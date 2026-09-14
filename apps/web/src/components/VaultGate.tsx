@@ -4,12 +4,15 @@ import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
 import { migrateToVault } from "../migrate.js";
 import { parseBackup } from "../backup.js";
-import { vaultPasswordProblem } from "../vaultPassword.js";
+import { vaultPasswordProblem, MIN_VAULT_PASSWORD, type VaultPasswordProblem } from "../vaultPassword.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy, type ShellCopy } from "../copy/shell.js";
 
-const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
-
-const DATA_LOSS_WARNING =
-  'Wachtwoord kwijt = data kwijt — geen herstel. Er is geen "wachtwoord vergeten"-optie.';
+function weakPasswordMessage(c: ShellCopy, kind: VaultPasswordProblem | null): string | null {
+  if (kind === "tooShort") return c.vaultGate.passwordProblem.tooShort(MIN_VAULT_PASSWORD);
+  if (kind === "lowVariation") return c.vaultGate.passwordProblem.lowVariation;
+  return null;
+}
 
 type VaultGateProps = {
   gate: GateState;
@@ -21,10 +24,12 @@ type VaultGateProps = {
 // Gates the app behind the encrypted vault: renders the matching screen for
 // every non-"ready" GateState. App only mounts this while gate !== "ready".
 export default function VaultGate({ gate, storage, onReady, onBackup }: VaultGateProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   if (gate === "loading") {
     return (
       <div className="vault-gate">
-        <p className="text-muted">Laden…</p>
+        <p className="text-muted">{c.vaultGate.loading}</p>
       </div>
     );
   }
@@ -38,6 +43,8 @@ export default function VaultGate({ gate, storage, onReady, onBackup }: VaultGat
 type ScreenProps = { storage: VaultStorage; onReady: () => void };
 
 function UnlockScreen({ storage, onReady }: ScreenProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [pass, setPass] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +56,7 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
     try {
       const ok = await storage.unlock(pass);
       if (!ok) {
-        setError("Onjuist wachtwoord.");
+        setError(c.vaultGate.unlock.wrongPassword);
         return;
       }
       onReady();
@@ -61,9 +68,9 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
   return (
     <div className="vault-gate">
       <form className="card vault-gate-card" onSubmit={submit}>
-        <h2>Kluis ontgrendelen</h2>
+        <h2>{c.vaultGate.unlock.title}</h2>
         <div className="vault-field">
-          <label htmlFor="unlock-pass">Wachtwoord</label>
+          <label htmlFor="unlock-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="unlock-pass"
             type="password"
@@ -79,7 +86,7 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
           </p>
         )}
         <button type="submit" className="btn btn-primary" disabled={busy || pass.length === 0}>
-          Ontgrendelen
+          {c.vaultGate.unlock.submit}
         </button>
       </form>
     </div>
@@ -87,6 +94,8 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
 }
 
 function SetupScreen({ storage, onReady }: ScreenProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [mode, setMode] = useState<"create" | "restore">("create");
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
@@ -97,7 +106,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
   const mismatch = pass2.length > 0 && pass1 !== pass2;
   // Only judge once something has been typed, so the screen does not open by
   // scolding an empty field.
-  const weak = pass1.length > 0 ? vaultPasswordProblem(pass1) : null;
+  const weak = pass1.length > 0 ? weakPasswordMessage(c, vaultPasswordProblem(pass1)) : null;
   const canSubmit = weak === null && pass1.length > 0 && pass1 === pass2 && understood && !busy;
 
   async function submit(e: FormEvent) {
@@ -128,10 +137,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
   return (
     <div className="vault-gate">
       <form className="card vault-gate-card" onSubmit={submit}>
-        <h2>Kluis instellen</h2>
-        <p className="text-warn">{DATA_LOSS_WARNING}</p>
+        <h2>{c.vaultGate.setup.title}</h2>
+        <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
         <div className="vault-field">
-          <label htmlFor="setup-pass1">Wachtwoord</label>
+          <label htmlFor="setup-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-pass1"
             type="password"
@@ -142,7 +151,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
           />
         </div>
         <div className="vault-field">
-          <label htmlFor="setup-pass2">Herhaal wachtwoord</label>
+          <label htmlFor="setup-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="setup-pass2"
             type="password"
@@ -152,7 +161,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
           />
         </div>
         {weak && <p className="text-warn">{weak}</p>}
-        {mismatch && <p className="text-warn">Wachtwoorden komen niet overeen.</p>}
+        {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
         <label className="vault-checkbox-field">
           <input
             type="checkbox"
@@ -160,7 +169,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             onChange={(e) => setUnderstood(e.target.checked)}
             disabled={busy}
           />
-          Ik begrijp dit
+          {c.vaultGate.understood}
         </label>
         {error && (
           <p role="alert" className="text-warn">
@@ -168,12 +177,12 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
           </p>
         )}
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
-          Kluis aanmaken
+          {c.vaultGate.setup.submit}
         </button>
         <p>
-          Heb je al een back-up?{" "}
+          {c.vaultGate.setup.haveBackupQuestion}{" "}
           <button type="button" className="btn" onClick={() => setMode("restore")} disabled={busy}>
-            Herstel uit back-up
+            {c.vaultGate.setup.restoreFromBackup}
           </button>
         </p>
       </form>
@@ -186,6 +195,8 @@ type RestoreOnSetupScreenProps = ScreenProps & { onCancel: () => void };
 // Fresh-machine recovery: no vault exists yet, so instead of creating a new
 // (empty) one, adopt a downloaded .lavega back-up as THE vault.
 function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScreenProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState("");
   const [busy, setBusy] = useState(false);
@@ -203,12 +214,12 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
       const blob = parseBackup(text); // throws on malformed/misshaped file
       const ok = await storage.restore(blob, pass);
       if (!ok) {
-        setError(RESTORE_ERROR);
+        setError(c.vaultGate.restoreOnSetup.restoreError);
         return;
       }
       onReady();
     } catch {
-      setError(RESTORE_ERROR);
+      setError(c.vaultGate.restoreOnSetup.restoreError);
     } finally {
       setBusy(false);
     }
@@ -217,10 +228,10 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
   return (
     <div className="vault-gate">
       <form className="card vault-gate-card" onSubmit={submit}>
-        <h2>Herstel uit back-up</h2>
-        <p>Kies je back-upbestand (.lavega) en vul het bijbehorende wachtwoord in.</p>
+        <h2>{c.vaultGate.restoreOnSetup.title}</h2>
+        <p>{c.vaultGate.restoreOnSetup.intro}</p>
         <div className="vault-field">
-          <label htmlFor="setup-restore-file">Back-upbestand</label>
+          <label htmlFor="setup-restore-file">{c.vaultGate.restoreOnSetup.fileLabel}</label>
           <input
             id="setup-restore-file"
             type="file"
@@ -230,7 +241,7 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
           />
         </div>
         <div className="vault-field">
-          <label htmlFor="setup-restore-pass">Wachtwoord</label>
+          <label htmlFor="setup-restore-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-restore-pass"
             type="password"
@@ -246,11 +257,11 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
           </p>
         )}
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
-          Herstellen
+          {c.vaultGate.restoreOnSetup.submit}
         </button>
         <p>
           <button type="button" className="btn" onClick={onCancel} disabled={busy}>
-            Terug
+            {c.vaultGate.restoreOnSetup.back}
           </button>
         </p>
       </form>
@@ -259,6 +270,8 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
 }
 
 function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup: () => void }) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -269,7 +282,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
   const mismatch = pass2.length > 0 && pass1 !== pass2;
   // Only judge once something has been typed, so the screen does not open by
   // scolding an empty field.
-  const weak = pass1.length > 0 ? vaultPasswordProblem(pass1) : null;
+  const weak = pass1.length > 0 ? weakPasswordMessage(c, vaultPasswordProblem(pass1)) : null;
   const canSubmit = weak === null && pass1.length > 0 && pass1 === pass2 && understood && !busy;
 
   async function submit(e: FormEvent) {
@@ -291,17 +304,14 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
     return (
       <div className="vault-gate">
         <div className="card vault-gate-card">
-          <h2>Migratie geslaagd</h2>
-          <p>Je bestaande data is versleuteld opgeslagen in de kluis.</p>
-          <p className="text-warn">
-            Maak nu meteen een back-up. Bij een vergeten wachtwoord is je data zonder back-up
-            onherstelbaar verloren.
-          </p>
+          <h2>{c.vaultGate.migrate.done.title}</h2>
+          <p>{c.vaultGate.migrate.done.body}</p>
+          <p className="text-warn">{c.vaultGate.migrate.done.warning}</p>
           <button type="button" className="btn btn-primary" onClick={onBackup}>
-            Maak nu een back-up
+            {c.vaultGate.migrate.done.backupNow}
           </button>{" "}
           <button type="button" className="btn" onClick={onReady}>
-            Later, naar de app
+            {c.vaultGate.migrate.done.later}
           </button>
         </div>
       </div>
@@ -311,11 +321,11 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
   return (
     <div className="vault-gate">
       <form className="card vault-gate-card" onSubmit={submit}>
-        <h2>Bestaande data versleutelen</h2>
-        <p>Je bestaande data wordt versleuteld en verplaatst naar de kluis.</p>
-        <p className="text-warn">{DATA_LOSS_WARNING}</p>
+        <h2>{c.vaultGate.migrate.title}</h2>
+        <p>{c.vaultGate.migrate.intro}</p>
+        <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
         <div className="vault-field">
-          <label htmlFor="migrate-pass1">Wachtwoord</label>
+          <label htmlFor="migrate-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="migrate-pass1"
             type="password"
@@ -326,7 +336,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
           />
         </div>
         <div className="vault-field">
-          <label htmlFor="migrate-pass2">Herhaal wachtwoord</label>
+          <label htmlFor="migrate-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="migrate-pass2"
             type="password"
@@ -336,7 +346,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
           />
         </div>
         {weak && <p className="text-warn">{weak}</p>}
-        {mismatch && <p className="text-warn">Wachtwoorden komen niet overeen.</p>}
+        {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
         <label className="vault-checkbox-field">
           <input
             type="checkbox"
@@ -344,7 +354,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             onChange={(e) => setUnderstood(e.target.checked)}
             disabled={busy}
           />
-          Ik begrijp dit
+          {c.vaultGate.understood}
         </label>
         {error && (
           <p role="alert" className="text-warn">
@@ -352,7 +362,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
           </p>
         )}
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
-          {busy ? "Bezig met versleutelen…" : "Versleutelen & doorgaan"}
+          {busy ? c.vaultGate.migrate.submitBusy : c.vaultGate.migrate.submitIdle}
         </button>
       </form>
     </div>

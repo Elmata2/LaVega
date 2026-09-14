@@ -125,7 +125,7 @@ test('no transaction history at all -> thin, and the banner refuses the green "g
   // weken" over a flat line drawn from an empty vault. There is no shortfall
   // because there is no forecast, and the banner now says which.
   expect(bannerState(f)).toBe("insufficient");
-  expect(coverageNotes(f).map((n) => n.id)).toContain("no-evidence");
+  expect(coverageNotes("nl", f).map((n) => n.id)).toContain("no-evidence");
 });
 
 test("splitDrivers: partitions by sign and preserves each side's existing order", () => {
@@ -162,7 +162,7 @@ test("coverageNotes: names the history, the live streams and the window it was b
     fxHistory: {},
     mode: "separate",
   }).byEntity["BV1"];
-  const basis = coverageNotes(f).find((n) => n.id === "basis")!;
+  const basis = coverageNotes("nl", f).find((n) => n.id === "basis")!;
   expect(basis.text).toContain("61 dagen historie (2026-04-25 t/m 2026-06-25)");
   expect(basis.text).toContain("1 lopende terugkerende stroom");
 });
@@ -194,7 +194,7 @@ test("coverageNotes: an account with a balance but no transactions is said out l
     fxHistory: {},
     mode: "separate",
   }).byEntity["BV1"];
-  const note = coverageNotes(f).find((n) => n.id === "accounts-without-history")!;
+  const note = coverageNotes("nl", f).find((n) => n.id === "accounts-without-history")!;
   expect(note.text).toContain("1 van je 2 rekeningen");
 });
 
@@ -241,10 +241,10 @@ test("coverageNotes: three weeks of one card among months of another is named, w
     fxHistory: {},
     mode: "separate",
   }).byEntity["BV1"];
-  expect(coverageNotes(f).find((n) => n.id === "short-account")!.text).toContain(
+  expect(coverageNotes("nl", f).find((n) => n.id === "short-account")!.text).toContain(
     "21 dagen historie",
   );
-  expect(confidenceLabel(f.basis!.confidence)).toBe("beperkte basis");
+  expect(confidenceLabel("nl", f.basis!.confidence)).toBe("beperkte basis");
 });
 
 test("coverageNotes: a stale import says how old it is instead of quietly forecasting from it", () => {
@@ -261,14 +261,14 @@ test("coverageNotes: a stale import says how old it is instead of quietly foreca
     fxHistory: {},
     mode: "separate",
   }).byEntity["BV1"];
-  expect(coverageNotes(f).find((n) => n.id === "stale-import")!.text).toContain(
+  expect(coverageNotes("nl", f).find((n) => n.id === "stale-import")!.text).toContain(
     "2026-03-05, 46 dagen geleden",
   );
 });
 
 test("coverageNotes: a forecast without a basis (hand-written fixture) says nothing at all", () => {
   expect(
-    coverageNotes({
+    coverageNotes("nl", {
       scope: "x",
       asOf: "2026-08-01",
       horizonDays: 91,
@@ -327,5 +327,5 @@ test('coverageNotes: a zero-width band says "measured zero", not nothing', () =>
   }).byEntity["BV1"];
   expect(f.basis!.bandBasis).not.toBe("none");
   expect(hasBand(f)).toBe(false);
-  expect(coverageNotes(f).map((n) => n.id)).toContain("flat-band");
+  expect(coverageNotes("nl", f).map((n) => n.id)).toContain("flat-band");
 });

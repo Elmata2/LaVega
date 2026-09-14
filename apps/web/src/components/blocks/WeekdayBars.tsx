@@ -1,5 +1,7 @@
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { barPercent, niceDomain, smoothPath, type Pt } from "../../chart.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* WeekdayBars — `Modules for homescreen7.png`: a bar per day of the week with a
  * soft trend line running across them.
@@ -95,12 +97,14 @@ export default function WeekdayBars({
   ariaLabel,
   peakIndex = -1,
   averageValue = null,
-  averageLabel = "gemiddelde dag",
+  averageLabel,
   height = 180,
 }: WeekdayBarsProps) {
   // Which bar was tapped; hover and focus are handled in CSS. See CategoryBars
   // for why a tap needs state of its own at all.
   const [tapped, setTapped] = useState<number | null>(null);
+  const [locale] = useAppLocale();
+  const resolvedAverageLabel = averageLabel ?? moneyCopy[locale].statistiek.gemiddeldeDagFallback;
 
   if (days.length === 0) return null;
 
@@ -223,7 +227,7 @@ export default function WeekdayBars({
           {average !== null && (
             <span className="weekday-average" style={{ top: `${100 - barPercent(average, max)}%` }}>
               <span className="weekday-average-label">
-                {averageLabel} {format(average)}
+                {resolvedAverageLabel} {format(average)}
               </span>
             </span>
           )}

@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL as NodeURL } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
@@ -234,7 +235,7 @@ test("blocks.css maakt de naam op alle drie de manieren leesbaar", () => {
    * de repo-wortel las dezelfde regel een bestand dat er niet is en viel de test
    * om met ENOENT — een fout die niets zegt over de opmaak die hij toetst. */
   const css = readFileSync(
-    fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)),
+    fileURLToPath(new NodeURL("../../styles/blocks.css", import.meta.url)),
     "utf8",
   );
   const flat = css.replace(/\s+/g, " ");

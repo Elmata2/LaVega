@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import type { Account, ConversionMode } from "@lavega/core";
 import { isEurCurrency, toEur } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Positie over je bedrijven — which BV holds the money.
  *
@@ -48,6 +50,8 @@ export default function PositieBlock({
   fxHistory,
   mode,
 }: PositieBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].positie;
   const rows = useMemo(() => {
     const eurBalanceOf = (a: Account): number | null => {
       if (a.balance === null) return null;
@@ -119,39 +123,32 @@ export default function PositieBlock({
       height="short"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          Rekeningen →
+          {c.rekeningenArrow}
         </button>
       }
       footer={
         rows.length > 0 ? (
           <>
-            {hidden > 0 && `+${hidden} meer · `}
+            {hidden > 0 && c.meerSuffix(hidden)}
             {[
-              noBalanceCount > 0 &&
-                `${noBalanceCount} bedrijf${noBalanceCount === 1 ? "" : "ven"} zonder compleet saldo`,
+              noBalanceCount > 0 && c.bedrijfZonderCompleetSaldo(noBalanceCount),
               currencyCount > 0 &&
                 (mode === "convert"
-                  ? `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} — nog geen koers.`
-                  : `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} — LaVega rekent nog niet om naar euro's`),
-              anyConverted && "Omgerekend via ECB.",
+                  ? c.vreemdeValutaConvert(currencyCount, currencyNames)
+                  : c.vreemdeValutaSeparate(currencyCount, currencyNames)),
+              anyConverted && c.omgerekendViaEcb,
             ]
               .filter(Boolean)
-              .join(" · ") || "Alle saldo's bekend"}
+              .join(" · ") || c.alleSaldosBekend}
           </>
         ) : undefined
       }
     >
       {rows.length === 0 ? (
-        <p className="block-empty">
-          Nog geen rekeningen met een entiteit — importeer eerst een bestand.
-        </p>
+        <p className="block-empty">{c.geenRekeningenMetEntiteit}</p>
       ) : (
         <>
-          <div
-            className="proportion-bar"
-            role="img"
-            aria-label="Verhouding van positieve posities per bedrijf"
-          >
+          <div className="proportion-bar" role="img" aria-label={c.verhoudingAria}>
             {rows
               .filter((r) => r.balance !== null && r.balance > 0)
               .map((r) => (
@@ -175,7 +172,7 @@ export default function PositieBlock({
                 <span
                   className={`entity-row-balance ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
                 >
-                  {r.balance === null ? "onbekend" : formatEuro(r.balance)}
+                  {r.balance === null ? c.onbekend : formatEuroIn(locale, r.balance)}
                 </span>
               </div>
             ))}

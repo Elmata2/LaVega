@@ -8,6 +8,8 @@ import {
   type ModuleId,
   type WidgetId,
 } from "./moduleRegistry";
+import { useAppLocale } from "../appLocale";
+import { shellCopy } from "../copy/shell";
 
 /* The module picker: every module in the registry, with its preview, one line
  * of what it does, and a switch. On = it appears in the top nav; off = it
@@ -83,6 +85,8 @@ type ModulePickerProps = {
 };
 
 export default function ModulePicker({ enabled, onChange }: ModulePickerProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const on = new Set<ModuleId>(enabled);
 
   return (
@@ -90,16 +94,17 @@ export default function ModulePicker({ enabled, onChange }: ModulePickerProps) {
       {MODULES.map((m) => {
         const isOn = on.has(m.id);
         const locked = m.id === HOME_MODULE;
+        const label = c.nav.moduleLabels[m.id];
         return (
           <PickerRow
             key={m.id}
             preview={m.preview}
-            label={m.label}
-            what={m.what}
-            note={locked ? "Je startpagina — staat altijd in de navigatie." : undefined}
+            label={label}
+            what={c.modulePicker.modules[m.id]}
+            note={locked ? c.modulePicker.homeNote : undefined}
             on={isOn}
             locked={locked}
-            switchLabel={`${m.label} in de navigatie`}
+            switchLabel={c.modulePicker.moduleSwitchLabel(label)}
             onToggle={() => onChange(toggleModule(enabled, m.id, !isOn))}
           />
         );
@@ -117,21 +122,24 @@ type WidgetPickerProps = {
  *  Nothing is locked here: a homescreen without any of them is still a
  *  homescreen, so every switch is always usable. */
 export function WidgetPicker({ enabled, onChange }: WidgetPickerProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const on = new Set<WidgetId>(enabled);
 
   return (
     <ul className="module-picker">
       {WIDGETS.map((w) => {
         const isOn = on.has(w.id);
+        const widgetCopy = c.modulePicker.widgets[w.id];
         return (
           <PickerRow
             key={w.id}
             preview={w.preview}
-            label={w.label}
-            what={w.what}
-            note={w.note}
+            label={widgetCopy.label}
+            what={widgetCopy.what}
+            note={widgetCopy.note}
             on={isOn}
-            switchLabel={`${w.label} op je overzicht`}
+            switchLabel={c.modulePicker.widgetSwitchLabel(widgetCopy.label)}
             onToggle={() => onChange(toggleWidget(enabled, w.id, !isOn))}
           />
         );

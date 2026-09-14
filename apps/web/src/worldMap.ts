@@ -76,7 +76,8 @@ import {
   type WorldCountry,
   type WorldCurrency,
 } from "./assets/world-map.generated.js";
-import { countryName } from "./countries.js";
+import type { Locale } from "./locale.js";
+import { countryNameIn } from "./countries.js";
 
 export type { LonLat, Ring, WorldCountry, WorldCurrency };
 export { WORLD_LATLON_BOUNDS, WORLD_MAP_FILL_RULE, WORLD_MAP_SOURCES };
@@ -118,11 +119,11 @@ export function countryById(id: string): WorldCountry | null {
  *  gebundelde naam — dezelfde afweging als in `countries.ts`: die namen komen
  *  uit CLDR en verouderen dus niet met onze sweep mee. Kent het platform de
  *  code niet, dan is de gebundelde naam beter dan de code zelf. */
-export function countryLabel(id: string): string {
+export function countryLabel(locale: Locale, id: string): string {
   const c = countryById(id);
   if (!c) return "";
-  const nl = countryName(c.id);
-  return nl && nl !== c.id ? nl : c.name;
+  const named = countryNameIn(locale, c.id);
+  return named && named !== c.id ? named : c.name;
 }
 
 /** Kleine letters, zonder accenten en zonder leestekens: zo vindt "curacao" ook
@@ -142,12 +143,12 @@ function fold(s: string): string {
  *  De volgorde is: exacte code, dan namen die met de zoekterm BEGINNEN, dan
  *  namen die hem bevatten. Zonder die volgorde zet "ind" India onder Indonesië
  *  en Brits Indische Oceaanterritorium, en dan lijkt de zoekbalk stuk. */
-export function searchCountries(query: string, limit = 8): WorldCountry[] {
+export function searchCountries(locale: Locale, query: string, limit = 8): WorldCountry[] {
   const q = fold(query);
   if (!q) return [];
   const scored: { c: WorldCountry; rank: number; name: string }[] = [];
   for (const c of WORLD_COUNTRIES) {
-    const label = countryLabel(c.id);
+    const label = countryLabel(locale, c.id);
     const names = [fold(label), fold(c.name), fold(c.nameEn)];
     const rank =
       c.id.toLowerCase() === q

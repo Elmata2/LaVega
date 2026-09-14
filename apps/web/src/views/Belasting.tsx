@@ -8,9 +8,9 @@ import type {
   OwnName,
   ScheduledFlow,
   TaxFigures,
+  TaxSheetProblem,
   TaxSheetRow,
   Tx,
-  VatBasis,
   VatNote,
   VatPosition,
   VatSettings,
@@ -32,7 +32,10 @@ import {
   txsForEntity,
   vatPosition,
 } from "@lavega/core";
-import { formatEuro } from "../format";
+import { formatEuroIn } from "../format.js";
+import { useAppLocale } from "../appLocale.js";
+import { adminCopy, type BelastingCopy } from "../copy/admin.js";
+import type { Locale } from "../locale.js";
 import { getHomeCountry } from "../settings";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -99,12 +102,6 @@ type BelastingProps = {
   onSaveScheduledFlows: (f: ScheduledFlow[]) => void;
 };
 
-const FREQ_LABELS: Record<VatSettings["frequency"], string> = {
-  monthly: "Maandelijks",
-  quarterly: "Per kwartaal",
-  yearly: "Jaarlijks",
-};
-
 /** The profile's country, narrowed to a country LaVega actually has rules for.
  *  An unknown code falls back rather than throwing — `taxPack` does the same,
  *  and a blank tax screen is worse than the default rules. */
@@ -124,25 +121,12 @@ function homeCountryCode(): CountryCode {
  * The column mapping is the guess from the header (Dutch/German/English
  * synonyms); `problems` is what it could not find, and the screen shows that
  * rather than hiding it. */
-export function readBookkeepingSheet(text: string): { rows: TaxSheetRow[]; problems: string[] } {
+export function readBookkeepingSheet(
+  text: string,
+): { rows: TaxSheetRow[]; problems: TaxSheetProblem[] } {
   const table = readSheetCsv(text);
   return readTaxSheet(table, suggestTaxSheetMapping(table.header));
 }
-
-/** What the figure was built from, in his words. */
-const BASIS_LABEL: Record<VatBasis, string> = {
-  manual: "het bedrag dat je zelf invulde",
-  sheet: "je eigen boekhouding",
-  invoices: "je facturen (factuurstelsel)",
-  proxy: "een marge-benadering uit je banktransacties",
-};
-
-/** Which way the money goes, in words. */
-const DIRECTION_LABEL: Record<VatPosition["direction"], string> = {
-  betalen: "te betalen",
-  terugvragen: "terug te vragen",
-  onbekend: "nog niet te bepalen",
-};
 
 /** Why a better basis was not used. One sentence, naming the real cause — never
  *  an instruction, and never a number LaVega cannot point at.
@@ -152,25 +136,28 @@ const DIRECTION_LABEL: Record<VatPosition["direction"], string> = {
  *  alleen niet te bereiken (`boekhouding-andere-periode` hangt aan een bestand
  *  dat hij kiest). Een zin die achter een onbereikbare tak zit, wordt door
  *  gerenderde HTML nooit gecontroleerd. */
-export function noteText(note: VatNote, p: VatPosition): string {
-  const missing = p.coverage.total - p.coverage.withVat;
-  switch (note) {
-    case "gemengde-tarieven":
-      return "Gemengde tarieven: LaVega rekent hier niets uit en zet ook geen nul. Vul het bedrag zelf in, of importeer je boekhouding.";
-    case "stelsel-onbekend":
-      return `Er ${p.coverage.total === 1 ? "staat 1 factuur" : `staan ${p.coverage.total} facturen`} in deze periode. LaVega gebruikt die nog niet, omdat niet bekend is welk stelsel voor deze onderneming geldt: de btw valt bij het factuurstelsel in de periode van de factuur en bij het kasstelsel in die van de betaling. Factuurstelsel of kasstelsel?`;
-    case "kasstelsel":
-      return "Kasstelsel: de btw valt in de periode van de betaling, niet van de factuur. LaVega leidt het bedrag daarom niet uit je facturen af.";
-    case "btw-onbekend-op-facturen":
-      return `Van ${missing} van de ${p.coverage.total} facturen in deze periode is het btw-bedrag onbekend, dus je facturen zijn hier niet de basis. Onbekend is geen nul.`;
-    case "omzetfacturen-onbekend":
-      return "In deze periode staan alleen inkoopfacturen. Wat er aan btw over je omzet tegenover staat, ziet LaVega niet — en dat vult het niet met een nul.";
-    case "voorbelasting-onbekend":
-      return "Geen inkoopfactuur met een btw-bedrag in deze periode, dus de voorbelasting is onbekend. Onbekend is geen nul, dus je facturen zijn hier niet de basis.";
-    case "boekhouding-andere-periode":
-      return "Je geïmporteerde boekhouding dekt deze periode niet volledig of noemt de twee btw-kolommen niet, dus LaVega gebruikt hem niet half.";
-    case "geen-banktransacties":
-      return "LaVega ziet geen transacties van deze onderneming in deze periode. Dat is geen nul: er is niets om een bedrag uit te lezen.";
+export function noteText(note: VatNote, p: VatPosition, locale: Locale): string {
+  const c = adminCopy[locale].belasting;
+  return c.vat.notes[note]({
+    total: p.coverage.total,
+    missing: p.coverage.total - p.coverage.withVat,
+  });
+}
+
+/** Renders a `TaxSheetProblem` (packages/core/src/taxSheet.ts) in the reader's
+ *  language, via the copy this screen already carries. */
+function problemText(problem: TaxSheetProblem, c: BelastingCopy["vat"]): string {
+  switch (problem.kind) {
+    case "missing-columns":
+      return c.sheetProblem.missingColumns(
+        problem.fields.map((f) => c.sheetFieldLabels[f]).join(", "),
+      );
+    case "undated-rows":
+      return c.sheetProblem.undatedRows(problem.count);
+    default: {
+      const exhaustive: never = problem;
+      return exhaustive;
+    }
   }
 }
 
@@ -194,19 +181,23 @@ export default function Belasting({
   // then the country pack's defaults, so a fresh entity is immediately usable.
   // Committed to storage only on "Bereken & bewaar" (mirrors the rest of the
   // app's draft-then-persist pattern).
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].belasting;
   const [drafts, setDrafts] = useState<Record<string, VatSettings>>({});
   const [savedNote, setSavedNote] = useState<string | null>(null);
   // His bookkeeping, per entity, for as long as this tab is open. It is NOT
   // written to storage: the vault is encrypted and plain localStorage is not the
   // vault, so real turnover figures do not go there. The screen says so.
   const [sheets, setSheets] = useState<
-    Record<string, { rows: TaxSheetRow[]; problems: string[]; name: string }>
+    Record<string, { rows: TaxSheetRow[]; problems: TaxSheetProblem[]; name: string }>
   >({});
 
   const country = homeCountryCode();
   const pack = useMemo(() => taxPack(country), [country]);
   // Hoisted so the narrowing survives into the callbacks below.
   const profitTax = pack.profitTax;
+  const countryLabel = pack.country === "DE" ? c.header.countryLabel.DE : c.header.countryLabel.NL;
+  const caveats = pack.country === "DE" ? c.header.caveatsByCountry.DE : c.header.caveatsByCountry.NL;
 
   const savedByEntity = useMemo(() => {
     const m = new Map<string, VatSettings>();
@@ -285,9 +276,7 @@ export default function Belasting({
     }
     onSaveScheduledFlows(rebuildVatFlows(scheduledFlows, entities, freshFlows));
     setSavedNote(
-      freshFlows.length === 0
-        ? "Bewaard. Er is niets te reserveren met de huidige gegevens — geen bedrag is dus ook geen nul in je forecast."
-        : `Bewaard. ${freshFlows.length} reservering${freshFlows.length === 1 ? "" : "en"} staan nu in je forecast en zijn van je beschikbare saldo afgetrokken.`,
+      freshFlows.length === 0 ? c.actions.savedNothing : c.actions.savedSome(freshFlows.length),
     );
   }
 
@@ -381,11 +370,15 @@ export default function Belasting({
     return (
       <>
         <div className="view-head">
-          <h2>Belasting · {pack.label}</h2>
-          <span className="eyebrow">regels per {pack.rulesAsOf}</span>
+          <h2>
+            {c.header.title} · {countryLabel}
+          </h2>
+          <span className="eyebrow">
+            {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
+          </span>
         </div>
-        <section className="card" aria-label="Belasting">
-          <p>Nog geen entiteiten — importeer eerst rekeningen.</p>
+        <section className="card" aria-label={c.header.title}>
+          <p>{c.header.entitiesEmpty}</p>
         </section>
       </>
     );
@@ -401,31 +394,35 @@ export default function Belasting({
             zoals hij was, het ⓘ komt ernaast, de lijst zelf vouwt op. */}
         <ToonMeer
           variant="info"
-          heading={<h2>Belasting · {pack.label}</h2>}
-          summary="Wat LaVega hier niet berekent"
+          heading={
+            <h2>
+              {c.header.title} · {countryLabel}
+            </h2>
+          }
+          summary={c.header.caveatsSummary}
         >
           <ul className="tax-caveats">
-            {pack.caveats.map((c) => (
-              <li key={c}>{c}</li>
+            {caveats.map((caveat) => (
+              <li key={caveat}>{caveat}</li>
             ))}
           </ul>
         </ToonMeer>
         <span className="eyebrow">
-          {profitTax ? "2 belastingen" : "1 belasting"} · regels per {pack.rulesAsOf}
+          {c.header.taxCount(profitTax ? 2 : 1)} · {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
         </span>
       </div>
 
-      <ModuleGrid className="grid-2" label="Belastingen">
+      <ModuleGrid className="grid-2" label={c.header.gridLabel}>
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
         <Module
           title={pack.vat.label}
           height="tall"
           footer={
             <span>
-              Tarieven in {pack.label}: {pack.vat.rates.map((r) => `${r}%`).join(" / ")}. Elk bedrag
-              komt uit één bron — je eigen bedrag, je boekhouding, je facturen of een
-              marge-benadering (netto ≈ marge × tarief ⁄ (100 + tarief)) — en die bronnen worden
-              nooit bij elkaar opgeteld. Geen van de vier is een aangifte.
+              {c.vat.footer({
+                countryLabel,
+                ratesList: pack.vat.rates.map((r) => `${r}%`).join(" / "),
+              })}
             </span>
           }
         >
@@ -448,7 +445,7 @@ export default function Belasting({
                   <span
                     className={`tax-entity-figure ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
-                    {known ? formatEuro(Math.abs(netCents) / 100) : "geen bedrag"}
+                    {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
                   </span>
                 </div>
 
@@ -461,33 +458,46 @@ export default function Belasting({
                     ONDERBOUWT — waar het vandaan komt, de dekking, de
                     kanttekeningen — staat erna, opgevouwen. */}
                 <p className="cell-sub">
-                  {period.periodLabel} · {DIRECTION_LABEL[direction]} · uiterlijk {period.deadline}{" "}
-                  · {stage === "loopt" ? `stand tot ${asOf}` : "afgesloten"}
+                  {c.vat.periodSummary({
+                    periodLabel: period.periodLabel,
+                    directionLabel: c.vat.directionLabels[direction],
+                    deadline: period.deadline,
+                    loopt: stage === "loopt",
+                    asOf,
+                  })}
                 </p>
 
-                <ToonMeer summary="Waar dit cijfer vandaan komt">
+                <ToonMeer summary={c.vat.detailsSummary}>
                   {/* Is the window over? This is the difference between a stand and
                       an aangifte, and it is also what makes the flow `expected`
                       instead of `confirmed`. */}
                   <p className="cell-sub">
-                    {stage === "loopt"
-                      ? `${period.periodLabel} loopt nog t/m ${period.periodEnd} — dit is de stand tot ${asOf}, niet de aangifte.`
-                      : `${period.periodLabel} is afgesloten (t/m ${period.periodEnd}).`}
+                    {c.vat.periodStatus({
+                      periodLabel: period.periodLabel,
+                      periodEnd: period.periodEnd,
+                      asOf,
+                      loopt: stage === "loopt",
+                    })}
                   </p>
 
                   {/* WHAT it was built from. A figure without its source is not
                       rendered here, because the type cannot produce one. */}
                   <p className="cell-sub">
-                    Bron: {BASIS_LABEL[basis]} · regels per {p.rulesAsOf}.
+                    {c.vat.sourceLine({
+                      basisLabel: c.vat.basisLabels[basis],
+                      rulesAsOf: p.rulesAsOf,
+                    })}
                     {p.chargedCents !== null && p.paidCents !== null
-                      ? ` Btw over omzet ${formatEuro(p.chargedCents / 100)}, voorbelasting ${formatEuro(p.paidCents / 100)}.`
+                      ? c.vat.sourceAmounts({
+                          chargedEuro: formatEuroIn(locale, p.chargedCents / 100),
+                          paidEuro: formatEuroIn(locale, p.paidCents / 100),
+                        })
                       : ""}
                   </p>
 
                   {coverage.total > 0 && (
                     <p className="cell-sub">
-                      Btw-bedrag bekend op {coverage.withVat} van de {coverage.total} facturen in
-                      deze periode.
+                      {c.vat.coverageLine({ withVat: coverage.withVat, total: coverage.total })}
                     </p>
                   )}
 
@@ -500,59 +510,48 @@ export default function Belasting({
                       en "je factuur staat ergens anders". */}
                   {coverage.outside > 0 && (
                     <p className="cell-sub" data-testid={`btw-buiten-${entity}`}>
-                      {coverage.outside === 1
-                        ? "Er staat 1 factuur van deze onderneming buiten dit tijdvak"
-                        : `Er staan ${coverage.outside} facturen van deze onderneming buiten dit tijdvak`}
-                      {coverage.nearestOutside
-                        ? `, de dichtstbijzijnde van ${coverage.nearestOutside}`
-                        : ""}
-                      .{" "}
-                      {coverage.total === 0
-                        ? "In dit tijdvak staat er geen enkele, dus hier valt niets uit je facturen af te leiden."
-                        : "Die telt hier dus niet mee."}
+                      {c.vat.outsidePeriod({
+                        outside: coverage.outside,
+                        nearestOutside: coverage.nearestOutside,
+                        total: coverage.total,
+                      })}
                     </p>
                   )}
-                  {note && <p className="cell-sub">{noteText(note, p)}</p>}
+                  {note && <p className="cell-sub">{noteText(note, p, locale)}</p>}
 
                   {direction === "terugvragen" && (
-                    <p className="cell-sub">
-                      Dit bedrag staat niet als inkomende betaling in je forecast: LaVega weet niet
-                      wanneer de Belastingdienst uitbetaalt.
-                    </p>
+                    <p className="cell-sub">{c.vat.refundNotInForecast}</p>
                   )}
 
                   {known && netCents > 0 && (
-                    <p className="cell-sub">
-                      Met “Bereken &amp; bewaar” staat dit bedrag op {period.deadline} in je
-                      forecast en gaat het van je beschikbare saldo af.
-                    </p>
+                    <p className="cell-sub">{c.vat.willReserve(period.deadline)}</p>
                   )}
                 </ToonMeer>
 
                 <div className="tax-fields">
                   <label>
-                    Frequentie
+                    {c.vat.fields.frequencyLabel}
                     <select
                       value={s.frequency}
                       disabled={busy}
-                      aria-label={`${pack.vat.label}-frequentie ${entity}`}
+                      aria-label={c.vat.ariaLabels.frequency(pack.vat.label, entity)}
                       onChange={(e) =>
                         patch(entity, { frequency: e.target.value as VatSettings["frequency"] })
                       }
                     >
                       {pack.vat.frequencies.map((f) => (
                         <option key={f} value={f}>
-                          {FREQ_LABELS[f]}
+                          {c.vat.frequencyLabels[f]}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label>
-                    Stelsel
+                    {c.vat.fields.stelselLabel}
                     <select
                       value={s.vatBasis ?? ""}
                       disabled={busy}
-                      aria-label={`Stelsel ${entity}`}
+                      aria-label={c.vat.ariaLabels.stelsel(entity)}
                       onChange={(e) =>
                         patch(entity, {
                           vatBasis:
@@ -562,13 +561,13 @@ export default function Belasting({
                         })
                       }
                     >
-                      <option value="">nog niet ingevuld</option>
-                      <option value="factuurstelsel">Factuurstelsel</option>
-                      <option value="kasstelsel">Kasstelsel</option>
+                      <option value="">{c.vat.fields.stelselUnset}</option>
+                      <option value="factuurstelsel">{c.vat.fields.stelselFactuur}</option>
+                      <option value="kasstelsel">{c.vat.fields.stelselKas}</option>
                     </select>
                   </label>
                   <label>
-                    Tarief %
+                    {c.vat.fields.ratePctLabel}
                     <input
                       className="saldo-input"
                       type="number"
@@ -576,7 +575,7 @@ export default function Belasting({
                       min={0}
                       value={s.defaultRatePct}
                       disabled={busy}
-                      aria-label={`${pack.vat.label}-tarief ${entity}`}
+                      aria-label={c.vat.ariaLabels.ratePct(pack.vat.label, entity)}
                       onChange={(e) =>
                         patch(entity, {
                           defaultRatePct: e.target.value === "" ? 0 : Number(e.target.value),
@@ -585,16 +584,16 @@ export default function Belasting({
                     />
                   </label>
                   <label>
-                    Handmatig €
+                    {c.vat.fields.manualAmountLabel}
                     <input
                       className="saldo-input"
                       type="number"
                       step={0.01}
                       min={0}
-                      placeholder="auto"
+                      placeholder={c.vat.fields.manualAmountPlaceholder}
                       value={s.manualCents != null ? s.manualCents / 100 : ""}
                       disabled={busy}
-                      aria-label={`Handmatig ${pack.vat.label}-bedrag ${entity}`}
+                      aria-label={c.vat.ariaLabels.manualAmount(pack.vat.label, entity)}
                       onChange={(e) =>
                         patch(entity, {
                           manualCents:
@@ -606,22 +605,22 @@ export default function Belasting({
                     />
                   </label>
                   <label>
-                    Gemengde tarieven
+                    {c.vat.fields.mixedRatesLabel}
                     <input
                       type="checkbox"
                       checked={s.mixedRates}
                       disabled={busy}
-                      aria-label={`Gemengde tarieven ${entity}`}
+                      aria-label={c.vat.ariaLabels.mixedRates(entity)}
                       onChange={(e) => patch(entity, { mixedRates: e.target.checked })}
                     />
                   </label>
                   <label>
-                    Boekhouding (CSV)
+                    {c.vat.fields.sheetLabel}
                     <input
                       type="file"
                       accept=".csv,text/csv"
                       disabled={busy}
-                      aria-label={`Boekhouding importeren ${entity}`}
+                      aria-label={c.vat.ariaLabels.sheetImport(entity)}
                       onChange={(e) => void pickSheet(entity, e.target.files?.[0])}
                     />
                   </label>
@@ -629,13 +628,16 @@ export default function Belasting({
 
                 {sheet && (
                   <p className="cell-sub">
-                    {sheet.name}: {sheet.rows.length} regel(s) gelezen
-                    {basis === "sheet"
-                      ? ` — de btw van ${period.periodLabel} komt hieruit.`
-                      : ` — nog niet de basis voor ${period.periodLabel}.`}
-                    {sheet.problems.length > 0 ? ` ${sheet.problems.join("; ")}.` : ""} Deze import
-                    blijft in dit tabblad; LaVega bewaart je boekhouding niet buiten de versleutelde
-                    vault.
+                    {c.vat.sheetStatus({
+                      fileName: sheet.name,
+                      rowCount: sheet.rows.length,
+                      isBasis: basis === "sheet",
+                      periodLabel: period.periodLabel,
+                      problemsText:
+                        sheet.problems.length > 0
+                          ? sheet.problems.map((p) => problemText(p, c.vat)).join("; ")
+                          : "",
+                    })}
                   </p>
                 )}
               </div>
@@ -657,15 +659,14 @@ export default function Belasting({
                   <div className="tax-entity-head">
                     <span className="tax-entity-name">{entity}</span>
                     <span className={`tax-entity-figure ${total > 0 ? "text-neg" : ""}`}>
-                      {flows.length > 0 ? formatEuro(total / 100) : "—"}
+                      {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
                     </span>
                   </div>
                   {flows.length === 0 ? (
                     <p className="cell-sub">
-                      Nog niets te reserveren: LaVega ziet dit jaar geen winst in de banktransacties
-                      van deze entiteit, en verzint er geen. Zodra het{" "}
-                      {pack.label === "Duitsland" ? "Finanzamt" : "de fiscus"} een bedrag oplegt,
-                      vul je dat hieronder in.
+                      {c.profitTax.nothingToReserve(
+                        pack.country === "DE" ? c.profitTax.authorityDE : c.profitTax.authorityOther,
+                      )}
                     </p>
                   ) : (
                     <div className="tax-flows">
@@ -673,16 +674,20 @@ export default function Belasting({
                         <div className="tax-flow" key={f.id}>
                           <span>
                             {f.label} · {f.dueDate}{" "}
-                            {f.status === "expected" && <span className="badge">schatting</span>}
+                            {f.status === "expected" && (
+                              <span className="badge">{c.profitTax.estimateBadge}</span>
+                            )}
                           </span>
-                          <span className="text-neg">{formatEuro(f.amountCents / 100)}</span>
+                          <span className="text-neg">
+                            {formatEuroIn(locale, f.amountCents / 100)}
+                          </span>
                         </div>
                       ))}
                     </div>
                   )}
                   <div className="tax-fields" style={{ marginTop: "var(--sp-3)" }}>
                     <label>
-                      Tarief %
+                      {c.profitTax.fields.ratePctLabel}
                       <input
                         className="saldo-input"
                         type="number"
@@ -691,7 +696,7 @@ export default function Belasting({
                         placeholder={String(profitTax.defaultRatePct)}
                         value={s.profitTaxRatePct ?? ""}
                         disabled={busy}
-                        aria-label={`Winstbelastingtarief ${entity}`}
+                        aria-label={c.profitTax.ariaLabels.ratePct(entity)}
                         onChange={(e) =>
                           patch(entity, {
                             profitTaxRatePct:
@@ -701,16 +706,16 @@ export default function Belasting({
                       />
                     </label>
                     <label>
-                      Opgelegd bedrag €
+                      {c.profitTax.fields.imposedAmountLabel}
                       <input
                         className="saldo-input"
                         type="number"
                         step={0.01}
                         min={0}
-                        placeholder="nog geen aanslag"
+                        placeholder={c.profitTax.fields.imposedAmountPlaceholder}
                         value={s.profitTaxManualCents != null ? s.profitTaxManualCents / 100 : ""}
                         disabled={busy}
-                        aria-label={`Opgelegde winstbelasting ${entity}`}
+                        aria-label={c.profitTax.ariaLabels.imposedAmount(entity)}
                         onChange={(e) =>
                           patch(entity, {
                             profitTaxManualCents:
@@ -754,7 +759,7 @@ export default function Belasting({
 
       <div className="stack-form-actions">
         <button type="button" className="btn btn-primary" disabled={busy} onClick={berekenEnBewaar}>
-          Bereken &amp; bewaar
+          {c.actions.saveButton}
         </button>
       </div>
       {savedNote && <p className="cell-sub">{savedNote}</p>}

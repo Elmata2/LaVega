@@ -1,7 +1,10 @@
 import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
 import { forecastCashflow } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
-import { formatEuro } from "../format";
+import { formatEuroIn } from "../format";
+import { useAppLocale, pick } from "../appLocale";
+import { moneyCopy } from "../copy/money";
+import type { Locale } from "../locale";
 import {
   bannerState,
   confidenceLabel,
@@ -27,12 +30,17 @@ type ForecastProps = {
 // passed in, so the shortfall line reflects it here too.
 const HORIZON_DAYS = 91;
 
-const wholeEuroFormatter = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
 /** Whole-euro number (no currency symbol, no cents) for chart ticks and
  *  driver rows — the mockup's "+€18.400" style is more scannable in a dense
- *  list/axis than formatEuro's full "€ 18.400,00". */
-function euroNumber(cents: number): string {
-  return wholeEuroFormatter.format(Math.round(cents / 100));
+ *  list/axis than formatEuroIn's full "€ 18.400,00". `n` is already in euros. */
+function wholeEuroFormat(locale: Locale, n: number): string {
+  return new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-GB", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
+}
+
+function euroNumber(locale: Locale, cents: number): string {
+  return wholeEuroFormat(locale, cents / 100);
 }
 
 type LowestPoint = {
@@ -72,13 +80,16 @@ function ForecastBanner({
   thin,
   lowest,
   bufferCents,
+  locale,
 }: {
   f: EntityForecast;
   state: BannerState;
   thin: boolean;
   lowest: LowestPoint | null;
   bufferCents: number;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].forecast;
   // "insufficient" borrows the neutral treatment: like an unknown opening it is
   // a "we cannot tell you this", not a verdict. There is deliberately no green
   // reassurance behind it.
@@ -93,45 +104,41 @@ function ForecastBanner({
   const atRisk = f.atRisk ?? null;
 
   return (
-    <section className={`card forecast-banner ${stateClass}`} aria-label="Tekort-signalering">
+    <section className={`card forecast-banner ${stateClass}`} aria-label={c.tekortSignaleringAria}>
       <div>
         <p className={`forecast-banner-title ${titleClass}`}>
-          {state === "shortfall" && f.shortfall && (
-            <>
-              Tekort verwacht rond {f.shortfall.date} — laagste saldo ~
-              {formatEuro(f.shortfall.balanceCents / 100)} (buffer €{euroNumber(bufferCents)}).
-            </>
-          )}
-          {state === "unknown" && (
-            <>
-              Positie onbekend (alleen CSV-rekeningen zonder saldo) — we tonen de verwachte stromen,
-              geen saldo-lijn.
-            </>
-          )}
-          {state === "insufficient" && (
-            <>Nog geen prognose te maken — er is niets om op te projecteren.</>
-          )}
-          {state === "none" && <>Geen tekort verwacht in de komende 13 weken.</>}
+          {state === "shortfall" &&
+            f.shortfall &&
+            c.shortfallSentence(
+              f.shortfall.date,
+              formatEuroIn(locale, f.shortfall.balanceCents / 100),
+              euroNumber(locale, bufferCents),
+            )}
+          {state === "unknown" && c.unknownSentence}
+          {state === "insufficient" && c.insufficientSentence}
+          {state === "none" && c.noneSentence}
         </p>
         {state === "none" && lowest && (
           <p className="forecast-banner-sub">
-            Krapste punt: week {lowest.weekNumber} — verwacht €{euroNumber(lowest.closingCents)}
-            {lowest.lowerCents !== null && <> (ondergrens €{euroNumber(lowest.lowerCents)})</>},
-            boven je buffer van €{euroNumber(bufferCents)}.
+            {c.krapstePuntBanner(
+              lowest.weekNumber,
+              euroNumber(locale, lowest.closingCents),
+              lowest.lowerCents !== null ? c.lowerSuffix(euroNumber(locale, lowest.lowerCents)) : "",
+              euroNumber(locale, bufferCents),
+            )}
           </p>
         )}
         {state === "none" && atRisk && (
           <p className="forecast-banner-sub">
-            Wel een risico: binnen de gemeten bandbreedte kan het saldo rond {atRisk.date} tot{" "}
-            {formatEuro(atRisk.balanceCents / 100)} zakken — onder je buffer van €
-            {euroNumber(bufferCents)}.
+            {c.wellRisico(
+              atRisk.date,
+              formatEuroIn(locale, atRisk.balanceCents / 100),
+              euroNumber(locale, bufferCents),
+            )}
           </p>
         )}
         {thin && state !== "insufficient" && (
-          <p className="forecast-banner-note">
-            Geen lopende terugkerende stromen herkend — de prognose leunt volledig op losse uitgaven
-            en ingeplande posten.
-          </p>
+          <p className="forecast-banner-note">{c.geenLopendeStromenNote}</p>
         )}
       </div>
     </section>
@@ -156,22 +163,25 @@ function ForecastChart({
   f,
   lowest,
   bufferCents,
+  locale,
 }: {
   f: EntityForecast;
   lowest: LowestPoint | null;
   bufferCents: number;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].forecast;
   if (f.openingCents === null) {
-    return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
+    return <p className="forecast-chart-empty">{c.positieOnbekendAlleenStromen}</p>;
   }
   if (f.points.length === 0) {
-    return <p className="forecast-chart-empty">Onvoldoende data voor een grafiek.</p>;
+    return <p className="forecast-chart-empty">{c.onvoldoendeDataGrafiek}</p>;
   }
 
   const opening = f.openingCents;
   const showBand = hasBand(f);
   const points: TrendPoint[] = [
-    { label: "nu", value: opening / 100 },
+    { label: c.positieAsOfLabel, value: opening / 100 },
     ...f.points.map((p, i) => ({
       label: `w${i + 1}`,
       value: (p.projectedClosingCents ?? opening) / 100,
@@ -197,11 +207,12 @@ function ForecastChart({
       <TrendChart
         points={points}
         band={band}
-        reference={{ value: bufferCents / 100, label: `buffer €${euroNumber(bufferCents)}` }}
+        // "buffer" reads the same in Dutch and English — see Worker B's report.
+        reference={{ value: bufferCents / 100, label: `buffer €${euroNumber(locale, bufferCents)}` }}
         color={f.shortfall ? "var(--neg)" : "var(--pos)"}
-        format={(v) => `€${wholeEuroFormatter.format(Math.round(v))}`}
-        ariaLabel="Verwachte kaspositie komende 13 weken"
-        readoutLabel="Verwacht saldo"
+        format={(v) => `€${wholeEuroFormat(locale, v)}`}
+        ariaLabel={c.verwachteKaspositieAria}
+        readoutLabel={pick(locale, "Verwacht saldo", "Expected balance")}
         mark={
           lowest
             ? { index: lowest.columnIndex, color: lowestIsShortfall ? "var(--neg)" : "var(--pos)" }
@@ -218,7 +229,7 @@ function ForecastChart({
             style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
             aria-hidden="true"
           />
-          Verwacht
+          {c.verwacht}
         </span>
         {showBand && (
           <span className="forecast-chart-legend-item">
@@ -227,7 +238,7 @@ function ForecastChart({
               style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
               aria-hidden="true"
             />
-            Gemeten bandbreedte
+            {c.gemetenBandbreedte}
           </span>
         )}
         <span className="forecast-chart-legend-item">
@@ -236,11 +247,11 @@ function ForecastChart({
             style={{ background: "var(--warn)" }}
             aria-hidden="true"
           />
-          Buffer €{euroNumber(bufferCents)}
+          {c.bufferLabel(euroNumber(locale, bufferCents))}
         </span>
         {lowest && (
           <span className="forecast-chart-legend-item">
-            Krapste punt: week {lowest.weekNumber} · €{euroNumber(lowest.closingCents)}
+            {c.krapstePuntLegend(lowest.weekNumber, euroNumber(locale, lowest.closingCents))}
           </span>
         )}
       </div>
@@ -258,6 +269,8 @@ export default function Forecast({
   fxHistory,
   mode,
 }: ForecastProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].forecast;
   const fc = forecastCashflow(txs, accounts, {
     asOf,
     horizonDays: HORIZON_DAYS,
@@ -271,7 +284,7 @@ export default function Forecast({
   // entityScope already, but this component stays correct on its own too.
   const scoped = entityScope ? fc.byEntity[entityScope] : undefined;
   const f = scoped ?? fc.consolidated;
-  const scopeLabel = scoped ? entityScope : "alle bedrijven, gesaldeerd";
+  const scopeLabel = scoped ? entityScope : c.scopeLabelAlleBedrijven;
 
   const state = bannerState(f);
   const thin = isThinData(f);
@@ -281,50 +294,59 @@ export default function Forecast({
 
   return (
     <>
-      <ForecastBanner f={f} state={state} thin={thin} lowest={lowest} bufferCents={bufferCents} />
+      <ForecastBanner
+        f={f}
+        state={state}
+        thin={thin}
+        lowest={lowest}
+        bufferCents={bufferCents}
+        locale={locale}
+      />
 
       <div className="card-grid forecast-grid">
-        <section className="card" aria-label="13-weeks cashflow-forecast">
+        <section className="card" aria-label={c.cashflowForecastAria}>
           <div className="card-header">
-            <h2>13-weeks cashflow-forecast</h2>
+            <h2>{c.cashflowForecastTitle}</h2>
             <span className="eyebrow">
               {scopeLabel}
-              {f.basis && <> · {confidenceLabel(f.basis.confidence)}</>}
+              {f.basis && <> · {confidenceLabel(locale, f.basis.confidence)}</>}
             </span>
           </div>
-          <ForecastChart f={f} lowest={lowest} bufferCents={bufferCents} />
+          <ForecastChart f={f} lowest={lowest} bufferCents={bufferCents} locale={locale} />
         </section>
 
-        <section className="card" aria-label="Drivers per week">
-          <h2>Drivers · per week (gem.)</h2>
+        <section className="card" aria-label={c.driversAria}>
+          <h2>{c.driversTitle}</h2>
           {f.drivers.length === 0 ? (
-            <p>Nog geen lopende terugkerende stromen herkend.</p>
+            <p>{c.nogGeenLopendeStromen}</p>
           ) : (
             <>
-              <h3 className="drivers-heading">Verwachte inkomsten</h3>
+              <h3 className="drivers-heading">{c.verwachteInkomsten}</h3>
               {inkomsten.length === 0 ? (
-                <p className="drivers-empty">Geen herkende inkomstenstromen.</p>
+                <p className="drivers-empty">{c.geenHerkendeInkomstenstromen}</p>
               ) : (
                 <div className="drivers-list">
                   {inkomsten.map((d) => (
                     <div className="driver-row" key={`${d.label}-${d.sign}`}>
                       <span className="driver-label">{d.label}</span>
-                      <span className="text-pos driver-amount">+€{euroNumber(d.perWeekCents)}</span>
+                      <span className="text-pos driver-amount">
+                        +€{euroNumber(locale, d.perWeekCents)}
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
 
-              <h3 className="drivers-heading">Verwachte uitgaven</h3>
+              <h3 className="drivers-heading">{c.verwachteUitgaven}</h3>
               {uitgaven.length === 0 ? (
-                <p className="drivers-empty">Geen herkende uitgavenstromen.</p>
+                <p className="drivers-empty">{c.geenHerkendeUitgavenstromen}</p>
               ) : (
                 <div className="drivers-list">
                   {uitgaven.map((d) => (
                     <div className="driver-row" key={`${d.label}-${d.sign}`}>
                       <span className="driver-label">{d.label}</span>
                       <span className="text-neg driver-amount">
-                        −€{euroNumber(Math.abs(d.perWeekCents))}
+                        −€{euroNumber(locale, Math.abs(d.perWeekCents))}
                       </span>
                     </div>
                   ))}
@@ -335,14 +357,16 @@ export default function Forecast({
 
           {ended.length > 0 && (
             <>
-              <h3 className="drivers-heading">Gestopt · niet meegeteld</h3>
+              <h3 className="drivers-heading">{c.gestoptNietMeegeteld}</h3>
               <div className="drivers-list">
                 {ended.map((s) => (
                   <div className="driver-row" key={s.key}>
                     <span className="driver-label text-muted">
-                      {s.counterparty} <span className="eyebrow">laatst {s.lastDate}</span>
+                      {s.counterparty} <span className="eyebrow">{c.laatst(s.lastDate)}</span>
                     </span>
-                    <span className="text-muted driver-amount">€{euroNumber(s.amountCents)}</span>
+                    <span className="text-muted driver-amount">
+                      €{euroNumber(locale, s.amountCents)}
+                    </span>
                   </div>
                 ))}
               </div>

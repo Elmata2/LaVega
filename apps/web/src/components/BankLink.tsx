@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useState } from "react";
-import { API_BASE, apiErrorMessage } from "../api";
+import { API_BASE, apiErrorMessageIn } from "../api";
+import { useAppLocale } from "../appLocale";
+import { moneyCopy } from "../copy/money";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
  * lets the user pick one, and redirects the browser to the bank to authorise.
@@ -9,12 +11,14 @@ type Aspsp = { name: string; country: string; logo?: string };
 type PsuType = "business" | "personal";
 
 const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
-const PSU_TYPE_LABELS: Record<PsuType, string> = {
-  business: "Zakelijk",
-  personal: "Particulier",
-};
 
 export default function BankLink({ busy }: { busy: boolean }) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale];
+  const psuTypeLabels: Record<PsuType, string> = {
+    business: c.bankLink.zakelijk,
+    personal: c.bankLink.particulier,
+  };
   const [psuType, setPsuType] = useState<PsuType>("business");
   const [aspsps, setAspsps] = useState<Aspsp[] | null>(null);
   const [selected, setSelected] = useState("");
@@ -27,7 +31,7 @@ export default function BankLink({ busy }: { busy: boolean }) {
     try {
       const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`);
       if (!res.ok) {
-        setError(await apiErrorMessage(res));
+        setError(await apiErrorMessageIn(locale, res));
         return;
       }
       const data = await res.json();
@@ -38,7 +42,7 @@ export default function BankLink({ busy }: { busy: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   function pickPsuType(type: PsuType) {
     setPsuType(type);
@@ -61,13 +65,13 @@ export default function BankLink({ busy }: { busy: boolean }) {
         body: JSON.stringify({ name: bank.name, country: bank.country, psuType }),
       });
       if (!res.ok) {
-        setError(await apiErrorMessage(res));
+        setError(await apiErrorMessageIn(locale, res));
         setLoading(false);
         return;
       }
       const data = await res.json();
       if (!data.url) {
-        setError(data.error || "De bank gaf geen autorisatiepagina terug.");
+        setError(data.error || c.bankLink.bankGeenAutorisatiepagina);
         setLoading(false);
         return;
       }
@@ -86,8 +90,8 @@ export default function BankLink({ busy }: { busy: boolean }) {
         paddingTop: "var(--sp-4)",
       }}
     >
-      <h3 style={{ marginTop: 0 }}>Of koppel je bank direct</h3>
-      <div className="scope-switch" role="group" aria-label="Type rekening">
+      <h3 style={{ marginTop: 0 }}>{c.bankLink.ofKoppelJeBankDirect}</h3>
+      <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
         {PSU_TYPE_ORDER.map((t, i) => (
           <Fragment key={t}>
             {i > 0 && <span className="scope-rule" aria-hidden="true" />}
@@ -98,7 +102,7 @@ export default function BankLink({ busy }: { busy: boolean }) {
               disabled={busy || loading}
               onClick={() => pickPsuType(t)}
             >
-              {PSU_TYPE_LABELS[t]}
+              {psuTypeLabels[t]}
             </button>
           </Fragment>
         ))}
@@ -110,10 +114,10 @@ export default function BankLink({ busy }: { busy: boolean }) {
           disabled={busy || loading}
           onClick={() => void loadBanks(psuType)}
         >
-          {loading ? "Laden…" : "Koppel bank (Enable Banking)"}
+          {loading ? c.bankLink.laden : c.bankLink.koppelBankEnableBanking}
         </button>
       ) : aspsps.length === 0 ? (
-        <p className="cell-sub">Geen banken beschikbaar.</p>
+        <p className="cell-sub">{c.bankLink.geenBankenBeschikbaar}</p>
       ) : (
         <span
           style={{
@@ -140,18 +144,17 @@ export default function BankLink({ busy }: { busy: boolean }) {
             disabled={busy || loading}
             onClick={() => void connect()}
           >
-            {loading ? "Doorsturen…" : "Autoriseer"}
+            {loading ? c.bankLink.doorsturen : c.bankLink.autoriseer}
           </button>
         </span>
       )}
       {error && (
         <p className="text-warn" role="alert">
-          Bankkoppeling: {error}
+          {c.bankLink.bankkoppelingError(error)}
         </p>
       )}
       <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
-        Alleen-lezen toegang via Enable Banking — je autoriseert bij je eigen bank; gegevens komen
-        versleuteld in je eigen kluis.
+        {c.bankLink.alleenLezenToegang}
       </p>
     </div>
   );

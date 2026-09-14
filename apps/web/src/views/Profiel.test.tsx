@@ -22,6 +22,7 @@ let container: HTMLElement | null = null;
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl";
 });
 
 afterEach(() => {
@@ -30,6 +31,7 @@ afterEach(() => {
   root = null;
   container = null;
   vi.unstubAllGlobals();
+  document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
 /** Wat de kluis in deze tests doet. Back-up raakt hem pas bij een klik, maar de
@@ -785,4 +787,32 @@ test("een 0 die HIJ invult is een bekende nul, geen aanname — en overleeft de 
   const row = cashbackRow("ING betaalpas").textContent ?? "";
   expect(row).toContain("door jou ingesteld");
   expect(row).not.toContain("uitgezet");
+});
+
+test("the page renders in English when the locale cookie says en", async () => {
+  document.cookie = "lavega_locale=en";
+  await render();
+  expect(container!.textContent).toContain("Correct cashback");
+  expect(container!.textContent).toContain("Personal or business");
+  expect(container!.textContent).toContain("Lock");
+  expect(container!.textContent).not.toContain("Cashback corrigeren");
+  expect(container!.textContent).not.toContain("Persoonlijk of zakelijk");
+  expect(container!.textContent).not.toContain("Vergrendelen");
+});
+
+test("the language switch flips the page's copy live, without a remount", async () => {
+  await render();
+  const switcher = section("Taal / Language");
+  expect(section("Vergrendelen")).toBeTruthy();
+
+  const englishButton = [...switcher.querySelectorAll("button")].find(
+    (b) => b.textContent === "English",
+  ) as HTMLButtonElement;
+  expect(englishButton).toBeTruthy();
+  await act(async () => {
+    englishButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  expect(section("Lock")).toBeTruthy();
+  expect(container!.querySelector('[aria-label="Vergrendelen"]')).toBeNull();
 });

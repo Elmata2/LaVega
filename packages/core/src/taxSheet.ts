@@ -62,16 +62,6 @@ export type TaxFigures = {
   vatPaidCents: number | null;
 };
 
-/** Dutch labels for the six figures — the UI language. */
-export const TAX_SHEET_FIELD_LABELS: Record<TaxSheetField, string> = {
-  period: "Periode",
-  revenue: "Omzet",
-  expenses: "Kosten",
-  profit: "Winst",
-  vatCharged: "Btw over omzet",
-  vatPaid: "Btw over kosten (voorbelasting)",
-};
-
 /** Header synonyms per field: NL, DE and EN, because the sheet may be his
  *  accountant's. Matched exactly first, then as a substring (same two-pass
  *  approach as the bank/invoice CSV importers). */
@@ -310,6 +300,13 @@ function cents(raw: string | undefined, signed: boolean): number | null {
   return Math.round((signed ? n : Math.abs(n)) * 100);
 }
 
+/** What `readTaxSheet` could not do with the owner's sheet, as a kind + data
+ *  rather than a baked sentence — the UI (copy/admin.ts) renders the words, in
+ *  whichever language it runs in. */
+export type TaxSheetProblem =
+  | { kind: "missing-columns"; fields: readonly TaxSheetField[] }
+  | { kind: "undated-rows"; count: number };
+
 /**
  * Apply a mapping to a sheet. Amounts become integer cents; costs and VAT are
  * taken as magnitudes (a sheet may write them negative), profit keeps its sign
@@ -321,14 +318,14 @@ function cents(raw: string | undefined, signed: boolean): number | null {
 export function readTaxSheet(
   table: SheetTable,
   mapping: TaxSheetMapping,
-): { rows: TaxSheetRow[]; problems: string[] } {
+): { rows: TaxSheetRow[]; problems: TaxSheetProblem[] } {
   const col: Partial<Record<TaxSheetField, number>> = {};
-  const missing: string[] = [];
+  const missing: TaxSheetField[] = [];
   for (const field of TAX_SHEET_FIELDS) {
     const wanted = mapping[field];
     const i = wanted === undefined ? -1 : table.header.findIndex((h) => norm(h) === norm(wanted));
     if (i >= 0) col[field] = i;
-    else missing.push(TAX_SHEET_FIELD_LABELS[field]);
+    else missing.push(field);
   }
 
   const at = (r: string[], field: TaxSheetField): string | undefined => {
@@ -361,9 +358,9 @@ export function readTaxSheet(
     rows.push(row);
   }
 
-  const problems: string[] = [];
-  if (missing.length) problems.push(`geen kolom gekoppeld voor: ${missing.join(", ")}`);
-  if (undated) problems.push(`${undated} regel(s) zonder leesbare periode — die tellen niet mee`);
+  const problems: TaxSheetProblem[] = [];
+  if (missing.length) problems.push({ kind: "missing-columns", fields: missing });
+  if (undated) problems.push({ kind: "undated-rows", count: undated });
   return { rows, problems };
 }
 

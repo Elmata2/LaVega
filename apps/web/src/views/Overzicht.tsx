@@ -11,6 +11,8 @@ import type {
 import { forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
 import type { ConversionMode } from "../settings.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
 import ModuleGrid from "../components/ModuleGrid";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
@@ -109,6 +111,8 @@ export default function Overzicht({
   onSelectCategory,
   travel,
 }: OverzichtProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const forecast = useMemo(
     () =>
       forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows, fxHistory, mode })
@@ -137,7 +141,7 @@ export default function Overzicht({
   const btwOn = useWidgetEnabled("btw-stand");
 
   return (
-    <ModuleGrid label="Overzicht">
+    <ModuleGrid label={c.overzicht.gridLabel}>
       <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
       {/* Saldo is span-2 with Positie beside it and span-3 without: an absent

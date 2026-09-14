@@ -1,4 +1,6 @@
 import BankLink from "../components/BankLink";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
 
 type ImportProps = {
   entity: string;
@@ -9,14 +11,16 @@ type ImportProps = {
 };
 
 export default function Import({ entity, onEntityChange, busy, problems, onImport }: ImportProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   return (
-    <section id="import" className="card" aria-label="Importeren">
-      <h2>Importeren</h2>
+    <section id="import" className="card" aria-label={c.import.ariaLabel}>
+      <h2>{c.import.heading}</h2>
       {/* One wrapping row: a native file input reports its own intrinsic width,
           which overflowed the page at phone width when it sat inline. */}
       <div className="import-controls">
         <label>
-          Entiteit{" "}
+          {c.import.entityLabel}{" "}
           <input value={entity} onChange={(e) => onEntityChange(e.target.value)} disabled={busy} />
         </label>
         {/* No `accept` filter: format is detected from the file's *contents*
@@ -26,7 +30,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
         <input
           type="file"
           className="btn import-file"
-          aria-label="Kies een bankbestand om te importeren"
+          aria-label={c.import.fileInputAriaLabel}
           disabled={busy}
           onChange={(e) => {
             const file = e.target.files?.[0];

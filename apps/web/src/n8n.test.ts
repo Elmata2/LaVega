@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
+import { adminCopy } from "./copy/admin.js";
 import type { N8nAutoBooked } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import {
@@ -12,7 +13,6 @@ import {
   pendingToInvoice,
   rememberAutoBooked,
   toPending,
-  NOTICE_LABELS,
   AUTO_BOOK_CEILING_CENTS,
   type N8nInvoiceRow,
 } from "./n8n.js";
@@ -174,7 +174,7 @@ test("pendingToInvoice refuses what it cannot know, and marks what a model read"
   expect(pending.dueDate).toBe("");
   const blocked = pendingToInvoice(pending);
   expect(blocked.ok).toBe(false);
-  expect(blocked.ok === false && blocked.error).toContain("vervaldatum");
+  expect(blocked.ok === false && blocked.gap).toBe("due-date");
 
   const done = pendingToInvoice({ ...pending, dueDate: "2026-07-31" });
   expect(done.ok).toBe(true);
@@ -234,7 +234,7 @@ test("an unreadable currency stays empty and blocks the row — a USD invoice is
   const pending = toPending(parsed!.rows[0], "BV1");
   const blocked = pendingToInvoice(pending);
   expect(blocked.ok).toBe(false);
-  if (!blocked.ok) expect(blocked.error).toContain("valuta");
+  if (!blocked.ok) expect(blocked.gap).toBe("currency");
 
   // ...and it books once he says which currency it is.
   const done = pendingToInvoice({ ...pending, currency: "usd" });
@@ -289,9 +289,10 @@ test("a link that does not go to his own mailbox is dropped, not shown", () => {
   expect(parsed!.notices[0].mailUrl).toBe("");
 });
 
-test("every notice kind has a Dutch label", () => {
+test("every notice kind has a label in both languages", () => {
   for (const kind of ["notification", "reminder", "no-amount", "unreadable"] as const) {
-    expect(NOTICE_LABELS[kind].length).toBeGreaterThan(0);
+    expect(adminCopy.nl.facturen.notices.kindLabels[kind].length).toBeGreaterThan(0);
+    expect(adminCopy.en.facturen.notices.kindLabels[kind].length).toBeGreaterThan(0);
   }
 });
 
@@ -362,12 +363,12 @@ test("autoBookDecision: een afzender die de controle niet haalt of niet had, boe
   })!.rows[0];
   const d1 = autoBookDecision(failed, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d1.book).toBe(false);
-  expect(d1.book === false && d1.reason).toContain("SPF");
+  expect(d1.book === false && d1.hold.kind).toBe("sender-failed");
 
   const unchecked = parseQueue({ invoices: [ROW] })!.rows[0];
   const d2 = autoBookDecision(unchecked, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d2.book).toBe(false);
-  expect(d2.book === false && d2.reason).toContain("geen afzendercontrole");
+  expect(d2.book === false && d2.hold.kind).toBe("sender-unchecked");
 });
 
 test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt de poort niet", () => {
@@ -391,21 +392,21 @@ test("autoBookDecision: bij meer dan één onderneming wordt er niet gegokt welk
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
   const d = autoBookDecision(row, { entityChoices: ["BV1", "BV2"], defaultEntity: "BV1" });
   expect(d.book).toBe(false);
-  expect(d.book === false && d.reason).toContain("onderneming");
+  expect(d.book === false && d.hold.kind).toBe("entity-ambiguous");
 });
 
 test("autoBookDecision: een incomplete factuur boekt niet, en noemt precies wat er mist", () => {
   const noDue = parseQueue({ invoices: [{ ...FORWARDED, dueDate: null }] })!.rows[0];
   const d1 = autoBookDecision(noDue, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d1.book === false && d1.reason).toContain("vervaldatum");
+  expect(d1.book === false && d1.hold.kind === "incomplete" && d1.hold.gap).toBe("due-date");
 
   const noCcy = parseQueue({ invoices: [{ ...FORWARDED, currency: "euro's" }] })!.rows[0];
   const d2 = autoBookDecision(noCcy, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d2.book === false && d2.reason).toContain("valuta");
+  expect(d2.book === false && d2.hold.kind === "incomplete" && d2.hold.gap).toBe("currency");
 
   const noCp = parseQueue({ invoices: [{ ...FORWARDED, counterparty: null }] })!.rows[0];
   const d3 = autoBookDecision(noCp, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d3.book === false && d3.reason).toContain("relatie");
+  expect(d3.book === false && d3.hold.kind === "incomplete" && d3.hold.gap).toBe("counterparty");
 });
 
 test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", async () => {
@@ -463,7 +464,7 @@ test("boven het plafond boekt niets zichzelf, ook niet van een geverifieerde afz
   // typechecker niets. Zonder dit compileert de test niet, en dat is de bedoeling
   // van die union — de reden bestaat alleen als er niet geboekt wordt.
   if (boven.book) throw new Error("verwacht dat het plafond dit tegenhoudt");
-  expect(boven.reason).toContain("10.000");
+  expect(boven.hold).toEqual({ kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS });
 });
 
 test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag", () => {
@@ -478,8 +479,7 @@ test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag
     { entityChoices: ["BV1"], defaultEntity: "BV1" },
   );
   if (d.book) throw new Error("verwacht dat een gespoofte afzender dit tegenhoudt");
-  expect(d.reason).toContain("afzender");
-  expect(d.reason).not.toContain("10.000");
+  expect(d.hold.kind).toBe("sender-failed");
 });
 
 /* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil staat in de reden.
@@ -498,8 +498,7 @@ test("een doorgestuurde mail krijgt de reden die klopt, niet de verdenking", () 
   if (d.book) throw new Error("de poort hoort dicht te blijven");
   // Let op de ONTKENNING: de tekst noemt "nagemaakte afzender" juist om te zeggen
   // dat het dat NIET is. Toetsen op de kale woorden zou hier dus altijd falen.
-  expect(d.reason).toContain("niet bij een nagemaakte afzender");
-  expect(d.reason).toContain("DOORGESTUURDE");
+  expect(d.hold.kind).toBe("sender-forwarded");
 });
 
 test("een echt nagemaakte afzender houdt de verdenking wél", () => {
@@ -510,8 +509,7 @@ test("een echt nagemaakte afzender houdt de verdenking wél", () => {
   });
   const d = autoBookDecision(nep, { entityChoices: [], defaultEntity: "Prive" });
   if (d.book) throw new Error("de poort hoort dicht te blijven");
-  expect(d.reason).toContain("óf een nagemaakte afzender");
-  expect(d.reason).not.toContain("DOORGESTUURDE");
+  expect(d.hold.kind).toBe("sender-failed");
 });
 
 test("de poort gaat niet open van een geldige DKIM alleen", () => {
@@ -539,4 +537,40 @@ test("a legacy n8n API key is deleted, not carried into the vault", async () => 
   expect(settings.baseUrl).toBeUndefined();
   expect(localStorage.getItem("lavega.n8nApiKey")).toBeNull();
   expect(localStorage.getItem("lavega.n8nBaseUrl")).toBeNull();
+});
+
+/* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil moet in de ZIN
+ * staan, niet alleen in de beslissing. Wie een doorstuurregel aanzet kreeg
+ * vroeger bij elke factuur te lezen dat zijn leverancier verdacht was. De
+ * beslissing hierboven kent het verschil; deze test bewaakt dat de tekst het
+ * ook zegt, in allebei de talen. */
+test("de doorgestuurd-melding ontkent de verdenking, de gespoofte bevestigt hem", () => {
+  const checks = { spf: "softfail", dkim: "pass", dmarc: "fail" };
+  for (const locale of ["nl", "en"] as const) {
+    const h = adminCopy[locale].facturen.queue.holds;
+    expect(h.senderForwarded(checks)).toContain("(SPF softfail, DKIM pass, DMARC fail)");
+    expect(h.senderForwarded(null)).not.toContain("(SPF");
+  }
+  expect(adminCopy.nl.facturen.queue.holds.senderForwarded(checks)).toContain(
+    "niet bij een nagemaakte afzender",
+  );
+  expect(adminCopy.nl.facturen.queue.holds.senderFailed(checks)).toContain(
+    "óf een nagemaakte afzender",
+  );
+  expect(adminCopy.en.facturen.queue.holds.senderForwarded(checks)).toContain("not to a faked");
+  expect(adminCopy.en.facturen.queue.holds.senderFailed(checks)).toContain("or a faked sender");
+});
+
+test("het plafond staat in de zin, in de opmaak van de taal", () => {
+  expect(adminCopy.nl.facturen.queue.holds.overCeiling(1_000_000)).toContain("€ 10.000");
+  expect(adminCopy.en.facturen.queue.holds.overCeiling(1_000_000)).toContain("€10,000");
+});
+
+/* Elke reden die de validatie kan geven moet in allebei de talen bestaan. Het
+ * type dwingt de sleutels af; deze test dwingt af dat er ook iets in staat. */
+test("elke ontbrekende factuurregel heeft een zin in beide talen", () => {
+  for (const gap of ["counterparty", "issue-date", "due-date", "amount", "currency", "vat"] as const) {
+    expect(adminCopy.nl.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
+    expect(adminCopy.en.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
+  }
 });

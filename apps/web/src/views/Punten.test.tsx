@@ -10,9 +10,7 @@ import Punten, {
   PICK_PROGRAMS,
   programCategory,
   programFacts,
-  programRoster,
   programUnit,
-  rosterFigure,
   worthLine,
 } from "./Punten";
 import Rekeningen, {
@@ -131,12 +129,12 @@ test("een saldo zonder balanceDate is 'datum onbekend' — en dat label bevat ge
   // Precies de vorm die mapEbAccount aflevert: een bedrag, geen dag.
   const age = saldoAge(acc({ key: "NL01INGB", balance: 1200.5 }), null);
   expect(age.kind).toBe("undated");
-  const short = saldoAgeShort(age);
+  const short = saldoAgeShort(age, "nl");
   expect(short).toBe("datum onbekend");
   // De hele fout die dit dichtzet: iets dat als datum kan worden gelezen. Ook
   // geen jaartal, geen "vandaag", geen streepje op een datumplek.
   expect(short).not.toMatch(/\d/);
-  expect(saldoAgeNote(age)).not.toMatch(/\d{4}/);
+  expect(saldoAgeNote(age, "nl")).not.toMatch(/\d{4}/);
 });
 
 test("bij een onbekende dag hoort elke datum in de melding bij de transacties, niet bij het bedrag", () => {
@@ -144,7 +142,7 @@ test("bij een onbekende dag hoort elke datum in de melding bij de transacties, n
   // hebben. Maar hij mag niet als de dag van het saldo kunnen worden gelezen —
   // bij een koppeling komen saldo en transacties uit dezelfde fetch, maar dat is
   // per rekening niet te bewijzen, dus wordt het niet geclaimd.
-  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 843.21 }), "2026-08-10"));
+  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 843.21 }), "2026-08-10"), "nl");
   const dated = datedSentences(note);
   expect(dated).toHaveLength(1);
   expect(dated[0]).toContain("De nieuwste transactie");
@@ -152,7 +150,7 @@ test("bij een onbekende dag hoort elke datum in de melding bij de transacties, n
 });
 
 test("de melding bij een onbekende dag noemt de oorzaak: de koppeling vernieuwt zichzelf niet", () => {
-  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null));
+  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null), "nl");
   expect(note).toContain("geen dag");
   expect(note).toContain("vernieuwt zichzelf niet");
   expect(note).toContain("het moment waarop je autoriseerde");
@@ -164,9 +162,12 @@ test("geen enkele melding stelt een handeling voor die op deze pagina niet besta
   // zijn dat niet uit te voeren is — en er is ook geen verversroute om naar te
   // wijzen: de server heeft aspsps/auth/callback/accounts en niets anders.
   const notes = [
-    saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null)),
-    saldoAgeNote(saldoAge(acc({ key: "B", balance: 10, balanceDate: "2026-07-31" }), "2026-08-12")),
-    saldoAgeNote(saldoAge(acc({ key: "C", balance: null }), null)),
+    saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null), "nl"),
+    saldoAgeNote(
+      saldoAge(acc({ key: "B", balance: 10, balanceDate: "2026-07-31" }), "2026-08-12"),
+      "nl",
+    ),
+    saldoAgeNote(saldoAge(acc({ key: "C", balance: null }), null), "nl"),
   ];
   for (const note of notes) {
     expect(note).not.toMatch(/koppel (opnieuw|je bank)/i);
@@ -178,8 +179,8 @@ test("geen enkele melding stelt een handeling voor die op deze pagina niet besta
 test("een gedateerd saldo zegt van welke dag het is, en meldt latere transacties", () => {
   const age = saldoAge(acc({ key: "A", balance: 1000, balanceDate: "2026-07-31" }), "2026-08-12");
   expect(age).toEqual({ kind: "dated", date: "2026-07-31", laterTx: "2026-08-12" });
-  expect(saldoAgeShort(age)).toBe("stand van 31 juli 2026");
-  const note = saldoAgeNote(age);
+  expect(saldoAgeShort(age, "nl")).toBe("stand van 31 juli 2026");
+  const note = saldoAgeNote(age, "nl");
   expect(note).toContain("stand van 31 juli 2026, niet van vandaag");
   expect(note).toContain("nieuwste is van 12 augustus 2026");
 });
@@ -187,14 +188,14 @@ test("een gedateerd saldo zegt van welke dag het is, en meldt latere transacties
 test("een transactie op de saldodatum zelf is geen latere transactie", () => {
   const age = saldoAge(acc({ key: "A", balance: 1000, balanceDate: "2026-08-12" }), "2026-08-12");
   expect(age).toEqual({ kind: "dated", date: "2026-08-12", laterTx: null });
-  expect(saldoAgeNote(age)).not.toContain("ná die dag");
+  expect(saldoAgeNote(age, "nl")).not.toContain("ná die dag");
 });
 
 test("geen saldo is geen nul en ook geen datum", () => {
   const age = saldoAge(acc({ key: "A", balance: null }), "2026-08-12");
   expect(age).toEqual({ kind: "none", latestTx: "2026-08-12" });
-  expect(saldoAgeShort(age)).toBe("geen saldo");
-  expect(saldoAgeNote(age)).toContain("geen bedrag, en dus ook geen nul");
+  expect(saldoAgeShort(age, "nl")).toBe("geen saldo");
+  expect(saldoAgeNote(age, "nl")).toContain("geen bedrag, en dus ook geen nul");
 });
 
 test("latestTxDates neemt per rekening de nieuwste dag, in één doorloop", () => {
@@ -526,8 +527,6 @@ test("een ander programma blijft precies zoals het was", () => {
  * hieronder) én er stonden twee ING's naast elkaar (nu nog één te kiezen).
  * ═════════════════════════════════════════════════════════════════════════ */
 
-const AMEX = "American Express Membership Rewards";
-
 test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg", () => {
   const pickable = PICK_PROGRAMS.map((p) => p.name).filter((n) => /^ING/i.test(n));
   expect(pickable).toEqual([ING]);
@@ -547,26 +546,13 @@ test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg"
  * onderliggende oorzaak bestaan: de kieslijst in "Saldo toevoegen" is een
  * <input list> + <datalist>, onzichtbaar tot je begint te typen. Met het blok
  * is ook deze wacht weg — komt die klacht terug, dan is er nu geen test die
- * hem vóór hem vangt. */
-
-test("de lijst zet de programma's met een saldo bovenaan en verzint er geen bij", () => {
-  const rows = programRoster([
-    makeRewardsBalance({
-      program: "Spaarzegels van de bakker",
-      points: 12,
-      updatedAt: "2026-08-01",
-    }),
-  ]);
-  // Zijn eigen programma staat erbij (anders zou "alle programma's" zijn eigen
-  // invoer weglaten) en het staat vooraan, want daar is een saldo van.
-  expect(rows[0].name).toBe("Spaarzegels van de bakker");
-  expect(rows[0].category).toBe("eigen programma");
-  expect(rows.filter((r) => r.balance !== null)).toHaveLength(1);
-  expect(rows.slice(1).every((r) => r.balance === null)).toBe(true);
-  // Een programma zonder saldo heeft er GEEN — geen nul die daarvoor doorgaat.
-  expect(rows.find((r) => r.name === AMEX)!.balance).toBeNull();
-  expect(rosterFigure(rows.find((r) => r.name === AMEX)!)).toBe("nog geen saldo");
-});
+ * hem vóór hem vangt.
+ *
+ * De achtste test — voor `programRoster`/`rosterFigure`, de functies achter
+ * dat verwijderde blok — bleef achter zonder aanroeper buiten zichzelf (Engelse
+ * localisatiepas, sep 2026). Dode Nederlandse code is een valkuil: hij compileert,
+ * hij test groen, en niemand merkt dat het scherm hem nooit rendert. Verwijderd
+ * samen met `programRoster`, `rosterFigure` en `RosterRow` in Punten.tsx. */
 
 test("er staat geen uitleg meer over waarom punten geen euro-waarde hebben", () => {
   /* HIJ HEEFT DIT BLOK LATEN VERWIJDEREN (22 augustus), samen met de inleidende
@@ -621,10 +607,10 @@ test("een her-import verschuift een bestaand koppelmoment niet en wist het niet"
 
 test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () => {
   const a = acc({ key: "A", balance: 1000, balanceDate: "2026-07-31", linkedAt: "2026-08-21" });
-  expect(saldoAgeShort(saldoAge(a, null))).toBe("stand van 31 juli 2026");
-  expect(linkedShort(linkedMoment(a))).toBe("gekoppeld op 21 augustus 2026");
+  expect(saldoAgeShort(saldoAge(a, null), "nl")).toBe("stand van 31 juli 2026");
+  expect(linkedShort(linkedMoment(a), "nl")).toBe("gekoppeld op 21 augustus 2026");
   // De zin over de koppeling doet geen enkele uitspraak over het bedrag.
-  const note = linkedNote(linkedMoment(a));
+  const note = linkedNote(linkedMoment(a), "nl");
   expect(note).toContain("hoe oud de koppeling is");
   expect(note).toContain("niet hoe oud het bedrag is");
 });
@@ -632,9 +618,9 @@ test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () =>
 test("geen koppelmoment leest als onbekend — geen cijfer, geen vandaag", () => {
   const m = linkedMoment(acc({ key: "A", balance: 10 }));
   expect(m).toEqual({ kind: "unknown" });
-  expect(linkedShort(m)).toBe("koppelmoment onbekend");
-  expect(linkedShort(m)).not.toMatch(/\d/);
-  const note = linkedNote(m);
+  expect(linkedShort(m, "nl")).toBe("koppelmoment onbekend");
+  expect(linkedShort(m, "nl")).not.toMatch(/\d/);
+  const note = linkedNote(m, "nl");
   expect(note).toContain("niet vastgelegd");
   expect(note).not.toMatch(/\d{4}/);
 });
@@ -643,7 +629,7 @@ test("de melding bij een onbekend koppelmoment stelt geen handeling voor die het
   // Opnieuw importeren MAAKT geen koppelmoment voor een rekening die er al is —
   // withLinkedAt vult niet met terugwerkende kracht. Dat als advies geven zou
   // dus een advies zijn dat in deze toestand niet werkt.
-  const note = linkedNote({ kind: "unknown" });
+  const note = linkedNote({ kind: "unknown" }, "nl");
   expect(note).not.toMatch(/opnieuw import|importeer opnieuw|koppel opnieuw|opnieuw koppelen/i);
   expect(note).not.toMatch(/ververs/i);
 });

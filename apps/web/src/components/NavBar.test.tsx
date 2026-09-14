@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import NavBar from "./NavBar";
 import TopBar from "./TopBar";
 import { enabledModules, navModules } from "./moduleRegistry";
@@ -10,6 +10,22 @@ import { enabledModules, navModules } from "./moduleRegistry";
  * floating chat widget is unmounted. */
 
 const app = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+
+/* This file runs in vitest's default Node environment (no `document` global)
+ * so that `readFileSync(new URL(..., import.meta.url))` above keeps resolving
+ * a real `file://` URL — switching the whole file to `@vitest-environment
+ * jsdom` breaks that resolution. `NavBar`/`TopBar` only need `document.cookie`
+ * to exist for `useAppLocale()` to read the locale, so a minimal stub is
+ * enough; `renderToStaticMarkup` itself never touches `document`. */
+beforeEach(() => {
+  (globalThis as unknown as { document: { cookie: string } }).document = {
+    cookie: "lavega_locale=nl",
+  };
+});
+
+afterEach(() => {
+  delete (globalThis as { document?: unknown }).document;
+});
 
 test("the nav renders exactly the enabled modules, and nothing else", () => {
   const html = renderToStaticMarkup(
@@ -153,4 +169,29 @@ test("every section header is a title with a rule under it, not a round-edged ti
   const module = modules.slice(modules.indexOf(".module {"), modules.indexOf(".module-head"));
   expect(module).toContain("border-radius: var(--r-sm)");
   expect(module).not.toContain("box-shadow");
+});
+
+test("the nav tab labels switch to English under the en locale cookie", () => {
+  document.cookie = "lavega_locale=en";
+  const html = renderToStaticMarkup(
+    <NavBar
+      view="overview"
+      modules={navModules(enabledModules(["overview", "valuta"]))}
+      onNavigate={() => {}}
+      onOpenProfile={() => {}}
+    />,
+  );
+  expect(html).toContain("Overview");
+  expect(html).toContain("Currency");
+  expect(html).not.toContain("Overzicht");
+  expect(html).not.toContain("Valuta");
+});
+
+test("TopBar's title and scope switch are English under the en locale cookie", () => {
+  document.cookie = "lavega_locale=en";
+  const html = renderToStaticMarkup(
+    <TopBar view="overview" scope="personal" onScopeChange={() => {}} onAddWidget={() => {}} />,
+  );
+  expect(html).toContain("Personal");
+  expect(html).toContain("Business");
 });

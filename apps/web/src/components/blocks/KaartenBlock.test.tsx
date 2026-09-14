@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL as NodeURL } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
@@ -122,7 +123,7 @@ test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
  * geen overgang. */
 
 const cardCss = readFileSync(
-  fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)),
+  fileURLToPath(new NodeURL("../../styles/blocks.css", import.meta.url)),
   "utf8",
 ).replace(/\s+/g, " ");
 

@@ -15,14 +15,12 @@
  */
 export const MIN_VAULT_PASSWORD = 12;
 
-export function vaultPasswordProblem(pass: string): string | null {
-  if (pass.length < MIN_VAULT_PASSWORD) {
-    return `Gebruik minstens ${MIN_VAULT_PASSWORD} tekens — je kluis-back-up kan offline onbeperkt geraden worden.`;
-  }
+export type VaultPasswordProblem = "tooShort" | "lowVariation";
+
+export function vaultPasswordProblem(pass: string): VaultPasswordProblem | null {
+  if (pass.length < MIN_VAULT_PASSWORD) return "tooShort";
   // Length on its own is not strength: "aaaaaaaaaaaa" clears the bar and falls
   // to the first thing any cracker tries.
-  if (new Set(pass).size < 4) {
-    return "Te weinig variatie — gebruik meer verschillende tekens, bijvoorbeeld een zin van een paar woorden.";
-  }
+  if (new Set(pass).size < 4) return "lowVariation";
   return null;
 }

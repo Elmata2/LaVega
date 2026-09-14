@@ -260,17 +260,16 @@ describe("a bank whose products all agree needs no 'which one is yours' caveat",
       entries: AMEX,
     });
     expect(rows[0].uniformAcrossBank).toBe(true);
-    expect(rows[0].why).toContain("hetzelfde bij alle 2 American Express-producten");
-    expect(rows[0].why).not.toContain("weet LaVega niet");
+    // The kind, not a rendered sentence: `whyKind` picks a "uniform-*" branch
+    // only when `uniformAcrossBank` holds, never "held-uncertain".
+    expect(rows[0].why.kind).toMatch(/^uniform-/);
+    expect(rows[0].why).toMatchObject({ collapsed: 2, bank: "American Express" });
   });
 
   test("products that disagree: the row names the product and admits the doubt", () => {
     const rows = ranked({ accounts: [acc("B1", "bunq", "bunq")], facts: [], entries: BUNQ });
     expect(rows[0].uniformAcrossBank).toBe(false);
-    expect(rows[0].why).toContain("bunq Core betaalpas");
-    expect(rows[0].why).toContain(
-      "of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet",
-    );
+    expect(rows[0].why).toMatchObject({ kind: "held-uncertain", product: "bunq Core betaalpas" });
   });
 
   test("the transfer is never priced on a package he may not be on", () => {

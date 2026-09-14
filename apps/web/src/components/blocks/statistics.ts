@@ -1,7 +1,6 @@
 import type { CategorySelection, ConversionMode, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categorize, isEurCurrency, selectMajorCategories, toEur } from "@lavega/core";
 import {
-  dayLabelNL,
   daysBetween,
   mondayOf,
   monthFirstDay,
@@ -12,7 +11,9 @@ import {
   WEEKDAYS_NL,
   WEEKDAYS_SHORT_NL,
 } from "./dates.js";
-import { monthLabelNL, monthShortNL } from "../../format.js";
+import { monthLabel, monthShort } from "../../format.js";
+import type { Locale } from "../../locale.js";
+import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 
 /* The two questions the Statistieken block answers, as pure derivations, over
  * an explicit WINDOW.
@@ -298,12 +299,19 @@ export type CategoryWindow = {
 
 /** "aug" inside a year, "aug '25" once the window is longer than twelve months
  *  — both so the label stays short and so it stays UNIQUE. */
-export function monthAxisLabel(month: string, windowLength: number): string {
-  return windowLength > 12 ? `${monthShortNL(month)} '${month.slice(2, 4)}` : monthShortNL(month);
+export function monthAxisLabel(month: string, windowLength: number, locale: Locale): string {
+  return windowLength > 12
+    ? `${monthShort(locale, month)} '${month.slice(2, 4)}`
+    : monthShort(locale, month);
 }
 
 /** The buckets covering `covered`, clipped at both ends. */
-function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucket, "hasData">[] {
+function buildBuckets(
+  covered: StatWindow,
+  unit: StatBucketUnit,
+  locale: Locale,
+): Omit<StatBucket, "hasData">[] {
+  const c = moneyCopy[locale].statistiek;
   const clip = (start: string, end: string) => ({
     start: start < covered.start ? covered.start : start,
     end: end > covered.end ? covered.end : end,
@@ -314,8 +322,8 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
     for (let d = covered.start; d <= covered.end; d = shiftDate(d, 1)) {
       out.push({
         key: d,
-        label: dayLabelNL(d),
-        title: `${WEEKDAYS_NL[weekdayIndex(d)]} ${dayLabelNL(d)}`,
+        label: dayLabelIn(locale, d),
+        title: `${WEEKDAYS_NL[weekdayIndex(d)]} ${dayLabelIn(locale, d)}`,
         start: d,
         end: d,
         // A single day is never "part of" itself.
@@ -333,10 +341,11 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
       const partial = start !== full.start || end !== full.end;
       out.push({
         key: w,
-        label: dayLabelNL(start),
+        label: dayLabelIn(locale, start),
         title: partial
-          ? `Week van ${dayLabelNL(full.start)} — alleen ${dayLabelNL(start)} t/m ${dayLabelNL(end)}`
-          : `Week van ${dayLabelNL(full.start)}`,
+          ? c.weekVan(dayLabelIn(locale, full.start)) +
+            c.alleenTM(dayLabelIn(locale, start), dayLabelIn(locale, end))
+          : c.weekVan(dayLabelIn(locale, full.start)),
         start,
         end,
         partial,
@@ -354,10 +363,10 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
     const partial = start !== full.start || end !== full.end;
     return {
       key: m,
-      label: monthAxisLabel(m, months.length),
+      label: monthAxisLabel(m, months.length, locale),
       title: partial
-        ? `${monthLabelNL(m)} — alleen ${dayLabelNL(start)} t/m ${dayLabelNL(end)}`
-        : monthLabelNL(m),
+        ? monthLabel(locale, m) + c.alleenTM(dayLabelIn(locale, start), dayLabelIn(locale, end))
+        : monthLabel(locale, m),
       start,
       end,
       partial,
@@ -390,6 +399,7 @@ export function categoryPerWindow(
   window: StatWindow,
   maxShown: number,
   conversion: Conversion,
+  locale: Locale,
 ): CategoryWindow {
   const unit = bucketUnit(window);
   const empty: CategoryWindow = {
@@ -413,7 +423,7 @@ export function categoryPerWindow(
   const rows = all.filter((r) => r.date >= covered.start && r.date <= covered.end);
   if (rows.length === 0) return { ...empty, covered };
 
-  const skeleton = buildBuckets(covered, unit);
+  const skeleton = buildBuckets(covered, unit, locale);
   const totals = new Map<string, number>();
   const grid = skeleton.map(() => new Map<string, number>());
   const touched = skeleton.map(() => false);

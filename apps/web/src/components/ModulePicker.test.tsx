@@ -194,6 +194,14 @@ test("every registry entry carries what the picker shows: label, one line, icon,
   expect(container!.querySelectorAll(".mp-preview svg.mp-thumb").length).toBe(MODULES.length);
 });
 
+test("the picker renders in English when the locale cookie says en", () => {
+  document.cookie = "lavega_locale=en";
+  const container = render();
+  expect(container.textContent).toContain("Currency");
+  expect(container.textContent).not.toContain("Valuta");
+  document.cookie = "lavega_locale=; Max-Age=0; Path=/";
+});
+
 /* ---------------------------------------------------------------------- *
  * Overzicht-widgets — Aandacht, Positie per bedrijf, Betaalagenda
  *

@@ -8,7 +8,8 @@
  * (investors, the CEMS network, partners abroad) who reach the site by link,
  * not by search.
  *
- * The app behind the waitlist is Dutch throughout and is untouched by this.
+ * The app behind the waitlist reads the same cookie but chooses its fallback
+ * differently. See `appLocale.ts`.
  */
 
 import { landingCopy } from "./landingCopy.js";

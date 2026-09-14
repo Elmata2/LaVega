@@ -429,7 +429,7 @@ describe("waar de bol naartoe draait", () => {
       expect(conversionFor(c.id).kind, c.id).not.toBe("unknown");
       // En te vinden op naam, anders is de eerlijke mededeling onbereikbaar.
       expect(
-        searchCountries(countryLabel(c.id), 20).map((x) => x.id),
+        searchCountries("nl", countryLabel("nl", c.id), 20).map((x) => x.id),
         c.id,
       ).toContain(c.id);
     }
@@ -553,23 +553,23 @@ describe("van land naar valuta", () => {
 
 describe("zoeken en benoemen", () => {
   it("noemt landen in het Nederlands", () => {
-    expect(countryLabel("DE")).toBe("Duitsland");
-    expect(countryLabel("NL")).toBe("Nederland");
-    expect(countryLabel("QQ")).toBe("");
+    expect(countryLabel("nl", "DE")).toBe("Duitsland");
+    expect(countryLabel("nl", "NL")).toBe("Nederland");
+    expect(countryLabel("nl", "QQ")).toBe("");
   });
 
   it("vindt een land op naam, op Engelse naam en op code", () => {
-    expect(searchCountries("japan")[0]?.id).toBe("JP");
-    expect(searchCountries("nederl")[0]?.id).toBe("NL");
-    expect(searchCountries("south africa")[0]?.id).toBe("ZA");
-    expect(searchCountries("US")[0]?.id).toBe("US");
+    expect(searchCountries("nl", "japan")[0]?.id).toBe("JP");
+    expect(searchCountries("nl", "nederl")[0]?.id).toBe("NL");
+    expect(searchCountries("nl", "south africa")[0]?.id).toBe("ZA");
+    expect(searchCountries("nl", "US")[0]?.id).toBe("US");
   });
 
   it("vindt Singapore zonder dat er gedraaid hoeft te worden, en weet waar het is", () => {
     // Dit is waarom er een zoekveld is: Singapore is op een bol van een paar
     // honderd pixels één pixel, en je vindt het niet door te slepen. Zoeken moet
     // dus in één stap bij een middelpunt uitkomen waar de bol naartoe kan.
-    const hit = searchCountries("singapore")[0];
+    const hit = searchCountries("nl", "singapore")[0];
     expect(hit?.id).toBe("SG");
     const f = countryFocus(hit!.id)!;
     expect(f.center[0]).toBeCloseTo(103.8, 0);
@@ -577,19 +577,19 @@ describe("zoeken en benoemen", () => {
   });
 
   it("trekt zich niets aan van accenten en hoofdletters", () => {
-    expect(searchCountries("curacao")[0]?.id).toBe("CW");
-    expect(searchCountries("CURAÇAO")[0]?.id).toBe("CW");
+    expect(searchCountries("nl", "curacao")[0]?.id).toBe("CW");
+    expect(searchCountries("nl", "CURAÇAO")[0]?.id).toBe("CW");
   });
 
   it("zet wat met de zoekterm begint boven wat hem alleen bevat", () => {
-    const ids = searchCountries("ind", 10).map((c) => c.id);
+    const ids = searchCountries("nl", "ind", 10).map((c) => c.id);
     expect(ids).toContain("IN");
     expect(ids.indexOf("IN")).toBeLessThan(ids.indexOf("ID") === -1 ? 99 : ids.indexOf("ID") + 1);
   });
 
   it("geeft niets terug op een lege vraag, in plaats van alles", () => {
-    expect(searchCountries("")).toEqual([]);
-    expect(searchCountries("   ")).toEqual([]);
-    expect(searchCountries("japan", 0)).toEqual([]);
+    expect(searchCountries("nl", "")).toEqual([]);
+    expect(searchCountries("nl", "   ")).toEqual([]);
+    expect(searchCountries("nl", "japan", 0)).toEqual([]);
   });
 });

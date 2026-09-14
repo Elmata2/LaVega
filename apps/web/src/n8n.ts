@@ -127,15 +127,6 @@ function senderChecksOf(v: unknown): SenderChecks | undefined {
   return { spf: spf ?? "unknown", dkim: dkim ?? "unknown", dmarc: dmarc ?? "unknown" };
 }
 
-/** What the owner reads above each notice. Kept here, next to the type, so a
- *  new kind cannot reach the screen without a label. */
-export const NOTICE_LABELS: Record<N8nNotice["kind"], string> = {
-  notification: "Staat klaar bij de leverancier",
-  reminder: "Herinnering of aanmaning",
-  "no-amount": "Factuur zonder leesbaar bedrag",
-  unreadable: "Niets leesbaars in deze mail",
-};
-
 /**
  * The `notices` half of the same body. An older workflow that doesn't send them
  * yields an empty list — that is not an error, it is a workflow that hasn't been
@@ -290,27 +281,35 @@ export function toPending(row: N8nInvoiceRow, defaultEntity: string): PendingInv
   };
 }
 
+/** What a reviewed row is missing, as a fact. These used to be Dutch sentences
+ *  returned from validation, which put prose in the model layer and rendered
+ *  Dutch on the English screen. */
+export type InvoiceGap =
+  | "counterparty"
+  | "issue-date"
+  | "due-date"
+  | "amount"
+  | "currency"
+  | "vat";
+
 /** Turn a reviewed row into a real Invoice, or say exactly what is missing.
  *  `sourceType: "llm"` because a model read this out of an e-mail — it must
  *  stay distinguishable from something he typed himself. No confidence is set:
  *  the workflow reports none, and a fabricated one would be a lie. */
 export function pendingToInvoice(
   p: PendingInvoice,
-): { ok: true; invoice: Invoice } | { ok: false; error: string } {
+): { ok: true; invoice: Invoice } | { ok: false; gap: InvoiceGap } {
   const counterparty = p.counterparty.trim();
-  if (!counterparty) return { ok: false, error: "Vul een relatie in." };
-  if (!p.issueDate) return { ok: false, error: "Vul een factuurdatum in." };
-  if (!p.dueDate) return { ok: false, error: "Vul een vervaldatum in — n8n vond er geen." };
+  if (!counterparty) return { ok: false, gap: "counterparty" };
+  if (!p.issueDate) return { ok: false, gap: "issue-date" };
+  if (!p.dueDate) return { ok: false, gap: "due-date" };
   const amount = Number(p.amount.replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0)
-    return { ok: false, error: "Vul een geldig bedrag in." };
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, gap: "amount" };
   const currency = p.currency.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency))
-    return { ok: false, error: "Vul de valuta in — n8n las er geen, en LaVega gokt geen euro's." };
+  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, gap: "currency" };
   const vatRaw = p.vat.trim();
   const vat = vatRaw === "" ? undefined : Number(vatRaw.replace(",", "."));
-  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0))
-    return { ok: false, error: "Btw-bedrag klopt niet." };
+  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0)) return { ok: false, gap: "vat" };
   return {
     ok: true,
     invoice: makeInvoice({
@@ -372,7 +371,25 @@ export function pendingToInvoice(
  * verdwijnt. Iets stils dat zijn boeken verandert is erger dan een klik.
  */
 
-export type AutoBookDecision = { book: true } | { book: false; reason: string };
+/** The sender checks as the workflow reported them. Language-neutral: SPF, DKIM
+ *  and DMARC are called that in every language. */
+export type SenderCheckDetail = { spf: string; dkim: string; dmarc: string };
+
+/** Why a row was held back, as a FACT rather than a sentence.
+ *
+ *  This used to be a Dutch string built right here, which meant the decision
+ *  engine owned prose and an English reader was told in Dutch why their invoice
+ *  was waiting. The engine decides; the screen says it, in the reader's
+ *  language. It also stops a copy tweak from breaking a decision test. */
+export type AutoBookHold =
+  | { kind: "sender-forwarded"; checks: SenderCheckDetail | null }
+  | { kind: "sender-failed"; checks: SenderCheckDetail | null }
+  | { kind: "sender-unchecked" }
+  | { kind: "entity-ambiguous" }
+  | { kind: "incomplete"; gap: InvoiceGap }
+  | { kind: "over-ceiling"; ceilingCents: number };
+
+export type AutoBookDecision = { book: true } | { book: false; hold: AutoBookHold };
 
 export type EntityContext = { entityChoices: string[]; defaultEntity: string };
 
@@ -396,10 +413,6 @@ export function bookingEntity(ctx: EntityContext): string {
  *  missen zonder het te zien. */
 export const AUTO_BOOK_CEILING_CENTS = 1_000_000;
 
-function formatCeiling(): string {
-  return `€ ${(AUTO_BOOK_CEILING_CENTS / 100).toLocaleString("nl-NL")}`;
-}
-
 /** Ziet dit eruit als een doorgestuurde mail in plaats van een nagemaakte afzender?
  *
  *  SPF gaat over de verzendende SERVER, DKIM over het BERICHT. Doorsturen wisselt
@@ -419,65 +432,52 @@ export function forwardedNotSpoofed(c: N8nInvoiceRow["senderChecks"]): boolean {
 export function autoBookDecision(row: N8nInvoiceRow, ctx: EntityContext): AutoBookDecision {
   if (row.senderCheck === "failed") {
     const c = row.senderChecks;
-    const detail = c ? ` (SPF ${c.spf}, DKIM ${c.dkim}, DMARC ${c.dmarc})` : "";
+    /* DE ECHTE OORZAAK IS HET DOORSTUREN, en die hoort de lezer te krijgen.
+     *
+     * SPF zakt en DKIM slaagt is de handtekening van een DOORGESTUURDE mail:
+     * DKIM ondertekent het bericht en overleeft de reis, SPF gaat over de
+     * verzendende server en die is bij doorsturen niet meer die van de
+     * leverancier. Een NAGEMAAKTE afzender krijgt juist geen geldige DKIM voor
+     * het domein dat hij naspeelt - dat is nou net wat DKIM moeilijk maakt.
+     *
+     * De oude tekst noemde hier twee oorzaken waarvan er in dit geval GEEN
+     * ENKELE de echte was. Wie een doorstuurregel in Gmail aanzet kreeg dus bij
+     * elke factuur te lezen dat zijn leverancier verdacht was.
+     *
+     * De poort blijft in beide gevallen dicht, en dat is opzet: DKIM zegt dat
+     * het bericht onderweg niet is veranderd, niet dat de doorstuurder te
+     * vertrouwen is. Maar wachten met de juiste reden is iets anders dan
+     * wachten met een verkeerde. */
     return {
       book: false,
-      reason: forwardedNotSpoofed(c)
-        ? /* DE ECHTE OORZAAK IS HET DOORSTUREN, en dat moet er staan.
-           *
-           * SPF zakt en DKIM slaagt is de handtekening van een DOORGESTUURDE
-           * mail: DKIM ondertekent het bericht en overleeft de reis, SPF gaat
-           * over de verzendende server en die is bij doorsturen niet meer die
-           * van de leverancier. Een NAGEMAAKTE afzender krijgt juist geen
-           * geldige DKIM voor het domein dat hij naspeelt - dat is nou net wat
-           * DKIM moeilijk maakt.
-           *
-           * De oude tekst noemde hier twee oorzaken ("slordig ingesteld domein
-           * of een nagemaakte afzender") waarvan er in dit geval GEEN ENKELE de
-           * echte was. Wie een doorstuurregel in Gmail aanzet kreeg dus bij elke
-           * factuur te lezen dat zijn leverancier verdacht was.
-           *
-           * De poort blijft dicht, en dat is opzet: DKIM zegt dat het bericht
-           * onderweg niet is veranderd, niet dat de doorstuurder te vertrouwen
-           * is. Maar wachten met de juiste reden is iets anders dan wachten met
-           * een verkeerde. */
-          `De afzender kwam niet door de SPF-controle${detail}, maar DKIM klopt wél — dat patroon hoort bij een DOORGESTUURDE mail en niet bij een nagemaakte afzender. Waarschijnlijk je eigen doorstuurregel. LaVega boekt hem toch niet zelf: dat de mail onderweg niet is veranderd, zegt niets over wie hem doorstuurde. Controleer de regel en bevestig hem zelf.`
-        : `De afzender kwam niet door de SPF/DKIM-controle${detail}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
+      hold: {
+        kind: forwardedNotSpoofed(c) ? "sender-forwarded" : "sender-failed",
+        checks: c ?? null,
+      },
     };
   }
   if (row.senderCheck !== "passed") {
-    return {
-      book: false,
-      reason:
-        "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
-    };
+    return { book: false, hold: { kind: "sender-unchecked" } };
   }
   if (ctx.entityChoices.length > 1) {
-    return {
-      book: false,
-      reason:
-        "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
-    };
+    return { book: false, hold: { kind: "entity-ambiguous" } };
   }
   const check = pendingToInvoice(toPending(row, bookingEntity(ctx)));
-  if (!check.ok)
-    return {
-      book: false,
-      reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.`,
-    };
+  if (!check.ok) return { book: false, hold: { kind: "incomplete", gap: check.gap } };
   /* HET PLAFOND, LAATST GECONTROLEERD EN MET OPZET. Een bedrag boven de grens
-   * wacht ook als de afzender geverifieerd is en de extractie compleet — het is de
-   * enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een geverifieerde
-   * afzender kan een correcte factuur sturen met een fout bedrag, en dan is de vraag
-   * niet of hij echt is maar hoeveel je wilt kunnen missen zonder het te zien.
+   * wacht ook als de afzender geverifieerd is en de extractie compleet - het is
+   * de enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een
+   * geverifieerde afzender kan een correcte factuur sturen met een fout bedrag,
+   * en dan is de vraag niet of hij echt is maar hoeveel je wilt kunnen missen
+   * zonder het te zien.
    *
    * Deze staat als LAATSTE zodat de melding de nuttigste is: bij een gespoofte
-   * afzender van € 50.000 hoort hij te lezen dat de afzender niet klopt, niet dat
-   * het bedrag hoog is. */
+   * afzender van EUR 50.000 hoort hij te lezen dat de afzender niet klopt, niet
+   * dat het bedrag hoog is. */
   if (row.amountCents > AUTO_BOOK_CEILING_CENTS) {
     return {
       book: false,
-      reason: `Boven ${formatCeiling()} boekt LaVega niets zelf, ook niet van een geverifieerde afzender. Deze wacht op jou.`,
+      hold: { kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS },
     };
   }
   return { book: true };

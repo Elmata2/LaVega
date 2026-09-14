@@ -3,8 +3,7 @@ import { MIN_VAULT_PASSWORD, vaultPasswordProblem } from "./vaultPassword.js";
 
 test("a password shorter than the minimum is refused, and the reason says why", () => {
   const problem = vaultPasswordProblem("kort");
-  expect(problem).not.toBeNull();
-  expect(problem).toContain(String(MIN_VAULT_PASSWORD));
+  expect(problem).toBe("tooShort");
 });
 
 test("one character under the minimum is still refused", () => {

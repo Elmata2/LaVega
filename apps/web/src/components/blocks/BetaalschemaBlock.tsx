@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import type { ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
-import { formatEuro, monthShortNL } from "../../format.js";
+import { formatEuroIn, monthShort } from "../../format.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import { daysBetween, shiftDate } from "./dates.js";
+import type { Locale } from "../../locale.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Betaalagenda — the reference's "Payment schedule": what is due next, with a
  * date tile per row.
@@ -39,26 +42,18 @@ const ROWS = 6;
  *  quarter the list stops being an agenda and becomes a subscription report. */
 const HORIZON_DAYS = 92;
 
-/** Dutch label for a flow's status. `paid`/`cancelled` never reach the list. */
-const STATUS_LABEL: Record<ScheduledFlow["status"], string> = {
-  expected: "verwacht",
-  confirmed: "bevestigd",
-  paid: "betaald",
-  cancelled: "vervallen",
-};
-
-/** How a detected cadence reads in Dutch. Covers every cadence
- *  `detectScheduleStreams` can return, plus the two short ones an older stream
- *  may still carry. */
-export function cadenceLabel(days: number): string {
-  if (days === 7) return "wekelijks";
-  if (days === 14) return "elke 2 weken";
-  if (days === 30) return "maandelijks";
-  if (days === 61) return "tweemaandelijks";
-  if (days === 91) return "elk kwartaal";
-  if (days === 182) return "halfjaarlijks";
-  if (days === 365) return "jaarlijks";
-  return `elke ${days} dagen`;
+/** How a detected cadence reads. Covers every cadence `detectScheduleStreams`
+ *  can return, plus the two short ones an older stream may still carry. */
+export function cadenceLabel(days: number, locale: Locale = "nl"): string {
+  const c = moneyCopy[locale].betaalschema.cadence;
+  if (days === 7) return c.wekelijks;
+  if (days === 14) return c.elke2Weken;
+  if (days === 30) return c.maandelijks;
+  if (days === 61) return c.tweemaandelijks;
+  if (days === 91) return c.elkKwartaal;
+  if (days === 182) return c.halfjaarlijks;
+  if (days === 365) return c.jaarlijks;
+  return c.elkeNDagen(days);
 }
 
 export type AgendaRow = {
@@ -88,7 +83,9 @@ export function agendaRows(
   txs: Tx[],
   asOf: string,
   limit = ROWS,
+  locale: Locale = "nl",
 ): AgendaRow[] {
+  const c = moneyCopy[locale].betaalschema;
   const planned: AgendaRow[] = scheduledFlows
     .filter((f) => f.status !== "paid" && f.status !== "cancelled")
     .map((f) => ({
@@ -96,7 +93,7 @@ export function agendaRows(
       date: f.dueDate,
       label: f.label,
       amount: (f.sign * f.amountCents) / 100,
-      note: `${f.entity ? `${f.entity} · ` : ""}${STATUS_LABEL[f.status]}`,
+      note: `${f.entity ? `${f.entity} · ` : ""}${c.status[f.status]}`,
       predicted: false,
     }));
 
@@ -109,7 +106,7 @@ export function agendaRows(
       date,
       label: s.label,
       amount: (s.sign * s.amountCents) / 100,
-      note: `${cadenceLabel(s.cadenceDays)} · ${s.occurrences}× gezien`,
+      note: `${cadenceLabel(s.cadenceDays, locale)} · ${c.xGezien(s.occurrences)}`,
       predicted: true,
     }));
 
@@ -129,9 +126,11 @@ type BetaalschemaBlockProps = {
 };
 
 export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].betaalschema;
   const upcoming = useMemo(
-    () => agendaRows(scheduledFlows, txs, asOf),
-    [scheduledFlows, txs, asOf],
+    () => agendaRows(scheduledFlows, txs, asOf, ROWS, locale),
+    [scheduledFlows, txs, asOf, locale],
   );
   const overdueCount = upcoming.filter((r) => r.date < asOf).length;
   const predictedCount = upcoming.filter((r) => r.predicted).length;
@@ -170,25 +169,19 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
 
   return (
     <Module
-      title="Betaalagenda"
+      title={c.title}
       height="tall"
       footer={
         upcoming.length > 0 ? (
           <>
-            {overdueCount > 0 &&
-              `${overdueCount} datum${overdueCount === 1 ? "" : "s"} al verstreken. `}
-            {predictedCount > 0
-              ? `${predictedCount} regel${predictedCount === 1 ? "" : "s"} voorspeld uit je eigen geschiedenis, niet bevestigd.`
-              : "Alle regels zijn ingeplande bedragen."}
+            {overdueCount > 0 && c.datumAlVerstreken(overdueCount)}
+            {predictedCount > 0 ? c.regelVoorspeld(predictedCount) : c.alleRegelsIngepland}
           </>
         ) : undefined
       }
     >
       {upcoming.length === 0 ? (
-        <p className="block-empty">
-          Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste
-          lasten te staan.
-        </p>
+        <p className="block-empty">{c.nietsIngepland}</p>
       ) : (
         <div className="pay-list">
           {upcoming.map((r) => {
@@ -215,7 +208,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                   aria-hidden="true"
                 >
                   <span className="pay-date-day">{r.date.slice(8, 10)}</span>
-                  <span className="pay-date-month">{monthShortNL(r.date)}</span>
+                  <span className="pay-date-month">{monthShort(locale, r.date)}</span>
                 </span>
                 <span className="pay-info">
                   <span className="pay-label">
@@ -228,15 +221,15 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                     <span className="pay-name" title={r.label}>
                       {r.label}
                     </span>
-                    {r.predicted && <span className="pay-tag">voorspeld</span>}
+                    {r.predicted && <span className="pay-tag">{c.voorspeldTag}</span>}
                   </span>
                   <span className="eyebrow pay-meta">
                     {r.date} · {r.note}
-                    {overdue ? " · te laat" : ""}
+                    {overdue ? c.teLaatSuffix : ""}
                   </span>
                 </span>
                 <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>
-                  {formatEuro(r.amount)}
+                  {formatEuroIn(locale, r.amount)}
                 </span>
               </button>
             );

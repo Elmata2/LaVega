@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { Rule } from "@lavega/core";
 import { CATEGORY_OPTIONS } from "@lavega/core";
+import { useAppLocale } from "../appLocale.js";
+import { adminCopy } from "../copy/admin.js";
 
 type RegelsProps = {
   rules: Rule[];
@@ -21,11 +23,15 @@ export default function Regels({
   onRuleCategoryChange,
   onSaveRules,
 }: RegelsProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].regels;
+
   // Case-insensitive, so "boodschappen" is recognised as the existing category
   // rather than warned about — the warning is for a genuinely new name.
   const typed = ruleCategory.trim();
   const isNewCategory =
-    typed !== "" && !CATEGORY_OPTIONS.some((c) => c.toLowerCase() === typed.toLowerCase());
+    typed !== "" &&
+    !CATEGORY_OPTIONS.some((option) => option.toLowerCase() === typed.toLowerCase());
 
   /* ALPHABETICAL FOR READING, ORIGINAL ORDER FOR MATCHING.
    *
@@ -48,21 +54,20 @@ export default function Regels({
   );
 
   return (
-    <section className="card" aria-label="Regels">
-      <h2>Regels</h2>
+    <section className="card" aria-label={c.section.ariaLabel}>
+      <h2>{c.section.heading}</h2>
+      <p className="cell-sub">{c.intro.autoCategorization}</p>
       <p className="cell-sub">
-        LaVega categoriseert transacties automatisch met een ingebouwde Nederlandse lijst (Albert
-        Heijn → Boodschappen, NS → Transport, Netflix → Entertainment, enz.). Je eigen regels
-        hieronder gaan vóór die automatische categorieën.
-      </p>
-      <p className="cell-sub">
-        Een regel matcht als de <em>match</em>-tekst ergens in de tegenpartij of de omschrijving
-        voorkomt, en de <strong>eerste</strong> regel die past wint — een korte match als "spar"
-        raakt dus ook "sparen". Zie je een transactie als <em>onbekend</em> staan bij Transacties?
-        Daar staat er ook bij wáárom, en dat is meestal de tekst waar je hier een regel op maakt.
+        {c.intro.matchingRules.beforeMatchWord}
+        <em>{c.intro.matchingRules.matchWord}</em>
+        {c.intro.matchingRules.beforeFirstWord}
+        <strong>{c.intro.matchingRules.firstWord}</strong>
+        {c.intro.matchingRules.beforeUnknownWord}
+        <em>{c.intro.matchingRules.unknownWord}</em>
+        {c.intro.matchingRules.afterUnknownWord}
       </p>
       <label>
-        Match{" "}
+        {c.form.matchLabel}{" "}
         <input
           value={ruleMatch}
           onChange={(e) => onRuleMatchChange(e.target.value)}
@@ -70,7 +75,7 @@ export default function Regels({
         />
       </label>{" "}
       <label>
-        Categorie{" "}
+        {c.form.categoryLabel}{" "}
         {/* A list-backed input, not a plain text field: typing a category by hand
             is how a second, near-identical bucket appears in every total
             ("Boodschappen" next to "boodschappen"). The list offers the
@@ -83,11 +88,11 @@ export default function Regels({
           value={ruleCategory}
           onChange={(e) => onRuleCategoryChange(e.target.value)}
           disabled={busy}
-          placeholder="Kies of typ een categorie"
+          placeholder={c.form.categoryPlaceholder}
         />
         <datalist id="regel-categorieen">
-          {CATEGORY_OPTIONS.map((c) => (
-            <option key={c} value={c} />
+          {CATEGORY_OPTIONS.map((option) => (
+            <option key={option} value={option} />
           ))}
         </datalist>
       </label>{" "}
@@ -104,23 +109,22 @@ export default function Regels({
           onRuleCategoryChange("");
         }}
       >
-        Toevoegen
+        {c.form.addButton}
       </button>
       {isNewCategory && (
         <p className="cell-sub" role="status">
-          "{ruleCategory.trim()}" staat niet in de lijst. Dat mag, maar het wordt dan een aparte
-          categorie in élk overzicht — ook als je een bestaande bedoelde met een andere spelling.
+          {c.newCategoryWarning(ruleCategory.trim())}
         </p>
       )}
       {rules.length === 0 ? (
-        <p>Nog geen regels.</p>
+        <p>{c.table.emptyState}</p>
       ) : (
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
-                <th>Match</th>
-                <th>Categorie</th>
+                <th>{c.table.matchHeader}</th>
+                <th>{c.table.categoryHeader}</th>
                 <th></th>
               </tr>
             </thead>
@@ -136,7 +140,7 @@ export default function Regels({
                       disabled={busy}
                       onClick={() => void onSaveRules(rules.filter((r) => r.id !== rule.id))}
                     >
-                      Verwijderen
+                      {c.table.deleteButton}
                     </button>
                   </td>
                 </tr>
@@ -145,8 +149,7 @@ export default function Regels({
           </table>
           {rules.length > 1 && (
             <p className="cell-sub" style={{ marginTop: ".5rem" }}>
-              Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint
-              de regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.
+              {c.table.sortNote}
             </p>
           )}
         </div>

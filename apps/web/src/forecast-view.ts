@@ -1,4 +1,7 @@
 import type { Driver, EntityForecast, ForecastConfidence } from "@lavega/core";
+import { formatWholeEuroIn } from "./format.js";
+import type { Locale } from "./locale.js";
+import { moneyCopy } from "./copy/money.js";
 
 /* Tiny pure presentational mappings for views/Forecast.tsx, split out so they
  * can be unit-tested without rendering JSX (mirrors the split already used by
@@ -46,16 +49,10 @@ export function hasBand(f: Pick<EntityForecast, "points">): boolean {
   );
 }
 
-/** Dutch label for the engine's confidence grade. Deliberately plain words: a
+/** Label for the engine's confidence grade. Deliberately plain words: a
  *  percentage here would claim a precision the grade does not have. */
-export function confidenceLabel(c: ForecastConfidence): string {
-  return c === "none"
-    ? "geen prognose mogelijk"
-    : c === "low"
-      ? "beperkte basis"
-      : c === "medium"
-        ? "redelijke basis"
-        : "brede basis";
+export function confidenceLabel(locale: Locale, c: ForecastConfidence): string {
+  return moneyCopy[locale].forecast.coverage.confidence[c];
 }
 
 /** Whole days from ISO `a` to ISO `b`. Same Date.UTC arithmetic the engine uses
@@ -66,9 +63,8 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 
-const euro = (cents: number): string =>
-  "€" +
-  new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 }).format(Math.round(cents / 100));
+const euro = (locale: Locale, cents: number): string =>
+  formatWholeEuroIn(locale, cents / 100);
 
 /** How many days behind `asOf` the newest transaction may be before the data
  *  itself is worth mentioning. Two weeks: shorter than a payment cycle, long
@@ -84,41 +80,28 @@ export type CoverageNote = { id: string; text: string };
  *  Empty for a forecast with no `basis` (hand-written fixtures) — silence is
  *  correct there; inventing a coverage claim would be the very thing this is
  *  meant to prevent. */
-export function coverageNotes(f: EntityForecast): CoverageNote[] {
+export function coverageNotes(locale: Locale, f: EntityForecast): CoverageNote[] {
   const b = f.basis;
   if (!b) return [];
+  const t = moneyCopy[locale].forecast.coverage;
   const notes: CoverageNote[] = [];
 
   if (b.confidence === "none") {
-    notes.push({
-      id: "no-evidence",
-      text:
-        "Er is niets om op te projecteren: geen lopende terugkerende stromen, te weinig historie voor een uitgavenpatroon en geen ingeplande posten. " +
-        "De lijn is je huidige saldo, doorgetrokken — geen prognose.",
-    });
+    notes.push({ id: "no-evidence", text: t.noEvidence });
   } else if (b.historyDays === 0) {
-    notes.push({
-      id: "flows-only",
-      text: `Geen transactiehistorie in deze weergave — alleen ${b.projectedFlowCount} ingeplande post(en) zijn meegeteld.`,
-    });
+    notes.push({ id: "flows-only", text: t.flowsOnly(b.projectedFlowCount) });
   } else {
-    const parts = [`${b.historyDays} dagen historie (${b.firstTxDate} t/m ${b.lastTxDate})`];
-    parts.push(
-      b.liveStreamCount === 1
-        ? "1 lopende terugkerende stroom"
-        : `${b.liveStreamCount} lopende terugkerende stromen`,
-    );
-    if (b.projectedFlowCount > 0) parts.push(`${b.projectedFlowCount} ingeplande post(en)`);
-    notes.push({ id: "basis", text: `Gebaseerd op ${parts.join(", ")}.` });
+    const parts = [t.historyWindow(b.historyDays, b.firstTxDate, b.lastTxDate)];
+    parts.push(t.liveStreams(b.liveStreamCount));
+    if (b.projectedFlowCount > 0) parts.push(t.scheduledItems(b.projectedFlowCount));
+    notes.push({ id: "basis", text: t.basedOn(parts.join(", ")) });
   }
 
   if (b.accountsTotal > 0 && b.accountsWithHistory < b.accountsTotal) {
     const missing = b.accountsTotal - b.accountsWithHistory;
     notes.push({
       id: "accounts-without-history",
-      text:
-        `${missing} van je ${b.accountsTotal} rekeningen leverde geen transacties. ` +
-        "Het saldo telt mee in de startpositie, maar wat daar in- en uitgaat is hier onzichtbaar.",
+      text: t.accountsWithoutHistory(missing, b.accountsTotal),
     });
   }
 
@@ -130,55 +113,35 @@ export function coverageNotes(f: EntityForecast): CoverageNote[] {
     b.shortestAccountDays !== null &&
     b.shortestAccountDays * 2 < b.historyDays
   ) {
-    notes.push({
-      id: "short-account",
-      text: `De kortst geïmporteerde rekening heeft ${b.shortestAccountDays} dagen historie — wat daarop terugkeert is nog niet te zien.`,
-    });
+    notes.push({ id: "short-account", text: t.shortAccount(b.shortestAccountDays) });
   }
 
   if (!b.incidentalIncluded && b.historyDays > 0) {
-    notes.push({
-      id: "no-incidental",
-      text: "Te weinig historie voor een uitgavenpatroon: losse uitgaven buiten de herkende stromen zijn niet meegeprojecteerd.",
-    });
+    notes.push({ id: "no-incidental", text: t.noIncidental });
   }
 
   if (b.bandBasis === "none") {
-    notes.push({
-      id: "no-band",
-      text: "Geen bandbreedte: er is nog niets gemeten waaruit spreiding af te leiden valt.",
-    });
+    notes.push({ id: "no-band", text: t.noBand });
   } else if (!hasBand(f)) {
-    notes.push({
-      id: "flat-band",
-      text: "Bandbreedte nul: de bedragen die we meten varieerden tot nu toe niet. Dat is een meting over het verleden, geen garantie.",
-    });
+    notes.push({ id: "flat-band", text: t.flatBand });
   }
 
   if (b.endedStreams.length > 0) {
     const names = b.endedStreams.map((s) => s.counterparty).join(", ");
-    notes.push({
-      id: "ended-streams",
-      text: `Niet meegeteld, want gestopt: ${names}. Klopt dat niet, dan mist de import de laatste afschrijvingen.`,
-    });
+    notes.push({ id: "ended-streams", text: t.endedStreams(names) });
   }
 
   if (b.overdueFlowCount > 0) {
     notes.push({
       id: "overdue-flows",
-      text:
-        `${b.overdueFlowCount} ingeplande post(en) van samen ${euro(Math.abs(b.overdueFlowsCents))} was al verlopen en staat niet in de lijn — ` +
-        "we kunnen hier niet zien of je die al betaald hebt.",
+      text: t.overdueFlows(b.overdueFlowCount, euro(locale, Math.abs(b.overdueFlowsCents))),
     });
   }
 
   if (b.lastTxDate) {
     const stale = daysBetween(b.lastTxDate, f.asOf);
     if (stale > STALE_IMPORT_DAYS) {
-      notes.push({
-        id: "stale-import",
-        text: `De nieuwste transactie is van ${b.lastTxDate}, ${stale} dagen geleden. Alles daarna ontbreekt in deze prognose.`,
-      });
+      notes.push({ id: "stale-import", text: t.staleImport(b.lastTxDate, stale) });
     }
   }
 

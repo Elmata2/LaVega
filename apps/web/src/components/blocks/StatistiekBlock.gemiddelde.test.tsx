@@ -1,8 +1,9 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import StatistiekBlock, { gemiddeldeWeigeringNL } from "./StatistiekBlock";
+import StatistiekBlock, { gemiddeldeWeigering } from "./StatistiekBlock";
 import { own, rules, txs } from "./fixtures";
 
 /* GEMIDDELDE INKOMSTEN EN GEMIDDELDE UITGAVEN — de weergave.
@@ -96,17 +97,17 @@ test("te weinig om te middelen is een zin op de voorgrond, geen leeg vak", () =>
 
 test("gemiddeldeWeigeringNL geeft alleen advies dat in díe toestand werkt", () => {
   // Ligt er afschrift buiten het venster, dan helpt een langere periode.
-  expect(gemiddeldeWeigeringNL("te-kort", 1, true)).toBe(
+  expect(gemiddeldeWeigering("te-kort", 1, true)).toBe(
     "Nog geen gemiddelde: deze periode bevat 1 dag afschrift, en middelen vraagt er minstens 2. " +
       "Een langere periode pakt de rest van je afschriften mee.",
   );
   // Is dit alles wat er is, dan klikt hij zich suf aan langere periodes; dan is
   // importeren het enige dat werkt.
-  expect(gemiddeldeWeigeringNL("te-kort", 1, false)).toContain("Oudere afschriften importeren");
-  expect(gemiddeldeWeigeringNL("te-kort", 1, false)).not.toContain("langere periode");
+  expect(gemiddeldeWeigering("te-kort", 1, false)).toContain("Oudere afschriften importeren");
+  expect(gemiddeldeWeigering("te-kort", 1, false)).not.toContain("langere periode");
   // Geen enkele transactie is een ander feit dan één dag afschrift, en krijgt
   // een andere zin — niet "0 dagen".
-  const leeg = gemiddeldeWeigeringNL("geen-gegevens", 0, true);
+  const leeg = gemiddeldeWeigering("geen-gegevens", 0, true);
   expect(leeg).toContain("geen enkele transactie");
   expect(leeg).not.toContain("0 dagen");
 });

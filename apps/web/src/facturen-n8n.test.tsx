@@ -7,6 +7,7 @@ import type { VaultStorage } from "@lavega/adapters";
 import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
 import { getHandledInvoiceMessageIds } from "./settings";
+import { adminCopy } from "./copy/admin.js";
 
 /** An in-memory vault, enough for Facturen's n8n block: URL/token and the
  *  auto-booked fallback log (privacy/security review 2026-08-28, M4/L6 — both
@@ -59,6 +60,7 @@ let vault: VaultStorage;
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl; Path=/";
   saved = [];
   vault = fakeVault({
     invoiceUrl: "https://n8n.example/webhook/lavega-facturen",
@@ -71,6 +73,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
 /** Serves `bodies[n]` on the n-th call — the real webhook empties its queue, so
@@ -673,6 +676,22 @@ test("een automatisch geboekte factuur is als zodanig te zien en met één klik 
   expect(saved[0][0].status).toBe("cancelled");
   expect(c2).toBe(container);
   expect(c).toBeTruthy();
+});
+
+test("the lavega_locale cookie switches the n8n surface to English", async () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const en = adminCopy.en.facturen;
+
+  const c = render(serving([{ invoices: [] }]));
+  await flush();
+  expect(c.textContent).toContain(en.n8nNotices.emptyQueue);
+
+  if (root) act(() => root!.unmount());
+  container?.remove();
+  const c2 = render(serving([{ invoices: [ROW] }]));
+  await flush();
+  expect(c2.textContent).toContain(en.queue.heading);
+  expect(c2.textContent).toContain(en.queue.eyebrow(1));
 });
 
 test("twee keer dezelfde factuur boekt één keer, ook automatisch", async () => {

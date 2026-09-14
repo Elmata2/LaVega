@@ -1,3 +1,5 @@
+import type { Locale } from "./locale.js";
+
 /* Base URL for the LaVega server API (Enable Banking + rates). In production the
  * web app is served from the same origin as the server, so a relative "" works.
  * In dev the web runs on Vite (:5173) and the server on :8787. Overridable via
@@ -16,6 +18,30 @@ export const SIGNED_OUT_MESSAGE = "Je bent uitgelogd, log opnieuw in.";
 export async function apiErrorMessage(res: Response): Promise<string> {
   if (res.status === 401) return SIGNED_OUT_MESSAGE;
   let msg = `Verzoek mislukt (${res.status}).`;
+  try {
+    const parsed = (await res.json()) as { error?: string; problems?: string[] };
+    if (parsed?.error) msg = parsed.error;
+    else if (parsed?.problems?.length) msg = parsed.problems.join(" ");
+  } catch {
+    /* non-JSON error body; keep the status-based message */
+  }
+  return msg;
+}
+
+const SIGNED_OUT_MESSAGE_EN = "You're signed out, log back in.";
+
+/** Same message as SIGNED_OUT_MESSAGE, in the caller's language. The
+ *  no-locale exports above keep returning Dutch so every existing caller
+ *  behaves exactly as before until it is converted — same pattern as
+ *  format.ts's `*In` functions. */
+export function signedOutMessageIn(locale: Locale): string {
+  return locale === "nl" ? SIGNED_OUT_MESSAGE : SIGNED_OUT_MESSAGE_EN;
+}
+
+export async function apiErrorMessageIn(locale: Locale, res: Response): Promise<string> {
+  if (res.status === 401) return signedOutMessageIn(locale);
+  let msg =
+    locale === "nl" ? `Verzoek mislukt (${res.status}).` : `Request failed (${res.status}).`;
   try {
     const parsed = (await res.json()) as { error?: string; problems?: string[] };
     if (parsed?.error) msg = parsed.error;

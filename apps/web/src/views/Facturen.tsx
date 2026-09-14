@@ -8,7 +8,9 @@ import {
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import type { View } from "../App";
-import { formatEuro } from "../format";
+import { formatEuroIn } from "../format.js";
+import { useAppLocale } from "../appLocale.js";
+import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { API_BASE } from "../api";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -21,6 +23,7 @@ import {
 } from "../settings";
 import {
   autoBookDecision,
+  type AutoBookHold,
   bookingEntity,
   fetchQueue,
   forgetAutoBooked,
@@ -28,7 +31,6 @@ import {
   pendingToInvoice,
   rememberAutoBooked,
   toPending,
-  NOTICE_LABELS,
   type N8nNotice,
   type PendingInvoice,
 } from "../n8n";
@@ -146,12 +148,6 @@ type FacturenProps = {
   storage?: VaultStorage;
 };
 
-const STATUS_LABELS: Record<Invoice["status"], string> = {
-  expected: "verwacht",
-  paid: "betaald",
-  cancelled: "geannuleerd",
-};
-
 function isPdf(file: File): boolean {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 }
@@ -160,6 +156,26 @@ function isPdf(file: File): boolean {
  *  runs hourly, so anything faster only costs an empty round-trip — five minutes
  *  is short enough that a mail forwarded during a session shows up on its own. */
 export const PULL_INTERVAL_MS = 5 * 60 * 1000;
+
+
+/** The one place a hold kind becomes a sentence. Exhaustive by switch, so a new
+ *  kind in n8n.ts fails the build here instead of rendering nothing. */
+export function holdSentence(c: AdminCopy["facturen"], hold: AutoBookHold): string {
+  switch (hold.kind) {
+    case "sender-forwarded":
+      return c.queue.holds.senderForwarded(hold.checks);
+    case "sender-failed":
+      return c.queue.holds.senderFailed(hold.checks);
+    case "sender-unchecked":
+      return c.queue.holds.senderUnchecked;
+    case "entity-ambiguous":
+      return c.queue.holds.entityAmbiguous;
+    case "incomplete":
+      return c.queue.holds.incomplete(hold.gap);
+    case "over-ceiling":
+      return c.queue.holds.overCeiling(hold.ceilingCents);
+  }
+}
 
 export default function Facturen({
   entities,
@@ -176,6 +192,8 @@ export default function Facturen({
   fetchImpl,
   storage,
 }: FacturenProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].facturen;
   const [entity, setEntity] = useState(defaultEntity);
   const [direction, setDirection] = useState<Invoice["direction"]>("out");
   const [counterparty, setCounterparty] = useState("");
@@ -328,12 +346,12 @@ export default function Facturen({
 
   async function runFetchN8n() {
     if (!storage) {
-      setN8nNote("De kluis is nog niet gekoppeld aan dit scherm. Er is niets opgehaald.");
+      setN8nNote(c.n8nNotices.vaultNotLinked);
       return;
     }
     const vault = storage;
     setN8nBusy(true);
-    setN8nNote("Bezig met ophalen…");
+    setN8nNote(c.n8nNotices.fetching);
     try {
       const settings = await getN8nSettings(vault);
       const outcome = await fetchQueue(
@@ -342,21 +360,15 @@ export default function Facturen({
         fetchImpl,
       );
       if (outcome.kind === "not-configured") {
-        setN8nNote(
-          "Nog niet ingesteld: vul eerst de webhook-URL en het token in onder Koppelingen. Er is niets opgehaald.",
-        );
+        setN8nNote(c.n8nNotices.notConfigured);
         return;
       }
       if (outcome.kind === "unauthorized") {
-        setN8nNote(
-          `n8n weigerde het token (${outcome.status}). Er is niets opgehaald; de wachtrij in n8n staat er nog, want de workflow is niet eens gestart. Controleer het token onder Koppelingen.`,
-        );
+        setN8nNote(c.n8nNotices.unauthorized(outcome.status));
         return;
       }
       if (outcome.kind === "http-error") {
-        setN8nNote(
-          `n8n antwoordde met status ${outcome.status}. Er is niets opgehaald. Staat de workflow aan?`,
-        );
+        setN8nNote(c.n8nNotices.httpError(outcome.status));
         return;
       }
       if (outcome.kind === "network") {
@@ -372,15 +384,11 @@ export default function Facturen({
          * De oude tekst zette netwerk, URL en allowedOrigins als gelijke
          * kandidaten naast elkaar. Drie oorzaken noemen waarvan er één de echte
          * is, is bijna net zo onbruikbaar als er geen noemen. */
-        setN8nNote(
-          "Geen antwoord van n8n. Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig. Hier is niets binnengekomen.",
-        );
+        setN8nNote(c.n8nNotices.network);
         return;
       }
       if (outcome.kind === "unreadable") {
-        setN8nNote(
-          "Het antwoord van n8n was niet te lezen. Er is niets overgenomen — en omdat de wachtrij bij het ophalen geleegd wordt, kan die rij verloren zijn. Kijk in n8n.",
-        );
+        setN8nNote(c.n8nNotices.unreadable);
         return;
       }
 
@@ -407,7 +415,7 @@ export default function Facturen({
         const draft = toPending(row, bookingEntity(entityCtx));
         const decision = autoBookDecision(row, entityCtx);
         if (!decision.book) {
-          proposals.push({ ...draft, waitReason: decision.reason });
+          proposals.push({ ...draft, waitReason: holdSentence(c, decision.hold) });
           continue;
         }
         // De poort laat alleen door wat GEEN keuze meer is: één onderneming of
@@ -418,7 +426,7 @@ export default function Facturen({
         if (!result.ok) {
           // Unreachable while the gate checks the same thing, but a row must
           // land in the review list rather than vanish if the two ever diverge.
-          proposals.push({ ...draft, waitReason: result.error });
+          proposals.push({ ...draft, waitReason: c.queue.holds.gaps[result.gap] });
           continue;
         }
         if (seenIds.has(result.invoice.id)) {
@@ -456,45 +464,29 @@ export default function Facturen({
       if (freshNotices.length > 0) onNoticesChange([...currentNotices, ...freshNotices]);
       const parts: string[] = [];
       if (outcome.rows.length === 0) {
-        parts.push(
-          "De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.",
-        );
+        parts.push(c.n8nNotices.emptyQueue);
       } else if (fresh.length === 0) {
-        parts.push("Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.");
+        parts.push(c.n8nNotices.nothingNew);
       } else {
-        parts.push(
-          `${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd.`,
-        );
+        parts.push(c.n8nNotices.fetched(fresh.length));
       }
       if (booked.length > 0) {
-        parts.push(
-          `${booked.length} daarvan ${booked.length === 1 ? "is" : "zijn"} automatisch geboekt: de afzender kwam door de SPF/DKIM-controle en er stond alles in wat nodig is. Ze staan hieronder met “automatisch” erbij en zijn met één klik terug te draaien.`,
-        );
+        parts.push(c.n8nNotices.autoBooked(booked.length));
       }
       if (alreadyStored > 0) {
         parts.push(
           alreadyStored === 1
-            ? "Eén ervan stond al in LaVega en is niet dubbel geboekt."
-            : `${alreadyStored} ervan stonden al in LaVega en zijn niet dubbel geboekt.`,
+            ? c.n8nNotices.alreadyStoredOne
+            : c.n8nNotices.alreadyStoredMany(alreadyStored),
         );
       }
       if (proposals.length > 0) {
-        parts.push(
-          `${proposals.length} ${proposals.length === 1 ? "regel wacht" : "regels wachten"} op jou — bij elke regel staat waarom.`,
-        );
+        parts.push(c.n8nNotices.waiting(proposals.length));
       }
-      if (duplicates > 0)
-        parts.push(
-          `${duplicates} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`,
-        );
-      if (outcome.dropped > 0)
-        parts.push(
-          `${outcome.dropped} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`,
-        );
+      if (duplicates > 0) parts.push(c.n8nNotices.duplicatesSkipped(duplicates));
+      if (outcome.dropped > 0) parts.push(c.n8nNotices.dropped(outcome.dropped));
       if (freshNotices.length > 0) {
-        parts.push(
-          `${freshNotices.length} ${freshNotices.length === 1 ? "mail wacht" : "mails wachten"} onder “Zelf ophalen”: daar zat geen factuur in die LaVega kon boeken.`,
-        );
+        parts.push(c.n8nNotices.noticesWaiting(freshNotices.length));
       }
       setN8nNote(parts.join(" "));
     } finally {
@@ -519,7 +511,7 @@ export default function Facturen({
   function confirmRow(p: PendingInvoice) {
     const result = pendingToInvoice(p);
     if (!result.ok) {
-      setRowErrors((errs) => ({ ...errs, [p.messageId]: result.error }));
+      setRowErrors((errs) => ({ ...errs, [p.messageId]: c.queue.holds.gaps[result.gap] }));
       return;
     }
     const duplicate = invoices.some((i) => i.id === result.invoice.id);
@@ -532,8 +524,8 @@ export default function Facturen({
     dropRowError(p.messageId);
     setN8nNote(
       duplicate
-        ? `Deze factuur (${p.counterparty.trim()}) stond al in LaVega — regel afgevinkt, niets dubbel geboekt.`
-        : `Factuur van ${result.invoice.counterparty} toegevoegd als verwacht.`,
+        ? c.n8nNotices.confirmedDuplicate(p.counterparty.trim())
+        : c.n8nNotices.confirmedNew(result.invoice.counterparty),
     );
   }
 
@@ -543,7 +535,7 @@ export default function Facturen({
     addHandledInvoiceMessageIds([p.messageId]);
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
-    setN8nNote("Regel verworpen. Er is niets geboekt, en hij wordt niet opnieuw aangeboden.");
+    setN8nNote(c.n8nNotices.rejected);
   }
 
   // Een melding "Gedaan" zetten boekt niets — het is een to-do die van de lijst
@@ -551,7 +543,7 @@ export default function Facturen({
   function dismissNotice(notice: N8nNotice) {
     addHandledInvoiceMessageIds([notice.messageId]);
     onNoticesChange(notices.filter((n) => n.messageId !== notice.messageId));
-    setN8nNote("Melding afgevinkt. Er is niets geboekt.");
+    setN8nNote(c.n8nNotices.noticeDismissed);
   }
 
   // Live projection: what the forecast will actually see from open invoices.
@@ -608,15 +600,13 @@ export default function Facturen({
     const amt = Number(amount.replace(",", "."));
     const ccy = currency.trim().toUpperCase();
     // Refuse, and SAY why. Each of these was previously a silent no-op.
-    if (!cp) return setManualError("Vul een relatie in.");
-    if (!issueDate) return setManualError("Vul een factuurdatum in.");
-    if (!dueDate) return setManualError("Vul een vervaldatum in.");
-    if (!Number.isFinite(amt) || amt <= 0)
-      return setManualError("Vul een geldig bedrag in — zonder bedrag wordt er niets geboekt.");
+    if (!cp) return setManualError(c.manualErrors.missingCounterparty);
+    if (!issueDate) return setManualError(c.manualErrors.missingIssueDate);
+    if (!dueDate) return setManualError(c.manualErrors.missingDueDate);
+    if (!Number.isFinite(amt) || amt <= 0) return setManualError(c.manualErrors.missingAmount);
     // Same rule as the n8n queue: an empty/unreadable currency is unknown, not
     // euros. LaVega never turns a blank field into EUR by itself.
-    if (!/^[A-Z]{3}$/.test(ccy))
-      return setManualError("Vul de valuta in (3 letters) — LaVega gokt geen euro's.");
+    if (!/^[A-Z]{3}$/.test(ccy)) return setManualError(c.manualErrors.invalidCurrency);
     setManualError(null);
     const inv = makeInvoice({
       entity: selectedEntity,
@@ -644,7 +634,7 @@ export default function Facturen({
     // "llm"/confidence/vat. (A validation failure above keeps the draft alive so
     // the owner can fix it, which is why that path intentionally doesn't reset.)
     if (invoices.some((i) => i.id === inv.id)) {
-      setImportNote("Deze factuur staat er al.");
+      setImportNote(c.importNotices.duplicateManualEntry);
       clearDraftTags();
       return;
     }
@@ -668,9 +658,7 @@ export default function Facturen({
   function undoAutoBooked(id: string) {
     setStatus(id, "cancelled");
     if (storage) void forgetAutoBooked(storage, id).then(refreshLegacyAutoBooked, () => {});
-    setN8nNote(
-      "Automatische boeking teruggedraaid: de factuur staat op geannuleerd en telt niet meer mee in de prognose.",
-    );
+    setN8nNote(c.n8nNotices.undone);
   }
 
   // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
@@ -700,7 +688,7 @@ export default function Facturen({
     void file.text().then((text) => {
       const rows = parseInvoiceFile(file.name, text);
       if (rows.length === 0) {
-        setImportNote("Geen facturen herkend in dit bestand.");
+        setImportNote(c.importNotices.noneRecognized);
         return;
       }
       const parsed = rows.map((row) => makeInvoice({ ...row, entity: selectedEntity }));
@@ -718,10 +706,8 @@ export default function Facturen({
       onSaveInvoices(merged);
       setImportNote(
         added.length > 0
-          ? `${added.length} van ${parsed.length} facturen geïmporteerd${
-              added.length !== parsed.length ? " (rest was al aanwezig)" : ""
-            }.`
-          : "Geen nieuwe facturen (allemaal al aanwezig).",
+          ? c.importNotices.imported(added.length, parsed.length)
+          : c.importNotices.noneNew,
       );
     });
   }
@@ -733,9 +719,7 @@ export default function Facturen({
     setImportNote(null);
     if (isPdf(file)) {
       if (!aiEnabled) {
-        setImportNote(
-          `"${file.name}" is een PDF. Die kan alleen door de AI-lezer gelezen worden — zet hieronder "AI-facturen lezen" aan, of voer de factuur handmatig in. Er is niets verstuurd.`,
-        );
+        setImportNote(c.importNotices.pdfNeedsAi(file.name));
         return;
       }
       void handleExtractPdf(file);
@@ -756,7 +740,7 @@ export default function Facturen({
   // manual form as a draft — nothing is saved until the owner clicks "Toevoegen".
   async function handleExtractPdf(file: File) {
     setAiBusy(true);
-    setAiNote("Bezig met lezen…");
+    setAiNote(c.aiExtraction.reading);
     try {
       const pdfBase64 = await fileToBase64(file);
       const res = await fetch(`${API_BASE}/api/agent/extract-invoice`, {
@@ -769,7 +753,7 @@ export default function Facturen({
         }),
       });
       if (!res.ok) {
-        let msg = `AI-extractie mislukt (${res.status}).`;
+        let msg = c.aiExtraction.extractFailedStatus(res.status);
         try {
           const body = (await res.json()) as { error?: string };
           if (body?.error) msg = body.error;
@@ -798,13 +782,13 @@ export default function Facturen({
       // the owner to check every field (no fabricated confidence number).
       const conf =
         typeof confidence === "number"
-          ? ` (AI-inschatting zekerheid ${Math.round(confidence * 100)}%)`
+          ? c.aiExtraction.confidencePart(Math.round(confidence * 100))
           : "";
-      const btw = vat !== null ? `, incl. btw ${formatEuro(vat)}` : "";
-      const noCcy = fields.currency ? "" : " De valuta stond er niet in — vul hem zelf in.";
-      setAiNote(`AI-concept — controleer elk veld en bevestig${conf}${btw}.${noCcy}`);
+      const btw = vat !== null ? c.aiExtraction.vatPart(formatEuroIn(locale, vat)) : "";
+      const noCcy = fields.currency ? "" : c.aiExtraction.noCurrencyPart;
+      setAiNote(c.aiExtraction.draftReady(conf, btw, noCcy));
     } catch {
-      setAiNote("AI-extractie mislukt. Probeer het opnieuw.");
+      setAiNote(c.aiExtraction.extractFailed);
     } finally {
       setAiBusy(false);
     }
@@ -813,32 +797,15 @@ export default function Facturen({
   return (
     <>
       <div className="view-head">
-        <h2>Drie manieren om een factuur binnen te krijgen</h2>
-        <span className="eyebrow">alleen een geverifieerde afzender boekt zichzelf</span>
+        <h2>{c.head.title}</h2>
+        <span className="eyebrow">{c.head.eyebrow}</span>
       </div>
 
-      <ModuleGrid label="Facturen invoeren">
+      <ModuleGrid label={c.forms.sectionLabel}>
         {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
-        <Module title="1 · Automatisch" height="tall">
-          <p className="cell-sub">
-            LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna elke{" "}
-            {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. De knop hieronder is
-            voor een directe hercontrole.
-          </p>
-          {/* De voorwaarden die hier staan moeten de voorwaarden zijn die
-              gelden. Bij één onderneming is dat een afgevinkte voorwaarde; bij
-              meer is het juist de reden dat er niets automatisch gaat, en dan
-              hoort er geen belofte te staan; bij geen enkele bestaat de
-              voorwaarde niet en hoeft het woord niet te vallen. */}
-          <p className="cell-sub">
-            Een factuur boekt zichzelf alleen als er niets meer te beslissen valt: de mail kwam via
-            je doorstuuradres binnen én door de SPF/DKIM-controle
-            {entities.length === 1 ? ", je hebt één onderneming" : ""}, en de factuur is compleet.
-            Die krijgt het label “automatisch” en is met één klik terug te draaien. Al het andere
-            wacht op jou, met de reden erbij — een niet-geverifieerde afzender boekt hier niets.
-            {entities.length > 1 &&
-              " Je hebt meer dan één onderneming, dus kiest LaVega de BV nooit voor je: die keuze vraagt hij één keer, en tot die tijd boekt er hier niets automatisch."}
-          </p>
+        <Module title={c.forms.auto.moduleTitle} height="tall">
+          <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
+          <p className="cell-sub">{c.forms.auto.gateNote(entities.length)}</p>
           <div className="stack-form-actions">
             <button
               type="button"
@@ -846,26 +813,23 @@ export default function Facturen({
               disabled={busy || n8nBusy}
               onClick={() => void handleFetchN8n()}
             >
-              Ophalen uit n8n
+              {c.forms.auto.fetchButton}
             </button>
             <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
-              Koppelingen instellen
+              {c.forms.auto.connectionsButton}
             </button>
           </div>
           {n8nNote && <p className="cell-sub">{n8nNote}</p>}
           {pending.length > 0 && (
-            <p className="cell-sub text-warn">
-              {pending.length} {pending.length === 1 ? "regel wacht" : "regels wachten"} op je
-              beslissing — zie hieronder.
-            </p>
+            <p className="cell-sub text-warn">{c.forms.auto.pendingWarning(pending.length)}</p>
           )}
         </Module>
 
         {/* ── 2. sleep een factuurbestand hierheen ────────────────────── */}
-        <Module title="2 · Slepen" height="tall">
+        <Module title={c.forms.drop.moduleTitle} height="tall">
           <label
             className={`dropzone${dragOver ? " dropzone-over" : ""}`}
-            aria-label="Factuurbestand hierheen slepen"
+            aria-label={c.forms.drop.dropzoneAriaLabel}
             onDragOver={(e) => {
               e.preventDefault();
               setDragOver(true);
@@ -878,17 +842,15 @@ export default function Facturen({
               if (file) handleFile(file);
             }}
           >
-            <span className="dropzone-title">Sleep een factuur hierheen</span>
-            <span className="dropzone-sub">
-              PDF, CSV-export of UBL/EN-16931 XML. Of klik om te kiezen.
-            </span>
+            <span className="dropzone-title">{c.forms.drop.dropzoneTitle}</span>
+            <span className="dropzone-sub">{c.forms.drop.dropzoneSub}</span>
             {/* No `accept` filter for the non-PDF formats, same rationale as
                 Import.tsx: format is sniffed from content, not extension. */}
             <input
               type="file"
               className="dropzone-input"
               disabled={busy || aiBusy}
-              aria-label="Factuurbestand kiezen"
+              aria-label={c.forms.drop.fileInputAriaLabel}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
@@ -901,40 +863,32 @@ export default function Facturen({
               type="checkbox"
               checked={aiEnabled}
               disabled={busy}
-              aria-label="AI-facturen lezen"
+              aria-label={c.forms.drop.aiCheckboxAriaLabel}
               onChange={(e) => toggleAi(e.target.checked)}
             />{" "}
-            AI-facturen lezen (PDF → Mistral)
+            {c.forms.drop.aiCheckboxLabel}
           </label>
-          <p className="cell-sub">
-            Alleen met deze schakelaar aan gaat een PDF via onze server naar Mistral — dat ene
-            document, en je bevestigt zelf voor het meetelt.
-          </p>
+          <p className="cell-sub">{c.forms.drop.aiHint}</p>
           {importNote && <p className="cell-sub">{importNote}</p>}
           {aiNote && <p className="cell-sub">{aiNote}</p>}
         </Module>
 
         {/* ── 3. handmatig ────────────────────────────────────────────── */}
         <Module
-          title="3 · Handmatig"
+          title={c.forms.manual.moduleTitle}
           height="tall"
-          footer={
-            <span>
-              Een verwachte factuur verschijnt op de vervaldatum in Overzicht en Forecast en gaat
-              zelf op “betaald” zodra een passende banktransactie binnenkomt.
-            </span>
-          }
+          footer={<span>{c.forms.manual.footer}</span>}
         >
           <div className="stack-form">
             <div className="stack-form-row">
               {/* Geen ondernemingen = geen keuze = geen keuzelijst. */}
               {hasEntities && (
                 <label>
-                  Entiteit
+                  {c.forms.manual.entityLabel}
                   <select
                     value={selectedEntity}
                     disabled={busy}
-                    aria-label="Entiteit"
+                    aria-label={c.forms.manual.entityAriaLabel}
                     onChange={(e) => setEntity(e.target.value)}
                   >
                     {entityChoices.map((e) => (
@@ -946,62 +900,64 @@ export default function Facturen({
                 </label>
               )}
               <label>
-                Richting
+                {c.forms.manual.directionLabel}
                 <select
                   value={direction}
                   disabled={busy}
-                  aria-label="Richting"
+                  aria-label={c.forms.manual.directionAriaLabel}
                   onChange={(e) => setDirection(e.target.value as Invoice["direction"])}
                 >
-                  <option value="out">Uitgaand (inkoop)</option>
-                  <option value="in">Inkomend (verkoop)</option>
+                  <option value="out">{c.directionOptions.out}</option>
+                  <option value="in">{c.directionOptions.in}</option>
                 </select>
               </label>
             </div>
             <label>
-              Relatie
+              {c.forms.manual.counterpartyLabel}
               <input
                 value={counterparty}
                 disabled={busy}
-                aria-label="Relatie"
+                aria-label={c.forms.manual.counterpartyAriaLabel}
                 onChange={(e) => setCounterparty(e.target.value)}
               />
             </label>
             <label>
-              Factuurnr.
+              {c.forms.manual.invoiceNumberLabel}
               <input
                 value={invoiceNumber}
                 disabled={busy}
-                aria-label="Factuurnummer"
+                aria-label={c.forms.manual.invoiceNumberAriaLabel}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
               />
             </label>
             <div className="stack-form-row">
               <label>
-                Factuurdatum
+                {c.forms.manual.issueDateLabel}
                 <input
                   type="date"
                   value={issueDate}
                   disabled={busy}
-                  aria-label="Factuurdatum"
+                  aria-label={c.forms.manual.issueDateAriaLabel}
                   onChange={(e) => setIssueDate(e.target.value)}
                 />
               </label>
               <label>
-                Vervaldatum
+                {c.forms.manual.dueDateLabel}
                 <input
                   type="date"
                   value={dueDate}
                   disabled={busy}
-                  aria-label="Vervaldatum"
+                  aria-label={c.forms.manual.dueDateAriaLabel}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
               </label>
             </div>
             <div className="stack-form-row">
               <label>
-                Bedrag
-                {pendingSource === "llm" && <span className="badge">AI-concept</span>}
+                {c.forms.manual.amountLabel}
+                {pendingSource === "llm" && (
+                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
+                )}
                 <input
                   className="saldo-input"
                   type="number"
@@ -1009,7 +965,7 @@ export default function Facturen({
                   min={0}
                   value={amount}
                   disabled={busy}
-                  aria-label="Bedrag"
+                  aria-label={c.forms.manual.amountAriaLabel}
                   onChange={(e) => setAmount(e.target.value)}
                 />
               </label>
@@ -1023,9 +979,9 @@ export default function Facturen({
                     een factuur waarvan de btw niet is ingevuld zijn niet hetzelfde,
                     en de dekkingsmeter moet dat verschil kunnen zien. Wil hij nul
                     zeggen (btw verlegd, ICP, 0%-export), dan typt hij 0. */}
-                Btw <span className="cell-sub">(leeg = onbekend)</span>
+                {c.forms.manual.vatLabel} <span className="cell-sub">{c.forms.manual.vatHint}</span>
                 {pendingSource === "llm" && pendingVat !== null && (
-                  <span className="badge">AI-concept</span>
+                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
                 )}
                 <input
                   className="saldo-input"
@@ -1033,32 +989,32 @@ export default function Facturen({
                   step={0.01}
                   min={0}
                   value={vatInput}
-                  placeholder="onbekend"
+                  placeholder={c.forms.manual.vatPlaceholder}
                   disabled={busy}
-                  aria-label="Btw"
+                  aria-label={c.forms.manual.vatAriaLabel}
                   onChange={(e) => setVatInput(e.target.value)}
                 />
               </label>
               <label>
-                Valuta
+                {c.forms.manual.currencyLabel}
                 <input
                   className="saldo-input"
                   value={currency}
                   maxLength={3}
-                  placeholder="onbekend"
+                  placeholder={c.forms.manual.currencyPlaceholder}
                   disabled={busy}
-                  aria-label="Valuta"
+                  aria-label={c.forms.manual.currencyAriaLabel}
                   onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                 />
               </label>
             </div>
             <div className="stack-form-actions">
               <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
-                Toevoegen
+                {c.forms.manual.addButton}
               </button>
               {pendingSource === "llm" && (
                 <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
-                  Verwijder AI-concept
+                  {c.forms.manual.discardDraftButton}
                 </button>
               )}
             </div>
@@ -1069,36 +1025,36 @@ export default function Facturen({
 
       {/* ── De confirm-first wachtrij. Ongewijzigd gedrag. ─────────────── */}
       {pending.length > 0 && (
-        <section className="card n8n-block" aria-label="Te bevestigen facturen">
+        <section className="card n8n-block" aria-label={c.queue.sectionAriaLabel}>
           <div className="card-header">
-            <h2>Te bevestigen</h2>
-            <span className="eyebrow">uit n8n · {pending.length}</span>
+            <h2>{c.queue.heading}</h2>
+            <span className="eyebrow">{c.queue.eyebrow(pending.length)}</span>
           </div>
           <p className="cell-sub text-neg">
-            <strong>Let op — dit is de enige kopie.</strong> n8n leegt zijn wachtrij op het moment
-            dat hij antwoordt: nog eens ophalen levert deze {pending.length}{" "}
-            {pending.length === 1 ? "regel" : "regels"} niet terug. Ook herladen of vergrendelen
-            wist ze. Bevestig of verwerp ze nu.
+            <strong>{c.queue.warningLead}</strong>
+            {c.queue.warningBody(pending.length)}
           </p>
           <div className="n8n-rows">
             {pending.map((p) => (
               <div className="n8n-row" data-messageid={p.messageId} key={p.messageId}>
                 <p className="n8n-row-source cell-sub">
-                  Uit de mail: {p.subject ?? "(geen onderwerp)"}
+                  {c.queue.mailSourcePrefix} {p.subject ?? c.notices.noSubjectFallback}
                   {p.note ? ` · ${p.note}` : ""}
                 </p>
                 {/* Waarom juist DEZE regel wacht. Zonder deze zin is "bevestig
                     hem zelf" een opdracht zonder reden — en de reden is het
                     enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
-                {p.waitReason && <p className="cell-sub text-warn">Wacht op jou: {p.waitReason}</p>}
+                {p.waitReason && (
+                  <p className="cell-sub text-warn">{c.queue.waitReason(p.waitReason)}</p>
+                )}
                 <div className="facturen-form">
                   {hasEntities && (
                     <>
                       <label>
-                        Entiteit{" "}
+                        {c.queue.entityLabel}{" "}
                         <select
                           value={p.entity}
-                          aria-label="Entiteit (n8n)"
+                          aria-label={c.queue.entityAriaLabel}
                           onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}
                         >
                           {entityChoices.map((e) => (
@@ -1111,87 +1067,87 @@ export default function Facturen({
                     </>
                   )}
                   <label>
-                    Richting{" "}
+                    {c.queue.directionLabel}{" "}
                     <select
                       value={p.direction}
-                      aria-label="Richting (n8n)"
+                      aria-label={c.queue.directionAriaLabel}
                       onChange={(e) =>
                         patchRow(p.messageId, { direction: e.target.value as Invoice["direction"] })
                       }
                     >
-                      <option value="out">Uitgaand (inkoop)</option>
-                      <option value="in">Inkomend (verkoop)</option>
+                      <option value="out">{c.directionOptions.out}</option>
+                      <option value="in">{c.directionOptions.in}</option>
                     </select>
                   </label>{" "}
                   <label>
-                    Relatie{" "}
+                    {c.queue.counterpartyLabel}{" "}
                     <input
                       value={p.counterparty}
-                      aria-label="Relatie (n8n)"
+                      aria-label={c.queue.counterpartyAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { counterparty: e.target.value })}
                     />
                   </label>{" "}
                   <label>
-                    Factuurnr.{" "}
+                    {c.queue.invoiceNumberLabel}{" "}
                     <input
                       value={p.invoiceNumber}
-                      aria-label="Factuurnummer (n8n)"
+                      aria-label={c.queue.invoiceNumberAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { invoiceNumber: e.target.value })}
                     />
                   </label>{" "}
                   <label>
-                    Factuurdatum{" "}
+                    {c.queue.issueDateLabel}{" "}
                     <input
                       type="date"
                       value={p.issueDate}
-                      aria-label="Factuurdatum (n8n)"
+                      aria-label={c.queue.issueDateAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { issueDate: e.target.value })}
                     />
                   </label>{" "}
                   <label>
-                    Vervaldatum{" "}
+                    {c.queue.dueDateLabel}{" "}
                     <input
                       type="date"
                       value={p.dueDate}
-                      aria-label="Vervaldatum (n8n)"
+                      aria-label={c.queue.dueDateAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { dueDate: e.target.value })}
                     />
                   </label>{" "}
                   <label>
-                    Bedrag{" "}
+                    {c.queue.amountLabel}{" "}
                     <input
                       className="saldo-input"
                       type="number"
                       step={0.01}
                       min={0}
                       value={p.amount}
-                      aria-label="Bedrag (n8n)"
+                      aria-label={c.queue.amountAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { amount: e.target.value })}
                     />
                   </label>{" "}
                   <label>
-                    Valuta{" "}
+                    {c.queue.currencyLabel}{" "}
                     <input
                       className="saldo-input"
                       value={p.currency}
                       maxLength={3}
-                      placeholder="onbekend"
-                      aria-label="Valuta (n8n)"
+                      placeholder={c.queue.currencyPlaceholder}
+                      aria-label={c.queue.currencyAriaLabel}
                       onChange={(e) =>
                         patchRow(p.messageId, { currency: e.target.value.toUpperCase() })
                       }
                     />
                   </label>{" "}
                   <label>
-                    Btw{" "}
+                    {c.queue.vatLabel}{" "}
                     <input
                       className="saldo-input"
                       type="number"
                       step={0.01}
                       min={0}
                       value={p.vat}
-                      placeholder="onbekend"
-                      aria-label="Btw (n8n)"
+                      placeholder={c.queue.vatPlaceholder}
+                      aria-label={c.queue.vatAriaLabel}
                       onChange={(e) => patchRow(p.messageId, { vat: e.target.value })}
                     />
                   </label>{" "}
@@ -1201,7 +1157,7 @@ export default function Facturen({
                     disabled={busy}
                     onClick={() => confirmRow(p)}
                   >
-                    Bevestigen
+                    {c.queue.confirmButton}
                   </button>{" "}
                   <button
                     type="button"
@@ -1209,26 +1165,12 @@ export default function Facturen({
                     disabled={busy}
                     onClick={() => rejectRow(p)}
                   >
-                    Verwerpen
+                    {c.queue.rejectButton}
                   </button>
                 </div>
-                {!p.dueDate && (
-                  <p className="cell-sub">
-                    Geen vervaldatum gevonden — vul hem zelf in. LaVega verzint er geen
-                    betaaltermijn bij.
-                  </p>
-                )}
-                {!p.currency && (
-                  <p className="cell-sub">
-                    Geen valuta gevonden — vul hem zelf in. LaVega boekt niets in euro&apos;s omdat
-                    de factuur toevallig geen valuta noemde.
-                  </p>
-                )}
-                {p.vat === "" && (
-                  <p className="cell-sub">
-                    Btw stond niet in de factuur; leeg blijft “onbekend”, niet €&nbsp;0,00.
-                  </p>
-                )}
+                {!p.dueDate && <p className="cell-sub">{c.queue.missingDueDateNote}</p>}
+                {!p.currency && <p className="cell-sub">{c.queue.missingCurrencyNote}</p>}
+                {p.vat === "" && <p className="cell-sub">{c.queue.missingVatNote}</p>}
                 {rowErrors[p.messageId] && (
                   <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>
                 )}
@@ -1240,36 +1182,33 @@ export default function Facturen({
 
       {/* ── Zelf ophalen: mail die geen boekbare factuur was ───────────── */}
       {notices.length > 0 && (
-        <section className="card n8n-block" aria-label="Zelf ophalen">
+        <section className="card n8n-block" aria-label={c.notices.sectionAriaLabel}>
           <div className="card-header">
-            <h2>Zelf ophalen</h2>
-            <span className="eyebrow">uit n8n · {notices.length}</span>
+            <h2>{c.notices.heading}</h2>
+            <span className="eyebrow">{c.notices.eyebrow(notices.length)}</span>
           </div>
           <p className="cell-sub">
-            Deze mails gingen over een factuur, maar er zat er geen in die LaVega kan boeken. Er
-            staat met opzet <strong>geen bedrag</strong> bij: dit is een lijstje om zelf af te
-            werken, geen boeking in wording. Haal de factuur op en sleep hem hierboven naar binnen.
+            {c.notices.introLead} <strong>{c.notices.introStrong}</strong> {c.notices.introTail}
           </p>
           <div className="n8n-rows">
             {notices.map((n) => (
               <div className="n8n-row" data-noticeid={n.messageId} key={n.messageId}>
                 <p className="n8n-row-source cell-sub">
-                  <strong>{NOTICE_LABELS[n.kind]}</strong> · {n.subject ?? "(geen onderwerp)"}
+                  <strong>{c.notices.kindLabels[n.kind]}</strong> ·{" "}
+                  {n.subject ?? c.notices.noSubjectFallback}
                   {n.from ? ` · ${n.from}` : ""}
                 </p>
                 <p className="cell-sub">{n.reason}</p>
                 <div className="stack-form-actions">
                   {n.mailUrl ? (
                     <a className="btn" href={n.mailUrl} target="_blank" rel="noreferrer noopener">
-                      Open in Gmail
+                      {c.notices.openInGmail}
                     </a>
                   ) : (
-                    <span className="cell-sub">
-                      n8n gaf geen link mee; zoek de mail op het onderwerp.
-                    </span>
+                    <span className="cell-sub">{c.notices.noLinkFallback}</span>
                   )}
                   <button type="button" className="btn" onClick={() => dismissNotice(n)}>
-                    Gedaan
+                    {c.notices.doneButton}
                   </button>
                 </div>
               </div>
@@ -1280,33 +1219,33 @@ export default function Facturen({
 
       {/* ── Wat er binnen is ───────────────────────────────────────────── */}
       <div className="view-head">
-        <h2>Openstaand en geboekt</h2>
+        <h2>{c.list.heading}</h2>
         <span className="eyebrow">
-          {flows.length} openstaande {flows.length === 1 ? "factuur" : "facturen"} · netto verwacht{" "}
+          {c.list.eyebrowCount(flows.length)}
           <span className={netCents >= 0 ? "text-pos" : "text-neg"}>
-            {formatEuro(netCents / 100)}
+            {formatEuroIn(locale, netCents / 100)}
           </span>
         </span>
       </div>
 
-      <section className="card" aria-label="Facturen">
+      <section className="card" aria-label={c.list.sectionAriaLabel}>
         {invoices.length === 0 ? (
-          <p className="cell-sub">Nog geen facturen.</p>
+          <p className="cell-sub">{c.list.empty}</p>
         ) : (
           <div className="table-wrap table-cards">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Relatie</th>
+                  <th>{c.list.columns.counterparty}</th>
                   {/* De onderneming staat er alleen als er meer dan één is. Bij
                       één (of geen) zou de kolom op elke regel hetzelfde zeggen,
                       en dan is het geen informatie maar ruis — en voor de
                       zelfstandige zonder entiteiten is het bovendien jargon. */}
-                  {showEntityColumn && <th>Onderneming</th>}
-                  <th>Richting</th>
-                  <th className="num">Bedrag</th>
-                  <th>Vervaldatum</th>
-                  <th>Status</th>
+                  {showEntityColumn && <th>{c.list.columns.company}</th>}
+                  <th>{c.list.columns.direction}</th>
+                  <th className="num">{c.list.columns.amount}</th>
+                  <th>{c.list.columns.dueDate}</th>
+                  <th>{c.list.columns.status}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -1315,38 +1254,39 @@ export default function Facturen({
                   const signed = inv.direction === "in" ? inv.amount : -inv.amount;
                   return (
                     <tr key={inv.id}>
-                      <td data-label="Relatie">
+                      <td data-label={c.list.columns.counterparty}>
                         {inv.counterparty}
                         {inv.invoiceNumber ? (
                           <span className="cell-sub"> · {inv.invoiceNumber}</span>
                         ) : null}
                       </td>
-                      {showEntityColumn && <td data-label="Onderneming">{inv.entity}</td>}
-                      <td data-label="Richting">
+                      {showEntityColumn && (
+                        <td data-label={c.list.columns.company}>{inv.entity}</td>
+                      )}
+                      <td data-label={c.list.columns.direction}>
                         <span className="badge">
-                          {inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}
+                          {inv.direction === "in"
+                            ? c.list.directionBadge.in
+                            : c.list.directionBadge.out}
                         </span>
                         {autoBookedIds.has(inv.id) && (
                           <>
                             {" "}
-                            <span
-                              className="badge"
-                              title="Deze factuur is zonder klik geboekt: de afzender kwam door de SPF/DKIM-controle en de factuur was compleet."
-                            >
-                              automatisch
+                            <span className="badge" title={c.list.autoBadgeTitle}>
+                              {c.list.autoBadge}
                             </span>
                           </>
                         )}
                       </td>
                       <td
                         className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`}
-                        data-label="Bedrag"
+                        data-label={c.list.columns.amount}
                       >
-                        {formatEuro(signed)}
+                        {formatEuroIn(locale, signed)}
                       </td>
-                      <td data-label="Vervaldatum">{inv.dueDate}</td>
-                      <td data-label="Status">
-                        <span className="badge">{STATUS_LABELS[inv.status]}</span>
+                      <td data-label={c.list.columns.dueDate}>{inv.dueDate}</td>
+                      <td data-label={c.list.columns.status}>
+                        <span className="badge">{c.list.statusLabels[inv.status]}</span>
                       </td>
                       <td>
                         {inv.status === "expected" ? (
@@ -1359,7 +1299,7 @@ export default function Facturen({
                                   disabled={busy}
                                   onClick={() => undoAutoBooked(inv.id)}
                                 >
-                                  Terugdraaien
+                                  {c.list.undoButton}
                                 </button>{" "}
                               </>
                             )}
@@ -1369,7 +1309,7 @@ export default function Facturen({
                               disabled={busy}
                               onClick={() => setStatus(inv.id, "paid")}
                             >
-                              markeer betaald
+                              {c.list.markPaidButton}
                             </button>{" "}
                             <button
                               type="button"
@@ -1377,11 +1317,11 @@ export default function Facturen({
                               disabled={busy}
                               onClick={() => setStatus(inv.id, "cancelled")}
                             >
-                              annuleer
+                              {c.list.cancelButton}
                             </button>
                           </>
                         ) : (
-                          <span className="cell-sub">—</span>
+                          <span className="cell-sub">{c.list.noActions}</span>
                         )}
                       </td>
                     </tr>

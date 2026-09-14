@@ -248,6 +248,26 @@ type Candidate = {
   fromCatalogue: boolean;
 };
 
+/** Why this row's koersopslag figure is what it is, as facts a copy module
+ *  renders into a sentence — see `whyKind`. `product` stays `string | null`
+ *  here because `FxRouteOption.product` is: a chosen candidate always carries
+ *  one in practice, but the type doesn't promise it. */
+export type FxWhy =
+  | { kind: "terms-unknown-held" }
+  | { kind: "no-rate" }
+  | { kind: "mine-only"; pct: number; product: string | null }
+  | {
+      kind: "mine-cheaper-elsewhere";
+      pct: number;
+      product: string | null;
+      cheaperProduct: string;
+      cheaperPct: number;
+    }
+  | { kind: "uniform-held"; pct: number; collapsed: number; bank: string }
+  | { kind: "uniform-not-held"; pct: number; collapsed: number; bank: string }
+  | { kind: "held-uncertain"; pct: number; product: string | null }
+  | { kind: "not-held"; pct: number; product: string | null };
+
 export type FxRouteOption = {
   /** The bank, ONCE. */
   bank: string;
@@ -283,12 +303,14 @@ export type FxRouteOption = {
   asOf: string | null;
   sourceUrl: string | null;
   conditions: string | null;
-  /** One Dutch line saying where the figure comes from and what it does not say.
-   *  Over de KOERSOPSLAG, en alleen daarover — wat het product kost om te hebben
-   *  staat in `holdingCost` en wordt door het scherm met dezelfde woorden gerend
-   *  als op Overzicht. Twee zinnen die hetzelfde zeggen in andere woorden zijn
-   *  een fout op zichzelf, dus deze zin blijft van één ding. */
-  why: string;
+  /** Where the koersopslag figure comes from and what it does not say, as a
+   *  KIND rather than a rendered sentence — core stopped choosing the words
+   *  (and the language) once this screen had to run in English too. Over de
+   *  KOERSOPSLAG, en alleen daarover — wat het product kost om te hebben staat
+   *  in `holdingCost` en wordt door het scherm met dezelfde woorden gerend als
+   *  op Overzicht. Twee zinnen die hetzelfde zeggen in andere woorden zijn een
+   *  fout op zichzelf, dus deze zin blijft van één ding. */
+  why: FxWhy;
   /** WAT DIT PRODUCT KOST OM TE HEBBEN, marginaal.
    *
    *  Een BEKENDE nul zodra hij de bank al heeft: die prijs loopt toch al door, dus
@@ -314,9 +336,6 @@ export type FxRouteOption = {
    *  en zeker geen bewijs dat de rekening gratis is. */
   totalCostKnown: boolean;
 };
-
-const pctText = (n: number): string =>
-  `${n.toFixed(2).replace(/0+$/, "").replace(/[.,]$/, "").replace(".", ",")}%`;
 
 /** Which candidate speaks for the bank.
  *
@@ -344,26 +363,30 @@ function pickCandidate(group: Candidate[]): Candidate | null {
   })[0];
 }
 
-function whyLine(o: Omit<FxRouteOption, "why">): string {
+function whyKind(o: Omit<FxRouteOption, "why">): FxWhy {
   if (o.pct === null) {
-    return o.held
-      ? "Voorwaarden van deze bank nog onbekend — en onbekend is geen 0%."
-      : "Geen tarief dat LaVega kan onderbouwen.";
+    return o.held ? { kind: "terms-unknown-held" } : { kind: "no-rate" };
   }
-  const head = `${pctText(o.pct)} koersopslag op ${o.product}`;
   if (o.mine) {
     return o.cheaperAtSameBank
-      ? `${head} — bij dezelfde bank rekent ${o.cheaperAtSameBank.product} ${pctText(o.cheaperAtSameBank.pct)}.`
-      : `${head}.`;
+      ? {
+          kind: "mine-cheaper-elsewhere",
+          pct: o.pct,
+          product: o.product,
+          cheaperProduct: o.cheaperAtSameBank.product,
+          cheaperPct: o.cheaperAtSameBank.pct,
+        }
+      : { kind: "mine-only", pct: o.pct, product: o.product };
   }
   // Every product at this bank agrees, so naming one of them would suggest the
   // figure depends on which — it does not.
   if (o.uniformAcrossBank) {
-    const all = `${pctText(o.pct)} koersopslag — hetzelfde bij alle ${o.collapsed} ${o.bank}-producten die LaVega kent`;
-    return o.held ? `${all}.` : `${all}. Deze bank heb je niet.`;
+    return o.held
+      ? { kind: "uniform-held", pct: o.pct, collapsed: o.collapsed, bank: o.bank }
+      : { kind: "uniform-not-held", pct: o.pct, collapsed: o.collapsed, bank: o.bank };
   }
-  if (o.held) return `${head} — of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet.`;
-  return `${head} — deze bank heb je niet.`;
+  if (o.held) return { kind: "held-uncertain", pct: o.pct, product: o.product };
+  return { kind: "not-held", pct: o.pct, product: o.product };
 }
 
 /** Every bank you could convert through, cheapest first, one row each.
@@ -562,7 +585,7 @@ export function rankFxRoutes(input: {
       totalCostCents: conversionCostCents === null ? null : conversionCostCents + holdingCents,
       totalCostKnown: holdingCost.kind === "known",
     };
-    return { ...base, why: whyLine(base) };
+    return { ...base, why: whyKind(base) };
   });
 
   return rows.sort((a, b) => {

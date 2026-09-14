@@ -7,7 +7,6 @@ import {
   suggestTaxSheetMapping,
   sumTaxFigures,
   taxSheetMappingFacts,
-  TAX_SHEET_FIELD_LABELS,
 } from "./taxSheet.js";
 import { AGENTS } from "./agentFacts.js";
 import { makeFact, upsertFacts } from "./facts.js";
@@ -96,7 +95,7 @@ test("readTaxSheet maps the columns onto cents and says what it could not find",
     vatChargedCents: 254_100,
     vatPaidCents: 50_820,
   });
-  expect(problems).toEqual([`geen kolom gekoppeld voor: ${TAX_SHEET_FIELD_LABELS.profit}`]);
+  expect(problems).toEqual([{ kind: "missing-columns", fields: ["profit"] }]);
 });
 
 test("a period is read as a period, whatever the owner writes", () => {
@@ -137,7 +136,7 @@ test("a row with no readable period is kept but never counted, and reported", ()
   const { rows, problems } = readTaxSheet(table, { period: "Periode", revenue: "Omzet" });
   expect(rows).toHaveLength(2);
   expect(rows[0].date).toBeNull();
-  expect(problems.some((p) => p.includes("zonder leesbare periode"))).toBe(true);
+  expect(problems.some((p) => p.kind === "undated-rows")).toBe(true);
   expect(sumTaxFigures(rows, "2026-01-01", "2026-12-31").revenueCents).toBe(10_000);
 });
 

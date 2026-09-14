@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeInvoice, type Invoice } from "@lavega/core";
 import Facturen from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
+import { adminCopy } from "./copy/admin.js";
 
 /* The rebuilt Facturen surface (UI review, 2026-08-16).
  *
@@ -21,6 +22,7 @@ let saved: Invoice[][] = [];
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl; Path=/";
   saved = [];
 });
 
@@ -29,6 +31,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
 function Harness({
@@ -347,4 +350,26 @@ test("met meerdere ondernemingen belooft het scherm geen automatische boeking", 
 test("met één onderneming staat die voorwaarde er wél, want dan klopt hij", () => {
   const c = render();
   expect(c.textContent).toContain("je hebt één onderneming");
+});
+
+test("the lavega_locale cookie switches the surface to English", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const c = render();
+  const en = adminCopy.en.facturen;
+
+  const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
+  expect(titles).toEqual([
+    en.forms.auto.moduleTitle,
+    en.forms.drop.moduleTitle,
+    en.forms.manual.moduleTitle,
+  ]);
+  expect(byText("button", en.forms.auto.fetchButton)).toBeTruthy();
+
+  act(() => setNativeValue(field(en.forms.manual.counterpartyAriaLabel), "ACME BV"));
+  act(() => setNativeValue(field(en.forms.manual.issueDateAriaLabel), "2026-08-01"));
+  act(() => setNativeValue(field(en.forms.manual.dueDateAriaLabel), "2026-08-31"));
+  act(() => setNativeValue(field(en.forms.manual.currencyAriaLabel), "EUR"));
+  click(byText("button", en.forms.manual.addButton));
+  expect(saved).toHaveLength(0);
+  expect(c.textContent).toContain(en.manualErrors.missingAmount);
 });

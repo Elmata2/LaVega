@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Aandacht — the alert centre plus the buffer that defines "too low".
  *
@@ -40,25 +42,14 @@ type AandachtBlockProps = {
   onBufferChange: (cents: number) => void;
 };
 
-type Tier = { severity: AlertSeverity; icon: string; label: string };
+type Tier = { severity: AlertSeverity; icon: string };
 
 /** Ranked hardest-first, the same order core sorts in. The word is the label;
  *  the circle only reinforces it, so it stays aria-hidden. */
 const TIERS: Tier[] = [
-  { severity: "critical", icon: "🔴", label: "Kritiek" },
-  { severity: "warning", icon: "🟠", label: "Let op" },
-  { severity: "info", icon: "🟡", label: "Ter info" },
-];
-
-/** Everything the alert centre looks at, in the owner's words. Printed when
- *  there is nothing to report, because "no alerts" is only reassuring if you
- *  know what was actually examined. Kept in step with `computeAlerts`. */
-const CHECKS = [
-  "een verwacht tekort tegenover je buffer",
-  "een terugkerende betaling of inkomst die uitblijft",
-  "BTW- en belastingdeadlines binnen 30 dagen",
-  "handmatig bijgehouden saldi die verouderd zijn",
-  "rekeningen zonder saldo",
+  { severity: "critical", icon: "🔴" },
+  { severity: "warning", icon: "🟠" },
+  { severity: "info", icon: "🟡" },
 ];
 
 /** Below this, folding costs more than it saves: the "Toon 2 ter info" button
@@ -66,6 +57,13 @@ const CHECKS = [
 const INFO_FOLD_MIN = 3;
 
 export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: AandachtBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].aandacht;
+  const tierLabel: Record<AlertSeverity, string> = {
+    critical: c.kritiek,
+    warning: c.letOp,
+    info: c.terInfo,
+  };
   const [draft, setDraft] = useState(bufferCents ? String(bufferCents / 100) : "");
   const [prevBuffer, setPrevBuffer] = useState(bufferCents);
   if (bufferCents !== prevBuffer) {
@@ -112,12 +110,13 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
       className="module-hug module-head-wrap"
       menu={
         <label className="buffer-field eyebrow">
-          Waarschuw onder buffer €{" "}
+          {c.waarschuwOnderBuffer}
+          {" "}
           <input
             className="saldo-input"
             inputMode="decimal"
             placeholder="0"
-            aria-label="Waarschuwingsbuffer in euro"
+            aria-label={c.waarschuwingsbufferAria}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
@@ -125,23 +124,15 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
         </label>
       }
       footer={
-        zeroBuffer ? (
-          <span className="cell-sub">
-            Je buffer staat op € 0, dus je hoort pas iets als je verwachte saldo onder nul zakt. Zet
-            er een bedrag in om eerder gewaarschuwd te worden.
-          </span>
-        ) : undefined
+        zeroBuffer ? <span className="cell-sub">{c.bufferZeroNote}</span> : undefined
       }
     >
       {alerts.length === 0 ? (
         /* Not "alles is in orde" — that is a claim about the data, and an empty
          * vault produces exactly this same empty list. State the scope instead. */
         <div className="alert-empty">
-          <p className="block-empty text-pos">Niets gevonden om je op te wijzen.</p>
-          <p className="cell-sub">
-            LaVega keek naar: {CHECKS.join(", ")}. Dat is alleen zo compleet als wat je hebt
-            geïmporteerd — over een rekening die er niet in zit kan LaVega niets zeggen.
-          </p>
+          <p className="block-empty text-pos">{c.nietsGevondenOmJeOpTeWijzen}</p>
+          <p className="cell-sub">{c.lavegaKeekNaar(c.checks.join(", "))}</p>
         </div>
       ) : (
         <div className="alert-tiers">
@@ -152,16 +143,16 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
               <section
                 className="alert-tier"
                 key={tier.severity}
-                aria-label={`${tier.label} (${rows.length})`}
+                aria-label={`${tierLabel[tier.severity]} (${rows.length})`}
               >
                 <h3 className={`alert-tier-head alert-tier-${tier.severity}`}>
                   <span aria-hidden="true">{tier.icon}</span>
-                  {tier.label}
+                  {tierLabel[tier.severity]}
                   <span className="alert-tier-count">{rows.length}</span>
                 </h3>
                 {folded ? (
                   <button type="button" className="card-link" onClick={() => setShowInfo(true)}>
-                    Toon {rows.length} ter info
+                    {c.toonNTerInfo(rows.length)}
                   </button>
                 ) : (
                   <div className="alert-rows">

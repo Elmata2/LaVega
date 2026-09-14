@@ -6,6 +6,8 @@ import type {
   RateBenchmark,
   TravelPlan,
   Journey,
+  JourneyWhy,
+  SpendWhy,
   CatalogueEntryLike,
   WithdrawOption,
   CardOffer,
@@ -28,8 +30,10 @@ import {
   TRAVEL_SMALL_WITHDRAWAL,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
-import { formatEuro } from "../../format.js";
-import { dayLabelYearNL } from "./dates.js";
+import { formatEuroIn, formatDate } from "../../format.js";
+import { useAppLocale, pick, readAppLocale } from "../../appLocale.js";
+import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optimise.js";
+import type { Locale } from "../../locale.js";
 import Module from "../Module.js";
 import ToonMeer from "../ToonMeer.js";
 
@@ -105,27 +109,24 @@ export type TravelBlockProps = {
   onCorrectFact: (fact: LearnedFact) => void;
 };
 
-const COUNTRIES: { code: string; name: string }[] = [
-  { code: "US", name: "Verenigde Staten" },
-  { code: "GB", name: "Verenigd Koninkrijk" },
-  { code: "CH", name: "Zwitserland" },
-  { code: "JP", name: "Japan" },
-  { code: "TH", name: "Thailand" },
-  { code: "TR", name: "Turkije" },
-  { code: "SE", name: "Zweden" },
-  { code: "DK", name: "Denemarken" },
-  { code: "NO", name: "Noorwegen" },
-  { code: "PL", name: "Polen" },
-  { code: "CA", name: "Canada" },
-  { code: "AU", name: "Australië" },
-  { code: "AE", name: "Verenigde Arabische Emiraten" },
-  { code: "MA", name: "Marokko" },
-  { code: "ID", name: "Indonesië" },
-  { code: "ES", name: "Spanje" },
-  { code: "DE", name: "Duitsland" },
-  { code: "FR", name: "Frankrijk" },
-  { code: "IT", name: "Italië" },
-];
+/** Fills `{name}`-style placeholders in a copy template. The copy module holds
+ *  words only, no interpolation logic — this is that logic, shared by every
+ *  call site below instead of a `.replace()` chain repeated at each one. */
+function fill(template: string, vals: Record<string, string | number>): string {
+  return Object.entries(vals).reduce(
+    (s, [k, v]) => s.replaceAll(`{${k}}`, String(v)),
+    template,
+  );
+}
+
+/** Splits a filled template at its " — " boundary, for the copy entries that
+ *  bundle a bold heading and its plain-text continuation into one string
+ *  (because the heading itself carries an interpolated value). Everything
+ *  before the dash is the fragment the original wrapped in `<strong>`. */
+function splitBold(filled: string): [string, string] {
+  const i = filled.indexOf(" — ");
+  return i === -1 ? [filled, ""] : [filled.slice(0, i), filled.slice(i + 3)];
+}
 
 /** Inline correction of one learned number. Correcting is the whole point: it
  *  writes a `user` fact, which no later agent run may overwrite. The same
@@ -133,26 +134,34 @@ const COUNTRIES: { code: string; name: string }[] = [
  *  leg is correctable the day it is priced, not a release later. */
 function FactCorrection({
   provider,
+  productLabel: displayLabel,
   factKey,
   label,
   value,
   busy,
   onCorrect,
 }: {
+  /** The identity `makeFact` writes under — never shown, must match what
+   *  `factNumber` reads by, so it stays the Dutch string `rankSpendOptions`
+   *  keys on. */
   provider: string;
+  /** What the aria-label actually names, in the reader's language. */
+  productLabel: string;
   factKey: string;
   label: string;
   value: number | null;
   busy: boolean;
   onCorrect: (fact: LearnedFact) => void;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value === null ? "" : String(value));
 
   if (!editing) {
     return (
       <button type="button" className="card-link" onClick={() => setEditing(true)} disabled={busy}>
-        {label} aanpassen
+        {fill(c.factCorrection.adjust, { label })}
       </button>
     );
   }
@@ -161,7 +170,7 @@ function FactCorrection({
       <input
         className="saldo-input"
         inputMode="decimal"
-        aria-label={`${label} van ${provider}`}
+        aria-label={fill(c.factCorrection.fieldAriaLabel, { label, provider: displayLabel })}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}
@@ -187,17 +196,62 @@ function FactCorrection({
           setEditing(false);
         }}
       >
-        Bewaar
+        {c.factCorrection.save}
       </button>
       <button type="button" className="card-link" onClick={() => setEditing(false)} disabled={busy}>
-        Annuleer
+        {c.factCorrection.cancel}
       </button>
     </span>
   );
 }
 
-function pct(n: number | null): string {
-  return n === null ? "onbekend" : `${n}%`;
+function pct(c: TravelCopy, n: number | null): string {
+  return n === null ? c.common.unknown : `${n}%`;
+}
+
+/** "{bank} betaalpas"/"{bank} creditcard" as the reader's language, not core's
+ *  identity string — that string (`Journey.provider`/`.via`) stays Dutch on
+ *  purpose, it is what fact lookups and React keys match on. */
+function productLabel(bank: string, productKind: "betaalpas" | "creditcard", c: TravelCopy): string {
+  return `${bank} ${c.common.productKindWord[productKind]}`;
+}
+
+/** The one place a `SpendWhy` becomes a sentence. Exhaustive by switch, so a
+ *  new kind in `rankSpendOptions` fails the build here instead of rendering
+ *  nothing — same pattern as `holdSentence` in Facturen.tsx. */
+function spendWhySentence(why: SpendWhy, c: TravelCopy): string {
+  switch (why.kind) {
+    case "known":
+      return c.spendWhy.known(
+        pct(c, why.fxFeePct),
+        why.cashbackPct === null ? null : pct(c, why.cashbackPct),
+        why.pointsPerEuro,
+      );
+    case "unknown":
+      return c.spendWhy.unknown;
+  }
+}
+
+/** Same pattern for `Journey.why`. The "direct" case wraps `spendWhySentence`
+ *  rather than duplicating it — a direct journey's reasoning IS its spend
+ *  option's reasoning, said with "pay directly" in front. */
+function journeyWhySentence(why: JourneyWhy, c: TravelCopy): string {
+  switch (why.kind) {
+    case "direct":
+      return c.journeyWhy.direct(spendWhySentence(why.spend, c));
+    case "direct-unknown":
+      return c.journeyWhy.directUnknown;
+    case "via":
+      return c.journeyWhy.via(
+        why.free,
+        pct(c, why.convertPct),
+        why.cashbackPct === null ? null : pct(c, why.cashbackPct),
+      );
+    case "via-unknown-convert":
+      return c.journeyWhy.viaUnknownConvert;
+    case "via-unknown-transfer":
+      return c.journeyWhy.viaUnknownTransfer;
+  }
 }
 
 /** THE ONE MARK THAT KEEPS THE TWO QUESTIONS APART.
@@ -209,7 +263,8 @@ function pct(n: number | null): string {
  *  word alone is not enough: it has to be visibly different, so it is the app's
  *  existing `.badge` chip and not another sentence. */
 function NotYours() {
-  return <span className="badge">nog niet van jou</span>;
+  const [locale] = useAppLocale();
+  return <span className="badge">{optimiseCopy[locale].travel.badge.notYours}</span>;
 }
 
 /* ══════════════════════ WAT DE KAART ZELF KOST, als eigen velden ══════════════
@@ -249,8 +304,8 @@ function NotYours() {
 /** Het bedrag in de eenheid van zijn eigen document. NOOIT omgerekend: een
  *  jaarprijs die als maandprijs op het scherm komt scheelt een factor twaalf, en
  *  "€ 42,95 per jaar" is ook wat hij op zijn afschrift terugvindt. */
-function feeLabel(a: FeeAmount): string {
-  return `${formatEuro(a.cents / 100)} per ${a.period}`;
+function feeLabel(locale: Locale, a: FeeAmount): string {
+  return `${formatEuroIn(locale, a.cents / 100)} per ${a.period}`;
 }
 
 /** De opslag op de referentiebesteding in CENTEN. Langs core's eigen
@@ -267,12 +322,16 @@ function surchargeCents(pctValue: number): number {
  *  geen nodig. Dit getal hoort op het scherm en niet in een tooltip: zonder de
  *  periode is een nettobedrag niet na te rekenen, en dan kan hij ons niet
  *  nakijken. */
-function spanWords(basis: NetBasis): string {
-  if (basis.kind !== "one-off") return `per ${basis.period}`;
+function spanWords(basis: NetBasis, c: TravelCopy): string {
+  if (basis.kind !== "one-off") return fill(c.cardCost.spanRecurring, { period: basis.period });
   const n = basis.periodsCharged;
   return basis.costPeriod === "jaar"
-    ? `over ${n} jaar`
-    : `over ${n} ${n === 1 ? "maand" : "maanden"}`;
+    ? n === 1
+      ? c.cardCost.spanOneOffYearOne
+      : fill(c.cardCost.spanOneOffYearMany, { n })
+    : n === 1
+      ? c.cardCost.spanOneOffMonthOne
+      : fill(c.cardCost.spanOneOffMonthMany, { n });
 }
 
 /** DE ONDERGRENS, HARDOP, en als eigen zin in plaats van een bijzin. Een reis van
@@ -281,11 +340,9 @@ function spanWords(basis: NetBasis): string {
  *  vraag die hij anders stelt — "maar ik ga maar één maand". Dezelfde woorden als
  *  core's eigen `floorNote`, zodat de zin die in de kop staat en de zin die hier
  *  staat niet twee verschillende dingen beweren. */
-function floorNote(basis: NetBasis): string {
+function floorNote(basis: NetBasis, c: TravelCopy): string {
   if (basis.kind !== "one-off" || !basis.flooredToMinimum) return "";
-  return basis.costPeriod === "jaar"
-    ? " Dit product wordt per jaar afgerekend, dus een kortere reis maakt het niet goedkoper."
-    : " Minder dan één maand kun je niet afnemen, dus daar rekenen we mee.";
+  return basis.costPeriod === "jaar" ? c.cardCost.floorYear : c.cardCost.floorMonth;
 }
 
 /** OF DEZE VELDEN IETS AFDRUKKEN — en dus of de kop het rekenwerk mag laten vallen.
@@ -322,36 +379,37 @@ export function Kaartkosten({
   benefit: NetBenefit | null;
   testId: string;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   if (!hasVisibleHoldingCost(cost)) return null;
 
   if (cost.kind === "unknown") {
     const why =
       cost.reason === "needs-another-product"
-        ? `de prijs die onze bron noemt geldt bovenop een ander product, dus wat ${product} los kost weten we niet`
-        : `wat ${product} zelf kost, staat niet in onze bronnen`;
+        ? fill(c.cardCost.unknownReasonBundled, { product })
+        : fill(c.cardCost.unknownReasonNoSource, { product });
     // Het woord "netto" komt hier NIET voor, en dat is de hele reden dat deze tak
     // apart staat: er is geen netto zolang de ene helft ontbreekt. Wel gezegd dat
     // het bedrag hierboven bruto is — anders leest een onbekende prijs als nul.
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
-        <strong>Kaartkosten: onbekend</strong> — {why}. Dat is geen nul.
-        {benefit !== null &&
-          " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af."}
+        <strong>{c.cardCost.unknownHeading}</strong> — {why}. {c.cardCost.unknownNotZero}
+        {benefit !== null && c.cardCost.unknownGrossHint}
       </p>
     );
   }
 
-  const price = feeLabel(cost.amount);
+  const price = feeLabel(locale, cost.amount);
   // EEN UITGESPROKEN NUL IS EEN BEKENDE NUL — de keerzijde van "onbekend is geen
   // nul". Zegt een bron letterlijk dat de kaart niets kost, dan is dat een
   // gemeten feit en scheelt het hem de vraag of we het gewoon niet weten. Zonder
   // rekensom: er is niets om over een periode uit te smeren, en "€ 0,00 per maand
   // en dat betaal je minstens één maand" is waar en onleesbaar.
   if (cost.amount.cents === 0) {
+    const [heading, rest] = splitBold(fill(c.cardCost.free, { price, product }));
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
-        <strong>Kaartkosten: {price}</strong> — de bron zegt dat {product} niets kost om aan te
-        houden.
+        <strong>{heading}</strong> — {rest}
       </p>
     );
   }
@@ -364,11 +422,14 @@ export function Kaartkosten({
   if (benefit === null || benefit.kind === "gross-cost-unknown") {
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
-        <strong>Kaartkosten: {price}</strong>.
+        <strong>{fill(c.cardCost.priceOnly, { price })}</strong>
       </p>
     );
   }
 
+  const [calculatedHeading, calculatedRest] = splitBold(
+    fill(c.cardCost.calculated, { price, span: spanWords(benefit.basis, c) }),
+  );
   return (
     <>
       <p className="cell-sub travel-note" data-testid={testId}>
@@ -377,27 +438,34 @@ export function Kaartkosten({
             over 1 maand is dat € 1,00" is waar en leest als een rekenfout. Bij
             een langere reis (meer dan één factureringsperiode) verschillen ze wel,
             en dan is het totaal juist het getal dat de aftrek verklaart. */}
-        <strong>Kaartkosten: {price}</strong> — gerekend {spanWords(benefit.basis)}
-        {benefit.costCents !== cost.amount.cents && <>: {formatEuro(benefit.costCents / 100)}</>}.
-        {floorNote(benefit.basis)}
+        <strong>{calculatedHeading}</strong> — {calculatedRest}
+        {benefit.costCents !== cost.amount.cents && (
+          <>{fill(c.cardCost.calculatedTotalSuffix, { total: formatEuroIn(locale, benefit.costCents / 100) })}</>
+        )}
+        .{floorNote(benefit.basis, c)}
       </p>
       {benefit.kind === "net" ? (
         <p className="cell-sub travel-note" data-testid={`${testId}-netto`}>
-          <strong>Netto:</strong>{" "}
-          <span className="text-pos">{formatEuro(benefit.netCents / 100)}</span> —{" "}
-          {formatEuro(benefit.grossCents / 100)} voordeel min {formatEuro(benefit.costCents / 100)}{" "}
-          kaartkosten.
+          <strong>{c.cardCost.netLabel}</strong>{" "}
+          <span className="text-pos">{formatEuroIn(locale, benefit.netCents / 100)}</span> —{" "}
+          {fill(c.cardCost.netBreakdown, {
+            gross: formatEuroIn(locale, benefit.grossCents / 100),
+            cost: formatEuroIn(locale, benefit.costCents / 100),
+          })}
         </p>
       ) : (
         /* GEEN AANBEVELING, en het bedrag staat er zodat hij het niet zelf hoeft
            uit te rekenen. Zijn woorden: een kaart die € 5 per maand kost en € 3
            oplevert is achteruit, en dat moet hij kunnen zien staan. */
         <p className="cell-sub travel-note text-warn" data-testid={`${testId}-geen`}>
-          <strong>Geen aanbeveling:</strong> {formatEuro(benefit.grossCents / 100)} voordeel tegen{" "}
-          {formatEuro(benefit.costCents / 100)} kaartkosten{" "}
+          <strong>{c.cardCost.noRecommendationLabel}</strong>{" "}
+          {fill(c.cardCost.noRecommendationBody, {
+            gross: formatEuroIn(locale, benefit.grossCents / 100),
+            cost: formatEuroIn(locale, benefit.costCents / 100),
+          })}{" "}
           {benefit.netCents === 0
-            ? "— dat levert niets op."
-            : `— je gaat er ${formatEuro(-benefit.netCents / 100)} op achteruit.`}
+            ? c.cardCost.noGain
+            : fill(c.cardCost.worseOff, { amount: formatEuroIn(locale, -benefit.netCents / 100) })}
         </p>
       )}
     </>
@@ -456,15 +524,15 @@ function rejectedByPrice(
  *  as free — that rule is why the ranking can be trusted at all. A leg that does
  *  not exist on this route (no transfer when you pay directly) is not a price,
  *  so it renders as "n.v.t." rather than as a zero. */
-function legCost(costPct: number | null): string {
-  if (costPct === null) return "onbekend";
+function legCost(locale: Locale, c: TravelCopy, costPct: number | null): string {
+  if (costPct === null) return c.common.unknown;
   const euros = costOnReferenceSpend(costPct);
-  if (euros === null) return "onbekend";
+  if (euros === null) return c.common.unknown;
   // `-0` is a real outcome here (a leg with no cashback prices at minus nothing)
   // and formats as "€ -0,00", which reads like a rounding error. It is zero.
-  if (euros === 0) return formatEuro(0);
-  if (euros < 0) return `${formatEuro(Math.abs(euros))} terug`;
-  return formatEuro(euros);
+  if (euros === 0) return formatEuroIn(locale, 0);
+  if (euros < 0) return fill(c.legs.cashback, { amount: formatEuroIn(locale, Math.abs(euros)) });
+  return formatEuroIn(locale, euros);
 }
 
 type Leg = { name: string; detail: string; cost: string };
@@ -473,29 +541,36 @@ type Leg = { name: string; detail: string; cost: string };
  *  wisselen → betalen. Named after the sections they replace, so the detail the
  *  owner already knows how to read is still there — now inside one route
  *  instead of standing next to it as a rival answer. */
-function legsOf(j: Journey): Leg[] {
+function legsOf(j: Journey, locale: Locale, c: TravelCopy): Leg[] {
+  const product = productLabel(j.bank, j.productKind, c);
   if (j.via === null) {
     return [
-      { name: "Overzetten", detail: "niet nodig — je betaalt direct", cost: "n.v.t." },
-      { name: "Wisselen", detail: "de kaart wisselt bij betaling", cost: "n.v.t." },
-      { name: "Betalen", detail: j.provider, cost: legCost(j.spendPct) },
+      { name: c.legs.transfer, detail: c.legs.directTransferDetail, cost: c.common.notApplicable },
+      { name: c.legs.exchange, detail: c.legs.directExchangeDetail, cost: c.common.notApplicable },
+      { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct) },
     ];
   }
   return [
     {
-      name: "Overzetten",
-      detail: `${j.fundedFrom ?? "je betaalrekening"} → ${j.via}${j.method ? ` via ${j.method}` : ""}`,
-      cost: legCost(j.transferPct),
+      name: c.legs.transfer,
+      detail: `${j.fundedFrom ?? c.legs.defaultFundingSource} → ${product}${j.method ? fill(c.legs.viaMethodSuffix, { method: j.method }) : ""}`,
+      cost: legCost(locale, c, j.transferPct),
     },
-    { name: "Wisselen", detail: `bij ${j.via}`, cost: legCost(j.convertPct) },
-    { name: "Betalen", detail: j.provider, cost: legCost(j.spendPct) },
+    {
+      name: c.legs.exchange,
+      detail: fill(c.legs.atProvider, { via: product }),
+      cost: legCost(locale, c, j.convertPct),
+    },
+    { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct) },
   ];
 }
 
-function journeyTitle(j: Journey): string {
+function journeyTitle(j: Journey, c: TravelCopy): string {
+  const product = productLabel(j.bank, j.productKind, c);
   return j.via === null
-    ? `Direct betalen met ${j.provider}`
-    : `Via ${j.via}${j.fundedFrom ? ` (vanaf ${j.fundedFrom})` : ""}`;
+    ? fill(c.journeys.directTitle, { provider: product })
+    : fill(c.journeys.viaTitle, { via: product }) +
+        (j.fundedFrom ? fill(c.journeys.fundedFromSuffix, { source: j.fundedFrom }) : "");
 }
 
 function journeyKey(j: Journey): string {
@@ -536,7 +611,7 @@ export type TermsState =
   | {
       kind: "known";
       unknown: string[];
-      unpriced: { provider: string; why: string }[];
+      unpriced: { bank: string; productKind: "betaalpas" | "creditcard"; why: JourneyWhy }[];
       lastUpdated: string | null;
     }
   | { kind: "no-key"; unknown: string[] }
@@ -566,12 +641,12 @@ export function termsState(
       .map((s) => (s.feeSource === "agent" ? s.feeUpdatedAt : null))
       .filter((d): d is string => d !== null)
       .sort();
-    // Which leg is missing is core's own answer (`journey.why` — "wisselkosten
-    // nog onbekend" vs "overboekkosten nog onbekend"), so the notice repeats it
-    // instead of guessing which of the two it was.
+    // Which leg is missing is core's own answer (`journey.why`'s
+    // "via-unknown-convert" vs "via-unknown-transfer"), so the notice repeats
+    // it instead of guessing which of the two it was.
     const unpriced = plan.journeys
       .filter((j) => !j.known && !unknown.includes(j.provider))
-      .map((j) => ({ provider: j.provider, why: j.why }));
+      .map((j) => ({ bank: j.bank, productKind: j.productKind, why: j.why }));
     return {
       kind: "known",
       unknown,
@@ -589,18 +664,18 @@ export function termsState(
 
 /** The one line that replaces core's headline when there is no priced route.
  *  Core's version advises a refresh; these name the cause instead. */
-function termsHeadline(state: TermsState): string | null {
+function termsHeadline(state: TermsState, c: TravelCopy): string | null {
   switch (state.kind) {
     case "no-products":
-      return "Nog geen betaalpas of creditcard met een bank erbij — er valt nog niets te vergelijken.";
+      return c.terms.causeNoProducts;
     case "searching":
-      return "LaVega zoekt de voorwaarden nu op — dat duurt een minuut of twee.";
+      return c.terms.causeSearching;
     case "no-key":
-      return "LaVega kan de voorwaarden hier niet opzoeken: deze server heeft geen AI-sleutel.";
+      return c.terms.causeNoKey;
     case "never-searched":
-      return "De voorwaarden van je kaarten zijn nog niet opgezocht.";
+      return c.terms.causeNeverSearched;
     case "searched-empty":
-      return "Opgezocht, maar er kwam geen bruikbaar tarief terug.";
+      return c.terms.causeSearchedEmpty;
     default:
       return null; // "known" and "euro" keep core's own answer
   }
@@ -609,12 +684,6 @@ function termsHeadline(state: TermsState): string | null {
 function nameList(providers: string[]): string {
   return providers.join(", ");
 }
-
-/** De kop van de routelijst in de uitklap — het enige plekje op dit scherm waar
- *  je een percentage zelf kunt intypen. Drie meldingen wijzen ernaar, dus de
- *  naam staat hier één keer: anders wijst de tekst na een hernoeming naar een
- *  kopje dat niet meer bestaat, en dat is precies wat er met “Waarom?” gebeurde. */
-export const ROUTES_HEADING = "Alle routes";
 
 /** The block's one visible control for the terms, sitting directly under the
  *  answer it explains.
@@ -645,6 +714,8 @@ export function TermsNotice({
   onSearch: () => void;
   onRecheckAi: () => void;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   if (state.kind === "euro") return null;
 
   /* WAAR "VUL HET ZELF IN" NAAR WIJST, en waarom het niet meer "Waarom?" is.
@@ -658,10 +729,10 @@ export function TermsNotice({
    * staat per route onder "Alle routes", in ditzelfde uitgeklapte deel, direct
    * onder deze melding. Dus wijst de zin daarheen.
    *
-   * Eén kopje, drie keer genoemd, dus de naam komt uit `ROUTES_HEADING` en niet
-   * uit drie overgetikte strings: een verwijzing die naar een kop wijst die
-   * anders heet is dezelfde dode aanwijzing, alleen moeilijker te vinden. */
-  const zelfInvullen = `bij “${ROUTES_HEADING}” hieronder`;
+   * Eén kopje, drie keer genoemd, dus de naam komt uit de copy en niet uit drie
+   * overgetikte strings: een verwijzing die naar een kop wijst die anders heet
+   * is dezelfde dode aanwijzing, alleen moeilijker te vinden. */
+  const zelfInvullen = fill(c.terms.fillInHint, { heading: c.terms.routesHeading });
 
   const searchButton = (primary: boolean, label: string) => (
     <button
@@ -670,7 +741,7 @@ export function TermsNotice({
       onClick={onSearch}
       disabled={busy}
     >
-      {busy ? "Bezig met zoeken…" : label}
+      {busy ? c.terms.searchingButton : label}
     </button>
   );
 
@@ -680,15 +751,18 @@ export function TermsNotice({
   // from the outside indistinguishable from a broken feature. Without this
   // button there is nothing to press in exactly the state that needs pressing,
   // and the only cure is knowing to reload.
+  const [noKeyBefore, noKeyAfter] = fill(c.terms.noKeyBody, { hint: zelfInvullen }).split(
+    "MISTRAL_API_KEY",
+  );
   const noKeyLine = (
     <>
       <p className="cell-sub">
-        Deze server heeft geen AI-sleutel (<code>MISTRAL_API_KEY</code>) ingesteld, dus opzoeken kan
-        hier niet — verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de
-        percentages zelf in {zelfInvullen}. Wat jij invult wordt nooit door een agent overschreven.
+        {noKeyBefore}
+        <code>MISTRAL_API_KEY</code>
+        {noKeyAfter}
       </p>
       <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
-        Sleutel net ingesteld? Opnieuw controleren
+        {c.terms.noKeyRecheck}
       </button>
     </>
   );
@@ -696,10 +770,7 @@ export function TermsNotice({
   if (state.kind === "no-products") {
     return (
       <div className="travel-terms" role="status">
-        <p className="cell-sub">
-          Vul bij Rekeningen de bank in bij je betaalrekeningen en creditcards. Zonder bank weten we
-          niet welk product het is, en dus ook niet welke voorwaarden erbij horen.
-        </p>
+        <p className="cell-sub">{c.terms.noProductsBody}</p>
       </div>
     );
   }
@@ -710,19 +781,22 @@ export function TermsNotice({
       <div className="travel-terms" role="status">
         {state.unknown.length > 0 && (
           <p className="cell-sub">
-            Van {state.unknown.length} kaart{state.unknown.length === 1 ? "" : "en"} kennen we de
-            wisselkosten nog niet ({nameList(state.unknown)}). Die staan onderaan zonder bedrag —
-            onbekend is niet gratis, dus ze doen niet mee in de rangschikking.
+            {fill(state.unknown.length === 1 ? c.terms.unknownCardsOne : c.terms.unknownCardsMany, {
+              count: state.unknown.length,
+              names: nameList(state.unknown),
+            })}
           </p>
         )}
         {state.unpriced.length > 0 && (
           <p className="cell-sub">
-            Nog niet elke route is te beprijzen:{" "}
-            {state.unpriced.map((u) => `${u.provider} — ${u.why}`).join("; ")}. Die routes staan
-            zonder bedrag.
+            {fill(c.terms.unpriced, {
+              list: state.unpriced
+                .map((u) => `${productLabel(u.bank, u.productKind, c)} — ${journeyWhySentence(u.why, c)}`)
+                .join("; "),
+            })}
           </p>
         )}
-        {gaps === 0 && <p className="cell-sub">Alle routes zijn beprijsd.</p>}
+        {gaps === 0 && <p className="cell-sub">{c.terms.allPriced}</p>}
         {/* Only ever a date we actually hold: a fee the owner typed himself
             carries no lookup date, and no date is printed for it.
             "Opgezocht" used to claim LaVega did the looking on that date — but
@@ -730,11 +804,11 @@ export function TermsNotice({
             neutral verb is true of both sources. */}
         {state.lastUpdated && (
           <p className="cell-sub">
-            Cijfers laatst gecontroleerd op {dayLabelYearNL(state.lastUpdated)}.
+            {fill(c.terms.lastChecked, { date: formatDate(locale, state.lastUpdated) })}
           </p>
         )}
         {aiAvailable
-          ? searchButton(false, gaps > 0 ? `Zoek voorwaarden (${gaps})` : "Ververs voorwaarden")
+          ? searchButton(false, gaps > 0 ? fill(c.terms.searchWithCount, { count: gaps }) : c.terms.refresh)
           : noKeyLine}
       </div>
     );
@@ -743,7 +817,7 @@ export function TermsNotice({
   if (state.kind === "no-key") {
     return (
       <div className="travel-terms travel-terms-blocked" role="status">
-        <p className="cell-sub">Nog onbekend: {nameList(state.unknown)}.</p>
+        <p className="cell-sub">{fill(c.terms.unknownList, { names: nameList(state.unknown) })}</p>
         {noKeyLine}
       </div>
     );
@@ -759,23 +833,15 @@ export function TermsNotice({
         <p className="cell-sub travel-searching">
           <span className="spinner" aria-hidden="true" />
           <span>
-            LaVega zoekt de voorwaarden op van {nameList(state.pending)}
-            {termsAsked > 0 && (
-              <>
-                {" "}
-                — {found} van {termsAsked} gevonden
-              </>
-            )}
-            . Dat duurt een minuut of twee; dit scherm werkt zichzelf bij.
+            {fill(c.terms.searchingBody, { names: nameList(state.pending) })}
+            {termsAsked > 0 && fill(c.terms.searchingFoundSuffix, { found, total: termsAsked })}
+            {c.terms.searchingTail}
           </span>
         </p>
         {termsGaveUp && (
-          <p className="cell-sub text-warn">
-            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in{" "}
-            {zelfInvullen} — wat jij invult wordt nooit overschreven.
-          </p>
+          <p className="cell-sub text-warn">{fill(c.terms.gaveUp, { hint: zelfInvullen })}</p>
         )}
-        {searchButton(false, "Nu opnieuw kijken")}
+        {searchButton(false, c.terms.searchAgain)}
       </div>
     );
   }
@@ -784,10 +850,9 @@ export function TermsNotice({
     return (
       <div className="travel-terms" role="status">
         <p className="cell-sub">
-          Deze zijn nog nooit opgezocht: {nameList(state.unknown)}. Eén klik en LaVega haalt de
-          tarieven van de aanbieders zelf op.
+          {fill(c.terms.neverSearchedBody, { names: nameList(state.unknown) })}
         </p>
-        {searchButton(true, `Zoek voorwaarden (${state.unknown.length})`)}
+        {searchButton(true, fill(c.terms.searchWithCount, { count: state.unknown.length }))}
       </div>
     );
   }
@@ -795,11 +860,9 @@ export function TermsNotice({
   return (
     <div className="travel-terms travel-terms-blocked" role="status">
       <p className="cell-sub">
-        We hebben gezocht, maar voor {nameList(state.unknown)} kwam er geen bruikbaar tarief terug.
-        Vul de wisselkosten zelf in {zelfInvullen} — jouw invoer blijft staan en wordt nooit
-        overschreven. Zoeken kan opnieuw; de server haalt sommige tarieven op de achtergrond op.
+        {fill(c.terms.searchedEmptyBody, { names: nameList(state.unknown), hint: zelfInvullen })}
       </p>
-      {searchButton(false, "Opnieuw zoeken")}
+      {searchButton(false, c.terms.searchAgainPlain)}
     </div>
   );
 }
@@ -832,14 +895,10 @@ export function TermsNotice({
  * screen. Without both, the block would be recommending a payment he cannot
  * make until he has opened an account. */
 
-function pctNL(n: number): string {
-  return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
-}
-
-/** What one withdrawal costs, or "onbekend". Never a zero — a missing price is
- *  not a free one, and abroad that difference is real money. */
-function cashCost(euros: number | null): string {
-  return euros === null ? "onbekend" : formatEuro(euros);
+/** What one withdrawal costs, or "onbekend"/"unknown". Never a zero — a
+ *  missing price is not a free one, and abroad that difference is real money. */
+function cashCost(locale: Locale, c: TravelCopy, euros: number | null): string {
+  return euros === null ? c.common.unknown : formatEuroIn(locale, euros);
 }
 
 /** His own cards, priced for pulling out cash. The reason a row has no price is
@@ -858,17 +917,22 @@ export function CashSection({
    *  cheapest one of those is not the answer to "which card should I use". */
   advice?: WithdrawAdvice | null;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   return (
     <div className="travel-step travel-cash">
-      <h3 className="travel-step-title">Geld pinnen</h3>
+      <h3 className="travel-step-title">{c.cash.title}</h3>
       <p className="cell-sub">
-        Pinnen is een aparte prijs, en bijna altijd hoger dan betalen. Bedragen gelden op één opname
-        van {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}.
+        {fill(c.cash.intro, { amount: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL) })}
       </p>
       {advice && !advice.held && (
         <p className="cell-sub travel-note">
-          <NotYours /> Het goedkoopste opnametarief dat we kunnen aantonen is {advice.product}:{" "}
-          {cashCost(advice.costOnReference)} per {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}
+          <NotYours />{" "}
+          {fill(c.cash.advice, {
+            product: advice.product,
+            cost: cashCost(locale, c, advice.costOnReference),
+            amount: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+          })}
           {advice.asOf && <> · {figureAge(advice.asOf, asOf)}</>}.
         </p>
       )}
@@ -883,17 +947,17 @@ export function CashSection({
         />
       )}
       {options.length === 0 ? (
-        <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
+        <p className="cell-sub">{c.common.noAccountsKnown}</p>
       ) : (
         <ul className="travel-legs">
           {options.map((o) => (
             <li key={o.provider} className="travel-leg">
               <span className="travel-leg-name">
-                {o.provider}
+                {productLabel(o.bank, o.productKind, c)}
                 {o.fee.known && <span className="eyebrow"> · {describeWithdrawalFee(o.fee)}</span>}
                 {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
               </span>
-              <span className="travel-leg-cost">{cashCost(o.costOnReference)}</span>
+              <span className="travel-leg-cost">{cashCost(locale, c, o.costOnReference)}</span>
             </li>
           ))}
         </ul>
@@ -903,20 +967,27 @@ export function CashSection({
           <div key={`why-${o.provider}`}>
             {o.penalisesSmall && o.smallEffectivePct !== null && (
               <p className="cell-sub travel-note">
-                {o.provider}: er zit een vast bedrag per opname bij, dus{" "}
-                {formatEuro(TRAVEL_SMALL_WITHDRAWAL)} pinnen kost {pctNL(o.smallEffectivePct)} in
-                plaats van {pctNL(o.effectivePct ?? 0)}. Neem in één keer meer op.
+                {fill(c.cash.smallWithdrawalNote, {
+                  provider: productLabel(o.bank, o.productKind, c),
+                  amount: formatEuroIn(locale, TRAVEL_SMALL_WITHDRAWAL),
+                  pctSmall: formatPercentIn(locale, o.smallEffectivePct),
+                  pctNormal: formatPercentIn(locale, o.effectivePct ?? 0),
+                })}
               </p>
             )}
             {o.fee.caveat && (
               <p className="cell-sub travel-note">
-                <strong>Let op:</strong> {o.provider} — {o.fee.caveat}
+                <strong>{c.common.caveatLabel}</strong>{" "}
+                {fill(c.cash.caveat, { provider: productLabel(o.bank, o.productKind, c), caveat: o.fee.caveat })}
               </p>
             )}
           </div>
         ) : (
           <p key={`why-${o.provider}`} className="cell-sub travel-note">
-            {o.provider}: {o.fee.why}
+            {fill(c.cash.feeUnknownReason, {
+              provider: productLabel(o.bank, o.productKind, c),
+              reason: o.fee.why ?? "",
+            })}
           </p>
         ),
       )}
@@ -946,6 +1017,8 @@ export function OffersSection({
    *  prijzen: een netto met één helft ontbrekend is een verzonnen bedrag. */
   ownPct?: number | null;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   if (offers.length === 0) return null;
   const top = offers.slice(0, shown);
   // Alle offers zijn met dezelfde horizon doorgerekend (`planTravel` geeft er één
@@ -954,12 +1027,8 @@ export function OffersSection({
   const tripMonths = offers[0].tripMonths;
   return (
     <div className="travel-step travel-offers">
-      <h3 className="travel-step-title">Wat je zou kunnen openen</h3>
-      <p className="cell-sub">
-        Kaarten uit de catalogus, geen kaarten van jou — voor zover wij kunnen zien heb je ze niet,
-        en betalen doe je vandaag met wat er onder “Betalen” staat. Eén kaart per aanbieder: de
-        voordeligste waarvan we de bron en de datum hebben.
-      </p>
+      <h3 className="travel-step-title">{c.offers.title}</h3>
+      <p className="cell-sub">{c.offers.intro1}</p>
       {/* WAAROM DE VOLGORDE IS WAT ZE IS. De lijst wordt gerangschikt op wat een
           kaart deze reis KOST — opslag plus kaartprijs — en toonde alleen de
           opslag. Een kaart met 0% opslag en € 16,90 per maand stond dan onder een
@@ -967,10 +1036,10 @@ export function OffersSection({
           die willekeurig leest omdat de helft van het criterium niet op het scherm
           stond. Nu staat die helft er, per rij. */}
       <p className="cell-sub">
-        De volgorde is wat een kaart je op deze reis kost: de opslag op{" "}
-        {formatEuro(TRAVEL_REFERENCE_SPEND)} plus wat de kaart zelf kost over {tripMonths}{" "}
-        {tripMonths === 1 ? "maand" : "maanden"}. Staat er “kaartkosten onbekend”, dan zit alleen de
-        opslag in dat bedrag — dat is een ondergrens, geen bewijs dat de kaart gratis is.
+        {fill(tripMonths === 1 ? c.offers.intro2One : c.offers.intro2Many, {
+          reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+          months: tripMonths,
+        })}
       </p>
       <ul className="travel-journeys">
         {top.map((o) => (
@@ -979,27 +1048,34 @@ export function OffersSection({
               <span className="travel-journey-name">{o.product}</span>
               <NotYours />
               <span className="travel-journey-cost">
-                {formatEuro(costOnReferenceSpend(o.netCostPct) ?? 0)} op{" "}
-                {formatEuro(TRAVEL_REFERENCE_SPEND)}
+                {fill(c.offers.amountOnReference, {
+                  amount: formatEuroIn(locale, costOnReferenceSpend(o.netCostPct) ?? 0),
+                  reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                })}
               </span>
             </div>
             <p className="cell-sub travel-note">
-              {pctNL(o.fxFeePct)} wisselkosten
-              {o.cashbackPct !== null && ` · ${pctNL(o.cashbackPct)} cashback`}
+              {fill(c.offers.feeLine, { pct: formatPercentIn(locale, o.fxFeePct) })}
+              {o.cashbackPct !== null &&
+                ` · ${fill(c.offers.cashbackSuffix, { pct: formatPercentIn(locale, o.cashbackPct) })}`}
               {o.withdrawalOnReference !== null
-                ? ` · pinnen ${formatEuro(o.withdrawalOnReference)} per ${formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}`
-                : " · pinnen onbekend"}
+                ? ` · ${fill(c.offers.withdrawalSuffix, {
+                    amount: formatEuroIn(locale, o.withdrawalOnReference),
+                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+                  })}`
+                : ` · ${c.offers.withdrawalUnknown}`}
               {" · "}
               {figureAge(o.asOf, asOf)}
             </p>
             {o.capNote && (
               <p className="cell-sub travel-note">
-                <strong>Let op:</strong> {o.capNote}
+                <strong>{c.common.caveatLabel}</strong> {o.capNote}
               </p>
             )}
             {o.cashbackNote && (
               <p className="cell-sub travel-note">
-                {o.cashbackNote} Daarom rekenen we die niet mee.
+                {o.cashbackNote}
+                {c.offers.cashbackNoteSuffix}
               </p>
             )}
             {/* De prijs van de kaart, en — als we zijn eigen opslag kennen — wat
@@ -1021,8 +1097,7 @@ export function OffersSection({
       </ul>
       {offers.length > top.length && (
         <p className="cell-sub">
-          Nog {offers.length - top.length} kaarten in de catalogus met een onderbouwd tarief,
-          allemaal duurder dan deze.
+          {fill(c.offers.remainingCount, { count: offers.length - top.length })}
         </p>
       )}
     </div>
@@ -1032,15 +1107,22 @@ export function OffersSection({
 /** How old a figure is, in words, because a bare date does not tell you whether
  *  to trust it. "vandaag opgezocht" and "gecontroleerd 15 jan" are different
  *  claims, and a koersopslag from seven months ago should look seven months old
- *  on screen rather than hide behind a formatted date. */
+ *  on screen rather than hide behind a formatted date.
+ *
+ *  Not a React component, so it cannot read `useAppLocale()` — it is called
+ *  directly from tests as a plain function too. `readAppLocale()` is the same
+ *  read the hook seeds its first render with, so this stays in step with
+ *  whatever locale the surrounding block is rendering in. */
 export function figureAge(updatedAt: string, asOf: string): string {
+  const locale = readAppLocale();
+  const c = optimiseCopy[locale].travel.figureAge;
   const days = Math.round((Date.parse(asOf) - Date.parse(updatedAt)) / 86_400_000);
-  if (!Number.isFinite(days)) return `opgezocht ${updatedAt}`;
-  if (days <= 0) return "vandaag opgezocht";
-  if (days === 1) return "gisteren opgezocht";
-  if (days < 14) return `${days} dagen geleden opgezocht`;
-  if (days < 60) return `${Math.round(days / 7)} weken geleden gecontroleerd`;
-  return `${Math.round(days / 30)} maanden geleden gecontroleerd`;
+  if (!Number.isFinite(days)) return fill(c.fallback, { date: updatedAt });
+  if (days <= 0) return c.today;
+  if (days === 1) return c.yesterday;
+  if (days < 14) return fill(c.daysAgo, { n: days });
+  if (days < 60) return fill(c.weeksAgo, { n: Math.round(days / 7) });
+  return fill(c.monthsAgo, { n: Math.round(days / 30) });
 }
 
 export default function TravelBlock({
@@ -1060,6 +1142,8 @@ export default function TravelBlock({
   onCorrectFact,
   catalogue = BUNDLED_CATALOGUE,
 }: TravelBlockProps) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
   const [destination, setDestination] = useState("");
   /* Eén uitklap voor het hele blok, en die staat in `ToonMeer` — geen `useState`
    * meer hier. Dat is niet alleen minder code: de stand zat in React en dus
@@ -1173,7 +1257,7 @@ export default function TravelBlock({
    * zonder sleutel niet worden uitgevoerd.
    *
    * De oorzaak staat daarmee precies één keer: als kop óf als regel eronder. */
-  const cause = (terms && termsHeadline(terms)) ?? null;
+  const cause = (terms && termsHeadline(terms, c)) ?? null;
   const headline = plan?.pay ? answer : (cause ?? answer);
   const causeLine = plan?.pay ? cause : null;
 
@@ -1181,35 +1265,33 @@ export default function TravelBlock({
    * klikt niemand en is de onderbouwing niet opgevouwen maar zoek. Twee vormen,
    * omdat er twee soorten inhoud achter zitten: normaal de onderbouwing van een
    * bedrag, en in een toestand met een gat de reden plus de knop die hem dicht. */
-  const foldLabel = cause
-    ? "Wat er ontbreekt, en wat je eraan kunt doen"
-    : "Alle routes, de bronnen en de voorwaarden";
+  const foldLabel = cause ? c.winner.foldLabelGap : c.winner.foldLabelFull;
 
   return (
     <Module title="Travel" span={3} height="tall">
       <div className="travel-controls">
         <label>
-          <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>
+          <span className="eyebrow">{fill(c.controls.from, { country: homeCountry })}</span>
           <select
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             disabled={busy}
           >
-            <option value="">— kies een land —</option>
-            {COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.name}
+            <option value="">{c.controls.countryPlaceholder}</option>
+            {c.countries.map((country) => (
+              <option key={country.code} value={country.code}>
+                {pick(locale, country.nl, country.en)}
               </option>
             ))}
           </select>
         </label>
-        {plan?.currency && <span className="eyebrow">je betaalt daar in {plan.currency}</span>}
+        {plan?.currency && (
+          <span className="eyebrow">{fill(c.controls.payingIn, { currency: plan.currency })}</span>
+        )}
       </div>
 
       {!plan ? (
-        <p className="block-empty">
-          Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.
-        </p>
+        <p className="block-empty">{c.empty}</p>
       ) : (
         <>
           {/* DE SAMENVATTING. Twee antwoorden — waarmee betaal je, waar kun je
@@ -1242,7 +1324,7 @@ export default function TravelBlock({
                 niet: die twee zijn niet dezelfde soort zin. */}
             {plan.pay && !plan.pay.held && plan.pay.note && (
               <p className="cell-sub travel-winner-caveat">
-                <strong>Let op:</strong> {plan.pay.note}
+                <strong>{c.common.caveatLabel}</strong> {plan.pay.note}
               </p>
             )}
             {/* WAT ER ONTBREEKT, in één zin. De hele melding met de knop staat in
@@ -1272,7 +1354,7 @@ export default function TravelBlock({
                 de tweede helft van wat vooraan mag blijven staan: waarmee betaal
                 je, en waar kun je pinnen. */}
             <p className="cell-sub travel-winner-cash">
-              <strong>Pinnen:</strong>{" "}
+              <strong>{c.winner.pinnenLabel}</strong>{" "}
               {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
                 <>
                   <NotYours />{" "}
@@ -1309,7 +1391,7 @@ export default function TravelBlock({
                   loopt daarom langs `plan.pay.note` en staat wél vooraan. */}
               {bestJourney?.note && (
                 <p className="cell-sub travel-winner-caveat">
-                  <strong>Let op:</strong> {bestJourney.note}
+                  <strong>{c.common.caveatLabel}</strong> {bestJourney.note}
                 </p>
               )}
               {/* Waar de aanbevolen kaart vandaan komt en hoe oud dat tarief is.
@@ -1317,8 +1399,11 @@ export default function TravelBlock({
                   wél staat, en dat is onderbouwing (punt 13). */}
               {plan.pay && !plan.pay.held && (
                 <p className="cell-sub travel-winner-switch">
-                  <NotYours /> {plan.pay.product} staat in de catalogus, niet bij je rekeningen
-                  {plan.pay.asOf && <> · tarief {figureAge(plan.pay.asOf, asOf)}</>}.
+                  <NotYours /> {fill(c.detail.switchSource, { product: plan.pay.product })}
+                  {plan.pay.asOf && (
+                    <>{fill(c.detail.switchAgeSuffix, { age: figureAge(plan.pay.asOf, asOf) })}</>
+                  )}
+                  .
                 </p>
               )}
               {/* ...and what he can pay with TODAY. He still has to be able to pay
@@ -1327,9 +1412,12 @@ export default function TravelBlock({
                   ook letterlijk niet de aanbeveling maar het alternatief. */}
               {plan.pay && !plan.pay.held && plan.pay.ownProduct && (
                 <p className="cell-sub travel-winner-today">
-                  <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met{" "}
-                  {plan.pay.ownProduct} — {formatEuro(plan.pay.ownCostOnReference ?? 0)} op{" "}
-                  {formatEuro(TRAVEL_REFERENCE_SPEND)}.
+                  <strong>{c.detail.todayLabel}</strong>{" "}
+                  {fill(c.detail.todayBody, {
+                    product: plan.pay.ownProduct,
+                    cost: formatEuroIn(locale, plan.pay.ownCostOnReference ?? 0),
+                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                  })}
                 </p>
               )}
               {/* WAAROM DE GOEDKOPERE KAART HET NIET WERD. Zijn eigen route wint
@@ -1341,16 +1429,24 @@ export default function TravelBlock({
                   rechtzetten. */}
               {plan.pay?.held && rejected && ownPct !== null && (
                 <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
-                  <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag
-                  ({pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
-                  {feeLabel(rejected.net.cost.amount)} om aan te houden:{" "}
-                  {formatEuro(rejected.net.grossCents / 100)} lagere opslag tegen{" "}
-                  {formatEuro(rejected.net.costCents / 100)} kaartkosten{" "}
-                  {spanWords(rejected.net.basis)}, dus{" "}
-                  {rejected.net.netCents === 0
-                    ? "even duur als"
-                    : `${formatEuro(-rejected.net.netCents / 100)} duurder dan`}{" "}
-                  {plan.pay.product}.{floorNote(rejected.net.basis)}
+                  <strong>{c.detail.notRecommendedLabel}</strong>{" "}
+                  {fill(c.detail.notRecommendedBody, {
+                    product: rejected.offer.product,
+                    offerPct: formatPercentIn(locale, rejected.offer.netCostPct),
+                    ownPct: formatPercentIn(locale, ownPct),
+                    fee: feeLabel(locale, rejected.net.cost.amount),
+                    gross: formatEuroIn(locale, rejected.net.grossCents / 100),
+                    cost: formatEuroIn(locale, rejected.net.costCents / 100),
+                    span: spanWords(rejected.net.basis, c),
+                    comparison:
+                      rejected.net.netCents === 0
+                        ? c.detail.evenAsExpensive
+                        : fill(c.detail.moreExpensiveThan, {
+                            amount: formatEuroIn(locale, -rejected.net.netCents / 100),
+                          }),
+                    ownProduct: plan.pay.product,
+                  })}
+                  {floorNote(rejected.net.basis, c)}
                 </p>
               )}
               {/* De maatstaf onder alle bedragen. Vooraan noemt de kop zijn eigen
@@ -1358,8 +1454,7 @@ export default function TravelBlock({
                   lijst, met de zin die zegt dat LaVega zelf niets verplaatst. */}
               {bestJourney && (
                 <div className="cell-sub">
-                  Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft.
-                  LaVega verplaatst zelf niets — dit is een stap die jij zet.
+                  {fill(c.detail.referenceNote, { reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND) })}
                 </div>
               )}
 
@@ -1379,12 +1474,10 @@ export default function TravelBlock({
                 />
               )}
 
-              <h3 className="travel-step-title">{ROUTES_HEADING}</h3>
+              <h3 className="travel-step-title">{c.terms.routesHeading}</h3>
               {plan.journeys.length === 0 ? (
                 <p className="cell-sub">
-                  {plan.currency === "EUR"
-                    ? "Geen route nodig — daar reken je gewoon in euro's af."
-                    : "Nog geen kaarten of betaalrekeningen bekend."}
+                  {plan.currency === "EUR" ? c.journeys.noRouteEuro : c.common.noAccountsKnown}
                 </p>
               ) : (
                 <ul className="travel-journeys">
@@ -1394,14 +1487,14 @@ export default function TravelBlock({
                       className={`travel-journey${j === bestJourney ? " travel-journey-best" : ""}${j.known ? "" : " travel-journey-unknown"}`}
                     >
                       <div className="travel-journey-head">
-                        <span className="travel-journey-name">{journeyTitle(j)}</span>
+                        <span className="travel-journey-name">{journeyTitle(j, c)}</span>
                         <span className="travel-journey-cost">
-                          {j.known ? legCost(j.totalCostPct) : "onbekend"}
+                          {j.known ? legCost(locale, c, j.totalCostPct) : c.common.unknown}
                         </span>
                       </div>
 
                       <ul className="travel-legs">
-                        {legsOf(j).map((leg) => (
+                        {legsOf(j, locale, c).map((leg) => (
                           <li key={leg.name} className="travel-leg">
                             <span className="travel-leg-name">
                               {leg.name} · {leg.detail}
@@ -1413,15 +1506,18 @@ export default function TravelBlock({
 
                       <p className="cell-sub travel-note">
                         {j.known
-                          ? j.why
-                          : `Niet elke stap van deze route is bekend (${j.why}) — daarom staat er geen bedrag. Onbekend is niet gratis.`}
+                          ? journeyWhySentence(j.why, c)
+                          : fill(c.journeys.unknownReason, { why: journeyWhySentence(j.why, c) })}
                       </p>
 
                       {j.via === null ? (
                         <FactCorrection
                           provider={j.provider}
+                          productLabel={productLabel(j.bank, j.productKind, c)}
                           factKey="fxFeePct"
-                          label={`wisselkosten (${pct(plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null)})`}
+                          label={fill(c.factCorrection.fxFeeLabel, {
+                            pct: pct(c, plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null),
+                          })}
                           value={
                             plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null
                           }
@@ -1431,8 +1527,9 @@ export default function TravelBlock({
                       ) : (
                         <FactCorrection
                           provider={j.provider}
+                          productLabel={productLabel(j.bank, j.productKind, c)}
                           factKey="convertFeePct"
-                          label={`omwisselkosten (${pct(j.convertPct)})`}
+                          label={fill(c.factCorrection.convertFeeLabel, { pct: pct(c, j.convertPct) })}
                           value={j.convertPct}
                           busy={busy}
                           onCorrect={onCorrectFact}
@@ -1447,33 +1544,33 @@ export default function TravelBlock({
                   answer rather than three answers standing beside it. */}
               <div className="travel-plan">
                 <div className="travel-step">
-                  <h3 className="travel-step-title">Bewaren</h3>
+                  <h3 className="travel-step-title">{c.steps.store}</h3>
                   <p className="travel-step-line">{plan.store.note}</p>
                   {plan.store.suggestion && (
                     <p className="cell-sub">
-                      Scheelt {formatEuro(plan.store.suggestion.extraPerYearCents / 100)} per jaar.
+                      {fill(c.steps.storeSavings, {
+                        amount: formatEuroIn(locale, plan.store.suggestion.extraPerYearCents / 100),
+                      })}
                     </p>
                   )}
                 </div>
 
                 <div className="travel-step">
-                  <h3 className="travel-step-title">Wisselen</h3>
+                  <h3 className="travel-step-title">{c.steps.exchange}</h3>
                   {/* Core's convert note carries the same "ververs eerst de
                       voorwaarden" advice as its headline, and it is wrong for
                       the same reason. When no card is priced, point at the
                       notice that names the real cause instead of repeating an
                       instruction that may be impossible to follow. */}
                   <p className="travel-step-line">
-                    {bestJourney
-                      ? plan.convert.note
-                      : "Nog geen kaart met bekende voorwaarden — zie de reden boven aan dit blok."}
+                    {bestJourney ? plan.convert.note : c.steps.exchangeNoCard}
                   </p>
                 </div>
 
                 <div className="travel-step">
-                  <h3 className="travel-step-title">Betalen</h3>
+                  <h3 className="travel-step-title">{c.steps.pay}</h3>
                   {plan.spend.length === 0 ? (
-                    <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
+                    <p className="cell-sub">{c.common.noAccountsKnown}</p>
                   ) : (
                     <ul className="travel-legs">
                       {plan.spend.map((option) => {
@@ -1481,12 +1578,15 @@ export default function TravelBlock({
                         return (
                           <li key={option.provider} className="travel-leg">
                             <span className="travel-leg-name">
-                              {option.provider}
+                              {productLabel(option.bank, option.productKind, c)}
                               {(option.pointsPerEuro ?? 0) > 0 && (
-                                <span className="eyebrow"> · {option.pointsPerEuro} punt/€</span>
+                                <span className="eyebrow">
+                                  {" "}
+                                  · {fill(c.steps.pointsPerEuro, { n: option.pointsPerEuro ?? 0 })}
+                                </span>
                               )}
                               {option.feeSource === "user" && (
-                                <span className="eyebrow"> · door jou ingesteld</span>
+                                <span className="eyebrow"> · {c.steps.userSetFee}</span>
                               )}
                               {option.feeSource === "agent" && option.feeUpdatedAt && (
                                 <span className="eyebrow">
@@ -1496,7 +1596,7 @@ export default function TravelBlock({
                               )}
                             </span>
                             <span className="travel-leg-cost">
-                              {cost === null ? "onbekend" : legCost(option.netCostPct)}
+                              {cost === null ? c.common.unknown : legCost(locale, c, option.netCostPct)}
                             </span>
                           </li>
                         );
@@ -1515,9 +1615,10 @@ export default function TravelBlock({
 
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">
-                  {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder
-                  bank — die kunnen we niet opzoeken. Vul de bank in bij Rekeningen, of zet het type
-                  op Spaarrekening als het spaargeld is.
+                  {fill(
+                    plan.unidentifiedCount === 1 ? c.detail.unidentifiedOne : c.detail.unidentifiedMany,
+                    { count: plan.unidentifiedCount },
+                  )}
                 </p>
               )}
             </div>

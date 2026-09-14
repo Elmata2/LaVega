@@ -2,11 +2,14 @@ import { useMemo } from "react";
 import type { Account, ConversionMode, ScheduledFlow, Tx } from "@lavega/core";
 import { availableBalanceCents, isEurCurrency, reservedCents, toEur } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart from "../TrendChart.js";
 import DeltaPill from "./DeltaPill.js";
-import { dayLabelNL, daysBetween, shiftDate } from "./dates.js";
+import { daysBetween, shiftDate } from "./dates.js";
+import type { Locale } from "../../locale.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 
 /* Totale positie — the most important number on the homescreen, and now the
  * line behind it.
@@ -180,11 +183,13 @@ export function changePct(now: number, then: number | null): number | null {
 /** One "vs. vorige week" cell: the earlier figure and the move since, or the
  *  reason there is nothing to compare with. */
 function Comparison({
+  locale,
   label,
   now,
   then,
   missing,
 }: {
+  locale: Locale;
   label: string;
   now: number;
   then: number | null;
@@ -197,7 +202,7 @@ function Comparison({
         <div className="position-compare-missing">{missing}</div>
       ) : (
         <div className="position-compare-figure">
-          <span className="position-compare-value">{formatEuro(then)}</span>
+          <span className="position-compare-value">{formatEuroIn(locale, then)}</span>
           <DeltaPill pct={changePct(now, then)} upIsGood={true} />
         </div>
       )}
@@ -228,6 +233,8 @@ export default function SaldoBlock({
   fxHistory,
   mode,
 }: SaldoBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].saldo;
   const series = useMemo(
     () => positionSeries(accounts, txs, asOf, POSITION_WINDOW_DAYS, { fxHistory, mode }),
     [accounts, txs, asOf, fxHistory, mode],
@@ -269,22 +276,22 @@ export default function SaldoBlock({
 
   return (
     <Module
-      title={`Totale positie${unknownCount > 0 ? " (deels)" : ""}`}
+      title={c.title(unknownCount > 0)}
       span={span}
       height="tall"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          Rekeningen →
+          {c.rekeningenArrow}
         </button>
       }
       footer={
         <>
-          {accounts.length} rekening{accounts.length === 1 ? "" : "en"} · {entities.length} entiteit
-          {entities.length === 1 ? "" : "en"}
+          {c.rekeningenEntiteiten(accounts.length, entities.length)}
           {accounts.length > 0 && reserved > 0 && (
             <>
-              {" · beschikbaar na BTW-reservering: "}
-              {formatEuro(availableBalanceCents(knownSum, scheduledFlows, asOf) / 100)}
+              {c.beschikbaarNaBtw(
+                formatEuroIn(locale, availableBalanceCents(knownSum, scheduledFlows, asOf) / 100),
+              )}
             </>
           )}
         </>
@@ -294,39 +301,39 @@ export default function SaldoBlock({
         <span
           className={`module-figure-value ${accounts.length === 0 ? "" : knownSum >= 0 ? "text-pos" : "text-neg"}`}
         >
-          {accounts.length === 0 ? "—" : formatEuro(knownSum)}
+          {accounts.length === 0 ? "—" : formatEuroIn(locale, knownSum)}
         </span>
         <DeltaPill pct={weekPct} upIsGood={true} />
         {/* A bare "▲ 3%" is unreadable: three percent since WHEN? The pill is
             the move against the position one week ago, so the card says so
             next to it — and says nothing at all when there is no week to
             compare against. */}
-        {weekPct !== null && <span className="figure-vs">t.o.v. vorige week</span>}
+        {weekPct !== null && <span className="figure-vs">{c.tOvVorigeWeek}</span>}
       </div>
       <p className="module-figure-label">
         {accounts.length === 0
-          ? "Importeer een bestand of vul saldo's in."
+          ? c.importeerOfVulSaldos
           : noBalanceCount > 0
-            ? `${noBalanceCount} rekening${noBalanceCount > 1 ? "en" : ""} nog zonder saldo — niet meegeteld, vul in bij Rekeningen.`
-            : "Compleet: elke rekening heeft een saldo."}
+            ? c.rekeningNogZonderSaldo(noBalanceCount)
+            : c.compleetElkeRekeningHeeftSaldo}
       </p>
       {currencyCount > 0 && (
         <p className="module-figure-label">
           {mode === "convert"
-            ? `${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — nog geen koers.`
-            : `${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`}
+            ? c.vreemdeValutaConvert(currencyCount, currencyNames)
+            : c.vreemdeValutaSeparate(currencyCount, currencyNames)}
         </p>
       )}
-      {anyConverted && <p className="module-figure-label">Omgerekend via ECB.</p>}
+      {anyConverted && <p className="module-figure-label">{c.omgerekendViaEcb}</p>}
 
       {hasGraph ? (
         <div className="position-graph">
           <TrendChart
-            points={series.points.map((p) => ({ label: dayLabelNL(p.date), value: p.value }))}
+            points={series.points.map((p) => ({ label: dayLabelIn(locale, p.date), value: p.value }))}
             color="var(--accent)"
-            format={(v) => formatEuro(v)}
-            ariaLabel="Totale positie per dag"
-            readoutLabel="Positie op"
+            format={(v) => formatEuroIn(locale, v)}
+            ariaLabel={c.positiePerDagAria}
+            readoutLabel={c.positieOpReadout}
             height={132}
             /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
              * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
@@ -345,24 +352,26 @@ export default function SaldoBlock({
         <p className="block-empty position-graph-empty">
           {series.coverageDays === 0
             ? limitLabel
-              ? `${limitLabel} heeft nog geen transacties, dus de positie van vorige week of maand is niet af te leiden — alleen aangenomen. Importeer die rekening en de vergelijking verschijnt.`
-              : "Nog geen transacties op de rekeningen met een saldo — daaruit wordt de grafiek opgebouwd."
-            : `Pas ${series.coverageDays} dag${series.coverageDays === 1 ? "" : "en"} transactiegeschiedenis — te weinig voor een lijn. Vanaf ${MIN_HISTORY_DAYS} dagen tekent LaVega hem.`}
+              ? c.heeftNogGeenTransacties(limitLabel)
+              : c.geenTransactiesOpRekeningenMetSaldo
+            : c.pasNDagenTransactiegeschiedenis(series.coverageDays, MIN_HISTORY_DAYS)}
         </p>
       )}
 
       <div className="position-compare">
         <Comparison
-          label="Vorige week"
+          locale={locale}
+          label={c.vorigeWeek}
           now={knownSum}
           then={series.weekAgo}
-          missing="Nog geen week geschiedenis"
+          missing={c.nogGeenWeekGeschiedenis}
         />
         <Comparison
-          label="Vorige maand"
+          locale={locale}
+          label={c.vorigeMaand}
           now={knownSum}
           then={series.monthAgo}
-          missing="Nog geen maand geschiedenis"
+          missing={c.nogGeenMaandGeschiedenis}
         />
       </div>
     </Module>

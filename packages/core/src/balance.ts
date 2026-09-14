@@ -44,6 +44,41 @@ export function accountType(a: Account): string {
   return "Betaalrekening";
 }
 
+/** The same distinction as `accountType`, as a locale-neutral kind rather than
+ *  a Dutch word. Core stays out of the business of UI prose — a caller that
+ *  needs to SHOW the type renders this kind through copy/money.ts, the way
+ *  n8n.ts's AutoBookHold is rendered through an exhaustive switch instead of
+ *  returning a sentence itself.
+ *
+ *  `accountType` itself keeps returning the Dutch string: accountCosts.ts,
+ *  returns.ts, travel.ts, interest.ts and two views (Optimalisatie.tsx,
+ *  Profiel.tsx) compare against it directly and are out of scope here, so
+ *  this is additive rather than a replacement. */
+export type AccountTypeKind = "current" | "savings" | "credit" | "investment" | "other";
+
+const ACCOUNT_TYPE_KIND: Record<(typeof ACCOUNT_TYPES)[number], AccountTypeKind> = {
+  Betaalrekening: "current",
+  Spaarrekening: "savings",
+  Creditcard: "credit",
+  Beleggingsrekening: "investment",
+  Overig: "other",
+};
+
+/** One of the five canonical `ACCOUNT_TYPES` strings, mapped to a kind. A value
+ *  outside that set (data from before a type was renamed, or a hand-edited
+ *  import) reads as "other" rather than throwing. Exported on its own so a
+ *  `<select>` built from `ACCOUNT_TYPES` — the value stays the canonical Dutch
+ *  string, only the option's displayed text is localised — can map each
+ *  option without first having an Account to call `accountTypeKind` on. */
+export function accountTypeKindOf(type: string): AccountTypeKind {
+  return ACCOUNT_TYPE_KIND[type as (typeof ACCOUNT_TYPES)[number]] ?? "other";
+}
+
+/** `accountTypeKindOf(accountType(a))` — the kind for a real account. */
+export function accountTypeKind(a: Account): AccountTypeKind {
+  return accountTypeKindOf(accountType(a));
+}
+
 /** Current balance rolled forward to `asOf`: stored balance + the txs that fall
  *  strictly AFTER balanceDate and on/before asOf. A null balance stays null
  *  (unknown). No balanceDate => the balance is already current (returned as-is). */

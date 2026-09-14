@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { VaultStorage } from "@lavega/adapters";
+import { useAppLocale } from "../appLocale.js";
+import { adminCopy, type CopySpan } from "../copy/admin.js";
 import {
   getN8nSettings,
   setN8nSettings,
@@ -48,25 +50,50 @@ function EyeIcon() {
 
 type InfoKey = "koppeling" | "url" | "token";
 
+function renderSpans(spans: readonly CopySpan[], keyPrefix = ""): ReactNode[] {
+  return spans.map((s, i) => {
+    const key = `${keyPrefix}${i}`;
+    if (s.mark === "em") return <em key={key}>{s.text}</em>;
+    if (s.mark === "strong") return <strong key={key}>{s.text}</strong>;
+    if (s.mark === "code") return <code key={key}>{s.text}</code>;
+    return s.text;
+  });
+}
+
+function renderParagraphSpans(paragraphs: readonly (readonly CopySpan[])[]): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  paragraphs.forEach((spans, i) => {
+    if (i > 0) {
+      nodes.push(<br key={`br-a-${i}`} />);
+      nodes.push(<br key={`br-b-${i}`} />);
+    }
+    nodes.push(...renderSpans(spans, `p${i}-`));
+  });
+  return nodes;
+}
+
 /** The eye beside a value. A button only — the panel it opens is rendered where
  *  the layout wants it, so a heading never has to contain a paragraph. */
 function InfoEye({
   id,
-  what,
+  prefix,
+  subject,
   open,
   onToggle,
 }: {
   id: InfoKey;
-  what: string;
+  prefix: string;
+  subject: string;
   open: boolean;
   onToggle: () => void;
 }) {
+  const label = `${prefix} ${subject}`;
   return (
     <button
       type="button"
       className="field-info"
-      aria-label={`Uitleg bij ${what}`}
-      title={`Uitleg bij ${what}`}
+      aria-label={label}
+      title={label}
       aria-expanded={open}
       aria-controls={`${id}-uitleg`}
       onClick={onToggle}
@@ -92,6 +119,8 @@ type KoppelingenProps = {
 };
 
 export default function Koppelingen({ storage }: KoppelingenProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].koppelingen;
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
   const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
   const [forwardError, setForwardError] = useState(false);
@@ -114,48 +143,44 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
         setToken(settings.invoiceToken ?? "");
       },
       () => {
-        if (!cancelled) setNote("Kon de kluis niet lezen — probeer dit scherm opnieuw te openen.");
+        if (!cancelled) setNote(c.status.vaultReadFailed);
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [storage]);
+  }, [storage, c.status.vaultReadFailed]);
 
   const urlLooksWrong = url.trim().length > 0 && !/^https?:\/\//i.test(url.trim());
 
   async function handleSave() {
     if (!storage) {
-      setNote("De kluis is nog niet gekoppeld aan dit scherm — er is niets opgeslagen.");
+      setNote(c.status.notLinkedOnSave);
       return;
     }
     try {
       await setN8nSettings(storage, { invoiceUrl: url, invoiceToken: token });
     } catch {
-      setNote("Opslaan in de kluis is mislukt — probeer het opnieuw.");
+      setNote(c.status.saveFailed);
       return;
     }
-    setNote(
-      url.trim() && token.trim()
-        ? "Opgeslagen in je kluis. Facturen haalt de wachtrij vanzelf op zodra je dat scherm opent."
-        : "Opgeslagen — maar zolang URL óf token leeg is, kan LaVega niets ophalen.",
-    );
+    setNote(url.trim() && token.trim() ? c.status.savedComplete : c.status.savedIncomplete);
   }
 
   async function handleClear() {
     setUrl("");
     setToken("");
     if (!storage) {
-      setNote("De kluis is nog niet gekoppeld aan dit scherm — er is niets gewist.");
+      setNote(c.status.notLinkedOnClear);
       return;
     }
     try {
       await setN8nSettings(storage, { invoiceUrl: "", invoiceToken: "" });
     } catch {
-      setNote("Wissen in de kluis is mislukt — probeer het opnieuw.");
+      setNote(c.status.clearFailed);
       return;
     }
-    setNote("Gewist. LaVega haalt nu niets meer op uit n8n.");
+    setNote(c.status.cleared);
   }
 
   return (
@@ -172,8 +197,8 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
        * heeft. Het adres verandert nooit meer nadat het bestaat — een doorstuuradres
        * dat wisselt is een adres waar post naartoe blijft gaan die niemand leest. */}
       <div className="card-header">
-        <h2>Doorstuuradres voor facturen</h2>
-        <span className="eyebrow">stuur een factuur hiernaartoe en hij komt in de wachtrij</span>
+        <h2>{c.forwardAddress.heading}</h2>
+        <span className="eyebrow">{c.forwardAddress.eyebrow}</span>
       </div>
       {/* INTYPEN GAAT VOOR GENEREREN, en dit commentaar noemt met opzet GEEN
           concreet adres meer. Het heeft er nu twee genoemd die geen van beide
@@ -188,12 +213,12 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           terwijl het scherm zegt van wel. Dus typt hij het in, en de generator
           staat ernaast voor wie nog niets heeft. */}
       <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
-        Adres
+        {c.forwardAddress.addressLabel}
         <input
           className="saldo-input"
           value={forwardDraft}
-          placeholder="invoices@lavega.dev"
-          aria-label="Doorstuuradres"
+          placeholder={c.forwardAddress.addressPlaceholder}
+          aria-label={c.forwardAddress.addressAriaLabel}
           onChange={(e) => {
             setForwardDraft(e.target.value);
             setForwardError(false);
@@ -210,12 +235,12 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
       </label>
       {forwardError && (
         <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
-          Dat is geen e-mailadres. Niets opgeslagen — het vorige adres staat er nog.
+          {c.forwardAddress.invalidError}
         </p>
       )}
       {!forwardAddress && !forwardError && (
         <p style={{ margin: "0 0 var(--sp-3)" }} className="cell-sub">
-          Nog geen adres. Typ het adres dat je in Cloudflare hebt aangemaakt, of{" "}
+          {c.forwardAddress.emptyIntroPrefix}
           <button
             type="button"
             className="btn"
@@ -225,112 +250,87 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
               setForwardDraft(made);
             }}
           >
-            laat LaVega er een maken
+            {c.forwardAddress.generateButton}
           </button>
-          .
+          {c.forwardAddress.emptyIntroSuffix}
         </p>
       )}
       <div className="card-header">
-        <h2>Koppeling met n8n</h2>
+        <h2>{c.n8nLink.heading}</h2>
         <span className="eyebrow">
-          voor de facturenwachtrij{" "}
+          {c.n8nLink.eyebrow}
           <InfoEye
             id="koppeling"
-            what="deze koppeling"
+            prefix={c.n8nLink.explain.prefix}
+            subject={c.n8nLink.explain.linkSubject}
             open={info === "koppeling"}
             onToggle={toggle("koppeling")}
           />
         </span>
       </div>
-      <p className="cell-sub">
-        Plak hier de <em>Production URL</em> van de webhook-node in jouw n8n en het token dat je
-        daar bij <em>Header Auth</em> hebt gezet. Facturen gebruikt die twee om de wachtrij op te
-        halen.
-      </p>
+      <p className="cell-sub">{renderSpans(c.n8nLink.intro)}</p>
 
       {info === "koppeling" && (
-        <InfoNote id="koppeling">
-          Je eigen n8n leest je mailbox, laat Mistral bepalen of er een factuur in zit, en houdt die
-          vast in een wachtrij. LaVega haalt die rij rechtstreeks op:{" "}
-          <strong>jouw mailbox → jouw n8n → jouw browser</strong>. De LaVega-server komt er niet aan
-          te pas en ziet dus nooit een factuurbedrag.
-          <br />
-          <br />
-          Opzetten doe je één keer, in n8n zelf: importeer{" "}
-          <code>docs/n8n/lavega-invoices.json</code>, zet een Header Auth-credential op de
-          webhook-node, activeer de workflow, en plak de Production URL en dat token hieronder.
-          Beide staan versleuteld in je kluis, net als een broker-koppeling — dus reizen ze mee in
-          een back-up en zijn ze alleen te lezen terwijl de kluis ontgrendeld is.
-          <br />
-          <br />
-          <strong>Er is met opzet geen testknop.</strong> De webhook leegt de wachtrij zodra hij
-          antwoordt: één lezer, één keer — een “test” zou dus echte facturen opgebruiken. Ophalen
-          gebeurt in Facturen, waar je elke regel te zien krijgt en zelf bevestigt.
-        </InfoNote>
+        <InfoNote id="koppeling">{renderParagraphSpans(c.n8nLink.info.link)}</InfoNote>
       )}
 
       <div className="facturen-form">
         <label>
-          Webhook-URL (n8n, Production URL){" "}
+          {c.n8nLink.form.urlLabel}{" "}
           <input
             value={url}
-            aria-label="n8n webhook-URL"
-            placeholder="https://jouw-n8n/webhook/lavega-facturen"
+            aria-label={c.n8nLink.form.urlAriaLabel}
+            placeholder={c.n8nLink.form.urlPlaceholder}
             style={{ minWidth: "22rem" }}
             onChange={(e) => setUrl(e.target.value)}
           />
         </label>
-        <InfoEye id="url" what="de webhook-URL" open={info === "url"} onToggle={toggle("url")} />{" "}
+        <InfoEye
+          id="url"
+          prefix={c.n8nLink.explain.prefix}
+          subject={c.n8nLink.explain.urlSubject}
+          open={info === "url"}
+          onToggle={toggle("url")}
+        />{" "}
         <label>
-          Token (header x-lavega-token){" "}
+          {c.n8nLink.form.tokenLabel}{" "}
           <input
             value={token}
             type={showToken ? "text" : "password"}
-            aria-label="n8n token"
-            placeholder="openssl rand -hex 24"
+            aria-label={c.n8nLink.form.tokenAriaLabel}
+            placeholder={c.n8nLink.form.tokenPlaceholder}
             style={{ minWidth: "16rem" }}
             onChange={(e) => setToken(e.target.value)}
           />
         </label>
-        <InfoEye id="token" what="het token" open={info === "token"} onToggle={toggle("token")} />{" "}
+        <InfoEye
+          id="token"
+          prefix={c.n8nLink.explain.prefix}
+          subject={c.n8nLink.explain.tokenSubject}
+          open={info === "token"}
+          onToggle={toggle("token")}
+        />{" "}
         <label>
           <input
             type="checkbox"
             checked={showToken}
-            aria-label="Token tonen"
+            aria-label={c.n8nLink.form.showTokenAriaLabel}
             onChange={(e) => setShowToken(e.target.checked)}
           />{" "}
-          token tonen
+          {c.n8nLink.form.showTokenLabel}
         </label>{" "}
         <button type="button" className="btn btn-primary" onClick={handleSave}>
-          Opslaan
+          {c.n8nLink.form.saveButton}
         </button>{" "}
         <button type="button" className="btn" onClick={handleClear}>
-          Wissen
+          {c.n8nLink.form.clearButton}
         </button>
       </div>
 
-      {info === "url" && (
-        <InfoNote id="url">
-          Het adres waarop jouw n8n luistert. In n8n staat hij op de Webhook-node onder{" "}
-          <em>Production URL</em> — niet de Test URL, die werkt alleen zolang je in n8n op “Listen”
-          hebt geklikt. Hij begint met http:// of https://.
-        </InfoNote>
-      )}
-      {info === "token" && (
-        <InfoNote id="token">
-          Een wachtwoord dat je zelf verzint, zodat alleen jouw browser die wachtrij mag leegmaken.
-          Maak er een met <code>openssl rand -hex 24</code> en zet dezelfde waarde in n8n bij{" "}
-          <em>Header Auth</em>, headernaam <code>x-lavega-token</code>. Hij blijft in deze browser
-          en gaat nooit naar de LaVega-server.
-        </InfoNote>
-      )}
+      {info === "url" && <InfoNote id="url">{renderSpans(c.n8nLink.info.url)}</InfoNote>}
+      {info === "token" && <InfoNote id="token">{renderSpans(c.n8nLink.info.token)}</InfoNote>}
 
-      {urlLooksWrong && (
-        <p className="cell-sub text-neg">
-          Dit ziet er niet uit als een webhook-URL — hij hoort met http:// of https:// te beginnen.
-        </p>
-      )}
+      {urlLooksWrong && <p className="cell-sub text-neg">{c.n8nLink.urlWarning}</p>}
       {note && <p className="cell-sub">{note}</p>}
     </section>
   );

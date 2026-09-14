@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import type { VaultStorage } from "@lavega/adapters";
 import Koppelingen from "./views/Koppelingen";
 import { getInvoiceForwardAddress } from "./settings";
+import { adminCopy } from "./copy/admin.js";
 
 /* Koppelingen is één blok geworden: de webhook-URL en het token.
  *
@@ -30,6 +31,7 @@ let container: HTMLElement | null = null;
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl; Path=/";
 });
 
 afterEach(() => {
@@ -37,6 +39,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
 /** An in-memory vault, enough for Koppelingen's n8n block. `stored` is exposed
@@ -311,4 +314,16 @@ test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", 
   blur(input);
   expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
   expect(c.textContent).toContain("Dat is geen e-mailadres");
+});
+
+test("the lavega_locale cookie switches the screen to English", async () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const en = adminCopy.en.koppelingen;
+  const c = await render(undefined);
+  expect(c.querySelector("h2")?.textContent).toBe(en.forwardAddress.heading);
+  const urlEyeLabel = `${en.n8nLink.explain.prefix} ${en.n8nLink.explain.urlSubject}`;
+  expect(c.querySelector(`[aria-label="${urlEyeLabel}"]`)).not.toBeNull();
+  await clickAsync(byText("button", en.n8nLink.form.saveButton));
+  expect(c.textContent).toContain(en.status.notLinkedOnSave);
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });

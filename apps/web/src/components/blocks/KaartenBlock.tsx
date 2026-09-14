@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import type { Account } from "@lavega/core";
-import { accountType } from "@lavega/core";
+import { accountType, accountTypeKind, type AccountTypeKind } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
 import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
 
 /* Je kaarten — the card-art strip from `Modules for homescreen 5/7.png`.
  *
@@ -61,6 +63,23 @@ const TYPE_ORDER = [
   "Beleggingsrekening",
   "Overig",
 ];
+
+/** Exhaustive by switch, so a new AccountTypeKind fails the build here instead
+ *  of rendering nothing. */
+function typeLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string {
+  switch (kind) {
+    case "current":
+      return c.current;
+    case "savings":
+      return c.savings;
+    case "credit":
+      return c.credit;
+    case "investment":
+      return c.investment;
+    case "other":
+      return c.other;
+  }
+}
 
 /** Four faces, cycled by position. Every stop is an existing token.
  *
@@ -158,11 +177,14 @@ type KaartenBlockProps = {
 };
 
 export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].kaarten;
+  const typesCopy = moneyCopy[locale].accountTypes;
   const ramps = useBrandRamps();
   const cards = useMemo(
     () =>
       accounts
-        .map((a) => ({ account: a, type: accountType(a) }))
+        .map((a) => ({ account: a, type: accountType(a), kind: accountTypeKind(a) }))
         .sort((a, b) => {
           const ta = TYPE_ORDER.indexOf(a.type);
           const tb = TYPE_ORDER.indexOf(b.type);
@@ -173,22 +195,20 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
 
   return (
     <Module
-      title="Kaarten"
+      title={c.title}
       span={3}
       height="short"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          Rekeningen →
+          {c.rekeningenArrow}
         </button>
       }
     >
       {cards.length === 0 ? (
-        <p className="block-empty">
-          Nog geen rekeningen gekoppeld — importeer een bestand of koppel een bank.
-        </p>
+        <p className="block-empty">{c.geenRekeningenGekoppeld}</p>
       ) : (
         <div className="card-strip">
-          {cards.map(({ account, type }, i) => {
+          {cards.map(({ account, kind }, i) => {
             const tail = ibanTail(account.iban);
             const logo = bankLogo(account.bank);
             // De eigen huisstijl waar die bestaat, anders het tokenvlak.
@@ -198,7 +218,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                 className="bank-card"
                 key={account.key}
                 style={{ background: face }}
-                aria-label={`${account.bank || "Onbekende bank"} · ${type}`}
+                aria-label={c.cardAria(account.bank || c.onbekendeBank, typeLabel(typesCopy, kind))}
                 /* De glans volgt de cursor. De transform gaat RECHTSTREEKS op de
                  * laag en niet via React-state: bij state zou elke muisbeweging
                  * een render van de hele kaartenrij zijn. Zo raakt hij alleen
@@ -236,9 +256,9 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                         }}
                       />
                     ) : null}
-                    {account.bank || "Onbekende bank"}
+                    {account.bank || c.onbekendeBank}
                   </span>
-                  <span className="bank-card-type">{type}</span>
+                  <span className="bank-card-type">{typeLabel(typesCopy, kind)}</span>
                 </header>
 
                 <div className="bank-card-number">
@@ -247,21 +267,21 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                       <span aria-hidden="true">•••• •••• ••••</span> {tail}
                     </>
                   ) : (
-                    <span className="bank-card-unknown">geen IBAN bekend</span>
+                    <span className="bank-card-unknown">{c.geenIbanBekend}</span>
                   )}
                 </div>
 
                 <footer className="bank-card-bottom">
                   <div className="bank-card-who">
-                    <div className="bank-card-caption">Op naam van</div>
+                    <div className="bank-card-caption">{c.opNaamVan}</div>
                     <div className="bank-card-holder" title={account.entity || undefined}>
-                      {account.entity || "geen entiteit ingesteld"}
+                      {account.entity || c.geenEntiteitIngesteld}
                     </div>
                   </div>
                   <div className="bank-card-saldo">
-                    <div className="bank-card-caption">Saldo</div>
+                    <div className="bank-card-caption">{c.saldoLabel}</div>
                     <div className={account.balance === null ? "bank-card-unknown" : ""}>
-                      {account.balance === null ? "onbekend" : formatEuro(account.balance)}
+                      {account.balance === null ? c.onbekend : formatEuroIn(locale, account.balance)}
                     </div>
                   </div>
                 </footer>

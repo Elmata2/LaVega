@@ -3,6 +3,8 @@ import type { View } from "../App";
 import type { ModuleDef } from "./moduleRegistry";
 import { pathForView } from "../appRoutes";
 import { INVESTING_URL } from "../investing.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
 
 /* The app bar: brand, the owner's own module selection as a horizontal tab set,
  * and the profile entry top right (the reference's avatar position).
@@ -47,6 +49,8 @@ type NavBarProps = {
 };
 
 export default function NavBar({ view, modules, onNavigate, onOpenProfile }: NavBarProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   return (
     <header className="appbar">
       <div className="brand">
@@ -54,7 +58,7 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
         <span>LaVega</span>
       </div>
 
-      <nav className="navrail" aria-label="Weergaven">
+      <nav className="navrail" aria-label={c.nav.ariaLabel}>
         {modules.map((m) => (
           <a
             key={m.id}
@@ -66,7 +70,7 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
             <span className="nav-icon" aria-hidden="true">
               {m.icon}
             </span>
-            <span>{m.label}</span>
+            <span>{c.nav.moduleLabels[m.id]}</span>
           </a>
         ))}
       </nav>
@@ -87,7 +91,7 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
               <path d="M4 19h16" />
               <path d="M7 19V10M12 19V5M17 19v7" />
             </Icon>
-            <span>Investing</span>
+            <span>{c.nav.investing}</span>
           </a>
         )}
 
@@ -103,7 +107,7 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
               <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
             </Icon>
           </span>
-          <span>Profiel</span>
+          <span>{c.nav.profile}</span>
         </a>
       </div>
     </header>

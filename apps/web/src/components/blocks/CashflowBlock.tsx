@@ -1,8 +1,10 @@
 import type { EntityForecast } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn, formatEuroAxisIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart, { type TrendPoint } from "../TrendChart.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Cashflow · komende 13 weken — the forecast in one glance: the uncertainty
  * band, the buffer line, and the projected closing balance, red once it dips
@@ -21,14 +23,9 @@ type CashflowBlockProps = {
   onNavigate: (view: View) => void;
 };
 
-/** Whole euros: cents on a forecast are false precision. */
-const wholeEuro = new Intl.NumberFormat("nl-NL", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
-
 export default function CashflowBlock({ forecast, bufferCents, onNavigate }: CashflowBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].forecast;
   const shortfallWeek =
     forecast.shortfall !== null
       ? forecast.points.findIndex((p) => p.date === forecast.shortfall!.date) + 1
@@ -43,9 +40,9 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
   const opening = forecast.openingCents ?? 0;
   const points: TrendPoint[] = hasChart
     ? [
-        { label: "nu", value: opening / 100 },
+        { label: c.positieAsOfLabel, value: opening / 100 },
         ...forecast.points.map((p, i) => ({
-          label: `week ${i + 1}`,
+          label: c.weekNLabel(i + 1),
           value: (p.projectedClosingCents ?? opening) / 100,
         })),
       ]
@@ -78,30 +75,33 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
         hasChart ? (
           forecast.shortfall && shortfallWeek !== null ? (
             <>
-              Krapste week:{" "}
+              {c.krapsteWeekLabel}{" "}
               <strong className="text-warn">
-                week {shortfallWeek} — {formatEuro(forecast.shortfall.balanceCents / 100)}
+                {c.krapsteWeekDetail(
+                  shortfallWeek,
+                  formatEuroIn(locale, forecast.shortfall.balanceCents / 100),
+                )}
               </strong>
             </>
           ) : (
-            "Geen tekort verwacht in de komende 13 weken."
+            c.noneSentence
           )
         ) : undefined
       }
     >
       {forecast.openingCents === null ? (
-        <p className="block-empty">Positie onbekend — nog geen betrouwbare prognose mogelijk.</p>
+        <p className="block-empty">{c.positieOnbekendKort}</p>
       ) : !hasChart ? (
-        <p className="block-empty">Onvoldoende historie voor een prognose.</p>
+        <p className="block-empty">{c.onvoldoendeHistorieVoorPrognose}</p>
       ) : (
         <TrendChart
           points={points}
           band={band}
-          reference={{ value: bufferCents / 100, label: "buffer" }}
+          reference={{ value: bufferCents / 100, label: c.bufferReferenceLabel }}
           color={color}
-          format={(v) => wholeEuro.format(v)}
-          ariaLabel="Verwachte kaspositie komende 13 weken"
-          readoutLabel="Verwacht"
+          format={(v) => formatEuroAxisIn(locale, v)}
+          ariaLabel={c.verwachteKaspositieAria}
+          readoutLabel={c.verwacht}
           mark={shortfallWeek !== null ? { index: shortfallWeek, color: "var(--neg)" } : null}
           height={170}
         />

@@ -24,6 +24,9 @@
  *
  * Pure: no I/O, no clock, no storage. */
 
+import type { Locale } from "./locale.js";
+import { localeTag } from "./format.js";
+
 /** ISO 3166-1 alpha-2, all 249 officially assigned codes, in code order. */
 export const COUNTRY_CODES: readonly string[] = [
   "AD",
@@ -281,34 +284,47 @@ export type Country = { code: string; name: string };
 
 /** Built once. `Intl.DisplayNames` exists in every browser LaVega targets; the
  *  guard is for an environment that lacks it, where the CODE is the name. */
-const displayNames: { of(code: string): string | undefined } | null = (() => {
+function buildDisplayNames(locale: Locale): { of(code: string): string | undefined } | null {
   try {
-    return new Intl.DisplayNames(["nl"], { type: "region" });
+    return new Intl.DisplayNames([localeTag(locale)], { type: "region" });
   } catch {
     return null;
   }
-})();
+}
 
-/** The Dutch name of a country code, or the code itself when the platform has
- *  none — never a blank row, and never a made-up name. */
-export function countryName(code: string): string {
+const displayNamesByLocale: Record<Locale, { of(code: string): string | undefined } | null> = {
+  nl: buildDisplayNames("nl"),
+  en: buildDisplayNames("en"),
+};
+
+export function countryNameIn(locale: Locale, code: string): string {
   const c = String(code ?? "")
     .trim()
     .toUpperCase();
   if (!/^[A-Z]{2}$/.test(c)) return "";
   try {
-    return displayNames?.of(c) ?? c;
+    return displayNamesByLocale[locale]?.of(c) ?? c;
   } catch {
     return c;
   }
 }
 
+/** The Dutch name of a country code, or the code itself when the platform has
+ *  none — never a blank row, and never a made-up name. */
+export function countryName(code: string): string {
+  return countryNameIn("nl", code);
+}
+
+export function countryListIn(locale: Locale): Country[] {
+  return COUNTRY_CODES.map((code) => ({ code, name: countryNameIn(locale, code) })).sort((a, b) =>
+    a.name.localeCompare(b.name, localeTag(locale)),
+  );
+}
+
 /** Every country, Dutch name, sorted the way a Dutch reader expects (so "Ålan"
  *  and "Oostenrijk" land where he would look for them). */
 export function countryList(): Country[] {
-  return COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort((a, b) =>
-    a.name.localeCompare(b.name, "nl"),
-  );
+  return countryListIn("nl");
 }
 
 /* --- The level beneath the country ---------------------------------------
@@ -391,9 +407,9 @@ const CA_PROVINCES: readonly string[] = [
 
 /** Countries whose region level LaVega can offer as a list, with what that
  *  level is CALLED there — a Canadian picks a province, not a state. */
-const KNOWN_REGIONS: Readonly<Record<string, { label: string; options: readonly string[] }>> = {
-  US: { label: "Staat", options: US_STATES },
-  CA: { label: "Provincie of territorium", options: CA_PROVINCES },
+const KNOWN_REGIONS: Readonly<Record<string, { label: Record<Locale, string>; options: readonly string[] }>> = {
+  US: { label: { nl: "Staat", en: "State" }, options: US_STATES },
+  CA: { label: { nl: "Provincie of territorium", en: "Province or territory" }, options: CA_PROVINCES },
 };
 
 /** The region options for a country, or [] when we have no verified list — in
@@ -408,14 +424,19 @@ export function regionsFor(code: string): readonly string[] {
   );
 }
 
-/** What the region level is called in this country. The generic fallback is
- *  used wherever we have no list, because "regio" is true everywhere. */
-export function regionLabel(code: string): string {
-  return (
+export function regionLabelIn(locale: Locale, code: string): string {
+  const known =
     KNOWN_REGIONS[
       String(code ?? "")
         .trim()
         .toUpperCase()
-    ]?.label ?? "Regio of staat"
-  );
+    ];
+  if (known) return known.label[locale];
+  return locale === "nl" ? "Regio of staat" : "Region or state";
+}
+
+/** What the region level is called in this country. The generic fallback is
+ *  used wherever we have no list, because "regio" is true everywhere. */
+export function regionLabel(code: string): string {
+  return regionLabelIn("nl", code);
 }

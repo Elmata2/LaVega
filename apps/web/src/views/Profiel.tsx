@@ -22,15 +22,18 @@ import type { VaultStorage } from "@lavega/adapters";
 import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
 import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
-import { countryList, countryName, regionLabel, regionsFor } from "../countries.js";
+import { countryListIn, countryNameIn, regionLabelIn, regionsFor } from "../countries.js";
 import {
   getCashbackAssumptionEnabled,
   ownerDisplayName,
   setCashbackAssumptionEnabled,
   type OwnerName,
 } from "../settings.js";
-import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
+import { SCOPE_ORDER } from "../scope.js";
 import { signIn, signOut, useAuthState } from "../authClient.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
+import { heldCashbackSentence } from "../copy/optimise.js";
 import Import from "./Import";
 import Regels from "./Regels";
 import Koppelingen from "./Koppelingen";
@@ -97,6 +100,8 @@ type ProfielProps = {
  * `loading`: a signed-out default would flash the login form at someone who
  * is already signed in, for the one render before the real check lands. */
 function AccountBlock() {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const { state, refresh } = useAuthState();
 
   const [email, setEmail] = useState("");
@@ -127,22 +132,17 @@ function AccountBlock() {
   if (state.kind === "loading") return null;
 
   return (
-    <section className="card" aria-label="Account">
-      <h2>Account</h2>
+    <section className="card" aria-label={c.profiel.account.ariaLabel}>
+      <h2>{c.profiel.account.heading}</h2>
       {state.kind === "unconfigured" && (
-        <p className="cell-sub">
-          Deze installatie heeft geen serveraccount ingesteld, dus alles blijft lokaal in deze
-          browser.
-        </p>
+        <p className="cell-sub">{c.profiel.account.unconfigured}</p>
       )}
       {state.kind === "signed-out" && (
         <>
-          <p className="cell-sub">
-            Log in op de geconfigureerde LaVega-server om de bankkoppeling te testen.
-          </p>
+          <p className="cell-sub">{c.profiel.account.signedOutIntro}</p>
           <form onSubmit={(e) => void handleSignIn(e)}>
             <div className="vault-field">
-              <label htmlFor="account-email">E-mailadres</label>
+              <label htmlFor="account-email">{c.profiel.account.emailLabel}</label>
               <input
                 id="account-email"
                 type="email"
@@ -153,7 +153,7 @@ function AccountBlock() {
               />
             </div>
             <div className="vault-field">
-              <label htmlFor="account-password">Wachtwoord</label>
+              <label htmlFor="account-password">{c.profiel.account.passwordLabel}</label>
               <input
                 id="account-password"
                 type="password"
@@ -173,7 +173,7 @@ function AccountBlock() {
               className="btn btn-primary"
               disabled={busy || !email || !password}
             >
-              Inloggen
+              {c.profiel.account.signIn}
             </button>
           </form>
         </>
@@ -182,7 +182,7 @@ function AccountBlock() {
         <>
           <p className="cell-sub">{state.email}</p>
           <button type="button" className="btn" onClick={() => void handleSignOut()}>
-            Uitloggen
+            {c.profiel.account.signOut}
           </button>
         </>
       )}
@@ -230,6 +230,8 @@ function CashbackCorrigeren({
   asOf: string;
   onRestored: () => void;
 }) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [cards, setCards] = useState<Account[] | null>(null);
   const [facts, setFacts] = useState<LearnedFact[]>([]);
   const [loadProblem, setLoadProblem] = useState<string | null>(null);
@@ -290,7 +292,9 @@ function CashbackCorrigeren({
     setProblem(null);
     const raw = (drafts[product] ?? "").trim();
     if (raw === "") {
-      setProblem(`Vul eerst een percentage in bij ${product}.`);
+      setProblem(
+        `${c.profiel.cashback.emptyPercentPrefix}${product}${c.profiel.cashback.emptyPercentSuffix}`,
+      );
       return;
     }
     const incoming = makeFact({
@@ -312,7 +316,9 @@ function CashbackCorrigeren({
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(`Opslaan in de kluis lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      setProblem(
+        `${c.profiel.cashback.saveFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+      );
       return;
     }
     setFacts(next);
@@ -329,7 +335,9 @@ function CashbackCorrigeren({
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(`Wissen lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      setProblem(
+        `${c.profiel.cashback.clearFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+      );
       return;
     }
     setFacts(next);
@@ -342,60 +350,52 @@ function CashbackCorrigeren({
   }
 
   return (
-    <section className="card" aria-label="Cashback corrigeren">
+    <section className="card" aria-label={c.profiel.cashback.ariaLabel}>
       <div className="card-header">
-        <h2>Cashback corrigeren</h2>
+        <h2>{c.profiel.cashback.heading}</h2>
         <span className="eyebrow">
-          {rows.length} {rows.length === 1 ? "kaart" : "kaarten"}
+          {rows.length}{" "}
+          {rows.length === 1 ? c.profiel.cashback.cardSingular : c.profiel.cashback.cardPlural}
         </span>
       </div>
-      <p className="cell-sub">
-        Bij een gewone Nederlandse betaalpas of grootbankcreditcard neemt LaVega aan dat er geen
-        cashback is. Dat is een aanname van ons en geen zin uit een document, dus je kunt hem hier
-        terugdraaien: vul het percentage in dat jouw kaart echt geeft. Wat jij invult gaat vóór
-        alles wat LaVega zelf vindt, ook na een volgende zoekopdracht.
-      </p>
-      <p className="cell-sub">
-        Er gaat niets naar een server. Je correctie blijft in je eigen kluis, op dit apparaat.
-      </p>
+      <p className="cell-sub">{c.profiel.cashback.intro}</p>
+      <p className="cell-sub">{c.profiel.cashback.privacyNote}</p>
       {/* DE KEERZIJDE VAN DE REGEL, en die is net zo hard: een uitgesproken nul
           is een BEKENDE nul. Wie in de voorwaarden van zijn eigen kaart heeft
           gelezen dat er geen cashback is, hoort dat te kunnen vastleggen — dan
           staat er geen aanname meer maar zijn eigen vaststelling, en die
           verdwijnt niet als de aanname ooit wordt teruggedraaid. */}
       <p className="cell-sub">
-        Weet je zeker dat een kaart niets teruggeeft? Vul dan <strong>0</strong> in. Dat is geen
-        aanname meer maar jouw eigen vaststelling, en die blijft staan ook als je de aanname
-        hieronder uitzet.
+        {c.profiel.cashback.zeroNoteBefore}
+        <strong>{c.profiel.cashback.zeroNoteBold}</strong>
+        {c.profiel.cashback.zeroNoteAfter}
       </p>
 
       <label>
         <input
           type="checkbox"
           checked={assumptionOn}
-          aria-label="Neem aan dat een gewone kaart geen cashback geeft"
+          aria-label={c.profiel.cashback.assumptionLabel}
           onChange={(e) => toggleAssumption(e.target.checked)}
         />{" "}
-        Neem aan dat een gewone kaart geen cashback geeft
+        {c.profiel.cashback.assumptionLabel}
       </label>
       <p className="cell-sub">
         {assumptionOn
-          ? "Staat aan. Zet hem uit om te zien wat er overblijft als LaVega alleen toont wat het echt gelezen heeft — dan staat er bij deze kaarten weer “onbekend”."
-          : "Staat uit. Bij kaarten zonder gelezen cijfer staat nu “onbekend” in plaats van nul, en de vergelijking op Optimalisatie kan daar geen bedrag bij noemen."}
+          ? c.profiel.cashback.assumptionOnStatus
+          : c.profiel.cashback.assumptionOffStatus}
       </p>
 
       {loadProblem !== null ? (
         <p role="alert" className="text-warn">
-          LaVega kon je rekeningen niet uit de kluis lezen: {loadProblem}. Zonder die lijst is er
-          niets om te corrigeren.
+          {c.profiel.cashback.loadProblemPrefix}
+          {loadProblem}
+          {c.profiel.cashback.loadProblemSuffix}
         </p>
       ) : cards === null ? (
-        <p className="text-muted">Bezig met lezen uit je kluis…</p>
+        <p className="text-muted">{c.profiel.cashback.loading}</p>
       ) : rows.length === 0 ? (
-        <p className="text-muted">
-          Nog geen betaalrekening of creditcard in je kluis. Importeer er één, dan verschijnt hij
-          hier.
-        </p>
+        <p className="text-muted">{c.profiel.cashback.empty}</p>
       ) : (
         <ul className="scope-list">
           {rows.map((row) => {
@@ -431,9 +431,10 @@ function CashbackCorrigeren({
                 <div className="scope-item-text">
                   <span className="scope-item-name">{row.product}</span>
                   <span className="mp-what">
-                    {describeHeldCashback(known)}
-                    {due && " · een jaar of langer niet nagekeken"}
-                    {row.names.length > 1 && ` · geldt voor ${row.names.length} rekeningen`}
+                    {heldCashbackSentence(describeHeldCashback(known), locale)}
+                    {due && c.profiel.cashback.dueSuffix}
+                    {row.names.length > 1 &&
+                      `${c.profiel.cashback.namesSuffixPrefix}${row.names.length}${c.profiel.cashback.namesSuffixSuffix}`}
                   </span>
                 </div>
                 <div>
@@ -441,7 +442,7 @@ function CashbackCorrigeren({
                     <input
                       className="saldo-input"
                       inputMode="decimal"
-                      aria-label={`Cashback ${row.product}`}
+                      aria-label={`${c.profiel.cashback.cashbackInputAriaLabelPrefix} ${row.product}`}
                       placeholder={pctNow === null ? "%" : String(pctNow)}
                       value={drafts[row.product] ?? ""}
                       onChange={(e) => setDrafts((d) => ({ ...d, [row.product]: e.target.value }))}
@@ -452,7 +453,7 @@ function CashbackCorrigeren({
                     className="btn btn-primary"
                     onClick={() => void saveCorrection(row.product)}
                   >
-                    Opslaan
+                    {c.profiel.cashback.save}
                   </button>{" "}
                   {entry !== null && entry.source === "user" && (
                     <button
@@ -460,7 +461,7 @@ function CashbackCorrigeren({
                       className="btn"
                       onClick={() => void clearCorrection(row.product)}
                     >
-                      Wis mijn correctie
+                      {c.profiel.cashback.clearCorrection}
                     </button>
                   )}
                 </div>
@@ -475,7 +476,12 @@ function CashbackCorrigeren({
           {problem}
         </p>
       )}
-      {saved !== null && <p data-testid="cashback-opgeslagen">Opgeslagen voor {saved}.</p>}
+      {saved !== null && (
+        <p data-testid="cashback-opgeslagen">
+          {c.profiel.cashback.savedPrefix}
+          {saved}.
+        </p>
+      )}
     </section>
   );
 }
@@ -510,13 +516,15 @@ export default function Profiel({
   asOf,
   onRestored,
 }: ProfielProps) {
+  const [locale, setLocale] = useAppLocale();
+  const c = shellCopy[locale];
   const modulesRef = useRef<HTMLElement>(null);
   // The widget preference is read here rather than passed in: the switch lives
   // on this page and the cards live on the homescreen, two branches of the tree
   // that share nothing above them but App itself. See moduleRegistry.
   const [widgets, setWidgets] = useOverviewWidgets();
   // 249 countries; built once rather than on every keystroke elsewhere on the page.
-  const countries = useMemo(() => countryList(), []);
+  const countries = useMemo(() => countryListIn(locale), [locale]);
   const regions = regionsFor(homeCountry);
   const fullName = ownerDisplayName(ownerName);
   // The initials are drawn, not fetched: a remote avatar would tell that server
@@ -536,37 +544,57 @@ export default function Profiel({
 
   return (
     <>
+      <section className="card" aria-label={c.profiel.languageSwitch.ariaLabel}>
+        <h2>{c.profiel.languageSwitch.cardLabel}</h2>
+        <div className="scope-switch" role="group" aria-label={c.profiel.languageSwitch.ariaLabel}>
+          <button
+            type="button"
+            className={`scope-option${locale === "nl" ? " scope-on" : ""}`}
+            aria-pressed={locale === "nl"}
+            onClick={() => setLocale("nl")}
+          >
+            {c.profiel.languageSwitch.nl}
+          </button>
+          <span className="scope-rule" aria-hidden="true" />
+          <button
+            type="button"
+            className={`scope-option${locale === "en" ? " scope-on" : ""}`}
+            aria-pressed={locale === "en"}
+            onClick={() => setLocale("en")}
+          >
+            {c.profiel.languageSwitch.en}
+          </button>
+        </div>
+      </section>
+
       <AccountBlock />
 
       {/* The owner, at the very top, so the page reads as his own screen and not
           as a settings menu. The name is a local preference like the buffer and
           the country: this browser only, never in the vault, never in a
           back-up, and deliberately never in anything a model is given. */}
-      <section className="card profile-head" aria-label="Profiel">
+      <section className="card profile-head" aria-label={c.profiel.head.ariaLabel}>
         <span className="profile-head-avatar" aria-hidden="true">
           {initials}
         </span>
         <div className="profile-head-text">
-          <h2 className="profile-head-name">{fullName || "Nog geen naam ingevuld"}</h2>
-          <p className="cell-sub">
-            Alleen voor dit scherm. Je naam blijft in deze browser — niet in de kluis, niet in een
-            back-up, en hij wordt nooit meegestuurd naar een model.
-          </p>
+          <h2 className="profile-head-name">{fullName || c.profiel.head.noName}</h2>
+          <p className="cell-sub">{c.profiel.head.note}</p>
           <div className="profile-head-fields">
             <label>
-              Voornaam{" "}
+              {c.profiel.head.firstName}{" "}
               <input
                 value={ownerName.first}
-                aria-label="Voornaam"
+                aria-label={c.profiel.head.firstName}
                 autoComplete="off"
                 onChange={(e) => onOwnerNameChange({ ...ownerName, first: e.target.value })}
               />
             </label>{" "}
             <label>
-              Achternaam{" "}
+              {c.profiel.head.lastName}{" "}
               <input
                 value={ownerName.last}
-                aria-label="Achternaam"
+                aria-label={c.profiel.head.lastName}
                 autoComplete="off"
                 onChange={(e) => onOwnerNameChange({ ...ownerName, last: e.target.value })}
               />
@@ -575,15 +603,14 @@ export default function Profiel({
         </div>
       </section>
 
-      <section className="card" aria-label="Modules" ref={modulesRef}>
+      <section className="card" aria-label={c.profiel.modules.ariaLabel} ref={modulesRef}>
         <div className="card-header">
-          <h2>Modules</h2>
-          <span className="eyebrow">{enabledModules.length} in je navigatie</span>
+          <h2>{c.profiel.modules.heading}</h2>
+          <span className="eyebrow">
+            {enabledModules.length} {c.profiel.modules.countSuffix}
+          </span>
         </div>
-        <p className="cell-sub">
-          Zet aan wat jij gebruikt. Wat aan staat verschijnt in de balk bovenin; wat uit staat
-          verdwijnt daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
-        </p>
+        <p className="cell-sub">{c.profiel.modules.description}</p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
       </section>
 
@@ -592,37 +619,31 @@ export default function Profiel({
           "welke kaart" are the same question asked about a different surface.
           Both start off: he asked for a widget he can click on "instead of it
           always being default there". */}
-      <section className="card" aria-label="Widgets">
+      <section className="card" aria-label={c.profiel.widgets.ariaLabel}>
         <div className="card-header">
-          <h2>Widgets op je overzicht</h2>
+          <h2>{c.profiel.widgets.heading}</h2>
           <span className="eyebrow">
-            {widgets.length} van {WIDGETS.length} aan
+            {widgets.length} {c.profiel.widgets.of} {WIDGETS.length} {c.profiel.widgets.on}
           </span>
         </div>
-        <p className="cell-sub">
-          Deze twee kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op je
-          startpagina — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
-        </p>
+        <p className="cell-sub">{c.profiel.widgets.description}</p>
         <WidgetPicker enabled={widgets} onChange={setWidgets} />
       </section>
 
-      <section className="card" aria-label="Persoonlijk of zakelijk">
+      <section className="card" aria-label={c.profiel.scopeSection.ariaLabel}>
         <div className="card-header">
-          <h2>Persoonlijk of zakelijk</h2>
+          <h2>{c.profiel.scopeSection.heading}</h2>
           <span className="eyebrow">
-            {entities.length} {entities.length === 1 ? "eenheid" : "eenheden"}
+            {entities.length}{" "}
+            {entities.length === 1
+              ? c.profiel.scopeSection.unitSingular
+              : c.profiel.scopeSection.unitPlural}
           </span>
         </div>
-        <p className="cell-sub">
-          De schakelaar bovenin toont één helft van je geld. Hier bepaal je zelf welke helft een
-          bedrijf of rekening bij hoort. Wat je niet indeelt telt als persoonlijk — LaVega gokt dat
-          nooit voor je.
-        </p>
+        <p className="cell-sub">{c.profiel.scopeSection.description}</p>
 
         {entities.length === 0 ? (
-          <p className="text-muted">
-            Nog geen rekeningen. Importeer er één, dan verschijnt hij hier.
-          </p>
+          <p className="text-muted">{c.profiel.scopeSection.noAccounts}</p>
         ) : (
           <ul className="scope-list">
             {entities.map((e) => (
@@ -630,19 +651,22 @@ export default function Profiel({
                 <div className="scope-item-text">
                   <span className="scope-item-name">{e.entity}</span>
                   <span className="mp-what">
-                    {e.accountKeys.length} {e.accountKeys.length === 1 ? "rekening" : "rekeningen"}
+                    {e.accountKeys.length}{" "}
+                    {e.accountKeys.length === 1
+                      ? c.profiel.scopeSection.accountSingular
+                      : c.profiel.scopeSection.accountPlural}
                     {!e.explicit &&
-                      ` · niet ingedeeld, telt als ${SCOPE_LABELS.personal.toLowerCase()}`}
+                      `${c.profiel.scopeSection.unclassifiedPrefix}${c.scope.personal.toLowerCase()}`}
                     {!e.explicit &&
                       e.suggested !== e.scope &&
-                      ` · de naam leest als ${SCOPE_LABELS[e.suggested].toLowerCase()}`}
+                      `${c.profiel.scopeSection.nameReadsAsPrefix}${c.scope[e.suggested].toLowerCase()}`}
                   </span>
                 </div>
 
                 <div
                   className="scope-switch"
                   role="group"
-                  aria-label={`${e.entity}: persoonlijk of zakelijk`}
+                  aria-label={`${e.entity}: ${c.profiel.scopeSection.groupAriaLabelSuffix}`}
                 >
                   {SCOPE_ORDER.map((s, i) => (
                     <Fragment key={s}>
@@ -651,10 +675,10 @@ export default function Profiel({
                         type="button"
                         className={`scope-option${e.scope === s ? " scope-on" : ""}`}
                         aria-pressed={e.scope === s}
-                        aria-label={`${e.entity} ${SCOPE_LABELS[s].toLowerCase()}`}
+                        aria-label={`${e.entity} ${c.scope[s].toLowerCase()}`}
                         onClick={() => onClassifyEntity(e.entity, s)}
                       >
-                        {SCOPE_LABELS[s]}
+                        {c.scope[s]}
                       </button>
                     </Fragment>
                   ))}
@@ -665,33 +689,27 @@ export default function Profiel({
         )}
       </section>
 
-      <section className="card" aria-label="Land en regio">
-        <h2>Land en regio</h2>
-        <p className="cell-sub">
-          Bepaalt welke belastingregels LaVega gebruikt en in welke markt het de voorwaarden van je
-          kaarten opzoekt. De belastingmodules zijn op dit moment alleen voor Nederland uitgewerkt.
-        </p>
-        <p className="cell-sub">
-          Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen
-          tijdzone.
-        </p>
+      <section className="card" aria-label={c.profiel.countryRegion.ariaLabel}>
+        <h2>{c.profiel.countryRegion.heading}</h2>
+        <p className="cell-sub">{c.profiel.countryRegion.purpose}</p>
+        <p className="cell-sub">{c.profiel.countryRegion.neverInferred}</p>
         <div className="facturen-form">
           <label>
-            Land{" "}
+            {c.profiel.countryRegion.countryLabel}{" "}
             <select
               value={homeCountry}
               onChange={(e) => onHomeCountryChange(e.target.value)}
-              aria-label="Land"
+              aria-label={c.profiel.countryRegion.countryLabel}
             >
-              {countries.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
                 </option>
               ))}
             </select>
           </label>{" "}
           <label>
-            {regionLabel(homeCountry)}{" "}
+            {regionLabelIn(locale, homeCountry)}{" "}
             {/* A list where we have a verified one, free text everywhere else:
                 belasting in Texas is niet belasting in New York, maar een
                 verzonnen keuzelijst voor de andere 247 landen zou een gok voor
@@ -699,8 +717,12 @@ export default function Profiel({
             <input
               value={homeRegion}
               list={regions.length > 0 ? "home-regions" : undefined}
-              aria-label={`${regionLabel(homeCountry)} in ${countryName(homeCountry)}`}
-              placeholder={regions.length > 0 ? "Kies of typ" : "Optioneel"}
+              aria-label={`${regionLabelIn(locale, homeCountry)} in ${countryNameIn(locale, homeCountry)}`}
+              placeholder={
+                regions.length > 0
+                  ? c.profiel.countryRegion.chooseOrType
+                  : c.profiel.countryRegion.optional
+              }
               autoComplete="off"
               onChange={(e) => onHomeRegionChange(e.target.value)}
             />
@@ -715,28 +737,25 @@ export default function Profiel({
         </div>
         <p className="cell-sub">
           {regions.length > 0
-            ? `LaVega kent de lijst voor ${countryName(homeCountry)}; je mag ook zelf iets intypen.`
-            : `Voor ${countryName(homeCountry)} heeft LaVega geen geverifieerde regiolijst — typ hem zelf, of laat hem leeg.`}
+            ? `${c.profiel.countryRegion.knownListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.knownListNoteSuffix}`
+            : `${c.profiel.countryRegion.noListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.noListNoteSuffix}`}
         </p>
       </section>
 
-      <section className="card" aria-label="Vreemde valuta">
+      <section className="card" aria-label={c.profiel.fx.ariaLabel}>
         <div className="card-header">
-          <h2>Vreemde valuta</h2>
+          <h2>{c.profiel.fx.heading}</h2>
         </div>
         <label>
           <input
             type="checkbox"
             checked={fxConversionMode === "convert"}
-            aria-label="Vreemde valuta omrekenen naar euro"
+            aria-label={c.profiel.fx.convertLabel}
             onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
           />{" "}
-          Vreemde valuta omrekenen naar euro
+          {c.profiel.fx.convertLabel}
         </label>
-        <p className="cell-sub">
-          Rekeningen en transacties in een andere valuta dan euro tellen mee in de totalen,
-          omgerekend via de ECB-koers van de dag. Zet dit uit om ze zoals voorheen apart te houden.
-        </p>
+        <p className="cell-sub">{c.profiel.fx.description}</p>
       </section>
 
       <Import
@@ -763,14 +782,11 @@ export default function Profiel({
 
       <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
 
-      <section className="card" aria-label="Vergrendelen">
-        <h2>Vergrendelen</h2>
-        <p className="cell-sub">
-          Sluit de kluis en wist alles uit het geheugen van deze browser. Je hebt je wachtwoord
-          nodig om weer binnen te komen.
-        </p>
+      <section className="card" aria-label={c.profiel.lock.ariaLabel}>
+        <h2>{c.profiel.lock.heading}</h2>
+        <p className="cell-sub">{c.profiel.lock.description}</p>
         <button type="button" className="btn" onClick={onLock}>
-          Vergrendel
+          {c.profiel.lock.button}
         </button>
       </section>
       <p className="cell-sub" data-testid="build-stamp">

@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
-import StatistiekBlock, { weggelatenLabelNL } from "./StatistiekBlock";
+import StatistiekBlock, { weggelatenLabel } from "./StatistiekBlock";
 import { freshTxs, own, rules, txs } from "./fixtures";
 
 /* REVIEW 4, PUNTEN 2 EN 3 — "the usual should be just the graphs and the
@@ -410,14 +410,14 @@ test("elke uitleg-alinea zit in een paneel — behalve een weigering, in elke we
 });
 
 test("weggelatenLabelNL telt, verbuigt, en zwijgt als er niets weg is", () => {
-  expect(weggelatenLabelNL({ maanden: 0, klein: 0, gecapt: 0 })).toBeNull();
-  expect(weggelatenLabelNL({ maanden: 1, klein: 0, gecapt: 0 })).toBe(
+  expect(weggelatenLabel({ maanden: 0, klein: 0, gecapt: 0 })).toBeNull();
+  expect(weggelatenLabel({ maanden: 1, klein: 0, gecapt: 0 })).toBe(
     "Wat hier niet in staat: 1 maand zonder afschrift",
   );
-  expect(weggelatenLabelNL({ maanden: 2, klein: 1, gecapt: 0 })).toBe(
+  expect(weggelatenLabel({ maanden: 2, klein: 1, gecapt: 0 })).toBe(
     "Wat hier niet in staat: 2 maanden zonder afschrift · 1 kleinere categorie",
   );
-  expect(weggelatenLabelNL({ maanden: 0, klein: 3, gecapt: 2 })).toBe(
+  expect(weggelatenLabel({ maanden: 0, klein: 3, gecapt: 2 })).toBe(
     "Wat hier niet in staat: 3 kleinere categorieën · 2 categorieën buiten de grafiek",
   );
 });

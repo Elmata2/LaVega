@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
 import Backup from "./Backup";
 import { SIGNED_OUT_MESSAGE } from "../api.js";
+import { adminCopy } from "../copy/admin.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -20,6 +21,10 @@ const blob: CipherBlob = {
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 
+beforeEach(() => {
+  document.cookie = "lavega_locale=nl; Path=/";
+});
+
 afterEach(async () => {
   await act(async () => {
     root?.unmount();
@@ -27,6 +32,7 @@ afterEach(async () => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
   vi.unstubAllGlobals();
 });
 
@@ -232,4 +238,39 @@ test("a session that lapsed mid-erasure is reported with the shared signed-out m
   });
 
   expect(container!.querySelector('[role="alert"]')?.textContent).toContain(SIGNED_OUT_MESSAGE);
+});
+
+test("an English browser gets English copy, including the erase warning and report", async () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const c = adminCopy.en.backup;
+  const fetchMock = withEraseRouting(
+    () =>
+      new Response(
+        JSON.stringify({
+          erased: [
+            { table: "personal.eb_sessions", rows: 0 },
+            { table: "personal.eb_pending_auth", rows: 0 },
+            { table: "investing.agent_runs", rows: 0 },
+            { table: "investing.sync_state", rows: 3 },
+            { table: "investing.preferences", rows: 0 },
+            { table: "investing.price_bars", rows: 0 },
+            { table: "investing.broker_vaults", rows: 0 },
+            { table: "personal.vaults", rows: 1 },
+          ],
+        }),
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+
+  await act(async () => {
+    button("Delete server data")!.click();
+  });
+  expect(container!.textContent).toContain(c.server.erase.warning);
+
+  await act(async () => {
+    button("Yes, delete")!.click();
+  });
+
+  expect(container!.textContent).toContain(c.server.erase.success(4, 2));
 });

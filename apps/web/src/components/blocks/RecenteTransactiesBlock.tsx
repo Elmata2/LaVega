@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categorize, enrichTxs } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
-import { dayLabelNL } from "./dates.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 
 /* Recente transacties — `desktop homeview inspo.png`: the counterparty, the
  * date, our category chip, a search, and "bekijk alles".
@@ -56,6 +57,8 @@ export default function RecenteTransactiesBlock({
   onNavigate,
   onSelectCategory,
 }: RecenteTransactiesBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].recenteTransacties;
   const [query, setQuery] = useState("");
 
   const all = useMemo(
@@ -75,39 +78,39 @@ export default function RecenteTransactiesBlock({
 
   return (
     <Module
-      title="Recente transacties"
+      title={c.title}
       span={2}
       height="tall"
       period={
         <input
           type="search"
           className="tx-search"
-          placeholder="Zoek op naam of categorie"
-          aria-label="Zoek in recente transacties"
+          placeholder={c.zoekPlaceholder}
+          aria-label={c.zoekenAria}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       }
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("transactions")}>
-          Bekijk alles →
+          {c.bekijkAlles}
         </button>
       }
     >
       {all.length === 0 ? (
-        <p className="block-empty">Nog geen transacties.</p>
+        <p className="block-empty">{c.nogGeenTransacties}</p>
       ) : recent.length === 0 ? (
-        <p className="block-empty">Geen transactie gevonden voor “{query.trim()}”.</p>
+        <p className="block-empty">{c.geenTransactieGevondenVoor(query.trim())}</p>
       ) : (
         <div className="tx-list">
           {recent.map(({ tx, category }) => {
-            const name = tx.counterparty || tx.description || "Onbekende tegenpartij";
+            const name = tx.counterparty || tx.description || c.onbekendeTegenpartij;
             return (
               <div className="tx-row" key={tx.id}>
                 <div className="tx-row-info">
                   <div className="tx-desc">{name}</div>
                   <div className="eyebrow tx-meta">
-                    {dayLabelNL(tx.date)}
+                    {dayLabelIn(locale, tx.date)}
                     {/* Where the account sits is context, not identity. On a
                         phone it is what gives way so the merchant name and the
                         amount keep their line. */}
@@ -121,13 +124,13 @@ export default function RecenteTransactiesBlock({
                   <button
                     type="button"
                     className="tx-chip tx-chip-button"
-                    title={`Bekijk transacties in ${category}`}
+                    title={c.bekijkTransactiesIn(category)}
                     onClick={() => onSelectCategory(category)}
                   >
                     {category}
                   </button>
                   <span className={`tx-amount ${tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
-                    {formatEuro(tx.amount)}
+                    {formatEuroIn(locale, tx.amount)}
                   </span>
                 </div>
               </div>

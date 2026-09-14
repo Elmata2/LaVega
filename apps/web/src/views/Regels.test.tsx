@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Rule, Tx } from "@lavega/core";
 import { categorize } from "@lavega/core";
+import { adminCopy } from "../copy/admin.js";
 import Regels from "./Regels";
 
 /* Regels — alfabetisch OM TE LEZEN, oorspronkelijke orde OM TE MATCHEN.
@@ -20,11 +21,16 @@ import Regels from "./Regels";
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 
+beforeEach(() => {
+  document.cookie = "lavega_locale=nl; Path=/";
+});
+
 afterEach(() => {
   if (root) act(() => root!.unmount());
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
 function render(rules: Rule[], onSaveRules: (next: Rule[]) => void = () => {}) {
@@ -149,4 +155,45 @@ test("een nieuwe regel komt ACHTER de bestaande, niet op zijn alfabetische plek"
   act(() => add.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   const next = onSaveRules.mock.calls[0]![0] as Rule[];
   expect(next.map((r) => r.match)).toEqual(["zalando pay", "Albert Heijn"]);
+});
+
+test("switches to English copy when the locale cookie says en, including the em/strong paragraph", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const en = adminCopy.en.regels;
+  const c = render([{ id: "1", match: "zalando pay", category: "Kleding" }]);
+
+  expect(c.querySelector("h2")!.textContent).toBe(en.section.heading);
+  expect(c.textContent).toContain(en.intro.autoCategorization);
+
+  const paragraphs = [...c.querySelectorAll("p.cell-sub")];
+  const matchingRulesParagraph = paragraphs.find((p) =>
+    p.textContent?.includes(en.intro.matchingRules.matchWord),
+  )!;
+  expect(matchingRulesParagraph.querySelector("em")!.textContent).toBe(
+    en.intro.matchingRules.matchWord,
+  );
+  expect(matchingRulesParagraph.querySelector("strong")!.textContent).toBe(
+    en.intro.matchingRules.firstWord,
+  );
+  expect([...matchingRulesParagraph.querySelectorAll("em")][1]!.textContent).toBe(
+    en.intro.matchingRules.unknownWord,
+  );
+  expect(matchingRulesParagraph.textContent).toBe(
+    en.intro.matchingRules.beforeMatchWord +
+      en.intro.matchingRules.matchWord +
+      en.intro.matchingRules.beforeFirstWord +
+      en.intro.matchingRules.firstWord +
+      en.intro.matchingRules.beforeUnknownWord +
+      en.intro.matchingRules.unknownWord +
+      en.intro.matchingRules.afterUnknownWord,
+  );
+
+  expect(c.querySelector("thead th")!.textContent).toBe(en.table.matchHeader);
+  expect(c.querySelectorAll("thead th")[1]!.textContent).toBe(en.table.categoryHeader);
+  expect(
+    [...c.querySelectorAll("button")].find((b) => b.textContent === en.form.addButton),
+  ).toBeTruthy();
+  expect(
+    [...c.querySelectorAll("button")].find((b) => b.textContent === en.table.deleteButton),
+  ).toBeTruthy();
 });

@@ -224,7 +224,7 @@ test('een totaal heeft een noemer nodig, dus "zoals afgeschreven" telt per jaar 
     unit: "maand",
     onbekend: 0,
   });
-  expect(SUB_PERIODS.map((p) => p.label)).toEqual(["Zoals afgeschreven", "Per maand", "Per jaar"]);
+  expect(SUB_PERIODS).toEqual(["eigen", "maand", "jaar"]);
 });
 
 /* ── en op het scherm ─────────────────────────────────────────────────────── */

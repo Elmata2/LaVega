@@ -10,7 +10,10 @@ import {
   parseBalanceReply,
   norm,
 } from "@lavega/core";
-import { formatEuro } from "../format";
+import { formatEuroIn, localeTag } from "../format.js";
+import { useAppLocale } from "../appLocale.js";
+import { optimiseCopy } from "../copy/optimise.js";
+import type { Locale } from "../locale.js";
 import "../styles/views.css";
 
 /* Punten — the hand-kept side of the money picture.
@@ -221,18 +224,14 @@ export function programFacts(program: string): ProgramFacts | null {
 /** De waarde-regel onder het saldo. Drie verschillende zinnen, omdat het drie
  *  verschillende situaties zijn: euro's (het bedrag is de waarde), een bekende
  *  nul aan de geldkant (de aanbieder zegt het zelf, met bron), en onbekend. */
-export function worthLine(program: string, unit: "eur" | "points"): string {
-  if (unit === "eur") {
-    return "Waarde: dit bedrag zelf — dit programma keert uit in euro's, er zit geen omrekening tussen.";
-  }
+export function worthLine(program: string, unit: "eur" | "points", locale: Locale = "nl"): string {
+  const c = optimiseCopy[locale].punten;
+  if (unit === "eur") return c.card.worthEur;
   const facts = programFacts(program);
   if (facts) {
-    return (
-      `In geld: niets. ${facts.cash.source} (geldig vanaf ${facts.cash.validFrom}): “${facts.cash.quote}”` +
-      " Wat één punt aan korting oplevert, is niet gepubliceerd: dat is onbekend en niet nul."
-    );
+    return c.card.worthStatedNone(facts.cash.source, facts.cash.validFrom, facts.cash.quote);
   }
-  return "Waarde: niet vast te stellen zonder te weten waarvoor je ze inwisselt.";
+  return c.card.worthUnknown;
 }
 
 /** De gepubliceerde regels, uitgeschreven. Alles wat hier een euroteken heeft is
@@ -246,11 +245,13 @@ export function worthLine(program: string, unit: "eur" | "points"): string {
  *  de onderbouwing ervan. De onderbouwing blijft volledig en één klik weg; dicht
  *  staat ze nog steeds in de DOM, dus ctrl-F en een schermlezer vinden haar. */
 function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].punten;
   return (
     <details className="field-note punt-facts">
       <summary className="punt-facts-lead" style={{ cursor: "pointer" }}>
-        <strong>Zo spaar je {facts.program}.</strong> {facts.noRateShort}{" "}
-        <span className="eyebrow">Toon de regels</span>
+        <strong>{c.card.factsLead(facts.program)}</strong> {facts.noRateShort}{" "}
+        <span className="eyebrow">{c.card.factsShowRules}</span>
       </summary>
       <p style={{ margin: "0.5rem 0 0" }}>{facts.noRate}</p>
       <ul className="punt-facts-earn" style={{ margin: "0.5rem 0", paddingLeft: "1.1rem" }}>
@@ -261,7 +262,8 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
         ))}
       </ul>
       <p style={{ margin: "0.5rem 0" }}>
-        Pakket: {facts.packages.join(" · ")}. {facts.caveat}
+        {c.card.factsPackageLabel}
+        {facts.packages.join(" · ")}. {facts.caveat}
       </p>
       {facts.unknowns.map((u) => (
         <p key={u} style={{ margin: "0.5rem 0" }}>
@@ -269,7 +271,8 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
         </p>
       ))}
       <p className="eyebrow" style={{ margin: "0.5rem 0 0" }}>
-        Bron: {facts.sources.join(" — ")}
+        {c.card.factsSourceLabel}
+        {facts.sources.join(" — ")}
       </p>
     </details>
   );
@@ -289,92 +292,6 @@ export function programUnit(program: string): "eur" | "points" {
  *  programme the owner typed himself — we don't invent one for it. */
 export function programCategory(program: string): string | null {
   return ALL_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
-}
-
-/* ---------------------------------------------------------------------------
- * ALLE PROGRAMMA'S OP HET SCHERM — waarom dit blok er is.
- *
- * "Waarom staan de ING-punten er niet?" (app review 4, punt 29 — en het is de
- * derde keer dat ING terugkomt). Gemeten voordat er iets veranderde: met een
- * lege puntenlijst kwam het woord ING op dit scherm NERGENS voor. Niet omdat het
- * programma ontbrak — het stond in de keuzelijst, zelfs twee keer — maar omdat
- * de keuzelijst een <datalist> is. Die is onzichtbaar tot je in het veld begint
- * te typen, en dit scherm toonde verder alleen kaarten voor saldi die hij al had
- * ingevoerd. Een programma zonder saldo bestond dus visueel niet, en "ik zie het
- * niet" is dan een juiste waarneming en geen vergissing van hem.
- *
- * Dit blok zet die lijst op het scherm: elk programma dat LaVega kent, met zijn
- * saldo als hij er een heeft en met "nog geen saldo" als hij er geen heeft. Dat
- * antwoordt in één keer op punt 29 (ING is er, en je kunt hem hier kiezen) en op
- * punt 30 (toon Amex en alle andere punten).
- *
- * WAT ER NIET STAAT IS EEN NUL. "Nog geen saldo" is een lege plek, geen 0
- * punten; de eerste is waar en de tweede zou een bewering zijn over een rekening
- * die we nooit hebben gezien.
- * ------------------------------------------------------------------------- */
-
-export type RosterRow = {
-  name: string;
-  /** "Bank", "Airline", … of "eigen programma" voor iets dat hij zelf typte. */
-  category: string;
-  unit: "eur" | "points";
-  /** Zijn eigen ingevoerde saldo, of null — nooit een nul die daarvoor doorgaat. */
-  balance: RewardsBalance | null;
-  /** Eén regel over de koers, alleen waar we er een hebben. Null = we hebben
-   *  hier niets te melden, en dan staat er ook niets. */
-  rateNote: string | null;
-};
-
-/** Wat er over de koers van dit programma te zeggen valt in één regel.
- *
- *  Drie uitkomsten en niet meer: gepubliceerde regels (dan staat er waarom er
- *  geen koers per euro is), een programma dat in euro's uitkeert (dan is het
- *  saldo de waarde), en verder niets. Die laatste is bewust leeg: dezelfde zin
- *  ("wat een punt waard is hangt af van hoe je hem inwisselt") acht keer onder
- *  elkaar is geen informatie meer, en hij staat één keer boven de lijst. */
-function rateNoteFor(program: string, unit: "eur" | "points"): string | null {
-  const facts = programFacts(program);
-  if (facts) return facts.noRateShort;
-  return unit === "eur" ? "Keert uit in euro's; het saldo is de waarde." : null;
-}
-
-/** De lijst zoals hij op het scherm komt: eerst de programma's waar hij een
- *  saldo van heeft, dan de rest in de volgorde van de referentielijst. Programma's
- *  die hij zelf heeft getypt staan er ook bij — anders zou "alle programma's" een
- *  lijst zijn die zijn eigen invoer weglaat.
- *
- *  Geen `asOf` en geen statusberekening hier: dit blok zegt WAT er is en van
- *  wanneer, de kaarten hierboven zeggen wat er moet gebeuren. Twee keer dezelfde
- *  aanmaning op één scherm maakt geen van beide dringender. */
-export function programRoster(balances: readonly RewardsBalance[]): RosterRow[] {
-  const byId = new Map(balances.map((b) => [b.id, b]));
-  const row = (name: string, category: string, balance: RewardsBalance | null): RosterRow => {
-    const unit = programUnit(name);
-    return { name, category, unit, balance, rateNote: rateNoteFor(name, unit) };
-  };
-  const listed = PICK_PROGRAMS.map((p) => row(p.name, p.category, byId.get(norm(p.name)) ?? null));
-  const listedIds = new Set(PICK_PROGRAMS.map((p) => norm(p.name)));
-  const own = balances
-    .filter((b) => !listedIds.has(b.id))
-    .map((b) => row(b.program, programCategory(b.program) ?? "eigen programma", b));
-  const all = [...listed, ...own];
-  return [...all.filter((r) => r.balance !== null), ...all.filter((r) => r.balance === null)];
-}
-
-/** Het cijfer in de regel, met de DATUM eraan vast.
- *
- *  Een saldo zonder datum is niet half zo goed als een saldo met datum, het is
- *  iets anders: niemand kan zien of het van gisteren of van vorig jaar is. Dat
- *  wordt straks nog belangrijker — het idee is dat de extensie deze getallen
- *  gebruikt en af en toe om een verversing vraagt, en "af en toe" heeft een
- *  ijkpunt nodig. */
-export function rosterFigure(r: RosterRow): string {
-  if (r.balance === null) return "nog geen saldo";
-  const amount =
-    r.unit === "eur"
-      ? `${formatEuro(r.balance.points)} cashback`
-      : `${r.balance.points.toLocaleString("nl-NL")} ${r.balance.points === 1 ? "punt" : "punten"}`;
-  return `${amount} — van ${dateNL(r.balance.updatedAt)}`;
 }
 
 /** A programme id (a normalised name, so it carries spaces) turned into
@@ -402,10 +319,38 @@ const MONTHS_NL = [
   "december",
 ];
 
-/** "2026-05-12" → "12 mei 2026". */
+/** "2026-05-12" → "12 mei 2026". Kept single-argument and Dutch-only: exported
+ *  and called directly (without a locale) by punten-ui.test.tsx. `dateIn`
+ *  below adds English without touching this signature. */
 export function dateNL(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return MONTHS_NL[m - 1] ? `${d} ${MONTHS_NL[m - 1]} ${y}` : iso;
+}
+
+const MONTHS_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** `dateNL`, but locale-aware: "12 May 2026" in English. `format.ts`'s own
+ *  `formatDate` uses SHORT month names ("31 jul 2026"), which is not the
+ *  wording already on this screen (full month names, e.g. "31 juli 2026") —
+ *  kept local for the same reason Rekeningen.tsx keeps its own `dayFullIn`
+ *  instead of reaching for format.ts. */
+function dateIn(locale: Locale, iso: string): string {
+  if (locale === "nl") return dateNL(iso);
+  const [y, m, d] = iso.split("-").map(Number);
+  return MONTHS_EN[m - 1] ? `${d} ${MONTHS_EN[m - 1]} ${y}` : iso;
 }
 
 export type PuntenRow = { balance: RewardsBalance; status: TrackedStatus; unit: "eur" | "points" };
@@ -427,35 +372,19 @@ export function puntenRows(balances: readonly RewardsBalance[], asOf: string): P
     );
 }
 
-const STATE_LABEL: Record<TrackingState, string> = {
-  fresh: "actueel",
-  due: "bevestigen",
-  overdue: "verouderd",
-  snoozed: "later",
-};
-
 /** How old the number is, in the owner's words — never a claim about the real
  *  balance today, only about when he last confirmed it. */
-function ageSentence(s: TrackedStatus): string {
-  const age =
-    s.ageDays === 0
-      ? "vandaag ingevoerd"
-      : `${s.ageDays} ${s.ageDays === 1 ? "dag" : "dagen"} geleden ingevoerd`;
-  if (s.state === "fresh")
-    return `${age}. LaVega vraagt hier vanaf ${dateNL(s.dueDate)} weer naar.`;
+function ageSentence(s: TrackedStatus, locale: Locale): string {
+  const c = optimiseCopy[locale].punten;
+  const age = s.ageDays === 0 ? c.card.ageToday : c.card.ageDaysAgo(s.ageDays);
+  if (s.state === "fresh") return c.card.ageFreshTemplate(age, dateIn(locale, s.dueDate));
   if (s.state === "snoozed")
-    return `${age}. Je vroeg om later — LaVega vraagt weer vanaf ${dateNL(s.snoozedUntil ?? s.dueDate)}.`;
-  if (s.state === "overdue")
-    return `${age}, ${s.daysOverdue} ${s.daysOverdue === 1 ? "dag" : "dagen"} over de afgesproken termijn.`;
-  return `${age}. Tijd om te bevestigen.`;
+    return c.card.ageSnoozedTemplate(age, dateIn(locale, s.snoozedUntil ?? s.dueDate));
+  if (s.state === "overdue") return c.card.ageOverdueTemplate(age, s.daysOverdue);
+  return c.card.ageDueTemplate(age);
 }
 
-const INTERVALS: { days: number; label: string }[] = [
-  { days: 30, label: "elke maand" },
-  { days: 90, label: "elk kwartaal" },
-  { days: 180, label: "elk half jaar" },
-  { days: 365, label: "elk jaar" },
-];
+const INTERVAL_DAYS = [30, 90, 180, 365] as const;
 
 export default function Punten({
   balances,
@@ -468,6 +397,14 @@ export default function Punten({
   busy: boolean;
   onSave: (next: RewardsBalance[]) => void;
 }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].punten;
+  const intervalLabels: Record<number, string> = {
+    30: c.card.intervalMonthly,
+    90: c.card.intervalQuarterly,
+    180: c.card.intervalHalfYearly,
+    365: c.card.intervalYearly,
+  };
   const [program, setProgram] = useState(REWARD_PROGRAMS[0].name);
   const [points, setPoints] = useState("");
   const [updatedAt, setUpdatedAt] = useState(asOf);
@@ -502,19 +439,15 @@ export default function Punten({
   function add() {
     const pts = parseBalanceReply(points);
     if (pts === null || pts < 0) {
-      setAddError(
-        "Ik kon hier geen getal in vinden — vul alleen het saldo in, bijvoorbeeld 245000 of 245k.",
-      );
+      setAddError(c.addForm.errorNoNumber);
       return;
     }
     if (!program.trim()) {
-      setAddError(
-        "Bij welk programma hoort dit saldo? Kies of typ een programma — anders weet ik niet waar dit getal thuishoort.",
-      );
+      setAddError(c.addForm.errorNoProgram);
       return;
     }
     if (!updatedAt) {
-      setAddError("Vul de datum in waarop je dit saldo zag.");
+      setAddError(c.addForm.errorNoDate);
       return;
     }
     setAddError("");
@@ -550,7 +483,7 @@ export default function Punten({
       setAsk({
         id,
         text: ask?.text ?? "",
-        error: "Ik kon daar geen enkel getal in vinden — stuur alleen het saldo.",
+        error: c.addForm.errorAskNoNumber,
       });
       return;
     }
@@ -564,9 +497,9 @@ export default function Punten({
   }
 
   return (
-    <section className="card" aria-label="Punten">
+    <section className="card" aria-label={c.header.ariaLabel}>
       <div className="view-head">
-        <h2>Punten</h2>
+        <h2>{c.header.title}</h2>
         {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
             cijfer van heeft ingevoerd, en zolang dat de enige lijst op het scherm
             was, was "programma's" daar het goede woord voor. Sinds de
@@ -574,8 +507,8 @@ export default function Punten({
             stond boven een scherm dat er tien opsomde, en dan is een van de twee
             fout. Wat er wordt geteld, staat er nu ook. */}
         <span className="eyebrow">
-          {rows.length} {rows.length === 1 ? "saldo" : "saldi"}
-          {attention > 0 ? ` · ${attention} te bevestigen` : ""}
+          {c.header.countLabel(rows.length)}
+          {attention > 0 ? c.header.attentionSuffix(attention) : ""}
         </span>
       </div>
       {/* GEEN INLEIDING EN GEEN WAAROM-BLOK MEER, op zijn verzoek (22 augustus).
@@ -590,14 +523,11 @@ export default function Punten({
 
       {rows.length === 0 ? (
         <div className="empty-guide">
-          <p>Nog geen punten- of cashback-saldi.</p>
+          <p>{c.empty.lead}</p>
           <ul>
-            <li>Zoek het saldo op in de app of de mail van het programma zelf.</li>
-            <li>Voeg het hieronder toe met de datum waarop je het zag.</li>
-            <li>
-              LaVega vraagt je daarna elk kwartaal om het te bevestigen — dat interval kun je per
-              programma aanpassen.
-            </li>
+            {c.empty.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
           </ul>
         </div>
       ) : (
@@ -611,23 +541,25 @@ export default function Punten({
                 <header className="punt-head">
                   <div className="punt-id">
                     <div className="punt-program">{b.program}</div>
-                    <div className="punt-category">{category ?? "eigen programma"}</div>
+                    <div className="punt-category">{category ?? c.card.ownProgramCategory}</div>
                   </div>
                   <span className={`badge punt-badge-${status.state}`}>
-                    {STATE_LABEL[status.state]}
+                    {c.card.stateLabel[status.state]}
                   </span>
                 </header>
 
                 <div className="punt-figure">
                   <span className="punt-value">
-                    {unit === "eur" ? formatEuro(b.points) : b.points.toLocaleString("nl-NL")}
+                    {unit === "eur"
+                      ? formatEuroIn(locale, b.points)
+                      : b.points.toLocaleString(localeTag(locale))}
                   </span>
-                  <span className="punt-unit">{unit === "eur" ? "cashback" : "punten"}</span>
+                  <span className="punt-unit">{unit === "eur" ? c.card.unitCashback : c.card.unitPoints}</span>
                 </div>
                 <p className="punt-asof">
-                  Stand van {dateNL(b.updatedAt)} — {ageSentence(status)}
+                  {c.card.asOfTemplate(dateIn(locale, b.updatedAt), ageSentence(status, locale))}
                 </p>
-                <p className="punt-worth">{worthLine(b.program, unit)}</p>
+                <p className="punt-worth">{worthLine(b.program, unit, locale)}</p>
                 {facts ? <ProgramFactsBlock facts={facts} /> : null}
 
                 {asking ? (
@@ -638,7 +570,7 @@ export default function Punten({
                         id={`punt-ask-${slug(b.id)}`}
                         className="saldo-input"
                         inputMode="decimal"
-                        placeholder={unit === "eur" ? "bijv. 42" : "bijv. 245000"}
+                        placeholder={unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints}
                         value={asking.text}
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
@@ -649,7 +581,7 @@ export default function Punten({
                         disabled={busy}
                         onClick={() => submitAsk(b.id)}
                       >
-                        Opslaan
+                        {c.card.askSave}
                       </button>
                       <button
                         type="button"
@@ -657,7 +589,7 @@ export default function Punten({
                         disabled={busy}
                         onClick={() => setAsk(null)}
                       >
-                        Annuleer
+                        {c.card.askCancel}
                       </button>
                     </div>
                     {asking.error ? <p className="punt-error">{asking.error}</p> : null}
@@ -672,7 +604,7 @@ export default function Punten({
                       disabled={busy}
                       onClick={() => setAsk({ id: b.id, text: "", error: "" })}
                     >
-                      Saldo bijwerken
+                      {c.card.updateBalance}
                     </button>
                   )}
                   {(status.state === "due" || status.state === "overdue") && (
@@ -682,20 +614,20 @@ export default function Punten({
                       disabled={busy}
                       onClick={() => onSave(snoozeTracker(balances, b.id, addDaysISO(asOf, 30)))}
                     >
-                      Niet nu
+                      {c.card.notNow}
                     </button>
                   )}
                   <label className="punt-interval">
-                    <span className="eyebrow">Vraag me</span>
+                    <span className="eyebrow">{c.card.remindMeLabel}</span>
                     <select
-                      aria-label={`Herinnering ${b.program}`}
+                      aria-label={c.card.reminderAriaLabel(b.program)}
                       value={String(b.intervalDays ?? 90)}
                       disabled={busy}
                       onChange={(e) => changeInterval(b.id, Number(e.target.value))}
                     >
-                      {INTERVALS.map((i) => (
-                        <option key={i.days} value={String(i.days)}>
-                          {i.label}
+                      {INTERVAL_DAYS.map((days) => (
+                        <option key={days} value={String(days)}>
+                          {intervalLabels[days]}
                         </option>
                       ))}
                     </select>
@@ -706,7 +638,7 @@ export default function Punten({
                     disabled={busy}
                     onClick={() => remove(b.id)}
                   >
-                    Verwijder
+                    {c.card.remove}
                   </button>
                 </footer>
               </article>
@@ -717,31 +649,32 @@ export default function Punten({
 
       {removed ? (
         <p className="field-note punt-undo" role="status">
-          <strong>{removed.program}</strong> is verwijderd —{" "}
+          <strong>{removed.program}</strong>
+          {c.removedBanner.removedSuffix}
           {programUnit(removed.program) === "eur"
-            ? `${formatEuro(removed.points)} cashback`
-            : `${removed.points.toLocaleString("nl-NL")} punten`}{" "}
-          van {dateNL(removed.updatedAt)}. Dat getal stond alleen hier.{" "}
+            ? `${formatEuroIn(locale, removed.points)} ${c.removedBanner.cashbackUnit}`
+            : `${removed.points.toLocaleString(localeTag(locale))} ${c.removedBanner.pointsUnit}`}{" "}
+          {c.removedBanner.dateOnlySuffix(dateIn(locale, removed.updatedAt))}{" "}
           <button type="button" className="card-link" disabled={busy} onClick={undoRemove}>
-            Zet terug
+            {c.removedBanner.undo}
           </button>
         </p>
       ) : null}
 
       <div className="view-head">
-        <h3>Saldo toevoegen</h3>
-        <span className="eyebrow">of een bestaand programma overschrijven</span>
+        <h3>{c.addForm.heading}</h3>
+        <span className="eyebrow">{c.addForm.overwriteHint}</span>
       </div>
       <div className="stack-form punt-form">
         <div className="stack-form-row">
           <label>
-            Programma
+            {c.addForm.programLabel}
             <input
               list="reward-programs"
               value={program}
               disabled={busy}
-              aria-label="Programma"
-              placeholder="bijv. Marriott Bonvoy"
+              aria-label={c.addForm.programLabel}
+              placeholder={c.addForm.programPlaceholder}
               onChange={(e) => setProgram(e.target.value)}
             />
             {/* PICK_PROGRAMS en niet ALL_PROGRAMS: elk programma één keer. Zie
@@ -753,24 +686,24 @@ export default function Punten({
             </datalist>
           </label>
           <label>
-            {addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
+            {addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
             <input
               className="saldo-input"
               inputMode="decimal"
               value={points}
               disabled={busy}
-              aria-label={addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
-              placeholder={addUnit === "eur" ? "bijv. 42" : "bijv. 245000"}
+              aria-label={addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
+              placeholder={addUnit === "eur" ? c.addForm.amountPlaceholderEur : c.addForm.amountPlaceholderPoints}
               onChange={(e) => setPoints(e.target.value)}
             />
           </label>
           <label>
-            Gezien op
+            {c.addForm.seenOnLabel}
             <input
               type="date"
               value={updatedAt}
               disabled={busy}
-              aria-label="Bijgewerkt op"
+              aria-label={c.addForm.updatedAtAriaLabel}
               onChange={(e) => setUpdatedAt(e.target.value)}
             />
           </label>
@@ -783,24 +716,24 @@ export default function Punten({
             staat één veld hoger in dezelfde lijst. */}
         {norm(program) === "ing" ? (
           <p className="field-note">
-            Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar
-            staan de verdienregels van ING bij. Wat “ING” zelf bijhoudt, weet LaVega niet.
+            {c.addForm.ingHintBefore}
+            <strong>{c.addForm.ingHintBold}</strong>
+            {c.addForm.ingHintAfter}
           </p>
         ) : null}
         {existing ? (
           <p className="field-note punt-overwrite">
-            <strong>{existing.program}</strong> staat al in de lijst:{" "}
+            <strong>{existing.program}</strong>
+            {c.addForm.existingOverwriteSuffix}
             {programUnit(existing.program) === "eur"
-              ? `${formatEuro(existing.points)} cashback`
-              : `${existing.points.toLocaleString("nl-NL")} punten`}{" "}
-            van {dateNL(existing.updatedAt)}. Overschrijven zet jouw nieuwe getal daarvoor in de
-            plaats — dat oude saldo is er dan niet meer. Je herinnering blijft wel staan. Wil je een
-            ander programma toevoegen, verander dan eerst het veld hierboven.
+              ? `${formatEuroIn(locale, existing.points)} ${c.card.unitCashback}`
+              : `${existing.points.toLocaleString(localeTag(locale))} ${c.card.unitPoints}`}{" "}
+            {c.addForm.existingOverwriteDateSuffix(dateIn(locale, existing.updatedAt))}
           </p>
         ) : null}
         <div className="stack-form-actions">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
-            {existing ? "Overschrijven" : "Opslaan"}
+            {existing ? c.addForm.submitOverwrite : c.addForm.submitSave}
           </button>
         </div>
         {addError ? <p className="punt-error">{addError}</p> : null}

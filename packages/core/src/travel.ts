@@ -115,13 +115,29 @@ export function countryCurrency(code: string): string | null {
   );
 }
 
+/** Why a spend option's cost is what it is, as facts a copy module renders into
+ *  a sentence — this used to be a Dutch sentence built in `rankSpendOptions`,
+ *  which put prose (and a language) in the domain layer. Every field here is
+ *  already carried by `SpendOption` itself; this is that same data, shaped for
+ *  the one sentence that reads it. */
+export type SpendWhy =
+  | { kind: "known"; fxFeePct: number; cashbackPct: number | null; pointsPerEuro: number | null }
+  | { kind: "unknown" };
+
 /** One PRODUCT ranked for spending abroad — a provider, not an account: terms
  *  belong to the card product, so two accounts at one bank are one row (and one
  *  correction). `netCostPct` is what the trip actually costs you per euro spent:
  *  the conversion surcharge minus what you get back. Lower is better; negative
  *  means the card pays you to use it. */
 export type SpendOption = {
+  /** Identity `productOf` built ("{bank} betaalpas"/"{bank} creditcard") — the
+   *  key `factNumber` and the grouping above match on, so it stays Dutch even
+   *  on an English screen. `bank`/`productKind` below are the same fact, split
+   *  so a view can build a translated label without parsing this string. */
   provider: string;
+  /** The bank alone — a proper noun, never translated. */
+  bank: string;
+  productKind: "betaalpas" | "creditcard";
   accounts: Account[];
   fxFeePct: number | null;
   cashbackPct: number | null;
@@ -129,7 +145,7 @@ export type SpendOption = {
   pointsPerEuro: number | null;
   netCostPct: number | null; // null when the fee is unknown — never assumed free
   known: boolean;
-  why: string;
+  why: SpendWhy;
   /** Where the fee figure came from and when, so the owner can judge it. */
   feeSource: FactSource | null;
   feeUpdatedAt: string | null;
@@ -509,15 +525,17 @@ export function rankSpendOptions(
     const netCostPct = known ? fxFeePct - (cashbackPct ?? 0) : null;
     return {
       provider,
+      // Same account this provider's group was keyed on, so this always
+      // matches what `productOf` folded into `provider` above.
+      bank: providerOf(group[0]),
+      productKind: accountType(group[0]) === "Creditcard" ? "creditcard" : "betaalpas",
       accounts: group,
       fxFeePct,
       cashbackPct,
       pointsPerEuro,
       netCostPct,
       known,
-      why: known
-        ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}${pointsPerEuro ? ` + ${pointsPerEuro} punt${pointsPerEuro === 1 ? "" : "en"} per euro` : ""}`
-        : "voorwaarden nog onbekend",
+      why: known ? { kind: "known", fxFeePct, cashbackPct, pointsPerEuro } : { kind: "unknown" },
       feeSource: entry?.source ?? null,
       feeUpdatedAt: entry?.updatedAt ?? null,
       note: entry?.note ?? null,
@@ -589,14 +607,30 @@ function euro(n: number): string {
   return `€ ${n.toFixed(2).replace(".", ",")}`;
 }
 
+/** Why a journey's cost is what it is (or isn't known), as facts. Mirrors
+ *  `SpendWhy` for the direct leg — a journey that pays directly IS that spend
+ *  option, worded with "direct betalen" in front — and adds the via-route's
+ *  own two facts (a free iDEAL transfer, the exchange leg's markup). */
+export type JourneyWhy =
+  | { kind: "direct"; spend: SpendWhy }
+  | { kind: "direct-unknown" }
+  | { kind: "via"; free: boolean; convertPct: number; cashbackPct: number | null }
+  | { kind: "via-unknown-convert" }
+  | { kind: "via-unknown-transfer" };
+
 /** One complete way to get €1.000 from where it sits now into a payment in the
  *  destination currency. Ranking JOURNEYS instead of cards is the whole point:
  *  ranking cards prices only the last leg, so "move it to Revolut first" always
  *  looked free and paying directly always looked expensive. That is not a
  *  comparison, it is two different questions answered side by side. */
 export type Journey = {
-  /** The product you finally pay with. */
+  /** The product you finally pay with — the same identity string as
+   *  `SpendOption.provider` (a business key, stays Dutch; see its doc). */
   provider: string;
+  /** The card's bank and kind, split for display — see `SpendOption`. Always
+   *  the card you finally PAY with, on both a direct and a via journey. */
+  bank: string;
+  productKind: "betaalpas" | "creditcard";
   /** Where the euros are converted; null means you pay directly and the card
    *  does the conversion for you. */
   via: string | null;
@@ -611,7 +645,7 @@ export type Journey = {
   totalCostPct: number | null;
   costOnReference: number | null;
   known: boolean;
-  why: string;
+  why: JourneyWhy;
   /** The provider's own caveat about the card leg — a monthly free allowance, a
    *  weekend surcharge, a fair-usage cap.
    *
@@ -643,6 +677,8 @@ export function rankJourneys(
     // Paying straight from the card: one leg, the one already priced today.
     journeys.push({
       provider: s.provider,
+      bank: s.bank,
+      productKind: s.productKind,
       via: null,
       fundedFrom: null,
       method: null,
@@ -652,7 +688,7 @@ export function rankJourneys(
       totalCostPct: s.netCostPct,
       costOnReference: costOnReferenceSpend(s.netCostPct),
       known: s.known,
-      why: s.known ? `direct betalen: ${s.why}` : "voorwaarden nog onbekend",
+      why: s.known ? { kind: "direct", spend: s.why } : { kind: "direct-unknown" },
       note: s.note,
     });
 
@@ -679,6 +715,8 @@ export function rankJourneys(
 
     journeys.push({
       provider: s.provider,
+      bank: s.bank,
+      productKind: s.productKind,
       via: s.provider,
       fundedFrom: providerOf(funding),
       method: free ? "iDEAL" : null,
@@ -689,10 +727,10 @@ export function rankJourneys(
       costOnReference: costOnReferenceSpend(totalCostPct),
       known,
       why: known
-        ? `overzetten${free ? " via iDEAL (gratis)" : ""} en daar wisselen: ${convertPct}% wisselkosten${s.cashbackPct ? ` − ${s.cashbackPct}% cashback` : ""}`
+        ? { kind: "via", free, convertPct, cashbackPct: s.cashbackPct }
         : convertPct === null
-          ? "wisselkosten nog onbekend"
-          : "overboekkosten nog onbekend",
+          ? { kind: "via-unknown-convert" }
+          : { kind: "via-unknown-transfer" },
       note: s.note,
     });
   }
@@ -1209,8 +1247,11 @@ function nameSome(names: readonly string[], limit = 3): string {
 
 /** One of HIS cards, priced for cash. */
 export type WithdrawOption = {
-  /** The product name as the rest of the block names it — "ING betaalpas". */
+  /** The product name as the rest of the block names it — "ING betaalpas".
+   *  Identity, stays Dutch; see `SpendOption.provider`. */
   provider: string;
+  bank: string;
+  productKind: "betaalpas" | "creditcard";
   fee: WithdrawalFee;
   /** Euros on one € 200 withdrawal, and what that is as a percentage. */
   costOnReference: number | null;
@@ -1251,6 +1292,8 @@ export function rankWithdrawOptions(
           : parseWithdrawalFee(value?.conditions ?? null);
     return {
       provider: s.provider,
+      bank: s.bank,
+      productKind: s.productKind,
       fee,
       costOnReference: withdrawalCost(fee, TRAVEL_REFERENCE_WITHDRAWAL),
       effectivePct: withdrawalEffectivePct(fee, TRAVEL_REFERENCE_WITHDRAWAL),

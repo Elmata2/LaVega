@@ -1,7 +1,19 @@
 import { useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup } from "@lavega/core";
-import { accountSummaries, isCardAccount, accountType, ACCOUNT_TYPES } from "@lavega/core";
-import { formatEuro } from "../format";
+import {
+  accountSummaries,
+  isCardAccount,
+  accountType,
+  accountTypeKind,
+  accountTypeKindOf,
+  ACCOUNT_TYPES,
+  type AccountTypeKind,
+} from "@lavega/core";
+import { formatEuroIn } from "../format";
+import { useAppLocale } from "../appLocale";
+import { moneyCopy } from "../copy/money";
+import type { MoneyCopy } from "../copy/money";
+import type { Locale } from "../locale";
 import "../styles/views.css";
 
 type RekeningenProps = {
@@ -170,12 +182,15 @@ function ConfirmAction({
   question,
   busy,
   onConfirm,
+  locale,
 }: {
   label: string;
   question: string;
   busy: boolean;
   onConfirm: () => void;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].rekeningen;
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
@@ -201,10 +216,10 @@ function ConfirmAction({
         }}
         disabled={busy}
       >
-        Ja
+        {c.ja}
       </button>
       <button type="button" className="card-link" onClick={() => setAsking(false)} disabled={busy}>
-        Nee
+        {c.nee}
       </button>
     </span>
   );
@@ -229,13 +244,16 @@ function NameCell({
   onFieldChange,
   onCommit,
   onEditingChange,
+  locale,
 }: {
   account: Account;
   busy: boolean;
   onFieldChange: (key: string, patch: Partial<Account>) => void;
   onCommit: (account: Account) => void;
   onEditingChange?: (editing: boolean) => void;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].rekeningen;
   const [editing, setEditing] = useState(false);
   const setEdit = (next: boolean) => {
     setEditing(next);
@@ -254,7 +272,7 @@ function NameCell({
           <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
         )}
         <button type="button" className="card-link" onClick={() => setEdit(true)} disabled={busy}>
-          {account.bank ? "Hernoem" : "Bank invullen"}
+          {account.bank ? c.hernoem : c.bankInvullen}
         </button>
       </>
     );
@@ -262,23 +280,23 @@ function NameCell({
   return (
     <div className="rename-cell">
       <input
-        aria-label={`Bank van ${account.name || account.key}`}
-        placeholder="Bank, bijv. ING"
+        aria-label={c.bankVanLabel(account.name || account.key)}
+        placeholder={c.bankPlaceholder}
         value={account.bank}
         onChange={(e) => onFieldChange(account.key, { bank: e.target.value, renamed: true })}
         onBlur={() => onCommit(account)}
         disabled={busy}
       />
       <input
-        aria-label={`Naam van ${account.name || account.key}`}
-        placeholder="Naam, bijv. Oranje Spaarrekening"
+        aria-label={c.naamVanLabel(account.name || account.key)}
+        placeholder={c.naamPlaceholder}
         value={account.name}
         onChange={(e) => onFieldChange(account.key, { name: e.target.value, renamed: true })}
         onBlur={() => onCommit(account)}
         disabled={busy}
       />
       <button type="button" className="card-link" onClick={() => setEdit(false)} disabled={busy}>
-        Klaar
+        {c.klaar}
       </button>
     </div>
   );
@@ -293,11 +311,14 @@ function SaldoCell({
   account,
   busy,
   onCommit,
+  locale,
 }: {
   account: Account;
   busy: boolean;
   onCommit: (key: string, value: string) => void;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].rekeningen;
   // A credit card stores a NEGATIVE balance (debt) but the user types/reads the
   // amount OWED as a positive — show the absolute value in the field for cards.
   const card = isCardAccount(account);
@@ -322,16 +343,33 @@ function SaldoCell({
       <input
         className={`saldo-input${cls}`}
         inputMode="decimal"
-        placeholder="onbekend"
-        aria-label={card ? `Openstaand bedrag ${account.name}` : `Saldo ${account.name}`}
+        placeholder={c.saldoOnbekendPlaceholder}
+        aria-label={card ? c.openstaandBedragVanLabel(account.name) : c.saldoVanLabel(account.name)}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => onCommit(account.key, draft)}
         disabled={busy}
       />
-      {card && <span className="eyebrow"> schuld</span>}
+      {card && <span className="eyebrow"> {c.schuld}</span>}
     </>
   );
+}
+
+/** Exhaustive by switch, so a new AccountTypeKind fails the build here instead
+ *  of rendering nothing. */
+function typeOptionLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string {
+  switch (kind) {
+    case "current":
+      return c.current;
+    case "savings":
+      return c.savings;
+    case "credit":
+      return c.credit;
+    case "investment":
+      return c.investment;
+    case "other":
+      return c.other;
+  }
 }
 
 /** Type of an account as an editable select — the same control in the table and
@@ -340,15 +378,18 @@ function TypeSelect({
   account,
   busy,
   onTypeCommit,
+  locale,
 }: {
   account: Account;
   busy: boolean;
   onTypeCommit: (key: string, type: string) => void;
+  locale: Locale;
 }) {
+  const c = moneyCopy[locale].rekeningen;
   const type = accountType(account);
   return (
     <select
-      aria-label={`Type ${account.name}`}
+      aria-label={c.typeVanLabel(account.name)}
       value={type}
       onChange={(e) => onTypeCommit(account.key, e.target.value)}
       disabled={busy}
@@ -358,18 +399,16 @@ function TypeSelect({
       )}
       {ACCOUNT_TYPES.map((t) => (
         <option key={t} value={t}>
-          {t}
+          {typeOptionLabel(moneyCopy[locale].accountTypes, accountTypeKindOf(t))}
         </option>
       ))}
     </select>
   );
 }
 
-function deleteQuestion(account: Account, txCount: number): string {
+function deleteQuestion(account: Account, txCount: number, locale: Locale): string {
   const name = account.name || account.key;
-  return txCount === 0
-    ? `${name} verwijderen?`
-    : `${name} en ${txCount} ${txCount === 1 ? "transactie" : "transacties"} verwijderen?`;
+  return moneyCopy[locale].rekeningen.deleteQuestion(name, txCount);
 }
 
 /** Everything you can do to one account, laid out as fields instead of a table
@@ -387,6 +426,7 @@ function AccountPanel({
   onSelectAccount,
   onDeleteAccount,
   onRenameOpen,
+  locale,
 }: {
   row: AccountSummary;
   busy: boolean;
@@ -394,6 +434,7 @@ function AccountPanel({
   /** Nieuwste transactiedatum van deze rekening, of null. Zie SaldoAgeNote. */
   latestTx: string | null;
   onRenameOpen: (account: Account, editing: boolean) => void;
+  locale: Locale;
 } & Pick<
   RekeningenProps,
   | "onEntityChange"
@@ -404,6 +445,7 @@ function AccountPanel({
   | "onSelectAccount"
   | "onDeleteAccount"
 >) {
+  const c = moneyCopy[locale].rekeningen;
   const { account, txCount } = row;
   const age = saldoAge(account, latestTx);
   const linked = linkedMoment(account);
@@ -411,7 +453,7 @@ function AccountPanel({
     <div className="bank-panel" role="tabpanel" aria-labelledby={labelledBy}>
       <div className="bank-fields">
         <div className="bank-field">
-          <span className="eyebrow">Bank &amp; naam</span>
+          <span className="eyebrow">{c.bankNaam}</span>
           <div>
             <NameCell
               account={account}
@@ -419,20 +461,21 @@ function AccountPanel({
               onFieldChange={onAccountFieldChange}
               onCommit={onAccountCommit}
               onEditingChange={(editing) => onRenameOpen(account, editing)}
+              locale={locale}
             />
           </div>
         </div>
         <div className="bank-field">
-          <span className="eyebrow">Type</span>
+          <span className="eyebrow">{c.type}</span>
           <div>
-            <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} />
+            <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} locale={locale} />
           </div>
         </div>
         <div className="bank-field">
-          <span className="eyebrow">Entiteit</span>
+          <span className="eyebrow">{c.entiteit}</span>
           <div>
             <input
-              aria-label={`Entiteit ${account.name || account.key}`}
+              aria-label={c.entiteitVanLabel(account.name || account.key)}
               value={account.entity}
               placeholder="—"
               onChange={(e) => onEntityChange(account.key, e.target.value)}
@@ -442,45 +485,46 @@ function AccountPanel({
           </div>
         </div>
         <div className="bank-field">
-          <span className="eyebrow">{isCardAccount(account) ? "Openstaand" : "Saldo"}</span>
+          <span className="eyebrow">{isCardAccount(account) ? c.openstaand : c.saldo}</span>
           <div>
-            <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
+            <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} locale={locale} />
           </div>
-          <span className="cell-sub">{saldoAgeShort(age)}</span>
+          <span className="cell-sub">{saldoAgeShort(age, locale)}</span>
         </div>
         {/* NA het saldoveld, en dat is geen volgorde-toeval: het bedrag is waar
             hij voor komt, het koppelmoment is de context eromheen. Een veld met
             een datum vóór het saldo zou als de datum van dat saldo lezen — de
             verwisseling die dit veld juist moet opheffen. */}
         <div className="bank-field">
-          <span className="eyebrow">Gekoppeld</span>
-          <div className="cell-sub">{linkedShort(linked)}</div>
+          <span className="eyebrow">{c.gekoppeld}</span>
+          <div className="cell-sub">{linkedShort(linked, locale)}</div>
         </div>
       </div>
 
-      <SaldoAgeNote age={age} />
-      <LinkedNote moment={linked} />
+      <SaldoAgeNote age={age} locale={locale} />
+      <LinkedNote moment={linked} locale={locale} />
 
       {account.iban ? <p className="bank-panel-iban">{account.iban}</p> : null}
 
       <div className="bank-panel-actions">
         {txCount === 0 ? (
-          <span className="cell-sub">Nog geen transacties geïmporteerd</span>
+          <span className="cell-sub">{c.nogGeenTransactiesGeimporteerd}</span>
         ) : (
           <button
             type="button"
             className="card-link"
             onClick={() => onSelectAccount(account.key)}
-            title={`Bekijk transacties van ${account.name}`}
+            title={c.bekijkTransactiesVan(account.name)}
           >
-            {txCount} {txCount === 1 ? "transactie" : "transacties"} bekijken
+            {c.transactiesBekijken(txCount)}
           </button>
         )}
         <ConfirmAction
-          label="Verwijder"
-          question={deleteQuestion(account, txCount)}
+          label={c.verwijder}
+          question={deleteQuestion(account, txCount, locale)}
           busy={busy}
           onConfirm={() => onDeleteAccount(account.key)}
+          locale={locale}
         />
       </div>
     </div>
@@ -545,10 +589,38 @@ const DAYS_NL = [
  *
  *  Eigen kopie in plaats van iets uit format.ts: die file is deze run van een
  *  andere lane, en een maandnaam-formatter is te klein om er een eigendomsruzie
- *  over te hebben. Staat het er ooit gedeeld, dan mag deze weg. */
+ *  over te hebben. Staat het er ooit gedeeld, dan mag deze weg.
+ *
+ *  Kept single-argument and Dutch-only: exported and called directly (without a
+ *  locale) by Punten.test.tsx, owned by another lane. `dayFullIn` below adds
+ *  English without touching this signature. */
 export function dayNL(iso: string): string {
   const [y, m, d] = (iso ?? "").split("-").map(Number);
   return DAYS_NL[m - 1] && d ? `${d} ${DAYS_NL[m - 1]} ${y}` : iso;
+}
+
+const MONTHS_EN_FULL = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** `dayNL`, but locale-aware: "31 July 2026" in English. format.ts's own
+ *  `formatDate` uses SHORT month names ("31 jul 2026"), which is not the
+ *  wording already on this screen — kept local for the same reason as `dayNL`. */
+function dayFullIn(locale: Locale, iso: string): string {
+  if (locale === "nl") return dayNL(iso);
+  const [y, m, d] = (iso ?? "").split("-").map(Number);
+  return MONTHS_EN_FULL[m - 1] && d ? `${d} ${MONTHS_EN_FULL[m - 1]} ${y}` : iso;
 }
 
 /** Nieuwste transactiedatum per accountKey. ISO-datums vergelijken als string,
@@ -587,31 +659,24 @@ export function saldoAge(account: Account, latestTx: string | null): SaldoAge {
 
 /** Het korte label naast het bedrag. Bij een onbekende dag staat er GEEN datum
  *  en ook geen streepje dat voor een datum kan doorgaan, maar het woord zelf. */
-export function saldoAgeShort(age: SaldoAge): string {
-  if (age.kind === "dated") return `stand van ${dayNL(age.date)}`;
-  if (age.kind === "undated") return "datum onbekend";
-  return "geen saldo";
+export function saldoAgeShort(age: SaldoAge, locale: Locale): string {
+  const c = moneyCopy[locale].rekeningen;
+  if (age.kind === "dated") return c.standVan(dayFullIn(locale, age.date));
+  if (age.kind === "undated") return c.datumOnbekend;
+  return c.geenSaldo;
 }
 
 /** De uitleg eronder: eerst wat het cijfer is, dan waarom het niet meebeweegt,
  *  dan — alleen als het waar is — wat je hier zelf kunt doen. */
-export function saldoAgeNote(age: SaldoAge): string {
+export function saldoAgeNote(age: SaldoAge, locale: Locale): string {
+  const c = moneyCopy[locale].rekeningen;
   if (age.kind === "dated") {
-    const later = age.laterTx
-      ? ` Er zijn transacties van ná die dag; de nieuwste is van ${dayNL(age.laterTx)}, dus dit is niet de stand van nu.`
-      : "";
-    return (
-      `Dit bedrag is de stand van ${dayNL(age.date)}, niet van vandaag. LaVega werkt het daarna niet zelf bij:` +
-      ` een koppeling of een import haalt alleen op het moment zelf gegevens binnen, er loopt niets op de achtergrond.` +
-      later +
-      ` Je kunt het bedrag in het veld hierboven overschrijven met wat je bankapp nu laat zien; LaVega legt dan de dag van vandaag erbij vast.`
-    );
+    const later = age.laterTx ? c.saldoAgeDatedLater(dayFullIn(locale, age.laterTx)) : "";
+    return c.saldoAgeDatedIntro(dayFullIn(locale, age.date)) + later + c.saldoAgeDatedInvite;
   }
   if (age.kind === "undated") {
-    const tx = age.latestTx
-      ? ` De nieuwste transactie die LaVega van deze rekening heeft, is van ${dayNL(age.latestTx)} — dat zegt iets over de transacties, niet over dit bedrag.`
-      : "";
-    const invite = ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu laat zien; dan staat de dag er wel bij.`;
+    const tx = age.latestTx ? c.saldoAgeUndatedTx(dayFullIn(locale, age.latestTx)) : "";
+    const invite = c.saldoAgeUndatedInvite;
     /* IS HET KOPPELMOMENT BEKEND, dan mag de oude zin hier niet meer staan.
      *
      * Die zin luidde: "wat hier staat is de stand van het moment waarop je
@@ -628,41 +693,20 @@ export function saldoAgeNote(age: SaldoAge): string {
      * koppelmoment. Eén regel die voor beide bronnen waar moet zijn, kan die
      * grens dus niet trekken — dus trekt hij hem niet, en wijst hij naar de
      * regel eronder die over de koppeling gaat en over niets anders. */
-    if (age.linkedAt) {
-      return (
-        `Bij dit bedrag staat geen dag: de bron stuurde er geen mee, en LaVega vult er zelf geen in.` +
-        ` De koppeling vernieuwt zichzelf niet — er loopt niets op de achtergrond, dus dit cijfer beweegt niet mee.` +
-        ` Wanneer deze rekening binnenkwam, staat in de regel hieronder; dat is de ouderdom van de koppeling en` +
-        ` niet die van dit bedrag.` +
-        tx +
-        invite
-      );
-    }
-    return (
-      `Bij dit bedrag staat geen dag, en van deze rekening is ook geen koppelmoment vastgelegd (zie de regel hieronder).` +
-      ` De koppeling vernieuwt zichzelf niet: wat hier staat is de stand van het moment waarop je autoriseerde.` +
-      ` Welk moment dat was, weet LaVega niet, en daarom staat er hier geen datum.` +
-      tx +
-      invite
-    );
+    if (age.linkedAt) return c.saldoAgeUndatedLinked + tx + invite;
+    return c.saldoAgeUndatedUnlinked + tx + invite;
   }
-  const tx = age.latestTx
-    ? ` Er zijn wel transacties: de nieuwste is van ${dayNL(age.latestTx)}.`
-    : "";
-  return (
-    `Van deze rekening is geen saldo bekend — geen bedrag, en dus ook geen nul.` +
-    tx +
-    ` Vul het bedrag in het veld hierboven in zoals je bankapp het laat zien; LaVega legt de dag van vandaag erbij vast.`
-  );
+  const tx = age.latestTx ? c.saldoAgeNoneTx(dayFullIn(locale, age.latestTx)) : "";
+  return c.saldoAgeNoneIntro + tx + c.saldoAgeNoneInvite;
 }
 
 /** Het blokje onder het saldoveld. Eén korte regel bij het bedrag en de uitleg
  *  eronder — de uitleg staat er altijd, want de misleiding (een oude stand die
  *  als de huidige leest) zit in élk saldo, niet alleen in een oud saldo. */
-function SaldoAgeNote({ age }: { age: SaldoAge }) {
+function SaldoAgeNote({ age, locale }: { age: SaldoAge; locale: Locale }) {
   return (
     <p className="field-note bank-panel-age">
-      <strong>{saldoAgeShort(age)}</strong> — {saldoAgeNote(age)}
+      <strong>{saldoAgeShort(age, locale)}</strong> — {saldoAgeNote(age, locale)}
     </p>
   );
 }
@@ -708,35 +752,25 @@ export function linkedMoment(account: Account): LinkedMoment {
 /** Het korte label. Bij onbekend staat er geen cijfer — geen jaartal, geen
  *  streepje op een datumplek — om dezelfde reden als bij `saldoAgeShort`: alles
  *  wat op een datum lijkt, wordt als de datum gelezen. */
-export function linkedShort(m: LinkedMoment): string {
-  return m.kind === "known" ? `gekoppeld op ${dayNL(m.date)}` : "koppelmoment onbekend";
+export function linkedShort(m: LinkedMoment, locale: Locale): string {
+  const c = moneyCopy[locale].rekeningen;
+  return m.kind === "known" ? c.gekoppeldOp(dayFullIn(locale, m.date)) : c.koppelmomentOnbekend;
 }
 
 /** De uitleg eronder. Bij een bekend moment één zin die zegt wat het WEL en wat
  *  het NIET is; bij een onbekend moment de echte oorzaak, zonder handeling
  *  erbij, want er is er geen die dit gat vult. */
-export function linkedNote(m: LinkedMoment): string {
-  if (m.kind === "known") {
-    return (
-      `Deze rekening staat sinds ${dayNL(m.date)} in LaVega — de dag van de koppeling of de import.` +
-      ` Dat is iets anders dan de dag waarop het saldo hierboven gold: dit zegt hoe oud de koppeling is,` +
-      ` niet hoe oud het bedrag is.`
-    );
-  }
-  return (
-    `Wanneer deze rekening in LaVega kwam, is niet vastgelegd: hij stond er al voordat LaVega het` +
-    ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
-    ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
-    ` koppelt of importeert krijgen hun moment wel.`
-  );
+export function linkedNote(m: LinkedMoment, locale: Locale): string {
+  const c = moneyCopy[locale].rekeningen;
+  return m.kind === "known" ? c.linkedNoteKnown(dayFullIn(locale, m.date)) : c.linkedNoteUnknown;
 }
 
 /** Eén regel plus uitleg, in dezelfde vorm als `SaldoAgeNote` en er bewust naast
  *  in plaats van erin: twee vragen, twee alinea's. */
-function LinkedNote({ moment }: { moment: LinkedMoment }) {
+function LinkedNote({ moment, locale }: { moment: LinkedMoment; locale: Locale }) {
   return (
     <p className="field-note bank-panel-linked">
-      <strong>{linkedShort(moment)}</strong> — {linkedNote(moment)}
+      <strong>{linkedShort(moment, locale)}</strong> — {linkedNote(moment, locale)}
     </p>
   );
 }
@@ -745,26 +779,27 @@ function LinkedNote({ moment }: { moment: LinkedMoment }) {
  *  genuinely different: everything known (a real total), some known (a total
  *  that is explicitly PART of the group), nothing known (no figure at all —
  *  never a zero standing in for "we don't know"). */
-function GroupSaldo({ group }: { group: BankGroup }) {
+function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
+  const c = moneyCopy[locale].rekeningen;
   if (group.total === null) {
     return (
       <span className="bank-group-saldo">
-        <span className="bank-group-unknown">saldo onbekend</span>
+        <span className="bank-group-unknown">{c.saldoOnbekend}</span>
       </span>
     );
   }
   return (
     <span className="bank-group-saldo">
-      <span className={group.total >= 0 ? "text-pos" : "text-neg"}>{formatEuro(group.total)}</span>
+      <span className={group.total >= 0 ? "text-pos" : "text-neg"}>
+        {formatEuroIn(locale, group.total)}
+      </span>
       {group.unknownCount > 0 && (
-        <span className="badge">
-          van {group.knownCount} van {group.rows.length}
-        </span>
+        <span className="badge">{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</span>
       )}
       {/* Niet "verouderd" en geen datum: we weten van deze bedragen niet op welke
           dag ze gelden. Zie SaldoAgeNote — het totaal blijft staan, want het is
           wél de som van wat we hebben. */}
-      {group.undatedCount > 0 && <span className="badge">dag onbekend</span>}
+      {group.undatedCount > 0 && <span className="badge">{c.dagOnbekend}</span>}
     </span>
   );
 }
@@ -783,6 +818,8 @@ export default function Rekeningen({
   duplicateGroups,
   onMergeDuplicates,
 }: RekeningenProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].rekeningen;
   // Only flag duplicates you can actually see here — a group whose accounts all
   // sit outside the active entity scope would be a banner about nothing.
   const visibleKeys = new Set(accounts.map((a) => a.key));
@@ -805,18 +842,18 @@ export default function Rekeningen({
   const latest = latestTxDates(txs);
 
   return (
-    <section className="card" aria-label="Rekeningen">
+    <section className="card" aria-label={c.heading}>
       <div className="card-header">
-        <h2>Rekeningen</h2>
+        <h2>{c.heading}</h2>
         {accounts.length > 0 && (
-          <div className="bank-modes" role="group" aria-label="Weergave">
+          <div className="bank-modes" role="group" aria-label={c.weergaveGroepAria}>
             <button
               type="button"
               className={`pill${mode === "bank" ? " pill-active" : ""}`}
               aria-pressed={mode === "bank"}
               onClick={() => setMode("bank")}
             >
-              Per bank
+              {c.perBank}
             </button>
             <button
               type="button"
@@ -824,7 +861,7 @@ export default function Rekeningen({
               aria-pressed={mode === "lijst"}
               onClick={() => setMode("lijst")}
             >
-              Alle rekeningen
+              {c.alleRekeningen}
             </button>
           </div>
         )}
@@ -836,22 +873,23 @@ export default function Rekeningen({
           <div className="dup-banner" key={group.canonicalId}>
             <div>
               <p className="dup-banner-title">
-                Deze rekeningen lijken dezelfde rekening:{" "}
-                {group.accounts.map(accountLabel).join(", ")}.
+                {c.dupBannerTitle(group.accounts.map(accountLabel).join(", "))}
               </p>
               <p className="dup-banner-sub">
-                LaVega houdt <strong>{accountLabel(group.survivor)}</strong> aan en verplaatst de
-                transacties daarheen. Overlappende periodes worden samengevoegd, niet dubbel geteld.
+                {c.dupBannerSubBefore}
+                <strong>{accountLabel(group.survivor)}</strong>
+                {c.dupBannerSubAfter}
               </p>
             </div>
             <div className="dup-banner-actions">
               {others.map((dup) => (
                 <ConfirmAction
                   key={dup.key}
-                  label={others.length > 1 ? `Samenvoegen: ${accountLabel(dup)}` : "Samenvoegen"}
-                  question={`${accountLabel(dup)} samenvoegen met ${accountLabel(group.survivor)}?`}
+                  label={c.samenvoegenLabel(others.length > 1, accountLabel(dup))}
+                  question={c.samenvoegenQuestion(accountLabel(dup), accountLabel(group.survivor))}
                   busy={busy}
                   onConfirm={() => onMergeDuplicates(group.survivor.key, dup.key)}
+                  locale={locale}
                 />
               ))}
             </div>
@@ -860,7 +898,7 @@ export default function Rekeningen({
       })}
 
       {accounts.length === 0 ? (
-        <p>Nog geen rekeningen — importeer eerst een bestand.</p>
+        <p>{c.geenRekeningen}</p>
       ) : mode === "bank" ? (
         <div className="bank-groups">
           {groups.map((g) => {
@@ -884,19 +922,15 @@ export default function Rekeningen({
                     {bankInitials(g.named ? g.label : "")}
                   </span>
                   <span className="bank-group-id">
-                    <span className="bank-group-name">{g.label}</span>
+                    <span className="bank-group-name">{g.named ? g.label : c.zonderBank}</span>
                     <span className="bank-group-meta">
-                      {g.rows.length} {g.rows.length === 1 ? "rekening" : "rekeningen"} ·{" "}
-                      {g.txCount} {g.txCount === 1 ? "transactie" : "transacties"}
+                      {g.rows.length} {c.rekeningWoord(g.rows.length)} · {g.txCount}{" "}
+                      {c.transactieWoord(g.txCount)}
                     </span>
                   </span>
-                  <GroupSaldo group={g} />
+                  <GroupSaldo group={g} locale={locale} />
                   <span className="bank-group-toggle">
-                    {open
-                      ? "Verbergen"
-                      : g.rows.length === 1
-                        ? "Rekening tonen"
-                        : "Rekeningen tonen"}
+                    {open ? c.verbergen : g.rows.length === 1 ? c.rekeningTonen : c.rekeningenTonen}
                     <span className="bank-chevron" aria-hidden="true">
                       ▾
                     </span>
@@ -909,7 +943,7 @@ export default function Rekeningen({
                       <div
                         className="bank-tabs"
                         role="tablist"
-                        aria-label={`Rekeningen bij ${g.label}`}
+                        aria-label={c.rekeningenBijBankAria(g.named ? g.label : c.zonderBank)}
                       >
                         {g.rows.map((r) => {
                           const isActive = r.account.key === activeKey;
@@ -928,7 +962,9 @@ export default function Rekeningen({
                                 aria-hidden="true"
                               />
                               {rowLabel(r)}
-                              <span className="bank-tab-type">{accountType(r.account)}</span>
+                              <span className="bank-tab-type">
+                                {typeOptionLabel(moneyCopy[locale].accountTypes, accountTypeKind(r.account))}
+                              </span>
                             </button>
                           );
                         })}
@@ -952,6 +988,7 @@ export default function Rekeningen({
                       onRenameOpen={(account, editing) =>
                         setRename(editing ? { key: account.key, bank: account.bank } : null)
                       }
+                      locale={locale}
                     />
                   </div>
                 )}
@@ -964,29 +1001,30 @@ export default function Rekeningen({
           <table className="table">
             <thead>
               <tr>
-                <th>Bank</th>
-                <th>Type</th>
-                <th>Entiteit</th>
-                <th className="num">Saldo</th>
-                <th className="num">Transacties</th>
+                <th>{c.tabelBank}</th>
+                <th>{c.tabelType}</th>
+                <th>{c.tabelEntiteit}</th>
+                <th className="num">{c.tabelSaldo}</th>
+                <th className="num">{c.tabelTransacties}</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {rows.map(({ account, txCount }) => (
                 <tr key={account.key}>
-                  <td data-label="Bank">
+                  <td data-label={c.tabelBank}>
                     <NameCell
                       account={account}
                       busy={busy}
                       onFieldChange={onAccountFieldChange}
                       onCommit={onAccountCommit}
+                      locale={locale}
                     />
                   </td>
-                  <td data-label="Type">
-                    <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} />
+                  <td data-label={c.tabelType}>
+                    <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} locale={locale} />
                   </td>
-                  <td data-label="Entiteit">
+                  <td data-label={c.tabelEntiteit}>
                     <input
                       value={account.entity}
                       placeholder="—"
@@ -995,23 +1033,23 @@ export default function Rekeningen({
                       disabled={busy}
                     />
                   </td>
-                  <td className="num" data-label="Saldo">
-                    <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
+                  <td className="num" data-label={c.tabelSaldo}>
+                    <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} locale={locale} />
                     {/* Dezelfde waarschuwing als in het paneel, maar de tabel
                         heeft geen ruimte voor de uitleg: hier alleen de dag (of
                         het woord "onbekend"), de uitleg staat per rekening in
                         "Per bank". Een datum verzinnen om de kolom te vullen is
                         het probleem dat deze regel juist oplost. */}
                     <div className="cell-sub">
-                      {saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null))}
+                      {saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null), locale)}
                     </div>
                   </td>
-                  <td className="num" data-label="Transacties">
+                  <td className="num" data-label={c.tabelTransacties}>
                     <button
                       type="button"
                       className="card-link"
                       onClick={() => onSelectAccount(account.key)}
-                      title={`Bekijk transacties van ${account.name}`}
+                      title={c.bekijkTransactiesVan(account.name)}
                       disabled={txCount === 0}
                     >
                       {txCount}
@@ -1019,10 +1057,11 @@ export default function Rekeningen({
                   </td>
                   <td className="num" data-label="">
                     <ConfirmAction
-                      label="Verwijder"
-                      question={deleteQuestion(account, txCount)}
+                      label={c.verwijder}
+                      question={deleteQuestion(account, txCount, locale)}
                       busy={busy}
                       onConfirm={() => onDeleteAccount(account.key)}
+                      locale={locale}
                     />
                   </td>
                 </tr>

@@ -10,12 +10,12 @@ import TravelBlock, {
   type TravelBlockProps,
   figureAge,
   TermsNotice,
-  ROUTES_HEADING,
 } from "./TravelBlock";
 // De klassenamen van de uitklap uit hun eigen bestand, niet overgetikt: een
 // hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
 // slagen op een klasse die niet meer bestaat.
 import { TOONMEER_CLASS } from "../ToonMeer";
+import { optimiseCopy } from "../../copy/optimise.js";
 import type { CatalogueEntryLike } from "@lavega/core";
 import { formatEuro } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
@@ -1415,10 +1415,10 @@ function keurDeUitweg(c: HTMLElement) {
   // De uitweg wordt genoemd, en niet meer met de naam van een knop die weg is.
   expect(tekst).toMatch(/zelf in/);
   expect(tekst).not.toContain("Waarom?");
-  expect(tekst).toContain(`“${ROUTES_HEADING}” hieronder`);
+  expect(tekst).toContain(`“${optimiseCopy.nl.travel.terms.routesHeading}” hieronder`);
 
   // De kop bestaat, en staat waar de zin zegt dat hij staat.
-  const kop = [...paneel.querySelectorAll("h3")].find((h) => h.textContent === ROUTES_HEADING);
+  const kop = [...paneel.querySelectorAll("h3")].find((h) => h.textContent === optimiseCopy.nl.travel.terms.routesHeading);
   expect(kop).toBeDefined();
   expect(melding.compareDocumentPosition(kop!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 

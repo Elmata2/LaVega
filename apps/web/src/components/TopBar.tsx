@@ -1,7 +1,9 @@
 import { Fragment } from "react";
 import type { EntityScope } from "@lavega/core";
 import type { View } from "../App";
-import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
+import { SCOPE_ORDER } from "../scope.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
 
 /* The greeting/title row, straight from the desktop reference: one large line
  * naming where you are with a rule under it, a muted eyebrow above, and the
@@ -15,22 +17,6 @@ import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
  * Rekeningen, Belasting per BV); the chrome asks the question the owner
  * actually asks first: is this my money or the company's. */
 
-const VIEW_TITLES: Record<View, string> = {
-  overview: "Overzicht",
-  transactions: "Transacties",
-  accounts: "Rekeningen",
-  rules: "Regels",
-  forecast: "Forecast",
-  optimalisatie: "Optimalisatie",
-  valuta: "Valuta",
-  belasting: "Belasting",
-  facturen: "Facturen",
-  punten: "Punten",
-  koppelingen: "Koppelingen",
-  backup: "Back-up",
-  profiel: "Profiel",
-};
-
 type TopBarProps = {
   view: View;
   /** Which half of the owner's money is in view. */
@@ -40,15 +26,17 @@ type TopBarProps = {
 };
 
 export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopBarProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   return (
     <div className="topbar">
       <div className="topbar-left">
-        <div className="eyebrow">LaVega · {SCOPE_LABELS[scope]}</div>
-        <h1 className="topbar-title">{VIEW_TITLES[view]}</h1>
+        <div className="eyebrow">LaVega · {c.scope[scope]}</div>
+        <h1 className="topbar-title">{c.topBar.viewTitles[view]}</h1>
       </div>
 
       <div className="topbar-right">
-        <div className="scope-switch" role="group" aria-label="Persoonlijk of zakelijk">
+        <div className="scope-switch" role="group" aria-label={c.topBar.scopeGroupLabel}>
           {SCOPE_ORDER.map((s, i) => (
             <Fragment key={s}>
               {i > 0 && <span className="scope-rule" aria-hidden="true" />}
@@ -58,7 +46,7 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
                 aria-pressed={scope === s}
                 onClick={() => onScopeChange(s)}
               >
-                {SCOPE_LABELS[s]}
+                {c.scope[s]}
               </button>
             </Fragment>
           ))}
@@ -66,7 +54,7 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
 
         <button type="button" className="pill topbar-add" onClick={onAddWidget}>
           <span aria-hidden="true">+</span>
-          <span>Widget toevoegen</span>
+          <span>{c.topBar.addWidget}</span>
         </button>
       </div>
     </div>

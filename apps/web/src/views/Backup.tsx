@@ -3,6 +3,9 @@ import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
 import { backupFilename, serializeBackup, parseBackup } from "../backup.js";
 import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
+import { adminCopy } from "../copy/admin.js";
+import { useAppLocale } from "../appLocale.js";
+import type { Locale } from "../locale.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -12,9 +15,8 @@ type BackupProps = {
   onRestored: () => void;
 };
 
-const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
-
-const dutchDate = (iso: string) => new Date(iso).toLocaleString("nl-NL");
+const formatDateTime = (locale: Locale, iso: string) =>
+  new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
 
 /**
  * Back-up naar de server. De kluis wordt hier versleuteld en gaat er versleuteld
@@ -23,6 +25,8 @@ const dutchDate = (iso: string) => new Date(iso).toLocaleString("nl-NL");
  * wachtwoord deze back-up net zo onbruikbaar maakt als die op schijf.
  */
 function ServerBackup({ storage }: { storage: VaultStorage }) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup;
   const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [serverBlob, setServerBlob] = useState<CipherBlob | null>(null);
@@ -58,7 +62,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
 
   async function upload(overwrite: boolean) {
     const blob = storage.export();
-    if (!blob) return setError("Ontgrendel de kluis voordat je een back-up maakt.");
+    if (!blob) return setError(c.server.errors.locked);
     setBusy(true);
     setError("");
     setMessage("");
@@ -74,9 +78,9 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       }
       setUpdatedAt(result.updatedAt);
       setServerBlob(blob);
-      setMessage("Back-up opgeslagen.");
+      setMessage(c.server.success);
     } catch {
-      setError("Back-up opslaan mislukt.");
+      setError(c.server.errors.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -90,12 +94,12 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       const report = await eraseServerData();
       const touched = report.filter((entry) => entry.rows > 0);
       const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
-      setEraseMessage(`Verwijderd: ${rows} rijen over ${touched.length} tabellen.`);
+      setEraseMessage(c.server.erase.success(rows, touched.length));
       await fetchServerBackup()
         .then(applyStatus)
         .catch(() => setState("signed-out"));
     } catch (err) {
-      setEraseError(err instanceof Error ? err.message : "Verwijderen mislukt.");
+      setEraseError(err instanceof Error ? err.message : c.server.erase.errorGeneric);
     } finally {
       setErasing(false);
       setConfirmErase(false);
@@ -106,21 +110,18 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
   if (state === "signed-out") {
     return (
       <>
-        <h3>Back-up op de server</h3>
-        <p>
-          Log in om je versleutelde kluis ook op de server te bewaren, bij Account hierboven. Handig
-          voor een tweede apparaat.
-        </p>
+        <h3>{c.server.title}</h3>
+        <p>{c.server.signedOut}</p>
       </>
     );
   }
 
   return (
     <>
-      <h3>Back-up op de server</h3>
+      <h3>{c.server.title}</h3>
       <p>
-        {updatedAt ? `Laatste back-up: ${dutchDate(updatedAt)}.` : "Nog geen back-up op de server."}{" "}
-        De server bewaart alleen versleutelde bytes en kan je gegevens niet lezen.
+        {updatedAt ? c.server.lastBackup(formatDateTime(locale, updatedAt)) : c.server.noBackupYet}{" "}
+        {c.server.encryptionNote}
       </p>
       <button
         type="button"
@@ -128,13 +129,12 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
         disabled={busy || erasing}
         onClick={() => void upload(false)}
       >
-        {busy ? "Bezig…" : "Nu back-uppen"}
+        {busy ? c.common.busy : c.server.backupNowButton}
       </button>
       {conflict && (
         <>
           <p role="alert" className="text-warn">
-            Een ander apparaat heeft op {dutchDate(conflict)} een nieuwere back-up opgeslagen.
-            Overschrijven verwijdert die.
+            {c.server.conflict.message(formatDateTime(locale, conflict))}
           </p>
           <button
             type="button"
@@ -142,7 +142,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             disabled={busy || erasing}
             onClick={() => void upload(true)}
           >
-            Toch overschrijven
+            {c.server.conflict.overwriteButton}
           </button>
         </>
       )}
@@ -154,7 +154,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       )}
       {serverBlob && (
         <p>
-          Herstellen van de server? Download &apos;m eerst en gebruik het formulier hieronder.{" "}
+          {c.server.restoreFromServer.prompt}{" "}
           <button
             type="button"
             className="btn"
@@ -169,7 +169,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
               URL.revokeObjectURL(url);
             }}
           >
-            Haal back-up van server
+            {c.server.restoreFromServer.button}
           </button>
         </p>
       )}
@@ -185,16 +185,14 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
               setEraseError("");
             }}
           >
-            Servergegevens verwijderen
+            {c.server.erase.button}
           </button>
         </p>
       )}
       {confirmErase && (
         <>
           <p role="alert" className="text-warn">
-            Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up,
-            bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs en je instellingen. De
-            lokale kluis in deze browser blijft staan.
+            {c.server.erase.warning}
           </p>
           <button
             type="button"
@@ -202,7 +200,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             disabled={busy || erasing}
             onClick={() => void eraseData()}
           >
-            {erasing ? "Bezig…" : "Ja, verwijder"}
+            {erasing ? c.common.busy : c.server.erase.confirmButton}
           </button>{" "}
           <button
             type="button"
@@ -210,7 +208,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             disabled={busy || erasing}
             onClick={() => setConfirmErase(false)}
           >
-            Annuleer
+            {c.server.erase.cancelButton}
           </button>
         </>
       )}
@@ -225,6 +223,8 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
 }
 
 export default function Backup({ storage, asOf, onRestored }: BackupProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup;
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -256,7 +256,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
       const blob = parseBackup(text); // throws on malformed/misshaped file
       const ok = await storage.restore(blob, pass);
       if (!ok) {
-        setError(RESTORE_ERROR);
+        setError(c.restore.error);
         return;
       }
       setRestored(true);
@@ -265,32 +265,29 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
       setConfirmed(false);
       onRestored();
     } catch {
-      setError(RESTORE_ERROR);
+      setError(c.restore.error);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="card" aria-label="Back-up">
-      <h2>Back-up</h2>
+    <section className="card" aria-label={c.ariaLabel}>
+      <h2>{c.title}</h2>
 
-      <h3>Download</h3>
-      <p>
-        Download een versleutelde back-up. Bewaar &apos;m veilig; je hebt je wachtwoord nodig om
-        &apos;m te herstellen.
-      </p>
+      <h3>{c.download.title}</h3>
+      <p>{c.download.description}</p>
       <button type="button" className="btn btn-primary" onClick={handleDownload}>
-        Download back-up
+        {c.download.button}
       </button>
 
       <ServerBackup storage={storage} />
 
-      <h3>Herstel uit back-up</h3>
-      <p className="text-warn">Dit vervangt je huidige data in deze kluis.</p>
+      <h3>{c.restore.title}</h3>
+      <p className="text-warn">{c.restore.warning}</p>
       <form onSubmit={handleRestore}>
         <div className="vault-field">
-          <label htmlFor="backup-restore-file">Back-upbestand</label>
+          <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
           <input
             id="backup-restore-file"
             type="file"
@@ -300,7 +297,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
           />
         </div>
         <div className="vault-field">
-          <label htmlFor="backup-restore-pass">Wachtwoord</label>
+          <label htmlFor="backup-restore-pass">{c.restore.passwordLabel}</label>
           <input
             id="backup-restore-pass"
             type="password"
@@ -316,20 +313,20 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             onChange={(e) => setConfirmed(e.target.checked)}
             disabled={busy}
           />
-          Ik snap dat dit mijn huidige data in deze kluis vervangt
+          {c.restore.confirmLabel}
         </label>
         {error && (
           <p role="alert" className="text-warn">
             {error}
           </p>
         )}
-        {restored && <p>Herstel geslaagd.</p>}
+        {restored && <p>{c.restore.success}</p>}
         <button
           type="submit"
           className="btn btn-primary"
           disabled={busy || !file || pass.length === 0 || !confirmed}
         >
-          Herstellen
+          {c.restore.submitButton}
         </button>
       </form>
     </section>

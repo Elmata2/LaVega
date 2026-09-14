@@ -56,7 +56,7 @@ test("bucketUnit picks a bucket the window can actually fill", () => {
 });
 
 test("categoryPerWindow returns one group per month and one bar per major category", () => {
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE, "nl");
   expect(s.unit).toBe("maand");
   expect(s.buckets.map((b) => b.key)).toEqual(["2026-06", "2026-07", "2026-08"]);
   // Ranked by total spend in the window: Inkoop 2.980, boodschappen 420,50, Energie 250.
@@ -75,7 +75,7 @@ test("categoryPerWindow returns one group per month and one bar per major catego
 test("categoryPerWindow clamps the window to the span the data covers", () => {
   // Twelve months requested, three months held: nine extra groups would each be
   // a bar of zero, which claims a month of no spending that was never observed.
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE, "nl");
   expect(s.covered).toEqual({ start: "2026-06-09", end: ANCHOR });
   expect(s.buckets).toHaveLength(3);
   // And a window entirely outside the data covers nothing at all — no buckets,
@@ -87,6 +87,7 @@ test("categoryPerWindow clamps the window to the span the data covers", () => {
     { start: "2025-01-01", end: "2025-03-01" },
     4,
     SEPARATE,
+    "nl",
   );
   expect(before.covered).toBeNull();
   expect(before.buckets).toEqual([]);
@@ -94,7 +95,7 @@ test("categoryPerWindow clamps the window to the span the data covers", () => {
 });
 
 test("categoryPerWindow marks a bucket the window only partly covers", () => {
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE, "nl");
   // June starts on the 9th (the first transaction) and August stops at the
   // 11th — neither is a whole month, and the tooltip says so.
   expect(s.buckets[0].partial).toBe(true);
@@ -105,7 +106,7 @@ test("categoryPerWindow marks a bucket the window only partly covers", () => {
 });
 
 test("categoryPerWindow buckets a one-week window per day", () => {
-  const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4, SEPARATE);
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4, SEPARATE, "nl");
   expect(s.unit).toBe("dag");
   // 5–11 August, clamped to the newest transaction on the 11th.
   expect(s.buckets.map((b) => b.key)).toEqual([
@@ -125,7 +126,7 @@ test("categoryPerWindow buckets a one-week window per day", () => {
 });
 
 test("categoryPerWindow buckets a month-long window per week", () => {
-  const s = categoryPerWindow(txs, rules, own, presetWindow("1m", ANCHOR), 4, SEPARATE);
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1m", ANCHOR), 4, SEPARATE, "nl");
   expect(s.unit).toBe("week");
   // 13 July – 11 August, in Monday-first weeks; the last one is cut short by
   // the window and says so rather than looking like a full week.
@@ -154,6 +155,7 @@ test("categoryPerWindow ranks the categories inside THIS window, against a floor
     { start: "2026-06-01", end: "2026-06-14" },
     4,
     SEPARATE,
+    "nl",
   );
   expect(june.categories).toEqual([DEFAULT_CATEGORY]);
   expect(june.selection?.hidden).toEqual([]);
@@ -162,12 +164,12 @@ test("categoryPerWindow ranks the categories inside THIS window, against a floor
   // June carry a far lower bar than sixty-four days of summer.
   expect(june.windowDays).toBe(6);
   expect(june.selection?.thresholdOut).toBeCloseTo((25 * 6) / 30, 6);
-  const year = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
+  const year = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE, "nl");
   expect(year.selection?.thresholdOut).toBeCloseTo((25 * 64) / 30, 6);
 
   // What the chart's cap pushes out is reported separately from what the floor
   // dropped — they are different facts about the same window.
-  const capped = categoryPerWindow(txs, rules, own, YEAR, 1, SEPARATE);
+  const capped = categoryPerWindow(txs, rules, own, YEAR, 1, SEPARATE, "nl");
   expect(capped.categories).toEqual(["Inkoop"]);
   expect(capped.selection?.hidden.map((h) => h.category)).toEqual([DEFAULT_CATEGORY, "Energie"]);
   expect(capped.selection?.hidden.every((h) => h.belowThreshold)).toBe(false);
@@ -189,7 +191,7 @@ test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", ()
       manual: true,
     },
   ];
-  const year = categoryPerWindow(withSmall, rules, own, YEAR, 4, SEPARATE);
+  const year = categoryPerWindow(withSmall, rules, own, YEAR, 4, SEPARATE, "nl");
   expect(year.categories).not.toContain("Zorg");
   expect(year.selection?.hidden.map((h) => [h.category, h.belowThreshold])).toEqual([
     ["Zorg", true],
@@ -202,6 +204,7 @@ test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", ()
     { start: "2026-06-08", end: "2026-06-13" },
     4,
     SEPARATE,
+    "nl",
   );
   expect(week.categories).toContain("Zorg");
   expect(week.selection?.hidden).toEqual([]);
@@ -221,6 +224,7 @@ test("categoryPerWindow marks a month with no data at all, so it is never drawn 
     { start: "2026-01-01", end: "2026-03-31" },
     4,
     SEPARATE,
+    "nl",
   );
   expect(s.unit).toBe("maand");
   expect(s.buckets.map((b) => b.key)).toEqual(["2026-01", "2026-02", "2026-03"]);
@@ -228,9 +232,9 @@ test("categoryPerWindow marks a month with no data at all, so it is never drawn 
 });
 
 test("monthAxisLabel keeps month labels unique once the window passes a year", () => {
-  expect(monthAxisLabel("2026-08", 12)).toBe("aug");
-  expect(monthAxisLabel("2026-08", 18)).toBe("aug '26");
-  expect(monthAxisLabel("2025-08", 18)).toBe("aug '25");
+  expect(monthAxisLabel("2026-08", 12, "nl")).toBe("aug");
+  expect(monthAxisLabel("2026-08", 18, "nl")).toBe("aug '26");
+  expect(monthAxisLabel("2025-08", 18, "nl")).toBe("aug '25");
 });
 
 test("windowTotals reports what came in and went out inside the window", () => {
@@ -446,7 +450,7 @@ test("the window's own totals leave the moved money out of BOTH sides", () => {
 });
 
 test("neither the bars nor the growth view counts a savings deposit as spending", () => {
-  const per = categoryPerWindow(parked, [], own, AUG, 4, SEPARATE);
+  const per = categoryPerWindow(parked, [], own, AUG, 4, SEPARATE, "nl");
   expect(per.categories).not.toContain("Sparen & beleggen");
   expect(per.categories).not.toContain("Eigen overboeking");
 
@@ -714,7 +718,7 @@ test("categoryShare: a converted HUF row counts toward the total in euros, not i
 });
 
 test("categoryPerWindow: a converted row lands in the bucket it happened in, at its euro amount", () => {
-  const s = categoryPerWindow([...txs, hufSpend], rules, own, YEAR, 4, CONVERT);
+  const s = categoryPerWindow([...txs, hufSpend], rules, own, YEAR, 4, CONVERT, "nl");
   // "taxi" in the description categorizes as "Transport" — a new category,
   // and 5 August falls in the same "aug" bucket as the existing rows.
   expect(s.categories).toContain("Transport");

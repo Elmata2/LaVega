@@ -5,6 +5,8 @@ import {
   withCurrentBalances,
   isCardAccount,
   accountType,
+  accountTypeKind,
+  accountTypeKindOf,
   availableBalanceCents,
 } from "./balance.js";
 import { makeScheduledFlow } from "./scheduledFlows.js";
@@ -90,6 +92,25 @@ test("accountType: no type + savings name => Spaarrekening (ING Oranje, Revolut 
   expect(accountType({ ...acc("A", 100), name: "Betaalrekening", bank: "Revolut" })).toBe(
     "Betaalrekening",
   );
+});
+
+test("accountTypeKind: the same distinction as accountType, as a locale-neutral kind", () => {
+  expect(accountTypeKind({ ...acc("A", 100), bank: "American Express" })).toBe("credit");
+  expect(accountTypeKind({ ...acc("A", 100), bank: "ING" })).toBe("current");
+  expect(accountTypeKind({ ...acc("A", 100), bank: "ING", type: "Spaarrekening" })).toBe("savings");
+  expect(accountTypeKind({ ...acc("A", 100), bank: "ING", type: "Beleggingsrekening" })).toBe(
+    "investment",
+  );
+  expect(accountTypeKind({ ...acc("A", 100), bank: "ING", type: "Overig" })).toBe("other");
+});
+
+test("accountTypeKindOf: maps each canonical ACCOUNT_TYPES string, and anything unrecognised falls to other", () => {
+  expect(accountTypeKindOf("Betaalrekening")).toBe("current");
+  expect(accountTypeKindOf("Spaarrekening")).toBe("savings");
+  expect(accountTypeKindOf("Creditcard")).toBe("credit");
+  expect(accountTypeKindOf("Beleggingsrekening")).toBe("investment");
+  expect(accountTypeKindOf("Overig")).toBe("other");
+  expect(accountTypeKindOf("Ongeldig")).toBe("other");
 });
 
 test("availableBalanceCents subtracts unpaid VAT reservations from the total", () => {

@@ -379,19 +379,28 @@ export function cashbackPctOf(k: HeldCashback): number | null {
   return null;
 }
 
-/** Wat er over deze eigen kaart op het scherm hoort, in één Nederlandse zin.
+/** Wat er over deze eigen kaart op het scherm hoort, als FEIT in plaats van
+ *  een kant-en-klare Nederlandse zin. Dit bouwde de zin hier zelf, inclusief
+ *  een hardgecodeerde `toLocaleString("nl-NL")` — core mag geen taal kiezen
+ *  voor een scherm dat ook Engels moet kunnen zijn, dus de zin verhuist naar
+ *  de copy-module die bij dat scherm hoort en rendert via een exhaustive
+ *  switch op `kind`.
  *
  *  Naast `describeCashback` en niet erin: die gaat over een catalogusrij met een
  *  URL en een peildatum, deze over een kaart met een feit en een bron. Ze in één
  *  functie proppen zou betekenen dat beide vormen overal optioneel worden, en dan
  *  is het type niet langer wat het onderscheid bewaakt. */
-export function describeHeldCashback(k: HeldCashback): string {
+export type HeldCashbackDescription =
+  | { kind: "measured"; pct: number; source: FactSource; updatedAt: string }
+  | { kind: "assumption-off" }
+  | { kind: "assumed-no-cashback" }
+  | { kind: "unknown"; reason: NoAssumptionReason };
+
+export function describeHeldCashback(k: HeldCashback): HeldCashbackDescription {
   if (k.tier === "gemeten") {
-    const p = k.pct.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
-    return `${p}%, ${k.source === "user" ? "door jou ingesteld" : "gevonden door de reisagent"} op ${k.updatedAt}`;
+    return { kind: "measured", pct: k.pct, source: k.source, updatedAt: k.updatedAt };
   }
-  if (k.tier === "uitgezet") {
-    return "onbekend — je hebt de aanname “geen cashback” uitgezet bij Profiel → Cashback corrigeren.";
-  }
-  return describeCashback(k);
+  if (k.tier === "uitgezet") return { kind: "assumption-off" };
+  if (k.tier === "aangenomen") return { kind: "assumed-no-cashback" };
+  return { kind: "unknown", reason: k.reason };
 }
