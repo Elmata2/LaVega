@@ -115,11 +115,12 @@ Never invent an account or sign one up.
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
 print what they would send. `prices purge` additionally refuses without `--yes`.
 
-For the visual side — a blank page, a stuck spinner, a chart that does not render — use the
-`/browse` skill against `https://www.lavega.dev/investing` (per CLAUDE.md, never the
-`mcp__claude-in-chrome__*` tools). The CLI covers everything the frontend asks the backend
-for, so reach for the browser when the question is "what does the user see", not "what does
-the API return".
+For the visual side — a blank page, a stuck spinner, a chart that does not render — drive a
+real browser against `https://www.lavega.dev/investing` with the `claude-in-chrome` tools
+(`navigate`, `find`, `read_page`, `computer`). The gstack `/browse` skill this used to name
+was uninstalled on 2026-09-05. The CLI covers everything the frontend asks the backend for, so
+reach for the browser when the question is "what does the user see", not "what does the API
+return".
 
 ## Evidence
 
