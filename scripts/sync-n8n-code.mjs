@@ -13,22 +13,37 @@ import { fileURLToPath } from "node:url";
 import { NODE_SPECS, buildCodeNode } from "../packages/core/src/n8n/codeNodes.js";
 
 const root = new URL("../", import.meta.url);
-const workflowUrl = new URL("docs/n8n/lavega-invoices.json", root);
+/* BEIDE exports, niet één. `lavega-invoices.json` is de template die de app
+ * pusht; `lavega-facturen-workflow.json` is de export die hij met de hand
+ * importeert. apps/web/src/n8n-workflow.test.ts eist dat ze op precies vier
+ * bekende punten verschillen, dus een sync die er maar één bijwerkt laat de
+ * twee uit elkaar lopen en breekt die wacht. */
+const workflowUrls = [
+  new URL("docs/n8n/lavega-invoices.json", root),
+  new URL("docs/n8n/lavega-facturen-workflow.json", root),
+];
 const sharedDir = new URL("packages/core/src/n8n/", root);
 
 const check = process.argv.includes("--check");
-const workflow = JSON.parse(readFileSync(workflowUrl, "utf8"));
-
 const changed = [];
-for (const spec of NODE_SPECS) {
-  const node = workflow.nodes.find((n) => n.id === spec.id);
-  if (!node) throw new Error(`Node ${spec.id} (${spec.name}) staat niet in de workflow-JSON.`);
-  const sources = spec.sources.map((file) => readFileSync(new URL(file, sharedDir), "utf8"));
-  const jsCode = buildCodeNode(sources, spec.adapter);
-  if (node.parameters.jsCode !== jsCode) {
-    changed.push(spec.name);
-    node.parameters.jsCode = jsCode;
+const pending = [];
+
+for (const workflowUrl of workflowUrls) {
+  const name = workflowUrl.pathname.split("/").pop();
+  const workflow = JSON.parse(readFileSync(workflowUrl, "utf8"));
+  let dirty = false;
+  for (const spec of NODE_SPECS) {
+    const node = workflow.nodes.find((n) => n.id === spec.id);
+    if (!node) throw new Error(`Node ${spec.id} (${spec.name}) staat niet in ${name}.`);
+    const sources = spec.sources.map((file) => readFileSync(new URL(file, sharedDir), "utf8"));
+    const jsCode = buildCodeNode(sources, spec.adapter);
+    if (node.parameters.jsCode !== jsCode) {
+      changed.push(`${name}: ${spec.name}`);
+      node.parameters.jsCode = jsCode;
+      dirty = true;
+    }
   }
+  if (dirty) pending.push([workflowUrl, workflow]);
 }
 
 if (changed.length === 0) {
@@ -43,5 +58,7 @@ if (check) {
   process.exit(1);
 }
 
-writeFileSync(fileURLToPath(workflowUrl), `${JSON.stringify(workflow, null, 2)}\n`);
+for (const [url, workflow] of pending) {
+  writeFileSync(fileURLToPath(url), `${JSON.stringify(workflow, null, 2)}\n`);
+}
 console.log(`Bijgewerkt: ${changed.join(", ")}.`);

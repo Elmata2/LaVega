@@ -11,6 +11,9 @@
     ".vercel/**",
     ".pnpm-store/**",
     "coverage/**",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+
+    "**/__fixtures__/**",
+    "docs/n8n/*.json"
   ]
 }
