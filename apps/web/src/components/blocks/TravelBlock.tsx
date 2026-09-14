@@ -16,6 +16,18 @@ import type {
   HoldingCost,
   NetBasis,
   NetBenefit,
+  NetBenefitDescription,
+  PayHeadline,
+  JourneyHeadline,
+  VersusNote,
+  HoldingCostClause,
+  BareHoldingCostClause,
+  ConvertStepNote,
+  WithdrawalHeadline,
+  MissingCashNote,
+  SmallWithdrawalPenalty,
+  OwnWithdrawalComparison,
+  WithdrawalFeeUnknownReason,
 } from "@lavega/core";
 import {
   planTravel,
@@ -28,6 +40,8 @@ import {
   describeWithdrawalFee,
   TRAVEL_REFERENCE_WITHDRAWAL,
   TRAVEL_SMALL_WITHDRAWAL,
+  nameSome,
+  splitProductName,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
 import { formatEuroIn, formatDate } from "../../format.js";
@@ -216,6 +230,22 @@ function productLabel(bank: string, productKind: "betaalpas" | "creditcard", c: 
   return `${bank} ${c.common.productKindWord[productKind]}`;
 }
 
+/** For a product identity string that DIDN'T arrive with its own `bank`/
+ *  `productKind` fields — a catalogue offer's raw `product`, or a `PayAdvice`/
+ *  `WithdrawAdvice`'s `product`/`ownProduct`, which stay `string` because they
+ *  can name either his own card or a catalogue one. `splitProductName` (core)
+ *  is the exact inverse of `productOf`, so it recovers `bank`/`productKind`
+ *  whenever the string IS that identity shape, tier name and all — "bunq Free
+ *  betaalpas" splits to bank "bunq Free", keeping the tier instead of losing it
+ *  the way rebuilding from `CardOffer.bank` (issuer only) would. A catalogue
+ *  product with no such trailing word ("Crypto.com Prepaid Card — Basic
+ *  (Midnight Blue)") doesn't split and passes through unchanged — it carries no
+ *  Dutch word to translate. */
+function displayProduct(name: string, c: TravelCopy): string {
+  const split = splitProductName(name);
+  return split ? productLabel(split.bank, split.card, c) : name;
+}
+
 /** The one place a `SpendWhy` becomes a sentence. Exhaustive by switch, so a
  *  new kind in `rankSpendOptions` fails the build here instead of rendering
  *  nothing — same pattern as `holdSentence` in Facturen.tsx. */
@@ -251,6 +281,330 @@ function journeyWhySentence(why: JourneyWhy, c: TravelCopy): string {
       return c.journeyWhy.viaUnknownConvert;
     case "via-unknown-transfer":
       return c.journeyWhy.viaUnknownTransfer;
+  }
+}
+
+/** English join for `nameSome` (core, Dutch-only — see its own doc comment in
+ *  travel.ts): same shape, different conjunction, so the Dutch string cannot
+ *  drift while English still reads naturally. */
+function nameSomeEn(names: readonly string[], limit = 3): string {
+  if (names.length > limit) return `${names.slice(0, limit).join(", ")} and ${names.length - limit} more`;
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function namedList(names: readonly string[], locale: Locale): string {
+  return locale === "nl" ? nameSome(names) : nameSomeEn(names);
+}
+
+/** Euros for a sentence this screen used to have core build directly, with
+ *  core's OWN formatting: `€ ${n.toFixed(2).replace(".", ",")}` — a plain
+ *  space, comma decimal. `formatEuroIn` is `Intl.NumberFormat`, which glues
+ *  the symbol on with a NO-BREAK space instead; swapping it in here would
+ *  move the Dutch byte-for-byte, which is the one thing this pass may not do.
+ *  English carries no such history, so it gets the nicer, locale-aware one. */
+function travelEuro(locale: Locale, n: number): string {
+  return locale === "nl" ? `€ ${n.toFixed(2).replace(".", ",")}` : formatEuroIn(locale, n);
+}
+
+/** The one place a `BareHoldingCostClause` becomes a sentence — the simpler of
+ *  the two card-cost tails, used when there is no benefit to net the price
+ *  against. `null` renders as "" (no fragment), same as core's own convention. */
+function bareHoldingCostClauseSentence(
+  clause: BareHoldingCostClause | null,
+  c: TravelCopy,
+  locale: Locale,
+): string {
+  if (!clause) return "";
+  const product = displayProduct(clause.product, c);
+  switch (clause.kind) {
+    case "unknown":
+      return clause.reason === "needs-another-product"
+        ? c.bareHoldingCostClause.unknownBundled(product)
+        : c.bareHoldingCostClause.unknownNoSource(product);
+    case "free":
+      return c.bareHoldingCostClause.free(product);
+    case "priced":
+      return c.bareHoldingCostClause.priced(
+        product,
+        travelEuro(locale, clause.cents / 100),
+        c.common.periodWord(clause.period),
+      );
+  }
+}
+
+/** The one place a `NetBenefitDescription` (netBenefit.ts) becomes a sentence.
+ *  Reuses `floorNote` below for the same lower-bound clause `Kaartkosten`
+ *  already renders from the same `NetBasis` shape — one sentence, not two. */
+function netBenefitDescriptionSentence(d: NetBenefitDescription, c: TravelCopy, locale: Locale): string {
+  switch (d.kind) {
+    case "gross-cost-unknown": {
+      const why =
+        d.reason === "needs-another-product"
+          ? c.netBenefitDescription.unknownBundled
+          : c.netBenefitDescription.unknownNoSource;
+      const gross =
+        d.benefit.kind === "recurring"
+          ? `${travelEuro(locale, d.grossCents / 100)} ${c.common.periodWord(d.benefit.period)}`
+          : travelEuro(locale, d.grossCents / 100);
+      return c.netBenefitDescription.grossOnly(gross, why);
+    }
+    case "net":
+    case "no-recommendation": {
+      const per = d.basis.kind === "recurring" ? ` ${c.common.periodWord(d.basis.period)}` : "";
+      const over =
+        d.basis.kind === "one-off"
+          ? c.common.overHorizon(
+              c.common.horizonWords(d.basis.periodsCharged, d.basis.costPeriod),
+            )
+          : "";
+      const floor = floorNote(d.basis, c);
+      const kosten = d.alreadyHeld ? c.netBenefitDescription.extraCosts : c.netBenefitDescription.costsForProduct;
+      const gross = travelEuro(locale, d.grossCents / 100);
+      const cost = travelEuro(locale, d.costCents / 100);
+      if (d.kind === "net") {
+        return c.netBenefitDescription.net(gross, per, cost, kosten, over, travelEuro(locale, d.netCents / 100), floor);
+      }
+      return d.netCents === 0
+        ? c.netBenefitDescription.noRecommendationZero(gross, per, cost, kosten, over, floor)
+        : c.netBenefitDescription.noRecommendationNegative(
+            gross,
+            per,
+            cost,
+            kosten,
+            over,
+            travelEuro(locale, -d.netCents / 100),
+            floor,
+          );
+    }
+  }
+}
+
+/** The one place a `HoldingCostClause` becomes a sentence — the card-cost tail
+ *  `payHeadline` and `withdrawHeadline`'s "not-held" both append to their own
+ *  sentence. Each branch keeps its own leading space, same convention as the
+ *  type it renders (see travel.ts). */
+function holdingCostClauseSentence(clause: HoldingCostClause, c: TravelCopy, locale: Locale): string {
+  switch (clause.kind) {
+    case "bare":
+      return bareHoldingCostClauseSentence(clause.clause, c, locale);
+    case "gross-cost-unknown":
+      return clause.reason === "needs-another-product"
+        ? c.holdingCostClause.unknownBundled(displayProduct(clause.product, c))
+        : c.holdingCostClause.unknownNoSource(displayProduct(clause.product, c));
+    case "recurring-benefit":
+      return ` ${netBenefitDescriptionSentence(clause.description, c, locale)}`;
+    case "free-to-hold":
+      return c.holdingCostClause.freeToHold(
+        displayProduct(clause.product, c),
+        travelEuro(locale, clause.grossCents / 100),
+      );
+    case "net-positive":
+    case "net-negative": {
+      const price = `${travelEuro(locale, clause.priceCents / 100)} ${c.common.periodWord(clause.pricePeriod)}`;
+      const period =
+        clause.costPeriod === "jaar"
+          ? c.holdingCostClause.periodBilledYearly
+          : clause.periodsCharged === 1
+            ? c.holdingCostClause.periodAtLeastOneMonth
+            : c.holdingCostClause.periodMonths(clause.periodsCharged);
+      const product = displayProduct(clause.product, c);
+      return clause.kind === "net-positive"
+        ? c.holdingCostClause.netPositive(product, price, period, travelEuro(locale, clause.netCents / 100))
+        : c.holdingCostClause.netNegative(product, price, period, travelEuro(locale, -clause.netCents / 100));
+    }
+  }
+}
+
+/** The one place a `VersusNote` becomes a sentence — the runner-up clause
+ *  `journeyHeadline` appends when there is a real saving to name. */
+function versusNoteSentence(v: VersusNote, c: TravelCopy, locale: Locale): string {
+  if (v.kind === "none") return "";
+  const amount = travelEuro(locale, v.savingEuros);
+  return v.alt.kind === "direct"
+    ? c.versusNote.cheaperDirect(amount, displayProduct(v.alt.provider, c))
+    : c.versusNote.cheaperVia(amount, displayProduct(v.alt.via, c));
+}
+
+/** The one place a `JourneyHeadline` becomes a sentence — `payHeadline`'s
+ *  fallback when the winning route is one of his own. */
+function journeyHeadlineSentence(h: JourneyHeadline, c: TravelCopy, locale: Locale): string {
+  switch (h.kind) {
+    case "eur":
+      return c.common.euroNoExchangeNeeded;
+    case "no-route":
+      return c.journeyHeadline.noRoute;
+    case "route": {
+      const head =
+        h.head.kind === "direct"
+          ? c.journeyHeadline.direct(displayProduct(h.head.provider, c))
+          : c.journeyHeadline.via(h.head.fundedFrom ?? "", displayProduct(h.head.via, c), h.head.method);
+      const cost =
+        h.costOnReference === null
+          ? ""
+          : h.costOnReference === 0
+            ? c.journeyHeadline.costFree
+            : c.journeyHeadline.costAmount(travelEuro(locale, h.costOnReference));
+      return `${head}${cost}${versusNoteSentence(h.versus, c, locale)}`;
+    }
+  }
+}
+
+/** The one place a `PayHeadline` becomes a sentence — THE answer the block
+ *  leads with. Exhaustive by switch, so a new kind in `payHeadline` (core)
+ *  fails the build here instead of rendering nothing. */
+export function payHeadlineSentence(h: PayHeadline, c: TravelCopy, locale: Locale): string {
+  switch (h.kind) {
+    case "eur":
+      return c.common.euroNoExchangeNeeded;
+    case "journey":
+      return journeyHeadlineSentence(h.headline, c, locale);
+    case "catalogue-card": {
+      const cost =
+        h.costOnReference === null
+          ? ""
+          : h.costOnReference === 0
+            ? c.payHeadline.costFree
+            : c.payHeadline.costAmount(travelEuro(locale, h.costOnReference));
+      const versus =
+        h.savingOnReference !== null && h.ownProduct
+          ? c.payHeadline.versusOwn(travelEuro(locale, h.savingOnReference), displayProduct(h.ownProduct, c))
+          : "";
+      return c.payHeadline.catalogueCard(
+        displayProduct(h.product, c),
+        cost,
+        versus,
+        holdingCostClauseSentence(h.holdingCost, c, locale),
+      );
+    }
+  }
+}
+
+/** The one place a `ConvertStepNote` becomes a sentence. */
+function convertStepNoteSentence(note: ConvertStepNote, c: TravelCopy): string {
+  switch (note.kind) {
+    case "eur":
+      return c.common.euroNoExchangeNeeded;
+    case "no-terms":
+      return c.convertStep.noTerms;
+    case "pay-directly":
+      return c.convertStep.payDirectly(displayProduct(note.provider, c));
+    case "move-funds":
+      return note.method
+        ? c.convertStep.moveFundsFree(note.fromProvider, displayProduct(note.toProvider, c), note.method)
+        : c.convertStep.moveFundsPlain(note.fromProvider, displayProduct(note.toProvider, c));
+  }
+}
+
+/** The one place a `WithdrawalFeeUnknownReason` becomes a sentence — why one
+ *  of his cards' withdrawal price is unknown. */
+function withdrawalFeeUnknownReasonSentence(
+  reason: WithdrawalFeeUnknownReason,
+  c: TravelCopy,
+  locale: Locale,
+): string {
+  switch (reason.kind) {
+    case "silent":
+      return c.withdrawalFeeUnknownReason.silent;
+    case "cross-reference":
+      return c.withdrawalFeeUnknownReason.crossReference;
+    case "conditional":
+      return c.withdrawalFeeUnknownReason.conditional;
+    case "mentioned-no-rate":
+      return c.withdrawalFeeUnknownReason.mentionedNoRate;
+    case "ambiguous-catalogue-match":
+      return c.withdrawalFeeUnknownReason.ambiguous(
+        displayProduct(reason.provider, c),
+        namedList(
+          reason.candidates.map((p) => displayProduct(p, c)),
+          locale,
+        ),
+      );
+    case "not-in-catalogue":
+      return c.withdrawalFeeUnknownReason.notInCatalogue;
+  }
+}
+
+/** The one place a `MissingCashNote` becomes a sentence — the cards whose
+ *  withdrawal price no source states, named rather than silently dropped. */
+function missingCashNoteSentence(note: MissingCashNote, c: TravelCopy, locale: Locale): string {
+  if (note.kind === "none") return "";
+  const names = namedList(
+    note.missing.map((p) => displayProduct(p, c)),
+    locale,
+  );
+  return note.missing.length === 1
+    ? c.withdrawHeadline.missingCashSingular(names)
+    : c.withdrawHeadline.missingCashPlural(names);
+}
+
+function withdrawalPctSuffix(locale: Locale, pct: number | null): string {
+  return pct === null || pct === 0 ? "" : ` (${formatPercentIn(locale, pct)})`;
+}
+
+/** The one place a `SmallWithdrawalPenalty` becomes a sentence — the flat-fee
+ *  warning that stays on screen whoever wins the ranking. */
+function smallWithdrawalPenaltySentence(p: SmallWithdrawalPenalty, c: TravelCopy, locale: Locale): string {
+  if (p.kind === "none") return "";
+  return c.withdrawHeadline.smallPenalty(
+    displayProduct(p.provider, c),
+    travelEuro(locale, TRAVEL_SMALL_WITHDRAWAL),
+    formatPercentIn(locale, p.smallEffectivePct),
+  );
+}
+
+/** The one place an `OwnWithdrawalComparison` becomes a sentence. */
+function ownWithdrawalComparisonSentence(own: OwnWithdrawalComparison, c: TravelCopy, locale: Locale): string {
+  if (own.kind === "unknown") return c.withdrawHeadline.ownUnknown;
+  const extra =
+    own.extraCostVsWinner === null ? "" : c.withdrawHeadline.ownExtraCost(travelEuro(locale, own.extraCostVsWinner));
+  return c.withdrawHeadline.ownKnown(
+    displayProduct(own.ownProduct, c),
+    travelEuro(locale, own.ownCostOnReference),
+    extra,
+  );
+}
+
+/** The one place a `WithdrawalHeadline` becomes a sentence — the "Pinnen:"
+ *  line's own answer. Exhaustive by switch, so a new kind in
+ *  `withdrawalHeadline` (core) fails the build here instead of rendering
+ *  nothing. */
+function withdrawalHeadlineSentence(h: WithdrawalHeadline, c: TravelCopy, locale: Locale): string {
+  switch (h.kind) {
+    case "eur":
+      return c.withdrawHeadline.eur;
+    case "no-accounts":
+      return c.withdrawHeadline.noAccounts;
+    case "no-known-price":
+      return c.withdrawHeadline.noKnownPrice(missingCashNoteSentence(h.missingCashNote, c, locale));
+    case "held": {
+      const price = c.withdrawHeadline.priceLine(
+        travelEuro(locale, h.costOnReference),
+        travelEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+        withdrawalPctSuffix(locale, h.effectivePct),
+      );
+      return c.withdrawHeadline.held(
+        displayProduct(h.product, c),
+        price,
+        smallWithdrawalPenaltySentence(h.small, c, locale),
+        missingCashNoteSentence(h.missingCashNote, c, locale),
+      );
+    }
+    case "not-held": {
+      const price = c.withdrawHeadline.priceLine(
+        travelEuro(locale, h.costOnReference),
+        travelEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+        withdrawalPctSuffix(locale, h.effectivePct),
+      );
+      return c.withdrawHeadline.notHeld(
+        displayProduct(h.product, c),
+        price,
+        ownWithdrawalComparisonSentence(h.own, c, locale),
+        holdingCostClauseSentence(h.holdingCost, c, locale),
+        smallWithdrawalPenaltySentence(h.small, c, locale),
+        missingCashNoteSentence(h.missingCashNote, c, locale),
+      );
+    }
   }
 }
 
@@ -304,8 +658,11 @@ function NotYours() {
 /** Het bedrag in de eenheid van zijn eigen document. NOOIT omgerekend: een
  *  jaarprijs die als maandprijs op het scherm komt scheelt een factor twaalf, en
  *  "€ 42,95 per jaar" is ook wat hij op zijn afschrift terugvindt. */
-function feeLabel(locale: Locale, a: FeeAmount): string {
-  return `${formatEuroIn(locale, a.cents / 100)} per ${a.period}`;
+/* `a.period` is the Dutch code "maand"/"jaar", an identifier rather than a word.
+ * Interpolating it straight into the sentence put "per maand" on the English
+ * screen; the copy owns the word. */
+function feeLabel(locale: Locale, a: FeeAmount, c: TravelCopy): string {
+  return `${formatEuroIn(locale, a.cents / 100)} ${c.common.periodWord(a.period)}`;
 }
 
 /** De opslag op de referentiebesteding in CENTEN. Langs core's eigen
@@ -399,7 +756,7 @@ export function Kaartkosten({
     );
   }
 
-  const price = feeLabel(locale, cost.amount);
+  const price = feeLabel(locale, cost.amount, c);
   // EEN UITGESPROKEN NUL IS EEN BEKENDE NUL — de keerzijde van "onbekend is geen
   // nul". Zegt een bron letterlijk dat de kaart niets kost, dan is dat een
   // gemeten feit en scheelt het hem de vraag of we het gewoon niet weten. Zonder
@@ -681,8 +1038,8 @@ function termsHeadline(state: TermsState, c: TravelCopy): string | null {
   }
 }
 
-function nameList(providers: string[]): string {
-  return providers.join(", ");
+function nameList(providers: string[], c: TravelCopy): string {
+  return providers.map((p) => displayProduct(p, c)).join(", ");
 }
 
 /** The block's one visible control for the terms, sitting directly under the
@@ -783,7 +1140,7 @@ export function TermsNotice({
           <p className="cell-sub">
             {fill(state.unknown.length === 1 ? c.terms.unknownCardsOne : c.terms.unknownCardsMany, {
               count: state.unknown.length,
-              names: nameList(state.unknown),
+              names: nameList(state.unknown, c),
             })}
           </p>
         )}
@@ -817,7 +1174,7 @@ export function TermsNotice({
   if (state.kind === "no-key") {
     return (
       <div className="travel-terms travel-terms-blocked" role="status">
-        <p className="cell-sub">{fill(c.terms.unknownList, { names: nameList(state.unknown) })}</p>
+        <p className="cell-sub">{fill(c.terms.unknownList, { names: nameList(state.unknown, c) })}</p>
         {noKeyLine}
       </div>
     );
@@ -833,7 +1190,7 @@ export function TermsNotice({
         <p className="cell-sub travel-searching">
           <span className="spinner" aria-hidden="true" />
           <span>
-            {fill(c.terms.searchingBody, { names: nameList(state.pending) })}
+            {fill(c.terms.searchingBody, { names: nameList(state.pending, c) })}
             {termsAsked > 0 && fill(c.terms.searchingFoundSuffix, { found, total: termsAsked })}
             {c.terms.searchingTail}
           </span>
@@ -850,7 +1207,7 @@ export function TermsNotice({
     return (
       <div className="travel-terms" role="status">
         <p className="cell-sub">
-          {fill(c.terms.neverSearchedBody, { names: nameList(state.unknown) })}
+          {fill(c.terms.neverSearchedBody, { names: nameList(state.unknown, c) })}
         </p>
         {searchButton(true, fill(c.terms.searchWithCount, { count: state.unknown.length }))}
       </div>
@@ -860,7 +1217,7 @@ export function TermsNotice({
   return (
     <div className="travel-terms travel-terms-blocked" role="status">
       <p className="cell-sub">
-        {fill(c.terms.searchedEmptyBody, { names: nameList(state.unknown), hint: zelfInvullen })}
+        {fill(c.terms.searchedEmptyBody, { names: nameList(state.unknown, c), hint: zelfInvullen })}
       </p>
       {searchButton(false, c.terms.searchAgainPlain)}
     </div>
@@ -929,7 +1286,7 @@ export function CashSection({
         <p className="cell-sub travel-note">
           <NotYours />{" "}
           {fill(c.cash.advice, {
-            product: advice.product,
+            product: displayProduct(advice.product, c),
             cost: cashCost(locale, c, advice.costOnReference),
             amount: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
           })}
@@ -940,7 +1297,7 @@ export function CashSection({
           die hij moet OPENEN, en die brengt zijn eigen maandnota mee. */}
       {advice && !advice.held && (
         <Kaartkosten
-          product={advice.product}
+          product={displayProduct(advice.product, c)}
           cost={advice.holdingCost}
           benefit={advice.benefit}
           testId="travel-cash-kosten"
@@ -986,7 +1343,7 @@ export function CashSection({
           <p key={`why-${o.provider}`} className="cell-sub travel-note">
             {fill(c.cash.feeUnknownReason, {
               provider: productLabel(o.bank, o.productKind, c),
-              reason: o.fee.why ?? "",
+              reason: o.fee.why ? withdrawalFeeUnknownReasonSentence(o.fee.why, c, locale) : "",
             })}
           </p>
         ),
@@ -1045,7 +1402,7 @@ export function OffersSection({
         {top.map((o) => (
           <li key={o.productId} className="travel-journey">
             <div className="travel-journey-head">
-              <span className="travel-journey-name">{o.product}</span>
+              <span className="travel-journey-name">{displayProduct(o.product, c)}</span>
               <NotYours />
               <span className="travel-journey-cost">
                 {fill(c.offers.amountOnReference, {
@@ -1083,7 +1440,7 @@ export function OffersSection({
                 wordt er een voordeel berekend: bij een hogere is er geen voordeel
                 om kosten van af te trekken, en "€ −5,00 voordeel" is geen zin. */}
             <Kaartkosten
-              product={o.product}
+              product={displayProduct(o.product, c)}
               cost={o.holdingCost}
               benefit={
                 ownPct !== null && surchargeCents(o.netCostPct) < surchargeCents(ownPct)
@@ -1229,13 +1586,13 @@ export default function TravelBlock({
   const answer =
     plan === null
       ? ""
-      : plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
-        ? payHeadline(
-            { ...plan.pay, holdingCost: null, benefit: null },
-            plan.journeys,
-            plan.currency,
-          )
-        : plan.headline;
+      : payHeadlineSentence(
+          plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
+            ? payHeadline({ ...plan.pay, holdingCost: null, benefit: null }, plan.journeys, plan.currency)
+            : plan.headline,
+          c,
+          locale,
+        );
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
    *
@@ -1341,7 +1698,7 @@ export default function TravelBlock({
                 toch al door. */}
             {plan.pay && !plan.pay.held && (
               <Kaartkosten
-                product={plan.pay.product}
+                product={displayProduct(plan.pay.product, c)}
                 cost={plan.pay.holdingCost}
                 benefit={plan.pay.benefit}
                 testId="travel-pay-kosten"
@@ -1360,13 +1717,13 @@ export default function TravelBlock({
                   <NotYours />{" "}
                 </>
               )}
-              {plan.withdrawHeadline}
+              {withdrawalHeadlineSentence(plan.withdrawHeadline, c, locale)}
             </p>
             {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
                 toestanden; bij zijn eigen kaart staat er niets. */}
             {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
               <Kaartkosten
-                product={plan.withdrawAdvice.product}
+                product={displayProduct(plan.withdrawAdvice.product, c)}
                 cost={plan.withdrawAdvice.holdingCost}
                 benefit={plan.withdrawAdvice.benefit}
                 testId="travel-pin-kosten"
@@ -1399,7 +1756,7 @@ export default function TravelBlock({
                   wél staat, en dat is onderbouwing (punt 13). */}
               {plan.pay && !plan.pay.held && (
                 <p className="cell-sub travel-winner-switch">
-                  <NotYours /> {fill(c.detail.switchSource, { product: plan.pay.product })}
+                  <NotYours /> {fill(c.detail.switchSource, { product: displayProduct(plan.pay.product, c) })}
                   {plan.pay.asOf && (
                     <>{fill(c.detail.switchAgeSuffix, { age: figureAge(plan.pay.asOf, asOf) })}</>
                   )}
@@ -1414,7 +1771,7 @@ export default function TravelBlock({
                 <p className="cell-sub travel-winner-today">
                   <strong>{c.detail.todayLabel}</strong>{" "}
                   {fill(c.detail.todayBody, {
-                    product: plan.pay.ownProduct,
+                    product: displayProduct(plan.pay.ownProduct, c),
                     cost: formatEuroIn(locale, plan.pay.ownCostOnReference ?? 0),
                     reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
                   })}
@@ -1431,10 +1788,10 @@ export default function TravelBlock({
                 <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
                   <strong>{c.detail.notRecommendedLabel}</strong>{" "}
                   {fill(c.detail.notRecommendedBody, {
-                    product: rejected.offer.product,
+                    product: displayProduct(rejected.offer.product, c),
                     offerPct: formatPercentIn(locale, rejected.offer.netCostPct),
                     ownPct: formatPercentIn(locale, ownPct),
-                    fee: feeLabel(locale, rejected.net.cost.amount),
+                    fee: feeLabel(locale, rejected.net.cost.amount, c),
                     gross: formatEuroIn(locale, rejected.net.grossCents / 100),
                     cost: formatEuroIn(locale, rejected.net.costCents / 100),
                     span: spanWords(rejected.net.basis, c),
@@ -1444,7 +1801,7 @@ export default function TravelBlock({
                         : fill(c.detail.moreExpensiveThan, {
                             amount: formatEuroIn(locale, -rejected.net.netCents / 100),
                           }),
-                    ownProduct: plan.pay.product,
+                    ownProduct: displayProduct(plan.pay.product, c),
                   })}
                   {floorNote(rejected.net.basis, c)}
                 </p>
@@ -1563,7 +1920,7 @@ export default function TravelBlock({
                       notice that names the real cause instead of repeating an
                       instruction that may be impossible to follow. */}
                   <p className="travel-step-line">
-                    {bestJourney ? plan.convert.note : c.steps.exchangeNoCard}
+                    {bestJourney ? convertStepNoteSentence(plan.convert.note, c) : c.steps.exchangeNoCard}
                   </p>
                 </div>
 

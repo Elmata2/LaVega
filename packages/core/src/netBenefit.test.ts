@@ -81,8 +81,10 @@ describe("kosten bekend: er wordt netto gerekend", () => {
     // achteruit is in plaats van het zelf te moeten uitrekenen.
     if (b.kind !== "no-recommendation") throw new Error("verkeerde toestand");
     expect(b.netCents).toBe(-200);
-    expect(describeNetBenefit(b)).toContain("€ 2,00");
-    expect(describeNetBenefit(b)).toMatch(/achteruit/);
+    // De beschrijving draagt hetzelfde negatieve bedrag mee — het valt niet weg.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("no-recommendation");
+    expect(desc.kind === "no-recommendation" && desc.netCents).toBe(-200);
   });
 
   test("netto precies nul is ook geen aanbeveling — een stap zonder uitkomst", () => {
@@ -91,7 +93,11 @@ describe("kosten bekend: er wordt netto gerekend", () => {
       cost: cost(445),
     });
     expect(b.kind).toBe("no-recommendation");
-    expect(describeNetBenefit(b)).toMatch(/levert niets op/);
+    // Netto nul is geclassificeerd als geen-aanbeveling, niet als "net" — dat is
+    // het onderscheid dat deze test vastlegt.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("no-recommendation");
+    expect(desc.kind === "no-recommendation" && desc.netCents).toBe(0);
   });
 
   test("blijft er iets over, dan is dát het bedrag en heet het netto", () => {
@@ -104,7 +110,11 @@ describe("kosten bekend: er wordt netto gerekend", () => {
     expect(b.netCents).toBe(355);
     expect(b.grossCents).toBe(800);
     expect(b.costCents).toBe(445);
-    expect(describeNetBenefit(b)).toContain("€ 3,55 netto");
+    // Kosten bekend en er blijft iets over: dit is het enige geval waarin de
+    // beschrijving "net" heet, met exact hetzelfde bedrag.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("net");
+    expect(desc.kind === "net" && desc.netCents).toBe(355);
   });
 
   test("een eenmalige winst tegen doorlopende kosten kantelt met de horizon", () => {
@@ -158,9 +168,11 @@ describe("de horizon en zijn ondergrens", () => {
     expect(b.basis.months).toBe(MIN_HORIZON_MONTHS);
     expect(b.basis.periodsCharged).toBe(1);
     expect(b.basis.flooredToMinimum).toBe(true);
-    // De gebruiker moet kunnen zien over welke periode we rekenen.
-    expect(describeNetBenefit(b)).toContain("over 1 maand");
-    expect(describeNetBenefit(b)).toMatch(/minder dan één maand/i);
+    // De gebruiker moet kunnen zien over welke periode we rekenen: `basis` reist
+    // ongewijzigd mee naar de beschrijving, mét de ondergrensvlag.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("net");
+    expect(desc.kind === "net" && desc.basis).toEqual(b.basis);
   });
 
   test("een ontbrekende of onzinnige horizon valt op de ondergrens terug, nooit op nul", () => {
@@ -207,7 +219,11 @@ describe("maand tegenover jaar — een factor twaalf", () => {
     if (b.basis.kind !== "one-off") throw new Error("verkeerde basis");
     expect(b.basis.costPeriod).toBe("jaar");
     expect(b.basis.flooredToMinimum).toBe(true);
-    expect(describeNetBenefit(b)).toMatch(/per jaar afgerekend/);
+    // De beschrijving draagt `basis` ongewijzigd door, dus costPeriod "jaar"
+    // (niet door twaalf gedeeld) komt aan de andere kant ongeschonden aan.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("no-recommendation");
+    expect(desc.kind === "no-recommendation" && desc.basis).toEqual(b.basis);
   });
 
   test("dezelfde jaarprijs als maandprijs geschreven is twaalf keer zo goedkoop over één maand", () => {
@@ -247,7 +263,11 @@ describe("maand tegenover jaar — een factor twaalf", () => {
     expect(b.basis.period).toBe("jaar");
     expect(b.basis.benefitDerived).toBe(true); // × 12, onze rekensom
     expect(b.basis.costDerived).toBe(false); // stond zo in het document
-    expect(describeNetBenefit(b)).toContain("per jaar");
+    // Ook hier reist `basis.period` ("jaar", de grofste eenheid) ongewijzigd mee
+    // naar de beschrijving.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("net");
+    expect(desc.kind === "net" && desc.basis).toEqual(b.basis);
   });
 
   test("beide per maand blijft per maand — dan is er niets om te ver­talen", () => {
@@ -277,10 +297,16 @@ describe("kosten onbekend: bruto, met het gat erbij", () => {
     // Het TYPE draagt het: er is geen netCents om per ongeluk te tonen.
     expect("netCents" in b).toBe(false);
     expect("costCents" in b).toBe(false);
-    const tekst = describeNetBenefit(b);
-    expect(tekst).not.toMatch(/netto/i);
-    expect(tekst).toContain("€ 14,00");
-    expect(tekst).toMatch(/geen nul/); // onbekend is geen nul, en dat staat er
+    // Dezelfde garantie geldt voor de beschrijving: geen netCents/costCents-veld,
+    // dus geen woord "netto" mogelijk. Onbekend is geen nul — dat draagt de
+    // `reason`, niet een bruto bedrag van nul.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("gross-cost-unknown");
+    if (desc.kind !== "gross-cost-unknown") throw new Error("verkeerde toestand");
+    expect(desc.grossCents).toBe(1400);
+    expect(desc.reason).toBe("no-source");
+    expect("netCents" in desc).toBe(false);
+    expect("costCents" in desc).toBe(false);
   });
 
   test("de kaart wordt niet verzwegen: hij blijft een aanbeveling zolang er iets te winnen is", () => {
@@ -298,9 +324,11 @@ describe("kosten onbekend: bruto, met het gat erbij", () => {
       benefit: { kind: "one-off", cents: 1400 },
       cost: { kind: "unknown", reason: "needs-another-product" },
     });
-    const tekst = describeNetBenefit(b);
-    expect(tekst).toMatch(/bovenop een ander product/);
-    expect(tekst).not.toMatch(/netto/i);
+    // "geen bron" en "hangt aan een ander product" zijn twee verschillende
+    // problemen: de reden moet het echte onderscheid dragen, niet dezelfde tekst.
+    const desc = describeNetBenefit(b);
+    expect(desc.kind).toBe("gross-cost-unknown");
+    expect(desc.kind === "gross-cost-unknown" && desc.reason).toBe("needs-another-product");
   });
 });
 

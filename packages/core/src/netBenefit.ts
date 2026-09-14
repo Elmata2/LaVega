@@ -30,8 +30,9 @@
  *     niet stilzwijgend als gratis behandeld (dan zou hij elke rangschikking
  *     winnen) en ook niet verzwegen (dan zie je hem nooit). Hij komt door met
  *     zijn brutobedrag en met de reden waarom er geen netto bij staat. Het woord
- *     "netto" komt in die tekst niet voor; `describeNetBenefit` heeft daar een
- *     test op staan.
+ *     "netto" komt in die tekst niet voor; de renderer die er een zin van maakt
+ *     (`netBenefitDescriptionSentence` in TravelBlock.tsx) heeft daar een test
+ *     op staan.
  *
  * Puur, zoals alles in packages/core: geen I/O, geen klok. De periode komt als
  * parameter binnen, niet uit een `new Date()`.
@@ -356,68 +357,69 @@ export function rankByNetBenefit<T>(items: readonly T[], of: (item: T) => NetBen
     .map((x) => x.item);
 }
 
-/* ─────────────────────────────────────────────────── in woorden */
+/* ─────────────────────────────────────────────────── in kind vorm */
 
-/** Euro's op de Nederlandse manier. Een eigen kopie van de formatter die
- *  travel.ts privé heeft: travel.ts importeert dít bestand, dus hem daar
- *  vandaan halen zou een cirkel maken. Twee regels dubbel is minder erg dan een
- *  importcirkel of een gedeelde module met één functie erin. */
-function euro(cents: number): string {
-  return `€ ${(Math.round(cents) / 100).toFixed(2).replace(".", ",")}`;
-}
-
-function periodWord(p: FeePeriod): string {
-  return p === "maand" ? "per maand" : "per jaar";
-}
-
-/** Over welke periode we rekenen, in woorden. */
-function horizonWords(basis: Extract<NetBasis, { kind: "one-off" }>): string {
-  const n = basis.periodsCharged;
-  if (basis.costPeriod === "jaar") return `${n} jaar`;
-  return `${n} ${n === 1 ? "maand" : "maanden"}`;
-}
-
-/** DE ONDERGRENS, HARDOP. Een eigen zin en geen bijzin, want dit is het stuk dat
- *  de gebruiker nodig heeft om het bedrag na te rekenen: een reis van een week
- *  kost toch een hele maand kaart, en zonder deze zin lijkt dat bedrag uit de
- *  lucht te komen. Bij een jaarproduct is het bovendien het antwoord op de vraag
- *  die hij anders stelt — "maar ik ga maar een maand". */
-function floorNote(basis: Extract<NetBasis, { kind: "one-off" }>): string {
-  if (!basis.flooredToMinimum) return "";
-  return basis.costPeriod === "jaar"
-    ? " Dit product wordt per jaar afgerekend, dus een kortere reis maakt het niet goedkoper."
-    : " Minder dan één maand kun je niet afnemen, dus daar rekenen we mee.";
-}
-
-/** HET ANTWOORD IN ÉÉN ZIN, in de toon van de rest van de app: rustig, concreet,
- *  en zonder een conclusie die de gegevens niet kunnen dragen.
+/** WAT ER TE ZEGGEN VALT, zonder het te zeggen. Core levert de feiten waaruit de
+ *  ene zin wordt opgebouwd — geen Nederlands, geen locale — en de view rendert
+ *  hem. Zie `holdSentence` (Facturen.tsx) en `fxWhySentence` (Valuta.tsx) voor
+ *  hetzelfde patroon elders in de app.
  *
- *  Het woord "netto" staat ALLEEN in de twee varianten waarin de kosten bekend
- *  zijn. In de derde staat waar het gat zit en dat het geen nul is. Daar staat een
- *  test op, want dit is precies de zin die te makkelijk te mooi wordt. */
-export function describeNetBenefit(b: NetBenefit): string {
+ *  DE DRIE VARIANTEN VOLGEN NetBenefit 1-op-1: `basis` en `benefit` reizen mee
+ *  ongewijzigd zodat de renderer dezelfde periode- en ondergrensregels kan
+ *  toepassen die hier vroeger stonden (`periodWord`, `horizonWords`,
+ *  `floorNote`) zonder dat core ze zelf hoeft te kennen. `alreadyHeld` is het
+ *  enige stuk classificatie dat de renderer nodig heeft en zelf niet kan
+ *  herleiden: of "extra kosten" dan wel "kosten voor het product" moet staan. */
+export type NetBenefitDescription =
+  | { kind: "gross-cost-unknown"; grossCents: number; benefit: Benefit; reason: HoldingCostUnknownReason }
+  | {
+      kind: "net";
+      grossCents: number;
+      costCents: number;
+      netCents: number;
+      basis: NetBasis;
+      alreadyHeld: boolean;
+    }
+  | {
+      kind: "no-recommendation";
+      grossCents: number;
+      costCents: number;
+      netCents: number;
+      basis: NetBasis;
+      alreadyHeld: boolean;
+    };
+
+/** HET ANTWOORD, GECLASSIFICEERD. Zie punt 1 in de kop van dit bestand: het
+ *  verschil zit in het type. Voorheen bouwde deze functie de Nederlandse zin
+ *  zelf; nu levert ze de feiten en bouwt de view (`netBenefitDescriptionSentence`
+ *  in TravelBlock.tsx) de zin per taal. Het woord "netto" mag ALLEEN in de
+ *  renderer voorkomen voor de twee varianten waarin de kosten bekend zijn — dat
+ *  is nu een tekst-regel van de view, niet meer een test op deze functie. */
+export function describeNetBenefit(b: NetBenefit): NetBenefitDescription {
   if (b.kind === "gross-cost-unknown") {
-    const why =
-      b.cost.reason === "needs-another-product"
-        ? "de prijs die de bron noemt geldt bovenop een ander product, dus wat dit los kost weten we niet"
-        : "wat dit product kost, staat niet in onze bronnen";
-    const gross =
-      b.benefit.kind === "recurring"
-        ? `${euro(b.grossCents)} ${periodWord(b.benefit.period)}`
-        : euro(b.grossCents);
-    return `${gross} voordeel. Maar ${why} — dat is geen nul, en het gaat hiervan af.`;
+    return {
+      kind: "gross-cost-unknown",
+      grossCents: b.grossCents,
+      benefit: b.benefit,
+      reason: b.cost.reason,
+    };
   }
-
-  const per = b.basis.kind === "recurring" ? ` ${periodWord(b.basis.period)}` : "";
-  const over = b.basis.kind === "one-off" ? ` over ${horizonWords(b.basis)}` : "";
-  const floor = b.basis.kind === "one-off" ? floorNote(b.basis) : "";
-  const kosten = b.cost.why === "already-held" ? "extra kosten" : "kosten voor het product";
-
-  if (b.kind === "net") {
-    return `${euro(b.grossCents)} voordeel${per} min ${euro(b.costCents)} ${kosten}${over}: ${euro(b.netCents)} netto${per}.${floor}`;
-  }
-  if (b.netCents === 0) {
-    return `Geen aanbeveling: ${euro(b.grossCents)} voordeel${per} tegen ${euro(b.costCents)} ${kosten}${over} — dat levert niets op.${floor}`;
-  }
-  return `Geen aanbeveling: ${euro(b.grossCents)} voordeel${per} tegen ${euro(b.costCents)} ${kosten}${over}, dus ${euro(-b.netCents)}${per} achteruit.${floor}`;
+  const alreadyHeld = b.cost.why === "already-held";
+  return b.kind === "net"
+    ? {
+        kind: "net",
+        grossCents: b.grossCents,
+        costCents: b.costCents,
+        netCents: b.netCents,
+        basis: b.basis,
+        alreadyHeld,
+      }
+    : {
+        kind: "no-recommendation",
+        grossCents: b.grossCents,
+        costCents: b.costCents,
+        netCents: b.netCents,
+        basis: b.basis,
+        alreadyHeld,
+      };
 }

@@ -114,7 +114,14 @@ test("planTravel combines the three answers for a non-euro destination", () => {
   expect(plan.convert.toProvider).toBe("Trading 212 creditcard"); // move money here
   expect(plan.convert.fromProvider).toBe("ING"); // out of the fullest payment account
   expect(plan.convert.method).toBe("iDEAL");
-  expect(plan.convert.note).toContain("gratis");
+  // "move-funds" met een niet-null `method` is de gratis-via-iDEAL variant (zie
+  // ConvertStepNote); met `method: null` zou het "geen methode bekend" zijn.
+  expect(plan.convert.note).toEqual({
+    kind: "move-funds",
+    fromProvider: "ING",
+    toProvider: "Trading 212 creditcard",
+    method: "iDEAL",
+  });
   expect(plan.unknownProviders).toEqual(["American Express creditcard"]);
 });
 
@@ -130,7 +137,7 @@ test("planTravel skips conversion advice entirely for a euro destination", () =>
   });
   expect(plan.currency).toBe("EUR");
   expect(plan.convert.method).toBeNull();
-  expect(plan.convert.note).toContain("euro");
+  expect(plan.convert.note).toEqual({ kind: "eur" });
 });
 
 test("planTravel says what it needs when no card terms are known yet", () => {
@@ -143,7 +150,8 @@ test("planTravel says what it needs when no card terms are known yet", () => {
     asOf: "2026-08-13",
   });
   expect(plan.spend.every((o) => !o.known)).toBe(true);
-  expect(plan.convert.note).toContain("ververs");
+  // Geen enkele kaart bekend: geen route om geld naartoe te verplaatsen.
+  expect(plan.convert.note).toEqual({ kind: "no-terms" });
   expect(plan.unknownProviders.sort()).toEqual([
     "American Express creditcard",
     "ING betaalpas",
@@ -446,14 +454,19 @@ test("journeyHeadline states the winner and what it saves, in euros", () => {
   const js = rankJourneys(ROUTE_ACCOUNTS, ROUTE_FACTS);
   const line = journeyHeadline(js, "USD");
 
-  expect(line).toContain("van ING naar Revolut betaalpas");
-  expect(line).toContain("iDEAL");
-  expect(line).toContain("€ 5,00 goedkoper");
+  // Route: van ING naar Revolut betaalpas, via iDEAL, € 5,00 goedkoper dan
+  // rechtstreeks met Revolut.
+  expect(line).toEqual({
+    kind: "route",
+    head: { kind: "via", fundedFrom: "ING", via: "Revolut betaalpas", method: "iDEAL" },
+    costOnReference: 0,
+    versus: { kind: "cheaper", savingEuros: 5, alt: { kind: "direct", provider: "Revolut betaalpas" } },
+  });
 });
 
 test("journeyHeadline says nothing to convert for a euro destination, and asks for a refresh when nothing is known", () => {
-  expect(journeyHeadline([], "EUR")).toContain("euro");
-  expect(journeyHeadline(rankJourneys(ROUTE_ACCOUNTS, []), "USD")).toContain("ververs");
+  expect(journeyHeadline([], "EUR")).toEqual({ kind: "eur" });
+  expect(journeyHeadline(rankJourneys(ROUTE_ACCOUNTS, []), "USD")).toEqual({ kind: "no-route" });
 });
 
 test("planTravel carries the priced journeys and leads with one sentence", () => {
@@ -467,7 +480,12 @@ test("planTravel carries the priced journeys and leads with one sentence", () =>
   });
   expect(plan.journeys.length).toBeGreaterThan(0);
   expect(plan.journeys[0].totalCostPct).toBe(0);
-  expect(plan.headline).toContain("Revolut");
+  // De kop is `journeyHeadline` op de eigen `journeys` van het plan — dezelfde
+  // zin die hierboven al op inhoud is getest, hier alleen op de bedrading.
+  expect(plan.headline.kind).toBe("journey");
+  expect(plan.headline.kind === "journey" && plan.headline.headline).toEqual(
+    journeyHeadline(plan.journeys, "USD"),
+  );
 
   // A euro destination has nothing to rank.
   const es = planTravel({
@@ -479,7 +497,7 @@ test("planTravel carries the priced journeys and leads with one sentence", () =>
     asOf: "2026-08-16",
   });
   expect(es.journeys).toEqual([]);
-  expect(es.headline).toContain("euro");
+  expect(es.headline).toEqual({ kind: "eur" });
 });
 
 test("the winning journey carries the provider's caveat, so a capped rate cannot read as absolute", () => {
@@ -760,7 +778,7 @@ test("a tiered or capped withdrawal row is refused, and the refusal names the re
   const abn = parseWithdrawalFee(CAT_ABN_CREDITCARD.fields!.fxFeePct!.conditions);
   expect(abn.known).toBe(false);
   expect(abn.components).toEqual([]);
-  expect(abn.why).toMatch(/staffel|vrijstelling|voorwaarde/i);
+  expect(abn.why).toEqual({ kind: "conditional" });
   // The sentence we refused is kept, so he can read it himself and correct us.
   expect(abn.quoted).toContain("aparte transactiekosten");
 });
@@ -768,7 +786,7 @@ test("a tiered or capped withdrawal row is refused, and the refusal names the re
 test("a cross-reference with no figure in it is unknown, not free", () => {
   const gold = parseWithdrawalFee(CAT_ABN_GOLD.fields!.fxFeePct!.conditions);
   expect(gold.known).toBe(false);
-  expect(gold.why).toMatch(/artikel|aparte/i);
+  expect(gold.why).toEqual({ kind: "cross-reference" });
   expect(withdrawalCost(gold, 200)).toBeNull();
 });
 
@@ -776,7 +794,7 @@ test("a source that says nothing about cash is unknown, and says that much", () 
   const t212 = parseWithdrawalFee(CAT_212.fields!.fxFeePct!.conditions);
   expect(t212.known).toBe(false);
   expect(t212.quoted).toBeNull();
-  expect(t212.why).toMatch(/niets|geen/i);
+  expect(t212.why).toEqual({ kind: "silent" });
   expect(parseWithdrawalFee(null).known).toBe(false);
 });
 
@@ -816,7 +834,11 @@ test("two catalogue products for one card are only separated by a fee we already
   // not the cheaper of the two.
   const blind = rankWithdrawOptions(rankSpendOptions(accounts, []), CATALOGUE);
   expect(blind[0].fee.known).toBe(false);
-  expect(blind[0].fee.why).toMatch(/meer dan één|welke/i);
+  expect(blind[0].fee.why).toEqual({
+    kind: "ambiguous-catalogue-match",
+    provider: "ING creditcard",
+    candidates: ["ING creditcard", "ING PlatinumCard"],
+  });
 });
 
 test("marketCardOffers ranks the whole catalogue and never includes an uncovered figure", () => {
@@ -901,8 +923,12 @@ test("without a catalogue nothing is invented — no offers, no switch, no cash 
   // Nothing proven anywhere, so there is no advice — but the card is still NAMED
   // as a gap. Dropping it silently is what reads as "opnemen kost hier niets".
   expect(plan.withdrawAdvice).toBeNull();
-  expect(plan.withdrawHeadline).toContain("ING betaalpas");
-  expect(plan.withdrawHeadline).not.toMatch(/gratis|kost je niets/i);
+  // Geen enkele prijs bekend, dus "no-known-price" met de kaart genoemd als gat
+  // — nooit stilzwijgend gratis.
+  expect(plan.withdrawHeadline).toEqual({
+    kind: "no-known-price",
+    missingCashNote: { kind: "some", missing: ["ING betaalpas"] },
+  });
 });
 
 test("a figure whose document prices withdrawal differently elsewhere carries that caveat", () => {
@@ -947,10 +973,16 @@ test("withdrawalHeadline leads with the euros and warns about small withdrawals"
     "USD",
   );
 
-  expect(line).toContain("ING betaalpas");
-  expect(line).toContain("€ 6,30");
-  expect(line).toContain("8,4%"); // what € 50 costs, because of the € 3,50 flat fee
-  expect(line).toContain("in één keer meer");
+  // € 6,30 op € 200 (€ 3,50 vast + 1,40%); de vaste kosten maken € 50 pinnen
+  // 8,4% (`small`) — "pin minder vaak, meer per keer" is exact dat gegeven.
+  expect(line).toEqual({
+    kind: "held",
+    product: "ING betaalpas",
+    costOnReference: 6.3,
+    effectivePct: 3.15,
+    small: { kind: "penalised", provider: "ING betaalpas", smallEffectivePct: 8.4 },
+    missingCashNote: { kind: "none" },
+  });
 });
 
 test("with no cash price anywhere the headline says that, and never says free", () => {
@@ -960,8 +992,11 @@ test("with no cash price anywhere the headline says that, and never says free", 
     rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE),
     "USD",
   );
-  expect(line).toMatch(/weten we .*niet|weten we wat|onbekend/i);
-  expect(line).not.toMatch(/gratis|kost je niets/i);
+  // "no-known-price" draagt de kaart als gat — geen bedrag, geen "gratis".
+  expect(line).toEqual({
+    kind: "no-known-price",
+    missingCashNote: { kind: "some", missing: ["Trading 212 betaalpas"] },
+  });
 });
 
 test("a card is matched by its product name too, because the issuer is often a different company", () => {
@@ -1031,8 +1066,8 @@ test("in euroland the cash advice is withdrawn, not repeated — those tariffs a
   });
 
   expect(es.withdraw).toEqual([]);
-  expect(es.withdrawHeadline).toContain("euro");
-  expect(es.withdrawHeadline).not.toContain("€ 6,30"); // ING's foreign-currency price does not apply here
+  // Geen tarief van toepassing in euroland — geen "€ 6,30" te herhalen.
+  expect(es.withdrawHeadline).toEqual({ kind: "eur" });
 });
 
 /* EEN GRATIS OPNAME IS EEN BEKENDE PRIJS, GEEN ONTBREKENDE.
@@ -1113,11 +1148,17 @@ test("the recommendation is the cheapest proven card, even one he does not hold,
   expect(plan.pay?.savingOnReference).toBe(14); // his own 1,4% on € 1.000
   expect(plan.pay?.sourceUrl).toContain("trading212");
 
-  // ...and the headline leads with it, in euros, the way he dictated it.
-  expect(plan.headline).toContain("212 Card");
-  expect(plan.headline).toContain("€ 14,00");
-  expect(plan.headline).toContain("ING betaalpas");
-  expect(plan.headline).toMatch(/heb je nog niet/i);
+  // ...and the headline leads with it, in euros, the way he dictated it. The
+  // "catalogue-card" kind exists only for a card he does not hold, so that kind
+  // ITSELF is "heb je nog niet" — no separate sentence check needed.
+  expect(plan.headline).toEqual({
+    kind: "catalogue-card",
+    product: "212 Card",
+    costOnReference: 0,
+    savingOnReference: 14,
+    ownProduct: "ING betaalpas",
+    holdingCost: { kind: "gross-cost-unknown", product: "212 Card", reason: "no-source" },
+  });
 });
 
 test("a card he does not hold never wins a tie — opening an account for nothing is not advice", () => {
@@ -1149,8 +1190,17 @@ test("a card he does not hold never wins a tie — opening an account for nothin
 
   expect(plan.pay?.held).toBe(true);
   expect(plan.pay?.savingOnReference).toBeNull();
-  expect(plan.headline).not.toContain("212 Card");
-  expect(plan.headline).toContain("Revolut betaalpas");
+  // "journey" nooit "catalogue-card": het type zelf sluit "212 Card" uit, en de
+  // route noemt Revolut betaalpas als de kaart om mee te betalen.
+  expect(plan.headline).toEqual({
+    kind: "journey",
+    headline: {
+      kind: "route",
+      head: { kind: "direct", provider: "Revolut betaalpas" },
+      costOnReference: 0,
+      versus: { kind: "cheaper", savingEuros: 14, alt: { kind: "direct", provider: "ING betaalpas" } },
+    },
+  });
 });
 
 test("the baseline is the cheapest thing he can ALREADY do, route included — not only a card tap", () => {
@@ -1187,7 +1237,7 @@ test("the baseline is the cheapest thing he can ALREADY do, route included — n
 
 test("bestPayAdvice returns nothing when neither side can be priced", () => {
   expect(bestPayAdvice([], [])).toBeNull();
-  expect(payHeadline(null, [], "EUR")).toContain("euro");
+  expect(payHeadline(null, [], "EUR")).toEqual({ kind: "eur" });
 });
 
 /* ---------- cash: the winner is a proven zero, and a missing figure is named ---------- */
@@ -1239,10 +1289,19 @@ test("the cash advice is the proven cheapest, and it names the cards whose price
   // figure nobody mentions reads as "there is no charge" — so it is named.
   expect(a.unpricedOwn).toEqual(["Revolut betaalpas"]);
 
-  expect(plan.withdrawHeadline).toContain("N26 Go betaalpas");
-  expect(plan.withdrawHeadline).toContain("ING betaalpas");
-  expect(plan.withdrawHeadline).toContain("Revolut betaalpas");
-  expect(plan.withdrawHeadline).not.toMatch(/gratis|kost je niets/i);
+  // N26 Go genoemd als winnaar, ING als zijn eigen vergelijking, en Revolut als
+  // het gat dat we niet kunnen bewijzen — nooit stilzwijgend gratis (er is geen
+  // stringveld dat "gratis" zou kunnen bevatten; de nul zit in costOnReference).
+  expect(plan.withdrawHeadline).toEqual({
+    kind: "not-held",
+    product: "N26 Go betaalpas",
+    costOnReference: 0,
+    effectivePct: 0,
+    own: { kind: "known", ownProduct: "ING betaalpas", ownCostOnReference: 6.3, extraCostVsWinner: null },
+    holdingCost: { kind: "gross-cost-unknown", product: "N26 Go betaalpas", reason: "no-source" },
+    small: { kind: "penalised", provider: "ING betaalpas", smallEffectivePct: 8.4 },
+    missingCashNote: { kind: "some", missing: ["Revolut betaalpas"] },
+  });
 });
 
 test("his own card still wins the cash advice when nothing proven beats it", () => {
@@ -1259,7 +1318,16 @@ test("his own card still wins the cash advice when nothing proven beats it", () 
   expect(a.held).toBe(true);
   expect(a.product).toBe("ING betaalpas");
   expect(a.savingOnReference).toBeNull();
-  expect(withdrawalHeadline(own, "USD", market)).toContain("in één keer meer");
+  // "in één keer meer" is de small-withdrawal-penalty (`small.kind ===
+  // "penalised"`) — die blijft op het scherm ongeacht wie de rangschikking wint.
+  expect(withdrawalHeadline(own, "USD", market)).toEqual({
+    kind: "held",
+    product: "ING betaalpas",
+    costOnReference: 6.3,
+    effectivePct: 3.15,
+    small: { kind: "penalised", provider: "ING betaalpas", smallEffectivePct: 8.4 },
+    missingCashNote: { kind: "none" },
+  });
 });
 
 /* GELIJKSPEL: DE KAART DIE HIJ AL HEEFT WINT — zijn beslissing van 20 augustus.
@@ -1661,9 +1729,11 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     expect(gain.savingCents).toBe(1400); // bruto: het verschil in opslag
     expect(gain.net.kind).toBe("no-recommendation");
     expect(gain.net.kind !== "gross-cost-unknown" && gain.net.netCents).toBe(-290);
-    // Hij moet het kunnen ZIEN in plaats van uit te rekenen.
-    expect(describeNetBenefit(gain.net)).toContain("Geen aanbeveling");
-    expect(describeNetBenefit(gain.net)).toContain("achteruit");
+    // Hij moet het kunnen ZIEN in plaats van uit te rekenen: het negatieve bedrag
+    // reist mee naar de beschrijving.
+    const desc = describeNetBenefit(gain.net);
+    expect(desc.kind).toBe("no-recommendation");
+    expect(desc.kind === "no-recommendation" && desc.netCents).toBe(-290);
   });
 
   test("...en dan blijft de aanbeveling zijn EIGEN kaart", () => {
@@ -1697,9 +1767,12 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     const gain = offerSwitchGain(1.4, offers)!;
     expect(gain.net.kind).toBe("gross-cost-unknown");
     expect(gain.net.kind === "gross-cost-unknown" && gain.net.grossCents).toBe(1400);
-    const words = describeNetBenefit(gain.net);
-    expect(words).not.toContain("netto");
-    expect(words).toContain("geen nul");
+    // Onbekend is geen nul: de reden staat erbij, en het type draagt geen
+    // netCents-veld — het woord "netto" kan structureel niet vallen.
+    const desc = describeNetBenefit(gain.net);
+    expect(desc.kind).toBe("gross-cost-unknown");
+    expect(desc.kind === "gross-cost-unknown" && desc.reason).toBe("no-source");
+    expect("netCents" in desc).toBe(false);
   });
 
   test("en de kop zegt bij onbekende kosten dat er een gat zit, zonder 'netto'", () => {
@@ -1716,8 +1789,16 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.netSavingOnReference).toBeNull(); // er is geen netto
     expect(plan.pay?.savingOnReference).toBe(14); // bruto wel
-    expect(plan.headline).not.toContain("netto");
-    expect(plan.headline).toContain("geen nul");
+    // Geen netCents-veld ergens in deze structuur (dus geen "netto" mogelijk),
+    // en de reden ("no-source") staat erbij in plaats van een verzwegen gat.
+    expect(plan.headline).toEqual({
+      kind: "catalogue-card",
+      product: "ING PlatinumCard",
+      costOnReference: 0,
+      savingOnReference: 14,
+      ownProduct: "ING betaalpas",
+      holdingCost: { kind: "gross-cost-unknown", product: "ING PlatinumCard", reason: "no-source" },
+    });
   });
 
   test("KOSTEN BEKEND en netto positief: dan mag het woord netto er staan", () => {
@@ -1735,10 +1816,24 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.netSavingOnReference).toBe(4.1);
     expect(plan.pay?.benefit?.kind).toBe("net");
-    expect(plan.headline).toContain("€ 9,90");
-    expect(plan.headline).toContain("€ 4,10");
-    // DE PERIODE STAAT ERBIJ, want zonder haar is € 4,10 niet na te rekenen.
-    expect(plan.headline).toContain("minstens één maand");
+    // DE PERIODE STAAT ERBIJ, want zonder haar is € 4,10 niet na te rekenen: de
+    // "net-positive"-variant draagt altijd `periodsCharged`/`costPeriod`.
+    expect(plan.headline).toEqual({
+      kind: "catalogue-card",
+      product: "N26 Go betaalpas",
+      costOnReference: 0,
+      savingOnReference: 14,
+      ownProduct: "ING betaalpas",
+      holdingCost: {
+        kind: "net-positive",
+        product: "N26 Go betaalpas",
+        priceCents: 990,
+        pricePeriod: "maand",
+        periodsCharged: 1,
+        costPeriod: "maand",
+        netCents: 410,
+      },
+    });
     expect(plan.tripMonths).toBe(1);
   });
 
@@ -1761,8 +1856,20 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.benefit).toBeNull(); // niets om te verrekenen
     expect(plan.pay?.holdingCost).toMatchObject({ kind: "known", amount: { cents: 1690 } });
-    expect(plan.headline).toContain("€ 16,90");
-    expect(plan.headline).not.toContain("netto");
+    // "bare"/"priced": de prijs blijft genoemd (€ 16,90) ook zonder iets om tegen
+    // af te zetten, en dat is een ander veld dan een net(to)-variant — er is hier
+    // structureel geen netCents.
+    expect(plan.headline).toEqual({
+      kind: "catalogue-card",
+      product: "N26 Metal betaalpas",
+      costOnReference: 0,
+      savingOnReference: null,
+      ownProduct: null,
+      holdingCost: {
+        kind: "bare",
+        clause: { kind: "priced", product: "N26 Metal betaalpas", cents: 1690, period: "maand" },
+      },
+    });
   });
 });
 
@@ -1780,8 +1887,15 @@ test("een kaart die niets kost krijgt geen rekensom over een periode", () => {
     catalogue: [CAT_TRADE_REPUBLIC],
     tripMonths: 6,
   });
-  expect(plan.headline).toContain("kost zelf niets om aan te houden");
-  expect(plan.headline).toContain("je houdt € 14,00 over");
-  expect(plan.headline).not.toContain("€ 0,00 per maand");
-  expect(plan.headline).not.toContain("6 maanden");
+  // "free-to-hold": geen rekensom over een periode (geen periodsCharged/
+  // costPeriod-veld, dus geen "€ 0,00 per maand" en geen "6 maanden" om te
+  // noemen), het volle brutobedrag blijft over.
+  expect(plan.headline).toEqual({
+    kind: "catalogue-card",
+    product: "Trade Republic betaalpas",
+    costOnReference: 0,
+    savingOnReference: 14,
+    ownProduct: "ING betaalpas",
+    holdingCost: { kind: "free-to-hold", product: "Trade Republic betaalpas", grossCents: 1400 },
+  });
 });

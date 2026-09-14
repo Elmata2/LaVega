@@ -586,9 +586,11 @@ describe("de rekening waar het advies heen wijst kost zelf ook geld", () => {
     expect(r.totalExtraPerYearCents).toBe(5000); // bruto blijft staan
     expect(r.net?.kind).toBe("no-recommendation");
     expect(r.net!.kind !== "gross-cost-unknown" && r.net!.netCents).toBe(-400);
-    // Hij moet het kunnen ZIEN staan in plaats van het uit te rekenen.
-    expect(describeNetBenefit(r.net!)).toContain("Geen aanbeveling");
-    expect(describeNetBenefit(r.net!)).toContain("achteruit");
+    // Hij moet het kunnen ZIEN staan in plaats van het uit te rekenen: de
+    // beschrijving draagt hetzelfde negatieve bedrag, niet weggevallen.
+    const desc = describeNetBenefit(r.net!);
+    expect(desc.kind).toBe("no-recommendation");
+    expect(desc.kind === "no-recommendation" && desc.netCents).toBe(-400);
   });
 
   test("MAAND TEGEN JAAR: dezelfde prijs, twaalf keer zo groot als de eenheid wegvalt", () => {
@@ -647,9 +649,12 @@ describe("de rekening waar het advies heen wijst kost zelf ook geld", () => {
     const r = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined, fees);
     expect(r.net?.kind).toBe("gross-cost-unknown");
     expect(r.net!.kind === "gross-cost-unknown" && r.net!.grossCents).toBe(5000);
-    const words = describeNetBenefit(r.net!);
-    expect(words).not.toContain("netto");
-    expect(words).toContain("geen nul");
+    // Onbekend is geen nul: de reden staat erbij, en het type draagt het woord
+    // "netto" niet — er is geen netCents-veld om per ongeluk te tonen.
+    const desc = describeNetBenefit(r.net!);
+    expect(desc.kind).toBe("gross-cost-unknown");
+    expect(desc.kind === "gross-cost-unknown" && desc.reason).toBe("no-source");
+    expect("netCents" in desc).toBe(false);
   });
 
   test("een benchmark ZONDER catalogusrij is óók 'kosten onbekend', niet gratis", () => {

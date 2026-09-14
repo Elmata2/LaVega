@@ -10,6 +10,7 @@ import TravelBlock, {
   type TravelBlockProps,
   figureAge,
   TermsNotice,
+  payHeadlineSentence,
 } from "./TravelBlock";
 // De klassenamen van de uitklap uit hun eigen bestand, niet overgetikt: een
 // hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
@@ -201,14 +202,18 @@ function rerender(overrides: Partial<TravelBlockProps> = {}) {
 
 test("the block leads with the plan's headline — the one answer, in euros", () => {
   const c = renderWithDestination();
-  const expected = planTravel({
-    accounts: travelAccounts,
-    txs: [],
-    rates: [],
-    facts: travelFacts,
-    destination: "US",
-    asOf: ASOF,
-  }).headline;
+  const expected = payHeadlineSentence(
+    planTravel({
+      accounts: travelAccounts,
+      txs: [],
+      rates: [],
+      facts: travelFacts,
+      destination: "US",
+      asOf: ASOF,
+    }).headline,
+    optimiseCopy.nl.travel,
+    "nl",
+  );
 
   const answer = c.querySelector(".travel-winner-name")!;
   expect(answer.textContent).toBe(expected);
@@ -1096,15 +1101,19 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
 
 test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen zin", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
-  const full = planTravel({
-    accounts: travelAccounts,
-    txs: [],
-    rates: [],
-    facts: DEARER_OWN,
-    destination: "US",
-    asOf: ASOF,
-    catalogue: GOEDKOOP,
-  }).headline;
+  const full = payHeadlineSentence(
+    planTravel({
+      accounts: travelAccounts,
+      txs: [],
+      rates: [],
+      facts: DEARER_OWN,
+      destination: "US",
+      asOf: ASOF,
+      catalogue: GOEDKOOP,
+    }).headline,
+    optimiseCopy.nl.travel,
+    "nl",
+  );
   const shown = headlineText(el);
 
   // PREFIX, en dat is de hele bewaking: er mag een staart af, er mag niets aan
