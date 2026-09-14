@@ -1,5 +1,5 @@
 import { expect, test, beforeEach } from "vitest";
-import { getCardTerms, resetCardTerms, ingestCardTerms, ingestCatalogue } from "./cardTerms.js";
+import { getCardTerms, resetCardTerms, ingestCardTerms, ingestCatalogue, awaitLookups} from "./cardTerms.js";
 import type { TravelInput } from "./agent/travel.js";
 import type { BankNlTable } from "@lavega/core";
 
@@ -11,7 +11,12 @@ const input = (providers: string[]): TravelInput => ({
   knownFacts: [],
 });
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
+/* Waits for the real thing rather than for a tick: background lookups are
+ * serialized now, so "one macrotask" is a guess and awaiting the chain is not. */
+const settle = async () => {
+  await awaitLookups();
+  await new Promise((r) => setTimeout(r, 0));
+};
 
 beforeEach(() => resetCardTerms());
 
@@ -495,8 +500,12 @@ test("a comparison row is served AND still sent to the agent, because it answers
 
   const first = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
   expect(first.terms[0].fxFeePct).toBe(1.4); // served immediately, nobody waits
-  expect(askedFor).toEqual(["ING betaalpas"]); // ...and the agent was asked anyway
   await settle();
+  // ...and the agent was asked anyway. Checked after the wait rather than
+  // before it: background lookups are queued now, so they no longer begin in
+  // the same tick as the call that scheduled them. What matters here is that a
+  // comparison row does not suppress the agent, not when the agent starts.
+  expect(askedFor).toEqual(["ING betaalpas"]);
 
   const second = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
   expect(second.terms[0].cashbackPct).toBe(0); // the gap closed by itself

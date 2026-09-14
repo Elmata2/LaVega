@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { Hono } from "hono";
+import { MistralHttpError } from "./agent/mistral.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import type { ExtractedInvoice } from "./agent/invoiceExtract.js";
 import { recordUsage, resetBudgetMemory } from "./agent/budget.js";
@@ -517,9 +518,14 @@ test("extract-invoice returns 429 over the daily budget, and never reaches the e
   });
 });
 
-test("extract-invoice proceeds normally when spend is under the daily budget", async () => {
+/* "Under the budget" now means under it WITH ROOM FOR THIS CALL. The gate
+ * reserves the route's worst case before allowing it, so a cap with less
+ * headroom than one extraction can cost refuses rather than admitting a call
+ * that would land past it. 70 cents used to pass here and no longer does,
+ * which is the fix, not a regression. */
+test("extract-invoice proceeds when the cap still has room for one extraction", async () => {
   await withApiKey("sk-ant-test", async () => {
-    await withDailyBudgetCents("70", async () => {
+    await withDailyBudgetCents("200", async () => {
       recordOneExpensiveCall();
       await new Promise((r) => setTimeout(r, 0));
       const app = new Hono();
@@ -583,6 +589,66 @@ test("travel-facts returns 429 over the daily budget, and never starts the backg
       // Not just "not awaited yet" — genuinely never scheduled, given the
       // event-loop tick below.
       await new Promise((r) => setTimeout(r, 0));
+      expect(called).toBe(false);
+    });
+  });
+});
+
+/* EEN PLAFOND VAN DE AANBIEDER IS GEEN STORING.
+ *
+ * Mistral antwoordde 429 omdat het spend-plafond van de workspace bereikt was,
+ * en de eigenaar las "probeer het later opnieuw": dezelfde zin als bij een kapot
+ * verzoek. Opnieuw proberen kon niet werken, want de oplossing stond op een
+ * facturatiepagina. Deze test houdt de twee uit elkaar. */
+test("extract-invoice: een 429 van de aanbieder leest als een plafond, niet als een storing", async () => {
+  await withApiKey("sk-test", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const limited = new Hono();
+    registerAgentRoutes(limited, {
+      extract: async () => {
+        throw new MistralHttpError(429, "chat", "Rate limit exceeded");
+      },
+    });
+    const res = await limited.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+    expect(res.status).toBe(502);
+    const body = await res.text();
+    expect(body).toContain("limiet van het account");
+    expect(body).not.toContain("probeer het later opnieuw");
+    expect(body).not.toContain("Rate limit exceeded");
+
+    const broken = new Hono();
+    registerAgentRoutes(broken, {
+      extract: async () => {
+        throw new MistralHttpError(500, "chat", "boom");
+      },
+    });
+    const res2 = await broken.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+    expect(await res2.text()).toContain("probeer het later opnieuw");
+
+    errSpy.mockRestore();
+  });
+});
+
+/* THE HOLE THIS CLOSES. The gate used to look only backwards: a request was
+ * admitted whenever PAST spend was under the cap, so a single call could cost
+ * more than the whole day's allowance and only the next one was refused. With
+ * pay-as-you-go upstream there is no provider ceiling behind it any more. */
+test("a cap with no room for the call itself refuses before spending", async () => {
+  await withApiKey("sk-test", async () => {
+    await withDailyBudgetCents("70", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0));
+      let called = false;
+      const app = new Hono();
+      registerAgentRoutes(app, {
+        extract: async () => {
+          called = true;
+          return FAKE_RESULT;
+        },
+      });
+      const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+      expect(res.status).toBe(429);
       expect(called).toBe(false);
     });
   });

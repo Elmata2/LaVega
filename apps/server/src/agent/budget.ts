@@ -54,18 +54,51 @@ export async function spentCents(): Promise<{ dayCents: number; monthCents: numb
 // is best-effort, not a hard ceiling. Accepted for a single-owner, low-volume
 // deployment; closing it for real would need a reservation step (check AND
 // provisionally charge before the call, reconcile after), not worth it here.
-export async function checkBudget(): Promise<BudgetGate> {
+/** The most a single call on each route can cost, in euro cents, derived from
+ *  that route's own input bounds: OCR is capped at a 20-page window, categorize
+ *  at 200 short items, and the two search-backed routes now send a max_tokens.
+ *  Rounded generously upward — this is a ceiling, not an estimate.
+ *
+ *  These exist so the gate can refuse a call it cannot afford BEFORE making it.
+ *  Without them the cap only ever looked backwards: a request was admitted
+ *  whenever past spend was under the cap, so one call could cost more than the
+ *  whole day's allowance and only the next one would be refused. */
+export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
+  "extract-invoice": 15,
+  categorize: 5,
+  chat: 25,
+  travel: 20,
+};
+
+/** Is there room for a call on `route`, counting what that call could cost?
+ *
+ *  Refuses slightly early by design: a route is blocked once its worst case no
+ *  longer fits under the cap, rather than once the cap is already breached.
+ *  That is the difference between a ceiling and a speed bump. */
+export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate> {
   const caps = loadBudgetConfig();
   const spent = await spentCents();
-  if (spent.dayCents >= caps.dayCents) return { ok: false, scope: "day" };
-  if (spent.monthCents >= caps.monthCents) return { ok: false, scope: "month" };
+  const headroom = route ? WORST_CASE_CENTS[route] : 0;
+  if (spent.dayCents + headroom >= caps.dayCents) return { ok: false, scope: "day" };
+  if (spent.monthCents + headroom >= caps.monthCents) return { ok: false, scope: "month" };
   return { ok: true };
 }
 
-/** Log and persist one AI call's cost. Fire-and-forget: an AI-usage-logging
- *  failure must never fail a request that already succeeded, so persistence
- *  runs detached and this function itself never throws or returns a Promise. */
-export function recordUsage(input: UsageInput): void {
+/** Log and persist one AI call's cost.
+ *
+ *  AWAITED, not detached. It used to run as `void (async () => …)()` so that a
+ *  logging failure could never fail a request that had already succeeded. On a
+ *  serverless host that reasoning does not survive contact with the platform:
+ *  the instance is free to stop once the response is sent, so a write suspended
+ *  mid-flight can simply be discarded. The Mistral call is billed either way,
+ *  the ledger never sees it, and the cap keeps answering "under cap" forever.
+ *  `waitUntil` would be the platform's own answer, but `@vercel/functions` is
+ *  not a dependency here.
+ *
+ *  So the promise is returned and the caller awaits it before responding. The
+ *  original guarantee is kept by never rejecting: every failure is swallowed
+ *  into a log, exactly as before. */
+export async function recordUsage(input: UsageInput): Promise<void> {
   const inputTokens = input.inputTokens ?? 0;
   const outputTokens = input.outputTokens ?? 0;
   const pages = input.pages ?? 0;
@@ -87,31 +120,29 @@ export function recordUsage(input: UsageInput): void {
     `ai.usage route=${input.route} model=${input.model} in=${inputTokens} out=${outputTokens} pages=${pages} cost_cents=${costCents}`,
   );
 
-  void (async () => {
-    try {
-      const { day, month } = todayParts();
-      const db = runtimeDatabase();
-      if (db) {
-        await createAiUsageRepository(db).record({
-          day,
-          route: input.route,
-          model: input.model,
-          inputTokens,
-          outputTokens,
-          pages,
-          searches,
-          costCents,
-        });
-        return;
-      }
-      memory.set(`day:${day}`, (memory.get(`day:${day}`) ?? 0) + costCents);
-      memory.set(`month:${month}`, (memory.get(`month:${month}`) ?? 0) + costCents);
-    } catch (e) {
-      console.error(
-        `agent/budget: failed to persist usage: ${e instanceof Error ? e.message : String(e)}`,
-      );
+  try {
+    const { day, month } = todayParts();
+    const db = runtimeDatabase();
+    if (db) {
+      await createAiUsageRepository(db).record({
+        day,
+        route: input.route,
+        model: input.model,
+        inputTokens,
+        outputTokens,
+        pages,
+        searches,
+        costCents,
+      });
+      return;
     }
-  })();
+    memory.set(`day:${day}`, (memory.get(`day:${day}`) ?? 0) + costCents);
+    memory.set(`month:${month}`, (memory.get(`month:${month}`) ?? 0) + costCents);
+  } catch (e) {
+    console.error(
+      `agent/budget: failed to persist usage: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 /** Test seam: clears the in-memory counter and the "warned once" flag. Cannot

@@ -18,10 +18,14 @@ export const PRICED_TOKEN_MODELS: ReadonlySet<string> = new Set(Object.keys(MODE
 
 const OCR_USD_PER_1000_PAGES = 4;
 
-// ASSUMPTION: Mistral does not publish a per-search price for its hosted
-// web_search tool as of writing. $10/1000 searches is a placeholder pending a
-// published number — the cap this feeds still bounds worst-case spend either way.
-const SEARCH_USD_PER_1000 = 10;
+// ASSUMPTION, DELIBERATELY PESSIMISTIC. Mistral does not publish a per-search
+// price on its public pricing page, and a review on 14 Sep 2026 put the real
+// figure at $30/1000 rather than the $10 placeholder that was here. I could not
+// confirm $30 against a primary source, so this errs HIGH on purpose: an
+// overstated price makes the budget gate refuse sooner, and the failure this
+// number guards against is a bill nobody expected, not a cap that bit early.
+// Correct it downward only against a real invoice.
+const SEARCH_USD_PER_1000 = 30;
 
 // Fixed, not live: the budget cap only needs to be roughly right, not track
 // the market rate. Revisit if it drifts far enough to matter.

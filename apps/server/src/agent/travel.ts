@@ -16,6 +16,9 @@ export type TravelInput = {
 };
 
 const MAX_PROVIDERS = 12;
+/* A travel answer is a short structured fact block, not an essay. Unbounded
+ * before this, on the priciest model this app calls. */
+const TRAVEL_MAX_OUTPUT_TOKENS = 2048;
 const MAX_FACTS = 60;
 const MAX_FIELD = 60;
 
@@ -168,20 +171,38 @@ export async function lookupProviderTerms(
   // this resolves; a thrown error is treated the same as any other failed
   // lookup, so the provider stays eligible for retry once the budget resets
   // instead of being wrongly recorded as "asked, and the model had nothing".
-  const budget = await checkBudget();
+  const budget = await checkBudget("travel");
   if (!budget.ok) throw new Error(`agent/travel: AI-limiet bereikt (${budget.scope})`);
 
-  const { text, usage } = await provider.chatWithSearch({
-    system,
-    messages: [{ role: "user", content: userMessage }],
-    onDelta: () => {},
-  });
+  let text: string;
+  let usage: { input: number; output: number } | undefined;
+  try {
+    ({ text, usage } = await provider.chatWithSearch({
+      system,
+      messages: [{ role: "user", content: userMessage }],
+      onDelta: () => {},
+      maxTokens: TRAVEL_MAX_OUTPUT_TOKENS,
+    }));
+  } catch (e) {
+    /* SEARCH_TIMEOUT_MS sits BELOW the top of this lookup's own stated range, so
+     * a timeout here is expected rather than exotic — and the searches were
+     * bought before it fired. Recording at the ceiling keeps a run of timeouts
+     * from being free. */
+    await recordUsage({
+      route: "travel",
+      model: MISTRAL_MEDIUM,
+      inputTokens: 0,
+      outputTokens: 0,
+      searches: 1,
+    });
+    throw e;
+  }
   // The one place the actual model call happens for travel, and the only
   // caller path there is — `/api/agent/travel-facts` never awaits this (it's
   // backgrounded past the route's return, see cardTerms.ts), so the route
   // can't record it; this has to. `usage` is optional here defensively: a
   // test double built before Part 2 can still omit it.
-  recordUsage({
+  await recordUsage({
     route: "travel",
     model: MISTRAL_MEDIUM,
     inputTokens: usage?.input,

@@ -2,7 +2,9 @@ import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
 import { checkBudget, recordUsage, spentCents } from "./agent/budget.js";
+import type { AiUsage } from "@lavega/database";
 import { MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
+import { MistralHttpError } from "./agent/mistral.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
 import { extractInvoiceFields } from "./agent/invoiceExtract.js";
 import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
@@ -47,6 +49,22 @@ const AI_ERROR_MESSAGE = "De AI-dienst gaf een fout; probeer het later opnieuw."
 // gate itself couldn't answer, not that it answered "over cap".
 const AI_UNAVAILABLE_MESSAGE = "De AI-dienst is tijdelijk niet beschikbaar.";
 
+/* An upstream 429 is not a fault, it is a ceiling somewhere else: the Mistral
+ * workspace's own rate limit or a spend cap that has been reached. Saying "try
+ * again later" there sends the owner to retry a request that cannot succeed
+ * until he opens a billing page, which is exactly what happened on 14 Sep. It
+ * is deliberately distinct from `budgetErrorMessage`, which is LaVega's OWN
+ * cap and is the owner's to raise in the app's environment. */
+const AI_UPSTREAM_LIMIT_MESSAGE =
+  "De AI-aanbieder weigert nu verzoeken (limiet van het account bereikt). Controleer je Mistral-account; opnieuw proberen helpt pas daarna.";
+
+/** 429 from the provider means their ceiling, anything else means a fault. */
+function aiFailureMessage(e: unknown): string {
+  return e instanceof MistralHttpError && e.status === 429
+    ? AI_UPSTREAM_LIMIT_MESSAGE
+    : AI_ERROR_MESSAGE;
+}
+
 function logAiError(route: string, e: unknown): void {
   console.error(`agent/${route}: ${e instanceof Error ? e.message : String(e)}`);
 }
@@ -63,9 +81,9 @@ function budgetErrorMessage(scope: "day" | "month"): string {
  *  send immediately (429 over cap, 503 if checkBudget() itself failed — Neon
  *  down must not read the same as "the model failed" or "over cap"), or
  *  `null` to proceed. */
-async function requireBudget(c: Context): Promise<Response | null> {
+async function requireBudget(c: Context, route: AiUsage["route"]): Promise<Response | null> {
   try {
-    const budget = await checkBudget();
+    const budget = await checkBudget(route);
     if (!budget.ok) return c.json({ error: budgetErrorMessage(budget.scope) }, 429);
     return null;
   } catch (e) {
@@ -125,7 +143,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
     if (!limit(bucket(c, "extract")))
       return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c);
+    const budgetBlocked = await requireBudget(c, "extract-invoice");
     if (budgetBlocked) return budgetBlocked;
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
@@ -145,7 +163,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json(result);
     } catch (e) {
       logAiError("extract-invoice", e);
-      return c.json({ error: AI_ERROR_MESSAGE }, 502);
+      return c.json({ error: aiFailureMessage(e) }, 502);
     }
   });
 
@@ -185,7 +203,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // because streamSSE structurally rules out a plain JSON 429 here.
       let budget: Awaited<ReturnType<typeof checkBudget>>;
       try {
-        budget = await checkBudget();
+        budget = await checkBudget("chat");
       } catch (e) {
         logAiError("budget", e);
         await stream.writeSSE({ event: "error", data: AI_UNAVAILABLE_MESSAGE });
@@ -225,7 +243,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
     if (!limit(bucket(c, "categorize")))
       return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c);
+    const budgetBlocked = await requireBudget(c, "categorize");
     if (budgetBlocked) return budgetBlocked;
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
@@ -245,7 +263,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json(result);
     } catch (e) {
       logAiError("categorize", e);
-      return c.json({ error: AI_ERROR_MESSAGE }, 502);
+      return c.json({ error: aiFailureMessage(e) }, 502);
     }
   });
 
@@ -263,7 +281,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
     if (!limit(bucket(c, "travel")))
       return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c);
+    const budgetBlocked = await requireBudget(c, "travel");
     if (budgetBlocked) return budgetBlocked;
     let input: import("./agent/travel.js").TravelInput;
     try {

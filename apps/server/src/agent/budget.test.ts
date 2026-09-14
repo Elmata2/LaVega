@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { checkBudget, recordUsage, resetBudgetMemory } from "./budget.js";
+import { checkBudget, recordUsage, resetBudgetMemory, spentCents } from "./budget.js";
 import { MISTRAL_SMALL } from "./models.js";
 
 let prevDay: string | undefined;
@@ -74,9 +74,42 @@ test("recordUsage increments what spentCents next reports", async () => {
   expect(await checkBudget()).toEqual({ ok: false, scope: "day" });
 });
 
-test("recordUsage never throws, and returns void synchronously", () => {
-  const result = recordUsage({ route: "extract-invoice", model: MISTRAL_SMALL });
-  expect(result).toBeUndefined();
+/* The contract changed on 14 Sep and the reason matters. This used to return
+ * void and persist in a detached `void (async () => …)()`, so that a logging
+ * failure could never fail a request that had already succeeded. On a
+ * serverless host the platform may stop the instance once the response is sent,
+ * which quietly discards that write: the Mistral call is billed, the ledger
+ * never sees it, and the cap answers "under" forever. It is awaited now. The
+ * original guarantee survives as "never rejects". */
+test("recordUsage is awaitable and never rejects", async () => {
+  await expect(
+    recordUsage({ route: "extract-invoice", model: MISTRAL_SMALL }),
+  ).resolves.toBeUndefined();
+});
+
+/* HONEST ABOUT WHAT THIS CANNOT PROVE.
+ *
+ * This asserts the spend is visible after awaiting, which it is. It does NOT
+ * prove the write is attached, and I checked: re-detaching it into a
+ * `void (async () => …)()` leaves this test green, because with no
+ * DATABASE_URL the memory branch runs synchronously before the IIFE ever
+ * yields. The bug being guarded lives on the Neon path, and this file's own
+ * header explains why that path is not reachable from here.
+ *
+ * So the real guard is the return type: `recordUsage` is `async`, the agents
+ * `await onUsage?.(…)`, and tsc fails if either stops being true. That is
+ * structural rather than behavioural, and it is what actually holds the fix. */
+test("recorded spend is visible to the next gate read", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "1000000";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+  const before = (await spentCents()).dayCents;
+  await recordUsage({
+    route: "categorize",
+    model: MISTRAL_SMALL,
+    inputTokens: 1_000_000,
+    outputTokens: 1_000_000,
+  });
+  expect((await spentCents()).dayCents).toBeGreaterThan(before);
 });
 
 test("recordUsage with an unrecognized model logs loudly and does not throw or record any spend — pricing.ts's throw is caught here, not propagated to the caller", async () => {

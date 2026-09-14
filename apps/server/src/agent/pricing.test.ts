@@ -71,9 +71,9 @@ test("priceOcrCents: per-page math at $4/1000 pages", () => {
   expect(priceOcrCents(1)).toBeCloseTo(0.4, 6);
 });
 
-test("priceSearchCents: per-search math at $10/1000 searches", () => {
-  expect(priceSearchCents(1000)).toBeCloseTo(1000, 6); // 1000 searches -> 1000 USD cents
-  expect(priceSearchCents(1)).toBeCloseTo(1, 6);
+test("priceSearchCents: per-search math at $30/1000 searches", () => {
+  expect(priceSearchCents(1000)).toBeCloseTo(3000, 6); // 1000 searches -> 3000 USD cents
+  expect(priceSearchCents(1)).toBeCloseTo(3, 6);
 });
 
 test("totalCostCents: composes token + OCR + search cost and converts USD to EUR cents", () => {

@@ -25,38 +25,76 @@ export type ExtractedInvoice = {
  * `_base.md`), not in this file. We coerce the parsed JSON defensively (the
  * model can omit or mistype fields).
  */
+/* THE ONLY THING BOUNDING WHAT ONE EXTRACTION CAN COST.
+ *
+ * OCR bills per page ($4 per 1000), and the redaction boundary accepts a PDF up
+ * to ~10 MB, which can be thousands of pages. The budget gate runs ONCE before
+ * the request, so it cannot stop a single call that costs more than the whole
+ * daily cap — it only refuses the next one. Twenty pages is far beyond any real
+ * invoice and holds one extraction under about seven cents.
+ *
+ * A longer document is truncated rather than refused: the fields this agent
+ * looks for are on the first pages, and refusing a fat scan outright would be a
+ * worse answer than reading the front of it. */
+const MAX_OCR_PAGES = 20;
+const OCR_PAGE_WINDOW = Array.from({ length: MAX_OCR_PAGES }, (_, i) => i);
+
 export async function extractInvoiceFields(
   input: InvoiceExtractInput,
   apiKey: string,
   facts: readonly LearnedFact[] = [],
-  onUsage?: (usage: { inputTokens: number; outputTokens: number; pages: number }) => void,
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    pages: number;
+  }) => void | Promise<void>,
 ): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
   const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
 
   let markdown: string | undefined;
   let pages = 0;
   if (input.pdfBase64) {
-    const ocr = await provider.ocrPdf({ pdfBase64: input.pdfBase64 });
-    markdown = ocr.markdown;
-    pages = ocr.pages;
+    /* A timeout or a malformed body here still leaves Mistral having processed
+     * and billed the pages. We cannot know how many, so the window is the
+     * honest upper bound: over-attributing is the safe direction for a cap. */
+    try {
+      const ocr = await provider.ocrPdf({ pdfBase64: input.pdfBase64, pages: OCR_PAGE_WINDOW });
+      markdown = ocr.markdown;
+      pages = ocr.pages;
+    } catch (e) {
+      await onUsage?.({ inputTokens: 0, outputTokens: 0, pages: MAX_OCR_PAGES });
+      throw e;
+    }
   }
   const documentText = markdown || input.text;
   if (!documentText) {
     // A blank/unreadable scan still burned a real, billable OCR call — record
     // it before throwing, or the spend never reaches the budget ledger.
-    onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
+    await onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
     throw new Error("geen extractie");
   }
 
-  const res = await provider.complete({
-    system: loadAgentPrompt("facturen-extract") + factsBlock(facts, AGENTS.facturen),
-    user: `Factuurtekst:\n${documentText}`,
-    json: true,
-    maxTokens: 1024,
-  });
+  // THE OCR PAGES ARE ALREADY BOUGHT BY HERE, whatever the completion does.
+  //
+  // Recording only on the happy path is how spend goes missing: on 14 Sep the
+  // owner's OCR calls were succeeding while every completion answered 429, so
+  // each attempt billed real pages that the cap never saw, and retrying looked
+  // free. The blank-scan branch above always knew this; this one did not.
+  let res: Awaited<ReturnType<typeof provider.complete>>;
+  try {
+    res = await provider.complete({
+      system: loadAgentPrompt("facturen-extract") + factsBlock(facts, AGENTS.facturen),
+      user: `Factuurtekst:\n${documentText}`,
+      json: true,
+      maxTokens: 1024,
+    });
+  } catch (e) {
+    await onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
+    throw e;
+  }
   // One row covers both the OCR pass and the completion — call it once, after
   // complete() resolves, so it reflects the full cost of this extraction.
-  onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output, pages });
+  await onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output, pages });
 
   let parsed: unknown;
   try {

@@ -52,7 +52,12 @@ test("a PDF input is OCR'd first, and the OCR markdown (not input.text) reaches 
     confidence: 0.9, // the model's own self-reported value, passed through
   });
 
-  expect(ocrMock).toHaveBeenCalledWith({ pdfBase64: "AAAA" });
+  /* The page window is part of the contract, not an incidental argument: it is
+  // the only bound on what a single extraction can cost. */
+  expect(ocrMock).toHaveBeenCalledWith({
+    pdfBase64: "AAAA",
+    pages: Array.from({ length: 20 }, (_, i) => i),
+  });
   const arg = completeMock.mock.calls[0][0];
   expect(arg.user).toBe("Factuurtekst:\nfactuur van ACME");
   expect(arg.json).toBe(true);
@@ -65,6 +70,26 @@ test("throws 'geen extractie' when OCR returns empty markdown and there is no in
 
   await expect(extractInvoiceFields({ pdfBase64: "AAAA" }, "k")).rejects.toThrow("geen extractie");
   expect(completeMock).not.toHaveBeenCalled();
+});
+
+/* DE ZUSTERGEVAL VAN HET BLANCO SCAN-GEVAL, EN HET GEVAL DAT ECHT GEBEURDE.
+ *
+ * Op 14 september slaagde elke OCR-aanroep en gaf elke completion 429, omdat
+ * het spend-plafond van de Mistral-workspace bereikt was. De pagina's waren dus
+ * echt gekocht, maar `onUsage` stond alleen op het gelukkige pad: het plafond
+ * zag die uitgave nooit en opnieuw proberen leek gratis. Nu de aanbieder
+ * pay-as-you-go is, is dat precies het gat waardoor een rekening oploopt zonder
+ * dat de dagteller beweegt. */
+test("onUsage fires with the OCR page count when complete() throws — those pages were bought", async () => {
+  ocrMock.mockResolvedValue({ markdown: "factuur van ACME", pages: 3 });
+  completeMock.mockRejectedValue(new Error("mistral chat 429: Rate limit exceeded"));
+  const onUsage = vi.fn();
+
+  await expect(extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage)).rejects.toThrow(
+    "429",
+  );
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, pages: 3 });
 });
 
 test("onUsage still fires with the OCR page count when a blank/unreadable scan throws before complete() — that OCR call was real and billable", async () => {

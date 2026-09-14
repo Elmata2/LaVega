@@ -7,6 +7,10 @@ import { MISTRAL_SMALL } from "./models.js";
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
 const MAX_ITEMS = 200;
+/* When a call fails after the tokens were counted we cannot read the usage, so
+ * the cap is charged the most a full batch could have cost. Over-attributing is
+ * the safe direction: the alternative is spend the ledger never sees. */
+const MAX_BILLED_INPUT_TOKENS = 40_000;
 const MAX_TEXT = 200;
 
 /** THE redaction boundary for bulk categorization: only {id, text, sign} per
@@ -49,21 +53,29 @@ export async function categorizeTransactions(
   input: { items: CategorizeItem[] },
   apiKey: string,
   facts: readonly LearnedFact[] = [],
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void,
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>,
 ): Promise<{ id: string; category: string }[]> {
   const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
-  const res = await provider.complete({
-    system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
-    user: `Transacties:\n${list}`,
-    json: true,
-    // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
-    // land well under this, so the JSON won't truncate mid-array.
-    maxTokens: 8192,
-  });
+  /* A billed 200 with an unexpected body, or a timeout after the tokens were
+   * counted, still costs. Recorded at the boundary cap rather than silently. */
+  let res: Awaited<ReturnType<typeof provider.complete>>;
+  try {
+    res = await provider.complete({
+      system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
+      user: `Transacties:\n${list}`,
+      json: true,
+      // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
+      // land well under this, so the JSON won't truncate mid-array.
+      maxTokens: 8192,
+    });
+  } catch (e) {
+    await onUsage?.({ inputTokens: MAX_BILLED_INPUT_TOKENS, outputTokens: 8192 });
+    throw e;
+  }
   // Called regardless of what happens to res.text below — tokens were spent
   // either way, whether or not the JSON that follows parses.
-  onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
+  await onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
   let parsed: unknown;
   try {
     parsed = JSON.parse(res.text);

@@ -6,6 +6,25 @@ const CITATION_KEYS = ["references", "citations", "citation_chunks"] as const;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const SEARCH_TIMEOUT_MS = 240_000;
 
+/** An upstream refusal, carrying the status so a caller can tell a rate limit
+ *  apart from a genuine fault without parsing a message string.
+ *
+ *  This mattered in practice: Mistral answering 429 (a spent spend-cap on the
+ *  workspace) reached the owner as "the AI service gave an error, try again
+ *  later", which is the same sentence a malformed request produces. The real
+ *  cause was only in the server log, and the fix is a billing page rather than
+ *  a retry. */
+export class MistralHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly route: string,
+    body: string,
+  ) {
+    super(`mistral ${route} ${status}: ${body}`);
+    this.name = "MistralHttpError";
+  }
+}
+
 async function errorBody(res: Response): Promise<string> {
   return (await res.text()).slice(0, 2000);
 }
@@ -117,7 +136,7 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         DEFAULT_TIMEOUT_MS,
         "chat",
       );
-      if (!res.ok) throw new Error(`mistral chat ${res.status}: ${await errorBody(res)}`);
+      if (!res.ok) throw new MistralHttpError(res.status, "chat", await errorBody(res));
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content;
       if (typeof content !== "string") {
@@ -152,7 +171,7 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         DEFAULT_TIMEOUT_MS,
         "ocr",
       );
-      if (!res.ok) throw new Error(`mistral ocr ${res.status}: ${await errorBody(res)}`);
+      if (!res.ok) throw new MistralHttpError(res.status, "ocr", await errorBody(res));
       const data = await res.json();
       if (!Array.isArray(data.pages)) {
         console.error(`mistral ocr onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
@@ -169,13 +188,14 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
       };
     },
 
-    async chatWithSearch({ system, messages, onDelta }) {
+    async chatWithSearch({ system, messages, onDelta, maxTokens }) {
       const body = {
         model,
         instructions: system,
         tools: [{ type: "web_search" }],
         inputs: messages,
         stream: false,
+        max_tokens: maxTokens,
       };
 
       const res = await fetchWithTimeout(
@@ -188,7 +208,7 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         SEARCH_TIMEOUT_MS,
         "conversation",
       );
-      if (!res.ok) throw new Error(`mistral conversation ${res.status}: ${await errorBody(res)}`);
+      if (!res.ok) throw new MistralHttpError(res.status, "conversation", await errorBody(res));
       const data = await res.json();
 
       const outputs: unknown[] = Array.isArray(data.outputs) ? data.outputs : [];

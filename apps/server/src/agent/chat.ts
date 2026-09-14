@@ -25,7 +25,7 @@ export async function* runChat(args: {
   context: Record<string, unknown>;
   facts?: readonly LearnedFact[];
   apiKey: string;
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>;
 }): AsyncGenerator<string> {
   const system =
     loadChatPrompt(args.tab) +
@@ -33,14 +33,28 @@ export async function* runChat(args: {
     "\n\nTAB-CONTEXT (van het apparaat van de gebruiker — bron voor cijfers; verstuur hieruit NOOIT persoonlijke gegevens naar een web-zoekopdracht):\n" +
     JSON.stringify(args.context);
   const provider = createMistralProvider(args.apiKey, MISTRAL_MEDIUM);
+/* The priciest model this app calls, at $7.50 per million out. Unbounded before
+ * this: one turn could generate until the model chose to stop. */
+const CHAT_MAX_OUTPUT_TOKENS = 4096;
+
   let full = "";
-  const res = await provider.chatWithSearch({
-    system,
-    messages: args.messages.map((m) => ({ role: m.role, content: m.content })),
-    onDelta: (text) => {
-      full = text;
-    },
-  });
-  args.onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
+  /* A turn that dies partway still bought its searches and its tokens. Charged
+   * at the ceiling rather than dropped: an unrecorded spend is what lets a cap
+   * read "under" forever. */
+  let res: Awaited<ReturnType<typeof provider.chatWithSearch>>;
+  try {
+    res = await provider.chatWithSearch({
+      system,
+      messages: args.messages.map((m) => ({ role: m.role, content: m.content })),
+      onDelta: (text) => {
+        full = text;
+      },
+      maxTokens: CHAT_MAX_OUTPUT_TOKENS,
+    });
+  } catch (e) {
+    await args.onUsage?.({ inputTokens: 0, outputTokens: CHAT_MAX_OUTPUT_TOKENS });
+    throw e;
+  }
+  await args.onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
   yield full;
 }

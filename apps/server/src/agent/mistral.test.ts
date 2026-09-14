@@ -114,11 +114,11 @@ test("ocrPdf() includes pages when given, and joins multi-page markdown", async 
   );
 
   const provider = createMistralProvider("sk-test", "mistral-small-latest");
-  const res = await provider.ocrPdf({ pdfBase64: "BBBB", pages: "0-1" });
+  const res = await provider.ocrPdf({ pdfBase64: "BBBB", pages: [0, 1] });
 
   expect(res).toEqual({ markdown: "een\n\ntwee", pages: 2 });
   const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-  expect(body.pages).toBe("0-1");
+  expect(body.pages).toEqual([0, 1]);
 });
 
 test("ocrPdf() throws an Error with status and body text on a non-2xx response", async () => {
@@ -145,6 +145,7 @@ test("chatWithSearch() sends inline model+instructions+tools with a single-messa
     system: "sys",
     messages: [{ role: "user", content: "hallo" }],
     onDelta,
+    maxTokens: 1024,
   });
 
   expect(res.text).toBe("antwoord");
@@ -176,6 +177,7 @@ test("chatWithSearch() reads usage from data.usage the same way complete() does"
     system: "sys",
     messages: [{ role: "user", content: "hallo" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.usage).toEqual({ input: 42, output: 7 });
@@ -191,6 +193,7 @@ test("chatWithSearch() defaults usage to {input:0, output:0} when the response h
     system: "sys",
     messages: [{ role: "user", content: "hallo" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.usage).toEqual({ input: 0, output: 0 });
@@ -209,6 +212,7 @@ test("chatWithSearch() always sends inputs as an array, even for a multi-turn hi
       { role: "assistant", content: "twee" },
     ],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   const body = JSON.parse(fetchMock.mock.calls[0][1].body);
@@ -241,6 +245,7 @@ test("chatWithSearch() parses a nested references[] citation shape into sources,
     system: "sys",
     messages: [{ role: "user", content: "vraag" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.sources).toEqual([
@@ -266,6 +271,7 @@ test("chatWithSearch() only reads text from message.output entries, not tool/fun
     system: "sys",
     messages: [{ role: "user", content: "vraag" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.text).toBe("final answer");
@@ -300,6 +306,7 @@ test("chatWithSearch() joins only the text blocks when content is the live API's
     system: "sys",
     messages: [{ role: "user", content: "vraag" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.text).toBe("Het antwoord is 42.");
@@ -327,6 +334,7 @@ test("chatWithSearch() collects sources from a directly {url,title}-shaped outpu
     system: "sys",
     messages: [{ role: "user", content: "vraag" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(res.sources).toEqual([
@@ -349,6 +357,7 @@ test("chatWithSearch() throws an Error with status and body text on a non-2xx re
       system: "s",
       messages: [{ role: "user", content: "u" }],
       onDelta: vi.fn(),
+    maxTokens: 1024,
     }),
   ).rejects.toThrow("mistral conversation 400: bad request");
 });
@@ -391,6 +400,7 @@ test("chatWithSearch() passes an AbortSignal to fetch", async () => {
     system: "sys",
     messages: [{ role: "user", content: "hallo" }],
     onDelta: vi.fn(),
+    maxTokens: 1024,
   });
 
   expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);

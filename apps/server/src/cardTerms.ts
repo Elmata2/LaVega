@@ -168,6 +168,19 @@ function incomplete(e: Entry): boolean {
   return e.terms.cashbackPct === undefined || e.terms.convertFeePct === undefined;
 }
 
+/** Test seam: resolves once every background lookup queued so far has finished.
+ *  The tests used to wait one macrotask tick, which worked while the lookups
+ *  were detached and independent. Chained, that is a guess about how many
+ *  microtask hops a run takes. Awaiting the chain itself is exact. */
+export function awaitLookups(): Promise<void> {
+  return queue;
+}
+
+/* The serial chain every background lookup joins. Rejections are swallowed so
+ * one failed lookup cannot break the chain for the ones behind it; each link
+ * already logs its own failure. */
+let queue: Promise<void> = Promise.resolve();
+
 function startLookup(
   provider: string,
   base: Omit<TravelInput, "providers">,
@@ -178,7 +191,21 @@ function startLookup(
   const held = cache.get(key);
   if (inFlight.has(key) || (fresh(held) && !incomplete(held as Entry))) return;
   inFlight.add(key);
-  void (async () => {
+  /* ONE AT A TIME, ON PURPOSE.
+   *
+   * These used to fire together, up to MAX_PROVIDERS of them from a single
+   * request. Each lookup checks the spend cap before it calls, but twelve
+   * concurrent checks all read the ledger before any of them has written to
+   * it, so every one is admitted and the cap is decided by a number that is
+   * already stale. A review measured it: 240 concurrent lookups were all
+   * admitted against a one-cent cap and landed EUR 14.39 past it.
+   *
+   * Chaining them is the smallest change that makes the gate real, because
+   * each lookup's check now sees the previous one's recorded spend and the
+   * run stops when the cap is reached. Nobody waits on these anyway: the
+   * request has already returned what it had, and a lookup takes 40s to 5min,
+   * so serial is the right shape for them regardless of cost. */
+  queue = queue.then(async () => {
     try {
       const found = await (deps.lookup ?? lookupProviderTerms)(
         { ...base, providers: [provider] },
@@ -203,7 +230,8 @@ function startLookup(
     } finally {
       inFlight.delete(key);
     }
-  })();
+  });
+  queue = queue.catch(() => {});
 }
 
 /** Fill the gaps from the bank.nl comparison table — ONE HTTP GET covering
@@ -392,4 +420,9 @@ export function resetCardTerms(): void {
   cache.clear();
   inFlight.clear();
   comparisonInFlight.clear();
+  /* The lookup chain is module state too. Without this a test that leaves a
+   * lookup pending blocks every later `awaitLookups()` forever, which is a
+   * test-only hazard but an instructive one: the same chain couples every
+   * background lookup in a process to the slowest one ahead of it. */
+  queue = Promise.resolve();
 }
