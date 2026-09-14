@@ -36,7 +36,8 @@ import { formatEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type BelastingCopy } from "../copy/admin.js";
 import type { Locale } from "../locale.js";
-import { getHomeCountry } from "../settings";
+import { getHomeCountry, getTaxCountryOverride, setTaxCountryOverride } from "../settings";
+import { countryNameIn } from "../countries.js";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
@@ -102,12 +103,21 @@ type BelastingProps = {
   onSaveScheduledFlows: (f: ScheduledFlow[]) => void;
 };
 
-/** The profile's country, narrowed to a country LaVega actually has rules for.
- *  An unknown code falls back rather than throwing — `taxPack` does the same,
- *  and a blank tax screen is worse than the default rules. */
-function homeCountryCode(): CountryCode {
-  const raw = getHomeCountry();
-  return COUNTRY_OPTIONS.find((o) => o.code === raw)?.code ?? DEFAULT_COUNTRY;
+/** Which tax system this screen applies, and whether it had to guess.
+ *
+ *  An explicit choice on this screen wins. Otherwise the profile's country is
+ *  used when LaVega has rules for it. Failing both, the Dutch rules are still
+ *  rendered, because a blank tax screen is worse than a default one, but
+ *  `unsupportedHome` carries the country we could NOT honour so the screen can
+ *  say so out loud. Falling back silently was the old behaviour, and it left a
+ *  Belgian owner reading Dutch tax rules with nothing to tell him. */
+function resolveTaxCountry(): { code: CountryCode; unsupportedHome: string | null } {
+  const chosen = COUNTRY_OPTIONS.find((o) => o.code === getTaxCountryOverride())?.code;
+  if (chosen) return { code: chosen, unsupportedHome: null };
+  const home = getHomeCountry();
+  const fromHome = COUNTRY_OPTIONS.find((o) => o.code === home)?.code;
+  if (fromHome) return { code: fromHome, unsupportedHome: null };
+  return { code: DEFAULT_COUNTRY, unsupportedHome: home };
 }
 
 /* ── THE SEAM BETWEEN A FILE HE PICKED AND THE TAX ENGINE ──────────────────
@@ -192,7 +202,8 @@ export default function Belasting({
     Record<string, { rows: TaxSheetRow[]; problems: TaxSheetProblem[]; name: string }>
   >({});
 
-  const country = homeCountryCode();
+  const [taxCountry, setTaxCountry] = useState(resolveTaxCountry);
+  const country = taxCountry.code;
   const pack = useMemo(() => taxPack(country), [country]);
   // Hoisted so the narrowing survives into the callbacks below.
   const profitTax = pack.profitTax;
@@ -411,6 +422,30 @@ export default function Belasting({
           {c.header.taxCount(profitTax ? 2 : 1)} · {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
         </span>
       </div>
+
+      <section className="card tax-system" aria-label={c.header.taxSystemLabel}>
+        <label htmlFor="tax-system">{c.header.taxSystemLabel}</label>
+        <select
+          id="tax-system"
+          value={country}
+          onChange={(e) => {
+            setTaxCountryOverride(e.target.value);
+            setTaxCountry(resolveTaxCountry());
+          }}
+        >
+          {COUNTRY_OPTIONS.map((o) => (
+            <option key={o.code} value={o.code}>
+              {countryNameIn(locale, o.code)}
+            </option>
+          ))}
+        </select>
+        <p className="mp-what">{c.header.taxSystemHint}</p>
+        {taxCountry.unsupportedHome && (
+          <p className="text-warn">
+            {c.header.unsupportedCountry(countryNameIn(locale, taxCountry.unsupportedHome))}
+          </p>
+        )}
+      </section>
 
       <ModuleGrid className="grid-2" label={c.header.gridLabel}>
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}

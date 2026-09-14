@@ -284,6 +284,13 @@ export type BelastingCopy = {
     rulesAsOfPrefix: string;
     /** ToonMeer summary text next to the title. */
     caveatsSummary: string;
+    /** The tax system in force, chosen here rather than inferred silently. */
+    taxSystemLabel: string;
+    taxSystemHint: string;
+    /** Shown when the profile's country has no pack. Naming the country matters:
+     *  the alternative is a screen that looks authoritative about a law it has
+     *  never read. */
+    unsupportedCountry: (country: string) => string;
     /** Shown instead of the whole screen when there are no entities at all. */
     entitiesEmpty: string;
     /** "1 belasting" / "2 belastingen" depending on whether the country pack has a profit-tax module. */
@@ -846,6 +853,10 @@ const nlBelasting: BelastingCopy = {
     title: "Belasting",
     rulesAsOfPrefix: "regels per",
     caveatsSummary: "Wat LaVega hier niet berekent",
+    taxSystemLabel: "Belastingstelsel",
+    taxSystemHint: "Bepaalt welke regels dit scherm toepast. Staat los van je land in Profiel.",
+    unsupportedCountry: (country) =>
+      `LaVega heeft nog geen belastingregels voor ${country}. Wat hieronder staat is afgeleid van de Nederlandse regels, niet van die van ${country} — kies hierboven zelf een stelsel of lees dit scherm als niet van toepassing.`,
     entitiesEmpty: "Nog geen entiteiten — importeer eerst rekeningen.",
     taxCount: (n) => (n === 2 ? "2 belastingen" : "1 belasting"),
     gridLabel: "Belastingen",
@@ -1451,6 +1462,10 @@ const enBelasting: BelastingCopy = {
     title: "Tax",
     rulesAsOfPrefix: "rules as of",
     caveatsSummary: "What LaVega does not calculate here",
+    taxSystemLabel: "Tax system",
+    taxSystemHint: "Decides which rules this screen applies. Separate from your country in Profile.",
+    unsupportedCountry: (country) =>
+      `LaVega has no tax rules for ${country} yet. What follows is derived from the Dutch rules, not from ${country}'s — pick a system above, or read this screen as not applying to you.`,
     entitiesEmpty: "No entities yet — import accounts first.",
     taxCount: (n) => (n === 2 ? "2 taxes" : "1 tax"),
     gridLabel: "Taxes",

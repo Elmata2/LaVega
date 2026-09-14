@@ -416,6 +416,42 @@ export function setEnabledModules(ids: string[]): void {
   }
 }
 
+const TAX_COUNTRY_KEY = "lavega.taxCountry";
+
+/** Which country's tax rules the Belasting screen applies.
+ *
+ *  Deliberately NOT the same setting as the home country. The home country also
+ *  decides which market's card terms the travel agent looks up and which
+ *  regions the border module offers, so picking "Germany" on the tax screen
+ *  would quietly move a Dutch owner's travel origin too. This is the narrower
+ *  question: whose tax law am I reading right now.
+ *
+ *  Unset means "follow the home country", which is right for the owner who
+ *  never thinks about this. It only becomes an explicit value when someone
+ *  chooses on the tax screen itself. */
+export function getTaxCountryOverride(): string | null {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(TAX_COUNTRY_KEY);
+    return raw && /^[A-Z]{2}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setTaxCountryOverride(code: string | null): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (code === null) {
+      localStorage.removeItem(TAX_COUNTRY_KEY);
+      return;
+    }
+    const c = String(code).trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(c)) localStorage.setItem(TAX_COUNTRY_KEY, c);
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
 const HOME_COUNTRY_KEY = "lavega.homeCountry";
 
 /** The owner's home country as a 2-letter code, default NL. A local-first app
