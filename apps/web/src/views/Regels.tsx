@@ -3,6 +3,7 @@ import type { Rule } from "@lavega/core";
 import { CATEGORY_OPTIONS } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
+import { categoryLabel } from "../copy/money.js";
 
 type RegelsProps = {
   rules: Rule[];
@@ -132,7 +133,7 @@ export default function Regels({
               {sortedRules.map((rule) => (
                 <tr key={rule.id}>
                   <td>{rule.match}</td>
-                  <td>{rule.category}</td>
+                  <td>{categoryLabel(locale, rule.category)}</td>
                   <td>
                     <button
                       type="button"

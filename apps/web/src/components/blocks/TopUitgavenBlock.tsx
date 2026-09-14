@@ -4,7 +4,7 @@ import { categoryComparison } from "@lavega/core";
 import { formatEuroIn, monthLabel } from "../../format.js";
 import Module from "../Module.js";
 import { useAppLocale } from "../../appLocale.js";
-import { moneyCopy } from "../../copy/money.js";
+import { moneyCopy, categoryLabel } from "../../copy/money.js";
 
 /* Top uitgaven — where the latest month's money went, biggest category first:
  * its share of the month's spend, the amount, and — only when the two months
@@ -123,9 +123,9 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
                     type="button"
                     className="card-link"
                     onClick={() => onSelectCategory(r.category)}
-                    title={c.bekijkTransactiesIn(r.category)}
+                    title={c.bekijkTransactiesIn(categoryLabel(locale, r.category))}
                   >
-                    {r.category}
+                    {categoryLabel(locale, r.category)}
                   </button>
                   <span className="cat-fig">
                     <span className="cat-share">{r.sharePct.toFixed(0)}%</span>

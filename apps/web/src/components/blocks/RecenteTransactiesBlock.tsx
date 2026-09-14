@@ -5,7 +5,7 @@ import type { View } from "../../App";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import { useAppLocale } from "../../appLocale.js";
-import { moneyCopy, dayLabelIn } from "../../copy/money.js";
+import { moneyCopy, dayLabelIn, categoryLabel } from "../../copy/money.js";
 
 /* Recente transacties — `desktop homeview inspo.png`: the counterparty, the
  * date, our category chip, a search, and "bekijk alles".
@@ -124,10 +124,10 @@ export default function RecenteTransactiesBlock({
                   <button
                     type="button"
                     className="tx-chip tx-chip-button"
-                    title={c.bekijkTransactiesIn(category)}
+                    title={c.bekijkTransactiesIn(categoryLabel(locale, category))}
                     onClick={() => onSelectCategory(category)}
                   >
-                    {category}
+                    {categoryLabel(locale, category)}
                   </button>
                   <span className={`tx-amount ${tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
                     {formatEuroIn(locale, tx.amount)}

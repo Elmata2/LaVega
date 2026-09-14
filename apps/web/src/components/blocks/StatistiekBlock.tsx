@@ -17,7 +17,14 @@ import SpendPie from "../SpendPie.js";
 import ToonMeer from "../ToonMeer.js";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
-import { moneyCopy, dayLabelYearIn, rangeLabelIn, unitWordIn, unitPluralIn } from "../../copy/money.js";
+import {
+  moneyCopy,
+  dayLabelYearIn,
+  rangeLabelIn,
+  unitWordIn,
+  unitPluralIn,
+  categoryLabel,
+} from "../../copy/money.js";
 import {
   categoryGrowth,
   categoryShare,
@@ -318,7 +325,7 @@ function PercentielLijst({
       <ul className="lv-percentiel-lijst">
         {rows.map((r) => (
           <li key={r.category} className="lv-percentiel-rij">
-            <span className="lv-percentiel-naam">{r.category}</span>
+            <span className="lv-percentiel-naam">{categoryLabel(locale, r.category)}</span>
             <span className="lv-percentiel-bedrag">{euroFromCents(locale, r.currentCents)}</span>
             {/* "geen-verschil" telt hier als een gewoon antwoord: er is geen
                 percentiel, maar "even hoog als al je laatste 10 maanden" is een
@@ -438,8 +445,8 @@ export default function StatistiekBlock({
     [txs, rules, own, range, conversion, locale],
   );
   const weekdays = useMemo(
-    () => (range === null ? null : weekdaySpend(txs, rules, own, range, conversion)),
-    [txs, rules, own, range, conversion],
+    () => (range === null ? null : weekdaySpend(txs, rules, own, range, conversion, locale)),
+    [txs, rules, own, range, conversion, locale],
   );
   const share = useMemo(
     () =>
@@ -472,11 +479,11 @@ export default function StatistiekBlock({
         .filter((r) => Math.abs(r.deltaCents) >= 500)
         .slice(0, TOP_CATEGORIES)
         .map((r) => ({
-          label: r.category,
+          label: categoryLabel(locale, r.category),
           values: [r.deltaCents / 100],
-          title: `${r.category}: ${euro(r.beforeCents)} → ${euro(r.nowCents)}`,
+          title: `${categoryLabel(locale, r.category)}: ${euro(r.beforeCents)} → ${euro(r.nowCents)}`,
         })),
-    [growth, euro],
+    [growth, euro, locale],
   );
   const totals = useMemo(
     () => (range === null ? null : windowTotals(txs, rules, own, range, conversion)),
@@ -557,7 +564,7 @@ export default function StatistiekBlock({
   );
 
   const categorySeries = (perCategory?.categories ?? []).map((cat, i) => ({
-    label: cat,
+    label: categoryLabel(locale, cat),
     color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
   }));
 
@@ -704,7 +711,7 @@ export default function StatistiekBlock({
                       key={cat}
                       type="button"
                       className="stat-legend-button"
-                      title={c.bekijkTransactiesIn(cat)}
+                      title={c.bekijkTransactiesIn(categoryLabel(locale, cat))}
                       onClick={() => onSelectCategory(cat)}
                     >
                       <span
@@ -712,7 +719,7 @@ export default function StatistiekBlock({
                         style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
                         aria-hidden="true"
                       />
-                      {cat}
+                      {categoryLabel(locale, cat)}
                     </button>
                   ))}
                 </div>
@@ -766,7 +773,7 @@ export default function StatistiekBlock({
                       <p className="cell-sub">
                         {c.nogNCategorieenBuitenGrafiek(
                           capped.length,
-                          capped.map((h) => h.category).join(", "),
+                          capped.map((h) => categoryLabel(locale, h.category)).join(", "),
                         )}
                       </p>
                     )}
@@ -788,6 +795,7 @@ export default function StatistiekBlock({
                 slices={share.slices}
                 totalCents={share.totalCents}
                 euro={euro}
+                label={(cat) => (cat === "Overig" ? c.overigCategorieLabel : categoryLabel(locale, cat))}
                 onSelect={onSelectCategory}
               />
             )
@@ -802,7 +810,7 @@ export default function StatistiekBlock({
                       meaningless without saying against what. */}
                   {growth.rows[0].deltaCents > 0 ? (
                     <>
-                      <strong>{growth.rows[0].category}</strong>{" "}
+                      <strong>{categoryLabel(locale, growth.rows[0].category)}</strong>{" "}
                       {c.steegHetHardst(euro(growth.rows[0].deltaCents), windowDays)}
                       {growth.rows[0].deltaPct !== null ? (
                         <>{c.pctDeel(Math.round(growth.rows[0].deltaPct * 100))}</>
@@ -914,7 +922,7 @@ export default function StatistiekBlock({
                     {i > 0 && " · "}
                     {c.movedRow(
                       euro(m.outCents),
-                      m.category,
+                      categoryLabel(locale, m.category),
                       m.why,
                       m.inCents > 0 ? c.movedInSuffix(euro(m.inCents)) : "",
                     )}

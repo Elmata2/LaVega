@@ -331,7 +331,7 @@ test("categoryShare excludes a non-EUR transaction from the spend total and its 
 });
 
 test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction", () => {
-  const w = weekdaySpend(txs, rules, own, YEAR, SEPARATE);
+  const w = weekdaySpend(txs, rules, own, YEAR, SEPARATE, "nl");
   expect(w.spanDays).toBe(64);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
 
@@ -354,7 +354,7 @@ test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction",
 
 test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
   // Two days of history: only Friday and Saturday ever occurred.
-  const w = weekdaySpend(freshTxs, rules, own, presetWindow("12m", "2026-08-15"), SEPARATE);
+  const w = weekdaySpend(freshTxs, rules, own, presetWindow("12m", "2026-08-15"), SEPARATE, "nl");
   expect(w.spanDays).toBe(2);
   expect(w.spanDays).toBeLessThan(MIN_WEEKDAY_DAYS);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
@@ -367,11 +367,18 @@ test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
 });
 
 test("weekdaySpend reports nothing at all rather than a flat week with no data", () => {
-  const w = weekdaySpend([], rules, own, YEAR, SEPARATE);
+  const w = weekdaySpend([], rules, own, YEAR, SEPARATE, "nl");
   expect(w.spanDays).toBe(0);
   expect(w.peak).toBeNull();
   expect(w.dayAverage).toBeNull();
   expect(w.rows.every((r) => r.average === null)).toBe(true);
+});
+
+test("weekdaySpend defaults to Dutch labels when called without a locale", () => {
+  const w = weekdaySpend([], rules, own, YEAR, SEPARATE, "nl");
+  expect(w.rows[0].label).toBe("Maandag");
+  expect(w.rows[0].short).toBe("ma");
+  expect(w.rows[6].label).toBe("Zondag");
 });
 
 /* ─────────────────── item 1: the donut said € 2 miljoen ───────────────────
@@ -461,7 +468,7 @@ test("neither the bars nor the growth view counts a savings deposit as spending"
 
 test("a weekday average is not made expensive by a savings deposit landing on it", () => {
   // 6 August 2026 is a Thursday; the € 15.000 to Trading 212 is on it.
-  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" }, SEPARATE);
+  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" }, SEPARATE, "nl");
   const thursday = w.rows[3];
   expect(thursday.total).toBe(0);
 });
@@ -728,7 +735,7 @@ test("categoryPerWindow: a converted row lands in the bucket it happened in, at 
 
 test("weekdaySpend: a converted row is measured on its own weekday, in euros", () => {
   // 5 August 2026 is a Wednesday.
-  const withRate = weekdaySpend([...txs, hufSpend], rules, own, YEAR, CONVERT);
+  const withRate = weekdaySpend([...txs, hufSpend], rules, own, YEAR, CONVERT, "nl");
   const woe = withRate.rows.find((r) => r.short === "wo");
   expect(woe?.total).toBe(750);
 });

@@ -74,6 +74,21 @@ const MONTHS_EN = [
   "Dec",
 ];
 
+const WEEKDAYS_NL = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
+const WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const WEEKDAYS_SHORT_NL = ["ma", "di", "wo", "do", "vr", "za", "zo"];
+const WEEKDAYS_SHORT_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** 0 = Monday … 6 = Sunday (see weekdayIndex in components/blocks/dates.ts). */
+export function weekdayLabel(locale: Locale, index: number): string {
+  return (locale === "nl" ? WEEKDAYS_NL : WEEKDAYS_EN)[index] ?? "";
+}
+
+/** Short form of weekdayLabel, for an axis or a chip. */
+export function weekdayShort(locale: Locale, index: number): string {
+  return (locale === "nl" ? WEEKDAYS_SHORT_NL : WEEKDAYS_SHORT_EN)[index] ?? "";
+}
+
 /** "2026-08" -> "aug 2026" / "Aug 2026". Empty string for a missing month. */
 export function monthLabel(locale: Locale, ym: string): string {
   if (!ym) return "";

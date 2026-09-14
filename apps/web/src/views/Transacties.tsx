@@ -24,7 +24,7 @@ import {
 import { formatEuroIn, formatCurrencyIn } from "../format";
 import { categorizeTxs } from "../api";
 import { useAppLocale, pick } from "../appLocale";
-import { moneyCopy } from "../copy/money";
+import { moneyCopy, categoryLabel } from "../copy/money";
 import { getAiCategorizeEnabled, setAiCategorizeEnabled, type ConversionMode } from "../settings";
 import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
 
@@ -237,7 +237,7 @@ export default function Transacties({
    *  about a row we cannot place. */
   function categoryCell(t: Tx) {
     const category = categorize(t, rules, own);
-    if (category !== "onbekend") return category;
+    if (category !== "onbekend") return categoryLabel(locale, category);
     const reason = unknownReason(t);
     const reasonCopy = c.transacties.reason[REASON_KEY[reason]];
     const cc = reason === "buitenland" ? foreignCode(t) : null;
@@ -396,7 +396,7 @@ export default function Transacties({
                         <option value="">{c.transacties.slaOver}</option>
                         {CATEGORY_OPTIONS.map((cat) => (
                           <option key={cat} value={cat}>
-                            {cat}
+                            {categoryLabel(locale, cat)}
                           </option>
                         ))}
                       </select>
@@ -460,11 +460,11 @@ export default function Transacties({
                 with zero rows (so the dropdown reflects state, e.g. after a click
                 from Overzicht + a scope change). */}
             {fCategory && !categoryOptions.includes(fCategory) && (
-              <option value={fCategory}>{fCategory}</option>
+              <option value={fCategory}>{categoryLabel(locale, fCategory)}</option>
             )}
             {categoryOptions.map((cat) => (
               <option key={cat} value={cat}>
-                {cat}
+                {categoryLabel(locale, cat)}
               </option>
             ))}
           </select>

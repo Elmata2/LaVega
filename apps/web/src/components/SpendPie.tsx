@@ -96,6 +96,10 @@ export type SpendPieProps = {
   totalCents: number;
   /** How the caller formats euros — passed in so this file holds no locale. */
   euro: (cents: number) => string;
+  /** How the caller renders a category for DISPLAY — passed in so this file
+   *  holds no locale, same as `euro`. `onSelect` still receives the raw
+   *  category; this only touches what is shown. */
+  label?: (category: string) => string;
   /** Slices beyond this are summed into "Overig", so the ring stays readable and
    *  the legend stays short. */
   maxSlices?: number;
@@ -106,6 +110,7 @@ export default function SpendPie({
   slices,
   totalCents,
   euro,
+  label = (c) => c,
   maxSlices = 8,
   onSelect,
 }: SpendPieProps) {
@@ -184,7 +189,7 @@ export default function SpendPie({
         className="spend-pie-ring"
         style={{ background: `conic-gradient(${stops.join(", ")})` }}
         role="img"
-        aria-label={shown.map((s) => `${s.category} ${Math.round(s.share * 100)}%`).join(", ")}
+        aria-label={shown.map((s) => `${label(s.category)} ${Math.round(s.share * 100)}%`).join(", ")}
         data-active={active === null ? "none" : String(active)}
         data-open={canOpen ? "yes" : "no"}
         onPointerMove={pickArc}
@@ -199,7 +204,7 @@ export default function SpendPie({
         <div className="spend-pie-hole">
           {reading ? (
             <>
-              <div className="spend-pie-slice">{reading.category}</div>
+              <div className="spend-pie-slice">{label(reading.category)}</div>
               <div className="spend-pie-total">{euro(reading.cents)}</div>
               {/* "van totaal" and not "van de uitgaven": the phrase has to fit
                   on one line inside a 108px hole, and the caption it replaces
@@ -244,7 +249,7 @@ export default function SpendPie({
                   style={{ background: sliceColor(i) }}
                   aria-hidden="true"
                 />
-                <span className="spend-pie-name">{s.category}</span>
+                <span className="spend-pie-name">{label(s.category)}</span>
                 <span className="spend-pie-value">{euro(s.cents)}</span>
                 <span className="spend-pie-share">{Math.round(s.share * 100)}%</span>
               </button>

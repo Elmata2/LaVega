@@ -26,11 +26,10 @@ import { monthShort } from "../format.js";
  *    split without editing Module.tsx. Those four titles therefore stay the
  *    literal Dutch word in both locales; everything else in those four
  *    blocks is translated.
- *  - Weekday names and the "why" a category was excluded as moved money.
- *    Both come from `components/blocks/statistics.ts` and
- *    `components/blocks/dates.ts` (WEEKDAYS_NL, MOVED_CATEGORIES), which are
- *    not owned here either. They render in Dutch in both locales until
- *    whichever lane owns those files localises them.
+ *  - The "why" a category was excluded as moved money — `MOVED_CATEGORIES.why`
+ *    in `components/blocks/statistics.ts`, a prose sentence ("een overboeking
+ *    tussen je eigen rekeningen"), not owned here. It renders in Dutch in both
+ *    locales until whichever lane owns that file localises it.
  */
 
 /** "2026-07-31" -> "31 Jul" / "31 jul" — a day-of-month label with no year,
@@ -371,6 +370,9 @@ type StatistiekCopy = {
   steegHetHardst: (delta: string, days: number) => string;
   pctDeel: (pct: number) => string;
   nieuwDeel: string;
+  /** The "Overig" bucket SpendPie synthesizes for slices past its cap — not a
+   *  stored category, so it lives here rather than in CATEGORY_LABELS. */
+  overigCategorieLabel: string;
   nietsGestegen: (days: number) => string;
   verschilSeriesLabel: string;
   verschilAria: (days: number) => string;
@@ -940,6 +942,7 @@ const nl: MoneyCopy = {
     steegHetHardst: (delta, days) => `steeg het hardst: ${delta} meer dan de ${days} dagen ervoor`,
     pctDeel: (pct) => ` (${pct}%)`,
     nieuwDeel: " (nieuw)",
+    overigCategorieLabel: "Overig",
     nietsGestegen: (days) => `Niets is gestegen tegenover de ${days} dagen ervoor.`,
     verschilSeriesLabel: "Verschil",
     verschilAria: (days) => `Verschil per categorie tegenover de ${days} dagen ervoor`,
@@ -1524,6 +1527,7 @@ const en: MoneyCopy = {
     steegHetHardst: (delta, days) => `rose the most: ${delta} more than the ${days} days before it`,
     pctDeel: (pct) => ` (${pct}%)`,
     nieuwDeel: " (new)",
+    overigCategorieLabel: "Other",
     nietsGestegen: (days) => `Nothing has gone up compared with the ${days} days before it.`,
     verschilSeriesLabel: "Difference",
     verschilAria: (days) => `Difference per category compared with the ${days} days before it`,
@@ -1728,3 +1732,50 @@ const en: MoneyCopy = {
 };
 
 export const moneyCopy: Record<Locale, MoneyCopy> = { nl, en };
+
+/** Display labels for the fixed CATEGORY_OPTIONS taxonomy in @lavega/core
+ *  (categorize.ts) — see that file's own comment on why these exact Dutch
+ *  strings cannot change: Tx.category/Rule.category store them verbatim, the
+ *  rules engine matches on them, and the AI-categorize contract
+ *  (apps/server/.../categorize.md) both returns and validates against them.
+ *  This table is DISPLAY ONLY. `nl` is byte-identical to the key on purpose,
+ *  so a stored value and its Dutch label can never drift apart by a typo
+ *  here. A category outside this table (a hand-edited import, data from
+ *  before a taxonomy change) is shown as typed rather than blanked. */
+export const CATEGORY_LABELS: Record<string, { nl: string; en: string }> = {
+  Boodschappen: { nl: "Boodschappen", en: "Groceries" },
+  "Eten & drinken": { nl: "Eten & drinken", en: "Eating out" },
+  Transport: { nl: "Transport", en: "Transport" },
+  Reizen: { nl: "Reizen", en: "Travel" },
+  "Wonen & energie": { nl: "Wonen & energie", en: "Housing & energy" },
+  Abonnementen: { nl: "Abonnementen", en: "Subscriptions" },
+  Verzekeringen: { nl: "Verzekeringen", en: "Insurance" },
+  Gezondheid: { nl: "Gezondheid", en: "Health" },
+  "Kleding & winkelen": { nl: "Kleding & winkelen", en: "Clothing & shopping" },
+  "Online shopping": { nl: "Online shopping", en: "Online shopping" },
+  Elektronica: { nl: "Elektronica", en: "Electronics" },
+  Entertainment: { nl: "Entertainment", en: "Entertainment" },
+  "Huis & tuin": { nl: "Huis & tuin", en: "Home & garden" },
+  Huisdieren: { nl: "Huisdieren", en: "Pets" },
+  "Goede doelen": { nl: "Goede doelen", en: "Charity" },
+  Bankkosten: { nl: "Bankkosten", en: "Bank fees" },
+  "Belastingen & overheid": { nl: "Belastingen & overheid", en: "Taxes & government" },
+  Geldopname: { nl: "Geldopname", en: "Cash withdrawal" },
+  "Sparen & beleggen": { nl: "Sparen & beleggen", en: "Savings & investing" },
+  Overboekingen: { nl: "Overboekingen", en: "Transfers" },
+  "Tussen personen": { nl: "Tussen personen", en: "Between people" },
+  "Creditcard afbetaald": { nl: "Creditcard afbetaald", en: "Credit card payment" },
+  "Automatische incasso": { nl: "Automatische incasso", en: "Direct debit" },
+  "Eigen overboeking": { nl: "Eigen overboeking", en: "Own transfer" },
+  Inkomen: { nl: "Inkomen", en: "Income" },
+};
+
+/** The Dutch stored category (or the "onbekend" categorize() returns for a
+ *  row nothing placed — never itself a stored value, see recategorize's
+ *  contract in categorize.ts) as the reader's language. Falls back to the
+ *  input unchanged for anything outside the table, so a legacy or
+ *  hand-edited value is shown as typed rather than blanked. */
+export function categoryLabel(locale: Locale, category: string): string {
+  if (category === "onbekend") return moneyCopy[locale].transacties.onbekendLabel;
+  return CATEGORY_LABELS[category]?.[locale] ?? category;
+}

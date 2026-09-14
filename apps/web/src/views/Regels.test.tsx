@@ -197,3 +197,22 @@ test("switches to English copy when the locale cookie says en, including the em/
     [...c.querySelectorAll("button")].find((b) => b.textContent === en.table.deleteButton),
   ).toBeTruthy();
 });
+
+test("in English, a rule's category renders translated while the stored value stays Dutch", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const stored: Rule[] = [{ id: "1", match: "albert heijn", category: "Boodschappen" }];
+  const onSaveRules = vi.fn();
+  render(stored, onSaveRules);
+
+  // Displayed: the English label.
+  expect(shownMatches()).toEqual(["albert heijn"]);
+  const categoryCell = container!.querySelector("tbody tr td:nth-child(2)")!;
+  expect(categoryCell.textContent).toBe("Groceries");
+
+  // Stored: deleting the row hands back the ORIGINAL Dutch category, unchanged
+  // — the translation never touched rule.category itself.
+  const row = container!.querySelector("tbody tr")!;
+  act(() => row.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(onSaveRules).toHaveBeenCalledWith([]);
+  expect(stored[0].category).toBe("Boodschappen");
+});

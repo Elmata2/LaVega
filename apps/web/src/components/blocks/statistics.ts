@@ -8,10 +8,8 @@ import {
   shiftDate,
   shiftMonth,
   weekdayIndex,
-  WEEKDAYS_NL,
-  WEEKDAYS_SHORT_NL,
 } from "./dates.js";
-import { monthLabel, monthShort } from "../../format.js";
+import { monthLabel, monthShort, weekdayLabel, weekdayShort } from "../../format.js";
 import type { Locale } from "../../locale.js";
 import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 
@@ -323,7 +321,7 @@ function buildBuckets(
       out.push({
         key: d,
         label: dayLabelIn(locale, d),
-        title: `${WEEKDAYS_NL[weekdayIndex(d)]} ${dayLabelIn(locale, d)}`,
+        title: `${weekdayLabel(locale, weekdayIndex(d))} ${dayLabelIn(locale, d)}`,
         start: d,
         end: d,
         // A single day is never "part of" itself.
@@ -748,11 +746,12 @@ export function weekdaySpend(
   own: OwnAccounts | undefined,
   window: StatWindow,
   conversion: Conversion,
+  locale: Locale,
 ): WeekdaySpend {
   const blank: WeekdaySpend = {
-    rows: WEEKDAYS_NL.map((label, i) => ({
-      label,
-      short: WEEKDAYS_SHORT_NL[i],
+    rows: Array.from({ length: 7 }, (_, i) => ({
+      label: weekdayLabel(locale, i),
+      short: weekdayShort(locale, i),
       total: 0,
       occurrences: 0,
       average: null,
@@ -782,9 +781,9 @@ export function weekdaySpend(
   const startWd = weekdayIndex(covered.start);
   for (let i = 0; i < spanDays; i++) occurrences[(startWd + i) % 7]++;
 
-  const out: WeekdayRow[] = WEEKDAYS_NL.map((label, i) => ({
-    label,
-    short: WEEKDAYS_SHORT_NL[i],
+  const out: WeekdayRow[] = Array.from({ length: 7 }, (_, i) => ({
+    label: weekdayLabel(locale, i),
+    short: weekdayShort(locale, i),
     total: totals[i],
     occurrences: occurrences[i],
     average: occurrences[i] === 0 ? null : totals[i] / occurrences[i],

@@ -174,6 +174,36 @@ test("a tap on a filterable row still filters; a tap on 'Overig' does nothing", 
   expect(picked).toEqual(["C0"]);
 });
 
+test("an injected label translates what is shown; onSelect still gets the raw category", () => {
+  const picked: string[] = [];
+  const html = renderToStaticMarkup(
+    <SpendPie
+      slices={slices}
+      totalCents={TOTAL}
+      euro={euro}
+      label={(cat) => (cat === "Boodschappen" ? "Groceries" : cat)}
+      onSelect={(c) => picked.push(c)}
+    />,
+  );
+  expect(html).toContain("Groceries");
+  expect(html).not.toContain("Boodschappen");
+
+  const el = mount(
+    <SpendPie
+      slices={slices}
+      totalCents={TOTAL}
+      euro={euro}
+      label={(cat) => (cat === "Boodschappen" ? "Groceries" : cat)}
+      onSelect={(c) => picked.push(c)}
+    />,
+  );
+  const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
+  act(() => rows[0].click());
+  // The click landed on the translated "Groceries" row, and onSelect still
+  // receives the raw Dutch category — the label is display-only.
+  expect(picked).toEqual(["Boodschappen"]);
+});
+
 test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twelve", () => {
   const shares = [0.5, 0.25, 0.25];
   expect(sliceAtPoint(shares, 0.9, 0.5)).toBe(0); // 3 o'clock = 90°
