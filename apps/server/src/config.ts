@@ -171,7 +171,7 @@ export function loadIngestConfig(): { configured: boolean; token: string | null 
   return { configured: typeof token === "string" && token.length >= 16, token };
 }
 
-const DEFAULT_DAY_BUDGET_CENTS = 200;
+const DEFAULT_DAY_BUDGET_CENTS = 400;
 const DEFAULT_MONTH_BUDGET_CENTS = 2000;
 
 function budgetCentsSetting(raw: string | undefined, fallback: number): number {

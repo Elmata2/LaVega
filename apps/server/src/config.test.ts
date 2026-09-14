@@ -75,13 +75,13 @@ test("loadLlmConfig: configured only when MISTRAL_API_KEY is set", () => {
   }
 });
 
-test("loadBudgetConfig: defaults to 200/2000 cents when unset", () => {
+test("loadBudgetConfig: defaults to 400/2000 cents when unset", () => {
   const prevDay = process.env.AI_DAILY_BUDGET_CENTS;
   const prevMonth = process.env.AI_MONTHLY_BUDGET_CENTS;
   try {
     delete process.env.AI_DAILY_BUDGET_CENTS;
     delete process.env.AI_MONTHLY_BUDGET_CENTS;
-    expect(loadBudgetConfig()).toEqual({ dayCents: 200, monthCents: 2000 });
+    expect(loadBudgetConfig()).toEqual({ dayCents: 400, monthCents: 2000 });
   } finally {
     if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
     else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
@@ -111,7 +111,7 @@ test("loadBudgetConfig: a non-numeric or non-positive value falls back to the de
   try {
     process.env.AI_DAILY_BUDGET_CENTS = "not-a-number";
     process.env.AI_MONTHLY_BUDGET_CENTS = "-5";
-    expect(loadBudgetConfig()).toEqual({ dayCents: 200, monthCents: 2000 });
+    expect(loadBudgetConfig()).toEqual({ dayCents: 400, monthCents: 2000 });
   } finally {
     if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
     else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
@@ -247,13 +247,13 @@ test("AI_DAILY_BUDGET_CENTS=0 switches AI spend off instead of falling back to t
     expect(loadBudgetConfig().dayCents).toBe(50);
     // missing, empty and nonsense all take the documented default
     delete process.env.AI_DAILY_BUDGET_CENTS;
-    expect(loadBudgetConfig().dayCents).toBe(200);
+    expect(loadBudgetConfig().dayCents).toBe(400);
     process.env.AI_DAILY_BUDGET_CENTS = "   ";
-    expect(loadBudgetConfig().dayCents).toBe(200);
+    expect(loadBudgetConfig().dayCents).toBe(400);
     process.env.AI_DAILY_BUDGET_CENTS = "gratis graag";
-    expect(loadBudgetConfig().dayCents).toBe(200);
+    expect(loadBudgetConfig().dayCents).toBe(400);
     process.env.AI_DAILY_BUDGET_CENTS = "-5";
-    expect(loadBudgetConfig().dayCents).toBe(200);
+    expect(loadBudgetConfig().dayCents).toBe(400);
   } finally {
     if (keep.d === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
     else process.env.AI_DAILY_BUDGET_CENTS = keep.d;

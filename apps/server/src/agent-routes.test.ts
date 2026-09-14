@@ -78,7 +78,7 @@ test("GET /api/agent/budget reports today's/month's AI spend against the configu
   const res = await app.request("/api/agent/budget");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({
-    dayCents: 200,
+    dayCents: 400,
     monthCents: 2000,
     spentTodayCents: 0,
     spentMonthCents: 0,

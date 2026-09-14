@@ -191,8 +191,8 @@ locally, create your own Neon branch and put its connection string, a
   categorization). Obtained from console.mistral.ai (La Plateforme). Absent
   means `/api/agent/status` answers `configured: false` and the agent routes
   answer `503`.
-- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend, in euro cents. Default `200`
-  (€2). The four `/api/agent/*` routes refuse with 429 once today's recorded
+- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend, in euro cents. Default `400`
+  (€4). The four `/api/agent/*` routes refuse with 429 once today's recorded
   spend meets or exceeds this.
 - `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend, in euro cents. Default
   `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
