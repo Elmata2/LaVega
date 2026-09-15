@@ -1,6 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool, type ToolSet } from "ai";
-import { createHash } from "node:crypto";
 import {
   computePortfolioValueSeries,
   type CashBalance,
@@ -293,7 +292,12 @@ export async function runPortfolioAgent({
       snapshotHash: "",
     };
   }
-  return parsePortfolioAgentResponse(text, agent, config.modelId, portfolioSnapshotHash(dashboard));
+  return parsePortfolioAgentResponse(
+    text,
+    agent,
+    config.modelId,
+    await portfolioSnapshotHash(dashboard),
+  );
 }
 
 export function buildPortfolioAgentPrompt(
@@ -405,8 +409,14 @@ function extractJsonObject(text: string): Record<string, unknown> {
   }
 }
 
-function portfolioSnapshotHash(dashboard: InvestingDashboardData): string {
-  return createHash("sha256").update(renderPortfolioSnapshot(dashboard)).digest("hex").slice(0, 24);
+export async function portfolioSnapshotHash(dashboard: InvestingDashboardData): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(renderPortfolioSnapshot(dashboard)),
+  );
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 24);
 }
 
 function round(value: number | null | undefined, digits: number): number | null {
