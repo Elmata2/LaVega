@@ -340,7 +340,7 @@ function PositionList({
               <button
                 type="button"
                 onClick={() => changeSort(column.key)}
-                className="rounded-sm text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="rounded-xs text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {column.label}
                 {sort === column.key ? (direction === "asc" ? " ↑" : " ↓") : ""}
@@ -357,7 +357,7 @@ function PositionList({
                 pathname: `/positions/${encodeURIComponent(position.symbol)}`,
                 search: query ? `?${query}` : "",
               }}
-              className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-none hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-hidden hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <div role="cell" className="min-w-0 pr-4">
                 <span className="block truncate font-semibold text-primary">
@@ -787,7 +787,7 @@ function AgentView() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Ask about your positions…"
-              className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none"
+              className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-hidden"
               disabled={sending}
             />
             <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
@@ -1858,7 +1858,7 @@ function SignOutLink() {
     <button
       type="button"
       onClick={handleSignOut}
-      className="pressable rounded-sm font-semibold text-primary underline-offset-2 hover:underline"
+      className="pressable rounded-xs font-semibold text-primary underline-offset-2 hover:underline"
     >
       Sign out
     </button>
@@ -2140,7 +2140,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             aria-expanded={quantityOpen}
             aria-controls="quantity-history"
             onClick={() => setQuantityOpen((open) => !open)}
-            className="pressable mt-1 rounded-sm text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            className="pressable mt-1 rounded-xs text-xs font-semibold text-primary underline-offset-2 hover:underline"
           >
             {quantityOpen ? "Hide history" : "Show quantity history"}
           </button>
@@ -2268,7 +2268,7 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
                 key={date}
                 id={`activity-${date}`}
                 tabIndex={-1}
-                className="scroll-mt-4 border-b border-border/70 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="scroll-mt-4 border-b border-border/70 py-2 outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {position.activity
                   .filter((item) => item.date === date)

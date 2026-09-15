@@ -144,7 +144,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                   </PieChart>
                 </ChartContainer>
               ) : (
-                <div className="mx-auto flex size-[180px] items-center justify-center rounded-full border-[22px] border-secondary text-center text-xs text-muted-foreground">
+                <div className="mx-auto flex size-[180px] items-center justify-center rounded-full border-22 border-secondary text-center text-xs text-muted-foreground">
                   Not priced
                 </div>
               )}
