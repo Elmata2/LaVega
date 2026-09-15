@@ -84,8 +84,15 @@ test("compute_portfolio_value delegates to the core portfolio calculation", asyn
 test("runPortfolioAgent refuses to start without an API key", async () => {
   const { runPortfolioAgent } = await import("./portfolioAgent.js");
   vi.stubEnv("LAVEGA_AGENT_API_KEY", "");
-  expect(() => resolveAgentConfig()).toThrow("LAVEGA_AGENT_API_KEY is not set");
+  vi.stubEnv("OPENROUTER_API_KEY", "");
+  expect(() => resolveAgentConfig()).toThrow("LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set");
   await expect(runPortfolioAgent({ prompt: "hello" })).rejects.toThrow("LAVEGA_AGENT_API_KEY");
+});
+
+test("portfolio agent accepts the standard OpenRouter API key variable", () => {
+  vi.stubEnv("LAVEGA_AGENT_API_KEY", "");
+  vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
+  expect(resolveAgentConfig()).toMatchObject({ apiKey: "openrouter-test-key" });
 });
 
 test("portfolio agent defaults to the configured free OpenRouter model", () => {

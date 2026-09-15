@@ -238,10 +238,11 @@ export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinit
 }
 
 export function resolveAgentConfig(model?: string) {
-  const apiKey = process.env.LAVEGA_AGENT_API_KEY?.trim();
+  const apiKey =
+    process.env.LAVEGA_AGENT_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey)
     throw new Error(
-      "LAVEGA_AGENT_API_KEY is not set; configure an OpenAI-compatible API key to run the portfolio agent",
+      "LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set; configure an OpenAI-compatible API key to run the portfolio agent",
     );
   return {
     apiKey,
