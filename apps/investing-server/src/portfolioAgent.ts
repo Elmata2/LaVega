@@ -14,6 +14,7 @@ import type { PriceStore } from "@lavega/adapters";
 import { readPriceBars } from "./priceReader.js";
 
 const TENANT_ID = "local";
+export const DEFAULT_PORTFOLIO_AGENT_MODEL = "inclusionai/ling-3.0-flash-fin:free";
 
 export type PortfolioAgentBrokerData = {
   positions: Position[];
@@ -245,7 +246,8 @@ export function resolveAgentConfig(model?: string) {
   return {
     apiKey,
     baseURL: process.env.LAVEGA_AGENT_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
-    modelId: model?.trim() || process.env.LAVEGA_AGENT_MODEL?.trim(),
+    modelId:
+      model?.trim() || process.env.LAVEGA_AGENT_MODEL?.trim() || DEFAULT_PORTFOLIO_AGENT_MODEL,
   };
 }
 

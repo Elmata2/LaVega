@@ -23,7 +23,7 @@ docker run --rm -p 8788:8788 \
   -e LAVEGA_VAULT_PASSPHRASE=... \
   -e SENTRY_DSN=https://example@o0.ingest.sentry.io/0 \
   -e LAVEGA_AGENT_API_KEY=... \
-  -e LAVEGA_AGENT_MODEL=openai/gpt-5-mini \
+  -e LAVEGA_AGENT_MODEL=inclusionai/ling-3.0-flash-fin:free \
   -e LAVEGA_AGENT_BASE_URL=https://openrouter.ai/api/v1 \
   lavega-investing
 ```

@@ -88,6 +88,15 @@ test("runPortfolioAgent refuses to start without an API key", async () => {
   await expect(runPortfolioAgent({ prompt: "hello" })).rejects.toThrow("LAVEGA_AGENT_API_KEY");
 });
 
+test("portfolio agent defaults to the configured free OpenRouter model", () => {
+  vi.stubEnv("LAVEGA_AGENT_API_KEY", "test-key");
+  vi.stubEnv("LAVEGA_AGENT_MODEL", "");
+  expect(resolveAgentConfig()).toMatchObject({
+    baseURL: "https://openrouter.ai/api/v1",
+    modelId: "inclusionai/ling-3.0-flash-fin:free",
+  });
+});
+
 test("portfolio agent registry exposes distinct investor personas", () => {
   expect(listPortfolioAgents().map((agent) => agent.id)).toEqual([
     "warren_buffett",
