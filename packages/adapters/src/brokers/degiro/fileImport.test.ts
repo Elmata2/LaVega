@@ -28,7 +28,7 @@ test("DeGiro file import returns problems for empty input", async () => {
   expect(result.problems.length).toBeGreaterThan(0);
 });
 
-test("DeGiro file import stamps caller entity on positions", async () => {
+test("DeGiro file import stamps caller entity and broker provenance on positions", async () => {
   const text =
     "Product;ISIN;Symbol;Amount;Price;Value;Currency;Date\nETF;IE00TEST;VUAA;2;10;20;EUR;2026-08-18";
   const result = await createDeGiroFileImport().load({
@@ -42,6 +42,7 @@ test("DeGiro file import stamps caller entity on positions", async () => {
   expect(result.positions).toEqual([
     {
       entity: "BV2",
+      broker: "degiro",
       symbol: "VUAA",
       isin: "IE00TEST",
       quantity: 2,

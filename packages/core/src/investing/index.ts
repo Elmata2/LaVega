@@ -1,4 +1,5 @@
 export * from "./model.js";
+export * from "./ownership.js";
 export * from "./risk.js";
 export * from "./hash.js";
 export * from "./credentials.js";

@@ -18,6 +18,7 @@ import {
   type PositionReturn,
   type PositionReturnStatus,
 } from "./positions.js";
+import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { tradeDelta } from "./quantity.js";
 
 export const PORTFOLIO_RANGES = [
@@ -259,7 +260,7 @@ function buildPositionDetail(input: {
       sourceOrder,
     });
   }
-  const snapshotQuantity = input.positions.reduce((sum, item) => sum + item.quantity, 0);
+  const snapshotQuantity = anchoredSnapshotQuantity(input.positions);
   const quantity = input.positions.length > 0 ? snapshotQuantity : reconstructedQuantity;
   const status = Math.abs(quantity) > 1e-9 ? "open" : "closed";
   const bars = [...input.bars].sort((left, right) => left.date.localeCompare(right.date));
@@ -314,7 +315,7 @@ function buildPositionDetail(input: {
     input.dividends,
     input.presentationCurrency,
     input.fxRates,
-    { valuationDate, brokerCost: brokerCostLegs(input.positions) },
+    { valuationDate, brokerCost: brokerCostLegs(latestOwnershipAnchors(input.positions)) },
   );
   const averageCost =
     returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9

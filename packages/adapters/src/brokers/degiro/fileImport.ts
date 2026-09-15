@@ -9,8 +9,18 @@ export function createDeGiroFileImport(): DeGiroFileImport {
   return {
     async load({ filename, text, entity }) {
       const parsed = parseBrokerFile(filename, text);
-      const trades: TradeWithoutId[] = parsed.trades.map((trade) => ({ ...trade, entity }));
-      const positions: Position[] = parsed.positions.map((position) => ({ ...position, entity }));
+      // A DeGiro file is one account's export, so every row it carries shares
+      // an ownership identity with the rest of that broker's data.
+      const trades: TradeWithoutId[] = parsed.trades.map((trade) => ({
+        ...trade,
+        entity,
+        broker: "degiro",
+      }));
+      const positions: Position[] = parsed.positions.map((position) => ({
+        ...position,
+        entity,
+        broker: "degiro",
+      }));
       return { positions, trades, source: parsed.source, problems: parsed.problems };
     },
   };
