@@ -208,6 +208,9 @@ export default function Belasting({
   // Hoisted so the narrowing survives into the callbacks below.
   const profitTax = pack.profitTax;
   const countryLabel = pack.country === "DE" ? c.header.countryLabel.DE : c.header.countryLabel.NL;
+  /* "BTW" to a Dutch reader, "VAT" to an English one. pack.vat.label is the
+   * authority's own term and stays as core data. */
+  const vatLabel = c.vat.taxLabel[country];
   const caveats = pack.country === "DE" ? c.header.caveatsByCountry.DE : c.header.caveatsByCountry.NL;
 
   const savedByEntity = useMemo(() => {
@@ -450,7 +453,7 @@ export default function Belasting({
       <ModuleGrid className="grid-2" label={c.header.gridLabel}>
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
         <Module
-          title={pack.vat.label}
+          title={vatLabel}
           height="tall"
           footer={
             <span>
@@ -569,7 +572,7 @@ export default function Belasting({
                     <select
                       value={s.frequency}
                       disabled={busy}
-                      aria-label={c.vat.ariaLabels.frequency(pack.vat.label, entity)}
+                      aria-label={c.vat.ariaLabels.frequency(vatLabel, entity)}
                       onChange={(e) =>
                         patch(entity, { frequency: e.target.value as VatSettings["frequency"] })
                       }
@@ -610,7 +613,7 @@ export default function Belasting({
                       min={0}
                       value={s.defaultRatePct}
                       disabled={busy}
-                      aria-label={c.vat.ariaLabels.ratePct(pack.vat.label, entity)}
+                      aria-label={c.vat.ariaLabels.ratePct(vatLabel, entity)}
                       onChange={(e) =>
                         patch(entity, {
                           defaultRatePct: e.target.value === "" ? 0 : Number(e.target.value),
@@ -628,7 +631,7 @@ export default function Belasting({
                       placeholder={c.vat.fields.manualAmountPlaceholder}
                       value={s.manualCents != null ? s.manualCents / 100 : ""}
                       disabled={busy}
-                      aria-label={c.vat.ariaLabels.manualAmount(pack.vat.label, entity)}
+                      aria-label={c.vat.ariaLabels.manualAmount(vatLabel, entity)}
                       onChange={(e) =>
                         patch(entity, {
                           manualCents:

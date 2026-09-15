@@ -374,6 +374,11 @@ export type BelastingCopy = {
       sheetLabel: string;
     };
 
+    /** What this tax is called to THIS reader. Dutch keeps the local name the
+     *  authority uses (BTW, USt); English says VAT, which is what both are.
+     *  Read from the copy rather than pack.vat.label, which is core data and
+     *  correctly Dutch. */
+    taxLabel: Record<"NL" | "DE", string>;
     /** aria-labels for the VAT field controls. `vatLabel` is pack.vat.label ("BTW"/"USt"), core data. */
     ariaLabels: {
       frequency: (vatLabel: string, entity: string) => string;
@@ -968,6 +973,7 @@ const nlBelasting: BelastingCopy = {
       sheetLabel: "Boekhouding (CSV)",
     },
 
+    taxLabel: { NL: "BTW", DE: "USt" },
     ariaLabels: {
       frequency: (vatLabel, entity) => `${vatLabel}-frequentie ${entity}`,
       stelsel: (entity) => `Stelsel ${entity}`,
@@ -1579,6 +1585,7 @@ const enBelasting: BelastingCopy = {
       sheetLabel: "Bookkeeping (CSV)",
     },
 
+    taxLabel: { NL: "VAT", DE: "VAT" },
     ariaLabels: {
       frequency: (vatLabel, entity) => `${vatLabel} frequency ${entity}`,
       stelsel: (entity) => `Basis (stelsel) ${entity}`,

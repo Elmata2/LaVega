@@ -450,6 +450,8 @@ type FacturenCopy = {
 };
 
 type BtwCopy = {
+  /** The local tax name in Dutch, its English name in English. */
+  title: string;
   belastingArrow: string;
   geenBedrag: string;
   direction: { betalen: string; terugvragen: string; onbekend: string };
@@ -1044,6 +1046,8 @@ const nl: MoneyCopy = {
     teBetalenAmount: (amount) => `${amount} te betalen`,
   },
   btw: {
+    /** The local tax name in Dutch, its English name in English. */
+    title: "BTW",
     belastingArrow: "Belasting →",
     geenBedrag: "geen bedrag",
     direction: {
@@ -1626,6 +1630,7 @@ const en: MoneyCopy = {
     teBetalenAmount: (amount) => `${amount} payable`,
   },
   btw: {
+    title: "VAT",
     belastingArrow: "Tax →",
     geenBedrag: "no amount",
     direction: { betalen: "payable", terugvragen: "reclaimable", onbekend: "direction unknown" },
