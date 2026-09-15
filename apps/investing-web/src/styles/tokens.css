@@ -1,14 +1,93 @@
-@import "@fontsource/eb-garamond/500.css";
-@import "@fontsource/eb-garamond/600.css";
-@import "@fontsource/eb-garamond/700.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
+@import '@fontsource/eb-garamond/500.css' layer(base);
+@import '@fontsource/eb-garamond/600.css' layer(base);
+@import '@fontsource/eb-garamond/700.css' layer(base);
+@import '@fontsource/inter/400.css' layer(base);
+@import '@fontsource/inter/500.css' layer(base);
+@import '@fontsource/inter/600.css' layer(base);
+@import '@fontsource/inter/700.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --radius-lg: var(--radius);
+  --radius-card: var(--radius-card);
+  --radius-frame: var(--radius-frame);
+  --radius-pill: var(--radius-pill);
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-positive: hsl(var(--pos));
+  --color-negative: hsl(var(--neg));
+  --color-warning: hsl(var(--warning));
+
+  --color-chart-blue: hsl(var(--chart-blue));
+  --color-chart-purple: hsl(var(--chart-purple));
+  --color-chart-teal: hsl(var(--chart-teal));
+  --color-chart-amber: hsl(var(--chart-amber));
+  --color-chart-coral: hsl(var(--chart-coral));
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-float: var(--shadow-float);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility pressable {
+  @apply transition-transform duration-150 ease-out active:scale-[.98];
+}
+
+@utility axis-label {
+  transition: opacity 160ms ease-out;
+}
+
+@utility net-worth-hatch {
+  background: repeating-linear-gradient(
+    135deg,
+    hsl(var(--chart-teal) / 0.62) 0 1px,
+    hsl(var(--chart-teal) / 0.12) 1px 4px
+  );
+}
 
 @layer base {
   :root {
@@ -58,23 +137,7 @@
     font-family: var(--font-body);
   }
   :focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
-  }
-}
-
-@layer components {
-  .pressable {
-    @apply transition-transform duration-150 ease-out active:scale-[.98];
-  }
-  .axis-label {
-    transition: opacity 160ms ease-out;
-  }
-  .net-worth-hatch {
-    background: repeating-linear-gradient(
-      135deg,
-      hsl(var(--chart-teal) / 0.62) 0 1px,
-      hsl(var(--chart-teal) / 0.12) 1px 4px
-    );
+    @apply outline-hidden ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 }
 

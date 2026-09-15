@@ -16,5 +16,26 @@
     ".vercel/**",
     ".pnpm-store/**",
     "coverage/**"
+  ],
+  "overrides": [
+    {
+      "files": ["apps/investing-web/src/**"],
+      "rules": {
+        "shadcn/no-restyle": ["warn", { "allow": ["layout"] }],
+        "shadcn/no-raw-colors": "warn",
+        "shadcn/no-arbitrary-values": ["warn", { "allow": ["layout"] }],
+        "shadcn/no-inline-styles": "warn",
+        "shadcn/no-unknown-classes": "warn",
+        "shadcn/require-static-classes": "warn"
+      }
+    },
+    {
+      "files": ["apps/investing-web/src/components/ui/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/no-arbitrary-values": "off",
+        "shadcn/require-static-classes": "off"
+      }
+    }
   ]
 }
