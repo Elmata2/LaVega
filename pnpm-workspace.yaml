@@ -6,3 +6,5 @@ packages:
 # platform-specific binary, which vitest/vite need to run.
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@shadcn/lint@0.1.0'
