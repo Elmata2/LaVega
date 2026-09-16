@@ -1,3 +1,20 @@
+/* WRAPPED IN @layer components, AND THE REASON MATTERS.
+ *
+ * Tailwind's utilities compile into `@layer utilities`. Per the cascade-layers
+ * spec an UNLAYERED rule beats a layered one regardless of specificity, so
+ * while this file sat outside any layer it silently won against every utility
+ * touching the same property — no error, no failing test, the utility simply
+ * did nothing. Two workers hit that independently and worked around it by
+ * adding Tailwind's `!` modifier to hundreds of classes.
+ *
+ * Putting this file in `components` puts it where it belongs in the order
+ * tokens.css declares (theme, base, components, utilities): it still beats the
+ * theme, and a utility written on a converted element beats it, which is what
+ * a utility is for. The `!` workarounds become unnecessary.
+ *
+ * Relative order between these stylesheets is unchanged — they are all in the
+ * same layer, so main.tsx's import order still decides. */
+@layer components {
 /* Reset + element defaults + component classes for the LaVega dark shell.
  * This is the foundation only (Task 1 of the UI overhaul) — per-view content
  * (KPI tiles, position/cashflow cards, forecast chart, ...) is restyled in
@@ -1585,4 +1602,6 @@ table tbody tr:hover {
 }
 .travel-note {
   line-height: 1.5;
+}
+
 }

@@ -2,6 +2,28 @@
  * clashes with the app's base.css. Warm cream + espresso + tan, big EB Garamond
  * serif (shared fonts), tasteful float/reveal/marquee animations. */
 
+/* Hero, device, FAQ, waitlist and footer now live in Tailwind utilities on
+ * Landing.tsx (docs/adr/0005). What's left here is either shared with
+ * sections outside that pass (nav, strengths, agents, privacy, how, the GSAP
+ * card spiral) or a rule an element still needs by selector, not by style
+ * (`.lp-faq-item` for its `[open]`/`::-webkit-details-marker` hooks). This
+ * file is unlayered CSS; without `@layer components` it would silently beat
+ * every Tailwind utility regardless of source order, since unlayered rules
+ * always win over layered ones — the third trap this conversion found.
+ *
+ * An `@theme inline` block here (mapping `--color-lp-*` to the `--lp-*`
+ * variables below, the way tokens.css does for the app-wide palette) compiles
+ * to nothing: `@tailwindcss/postcss` only expands `@theme` in the file that
+ * carries `@import "tailwindcss/theme.css"` (tokens.css, which this file
+ * cannot edit), not in every CSS file Vite bundles. Confirmed by grepping the
+ * built CSS for `--color-lp-ink` and `.bg-lp-ink` after adding one — neither
+ * exists. So every landing color below is `bg-[var(--lp-ink)]` etc., an
+ * arbitrary value against the `--lp-*` variable directly — Tailwind compiles
+ * those with no theme registration needed, the same mechanism `shadow-[...]`
+ * and `px-[10px]` already rely on. */
+
+@layer components {
+
 /* The landing lets the whole window scroll (Landing.tsx sets html/body sizing
  * imperatively so GSAP ScrollTrigger tracks the default scroller). */
 body.lp-scroll #root {
@@ -94,6 +116,10 @@ body.lp-scroll #root {
 }
 
 /* ---- Buttons ---- */
+/* Still used by the nav "Inloggen" button and the strengths-tile CTA (both
+ * outside this pass). Landing.tsx's own buttons (hero, waitlist, footer) are
+ * now pure Tailwind — mixing `.lp-btn`'s unlayered padding with a Tailwind
+ * size override would lose to it under the layer rule above. */
 .lp-btn {
   display: inline-flex;
   align-items: center;
@@ -115,160 +141,16 @@ body.lp-scroll #root {
 .lp-btn:hover {
   transform: translateY(-1px);
 }
-.lp-btn-lg {
-  padding: 15px 28px;
-  font-size: 1.02rem;
-}
 .lp-btn-dark {
   background: var(--lp-ink);
   color: var(--lp-cream);
   box-shadow: 0 12px 26px -14px rgba(43, 33, 23, 0.6);
 }
-.lp-btn-light {
-  background: var(--lp-card);
-  color: var(--lp-ink);
-  border-color: var(--lp-line);
-}
-.lp-btn-tan {
-  background: var(--lp-tan);
-  color: var(--lp-espresso);
-  box-shadow: 0 14px 30px -14px rgba(176, 127, 51, 0.7);
-}
-
-/* ---- Hero ---- */
-.lp-hero {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 48px 28px 40px;
-  text-align: center;
-}
-.lp-h1 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: clamp(2.6rem, 6vw, 4.6rem);
-  line-height: 1.04;
-  letter-spacing: -0.02em;
-  margin: 0 0 22px;
-  color: var(--lp-ink);
-}
-.lp-sub {
-  max-width: 640px;
-  margin: 0 auto 28px;
-  color: var(--lp-ink2);
-  font-size: 1.1rem;
-}
-.lp-cta-row {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-bottom: 56px;
-}
-
-/* ---- Hero stage (device + floating chips) ---- */
-.lp-stage {
-  position: relative;
-  max-width: 720px;
-  min-height: 400px;
-  margin: 0 auto;
-}
-.lp-device {
-  position: relative;
-  z-index: 2;
-  width: min(340px, 82vw);
-  margin: 0 auto;
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 24px;
-  padding: 24px;
-  text-align: left;
-  box-shadow:
-    0 40px 80px -40px rgba(43, 33, 23, 0.45),
-    0 8px 20px -12px rgba(43, 33, 23, 0.2);
-}
-.lp-device-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--lp-ink2);
-}
-.lp-device-value {
-  font-size: 2.4rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-.lp-device-delta {
-  color: var(--lp-pos);
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.lp-spark {
-  margin: 8px 0 14px;
-}
-.lp-device-rows > div {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-top: 1px solid var(--lp-line);
-  font-size: 0.9rem;
-  color: var(--lp-ink2);
-}
-.lp-device-rows > div span:last-child {
-  color: var(--lp-ink);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.lp-chip {
-  position: absolute;
-  z-index: 3;
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 16px;
-  padding: 12px 16px;
-  box-shadow: 0 24px 50px -28px rgba(43, 33, 23, 0.4);
-  font-size: 0.9rem;
-}
-.lp-chip-label {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--lp-ink2);
-}
-.lp-chip-value {
-  font-size: 1.15rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.lp-chip .lp-pos {
-  color: var(--lp-pos);
-  font-size: 1rem;
-}
-.lp-chip-a {
-  top: 30px;
-  left: 0;
-}
-.lp-chip-b {
-  top: 90px;
-  right: 0;
-}
-.lp-chip-c {
-  bottom: 24px;
-  left: 8%;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-.lp-lock {
-  font-size: 1rem;
-}
 
 /* ---- Sections ---- */
+/* `.lp-section`, `.lp-h2`, `.lp-eyebrow` and `.lp-sub` still back the
+ * strengths, agents, privacy and how-it-works sections. FAQ/waitlist/footer
+ * now carry the equivalent Tailwind utilities directly instead. */
 .lp-section {
   max-width: 1100px;
   margin: 0 auto;
@@ -292,24 +174,11 @@ body.lp-scroll #root {
   margin: 0 0 36px;
   color: var(--lp-ink);
 }
-.lp-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
-}
-.lp-grid-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-.lp-card {
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 20px;
-  padding: 26px 22px;
-  box-shadow: 0 22px 48px -34px rgba(43, 33, 23, 0.28);
-}
-.lp-card-icon {
-  font-size: 1.7rem;
-  margin-bottom: 12px;
+.lp-sub {
+  max-width: 640px;
+  margin: 0 auto 28px;
+  color: var(--lp-ink2);
+  font-size: 1.1rem;
 }
 .lp-card-title {
   font-family: var(--font-display);
@@ -322,38 +191,6 @@ body.lp-scroll #root {
   margin: 0;
   color: var(--lp-ink2);
   font-size: 0.95rem;
-}
-
-/* ---- Marquee ---- */
-.lp-marquee {
-  overflow: hidden;
-  padding: 8px 0;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-}
-.lp-marquee-track {
-  display: flex;
-  gap: 14px;
-  width: max-content;
-  animation: lp-marq 34s linear infinite;
-}
-.lp-pill {
-  flex: none;
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 999px;
-  padding: 10px 20px;
-  font-size: 0.95rem;
-  color: var(--lp-ink);
-  white-space: nowrap;
-}
-@keyframes lp-marq {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
 }
 
 /* ---- Privacy band (dark for contrast) ---- */
@@ -419,48 +256,6 @@ body.lp-scroll #root {
   color: var(--lp-cream);
   font-weight: 700;
   margin-bottom: 14px;
-}
-
-/* ---- CTA band ---- */
-.lp-cta-band {
-  max-width: 1100px;
-  margin: 0 auto 24px;
-  padding: 64px 28px;
-  text-align: center;
-}
-
-/* ---- Footer ---- */
-.lp-footer {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 32px 28px 56px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--lp-line);
-  color: var(--lp-ink2);
-  font-size: 0.9rem;
-}
-.lp-brand-sm {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--lp-ink);
-}
-.lp-foot-note {
-  flex: 1;
-}
-.lp-foot-links {
-  display: flex;
-  gap: 18px;
-}
-.lp-foot-links a {
-  color: var(--lp-ink2);
-  text-decoration: none;
-}
-.lp-foot-links a:hover {
-  color: var(--lp-ink);
 }
 
 /* ---- Kern-tegels (waarom LaVega) ---- */
@@ -753,32 +548,12 @@ body.lp-scroll #root {
 }
 
 /* ---- FAQ ---- */
-.lp-faq {
-  max-width: 760px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.lp-faq-item {
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 16px;
-  padding: 0 22px;
-}
-.lp-faq-item summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  list-style: none;
-  cursor: pointer;
-  padding: 18px 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--lp-ink);
-}
+/* `.lp-faq-item` stays as a bare hook: `[open]` and `::-webkit-details-marker`
+ * below need the class in the DOM, even though its own box-model now comes
+ * from Tailwind utilities on the element (see Landing.tsx). The plus/minus
+ * icon is two pseudo-elements toggled by an attribute selector — left as
+ * hand-written CSS rather than reconstructed with `before:`/`after:` and
+ * `group-open:` for a decorative icon with no other reader. */
 .lp-faq-item summary::-webkit-details-marker {
   display: none;
 }
@@ -813,125 +588,6 @@ body.lp-scroll #root {
 .lp-faq-item[open] .lp-faq-mark::after {
   transform: rotate(90deg);
   opacity: 0;
-}
-.lp-faq-item p {
-  margin: 0 0 18px;
-  color: var(--lp-ink2);
-}
-
-/* ---- Waitlist ---- */
-.lp-waitlist-inner {
-  max-width: 680px;
-  margin: 0 auto;
-  text-align: center;
-}
-.lp-waitlist-inner .lp-eyebrow {
-  text-align: center;
-}
-.lp-waitlist-form {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 24px;
-}
-.lp-input {
-  flex: 1 1 220px;
-  min-width: 0;
-  padding: 14px 18px;
-  border-radius: 999px;
-  border: 1px solid var(--lp-line);
-  background: var(--lp-card);
-  font-family: var(--font-body);
-  font-size: 1rem;
-  color: var(--lp-ink);
-}
-.lp-input:focus {
-  outline: none;
-  border-color: var(--lp-tan-deep);
-  box-shadow: 0 0 0 3px rgba(207, 159, 94, 0.2);
-}
-.lp-input:disabled {
-  opacity: 0.6;
-}
-.lp-waitlist-form .lp-btn {
-  flex: 0 0 auto;
-}
-.lp-waitlist-done {
-  margin-top: 24px;
-  font-size: 1.1rem;
-  color: var(--lp-pos);
-  font-weight: 600;
-}
-.lp-waitlist-note {
-  margin-top: 12px;
-  font-size: 0.85rem;
-  color: var(--lp-ink2);
-}
-
-/* ---- Footer (dark) ---- */
-.lp-footer2 {
-  background: var(--lp-espresso);
-  color: var(--lp-cream);
-  margin-top: 24px;
-}
-.lp-footer2-cta {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 64px 28px 40px;
-  text-align: center;
-}
-.lp-footer2-cta .lp-h2 {
-  color: var(--lp-cream);
-  margin-bottom: 24px;
-}
-.lp-footer2-grid {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 32px 28px;
-  display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr;
-  gap: 32px;
-  border-top: 1px solid rgba(244, 241, 236, 0.12);
-}
-.lp-footer2-brand {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.4rem;
-}
-.lp-footer2-note {
-  color: rgba(244, 241, 236, 0.7);
-  font-size: 0.95rem;
-  max-width: 320px;
-  margin: 10px 0 0;
-}
-.lp-footer2-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.lp-footer2-h {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(244, 241, 236, 0.55);
-  margin-bottom: 4px;
-}
-.lp-footer2-col a {
-  color: rgba(244, 241, 236, 0.85);
-  text-decoration: none;
-  font-size: 0.95rem;
-}
-.lp-footer2-col a:hover {
-  color: var(--lp-cream);
-}
-.lp-footer2-bottom {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px 28px 48px;
-  color: rgba(244, 241, 236, 0.5);
-  font-size: 0.85rem;
 }
 
 /* ---- Signature scroll section (GSAP card spiral) ---- */
@@ -1023,6 +679,9 @@ body.lp-scroll #root {
 }
 
 /* ---- Animations ---- */
+/* `.lp-reveal`/`.lp-in` back every section's scroll-reveal, including the four
+ * outside this pass — Landing.tsx's IntersectionObserver targets the class by
+ * name, so it stays on every element that has it, converted or not. */
 .lp-reveal {
   opacity: 0;
   transform: translateY(18px);
@@ -1052,23 +711,11 @@ body.lp-scroll #root {
     transform: translateY(-10px);
   }
 }
-.lp-float {
-  animation: lp-bob 4s ease-in-out infinite;
-}
-.lp-float-slow {
-  animation-duration: 5.5s;
-}
-.lp-float-slower {
-  animation-duration: 7s;
-}
 
 /* ---- Responsive ---- */
 @media (max-width: 860px) {
   .lp-nav-links {
     display: none;
-  }
-  .lp-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
   .lp-tiles {
     grid-template-columns: repeat(2, 1fr);
@@ -1080,28 +727,13 @@ body.lp-scroll #root {
   .lp-steps {
     grid-template-columns: 1fr;
   }
-  .lp-footer2-grid {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
 }
 @media (max-width: 560px) {
-  .lp-grid {
-    grid-template-columns: 1fr;
-  }
   .lp-tiles {
     grid-template-columns: 1fr;
   }
-  .lp-chip-a,
-  .lp-chip-b {
-    display: none;
-  }
   .lp-privacy-inner {
     padding: 40px 24px;
-  }
-  .lp-waitlist-form .lp-btn {
-    flex: 1 1 100%;
-    justify-content: center;
   }
 }
 
@@ -1110,12 +742,6 @@ body.lp-scroll #root {
     opacity: 1;
     transform: none;
     transition: none;
-  }
-  .lp-float {
-    animation: none;
-  }
-  .lp-marquee-track {
-    animation: none;
   }
   .lp-ill-fast .c4,
   .lp-ill-toggles .tg.on::after,
@@ -1127,3 +753,5 @@ body.lp-scroll #root {
     transform: none;
   }
 }
+
+} /* @layer components */

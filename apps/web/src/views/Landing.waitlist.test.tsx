@@ -50,7 +50,7 @@ function fillEmail(el: HTMLElement, value: string) {
 }
 
 function submit(el: HTMLElement) {
-  const form = el.querySelector<HTMLFormElement>(".lp-waitlist-form")!;
+  const form = el.querySelector<HTMLFormElement>('[data-testid="waitlist-form"]')!;
   act(() => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });

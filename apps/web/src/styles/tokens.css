@@ -122,12 +122,19 @@
   --radius-sm: var(--r-sm);
   --radius-pill: var(--pill);
 
-  --spacing-1: var(--sp-1);
-  --spacing-2: var(--sp-2);
-  --spacing-3: var(--sp-3);
-  --spacing-4: var(--sp-4);
-  --spacing-5: var(--sp-5);
-  --spacing-6: var(--sp-6);
+  /* NO --spacing-* HERE, DELIBERATELY.
+   *
+   * Mapping Tailwind's numeric scale onto --sp-1..6 was the obvious move and it
+   * was wrong. Steps 1 to 4 happen to agree (4/8/12/16px), but --sp-5 is 24px
+   * where Tailwind's 5 is 20px, and --sp-6 is 32px where Tailwind's 6 is 24px.
+   * That made `p-6` mean 32px in this repo and 24px everywhere else, including
+   * apps/investing-web — the codebase this migration exists to align with. A
+   * reader coming from Tailwind would have been wrong about every spacing
+   * value above 4, silently.
+   *
+   * So the numeric scale stays standard (n x 4px): 24px is `6`, 32px is `8`.
+   * The app's own tokens remain available where they carry meaning the scale
+   * does not, as var(--sp-5) or an explicit p-[24px]. */
 
   --font-display: var(--font-display);
   --font-body: var(--font-body);

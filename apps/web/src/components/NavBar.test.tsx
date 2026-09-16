@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import NavBar from "./NavBar";
 import TopBar from "./TopBar";
 import { enabledModules, navModules } from "./moduleRegistry";
+import { resolved } from "../test-support/resolveStyle.js";
 
 /* The shell chrome after the UI review: the nav shows the owner's selection,
  * the profile sits top right, the "lokaal & privé" claim is gone, and the
@@ -52,12 +53,7 @@ test("the active tab is marked by a rule, not by a round-edged tile", () => {
     />,
   );
   expect(html).toContain('aria-current="page"');
-  const base = readFileSync(new URL("../styles/base.css", import.meta.url), "utf8").replace(
-    /\s+/g,
-    " ",
-  );
-  const active = base.slice(base.indexOf(".nav-item.active"), base.indexOf(".nav-item:disabled"));
-  expect(active).toContain("border-bottom-color: var(--ink)");
+  expect(resolved(["nav-item", "active"], "border-bottom-color")).toBe("var(--ink)");
 });
 
 test("the profile entry sits in the app bar's right-hand slot", () => {
@@ -126,13 +122,7 @@ test("the header's switcher is Persoonlijk | Zakelijk, split by a vertical rule"
   const zakelijk = html.slice(html.lastIndexOf("<button", html.lastIndexOf("Zakelijk")));
   expect(zakelijk).toContain('aria-pressed="true"');
   expect(zakelijk).toContain("scope-on");
-  const base = readFileSync(new URL("../styles/base.css", import.meta.url), "utf8").replace(
-    /\s+/g,
-    " ",
-  );
-  expect(base.slice(base.indexOf(".scope-option.scope-on"))).toContain(
-    "border-bottom-color: var(--ink)",
-  );
+  expect(resolved(["scope-option", "scope-on"], "border-bottom-color")).toBe("var(--ink)");
 });
 
 test("the per-company pills are gone from the chrome, the entity scope is not", () => {
@@ -147,28 +137,14 @@ test("the per-company pills are gone from the chrome, the entity scope is not", 
 });
 
 test("every section header is a title with a rule under it, not a round-edged tile", () => {
-  const base = readFileSync(new URL("../styles/base.css", import.meta.url), "utf8").replace(
-    /\s+/g,
-    " ",
-  );
-  const modules = readFileSync(new URL("../styles/modules.css", import.meta.url), "utf8").replace(
-    /\s+/g,
-    " ",
-  );
   // The shared header classes the views and the blocks already use.
-  expect(base.slice(base.indexOf(".card-header, .card > h2"))).toContain(
-    "border-bottom: 1px solid var(--ink)",
-  );
-  expect(
-    modules.slice(modules.indexOf(".module-head {"), modules.indexOf(".module-title")),
-  ).toContain("border-bottom: 1px solid var(--ink)");
+  expect(resolved(["card-header"], "border-bottom")).toBe("1px solid var(--ink)");
+  expect(resolved(["module-head"], "border-bottom")).toBe("1px solid var(--ink)");
   // ...and the tiles themselves stopped shouting.
-  const card = base.slice(base.indexOf(".card {"), base.indexOf(".kpi-row"));
-  expect(card).toContain("border-radius: var(--r-sm)");
-  expect(card).not.toContain("box-shadow");
-  const module = modules.slice(modules.indexOf(".module {"), modules.indexOf(".module-head"));
-  expect(module).toContain("border-radius: var(--r-sm)");
-  expect(module).not.toContain("box-shadow");
+  expect(resolved(["card"], "border-radius")).toBe("var(--r-sm)");
+  expect(resolved(["card"], "box-shadow")).toBeUndefined();
+  expect(resolved(["module"], "border-radius")).toBe("var(--r-sm)");
+  expect(resolved(["module"], "box-shadow")).toBeUndefined();
 });
 
 test("the nav tab labels switch to English under the en locale cookie", () => {

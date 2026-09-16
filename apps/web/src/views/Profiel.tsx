@@ -573,14 +573,23 @@ export default function Profiel({
           as a settings menu. The name is a local preference like the buffer and
           the country: this browser only, never in the vault, never in a
           back-up, and deliberately never in anything a model is given. */}
-      <section className="card profile-head" aria-label={c.profiel.head.ariaLabel}>
-        <span className="profile-head-avatar" aria-hidden="true">
+      <section
+        className="card flex items-start gap-4 max-[640px]:flex-col"
+        aria-label={c.profiel.head.ariaLabel}
+      >
+        <span
+          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-display text-[1.15rem] font-semibold tracking-[0.02em]"
+          aria-hidden="true"
+          data-testid="profile-head-avatar"
+        >
           {initials}
         </span>
-        <div className="profile-head-text">
-          <h2 className="profile-head-name">{fullName || c.profiel.head.noName}</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="mb-1!" data-testid="profile-head-name">
+            {fullName || c.profiel.head.noName}
+          </h2>
           <p className="cell-sub">{c.profiel.head.note}</p>
-          <div className="profile-head-fields">
+          <div className="mt-3">
             <label>
               {c.profiel.head.firstName}{" "}
               <input

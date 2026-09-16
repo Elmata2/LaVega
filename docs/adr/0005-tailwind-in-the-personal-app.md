@@ -95,6 +95,38 @@ available now in a way it was not when those tests were written.
 So the order is: convert what is free, and before touching the rest, replace the
 stylesheet-reading assertions with computed-style ones.
 
+## Four traps, all of which fail silently
+
+Every one of these produces a wrong screen with a green suite. That is the
+shape of the risk in this migration, and none of them is caught by a test.
+
+**1. Alpha modifiers on indirect tokens are dropped.** `bg-pos/12` emits full
+opacity, because `@theme inline` points `--color-pos` at another variable and
+Tailwind cannot resolve it at build time to mix against. Use a `--x-tint` token
+built with `color-mix(in srgb, var(--x) N%, transparent)`.
+
+**2. Unlayered CSS beats layered CSS, regardless of specificity.** Tailwind
+utilities compile into `@layer utilities`; every hand-written sheet here sat
+outside any layer and therefore won against them silently. Two workers hit this
+independently and worked around it with hundreds of `!` modifiers. FIXED AT THE
+ROOT: all six hand-written sheets are now wrapped in `@layer components`, so a
+utility on a converted element wins as it should. Verified by diffing
+`getComputedStyle` for `h2`, `button` and `input` between the migrated build and
+production; identical character for character. The `!` workarounds are now
+redundant and can be swept.
+
+**3. `@theme` only expands in the file that imports Tailwind.** A per-file
+`@theme inline` block compiles to nothing, so `bg-lp-ink` silently never exists.
+Either register the token in `tokens.css`, or use an arbitrary value against the
+custom property directly: `bg-[var(--lp-ink)]`.
+
+**4. Do not remap Tailwind's numeric spacing scale.** The first version of
+`tokens.css` mapped `--spacing-1..6` onto `--sp-1..6`. Steps 1 to 4 agree, but
+`--sp-5` is 24px where Tailwind's 5 is 20px, and `--sp-6` is 32px where
+Tailwind's 6 is 24px — so `p-6` meant one thing here and another everywhere
+else, including the app this migration exists to align with. Removed. The scale
+is standard: 24px is `6`, 32px is `8`.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual

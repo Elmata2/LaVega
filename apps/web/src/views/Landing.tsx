@@ -24,6 +24,30 @@ const WAITLIST_ENDPOINT =
  *  autofill loses nothing, a bot has to wait like everyone else. */
 const WAITLIST_MIN_FILL_MS = 2000;
 
+/* The hero/waitlist/footer CTAs used to share `.lp-btn`/`.lp-btn-dark` (still
+ * used by the nav login button and the strengths-tile CTA, both outside this
+ * pass) with a `.lp-btn-lg` size modifier layered on top. Mixing that
+ * unlayered class with a Tailwind padding override would lose to it — see the
+ * `@layer components` note in landing.css — so these four buttons are now
+ * fully Tailwind, duplicating `.lp-btn`'s shape rather than reaching for it.
+ *
+ * One of the four is a `<button>`, and base.css's bare `button{}` (background,
+ * border, border-radius, padding, color, font-size, cursor — all unlayered)
+ * would beat every one of those Tailwind utilities under the cascade-layers
+ * rule regardless of specificity. `!` forces each to win; on the three `<a>`
+ * CTAs it is a harmless no-op except for color, where base.css's bare `a`
+ * rule has the same problem. */
+const LP_BTN =
+  "inline-flex items-center gap-2 rounded-pill! font-body! text-[0.95rem]! font-semibold border! " +
+  "cursor-pointer! no-underline whitespace-nowrap transition-[transform,box-shadow,background] " +
+  "duration-[120ms] ease-[ease] motion-safe:hover:-translate-y-px";
+const LP_BTN_LG = "px-[28px]! py-[15px]! text-[1.02rem]!";
+const LP_BTN_DARK =
+  "bg-[var(--lp-ink)]! text-[var(--lp-cream)]! border-transparent! shadow-[0_12px_26px_-14px_rgba(43,33,23,.6)]";
+const LP_BTN_LIGHT = "bg-[var(--lp-card)]! text-[var(--lp-ink)]! border-[var(--lp-line)]!";
+const LP_BTN_TAN =
+  "bg-[var(--lp-tan)]! text-[var(--lp-espresso)]! border-transparent! shadow-[0_14px_30px_-14px_rgba(176,127,51,.7)]";
+
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
  *  ondernemers). The app isn't public yet — it's a waitlist front door: the
@@ -201,29 +225,33 @@ export default function Landing({
       </header>
 
       {/* Hero */}
-      <section className="lp-hero">
-        <h1 className="lp-h1 lp-reveal">
+      <section className="lp-hero max-w-[1000px] mx-auto pt-[48px] px-[28px] pb-[40px] text-center">
+        <h1 className="lp-reveal font-display! font-semibold! text-[clamp(2.6rem,6vw,4.6rem)]! leading-[1.04] tracking-[-0.02em]! m-0! mb-[22px]! text-[var(--lp-ink)]!">
           {c.hero.titleTop}
           <br />
           {c.hero.titleBottom}
         </h1>
-        <p className="lp-sub lp-reveal">{c.hero.sub}</p>
-        <div className="lp-cta-row lp-reveal">
-          <a className="lp-btn lp-btn-dark lp-btn-lg" href="#wachtlijst">
+        <p className="lp-reveal max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">
+          {c.hero.sub}
+        </p>
+        <div className="lp-reveal flex gap-3 justify-center flex-wrap mb-[56px]">
+          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK}`} href="#wachtlijst">
             {c.hero.ctaPrimary} <span aria-hidden="true">→</span>
           </a>
-          <a className="lp-btn lp-btn-light lp-btn-lg" href="#how">
+          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_LIGHT}`} href="#how">
             {c.hero.ctaSecondary}
           </a>
         </div>
 
         {/* Floating product illustration */}
-        <div className="lp-stage lp-reveal" aria-hidden="true">
-          <div className="lp-device">
-            <div className="lp-device-eyebrow">{c.device.eyebrow}</div>
-            <div className="lp-device-value">€12.480</div>
-            <div className="lp-device-delta">{c.device.delta}</div>
-            <div className="lp-spark">
+        <div className="lp-reveal relative max-w-[720px] min-h-[400px] mx-auto" aria-hidden="true">
+          <div className="relative z-[2] w-[min(340px,82vw)] mx-auto bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[24px] p-[24px] text-left shadow-[0_40px_80px_-40px_rgba(43,33,23,.45),0_8px_20px_-12px_rgba(43,33,23,.2)]">
+            <div className="font-mono text-[0.72rem] tracking-[0.04em] uppercase text-[var(--lp-ink2)]">
+              {c.device.eyebrow}
+            </div>
+            <div className="text-[2.4rem] font-bold tracking-[-0.02em] tabular-nums mt-[2px]">€12.480</div>
+            <div className="text-[var(--lp-pos)] text-[0.9rem] font-semibold mb-2">{c.device.delta}</div>
+            <div className="mt-2 mb-[14px]">
               <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
                 <polyline
                   points="0,52 30,46 60,50 90,38 120,40 150,28 180,30 210,16 240,10"
@@ -235,31 +263,37 @@ export default function Landing({
                 />
               </svg>
             </div>
-            <div className="lp-device-rows">
-              <div>
+            <div>
+              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
                 <span>{c.device.rows[0]}</span>
-                <span>28%</span>
+                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">28%</span>
               </div>
-              <div>
+              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
                 <span>{c.device.rows[1]}</span>
-                <span>34%</span>
+                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">34%</span>
               </div>
-              <div>
+              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
                 <span>{c.device.rows[2]}</span>
-                <span>18%</span>
+                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">18%</span>
               </div>
             </div>
           </div>
-          <div className="lp-chip lp-chip-a lp-float">
-            <div className="lp-chip-label">{c.device.savedLabel}</div>
-            <div className="lp-chip-value lp-pos">+€420</div>
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 max-[560px]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
+            <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
+              {c.device.savedLabel}
+            </div>
+            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">+€420</div>
           </div>
-          <div className="lp-chip lp-chip-b lp-float lp-float-slow">
-            <div className="lp-chip-label">{c.device.forecastLabel}</div>
-            <div className="lp-chip-value lp-pos">{c.device.forecastValue}</div>
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 max-[560px]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
+            <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
+              {c.device.forecastLabel}
+            </div>
+            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">
+              {c.device.forecastValue}
+            </div>
           </div>
-          <div className="lp-chip lp-chip-c lp-float lp-float-slower">
-            <span className="lp-lock">🔒</span> {c.device.lockChip}
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] bottom-[24px] left-[8%] inline-flex items-center gap-2 font-semibold motion-safe:animate-[lp-bob_7s_ease-in-out_infinite]">
+            <span className="text-base">🔒</span> {c.device.lockChip}
           </div>
         </div>
       </section>
@@ -455,32 +489,46 @@ export default function Landing({
       </section>
 
       {/* FAQ */}
-      <section className="lp-section" id="faq">
-        <p className="lp-eyebrow lp-reveal">{c.faq.eyebrow}</p>
-        <h2 className="lp-h2 lp-reveal">{c.faq.title}</h2>
-        <div className="lp-faq lp-reveal">
+      <section className="max-w-[1100px] mx-auto py-[72px] px-[28px]" id="faq">
+        <p className="lp-reveal font-mono text-[0.75rem] tracking-[0.08em] uppercase text-[var(--lp-tan-deep)] text-center m-0! mb-[10px]!">
+          {c.faq.eyebrow}
+        </p>
+        <h2 className="lp-reveal font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[36px]! text-[var(--lp-ink)]!">
+          {c.faq.title}
+        </h2>
+        <div className="lp-reveal max-w-[760px] mx-auto flex flex-col gap-3">
           {c.faq.items.map((f) => (
-            <details className="lp-faq-item" key={f.q}>
-              <summary>
+            <details className="lp-faq-item bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-[22px]" key={f.q}>
+              <summary className="flex items-center justify-between gap-4 list-none cursor-pointer py-[18px] font-display font-semibold text-[1.1rem] text-[var(--lp-ink)]">
                 <span>{f.q}</span>
                 <span className="lp-faq-mark" aria-hidden="true" />
               </summary>
-              <p>{f.a}</p>
+              <p className="m-0! mb-[18px]! text-[var(--lp-ink2)]">{f.a}</p>
             </details>
           ))}
         </div>
       </section>
 
       {/* Waitlist */}
-      <section className="lp-section lp-waitlist" id="wachtlijst">
-        <div className="lp-waitlist-inner lp-reveal">
-          <p className="lp-eyebrow">{c.waitlist.eyebrow}</p>
-          <h2 className="lp-h2">{c.waitlist.title}</h2>
-          <p className="lp-sub">{c.waitlist.sub}</p>
+      <section className="max-w-[1100px] mx-auto py-[72px] px-[28px]" id="wachtlijst">
+        <div className="lp-reveal max-w-[680px] mx-auto text-center">
+          <p className="font-mono text-[0.75rem] tracking-[0.08em] uppercase text-[var(--lp-tan-deep)] text-center m-0! mb-[10px]!">
+            {c.waitlist.eyebrow}
+          </p>
+          <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[36px]! text-[var(--lp-ink)]!">
+            {c.waitlist.title}
+          </h2>
+          <p className="max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">{c.waitlist.sub}</p>
           {wlStatus === "done" ? (
-            <p className="lp-waitlist-done">{c.waitlist.done}</p>
+            <p className="mt-[24px]! text-[1.1rem] text-[var(--lp-pos)] font-semibold" data-testid="waitlist-done">
+              {c.waitlist.done}
+            </p>
           ) : (
-            <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
+            <form
+              className="flex gap-[10px] justify-center flex-wrap mt-[24px]"
+              onSubmit={submitWaitlist}
+              data-testid="waitlist-form"
+            >
               <input
                 type="text"
                 name="company"
@@ -493,7 +541,7 @@ export default function Landing({
               />
               <input
                 type="text"
-                className="lp-input"
+                className="flex-[1_1_220px] min-w-0 px-[18px]! py-[14px]! rounded-pill! border! border-[var(--lp-line)]! bg-[var(--lp-card)]! font-body! text-base! text-[var(--lp-ink)]! focus:outline-none! focus:border-[var(--lp-tan-deep)]! focus:shadow-[0_0_0_3px_rgba(207,159,94,.2)] disabled:opacity-60!"
                 placeholder={c.waitlist.namePlaceholder}
                 aria-label={c.waitlist.nameLabel}
                 value={wlName}
@@ -502,7 +550,7 @@ export default function Landing({
               />
               <input
                 type="email"
-                className="lp-input"
+                className="flex-[1_1_220px] min-w-0 px-[18px]! py-[14px]! rounded-pill! border! border-[var(--lp-line)]! bg-[var(--lp-card)]! font-body! text-base! text-[var(--lp-ink)]! focus:outline-none! focus:border-[var(--lp-tan-deep)]! focus:shadow-[0_0_0_3px_rgba(207,159,94,.2)] disabled:opacity-60!"
                 placeholder={c.waitlist.emailPlaceholder}
                 aria-label={c.waitlist.emailLabel}
                 required
@@ -512,7 +560,7 @@ export default function Landing({
               />
               <button
                 type="submit"
-                className="lp-btn lp-btn-dark lp-btn-lg"
+                className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK} flex-none max-[560px]:flex-1 max-[560px]:justify-center disabled:opacity-60!`}
                 disabled={!wlReady || wlStatus === "sending"}
               >
                 {wlReady
@@ -523,37 +571,80 @@ export default function Landing({
               </button>
             </form>
           )}
-          {!wlReady && <p className="lp-waitlist-note">{c.waitlist.notReady}</p>}
-          {wlStatus === "error" && <p className="lp-waitlist-note">{c.waitlist.error}</p>}
+          {!wlReady && (
+            <p className="mt-3! text-[0.85rem] text-[var(--lp-ink2)]" data-testid="waitlist-note">
+              {c.waitlist.notReady}
+            </p>
+          )}
+          {wlStatus === "error" && (
+            <p className="mt-3! text-[0.85rem] text-[var(--lp-ink2)]" data-testid="waitlist-note">
+              {c.waitlist.error}
+            </p>
+          )}
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="lp-footer2">
-        <div className="lp-footer2-cta lp-reveal">
-          <h2 className="lp-h2">{c.footer.ctaTitle}</h2>
-          <a className="lp-btn lp-btn-tan lp-btn-lg" href="#wachtlijst">
+      <footer className="bg-[var(--lp-espresso)] text-[var(--lp-cream)] mt-[24px]">
+        <div className="lp-reveal max-w-[1100px] mx-auto pt-[64px] px-[28px] pb-[40px] text-center">
+          <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[24px]! text-[var(--lp-cream)]!">
+            {c.footer.ctaTitle}
+          </h2>
+          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_TAN}`} href="#wachtlijst">
             {c.footer.cta} <span aria-hidden="true">→</span>
           </a>
         </div>
-        <div className="lp-footer2-grid">
-          <div className="lp-footer2-about">
-            <div className="lp-footer2-brand">LaVega</div>
-            <p className="lp-footer2-note">{c.footer.note}</p>
+        <div className="max-w-[1100px] mx-auto py-[32px] px-[28px] grid grid-cols-[1.6fr_1fr_1fr] gap-[32px] border-t border-[color-mix(in_srgb,var(--lp-cream)_12%,transparent)] max-[860px]:grid-cols-1 max-[860px]:gap-[24px]">
+          <div>
+            <div className="font-display font-semibold text-[1.4rem]">LaVega</div>
+            <p className="text-[color-mix(in_srgb,var(--lp-cream)_70%,transparent)] text-[0.95rem] max-w-[320px] mt-[10px]!">
+              {c.footer.note}
+            </p>
           </div>
-          <div className="lp-footer2-col">
-            <span className="lp-footer2-h">{c.footer.product}</span>
-            <a href="#agents">{c.nav.agents}</a>
-            <a href="#how">{c.nav.how}</a>
-            <a href="#faq">{c.faq.eyebrow}</a>
+          <div className="flex flex-col gap-[10px]">
+            <span className="font-mono text-[0.72rem] tracking-[0.06em] uppercase text-[color-mix(in_srgb,var(--lp-cream)_55%,transparent)] mb-1">
+              {c.footer.product}
+            </span>
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
+              href="#agents"
+            >
+              {c.nav.agents}
+            </a>
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
+              href="#how"
+            >
+              {c.nav.how}
+            </a>
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
+              href="#faq"
+            >
+              {c.faq.eyebrow}
+            </a>
           </div>
-          <div className="lp-footer2-col">
-            <span className="lp-footer2-h">{c.footer.legal}</span>
-            <a href="/privacy">{c.footer.privacy}</a>
-            <a href="/terms">{c.footer.terms}</a>
+          <div className="flex flex-col gap-[10px]">
+            <span className="font-mono text-[0.72rem] tracking-[0.06em] uppercase text-[color-mix(in_srgb,var(--lp-cream)_55%,transparent)] mb-1">
+              {c.footer.legal}
+            </span>
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
+              href="/privacy"
+            >
+              {c.footer.privacy}
+            </a>
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
+              href="/terms"
+            >
+              {c.footer.terms}
+            </a>
           </div>
         </div>
-        <div className="lp-footer2-bottom">{c.footer.rights}</div>
+        <div className="max-w-[1100px] mx-auto pt-[20px] px-[28px] pb-[48px] text-[color-mix(in_srgb,var(--lp-cream)_50%,transparent)] text-[0.85rem]">
+          {c.footer.rights}
+        </div>
       </footer>
     </div>
   );

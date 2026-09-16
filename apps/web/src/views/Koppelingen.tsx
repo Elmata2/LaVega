@@ -91,7 +91,7 @@ function InfoEye({
   return (
     <button
       type="button"
-      className="field-info"
+      className="inline-flex items-center justify-center w-[24px] h-[24px] p-0! align-middle rounded-[50%]! border border-line bg-surface-2 text-muted! cursor-pointer hover:text-ink! hover:border-accent! aria-expanded:text-ink! aria-expanded:border-accent!"
       aria-label={label}
       title={label}
       aria-expanded={open}
@@ -105,7 +105,10 @@ function InfoEye({
 
 function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
   return (
-    <p className="field-note" id={`${id}-uitleg`}>
+    <p
+      className="mt-3! mb-0! py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem] [&_strong]:text-ink [&_code]:text-ink"
+      id={`${id}-uitleg`}
+    >
       {children}
     </p>
   );

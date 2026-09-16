@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { resolved } from "./test-support/resolveStyle.js";
 
 /* The phone layout is pure CSS reflow of the same DOM the desktop uses, so its
  * only failure mode is a silent one: a class or an attribute renamed on one
@@ -53,14 +54,13 @@ test("the card-table treatment is scoped to phone width, not applied everywhere"
 test("grid tracks that hold money use minmax(0,...) so a long amount cannot widen the page", () => {
   // The bug: a .kpi tile's min-content (a euro amount at 2.3rem) was wider than
   // its 1fr track, giving a 414px document in a 390px viewport.
-  expect(flat(base)).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
-  expect(flat(base)).toContain(".kpi { min-width: 0;");
+  expect(resolved(["kpi-row"], "grid-template-columns", 900)).toBe("repeat(2,minmax(0,1fr))");
+  expect(resolved(["kpi"], "min-width", 900)).toBe("0");
 });
 
 test("the pinned phone app bar leaves room for anything scrolled under it", () => {
-  const phone = base.slice(base.indexOf("@media (max-width: 900px)"));
-  expect(flat(phone)).toContain("position: sticky");
-  expect(flat(phone)).toContain("scroll-margin-top");
+  expect(resolved(["appbar"], "position", 900)).toBe("sticky");
+  expect(resolved(["module"], "scroll-margin-top", 900)).toBe("7rem");
 });
 
 test("a crowded bar axis thins its labels instead of ellipsising every one", () => {

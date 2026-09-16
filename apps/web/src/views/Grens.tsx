@@ -283,9 +283,12 @@ export default function Grens({
             "herkomst",
           )}
           {groups.map(([entity, entityStreams]) => (
-            <div className="tax-entity" key={entity || "zonder-naam"}>
-              <div className="tax-entity-head">
-                <span className="tax-entity-name">{entity}</span>
+            <div
+              className="border-t border-t-line pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0"
+              key={entity || "zonder-naam"}
+            >
+              <div className="flex items-baseline justify-between gap-3 mb-2">
+                <span className="font-semibold text-ink">{entity}</span>
               </div>
               {entityStreams.map((s) => {
                 const rows = crossingsByStream.get(s.key) ?? [];
@@ -293,7 +296,7 @@ export default function Grens({
                 const fromLabel = sideLabel(s.fromEntity, s.fromScope);
                 const toLabel = sideLabel(s.toEntity, s.toScope);
                 return (
-                  <div className="grens-stroom" key={s.key}>
+                  <div className="mt-3 first:mt-0" key={s.key}>
                     {paragraphs(
                       copy.stream.heading({
                         fromLabel,
@@ -343,9 +346,9 @@ export default function Grens({
                       Belasting.tsx — zie ToonMeer.tsx voor waarom dit een
                       <details> is en geen useState. */}
                     <ToonMeer summary={copy.answerForm.toonMeerSummary}>
-                      <div className="grens-rijen">
+                      <div className="mt-2 pl-3 border-l-2 border-l-line">
                         {shown.map((c) => (
-                          <div className="grens-rij" key={c.id}>
+                          <div className="[&+&]:mt-1" key={c.id}>
                             {paragraphs(crossingLines(c, copy), `rij-${c.id}`)}
                           </div>
                         ))}
@@ -398,7 +401,7 @@ export default function Grens({
       {/* ── De vragenlijst. Bevestigen-eerst: het keuzemenu bewerkt alleen een
            lokaal concept, en pas "Bewaar antwoorden" schrijft iets weg. ─────── */}
       {unanswered.length > 0 && phase === "idle" && (
-        <div className="stack-form-actions">
+        <div className="flex flex-wrap gap-2 mt-2">
           <button
             type="button"
             className="btn"
@@ -501,9 +504,12 @@ export default function Grens({
       )}
 
       {/* ── Het bijproduct ────────────────────────────────────────────────── */}
-      <div className="tax-entity" data-testid="grens-bijproduct">
-        <div className="tax-entity-head">
-          <span className="tax-entity-name">{copy.byproduct.heading}</span>
+      <div
+        className="border-t border-t-line pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0"
+        data-testid="grens-bijproduct"
+      >
+        <div className="flex items-baseline justify-between gap-3 mb-2">
+          <span className="font-semibold text-ink">{copy.byproduct.heading}</span>
         </div>
         {paragraphs(copy.byproduct.summary({ rows: costRows.length }), "bijproduct-kop")}
         {costRows.map((r) => (
