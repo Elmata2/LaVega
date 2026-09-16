@@ -1,3 +1,25 @@
+/* TAILWIND, WITHOUT ITS RESET, ON PURPOSE.
+ *
+ * This app is 6,300 lines of hand-written CSS that predates Tailwind. Importing
+ * `tailwindcss` whole would bring Preflight, which rewrites margins, box-sizing
+ * and the default look of headings, lists and form controls — silently
+ * restyling every screen while every test kept passing, because none of them
+ * assert on appearance.
+ *
+ * So only the theme and the utilities are imported. Existing CSS is untouched,
+ * Tailwind classes work alongside it, and a component can be converted one at a
+ * time rather than the whole app at once. Preflight can be adopted later, as a
+ * deliberate step with its own visual check, once little enough hand-written
+ * CSS is left for it to matter.
+ *
+ * The @theme block below maps Tailwind's namespaces onto the variables this
+ * file already defines, so `bg-surface` and `var(--surface)` are the same
+ * colour by construction. A converted component cannot drift from an
+ * unconverted one. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 /* LaVega design-system tokens. Warm editorial palette (EB Garamond headings +
  * Inter body — self-hosted via @fontsource in main.tsx). The app now sits as a
  * single floating, rounded "frame" on a soft gutter, with generously rounded
@@ -59,4 +81,46 @@
   --module-h-short: 200px;
   --module-h-tall: 360px;
   --module-pad: var(--sp-5);
+}
+
+/* Tailwind's namespace, pointed at the variables above. Adding a token means
+ * adding it in :root and naming it here — never a second hard-coded value. */
+@theme inline {
+  --color-gutter: var(--gutter);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-on-ink: var(--on-ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-warn: var(--warn);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-teal: var(--chart-teal);
+
+  --radius-lg: var(--r-lg);
+  --radius-card: var(--r-card);
+  --radius-DEFAULT: var(--r);
+  --radius-sm: var(--r-sm);
+  --radius-pill: var(--pill);
+
+  --spacing-1: var(--sp-1);
+  --spacing-2: var(--sp-2);
+  --spacing-3: var(--sp-3);
+  --spacing-4: var(--sp-4);
+  --spacing-5: var(--sp-5);
+  --spacing-6: var(--sp-6);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-float: var(--shadow-float);
 }
