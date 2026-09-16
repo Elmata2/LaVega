@@ -14,6 +14,7 @@ import {
 import {
   createPortfolioAgentTools,
   getPortfolioAgent,
+  isPortfolioAgentId,
   listPortfolioAgents,
   runPortfolioAgent,
   type PortfolioAgentId,
@@ -70,6 +71,7 @@ import {
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
+import { resolvePortfolioSectors } from "./sectorResolution.js";
 import {
   createDevFixtureBrokerData,
   createDevFixtureFxProvider,
@@ -375,6 +377,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const priceSyncProgressStore = database
     ? createNeonPriceSyncProgressStore(database)
     : createInMemoryPriceSyncProgressStore();
+  /* Built before the tenant runtimes because the portfolio agent reads it too,
+   * not only the risk-summary route. */
+  const sectorDependencies = {
+    sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()),
+  };
   const tenantSyncStateFile = (tenantId: string) => {
     const base = runtimeBrokerSyncStateFile();
     return tenantId === LOCAL_TENANT_ID
@@ -692,10 +699,17 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         try {
           if ((await credentials.status()) === "unlocked") await restoreBrokerData();
           const dashboard = await dashboardReader({});
+          /* Stored sector profiles only: an agent run must not fetch from
+           * Yahoo or write to the sector store. A symbol without a stored
+           * profile reaches the model as Unknown, never as its entity. */
+          const { exposure: sectors } = await resolvePortfolioSectors(dashboard.positions, {
+            store: sectorDependencies.sectorStore,
+          });
           const insight = options.runAgent
             ? await options.runAgent({
                 agentId: agent.id,
                 dashboard,
+                sectors,
                 model,
                 prompt,
                 tools: createPortfolioAgentTools({
@@ -703,7 +717,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                   priceStore,
                 }),
               })
-            : await runPortfolioAgent({ agentId: agent.id, dashboard, model, prompt });
+            : await runPortfolioAgent({ agentId: agent.id, dashboard, sectors, model, prompt });
           const normalized = normalizePortfolioAgentInsight(insight, agent.id);
           const done: AgentRunRecord = {
             ...record,
@@ -800,11 +814,31 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }),
     );
     honoApp.post("/api/agents/portfolio/run", async (c) => {
-      const body: { agentId?: unknown; model?: unknown; prompt?: unknown } = await c.req
-        .json<{ agentId?: unknown; model?: unknown; prompt?: unknown }>()
-        .catch(() => ({}));
-      const agentId =
-        typeof body.agentId === "string" ? getPortfolioAgent(body.agentId).id : undefined;
+      /* Validated before anything is read or run: a rejected request must
+       * cost no snapshot read and no model call. An absent body still means
+       * "the default persona", so only a body that is present and wrong is a
+       * 400. */
+      const raw = await c.req.text().catch(() => "");
+      let body: { agentId?: unknown; model?: unknown; prompt?: unknown } = {};
+      if (raw.trim()) {
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+            throw new Error("not an object");
+          body = parsed as typeof body;
+        } catch {
+          return c.json({ problems: ["Request body must be a JSON object"] }, 400);
+        }
+      }
+      if (body.agentId !== undefined && !isPortfolioAgentId(body.agentId))
+        return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      if (body.model !== undefined && typeof body.model !== "string")
+        return c.json({ problems: ["model must be a string"] }, 400);
+      if (body.prompt !== undefined && typeof body.prompt !== "string")
+        return c.json({ problems: ["prompt must be a string"] }, 400);
+      const agentId = isPortfolioAgentId(body.agentId)
+        ? getPortfolioAgent(body.agentId).id
+        : undefined;
       const model =
         typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
       const prompt =
@@ -820,9 +854,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }
     });
     return Object.assign(honoApp, { runPortfolioAgentOnce });
-  };
-  const sectorDependencies = {
-    sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()),
   };
   if (!dsn)
     return withPortfolioAgentRoute(

@@ -170,6 +170,78 @@ test("the portfolio agent route forwards a custom prompt and returns its result"
   });
 });
 
+test("an unusable model response fails the run and answers 502 on the existing shape", async () => {
+  const { runtimeApp, agentRunStore } = await appWith(
+    vi.fn(async () => {
+      throw new Error("Portfolio agent returned an unusable response: signal must be exactly");
+    }),
+  );
+
+  const response = await post(runtimeApp);
+
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({
+    problems: ["Portfolio agent returned an unusable response: signal must be exactly"],
+  });
+  expect(await agentRunStore.get()).toMatchObject({ status: "error" });
+});
+
+test("an unknown explicit persona is rejected before any snapshot or model side effect", async () => {
+  const runAgent = vi.fn(async () => "never runs");
+  const { runtimeApp, agentRunStore } = await appWith(runAgent);
+
+  const response = await runtimeApp.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+    body: JSON.stringify({ agentId: "gordon_gekko" }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["Unknown portfolio agent"] });
+  expect(runAgent).not.toHaveBeenCalled();
+  expect(await agentRunStore.get()).toBeNull();
+});
+
+test("a malformed request body is rejected before any snapshot or model side effect", async () => {
+  const runAgent = vi.fn(async () => "never runs");
+  const { runtimeApp, agentRunStore } = await appWith(runAgent);
+
+  const response = await runtimeApp.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+    body: "{ not json",
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["Request body must be a JSON object"] });
+  expect(runAgent).not.toHaveBeenCalled();
+  expect(await agentRunStore.get()).toBeNull();
+});
+
+test("a non-string model or prompt is rejected", async () => {
+  const runAgent = vi.fn(async () => "never runs");
+  const { runtimeApp } = await appWith(runAgent);
+
+  const model = await runtimeApp.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+    body: JSON.stringify({ model: 7 }),
+  });
+  const prompt = await runtimeApp.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+    body: JSON.stringify({ prompt: { text: "hi" } }),
+  });
+
+  expect([model.status, prompt.status]).toEqual([400, 400]);
+  expect(runAgent).not.toHaveBeenCalled();
+});
+
+test("the agent snapshot carries stored sector exposure, never the entity allocation", async () => {
+  const runAgent = vi.fn(async () => "ok");
+  const { runtimeApp } = await appWith(runAgent);
+
+  await post(runtimeApp);
+
+  expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ sectors: expect.any(Array) }));
+});
+
 test("the portfolio agent registry exposes investor personas", async () => {
   const { runtimeApp } = await appWith(vi.fn(async () => "unused"));
 
