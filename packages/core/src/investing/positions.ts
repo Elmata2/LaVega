@@ -2,6 +2,7 @@ import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
 import { isPriceFresh } from "./calendar.js";
+import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
@@ -282,9 +283,12 @@ export function buildCurrentPositions(input: {
   fxRates: FxRates;
   today: string;
 }): CurrentPosition[] {
+  // Grouped by entity + symbol because that is the row a reader wants, but the
+  // quantity inside a group is rebuilt per ownership key first: a group can
+  // hold several brokers' snapshots, and only snapshots of the same account
+  // supersede one another by date.
   const groups = new Map<string, Position[]>();
   for (const position of input.positions) {
-    if (Math.abs(position.quantity) <= EPSILON) continue;
     const groupKey = key(position);
     groups.set(groupKey, [...(groups.get(groupKey) ?? []), position]);
   }
@@ -303,9 +307,13 @@ export function buildCurrentPositions(input: {
   for (const list of barsBySymbol.values())
     list.sort((left, right) => left.date.localeCompare(right.date));
 
-  const current = [...groups.entries()].map(([groupKey, positions]) => {
-    const sample = positions[0]!;
-    const quantity = positions.reduce((sum, position) => sum + position.quantity, 0);
+  const current = [...groups.entries()].flatMap(([groupKey, positions]) => {
+    const anchors = latestOwnershipAnchors(positions);
+    const sample = anchors[0]!;
+    const quantity = anchors.reduce((sum, position) => sum + position.quantity, 0);
+    // A holding every owner has closed out is not a row, and neither is one
+    // whose brokers' remaining quantities happen to cancel.
+    if (Math.abs(quantity) <= EPSILON) return [];
     const bars = barsBySymbol.get(sample.symbol.toUpperCase()) ?? [];
     const latest = bars.at(-1);
     let marketValue: number | null = null;
@@ -331,13 +339,13 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date, brokerCost: brokerCostLegs(positions) },
+      { valuationDate: latest?.date, brokerCost: brokerCostLegs(anchors) },
     );
     const returns =
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
         ? { ...calculatedReturns, status: "missing-fx" as const }
         : calculatedReturns;
-    return {
+    const row = {
       symbol: sample.symbol,
       entity: sample.entity,
       ...(sample.isin ? { isin: sample.isin } : {}),
@@ -353,6 +361,7 @@ export function buildCurrentPositions(input: {
       priceStatus,
       returns,
     } satisfies CurrentPosition;
+    return [row];
   });
 
   const pricedTotal = current.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);

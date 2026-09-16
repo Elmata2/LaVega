@@ -210,6 +210,17 @@ function normalizePortfolioAgentInsight(
   };
 }
 
+/** Stamp the broker a row came from onto rows that do not name one.
+ *
+ *  This store has always been keyed by broker, so the key is the provenance —
+ *  it just never reached the row. Snapshots persisted before positions and
+ *  trades carried a broker therefore need no migration: they gain their
+ *  ownership identity on load, and nothing already written is rewritten — a
+ *  trade's `id` in particular is left exactly as it was persisted. */
+function withBroker<T extends { broker?: string }>(broker: string, rows: readonly T[]): T[] {
+  return rows.map((row) => (row.broker ? row : { ...row, broker }));
+}
+
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((item) => [item.id, item]));
   for (const item of incoming) byId.set(item.id, item);
@@ -233,8 +244,8 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
     cashFlowsByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
-      positionsByBroker.set(broker, structuredClone(data.positions));
-      tradesByBroker.set(broker, structuredClone(data.trades));
+      positionsByBroker.set(broker, withBroker(broker, structuredClone(data.positions)));
+      tradesByBroker.set(broker, withBroker(broker, structuredClone(data.trades)));
       dividendsByBroker.set(broker, structuredClone(data.dividends ?? []));
       cashBalancesByBroker.set(broker, structuredClone(data.cashBalances ?? []));
       cashFlowsByBroker.set(broker, structuredClone(data.cashFlows ?? []));
@@ -260,12 +271,15 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
           (complete && positionsComplete(incoming)) ||
           !positionsByBroker.has(outcome.broker)
         ) {
-          positionsByBroker.set(outcome.broker, incoming.positions);
+          positionsByBroker.set(outcome.broker, withBroker(outcome.broker, incoming.positions));
         }
-        const mappedTrades = incoming.trades.map((trade, index) => ({
-          ...trade,
-          id: `${outcome.broker}:${trade.brokerTradeId ?? index}`,
-        }));
+        const mappedTrades = withBroker(
+          outcome.broker,
+          incoming.trades.map((trade, index) => ({
+            ...trade,
+            id: `${outcome.broker}:${trade.brokerTradeId ?? index}`,
+          })),
+        );
         // A truncated trade history must not wipe good stored trades. A first
         // truncated run (empty vault) must still keep the pages it did read,
         // or a Vercel time-limit stop would persist nothing.

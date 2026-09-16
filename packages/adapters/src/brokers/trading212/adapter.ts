@@ -398,6 +398,7 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
       : null;
   return {
     entity,
+    broker: "trading212",
     date: date(fill.filledAt, "order fill date"),
     symbol,
     ...(isin ? { isin } : {}),
@@ -434,6 +435,7 @@ function mapPosition(raw: Trading212Order, entity: string, asOf: string): Positi
   const averagePrice = nullableNumber(raw.averagePricePaid) ?? averageFromTotal;
   return {
     entity,
+    broker: "trading212",
     symbol,
     ...(isin ? { isin } : {}),
     ...(description ? { description } : {}),

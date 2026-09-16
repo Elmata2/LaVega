@@ -228,6 +228,66 @@ test("cached broker skip retains last successful positions", () => {
   expect(cache.read().positions[0]?.symbol).toBe("AAPL");
 });
 
+test("a legacy snapshot gains broker provenance on load without its trade ids changing", () => {
+  const cache = createRuntimeBrokerDataCache({
+    ibkr: {
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity: 1,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 10,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-09-11",
+        },
+      ],
+      trades: [
+        {
+          id: "ibkr:legacy-1",
+          entity: "BV",
+          date: "2026-09-11",
+          symbol: "AAPL",
+          side: "buy",
+          quantity: 1,
+          price: 10,
+          amount: 10,
+          currency: "EUR",
+          commission: 0,
+        },
+      ],
+      dividends: [],
+    },
+    trading212: {
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity: 2,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 20,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-09-14",
+        },
+      ],
+      trades: [],
+      dividends: [],
+    },
+  });
+
+  const { positions, trades } = cache.read();
+
+  // The later trading212 snapshot must not read as an update to the ibkr one.
+  expect(positions.map((position) => [position.broker, position.quantity])).toEqual([
+    ["ibkr", 1],
+    ["trading212", 2],
+  ]);
+  expect(trades[0]?.id).toBe("ibkr:legacy-1");
+  expect(trades[0]?.broker).toBe("ibkr");
+});
+
 test("runtime broker cache restores encrypted snapshot after restart", () => {
   const first = createRuntimeBrokerDataCache();
   first.apply({

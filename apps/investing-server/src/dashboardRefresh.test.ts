@@ -206,8 +206,10 @@ test("a resumed sync merges the latest persisted history instead of its warm sna
   );
   const response = await app.request("/api/brokers/sync", { method: "POST" });
   expect(response.status).toBe(200);
+  // Same trades, same ids; loading a snapshot only adds the broker its own key
+  // already named.
   expect(persistence.snapshots.get("tenant")?.trading212?.trades).toEqual(
-    updated.trading212!.trades,
+    updated.trading212!.trades.map((trade) => ({ ...trade, broker: "trading212" })),
   );
   expect(persistence.reads).toHaveBeenCalledTimes(2);
 });
