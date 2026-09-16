@@ -127,6 +127,14 @@ Tailwind's 6 is 24px — so `p-6` meant one thing here and another everywhere
 else, including the app this migration exists to align with. Removed. The scale
 is standard: 24px is `6`, 32px is `8`.
 
+**5. `max-[560px]:` is not `@media (max-width: 560px)`.** Tailwind compiles the
+`max-*` variant to `not (min-width: 560px)`, which EXCLUDES exactly 560px; the
+hand-written media query includes it. On a responsive boundary that is a real
+one-pixel behaviour change, and only visible by reading the built CSS. Use the
+arbitrary at-rule form `[@media(max-width:560px)]:`, which compiles byte-identical
+to the original condition. This matters everywhere in this app, because its
+breakpoints are all desktop-first `max-width`.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual

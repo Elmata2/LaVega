@@ -53,3 +53,11 @@ test("a state rule does not leak into the resting style", () => {
   expect(hover).toBe("underline");
   expect(rest).not.toBe(hover);
 });
+
+/* A selector list must not be torn apart by a comma inside brackets. Most
+ * Tailwind arbitrary values carry one, and a naive split made the rule match
+ * nothing — so a converted component resolved to whatever it had before and the
+ * assertion checking it was quietly wrong. */
+test("a selector carrying a bracketed comma still matches", () => {
+  expect(() => resolved(["bg-[rgb(0_0_0/4%)]"], "background-color")).not.toThrow();
+});

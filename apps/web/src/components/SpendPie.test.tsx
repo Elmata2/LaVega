@@ -6,6 +6,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import SpendPie, { sliceAtPoint } from "./SpendPie";
+import { resolved } from "../test-support/resolveStyle.js";
+
+/** The classes an ACTUAL element in the mounted tree carries, so an assertion
+ *  never drifts from what SpendPie.tsx renders. */
+function classesOf(el: Element): string[] {
+  return el.className.split(/\s+/).filter(Boolean);
+}
 
 /* Item 12 for the pie: every slice's exact euro has to be readable by hover, by
  * tap and by keyboard, and the ring itself has to answer when you point at it —
@@ -221,12 +228,18 @@ test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twe
 });
 
 test("charts.css dresses the state the reading depends on", () => {
-  const flat = css.replace(/\s+/g, " ");
-  expect(flat).toContain(".spend-pie-item:focus-visible");
-  expect(flat).toContain('.spend-pie-item[data-active="on"]');
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const item = classesOf(el.querySelector(".spend-pie-item")!);
+  const hole = classesOf(el.querySelector(".spend-pie-hole")!);
+
+  expect(resolved(item, "background-color", undefined, ":focus-visible")).toBe("#0000000a");
+  expect(resolved(item, "background-color", undefined, "[data-active=on]")).toBe("#0000000a");
   // A row that filters points; a row that only highlights must not pretend to.
-  expect(flat).toContain('.spend-pie-item[data-filter="yes"] { cursor: pointer; }');
-  expect(flat).toContain(".spend-pie-hole");
+  expect(resolved(item, "cursor", undefined, "[data-filter=yes]")).toBe("pointer");
+  // Tailwind's rounded-full uses an oversized radius rather than 50%, which
+  // draws identically on a fixed-size box but never flattens into an ellipse
+  // if the box ever stops being square.
+  expect(resolved(hole, "border-radius")).toBe("3.40282e38px");
 });
 
 /* Item 5: the number in the middle was centred while a slice was being read and
@@ -235,21 +248,28 @@ test("charts.css dresses the state the reading depends on", () => {
  * amount in the top half and three rows put it in the middle by accident. Packing
  * the rows centres the group at any number of lines. */
 test("the hole centres its contents whether it holds two lines or three", () => {
-  const flat = css.replace(/\s+/g, " ");
-  const hole = flat.match(/\.spend-pie-hole \{[^}]*\}/)?.[0] ?? "";
-  expect(hole).toContain("align-content: center");
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const hole = classesOf(el.querySelector(".spend-pie-hole")!);
+  expect(resolved(hole, "align-content")).toBe("center");
 });
 
 /* Item 6: an arc opens its category, so it has to point — and only where a click
  * actually goes somewhere. */
 test("the ring points only where an arc can be opened", () => {
-  const flat = css.replace(/\s+/g, " ");
-  expect(flat).toContain('.spend-pie-ring[data-open="yes"] { cursor: pointer; }');
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const ring = classesOf(el.querySelector(".spend-pie-ring")!);
+  expect(resolved(ring, "cursor")).toBe("default");
+  expect(resolved(ring, "cursor", undefined, "[data-open=yes]")).toBe("pointer");
 });
 
 /* Item 8: "V…" names nothing. The row being read un-clips its name, and it is
  * reachable by hover, by tap (data-active) and by keyboard (focus-visible) — a
  * `title` alone would have answered only the mouse. */
+/* The un-clip is a PARENT-state → CHILD-style rule (.spend-pie-item:hover
+ * .spend-pie-name), which no CSS-utility variant can express without the same
+ * descendant selector `resolveStyle` refuses by design — see the WHY comment
+ * on this rule in charts.css. It stays hand-written and is asserted as CSS
+ * text, unchanged from before the conversion. */
 test("a clipped legend name un-clips while it is being read, by any of the three ways", () => {
   const flat = css.replace(/\s+/g, " ");
   for (const selector of [
@@ -261,9 +281,16 @@ test("a clipped legend name un-clips while it is being read, by any of the three
   }
   const revealed = flat.match(/\.spend-pie-item:hover \.spend-pie-name,[^{]*\{[^}]*\}/)?.[0] ?? "";
   expect(revealed).toContain("white-space: normal");
-  // And the name in the hole wraps rather than ellipsising into nothing.
-  const slice = flat.match(/\.spend-pie-slice \{[^}]*\}/)?.[0] ?? "";
-  expect(slice).not.toContain("text-overflow: ellipsis");
+
+  // And the name in the hole wraps rather than ellipsising into nothing —
+  // moved onto SpendPie.tsx's own utilities, so this reads the render instead
+  // of the stylesheet text.
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
+  act(() => rows[0].focus());
+  const slice = classesOf(el.querySelector(".spend-pie-slice")!);
+  expect(resolved(slice, "text-overflow")).toBeUndefined();
+  expect(resolved(slice, "white-space")).toBe("normal");
 });
 
 /* Item 8 for the bar charts: the axis cell keeps its slot (the row stays aligned

@@ -76,6 +76,31 @@ function scopes(source: string): { base: string; media: Map<number, string> } {
 
 const SCOPES = scopes(SHEET);
 
+/** Split a selector list on its top-level commas only.
+ *
+ *  A plain `.split(",")` tears apart any selector carrying a comma inside
+ *  brackets or parentheses, which is most Tailwind arbitrary values:
+ *  `.bg-[rgba(0,0,0,0.04)]`, `.text-[var(--x,fallback)]`. The halves then match
+ *  nothing and the rule is skipped — so a converted component silently resolves
+ *  to whatever it had before, and the assertion checking it is quietly wrong.
+ *  Found by a worker whose arbitrary value contained an rgba(). */
+function splitSelectors(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const c = list[i];
+    if (c === "(" || c === "[") depth += 1;
+    else if (c === ")" || c === "]") depth -= 1;
+    else if (c === "," && depth === 0) {
+      out.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(list.slice(start));
+  return out;
+}
+
 /** Does `selector` target an element carrying these classes, in `state`?
  *
  *  `state` is the suffix a rule carries beyond its classes — ":hover",
@@ -127,7 +152,7 @@ export function resolved(
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   for (let m = rule.exec(scope); m !== null; m = rule.exec(scope)) {
     const [, selectors, body] = m;
-    if (!selectors.split(",").some((s) => targets(s, classes, state))) continue;
+    if (!splitSelectors(selectors).some((s) => targets(s, classes, state))) continue;
     matchedAnyRule = true;
     const decl = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(body);
     /* Normalised, because the source sheets are readable and the built one is
