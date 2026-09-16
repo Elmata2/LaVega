@@ -20,7 +20,7 @@ import {
   type PortfolioAgentInsight,
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
-import { createProblemReporter } from "./observability.js";
+import { createProblemReporter, redactProblem } from "./observability.js";
 import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
@@ -576,7 +576,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           status: "problem",
           waitUntil: null,
           updatedAt: new Date().toISOString(),
-          message: error instanceof Error ? error.message : "Broker synchronization failed",
+          message:
+            error instanceof Error
+              ? redactProblem(error.message)
+              : "Broker synchronization failed",
         };
         throw error;
       }
@@ -702,7 +705,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             ...record,
             finishedAt: new Date().toISOString(),
             status: "error",
-            error: error instanceof Error ? error.message : "Portfolio agent run failed",
+            error:
+              error instanceof Error ? redactProblem(error.message) : "Portfolio agent run failed",
           };
           await agentRunStore.put(failed);
           throw error;

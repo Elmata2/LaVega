@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { serve } from "@hono/node-server";
 import { createRuntimeApp } from "./index.js";
+import { redactProblem } from "./observability.js";
 import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 import {
   createFileBenchmarkSelectionStore,
@@ -83,12 +84,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           .runPortfolioAgentOnce()
           .then((record) =>
             console.log(
-              `Portfolio agent run ${record.status}: ${record.summary ?? record.error ?? ""}`,
+              redactProblem(
+                `Portfolio agent run ${record.status}: ${record.summary ?? record.error ?? ""}`,
+              ),
             ),
           )
           .catch((error) =>
             console.error(
-              `Portfolio agent run failed: ${error instanceof Error ? error.message : error}`,
+              redactProblem(
+                `Portfolio agent run failed: ${error instanceof Error ? error.message : error}`,
+              ),
             ),
           );
       },
