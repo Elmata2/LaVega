@@ -1,10 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { createInMemoryPriceStore } from "@lavega/adapters";
 import type { InvestingDashboardData, Position, PriceBar, Trade } from "@lavega/core";
 import {
   createPortfolioAgentTools,
   getPortfolioAgent,
   listPortfolioAgents,
+  portfolioSnapshotHash,
   renderPortfolioSnapshot,
   resolveAgentConfig,
 } from "./portfolioAgent.js";
@@ -153,8 +155,8 @@ test("compute_portfolio_value bounds price-store concurrency", async () => {
   expect(peak).toBeLessThanOrEqual(3);
 });
 
-test("portfolio snapshot renders user position facts for LLM input", () => {
-  const dashboard: InvestingDashboardData = {
+function buildSnapshotDashboard(): InvestingDashboardData {
+  return {
     dataVersion: 3,
     presentationCurrency: "EUR",
     portfolio: {
@@ -210,10 +212,29 @@ test("portfolio snapshot renders user position facts for LLM input", () => {
     position: null,
     problems: [],
   };
+}
+
+test("portfolio snapshot renders user position facts for LLM input", () => {
+  const dashboard = buildSnapshotDashboard();
 
   expect(JSON.parse(renderPortfolioSnapshot(dashboard))).toMatchObject({
     dataVersion: 3,
     totalPricedValue: 30,
     topPositions: [{ symbol: "AAPL", weight: 1, totalReturnPercentage: 0.5 }],
   });
+});
+
+test("snapshot hash keeps the prior digest and follows the snapshot input", async () => {
+  const dashboard = buildSnapshotDashboard();
+  const hash = await portfolioSnapshotHash(dashboard);
+
+  expect(hash).toMatch(/^[0-9a-f]{24}$/);
+  expect(await portfolioSnapshotHash(dashboard)).toBe(hash);
+  expect(hash).toBe(
+    createHash("sha256").update(renderPortfolioSnapshot(dashboard)).digest("hex").slice(0, 24),
+  );
+
+  const changed = buildSnapshotDashboard();
+  changed.positions[0]!.marketValue = 31;
+  expect(await portfolioSnapshotHash(changed)).not.toBe(hash);
 });
