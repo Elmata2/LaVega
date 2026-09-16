@@ -66,6 +66,37 @@ test.each([
   });
 });
 
+test("a cache hit costs one store read, not two", async () => {
+  /* Every warm symbol pays this round trip. In production the store is Neon,
+   * where a re-read of the range just read costs about as much as the symbol
+   * it serves, which is what caps warm-cache sync throughput. */
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR" },
+  ]);
+  const getRange = vi.fn(store.getRange);
+  const priceProviders = [
+    {
+      sourceKey: "yahoo",
+      priority: 10,
+      get: async () => {
+        throw new Error("a cache hit must not reach a provider");
+      },
+    },
+  ];
+
+  const result = await syncPrices({
+    store: { ...store, getRange },
+    tenantId: "local",
+    priceProviders,
+    request: { ...request, today: "2026-01-03" },
+  });
+
+  expect(result.fetched).toBe(false);
+  expect(result.bars).toHaveLength(1);
+  expect(getRange).toHaveBeenCalledTimes(1);
+});
+
 test("backfills once and top-ups from PriceStore lastDate without wiping cache", async () => {
   const urls: string[] = [];
   const client = {

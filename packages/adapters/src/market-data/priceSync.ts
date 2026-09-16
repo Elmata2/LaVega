@@ -29,9 +29,12 @@ export async function syncPrices(input: {
   const lastDate = cachedBars.at(-1)?.date ?? null;
   const staleFrom = firstCurrencyMismatchDate(cachedBars, input.request.currency);
   const from = staleFrom ?? (lastDate ? nextDate(lastDate) : input.request.backfillFrom);
+  /* Only a path that upserted needs to read the range again. Every other
+   * return has written nothing since the read above, so re-reading costs a
+   * store round trip per symbol and returns what is already in hand. */
   const cached = () =>
     input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom, today);
-  if (from && from > today) return { bars: await cached(), problems: [], fetched: false };
+  if (from && from > today) return { bars: cachedBars, problems: [], fetched: false };
   const result = await firstProviderResult(
     input.priceProviders,
     { ...input.request, from, to: today },
@@ -39,10 +42,10 @@ export async function syncPrices(input: {
     hasProblems,
   );
   if (!result)
-    return { bars: await cached(), problems: ["No price provider returned data"], fetched: true };
+    return { bars: cachedBars, problems: ["No price provider returned data"], fetched: true };
   if (result.value.problems.length || result.value.bars.length === 0)
     return {
-      bars: await cached(),
+      bars: cachedBars,
       problems: result.value.problems.length
         ? result.value.problems
         : ["Price provider returned no bars"],
