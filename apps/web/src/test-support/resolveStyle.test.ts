@@ -35,3 +35,21 @@ test.skipIf(!built)("resolves a generated Tailwind utility", () => {
 test("throws rather than passing vacuously when nothing matches", () => {
   expect(() => resolved(["class-that-does-not-exist"], "color")).toThrow(/no rule matches/);
 });
+
+/* Interactive states, both halves of the migration. The hand-written sheets use
+ * :hover heavily, and a converted component emits the same shape, since
+ * `hover:bg-surface` compiles to `.hover\:bg-surface:hover`. Without this the
+ * migration could verify a component at rest and nothing else. */
+test("resolves a rule that only applies in a state", () => {
+  expect(resolved(["card-link"], "text-decoration", undefined, ":hover")).toBe("underline");
+});
+
+/* The state must not leak into the resting style, or a test would assert a
+ * hover colour on an element nobody is pointing at. card-link has both, and
+ * they must come back different. */
+test("a state rule does not leak into the resting style", () => {
+  const rest = resolved(["card-link"], "text-decoration");
+  const hover = resolved(["card-link"], "text-decoration", undefined, ":hover");
+  expect(hover).toBe("underline");
+  expect(rest).not.toBe(hover);
+});

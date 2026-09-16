@@ -1,5 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+/* NodeURL, not the global URL. Under vitest's jsdom environment Vite transforms
+ * this module in web mode, and its static asset-URL analysis rewrites
+ * `new URL(..., import.meta.url)` into a dev-server path that fileURLToPath then
+ * rejects with "The URL must be of scheme file". Aliasing the Node class
+ * sidesteps the pattern match. Two test files in this repo already hit the same
+ * thing and worked around it the same way. */
+import { fileURLToPath, URL as NodeURL } from "node:url";
 
 /* WHAT AN ELEMENT RESOLVES TO, rather than what a named rule says.
  *
@@ -18,8 +24,8 @@ import { fileURLToPath } from "node:url";
  * every rule that matches — hand-written or generated. The assertion then
  * survives the conversion, because it never mentions how the style arrived. */
 
-const DIST = new URL("../../dist/assets/", import.meta.url);
-const SOURCE = new URL("../styles/", import.meta.url);
+const DIST = new NodeURL("../../dist/assets/", import.meta.url);
+const SOURCE = new NodeURL("../styles/", import.meta.url);
 
 function css(): string {
   /* The built sheet first: it holds the generated utilities as well as the
@@ -70,15 +76,30 @@ function scopes(source: string): { base: string; media: Map<number, string> } {
 
 const SCOPES = scopes(SHEET);
 
-/** Does `selector` target an element carrying exactly these classes? Handles the
- *  compound forms this codebase uses (`.a.b`) and nothing more exotic, because
- *  nothing more exotic is asserted on. */
-function targets(selector: string, classes: readonly string[]): boolean {
-  const s = selector.trim();
-  if (!s.startsWith(".") || /[\s>+~[:]/.test(s)) return false;
+/** Does `selector` target an element carrying these classes, in `state`?
+ *
+ *  `state` is the suffix a rule carries beyond its classes — ":hover",
+ *  ":focus-visible", '[data-open="true"]'. It matters twice over: the
+ *  hand-written sheets use those rules heavily, and a converted component emits
+ *  them too, since `hover:bg-surface` compiles to `.hover\:bg-surface:hover`.
+ *  Without this the migration could not verify any interactive state.
+ *
+ *  Descendant, child and sibling combinators are still refused. Those describe
+ *  a relationship between elements, and this function is only given one. */
+function targets(selector: string, classes: readonly string[], state: string): boolean {
+  let s = selector.trim();
+  if (/[\s>+~]/.test(s)) return false;
+  if (state) {
+    if (!s.endsWith(state)) return false;
+    s = s.slice(0, -state.length);
+  } else if (/[:[]/.test(s.replace(/\\./g, ""))) {
+    return false;
+  }
+  if (!s.startsWith(".")) return false;
   return s
     .slice(1)
     .split(".")
+    .map((c) => c.replace(/\\/g, ""))
     .every((c) => classes.includes(c));
 }
 
@@ -87,7 +108,8 @@ function targets(selector: string, classes: readonly string[]): boolean {
  *
  * Later rules win, which is CSS's own order and enough here: this codebase has
  * no `!important` and no id selectors in the sheets these tests read. Pass
- * `atWidth` to resolve inside a `max-width` block instead of the base scope.
+ * `atWidth` to resolve inside a `max-width` block instead of the base scope, and
+ * `state` for a rule that only applies in one, such as ":hover".
  *
  * Throws when no rule matches at all, rather than returning undefined. A silent
  * undefined is how a conversion turns a real assertion into a vacuous one.
@@ -96,6 +118,7 @@ export function resolved(
   classes: readonly string[],
   property: string,
   atWidth?: number,
+  state = "",
 ): string | undefined {
   const scope =
     atWidth === undefined ? SCOPES.base : SCOPES.base + "\n" + (SCOPES.media.get(atWidth) ?? "");
@@ -104,7 +127,7 @@ export function resolved(
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   for (let m = rule.exec(scope); m !== null; m = rule.exec(scope)) {
     const [, selectors, body] = m;
-    if (!selectors.split(",").some((s) => targets(s, classes))) continue;
+    if (!selectors.split(",").some((s) => targets(s, classes, state))) continue;
     matchedAnyRule = true;
     const decl = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(body);
     /* Normalised, because the source sheets are readable and the built one is
@@ -115,7 +138,7 @@ export function resolved(
   }
   if (!matchedAnyRule) {
     throw new Error(
-      `no rule matches .${classes.join(".")} — the classes changed but the assertion did not`,
+      `no rule matches .${classes.join(".")}${state} — the classes changed but the assertion did not`,
     );
   }
   return found;
