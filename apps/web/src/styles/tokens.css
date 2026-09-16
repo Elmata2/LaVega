@@ -118,7 +118,11 @@
 
   --radius-lg: var(--r-lg);
   --radius-card: var(--r-card);
-  --radius-DEFAULT: var(--r);
+  /* `--radius`, not `--radius-DEFAULT`. Tailwind v4 keys the bare `rounded`
+   * utility off `--radius`; a `-DEFAULT` suffix is simply an unused token, so
+   * `rounded` silently fell back to Tailwind's own 0.25rem instead of this
+   * app's 18px. Wrong corner on every element using it, green suite. */
+  --radius: var(--r);
   --radius-sm: var(--r-sm);
   --radius-pill: var(--pill);
 

@@ -135,6 +135,15 @@ arbitrary at-rule form `[@media(max-width:560px)]:`, which compiles byte-identic
 to the original condition. This matters everywhere in this app, because its
 breakpoints are all desktop-first `max-width`.
 
+**6. The bare `rounded` utility needs `--radius`, not `--radius-DEFAULT`.**
+Tailwind v4 keys it off `--radius`; a `-DEFAULT` suffix is simply an unused
+token, so `rounded` fell back to Tailwind's own 0.25rem instead of this app's
+18px. This one bit for real: a worker converted `border-radius: var(--r)` to
+`rounded` and verified it against a build that already had the bug, so the
+comparison agreed at 4px on both sides and the regression passed review. Fixed
+in `tokens.css`. The lesson generalises — verifying a conversion against a
+broken theme proves only that both sides are broken the same way.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual

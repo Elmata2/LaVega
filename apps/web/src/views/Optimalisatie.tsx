@@ -547,7 +547,10 @@ function Productkosten({
         /* GEEN AANBEVELING, en zichtbaar waarom niet. Zijn beslissing, en de reden
            dat het bedrag erbij staat: hij moet kunnen zien dat iets afvalt omdat
            het te duur is, in plaats van het zelf te moeten uitrekenen. */
-        <p className="reason" data-testid={`${id}-geen`}>
+        <p
+          className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+          data-testid={`${id}-geen`}
+        >
           <strong>{pc.noRecommendation.heading}</strong>{" "}
           {pc.noRecommendation.body(euro(locale, net.grossCents), per, gainWord, euro(locale, net.costCents), costWord)}{" "}
           {net.netCents === 0
@@ -1096,9 +1099,11 @@ export default function Optimalisatie({
 
   return (
     <>
-      <div className="view-head">
-        <h2>{c.header.title}</h2>
-        <span className="eyebrow">{c.header.eyebrow}</span>
+      <div className="flex items-baseline justify-between gap-[var(--sp-4)] flex-wrap pb-[var(--sp-2)] mt-[var(--sp-5)] mb-[var(--sp-4)] border-b-2 border-b-ink first:mt-0">
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.header.title}
+        </h2>
+        <span className="eyebrow flex-none">{c.header.eyebrow}</span>
       </div>
 
       <div className="kpi-row">
@@ -1194,7 +1199,7 @@ export default function Optimalisatie({
               A quarterly charge needs one full gap before there is a pattern at
               all, so with a short import "niets gevonden" and "kon niets vinden"
               are different answers — and only core knows which one this is. */}
-          <p className="reason">
+          <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]">
             {coverage.historyDays === 0 ? (
               c.subscriptions.coverage.noHistory
             ) : (
@@ -1225,8 +1230,8 @@ export default function Optimalisatie({
           </p>
 
           {subs.length === 0 ? (
-            <div className="empty-guide">
-              <p>
+            <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
+              <p className="m-0 mb-[var(--sp-3)] last:mb-0">
                 <strong>{c.subscriptions.empty.heading}</strong> {c.subscriptions.empty.intro}
                 {seen.outflows === 0 ? (
                   c.subscriptions.empty.noOutflows
@@ -1244,15 +1249,17 @@ export default function Optimalisatie({
                   )
                 )}
               </p>
-              <p className="cell-sub">{c.subscriptions.empty.rulesIntro}</p>
-              <ul>
+              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">{c.subscriptions.empty.rulesIntro}</p>
+              <ul className="m-0 mb-[var(--sp-3)] pl-[1.1rem] text-muted text-[0.88rem] last:mb-0">
                 {/* DRIE EN NIET TWEE, en dat is een correctie. Hier stond "minstens
                     twee betalingen" terwijl de maandband minstens DRIE afschrijvingen
                     eist (CADENCE_BANDS in subscriptions.ts: minOcc 3 voor 30 dagen,
                     2 voor kwartaal, halfjaar en jaar). Wie twee maandbedragen zag
                     staan en dit las, zocht de fout op de verkeerde plek. */}
                 {c.subscriptions.empty.rules.map((rule) => (
-                  <li key={rule}>{rule}</li>
+                  <li className="mb-[var(--sp-1)]" key={rule}>
+                    {rule}
+                  </li>
                 ))}
               </ul>
 
@@ -1325,12 +1332,18 @@ export default function Optimalisatie({
                   </p>
                 </ToonMeer>
               )}
-              <p className="cell-sub">{c.subscriptions.empty.missingAccountNote}</p>
-              <details className="demo-preview">
-                <summary>{c.subscriptions.empty.demoDisclosureSummary}</summary>
-                <p className="badge demo-flag">{c.subscriptions.empty.demoBadge}</p>
+              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">
+                {c.subscriptions.empty.missingAccountNote}
+              </p>
+              <details className="mt-[var(--sp-3)] p-[var(--sp-3)] border border-dashed border-line rounded-sm">
+                <summary className="cursor-pointer text-muted text-[0.85rem]">
+                  {c.subscriptions.empty.demoDisclosureSummary}
+                </summary>
+                <p className="badge inline-block mt-[var(--sp-3)] mb-[var(--sp-2)]">
+                  {c.subscriptions.empty.demoBadge}
+                </p>
                 <div className="table-wrap table-cards">
-                  <table className="table">
+                  <table className="table opacity-75">
                     <thead>
                       <tr>
                         <th>{c.subscriptions.empty.demoTableHeaders[0]}</th>
@@ -1369,7 +1382,7 @@ export default function Optimalisatie({
           ) : (
             <>
               {increases.length > 0 || overlaps.length > 0 ? (
-                <div className="reason-list" style={{ marginBottom: "var(--sp-4)" }}>
+                <div className="flex flex-col gap-[var(--sp-3)] mb-[var(--sp-4)]">
                   {/* HET VERSCHIL WORDT NIET MEER × 12 GEREKEND. `fromCents` en
                       `toCents` zijn de afgeschreven bedragen in het ritme van dát
                       abonnement, dus × 12 maakte van een verhoging van € 10,00 op
@@ -1388,7 +1401,11 @@ export default function Optimalisatie({
                       locale,
                     );
                     return (
-                      <p key={`inc-${p.sub.key}`} className="reason">
+                      <p
+                        key={`inc-${p.sub.key}`}
+                        data-testid="subscription-change"
+                        className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                      >
                         {c.subscriptions.increaseSentence(
                           extra.kind === "bedrag"
                             ? {
@@ -1422,7 +1439,11 @@ export default function Optimalisatie({
                     }, o.subs[0]);
                     const opzegbaar = subAmountIn(grootste, subTotal.unit, locale);
                     return (
-                      <p key={`ov-${o.function}`} className="reason">
+                      <p
+                        key={`ov-${o.function}`}
+                        data-testid="subscription-change"
+                        className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                      >
                         {c.subscriptions.overlapSentence({
                           count: o.subs.length,
                           functionName: o.function,
@@ -1572,7 +1593,7 @@ export default function Optimalisatie({
                   wat je erop overhoudt, terwijl de rekening waar je heen gaat zelf
                   ook geld kan kosten: € 50 rente meer op een pakket van € 4,50 per
                   maand is € 4,00 achteruit. De aftrek staat onderaan dit blok. */}
-              <p className="reason-lead">
+              <p className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink">
                 {renderSegments(
                   c.interest.leadSentence({
                     amount: euro(locale, interest.totalExtraPerYearCents),
@@ -1589,9 +1610,12 @@ export default function Optimalisatie({
                   uitleg naast een tabel en geen tweede plek waar hetzelfde cijfer
                   voor het eerst staat. */}
               <ToonMeer summary={c.interest.toonMeerSummary}>
-                <div className="reason-list">
+                <div className="flex flex-col gap-[var(--sp-3)]">
                   {interest.suggestions.map((s) => (
-                    <p key={`sug-${s.account.key}`} className="reason">
+                    <p
+                      key={`sug-${s.account.key}`}
+                      className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                    >
                       {c.interest.suggestionSentence({
                         balance: euro(locale, s.balanceCents),
                         accountLabel: accountLabel(s.account),
@@ -1624,13 +1648,17 @@ export default function Optimalisatie({
               </ToonMeer>
             </>
           ) : (
-            <div className="empty-guide">
-              <p>
+            <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
+              <p className="m-0 mb-[var(--sp-3)] last:mb-0">
                 <strong>{c.interest.empty.heading}</strong> {c.interest.empty.explanation}
               </p>
-              <ul>
-                {noSaldo > 0 && <li>{c.interest.empty.noSaldoItem(noSaldo)}</li>}
-                {unknownRate > 0 && <li>{c.interest.empty.noRateItem(unknownRate)}</li>}
+              <ul className="m-0 mb-[var(--sp-3)] pl-[1.1rem] text-muted text-[0.88rem] last:mb-0">
+                {noSaldo > 0 && (
+                  <li className="mb-[var(--sp-1)]">{c.interest.empty.noSaldoItem(noSaldo)}</li>
+                )}
+                {unknownRate > 0 && (
+                  <li className="mb-[var(--sp-1)]">{c.interest.empty.noRateItem(unknownRate)}</li>
+                )}
                 {/* "Al op de beste plek" was a CONCLUSION drawn from an absence
                     of suggestions, and an absence has two causes: nothing to gain,
                     or nothing computed. He hit the second and was told the first.
@@ -1639,7 +1667,7 @@ export default function Optimalisatie({
                 {noSaldo === 0 &&
                   unknownRate === 0 &&
                   (interest.best && keptBest !== null ? (
-                    <li>
+                    <li className="mb-[var(--sp-1)]">
                       {c.interest.empty.bestKnown({
                         keptPct: pct(locale, keptBest),
                         bank: interest.best.bank,
@@ -1647,7 +1675,7 @@ export default function Optimalisatie({
                       })}
                     </li>
                   ) : (
-                    <li>{c.interest.empty.noRatesKnown}</li>
+                    <li className="mb-[var(--sp-1)]">{c.interest.empty.noRatesKnown}</li>
                   ))}
               </ul>
             </div>
@@ -1661,7 +1689,7 @@ export default function Optimalisatie({
               attached, and the euro figure below is per MONTH because that is the
               only unit an action is honestly priced in. */}
           {interest.bestPromo && (
-            <p className="reason" style={{ marginTop: "var(--sp-3)" }}>
+            <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5] mt-[var(--sp-3)]">
               <span className="badge">{c.interest.promo.badge}</span>{" "}
               {c.interest.promo.headline({
                 bank: interest.bestPromo.bank,
@@ -1925,7 +1953,7 @@ export default function Optimalisatie({
               ALLEEN DE REGEL ZELF, sinds de top-downronde: waar die euro's over
               gerekend zijn staat in de plooi onderaan, bij de rest van de meting. */}
           {routing.length > 0 && (
-            <div className="reason-list">
+            <div className="flex flex-col gap-[var(--sp-3)]">
               {routing.map((a) => {
                 const routed = c.cashback.routingSentence({
                   toBank: a.to.bank,
@@ -1950,8 +1978,7 @@ export default function Optimalisatie({
           monthlyBaseCents !== null &&
           bestHeldCashback !== null ? (
             <div
-              className="reason-list"
-              style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}
+              className={`flex flex-col gap-[var(--sp-3)]${routing.length > 0 ? " mt-[var(--sp-4)]" : ""}`}
             >
               {/* HET ANTWOORD, IN ÉÉN REGEL. Welke kaart, tegen welke van hem, en
                   hoeveel dat bruto scheelt — daarna doet `Productkosten` er de
@@ -1970,7 +1997,10 @@ export default function Optimalisatie({
                      gevonden is. Het is dezelfde splitsing als in het reisblok:
                      een HERKEND kenmerk staat vooraan, de vrije brontekst
                      eromheen vouwt op. */}
-              <p className="reason-lead" data-testid="cashback-antwoord">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="cashback-antwoord"
+              >
                 {c.cashback.answerLine({
                   product: cashbackUpgrade.best.product,
                   bank: cashbackUpgrade.best.bank || undefined,
@@ -2079,7 +2109,7 @@ export default function Optimalisatie({
           {cashbackOnderbouwing && (
             <ToonMeer summary={c.cashback.onderbouwing.toonMeerSummary}>
               {cashbackUpgrade && monthlyBaseCents !== null && bestHeldCashback !== null && (
-                <div className="reason-list">
+                <div className="flex flex-col gap-[var(--sp-3)]">
                   {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
                       NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
                       spending sits on the 0% pas, so the first row is what that card
@@ -2226,9 +2256,8 @@ export default function Optimalisatie({
                   hetzelfde antwoord. */}
               {lastMonthCompare && cashbackUpgrade && bestHeldCashback !== null && (
                 <div
-                  className="reason-list"
+                  className="flex flex-col gap-[var(--sp-3)] mt-[var(--sp-3)]"
                   data-testid="cashback-vorige-maand"
-                  style={{ marginTop: "var(--sp-3)" }}
                 >
                   <p style={{ margin: 0 }}>
                     <strong>
@@ -2350,12 +2379,18 @@ export default function Optimalisatie({
                 WEIGERINGEN en dus zelf de uitkomst: ze staan vooraan en vouwen
                 nooit op. */}
             {costs.total.kind === "complete" && (
-              <p className="reason-lead" data-testid="kosten-totaal">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalComplete(euro(locale, costs.total.perYearCents), costs.total.accounts)}
               </p>
             )}
             {costs.total.kind === "incomplete" && (
-              <p className="reason-lead" data-testid="kosten-totaal">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalIncomplete({
                   known: costs.total.known,
                   total: costs.total.known + costs.total.unknown,
@@ -2365,7 +2400,10 @@ export default function Optimalisatie({
               </p>
             )}
             {costs.total.kind === "none" && (
-              <p className="reason" data-testid="kosten-totaal">
+              <p
+                className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalNone}
               </p>
             )}
@@ -2396,7 +2434,7 @@ export default function Optimalisatie({
                 cost.matchedBy === "product-name" ? cost.fee.product : `${bank} — ${row.account.name}`;
               return (
                 <p
-                  className="reason"
+                  className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
                   data-testid={`kosten-gratis-${row.account.key}`}
                   key={`gratis-${row.account.key}`}
                 >
@@ -2427,7 +2465,10 @@ export default function Optimalisatie({
               const free = row.candidates.filter((f) => f.amount.cents === 0);
               return (
                 <div key={`onbekend-${row.account.key}`}>
-                  <p className="reason" data-testid={`kosten-onbekend-${row.account.key}`}>
+                  <p
+                    className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                    data-testid={`kosten-onbekend-${row.account.key}`}
+                  >
                     {c.costs.unknownAccountLead(bank, row.account.name)}{" "}
                     {cost.reason === "no-bank"
                       ? c.costs.unknownReasons.noBank
@@ -2488,7 +2529,7 @@ export default function Optimalisatie({
                 peildatum — verhuist naar de bronnenlijst in de plooi, waar de
                 rest van de herkomst ook staat. */}
             {costTips.length > 0 && (
-              <div className="reason-list" style={{ marginTop: "var(--sp-4)" }}>
+              <div className="flex flex-col gap-[var(--sp-3)] mt-[var(--sp-4)]">
                 {costTips.map((row) => {
                   const cost = row.cost;
                   if (cost.kind !== "known") return null;
@@ -2501,7 +2542,7 @@ export default function Optimalisatie({
                   return alts.map(({ label, alt }) =>
                     alt === null ? null : (
                       <div key={`${row.account.key}-${alt.fee.productId}`}>
-                        <p className="reason">
+                        <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]">
                           {c.costs.tips.sentence({
                             label,
                             heldLabel: held,
