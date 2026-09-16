@@ -58,6 +58,43 @@ pre-existing blocks is still present, byte for byte — the diff is purely
 additive theme variables. `apps/web` stayed at 1149/1149 tests, typecheck and
 lint clean.
 
+## The prerequisite this ADR originally missed
+
+Converting `ModuleGrid` second turned up something that changes the order of
+the work. **Eleven test files read the stylesheets directly and assert on the
+rules**, and `module-grid.test.ts` parses every `@media` block into a map keyed
+by breakpoint. `module-grid.ts` says why out loud: the class names are "the
+*only* coupling between the React primitives and styles/modules.css, so both
+sides are pinned by tests", and `module-grid.test.ts` adds "this repo has no
+render/DOM test lib".
+
+So the CSS text is not incidental here. It is the contract, and it is the only
+guard on homescreen layout. Converting a component deletes the rules its test
+reads; the test then fails, or passes while asserting nothing.
+
+That splits the stylesheet in two:
+
+| under test contract | free |
+| --- | --- |
+| `base.css` 1588, `blocks.css` 1048, `charts.css` 816, `modules.css` 358 | `landing.css` 1129, `views.css` 921, `worldmap.css` 394 |
+| 3,810 lines, 11 test files | 2,444 lines, none |
+
+`ModuleGrid` and `Module` are **excluded for now** for a second reason too: their
+media queries are desktop-first (`max-width: 1200px`, `900px`) while Tailwind is
+mobile-first (`min-width`). Converting them means inverting the breakpoint logic,
+which is easy to get subtly and invisibly wrong on the one layout every screen
+depends on.
+
+**The replacement for CSS-as-contract already exists in this branch.** The
+DeltaPill conversion was verified by rendering old rules and new classes side by
+side against the real built stylesheet and diffing `getComputedStyle`. That is
+strictly stronger than asserting on CSS text: it tests what the browser computes,
+not what the file says, and it keeps working after a conversion. jsdom is
+available now in a way it was not when those tests were written.
+
+So the order is: convert what is free, and before touching the rest, replace the
+stylesheet-reading assertions with computed-style ones.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual
