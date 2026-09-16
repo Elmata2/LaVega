@@ -159,7 +159,7 @@ test("the surface is exactly three ways in, and nothing else", () => {
   expect(fileInputs[0].getAttribute("aria-label")).toBe("Factuurbestand kiezen");
   expect(c.textContent).not.toContain("CSV of UBL/XML importeren");
 
-  expect(c.querySelector(".dropzone")).not.toBeNull();
+  expect(c.querySelector("[data-testid=dropzone]")).not.toBeNull();
   expect(byText("button", "Ophalen uit n8n")).toBeTruthy();
 });
 
@@ -195,7 +195,7 @@ test("dropping a CSV imports its invoices through the same parser", async () => 
     "Relatie,Bedrag,Factuurdatum,Vervaldatum,Richting\nACME BV,121.00,2026-08-01,2026-08-31,uitgaand\n";
   const file = new File([csv], "facturen.csv", { type: "text/csv" });
 
-  drop(c.querySelector(".dropzone")!, file);
+  drop(c.querySelector("[data-testid=dropzone]")!, file);
   // handleImportFile reads the file asynchronously.
   await act(async () => {
     await Promise.resolve();
@@ -211,7 +211,7 @@ test("dropping a CSV imports its invoices through the same parser", async () => 
 test("a dropped PDF sends nothing while the AI opt-in is off", () => {
   const c = render();
   const file = new File(["%PDF-1.4"], "factuur.pdf", { type: "application/pdf" });
-  drop(c.querySelector(".dropzone")!, file);
+  drop(c.querySelector("[data-testid=dropzone]")!, file);
 
   expect(saved).toHaveLength(0);
   expect(c.textContent).toContain("Er is niets verstuurd");

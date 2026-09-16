@@ -252,18 +252,18 @@ function rekProps(): RekProps {
 
 test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Gekoppelde rekening"));
-  const panel = container!.querySelector(".bank-panel")!;
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
   expect(panel.textContent).toContain("datum onbekend");
   // Er staat geen dag bij het bedrag. De enige datum in het blok is die van de
   // nieuwste transactie, en die zin gaat ook over de transacties.
-  const age = panel.querySelector(".bank-panel-age")!;
+  const age = panel.querySelector("[data-testid=bank-panel-age]")!;
   // Het veld van het SALDO, opgezocht aan het invoerveld dat erin staat en niet
   // aan zijn plek in de rij: er staat nu ook een veld "Gekoppeld" met een datum
   // erin, en dat is een ander gegeven. Op volgorde selecteren zou deze test op
   // een dag stilletjes het verkeerde veld gaan keuren.
-  const saldoField = [...panel.querySelectorAll<HTMLElement>(".bank-field")].find((f) =>
+  const saldoField = [...panel.querySelectorAll<HTMLElement>("[data-testid=bank-field]")].find((f) =>
     f.querySelector(".saldo-input"),
   )!;
   expect(saldoField.querySelector(".cell-sub")!.textContent).not.toMatch(/\d/);
@@ -276,10 +276,10 @@ test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen 
 
 test("het advies in de melding wijst naar een veld dat op dezelfde pagina staat", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Gekoppelde rekening"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  expect(panel.querySelector(".bank-panel-age")!.textContent).toContain("in het veld hierboven");
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).toContain("in het veld hierboven");
   // En dat veld bestaat hier echt — dit is het hele punt van regel 3.
   expect(panel.querySelector('[aria-label="Saldo Gekoppelde rekening"]')).toBeTruthy();
   // Er staat geen knop op deze pagina die een koppeling verrast, dus er wordt
@@ -290,17 +290,17 @@ test("het advies in de melding wijst naar een veld dat op dezelfde pagina staat"
 
 test("een geïmporteerd saldo zegt van welke dag het is, en dat er nieuwere transacties zijn", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector(".bank-panel")!; // eerste tab = Afschrift
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector("[data-testid=bank-panel]")!; // eerste tab = Afschrift
   expect(panel.textContent).toContain("stand van 31 juli 2026");
-  expect(panel.querySelector(".bank-panel-age")!.textContent).toContain(
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).toContain(
     "nieuwste is van 12 augustus 2026",
   );
 });
 
 test("de platte tabel zegt per rij hetzelfde, en vult ook daar geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-modes .pill", "Alle rekeningen"));
+  click(byText("[data-testid=bank-modes] .pill", "Alle rekeningen"));
   const cells = [...container!.querySelectorAll<HTMLElement>('td[data-label="Saldo"]')];
   const texts = cells.map((c) => c.querySelector(".cell-sub")!.textContent);
   expect(texts).toContain("stand van 31 juli 2026");
@@ -311,7 +311,7 @@ test("de dichtgeklapte bankkop zegt 'dag onbekend' zodra een opgeteld saldo geen
   // Dichtgeklapt is de stand waarin hij de pagina opent: daar staat een
   // euro-totaal en niets anders, en dat leest als "nu".
   mount(<Rekeningen {...rekProps()} />);
-  const head = byText(".bank-group-head", "ING");
+  const head = byText("[data-testid=bank-group-head]", "ING");
   expect(head.textContent).toContain("dag onbekend");
   // Het totaal blijft staan — het is wél de som van wat we hebben (843,21 +
   // 1.200,50), alleen niet de som van één dag.
@@ -320,7 +320,7 @@ test("de dichtgeklapte bankkop zegt 'dag onbekend' zodra een opgeteld saldo geen
 
 test("een bank waarvan elk saldo een dag heeft krijgt die melding niet", () => {
   mount(<Rekeningen {...rekProps()} accounts={[IMPORTED]} />);
-  const head = byText(".bank-group-head", "ING");
+  const head = byText("[data-testid=bank-group-head]", "ING");
   expect(head.textContent).not.toContain("dag onbekend");
 });
 
@@ -432,15 +432,15 @@ test("de waarderegel van ING noemt de reden waarom er geen bedrag staat", () => 
 
 test("op de ING-kaart staat geen euro-waarde, wel de reden waarom niet", () => {
   mount(<Punten {...puntenProps([ingBalance(12_500)])} />);
-  const card = container!.querySelector<HTMLElement>(".punt-card")!;
-  expect(card.querySelector(".punt-value")!.textContent).toBe("12.500");
-  expect(card.querySelector(".punt-unit")!.textContent).toBe("punten");
+  const card = container!.querySelector<HTMLElement>('[data-testid=punt-card]')!;
+  expect(card.querySelector('[data-testid=punt-value]')!.textContent).toBe("12.500");
+  expect(card.querySelector('[data-testid=punt-unit]')!.textContent).toBe("punten");
 
   // Alles buiten het regelblok is LaVega's eigen tekst over dit saldo. Daar mag
   // geen euroteken staan: er is geen euro-waarde van een ING-punt.
-  const rules = card.querySelector<HTMLElement>(".punt-facts")!;
+  const rules = card.querySelector<HTMLElement>('[data-testid=punt-facts]')!;
   const own = card.cloneNode(true) as HTMLElement;
-  own.querySelector(".punt-facts")!.remove();
+  own.querySelector('[data-testid=punt-facts]')!.remove();
   expect(own.textContent).not.toContain("€");
 
   // En binnen het regelblok is elk euroteken een DREMPEL van ING, nooit een
@@ -461,7 +461,7 @@ test("de kaart toont de negen verdienregels en de pakketopslag", () => {
   const items = [...container!.querySelectorAll(".punt-facts-earn li")].map((li) => li.textContent);
   expect(items).toHaveLength(9);
   expect(items[0]).toContain("250 punten per maand");
-  const rules = container!.querySelector(".punt-facts")!;
+  const rules = container!.querySelector('[data-testid=punt-facts]')!;
   expect(rules.textContent).toContain("ING Extra: 20% meer punten");
   expect(rules.textContent).toContain("kunnen wijzigen");
   expect(rules.textContent).toContain("opgehaald op 21 augustus 2026");
@@ -477,19 +477,23 @@ test("het regelblok haalt niets op: geen link, geen afbeelding, geen remote adre
 
 test("de regels staan er al vóórdat hij opslaat, zodra het formulier op ING Punten staat", () => {
   mount(<Punten {...puntenProps([])} />);
-  expect(container!.querySelector(".punt-facts")).toBeNull();
-  const field = container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+  expect(container!.querySelector('[data-testid=punt-facts]')).toBeNull();
+  const field = container!.querySelector<HTMLInputElement>(
+    '[data-testid=punt-form] [aria-label="Programma"]',
+  )!;
   type(field, ING);
-  const rules = container!.querySelector(".punt-facts")!;
+  const rules = container!.querySelector('[data-testid=punt-facts]')!;
   expect(rules.textContent).toContain("drempel, geen tarief");
   expect(container!.querySelector('[aria-label="Punten"]')).toBeTruthy(); // punten, geen euro's
 });
 
 test("wie 'ING' kiest wordt naar ING Punten gewezen — een optie die in dezelfde lijst staat", () => {
   mount(<Punten {...puntenProps([])} />);
-  const field = container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+  const field = container!.querySelector<HTMLInputElement>(
+    '[data-testid=punt-form] [aria-label="Programma"]',
+  )!;
   type(field, "ING");
-  const note = byText(".punt-form .field-note", "Spaar je ING Punten?");
+  const note = byText('[data-testid=punt-form] [data-testid=punt-ing-hint]', "Spaar je ING Punten?");
   expect(note).toBeTruthy();
   const options = [...container!.querySelectorAll("#reward-programs option")].map((o) =>
     o.getAttribute("value"),
@@ -505,9 +509,9 @@ test("een ander programma blijft precies zoals het was", () => {
       ])}
     />,
   );
-  const card = container!.querySelector<HTMLElement>(".punt-card")!;
-  expect(card.querySelector(".punt-facts")).toBeNull();
-  expect(card.querySelector(".punt-worth")!.textContent).toContain("niet vast te stellen");
+  const card = container!.querySelector<HTMLElement>('[data-testid=punt-card]')!;
+  expect(card.querySelector('[data-testid=punt-facts]')).toBeNull();
+  expect(card.querySelector('[data-testid=punt-worth]')!.textContent).toContain("niet vast te stellen");
   expect(card.textContent).not.toContain("€");
 });
 
@@ -643,22 +647,22 @@ test("het paneel toont beide data, uit elkaar gehouden", () => {
     linkedAt: "2026-08-21",
   });
   mount(<Rekeningen {...rekProps()} accounts={[IMPORTED, gekoppeld]} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Nieuwe rekening"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  expect(panel.querySelector(".bank-panel-linked")!.textContent).toContain(
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  expect(panel.querySelector("[data-testid=bank-panel-linked]")!.textContent).toContain(
     "gekoppeld op 21 augustus 2026",
   );
   // Twee aparte alinea's, niet één zin met twee datums erin.
-  expect(panel.querySelector(".bank-panel-age")!.textContent).not.toContain("gekoppeld op");
-  expect(panel.querySelector(".bank-panel-linked")!.textContent).not.toContain("stand van");
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).not.toContain("gekoppeld op");
+  expect(panel.querySelector("[data-testid=bank-panel-linked]")!.textContent).not.toContain("stand van");
 });
 
 test("een rekening van vóór dit veld zegt het eerlijk in het paneel", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  const linked = panel.querySelector(".bank-panel-linked")!;
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  const linked = panel.querySelector("[data-testid=bank-panel-linked]")!;
   expect(linked.textContent).toContain("koppelmoment onbekend");
   expect(linked.textContent).not.toMatch(/\d{4}/);
 });

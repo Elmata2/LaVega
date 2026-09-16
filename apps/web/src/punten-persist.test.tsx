@@ -70,19 +70,22 @@ function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
 }
 
 const programField = () =>
-  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+  container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Programma"]')!;
 const pointsField = () =>
-  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]') ??
-  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Cashback in hele euro\'s"]')!;
+  container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]') ??
+  container!.querySelector<HTMLInputElement>(
+    '[data-testid="punt-form"] [aria-label="Cashback in hele euro\'s"]',
+  )!;
 /** The form's own save button, whatever it currently calls itself. */
 const saveButton = () =>
-  container!.querySelector<HTMLButtonElement>(".stack-form-actions .btn-primary")!;
-const formNote = () => container!.querySelector(".punt-overwrite")?.textContent ?? "";
+  container!.querySelector<HTMLButtonElement>('[data-testid="stack-form-actions"] .btn-primary')!;
+const formNote = () => container!.querySelector('[data-testid="punt-overwrite"]')?.textContent ?? "";
 const cardFor = (program: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(".punt-card")].find((n) =>
+  [...container!.querySelectorAll<HTMLElement>('[data-testid="punt-card"]')].find((n) =>
     (n.textContent ?? "").includes(program),
   )!;
-const valueOf = (program: string) => cardFor(program).querySelector(".punt-value")!.textContent;
+const valueOf = (program: string) =>
+  cardFor(program).querySelector('[data-testid="punt-value"]')!.textContent;
 const interval = (program: string) =>
   container!.querySelector<HTMLSelectElement>(`[aria-label="Herinnering ${program}"]`)!.value;
 
@@ -118,20 +121,22 @@ test("after a save the form no longer points at the row it just wrote", () => {
   expect(valueOf(AMEX)).toBe("245.000");
   // The next number typed here is a NEW balance, not an edit of the one above.
   expect(programField().value).toBe("");
-  expect(container!.querySelector(".punt-overwrite")).toBeNull();
+  expect(container!.querySelector('[data-testid="punt-overwrite"]')).toBeNull();
 
   // And with nothing named, saving says so instead of writing somewhere.
   type(pointsField(), "60000");
   click(saveButton());
   expect(valueOf(AMEX)).toBe("245.000");
-  expect(container!.querySelector(".punt-form .punt-error")!.textContent).toContain("programma");
+  expect(
+    container!.querySelector('[data-testid="punt-form"] [data-testid="punt-error"]')!.textContent,
+  ).toContain("programma");
 });
 
 test("adding a second programme leaves the first one alone", () => {
   render([]);
   addBalance(AMEX, "245000");
   addBalance(FLYING_BLUE, "60000");
-  expect(container!.querySelectorAll(".punt-card")).toHaveLength(2);
+  expect(container!.querySelectorAll('[data-testid="punt-card"]')).toHaveLength(2);
   expect(valueOf(AMEX)).toBe("245.000");
   expect(valueOf(FLYING_BLUE)).toBe("60.000");
 });
@@ -179,16 +184,16 @@ test("a removed balance can be put back — one click never destroys a hand-type
     (n.textContent ?? "").includes("Verwijder"),
   )!;
   click(del);
-  expect(container!.querySelectorAll(".punt-card")).toHaveLength(1);
+  expect(container!.querySelectorAll('[data-testid="punt-card"]')).toHaveLength(1);
 
   // It says what went, and offers the way back — no confirm dialog, a real undo.
-  const undo = container!.querySelector<HTMLButtonElement>(".punt-undo button")!;
-  expect(container!.querySelector(".punt-undo")!.textContent).toContain(AMEX);
+  const undo = container!.querySelector<HTMLButtonElement>('[data-testid="punt-undo"] button')!;
+  expect(container!.querySelector('[data-testid="punt-undo"]')!.textContent).toContain(AMEX);
   click(undo);
 
-  expect(container!.querySelectorAll(".punt-card")).toHaveLength(2);
+  expect(container!.querySelectorAll('[data-testid="punt-card"]')).toHaveLength(2);
   expect(valueOf(AMEX)).toBe("245.000");
-  expect(container!.querySelector(".punt-undo")).toBeNull();
+  expect(container!.querySelector('[data-testid="punt-undo"]')).toBeNull();
 });
 
 test("the undo keeps the reminder the owner set on the row he removed", () => {
@@ -203,7 +208,7 @@ test("the undo keeps the reminder the owner set on the row he removed", () => {
       (n.textContent ?? "").includes("Verwijder"),
     )!,
   );
-  click(container!.querySelector<HTMLButtonElement>(".punt-undo button")!);
+  click(container!.querySelector<HTMLButtonElement>('[data-testid="punt-undo"] button')!);
   expect(interval(AMEX)).toBe("30");
 });
 
@@ -214,9 +219,9 @@ test("saving something else lets the undo go, so it can never overwrite a newer 
       (n.textContent ?? "").includes("Verwijder"),
     )!,
   );
-  expect(container!.querySelector(".punt-undo")).not.toBeNull();
+  expect(container!.querySelector('[data-testid="punt-undo"]')).not.toBeNull();
 
   addBalance(AMEX, "1000"); // he re-entered it himself
-  expect(container!.querySelector(".punt-undo")).toBeNull();
+  expect(container!.querySelector('[data-testid="punt-undo"]')).toBeNull();
   expect(valueOf(AMEX)).toBe("1.000");
 });

@@ -292,6 +292,14 @@ type ValutaProps = {
 
 const NO_ACCOUNT = "";
 
+/** The read-out leg's figure: full size in ink once an amount is known, quieter
+ *  and muted while it isn't (was `.xfer-out`/`.xfer-out-unknown` in views.css). */
+function xferOutClass(unknown: boolean): string {
+  return unknown
+    ? "font-display text-[1.35rem] font-semibold text-muted min-w-0 [overflow-wrap:anywhere]"
+    : "font-display text-[2rem] font-semibold text-ink min-w-0 [overflow-wrap:anywhere]";
+}
+
 /** HET VERSCHIL MET DE GEKOZEN ROUTE, IN WOORDEN, en de twee zinnen zijn met opzet
  *  niet inwisselbaar.
  *
@@ -356,7 +364,7 @@ function CcySelect({
   );
   return (
     <select
-      className="xfer-ccy"
+      className="flex-none appearance-none [border:0] rounded-pill bg-ink text-on-ink font-body text-[0.85rem] font-semibold py-[8px] px-[14px] cursor-pointer"
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -731,13 +739,18 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
 
   return (
     <>
-      <div className="view-head">
-        <h2>{c.head.title}</h2>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        data-testid="view-head"
+      >
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.head.title}
+        </h2>
         {/* De kop volgt de koers die er ECHT ligt. Hier stond "live ECB-middenkoers"
             als vaste tekst, en dat is de eerste regel van het scherm die onwaar is
             zodra de aanroep niet aankomt: dan rekent de tab met de meegebundelde
             momentopname van begin augustus terwijl er "live" boven staat. */}
-        <span className="eyebrow">
+        <span className="eyebrow flex-none">
           {koersKop}
           {c.head.eyebrowSuffix}
         </span>
@@ -765,12 +778,14 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
           zou iedereen langs een bol van 420 px moeten om bij het bedrag te komen. */}
       <ModuleGrid className="grid-2" label={c.moduleLabels.grid}>
         <Module title={c.moduleLabels.transferTitle} height="tall">
-          <div className="xfer">
-            <div className="xfer-leg">
-              <div className="xfer-leg-head">
-                <span className="xfer-leg-label">{c.transfer.fromAccountLabel}</span>
+          <div className="flex flex-col gap-2 relative">
+            <div className="border border-line rounded bg-surface-2 p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <span className="text-[0.78rem] tracking-[0.06em] uppercase text-muted">
+                  {c.transfer.fromAccountLabel}
+                </span>
                 <select
-                  className="xfer-account"
+                  className="max-w-[60%] rounded-pill border border-line bg-surface text-ink text-[0.8rem] py-[5px] px-[10px]"
                   aria-label={c.transfer.fromAccountLabel}
                   value={fromKey}
                   onChange={(e) => pickFrom(e.target.value)}
@@ -783,9 +798,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   ))}
                 </select>
               </div>
-              <div className="xfer-amount-row">
+              <div className="flex items-center justify-between gap-3">
                 <input
-                  className="xfer-amount"
+                  className="flex-auto min-w-0 [border:0] bg-transparent p-0 font-display text-[2rem] font-semibold text-ink focus:outline-none"
                   type="number"
                   step={0.01}
                   min={0}
@@ -801,7 +816,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   groups={ccyGroups}
                 />
               </div>
-              <div className="xfer-foot">
+              <div className="flex justify-between gap-3 mt-2 text-[0.8rem] text-muted">
                 <span>{c.transfer.availableLabel}</span>
                 <span>{available(fromAcc)}</span>
               </div>
@@ -809,18 +824,20 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
 
             <button
               type="button"
-              className="xfer-swap"
+              className="self-center w-9 h-9 -my-2 rounded-[50%] border border-line bg-surface text-muted text-[0.95rem] leading-none cursor-pointer z-[1] hover:text-ink hover:border-accent"
               aria-label={c.transfer.swapAriaLabel}
               onClick={swap}
             >
               <span aria-hidden="true">⇅</span>
             </button>
 
-            <div className="xfer-leg">
-              <div className="xfer-leg-head">
-                <span className="xfer-leg-label">{c.transfer.toAccountLabel}</span>
+            <div className="border border-line rounded bg-surface-2 p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <span className="text-[0.78rem] tracking-[0.06em] uppercase text-muted">
+                  {c.transfer.toAccountLabel}
+                </span>
                 <select
-                  className="xfer-account"
+                  className="max-w-[60%] rounded-pill border border-line bg-surface text-ink text-[0.8rem] py-[5px] px-[10px]"
                   aria-label={c.transfer.toAccountLabel}
                   value={toKey}
                   onChange={(e) => pickTo(e.target.value)}
@@ -833,11 +850,8 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   ))}
                 </select>
               </div>
-              <div className="xfer-amount-row">
-                <span
-                  className={`xfer-out${netReceived === null ? " xfer-out-unknown" : ""}`}
-                  data-testid="arrives"
-                >
+              <div className="flex items-center justify-between gap-3">
+                <span className={xferOutClass(netReceived === null)} data-testid="arrives">
                   {netReceived === null ? c.transfer.unknown : formatCurrencyIn(locale, netReceived, to)}
                 </span>
                 <CcySelect
@@ -848,7 +862,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   groups={ccyGroups}
                 />
               </div>
-              <div className="xfer-foot">
+              <div className="flex justify-between gap-3 mt-2 text-[0.8rem] text-muted">
                 <span>{c.transfer.arrivesFooterLabel}</span>
                 <span>{available(toAcc)}</span>
               </div>
@@ -860,7 +874,11 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               route waarmee dat gerekend is, want een bedrag zonder route is niet na
               te rekenen), en of overstappen loont. Alles wat uitlegt HOE we daaraan
               komen — de hele rangschikking, de bronnen — staat hieronder opgevouwen. */}
-          <p className="reason" style={{ marginTop: "var(--sp-4)" }} data-testid="uitleg">
+          <p
+            className="py-3 px-4 border border-line rounded-sm bg-surface-2 leading-normal"
+            style={{ marginTop: "var(--sp-4)" }}
+            data-testid="uitleg"
+          >
             {netReceived === null ? (
               <>
                 <strong>{c.reason.arrivesUnknownLead}</strong>{" "}
@@ -939,7 +957,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               die deze hele ronde moest wegnemen. */}
           {beats && !sameCurrency && (
             <>
-              <p className="reason" data-testid="goedkoper">
+              <p
+                className="py-3 px-4 border border-line rounded-sm bg-surface-2 leading-normal"
+                data-testid="goedkoper"
+              >
                 {/* DE KOP VOLGT DE UITKOMST, en niet andersom. "Goedkoper kan"
                     boven een regel die eindigt op "je gaat er € 2,90 op achteruit"
                     is een kop die zijn eigen alinea tegenspreekt — en het is precies
@@ -976,12 +997,12 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               verandert met het aantal banken. */}
           <ToonMeer className="valuta-banken" summary={bankenLabel}>
             {routes.length === 0 ? (
-              <div className="empty-guide">
-                <p>{c.emptyGuide.heading}</p>
-                <ul>
-                  <li>{c.emptyGuide.catalogueNote}</li>
-                  <li>{c.emptyGuide.requirementsNote}</li>
-                  <li>{c.emptyGuide.noBankNote}</li>
+              <div className="border border-dashed border-line rounded bg-surface-2 p-4">
+                <p className="m-0 mb-3">{c.emptyGuide.heading}</p>
+                <ul className="m-0 pl-[1.1rem] text-muted text-[0.88rem]">
+                  <li className="mb-1">{c.emptyGuide.catalogueNote}</li>
+                  <li className="mb-1">{c.emptyGuide.requirementsNote}</li>
+                  <li className="mb-1">{c.emptyGuide.noBankNote}</li>
                 </ul>
               </div>
             ) : (

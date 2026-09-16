@@ -384,7 +384,7 @@ export default function Belasting({
     return (
       <>
         <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
-          <h2 className="m-0! text-[1.5rem]!">
+          <h2 className="m-0 text-[1.5rem]">
             {c.header.title} · {countryLabel}
           </h2>
           <span className="eyebrow flex-none">
@@ -409,7 +409,7 @@ export default function Belasting({
         <ToonMeer
           variant="info"
           heading={
-            <h2 className="m-0! text-[1.5rem]!">
+            <h2 className="m-0 text-[1.5rem]">
               {c.header.title} · {countryLabel}
             </h2>
           }
@@ -572,7 +572,7 @@ export default function Belasting({
                 </ToonMeer>
 
                 <div className="flex flex-wrap gap-3">
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.frequencyLabel}
                     <select
                       value={s.frequency}
@@ -589,7 +589,7 @@ export default function Belasting({
                       ))}
                     </select>
                   </label>
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.stelselLabel}
                     <select
                       value={s.vatBasis ?? ""}
@@ -609,10 +609,10 @@ export default function Belasting({
                       <option value="kasstelsel">{c.vat.fields.stelselKas}</option>
                     </select>
                   </label>
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.ratePctLabel}
                     <input
-                      className="w-[110px]!"
+                      className="w-[110px]"
                       type="number"
                       step={1}
                       min={0}
@@ -626,10 +626,10 @@ export default function Belasting({
                       }
                     />
                   </label>
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.manualAmountLabel}
                     <input
-                      className="w-[110px]!"
+                      className="w-[110px]"
                       type="number"
                       step={0.01}
                       min={0}
@@ -647,7 +647,7 @@ export default function Belasting({
                       }
                     />
                   </label>
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.mixedRatesLabel}
                     <input
                       type="checkbox"
@@ -657,7 +657,7 @@ export default function Belasting({
                       onChange={(e) => patch(entity, { mixedRates: e.target.checked })}
                     />
                   </label>
-                  <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.sheetLabel}
                     <input
                       type="file"
@@ -692,7 +692,7 @@ export default function Belasting({
              betalen. NL heeft die niet, dus NL ziet deze module niet. ─────── */}
         {profitTax && (
           <Module title={profitTax.label} height="tall" footer={<span>{profitTax.rateBasis}</span>}>
-            <p className="mb-4! text-muted max-w-[68ch]">{profitTax.what}</p>
+            <p className="mb-4 text-muted max-w-[68ch]">{profitTax.what}</p>
             {entities.map((entity) => {
               const s = resolve(entity);
               const flows = computeProfitTaxPrepayments(entityTxs(entity), s, asOf);
@@ -734,10 +734,10 @@ export default function Belasting({
                     </div>
                   )}
                   <div className="flex flex-wrap gap-3" style={{ marginTop: "var(--sp-3)" }}>
-                    <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                    <label className="flex flex-col gap-1 text-[0.78rem]">
                       {c.profitTax.fields.ratePctLabel}
                       <input
-                        className="w-[110px]!"
+                        className="w-[110px]"
                         type="number"
                         step={0.1}
                         min={0}
@@ -753,10 +753,10 @@ export default function Belasting({
                         }
                       />
                     </label>
-                    <label className="flex! flex-col gap-1! text-[0.78rem]!">
+                    <label className="flex flex-col gap-1 text-[0.78rem]">
                       {c.profitTax.fields.imposedAmountLabel}
                       <input
-                        className="w-[110px]!"
+                        className="w-[110px]"
                         type="number"
                         step={0.01}
                         min={0}

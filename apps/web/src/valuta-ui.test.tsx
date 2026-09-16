@@ -439,7 +439,7 @@ test("zonder live koers zegt de bronregel wat het dan wél is, zonder een oorzaa
 
 test("de kop belooft geen live koers als die er niet is", () => {
   const c = render();
-  const eyebrow = c.querySelector(".view-head .eyebrow")!.textContent ?? "";
+  const eyebrow = c.querySelector("[data-testid=view-head] .eyebrow")!.textContent ?? "";
   expect(eyebrow).toContain(`ECB-middenkoers van ${FX_RATE_FALLBACK.date} uit de app`);
   expect(eyebrow).not.toContain("live");
   // De rest van de regel blijft staan: waar de koersopslag vandaan komt verandert
@@ -805,7 +805,7 @@ test("een aanbieder die dit scherm niet kent levert geen koersen, want de vermel
 
 test("de kop noemt beide lagen met hun aantallen, en zegt niet meer 'ECB-middenkoers'", async () => {
   const c = await renderLive(layered());
-  const eyebrow = c.querySelector(".view-head .eyebrow")!.textContent ?? "";
+  const eyebrow = c.querySelector("[data-testid=view-head] .eyebrow")!.textContent ?? "";
   expect(eyebrow).toContain("2 ECB-referentiekoersen van 2026-08-21");
   expect(eyebrow).toContain("1 dagkoersen via ExchangeRate-API van 2026-08-22");
   // De oude vaste tekst zou nu voor het grootste deel van de lijst onwaar zijn.

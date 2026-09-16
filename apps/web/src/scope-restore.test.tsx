@@ -253,7 +253,7 @@ test("a filter naming an account of one half never narrows the other half", asyn
   // filtered to that account.
   await click(button("a.nav-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
-  await click(buttonLike("button.bank-group-head", "TEST"));
+  await click(buttonLike("button[data-testid=bank-group-head]", "TEST"));
   await click(buttonLike("button.card-link", "4 transacties bekijken"));
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");

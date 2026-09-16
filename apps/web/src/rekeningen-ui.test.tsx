@@ -226,11 +226,11 @@ function blur(el: HTMLElement) {
 
 test("the banks are listed collapsed, each saying what it holds", () => {
   render();
-  const heads = [...container!.querySelectorAll(".bank-group-head")];
+  const heads = [...container!.querySelectorAll("[data-testid=bank-group-head]")];
   expect(heads).toHaveLength(4);
   expect(heads.every((h) => h.getAttribute("aria-expanded") === "false")).toBe(true);
-  expect(container!.querySelectorAll(".bank-panel")).toHaveLength(0);
-  const ing = byText(".bank-group-head", "ING");
+  expect(container!.querySelectorAll("[data-testid=bank-panel]")).toHaveLength(0);
+  const ing = byText("[data-testid=bank-group-head]", "ING");
   expect(ing.textContent).toContain("2 rekeningen");
   expect(ing.textContent).toContain("Rekeningen tonen"); // the click is spelled out
   // €26.200,50 — the two ING balances, nothing invented.
@@ -239,14 +239,14 @@ test("the banks are listed collapsed, each saying what it holds", () => {
 
 test("a bank with no saldo at all says so instead of showing € 0,00", () => {
   render();
-  const abn = byText(".bank-group-head", "ABN AMRO");
+  const abn = byText("[data-testid=bank-group-head]", "ABN AMRO");
   expect(abn.textContent).toContain("saldo onbekend");
   expect(abn.textContent).not.toContain("0,00");
 });
 
 test("clicking a bank opens it and its accounts appear as sub-tabs", () => {
   render();
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   const tabs = [...container!.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map((t) => t.textContent)).toEqual([
     expect.stringContaining("Betaalrekening"),
@@ -254,14 +254,14 @@ test("clicking a bank opens it and its accounts appear as sub-tabs", () => {
   ]);
   expect(tabs[0].getAttribute("aria-selected")).toBe("true");
   // The first account's panel is the one on screen.
-  expect(container!.querySelector(".bank-panel")!.textContent).toContain("2 transacties bekijken");
+  expect(container!.querySelector("[data-testid=bank-panel]")!.textContent).toContain("2 transacties bekijken");
 });
 
 test("a second sub-tab swaps the panel to that account", () => {
   render();
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Oranje Spaarrekening"));
-  const panel = container!.querySelector(".bank-panel")!;
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
   expect(
     panel.querySelector<HTMLInputElement>('[aria-label="Saldo Oranje Spaarrekening"]')!.value,
   ).toBe("25000");
@@ -270,7 +270,7 @@ test("a second sub-tab swaps the panel to that account", () => {
 
 test("a bank with one account shows the account straight away, without a tab strip", () => {
   render();
-  click(byText(".bank-group-head", "American Express"));
+  click(byText("[data-testid=bank-group-head]", "American Express"));
   expect(container!.querySelectorAll('[role="tab"]')).toHaveLength(0);
   // A card's debt is typed and read as a positive.
   expect(
@@ -287,19 +287,19 @@ test("the panel still carries every edit the table had", () => {
     onSelectAccount: (key) => seen.push(`open:${key}`),
     onDeleteAccount: (key) => seen.push(`delete:${key}`),
   });
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector(".bank-panel")!;
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
 
   type(panel.querySelector<HTMLSelectElement>("select")!, "Spaarrekening");
   type(panel.querySelector<HTMLInputElement>('[aria-label="Entiteit Betaalrekening"]')!, "BV2");
   // Saldo commits on blur, unchanged.
   blur(panel.querySelector<HTMLInputElement>('[aria-label="Saldo Betaalrekening"]')!);
-  click(byText(".bank-panel .card-link", "transacties bekijken"));
+  click(byText("[data-testid=bank-panel] .card-link", "transacties bekijken"));
   // Delete asks first — one click never deletes.
-  click(byText(".bank-panel .card-link-danger", "Verwijder"));
+  click(byText("[data-testid=bank-panel] .card-link-danger", "Verwijder"));
   expect(container!.textContent).toContain("Betaalrekening en 2 transacties verwijderen?");
   expect(seen).not.toContain("delete:NL01INGB");
-  click(byText(".bank-panel .card-link-danger", "Ja"));
+  click(byText("[data-testid=bank-panel] .card-link-danger", "Ja"));
 
   expect(seen).toEqual([
     "type:NL01INGB:Spaarrekening",
@@ -332,8 +332,8 @@ test("typing a bank name does not move the row to another group mid-word", () =>
   root = createRoot(container);
   act(() => root!.render(<Shell />));
 
-  click(byText(".bank-group-head", UNKNOWN_BANK));
-  click(byText(".bank-panel .card-link", "Bank invullen"));
+  click(byText("[data-testid=bank-group-head]", UNKNOWN_BANK));
+  click(byText("[data-testid=bank-panel] .card-link", "Bank invullen"));
   const bank = container.querySelector<HTMLInputElement>('[aria-label="Bank van 0123456789"]')!;
 
   for (const partial of ["I", "IN", "ING"]) {
@@ -341,21 +341,21 @@ test("typing a bank name does not move the row to another group mid-word", () =>
     // Same element, still in the same open group — never re-mounted, never moved.
     expect(container.querySelector('[aria-label="Bank van 0123456789"]')).toBe(bank);
     expect(bank.value).toBe(partial);
-    expect(byText(".bank-group-head", UNKNOWN_BANK)).toBeTruthy();
+    expect(byText("[data-testid=bank-group-head]", UNKNOWN_BANK)).toBeTruthy();
   }
-  expect(container.querySelectorAll(".bank-group")).toHaveLength(4);
+  expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(4);
 
   // "Klaar" ends the rename, and only then does the account join ING.
-  click(byText(".bank-panel .card-link", "Klaar"));
-  expect(container.querySelectorAll(".bank-group")).toHaveLength(3);
-  expect(byText(".bank-group-head", "ING").textContent).toContain("3 rekeningen");
+  click(byText("[data-testid=bank-panel] .card-link", "Klaar"));
+  expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(3);
+  expect(byText("[data-testid=bank-group-head]", "ING").textContent).toContain("3 rekeningen");
 });
 
 test("'Alle rekeningen' falls back to the flat table, with every account in it", () => {
   render();
-  act(() => byText(".bank-modes .pill", "Alle rekeningen").click());
+  act(() => byText("[data-testid=bank-modes] .pill", "Alle rekeningen").click());
   expect(container!.querySelectorAll("table tbody tr")).toHaveLength(5);
-  expect(container!.querySelectorAll(".bank-group")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=bank-group]")).toHaveLength(0);
 });
 
 test("the duplicate banner still sits above the groups", () => {
@@ -371,11 +371,11 @@ test("the duplicate banner still sits above the groups", () => {
   expect(container!.querySelector(".dup-banner")!.textContent).toContain(
     "lijken dezelfde rekening",
   );
-  expect(container!.querySelectorAll(".bank-group").length).toBeGreaterThan(0);
+  expect(container!.querySelectorAll("[data-testid=bank-group]").length).toBeGreaterThan(0);
 });
 
 test("with no accounts the view says to import first, and offers no view switch", () => {
   render({ accounts: [], txs: [] });
   expect(container!.textContent).toContain("Nog geen rekeningen");
-  expect(container!.querySelectorAll(".bank-modes")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=bank-modes]")).toHaveLength(0);
 });

@@ -585,7 +585,7 @@ export default function Profiel({
           {initials}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="mb-1!" data-testid="profile-head-name">
+          <h2 className="mb-1" data-testid="profile-head-name">
             {fullName || c.profiel.head.noName}
           </h2>
           <p className="cell-sub">{c.profiel.head.note}</p>

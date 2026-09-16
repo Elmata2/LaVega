@@ -144,6 +144,12 @@ comparison agreed at 4px on both sides and the regression passed review. Fixed
 in `tokens.css`. The lesson generalises — verifying a conversion against a
 broken theme proves only that both sides are broken the same way.
 
+**7. A utility applied unconditionally defeats a state class.** Now that the
+sheets are layered, a utility beats a component class by design — so
+`className="pill bg-surface"` paints the ACTIVE pill white too, hiding
+`.pill-active`'s own background. Apply the utility only in the states where it
+belongs, or convert the state class with it. Found on the Rekeningen bank tabs.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual
