@@ -7,6 +7,7 @@ import {
   type Dividend,
   type InvestingDashboardData,
   type Position,
+  type SectorExposure,
   type Trade,
 } from "@lavega/core";
 import type { PriceStore } from "@lavega/adapters";
@@ -14,6 +15,10 @@ import { readPriceBars } from "./priceReader.js";
 
 const TENANT_ID = "local";
 export const DEFAULT_PORTFOLIO_AGENT_MODEL = "inclusionai/ling-3.0-flash-fin:free";
+/** Wall-clock budget for one agent run. `stepCountIs` bounds how many tool
+ *  rounds may happen, not how long they may take, so a provider that never
+ *  answers would otherwise hold the request open forever. */
+export const DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS = 60_000;
 
 export type PortfolioAgentBrokerData = {
   positions: Position[];
@@ -105,6 +110,10 @@ export type RunPortfolioAgentOptions = {
   model?: string;
   agentId?: PortfolioAgentId;
   dashboard?: InvestingDashboardData;
+  /** Sector exposure resolved by `sectorResolution.ts` from stored sector
+   *  profiles. Absent or empty renders as `"unavailable"` — never as an
+   *  entity name and never as a guessed industry. */
+  sectors?: readonly SectorExposure[];
 };
 
 export const PORTFOLIO_AGENT_IDS = [
@@ -230,10 +239,30 @@ export function listPortfolioAgents(): PortfolioAgentDefinition[] {
   return PORTFOLIO_AGENT_IDS.map((id) => PERSONAS[id]);
 }
 
+export function isPortfolioAgentId(id: unknown): id is PortfolioAgentId {
+  return typeof id === "string" && PORTFOLIO_AGENT_IDS.includes(id.trim() as PortfolioAgentId);
+}
+
 export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinition {
   const normalized = id?.trim() as PortfolioAgentId | undefined;
   if (normalized && PORTFOLIO_AGENT_IDS.includes(normalized)) return PERSONAS[normalized];
   return PERSONAS.warren_buffett;
+}
+
+/** Thrown when the model answers with something that is not an insight. The
+ *  run fails; it never degrades into a neutral zero-confidence "result". */
+export class PortfolioAgentResponseError extends Error {
+  constructor(problem: string) {
+    super(`Portfolio agent returned an unusable response: ${problem}`);
+    this.name = "PortfolioAgentResponseError";
+  }
+}
+
+export function resolveAgentTimeoutMs(): number {
+  const raw = process.env.LAVEGA_AGENT_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS;
 }
 
 export function resolveAgentConfig(model?: string) {
@@ -257,6 +286,7 @@ export async function runPortfolioAgent({
   model,
   agentId,
   dashboard,
+  sectors,
 }: RunPortfolioAgentOptions): Promise<PortfolioAgentInsight> {
   const config = resolveAgentConfig(model);
   if (!config.modelId)
@@ -269,15 +299,16 @@ export async function runPortfolioAgent({
   const agent = getPortfolioAgent(agentId);
   const userPrompt = prompt
     ? dashboard
-      ? [prompt, "", "Portfolio snapshot:", renderPortfolioSnapshot(dashboard)].join("\n")
+      ? [prompt, "", "Portfolio snapshot:", renderPortfolioSnapshot(dashboard, sectors)].join("\n")
       : prompt
-    : buildPortfolioAgentPrompt(agent, dashboard);
+    : buildPortfolioAgentPrompt(agent, dashboard, sectors);
   const { text } = await generateText({
     model: provider.chatModel(config.modelId),
     tools,
     stopWhen: tools ? stepCountIs(8) : undefined,
     system: dashboard ? agent.systemPrompt : undefined,
     prompt: userPrompt,
+    abortSignal: AbortSignal.timeout(resolveAgentTimeoutMs()),
   });
   if (!dashboard) {
     return {
@@ -296,13 +327,14 @@ export async function runPortfolioAgent({
     text,
     agent,
     config.modelId,
-    await portfolioSnapshotHash(dashboard),
+    await portfolioSnapshotHash(dashboard, sectors),
   );
 }
 
 export function buildPortfolioAgentPrompt(
   agent: PortfolioAgentDefinition,
   dashboard: InvestingDashboardData | undefined,
+  sectors?: readonly SectorExposure[],
 ): string {
   if (!dashboard) return `Give a concise ${agent.displayName} view on this portfolio.`;
   return [
@@ -311,11 +343,14 @@ export function buildPortfolioAgentPrompt(
     "Rules: educational analysis only, no individualized trade instruction, no invented data, mention missing prices or missing cost basis when relevant.",
     "",
     "Portfolio snapshot:",
-    renderPortfolioSnapshot(dashboard),
+    renderPortfolioSnapshot(dashboard, sectors),
   ].join("\n");
 }
 
-export function renderPortfolioSnapshot(dashboard: InvestingDashboardData): string {
+export function renderPortfolioSnapshot(
+  dashboard: InvestingDashboardData,
+  sectors?: readonly SectorExposure[],
+): string {
   const latestValue = dashboard.portfolio.All.at(-1);
   const priced = dashboard.positions.filter((position) => position.marketValue !== null);
   const totalValue = priced.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);
@@ -345,7 +380,11 @@ export function renderPortfolioSnapshot(dashboard: InvestingDashboardData): stri
       pricedPositionCount: priced.length,
       unpriced: dashboard.allocation.instrument.unpriced,
       allocation: dashboard.allocation.instrument.buckets.slice(0, 10),
-      sectors: dashboard.allocation.entity.buckets.slice(0, 10),
+      /* Entities are the user's own legal wrappers (private, business), not
+       * industry sectors. They kept the `sectors` name once, which told the
+       * model "private" was a sector. Each now says what it is. */
+      entityAllocation: dashboard.allocation.entity.buckets.slice(0, 10),
+      sectors: sectors && sectors.length > 0 ? sectors.slice(0, 10) : "unavailable",
       topPositions,
       problems: dashboard.problems,
     },
@@ -361,20 +400,23 @@ function parsePortfolioAgentResponse(
   snapshotHash: string,
 ): PortfolioAgentInsight {
   const parsed = extractJsonObject(text);
-  const rawSignal = String(parsed.signal ?? "").toLowerCase();
-  const signal: PortfolioAgentSignal =
-    rawSignal === "bullish" || rawSignal === "bearish" || rawSignal === "neutral"
-      ? rawSignal
-      : "neutral";
-  const confidence = clamp(Number(parsed.confidence), 0, 100);
-  const reasoning = String(parsed.reasoning ?? parsed.summary ?? "");
-  const summary = String(parsed.summary ?? reasoning);
-  const insights = Array.isArray(parsed.insights)
-    ? parsed.insights
-        .map((item) => String(item))
-        .filter(Boolean)
-        .slice(0, 5)
-    : [];
+  const signal = parsed.signal;
+  if (signal !== "bullish" && signal !== "bearish" && signal !== "neutral")
+    throw new PortfolioAgentResponseError(
+      'signal must be exactly "bullish", "bearish" or "neutral"',
+    );
+  const confidence = parsed.confidence;
+  if (
+    typeof confidence !== "number" ||
+    !Number.isFinite(confidence) ||
+    confidence < 0 ||
+    confidence > 100
+  )
+    throw new PortfolioAgentResponseError("confidence must be a number between 0 and 100");
+  const summary = requireText(parsed.summary, "summary");
+  const reasoning = requireText(parsed.reasoning, "reasoning");
+  if (!Array.isArray(parsed.insights) || parsed.insights.some((item) => typeof item !== "string"))
+    throw new PortfolioAgentResponseError("insights must be an array of strings");
   return {
     agentId: agent.id,
     displayName: agent.displayName,
@@ -382,10 +424,16 @@ function parsePortfolioAgentResponse(
     confidence,
     summary,
     reasoning,
-    insights,
+    insights: (parsed.insights as string[]).filter((item) => item.trim()).slice(0, 5),
     model,
     snapshotHash,
   };
+}
+
+function requireText(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim())
+    throw new PortfolioAgentResponseError(`${field} must be a non-empty string`);
+  return value;
 }
 
 function extractJsonObject(text: string): Record<string, unknown> {
@@ -409,10 +457,13 @@ function extractJsonObject(text: string): Record<string, unknown> {
   }
 }
 
-export async function portfolioSnapshotHash(dashboard: InvestingDashboardData): Promise<string> {
+export async function portfolioSnapshotHash(
+  dashboard: InvestingDashboardData,
+  sectors?: readonly SectorExposure[],
+): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(renderPortfolioSnapshot(dashboard)),
+    new TextEncoder().encode(renderPortfolioSnapshot(dashboard, sectors)),
   );
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"))
     .join("")
@@ -421,9 +472,4 @@ export async function portfolioSnapshotHash(dashboard: InvestingDashboardData): 
 
 function round(value: number | null | undefined, digits: number): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(digits)) : null;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
 }
