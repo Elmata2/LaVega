@@ -224,7 +224,7 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
   // in het paneel van de uitklap, en die is dicht. Ze staan wél in de DOM — zo
   // werkt <details> — dus getoetst wordt de stand en de plaats, niet afwezigheid.
   expect(fold(c).open).toBe(false);
-  expect(c.querySelector(".travel-winner .travel-journeys")).toBeNull();
+  expect(c.querySelector('.travel-winner [data-testid="travel-journeys"]')).toBeNull();
   expect(foldText(c)).toContain("Bewaren");
   expect(c.querySelector(".travel-winner")!.textContent).not.toContain("Bewaren");
 });
@@ -233,15 +233,15 @@ test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () =>
   const c = renderWithDestination();
   openFold();
 
-  const journeys = [...c.querySelectorAll(".travel-journey")];
+  const journeys = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(journeys.length).toBeGreaterThan(1);
 
   // Cheapest first, and the winner is the one the headline named.
-  expect(journeys[0].classList.contains("travel-journey-best")).toBe(true);
+  expect(journeys[0].getAttribute("data-best")).toBe("true");
   expect(journeys[0].textContent).toContain("Via Revolut betaalpas");
   expect(journeys[0].textContent).toContain("vanaf ING");
 
-  const legs = [...journeys[0].querySelectorAll(".travel-leg-name")].map(
+  const legs = [...journeys[0].querySelectorAll('[data-testid="travel-leg-name"]')].map(
     (n) => n.textContent ?? "",
   );
   expect(legs[0]).toContain("Overzetten");
@@ -262,18 +262,18 @@ test("a route with an unknown leg says so and never renders as free", () => {
   const c = renderWithDestination();
   openFold();
 
-  const unknown = c.querySelector(".travel-journey-unknown");
+  const unknown = c.querySelector('[data-testid="travel-journey"][data-unknown="true"]');
   expect(unknown).not.toBeNull();
   // ING's conversion leg was never learned, so the whole route is unpriced.
   expect(unknown!.textContent).toContain("Via ING betaalpas");
 
-  const total = unknown!.querySelector(".travel-journey-cost")!.textContent ?? "";
+  const total = unknown!.querySelector('[data-testid="travel-journey-cost"]')!.textContent ?? "";
   expect(total).toBe("onbekend");
   expect(total).not.toMatch(/[0-9]/); // not "€ 0,00", not any number
   expect(unknown!.textContent).toContain("Onbekend is niet gratis");
 
   // ...and it sorts behind the known winner.
-  const all = [...c.querySelectorAll(".travel-journey")];
+  const all = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(all.indexOf(unknown as Element)).toBeGreaterThan(0);
 });
 
@@ -429,8 +429,8 @@ test("a lookup that came back empty is not the same sentence as one never run", 
 
 test("an unpriced answer card is not marked as a winning route", () => {
   const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
-  expect(c.querySelector(".travel-winner-unpriced")).not.toBeNull();
-  expect(c.querySelector(".travel-journey-best")).toBeNull();
+  expect(c.querySelector('.travel-winner[data-priced="false"]')).not.toBeNull();
+  expect(c.querySelector('[data-testid="travel-journey"][data-best="true"]')).toBeNull();
 
   // ...and the "Wisselen" step does not repeat the impossible advice either.
   openFold();
@@ -576,7 +576,7 @@ test("while the server is looking, the block SHOWS it working and counts up", ()
     />,
   );
 
-  expect(html).toContain("spinner");
+  expect(html).toContain('data-testid="spinner"');
   expect(html).toContain("2 van 4 gevonden"); // 4 asked, 2 still pending
   expect(html).toContain("werkt zichzelf bij");
   expect(html).toContain('aria-live="polite"'); // it changes under him; say so
@@ -803,7 +803,7 @@ test("catalogue cashback is shown with its gate, never subtracted from the price
   expect(offers.textContent).toContain("0,5% cashback");
   expect(offers.textContent).toMatch(/crypto/i);
   // 1,5% minus 0,5% would have put Wirex above Revolut's 1%; it does not.
-  const rows = [...offers.querySelectorAll(".travel-journey-name")].map((n) => n.textContent ?? "");
+  const rows = [...offers.querySelectorAll('[data-testid="travel-journey-name"]')].map((n) => n.textContent ?? "");
   expect(rows.indexOf("212 Card")).toBeLessThan(rows.findIndex((r) => r.includes("Wirex")));
 });
 

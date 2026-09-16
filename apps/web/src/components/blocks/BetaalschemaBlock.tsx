@@ -183,7 +183,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
       {upcoming.length === 0 ? (
         <p className="block-empty">{c.nietsIngepland}</p>
       ) : (
-        <div className="pay-list">
+        <div className="flex flex-col">
           {upcoming.map((r) => {
             const overdue = r.date < asOf;
             const isOpen = open === r.id;
@@ -194,7 +194,12 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                  is een knop, ook een korte naam die nergens afgekapt wordt —
                  welke naam past hangt van de vensterbreedte af en die kan dit
                  component niet meten, dus één gedrag voor alle rijen is het
-                 enige dat niet soms liegt. */
+                 enige dat niet soms liegt.
+                 pay-row and pay-name stay hand-written CSS: the hover/focus/tap
+                 reveal is `.pay-row:hover .pay-name` — a descendant combinator
+                 resolveStyle cannot express, so its assertions in
+                 BetaalschemaBlock.test.tsx read blocks.css directly and are left
+                 as-is (see docs/adr/0005). */
               <button
                 type="button"
                 className="pay-row"
@@ -204,14 +209,23 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                 onClick={() => setOpen((cur) => (cur === r.id ? null : r.id))}
               >
                 <span
-                  className={`pay-date ${overdue ? "pay-date-overdue" : ""}`}
+                  className={`flex flex-col items-center justify-center flex-none w-[42px] py-1 px-0 rounded-sm leading-[1.1] ${
+                    overdue
+                      ? "bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] border border-[color-mix(in_srgb,var(--warn)_35%,transparent)]"
+                      : "bg-surface-2 border border-line"
+                  }`}
+                  data-overdue={overdue ? "true" : "false"}
                   aria-hidden="true"
                 >
-                  <span className="pay-date-day">{r.date.slice(8, 10)}</span>
-                  <span className="pay-date-month">{monthShort(locale, r.date)}</span>
+                  <span className="font-bold text-[0.95rem] tabular-nums">
+                    {r.date.slice(8, 10)}
+                  </span>
+                  <span className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted">
+                    {monthShort(locale, r.date)}
+                  </span>
                 </span>
-                <span className="pay-info">
-                  <span className="pay-label">
+                <span className="flex-1 min-w-0 flex flex-col items-start">
+                  <span className="flex items-baseline gap-2 w-full min-w-0 font-semibold">
                     {/* De naam staat in een eigen span, en dat is niet
                         cosmetisch: het afkappen zat op hetzelfde vakje als de
                         "voorspeld"-pil, dus bij een lange naam viel die pil
@@ -221,14 +235,23 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                     <span className="pay-name" title={r.label}>
                       {r.label}
                     </span>
-                    {r.predicted && <span className="pay-tag">{c.voorspeldTag}</span>}
+                    {r.predicted && (
+                      <span
+                        data-testid="pay-tag"
+                        className="flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.65rem] font-medium py-0.5 px-2 whitespace-nowrap"
+                      >
+                        {c.voorspeldTag}
+                      </span>
+                    )}
                   </span>
-                  <span className="eyebrow pay-meta">
+                  <span className="eyebrow w-full">
                     {r.date} · {r.note}
                     {overdue ? c.teLaatSuffix : ""}
                   </span>
                 </span>
-                <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                <span
+                  className={`flex-none font-semibold tabular-nums ${r.amount >= 0 ? "text-pos" : "text-neg"}`}
+                >
                   {formatEuroIn(locale, r.amount)}
                 </span>
               </button>

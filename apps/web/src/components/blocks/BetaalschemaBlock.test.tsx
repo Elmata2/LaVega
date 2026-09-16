@@ -32,7 +32,7 @@ test("BetaalschemaBlock lists the planned flows by due date, overdue flagged", (
   expect(html.indexOf("Factuur Klant BV")).toBeLessThan(html.indexOf("BTW Q3 2026"));
   expect(html).toContain(">31<");
   expect(html).toContain(">jul<");
-  expect(html).toContain("pay-date-overdue");
+  expect(html).toContain('data-overdue="true"');
   expect(html).toContain("te laat");
   expect(html).toContain("1 datum al verstreken.");
   // sign drives the amount's direction: -1 out, +1 in.
@@ -222,7 +222,7 @@ test("de voorspeld-pil valt niet met de naam mee weg", () => {
     <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
   );
   const naam = html.indexOf('class="pay-name"');
-  const pil = html.indexOf('class="pay-tag"');
+  const pil = html.indexOf('data-testid="pay-tag"');
   expect(naam).toBeGreaterThan(-1);
   expect(pil).toBeGreaterThan(naam);
   // De pil staat NA het sluiten van de naam-span, dus buiten het afkappende vak.

@@ -238,7 +238,9 @@ export function BtwBlock({
         >
           {row.amountShown ? formatEuroIn(locale, Math.abs(p.netCents as number) / 100) : c.geenBedrag}
         </span>
-        {row.amountShown && <span className="figure-vs">{c.direction[p.direction]}</span>}
+        {row.amountShown && (
+          <span className="text-muted text-[0.8rem]">{c.direction[p.direction]}</span>
+        )}
       </div>
 
       <p className="module-figure-label">

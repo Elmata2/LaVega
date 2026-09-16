@@ -114,7 +114,7 @@ test("the info tier folds away behind a count when something real outranks it", 
   // The critical alert is never folded.
   expect(c.textContent).toContain("Verwacht tekort");
   expect(c.textContent).not.toContain("Punten 0");
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(1);
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(1);
 
   const toggle = [...c.querySelectorAll("button")].find((b) =>
     (b.textContent ?? "").includes("Toon 4 ter info"),
@@ -123,14 +123,14 @@ test("the info tier folds away behind a count when something real outranks it", 
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
   expect(c.textContent).toContain("Punten 0");
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(5);
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(5);
 });
 
 test("info alerts stay open when they are the only thing there — folding them would hide the block", () => {
   const c = render(
     <AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />,
   );
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(3);
   expect(c.textContent).not.toContain("Toon 3 ter info");
 });
 
@@ -143,6 +143,6 @@ test("one or two info alerts are never folded — the toggle would cost the spac
       onBufferChange={() => {}}
     />,
   );
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
-  expect(c.querySelector(".alert-tier button")).toBeNull(); // no fold toggle
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(3);
+  expect(c.querySelector('[data-testid="alert-tier"] button')).toBeNull(); // no fold toggle
 });

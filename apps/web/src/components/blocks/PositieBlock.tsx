@@ -162,15 +162,21 @@ export default function PositieBlock({
               ))}
           </div>
 
-          <div className="entity-rows">
+          <div className="flex flex-col mt-3">
             {shown.map((r) => (
-              <div className="entity-row" key={r.entity}>
+              <div
+                className="flex items-center gap-2 py-2 px-0 border-b border-line last:border-b-0"
+                key={r.entity}
+              >
                 <span className="dot" style={{ background: r.color }} aria-hidden="true" />
-                <span className="entity-row-name" title={`${r.entity} · ${r.count} rek.`}>
+                <span
+                  className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.9rem]"
+                  title={`${r.entity} · ${r.count} rek.`}
+                >
                   {r.entity}
                 </span>
                 <span
-                  className={`entity-row-balance ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
+                  className={`flex-none font-semibold text-[0.9rem] tabular-nums ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
                 >
                   {r.balance === null ? c.onbekend : formatEuroIn(locale, r.balance)}
                 </span>

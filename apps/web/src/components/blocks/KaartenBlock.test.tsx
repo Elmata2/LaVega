@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import KaartenBlock, { bankLogo, ibanTail } from "./KaartenBlock";
+import KaartenBlock, { CARD_STRIP_CLASS, bankLogo, ibanTail } from "./KaartenBlock";
+import { resolved } from "../../test-support/resolveStyle.js";
 import { BANK_LOGOS } from "../../assets/bank-logos.generated";
 import { accounts } from "./fixtures";
 
@@ -192,10 +193,18 @@ test("de kaart heeft een hover-toestand, en die raakt de leesbaarheid niet", () 
 });
 
 test("geen animatie op de kaart — een toestand mag, een overgang niet", () => {
-  for (const selector of [".bank-card", ".bank-card:hover", ".card-strip"]) {
+  for (const selector of [".bank-card", ".bank-card:hover"]) {
     const body = rule(selector);
     expect(body, `${selector} staat niet in blocks.css`).not.toBe("");
     expect(body).not.toContain("transition");
     expect(body).not.toContain("animation");
   }
+  // .card-strip converted to Tailwind (docs/adr/0005): resolved against the
+  // classes the strip actually renders, not the deleted rule's text.
+  const stripClasses = CARD_STRIP_CLASS.split(" ");
+  expect(resolved(stripClasses, "transition")).toBeUndefined();
+  // Tailwind's transition-* utilities emit transition-property, not the
+  // shorthand — checked separately or a transition-all would go undetected.
+  expect(resolved(stripClasses, "transition-property")).toBeUndefined();
+  expect(resolved(stripClasses, "animation")).toBeUndefined();
 });

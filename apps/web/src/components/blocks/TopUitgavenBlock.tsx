@@ -83,7 +83,7 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
     // be read as an exact one.
     return (
       <Module title={c.title} height="tall" footer={<>{c.maandTOvPrev(month, prev)}</>}>
-        <p className="cat-nocompare">
+        <p className="mt-0 mx-0 mb-3 py-2 px-3 border border-dashed border-line rounded bg-surface-2 text-muted text-[0.8rem]">
           {c.nietVergelijkbaar(month, prev)}
           {excludedOut > 0 && <>{c.erStaatWelUitgaven(formatEuroIn(locale, excludedOut))}</>}
         </p>
@@ -105,7 +105,7 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
           {(current.partial || excluded > 0) && (
             // The comparison holds, but not without qualification — and the
             // qualification is stated next to it, not left for him to guess.
-            <p className="cat-nocompare">
+            <p className="mt-0 mx-0 mb-3 py-2 px-3 border border-dashed border-line rounded bg-surface-2 text-muted text-[0.8rem]">
               {current.partial && (
                 <>{c.telDagenTotNuToe(month, current.daysObserved, current.daysInMonth)}</>
               )}

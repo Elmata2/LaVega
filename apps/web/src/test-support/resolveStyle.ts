@@ -121,9 +121,13 @@ function targets(selector: string, classes: readonly string[], state: string): b
     return false;
   }
   if (!s.startsWith(".")) return false;
+  /* Split on an UNESCAPED dot only. A plain `.split(".")` also cuts inside an
+   * arbitrary value's own escaped decimal point — `.text-\[0\.8rem\]` split
+   * into "text-\[0" and "8rem\]", neither of which is a real class, so every
+   * arbitrary rem/em value with a fraction failed to match here. */
   return s
     .slice(1)
-    .split(".")
+    .split(/(?<!\\)\./)
     .map((c) => c.replace(/\\/g, ""))
     .every((c) => classes.includes(c));
 }

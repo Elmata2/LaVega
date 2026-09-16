@@ -196,13 +196,15 @@ function Comparison({
   missing: string;
 }) {
   return (
-    <div className="position-compare-item">
+    <div className="min-w-0">
       <div className="eyebrow">{label}</div>
       {then === null ? (
-        <div className="position-compare-missing">{missing}</div>
+        <div className="mt-[2px] text-muted text-[0.9rem]">{missing}</div>
       ) : (
-        <div className="position-compare-figure">
-          <span className="position-compare-value">{formatEuroIn(locale, then)}</span>
+        <div className="flex items-baseline gap-2 flex-wrap mt-[2px]">
+          <span className="font-semibold text-[1.05rem] tabular-nums">
+            {formatEuroIn(locale, then)}
+          </span>
           <DeltaPill pct={changePct(now, then)} upIsGood={true} />
         </div>
       )}
@@ -308,7 +310,7 @@ export default function SaldoBlock({
             the move against the position one week ago, so the card says so
             next to it — and says nothing at all when there is no week to
             compare against. */}
-        {weekPct !== null && <span className="figure-vs">{c.tOvVorigeWeek}</span>}
+        {weekPct !== null && <span className="text-muted text-[0.8rem]">{c.tOvVorigeWeek}</span>}
       </div>
       <p className="module-figure-label">
         {accounts.length === 0
@@ -349,7 +351,7 @@ export default function SaldoBlock({
           />
         </div>
       ) : (
-        <p className="block-empty position-graph-empty">
+        <p className="block-empty mt-4 p-4 border border-dashed border-line rounded bg-surface-2">
           {series.coverageDays === 0
             ? limitLabel
               ? c.heeftNogGeenTransacties(limitLabel)
@@ -358,7 +360,7 @@ export default function SaldoBlock({
         </p>
       )}
 
-      <div className="position-compare">
+      <div className="flex flex-wrap gap-8 mt-4 pt-3 border-t border-line">
         <Comparison
           locale={locale}
           label={c.vorigeWeek}

@@ -84,7 +84,8 @@ export default function RecenteTransactiesBlock({
       period={
         <input
           type="search"
-          className="tx-search"
+          className="w-60 max-w-full rounded-pill py-[6px] px-[14px] text-[0.8rem] max-[520px]:w-full"
+          data-testid="tx-search"
           placeholder={c.zoekPlaceholder}
           aria-label={c.zoekenAria}
           value={query}
@@ -114,16 +115,17 @@ export default function RecenteTransactiesBlock({
                     {/* Where the account sits is context, not identity. On a
                         phone it is what gives way so the merchant name and the
                         amount keep their line. */}
-                    <span className="tx-meta-extra">
+                    <span className="max-[520px]:hidden">
                       {" · "}
                       {tx.entity} · {tx.bank}
                     </span>
                   </div>
                 </div>
-                <div className="tx-row-right">
+                <div className="flex items-center gap-3 flex-none">
                   <button
                     type="button"
-                    className="tx-chip tx-chip-button"
+                    className="inline-flex items-center flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.72rem] py-[3px] px-[10px] whitespace-nowrap max-[520px]:text-[0.68rem] max-[520px]:px-2 cursor-pointer hover:text-ink hover:border-accent"
+                    data-testid="tx-chip"
                     title={c.bekijkTransactiesIn(categoryLabel(locale, category))}
                     onClick={() => onSelectCategory(category)}
                   >
