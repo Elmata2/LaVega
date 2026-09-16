@@ -164,33 +164,6 @@
   font-size: 0.85rem;
 }
 
-.delta-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: var(--pill);
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-2);
-  color: var(--muted);
-}
-/* Money semantics, not chart semantics: up = more money out is handled by the
- * caller choosing the class, so a rising balance and a rising cost can differ. */
-.delta-pill.delta-up {
-  background: rgba(78, 122, 58, 0.12);
-  color: var(--pos);
-}
-.delta-pill.delta-down {
-  background: rgba(176, 68, 46, 0.12);
-  color: var(--neg);
-}
-.delta-pill.delta-flat {
-  background: var(--surface-2);
-  color: var(--muted);
-}
-
 /* ---------- Breakpoints: the grid collapses, spans clamp to full width ---------- */
 
 @media (max-width: 1200px) {

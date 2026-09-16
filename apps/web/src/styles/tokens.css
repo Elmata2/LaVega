@@ -42,6 +42,16 @@
   --pos: #4e7a3a; /* money in — natural green */
   --neg: #b0442e; /* money out / debt — terracotta */
   --warn: #b0781e; /* attention — amber */
+  /* The 12% tints behind the delta pills. Derived rather than written out: they
+   * were rgba(78,122,58,.12) and rgba(176,68,46,.12), two hand-copied values
+   * that would not follow --pos/--neg if either changed.
+   *
+   * color-mix in srgb, not Tailwind's `bg-pos/12`. That modifier SILENTLY emits
+   * full opacity here, because @theme inline points --color-pos at another
+   * variable and Tailwind cannot resolve it at build time to mix against. A
+   * solid green pill, no error, no failing test. */
+  --pos-tint: color-mix(in srgb, var(--pos) 12%, transparent);
+  --neg-tint: color-mix(in srgb, var(--neg) 12%, transparent);
   /* Data-viz accents (charts, category dots) */
   --chart-blue: #3b6ea5;
   --chart-purple: #7b6cc4;
@@ -100,6 +110,8 @@
   --color-pos: var(--pos);
   --color-neg: var(--neg);
   --color-warn: var(--warn);
+  --color-pos-tint: var(--pos-tint);
+  --color-neg-tint: var(--neg-tint);
   --color-chart-blue: var(--chart-blue);
   --color-chart-purple: var(--chart-purple);
   --color-chart-teal: var(--chart-teal);
