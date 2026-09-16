@@ -16,12 +16,36 @@ function adapters(sync: () => Promise<BrokerResult>) {
   return [{ broker: "trading212" as const, adapter: { sync } }];
 }
 
-const empty = (overrides: Partial<BrokerResult>): BrokerResult => ({
-  positions: [],
-  trades: [],
+const empty = (overrides: {
+  positions?: BrokerResult["sections"]["positions"]["rows"];
+  trades?: BrokerResult["sections"]["trades"]["rows"];
+  problems?: string[];
+  tradesComplete?: boolean;
+  positionsComplete?: boolean;
+  cashBalancesComplete?: boolean;
+  resume?: BrokerResult["resume"];
+  retryAfter?: string;
+}): BrokerResult => ({
+  sections: {
+    positions: {
+      status: overrides.positionsComplete === false ? "unavailable" : "complete",
+      rows: overrides.positions ?? [],
+    },
+    trades: {
+      status: overrides.tradesComplete === false ? "partial" : "complete",
+      rows: overrides.trades ?? [],
+    },
+    dividends: { status: "complete", rows: [] },
+    cashBalances: {
+      status: overrides.cashBalancesComplete === false ? "unavailable" : "complete",
+      rows: [],
+    },
+    cashFlows: { status: "complete", rows: [] },
+  },
   source: "trading-212",
-  problems: [],
-  ...overrides,
+  problems: overrides.problems ?? [],
+  resume: overrides.resume,
+  retryAfter: overrides.retryAfter,
 });
 
 function run(

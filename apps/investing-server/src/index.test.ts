@@ -3,7 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore, createMemoryBrokerSyncStateStore } from "@lavega/adapters";
+import {
+  createInMemoryPriceStore,
+  createMemoryBrokerSyncStateStore,
+  type BrokerResult,
+} from "@lavega/adapters";
 import {
   createRuntimeApp,
   createRuntimeBrokerCredentialSetup,
@@ -13,6 +17,41 @@ import {
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
+
+function brokerResult(input: Record<string, unknown>): BrokerResult {
+  const status = (complete: unknown): "complete" | "unavailable" =>
+    complete === false ? "unavailable" : "complete";
+  return {
+    sections: {
+      positions: {
+        status: status(input.positionsComplete),
+        rows: (input.positions ?? []) as never[],
+      },
+      trades: {
+        status: input.tradesComplete === false ? "partial" : "complete",
+        rows: (input.trades ?? []) as never[],
+      },
+      dividends: { status: "complete", rows: (input.dividends ?? []) as never[] },
+      cashBalances: {
+        status: status(input.cashBalancesComplete),
+        rows: (input.cashBalances ?? []) as never[],
+      },
+      cashFlows: { status: "complete", rows: (input.cashFlows ?? []) as never[] },
+    },
+    source: String(input.source ?? "trading-212"),
+    problems: (input.problems ?? []) as string[],
+    ...(input.retryAfter ? { retryAfter: String(input.retryAfter) } : {}),
+    ...(input.resume ? { resume: input.resume as BrokerResult["resume"] } : {}),
+  };
+}
+
+function partialTrades(result: BrokerResult, problems: string[]): BrokerResult {
+  return {
+    ...result,
+    sections: { ...result.sections, trades: { ...result.sections.trades, status: "partial" } },
+    problems,
+  };
+}
 
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -191,7 +230,7 @@ test("cached broker skip retains last successful positions", () => {
         broker: "trading212",
         status: "synced",
         lastSyncedAt: "2026-08-19T14:00:00.000Z",
-        result: {
+        result: brokerResult({
           positions: [
             {
               symbol: "AAPL",
@@ -207,7 +246,7 @@ test("cached broker skip retains last successful positions", () => {
           trades: [],
           source: "trading-212",
           problems: [],
-        },
+        }),
       },
     ],
     problems: [],
@@ -236,7 +275,7 @@ test("runtime broker cache restores encrypted snapshot after restart", () => {
         broker: "trading212",
         status: "synced",
         lastSyncedAt: "2026-08-19T14:00:00.000Z",
-        result: {
+        result: brokerResult({
           positions: [
             {
               symbol: "AAPL",
@@ -252,7 +291,7 @@ test("runtime broker cache restores encrypted snapshot after restart", () => {
           trades: [],
           source: "trading-212",
           problems: [],
-        },
+        }),
       },
     ],
     problems: [],
@@ -273,7 +312,7 @@ test("runtime broker cache persists cash facts and increments data version", () 
         broker: "ibkr",
         status: "synced",
         lastSyncedAt: "2026-08-19T14:00:00.000Z",
-        result: {
+        result: brokerResult({
           positions: [],
           trades: [],
           dividends: [],
@@ -293,7 +332,7 @@ test("runtime broker cache persists cash facts and increments data version", () 
           ],
           source: "ibkr-flex",
           problems: [],
-        },
+        }),
       },
     ],
     problems: [],
@@ -350,24 +389,25 @@ test("runtime dashboard separates selected symbols and returns unknown detail wi
 
 test("a partial result with fresh broker data updates the snapshot, a null result does not", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (symbol: string) => ({
-    positions: [
-      {
-        tenantId: "local",
-        symbol,
-        quantity: 1,
-        averagePrice: 10,
-        marketPrice: 10,
-        marketValue: 10,
-        currency: "EUR",
-        entity: "BV",
-        asOf: "2026-08-19",
-      },
-    ],
-    trades: [],
-    source: "trading-212",
-    problems: [],
-  });
+  const result = (symbol: string) =>
+    brokerResult({
+      positions: [
+        {
+          tenantId: "local",
+          symbol,
+          quantity: 1,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 10,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-08-19",
+        },
+      ],
+      trades: [],
+      source: "trading-212",
+      problems: [],
+    });
   cache.apply({
     outcomes: [
       {
@@ -385,7 +425,7 @@ test("a partial result with fresh broker data updates the snapshot, a null resul
         broker: "trading212",
         status: "problem",
         lastSyncedAt: "2026-08-19T14:00:00.000Z",
-        result: { ...result("MSFT"), problems: ["partial sync"] },
+        result: result("MSFT"),
       },
     ],
     problems: ["trading212: partial sync"],
@@ -408,23 +448,24 @@ test("a partial result with fresh broker data updates the snapshot, a null resul
 
 test("a truncated trade history keeps the stored trades instead of overwriting them", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({
-    positions: [],
-    trades: trades.map((brokerTradeId) => ({
-      entity: "BV",
-      date: "2026-08-19",
-      symbol: "AAPL",
-      side: "buy" as const,
-      quantity: 1,
-      price: 10,
-      amount: 10,
-      currency: "EUR",
-      commission: 0,
-      brokerTradeId,
-    })),
-    source: "trading-212",
-    problems: [],
-  });
+  const result = (trades: string[]) =>
+    brokerResult({
+      positions: [],
+      trades: trades.map((brokerTradeId) => ({
+        entity: "BV",
+        date: "2026-08-19",
+        symbol: "AAPL",
+        side: "buy" as const,
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId,
+      })),
+      source: "trading-212",
+      problems: [],
+    });
   cache.apply({
     outcomes: [
       {
@@ -443,7 +484,7 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
         broker: "trading212",
         status: "problem",
         lastSyncedAt: null,
-        result: { ...result(["partial-1"]), problems: ["history failed"], tradesComplete: false },
+        result: partialTrades(result(["partial-1"]), ["history failed"]),
       },
     ],
     problems: ["trading212: history failed"],
@@ -465,7 +506,7 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
 
 test("a failed holdings read keeps last-good positions instead of replacing them with empty", () => {
   const cache = createRuntimeBrokerDataCache();
-  const good = {
+  const good = brokerResult({
     positions: [
       {
         tenantId: "local",
@@ -505,7 +546,7 @@ test("a failed holdings read keeps last-good positions instead of replacing them
     ],
     source: "trading-212",
     problems: [],
-  };
+  });
   cache.apply({
     outcomes: [
       {
@@ -524,16 +565,15 @@ test("a failed holdings read keeps last-good positions instead of replacing them
         broker: "trading212",
         status: "problem",
         lastSyncedAt: null,
-        result: {
+        result: brokerResult({
           positions: [],
-          trades: good.trades,
+          trades: good.sections.trades.rows,
           cashBalances: [],
           source: "trading-212",
           problems: ["Trading 212 holdings request failed with HTTP 503"],
-          tradesComplete: true,
           positionsComplete: false,
           cashBalancesComplete: false,
-        },
+        }),
       },
     ],
     problems: ["trading212: Trading 212 holdings request failed with HTTP 503"],
@@ -546,30 +586,31 @@ test("a failed holdings read keeps last-good positions instead of replacing them
 
 test("a first truncated history still keeps the trades it did read", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({
-    positions: [],
-    trades: trades.map((brokerTradeId) => ({
-      entity: "BV",
-      date: "2026-08-19",
-      symbol: "AAPL",
-      side: "buy" as const,
-      quantity: 1,
-      price: 10,
-      amount: 10,
-      currency: "EUR",
-      commission: 0,
-      brokerTradeId,
-    })),
-    source: "trading-212",
-    problems: [],
-  });
+  const result = (trades: string[]) =>
+    brokerResult({
+      positions: [],
+      trades: trades.map((brokerTradeId) => ({
+        entity: "BV",
+        date: "2026-08-19",
+        symbol: "AAPL",
+        side: "buy" as const,
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId,
+      })),
+      source: "trading-212",
+      problems: [],
+    });
   cache.apply({
     outcomes: [
       {
         broker: "trading212",
         status: "problem",
         lastSyncedAt: null,
-        result: { ...result(["partial-1"]), problems: ["host time limit"], tradesComplete: false },
+        result: partialTrades(result(["partial-1"]), ["host time limit"]),
       },
     ],
     problems: ["trading212: host time limit"],
@@ -758,7 +799,7 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
         broker: "trading212",
         status: "problem",
         lastSyncedAt: null,
-        result: {
+        result: brokerResult({
           positions: [
             {
               symbol: "AAPL",
@@ -793,7 +834,7 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
           positionsComplete: true,
           cashBalancesComplete: true,
           resume: { ordersNextPagePath: "/next" },
-        },
+        }),
       },
     ],
     problems: [

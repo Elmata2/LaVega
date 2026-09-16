@@ -129,7 +129,7 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
   expect(result.source).toBe("trading-212");
   expect(result.problems).toEqual([]);
   // `asOf` is the date the broker was read, not the date the holding was opened.
-  expect(result.positions).toMatchObject([
+  expect(result.sections.positions.rows).toMatchObject([
     {
       entity: "Holding BV",
       symbol: "AAPL",
@@ -142,7 +142,7 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
       asOf: "2026-08-21",
     },
   ]);
-  expect(result.trades).toMatchObject([
+  expect(result.sections.trades.rows).toMatchObject([
     {
       entity: "Holding BV",
       symbol: "AAPL",
@@ -154,7 +154,7 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
     },
     { entity: "Holding BV", symbol: "MSFT", side: "sell" },
   ]);
-  expect(result.cashBalances).toMatchObject([
+  expect(result.sections.cashBalances.rows).toMatchObject([
     { broker: "trading212", entity: "Holding BV", currency: "EUR", amount: 100 },
   ]);
 });
@@ -170,7 +170,9 @@ test("maps one trade per fill and does not use order-level filledValue as fill a
   });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL", quantity: 2, price: 10, amount: 20 }]);
+  expect(result.sections.trades.rows).toMatchObject([
+    { symbol: "AAPL", quantity: 2, price: 10, amount: 20 },
+  ]);
 });
 
 test("sync returns collected trades and problem when later page fails", async () => {
@@ -185,8 +187,8 @@ test("sync returns collected trades and problem when later page fails", async ()
     entity: "BV",
   });
 
-  expect(result.trades).toHaveLength(1);
-  expect(result.tradesComplete).toBe(false);
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.trades.status).toBe("partial");
   expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
   expect(result.resume?.ordersNextPagePath).toContain("/next");
 });
@@ -202,7 +204,7 @@ test("the next sync continues order history from the stored nextPagePath", async
   });
   const adapter = createTrading212Adapter({ token: "token", secret: "secret", baseUrl });
   const first = await adapter.sync({ entity: "BV" });
-  expect(first.trades).toHaveLength(2);
+  expect(first.sections.trades.rows).toHaveLength(2);
 
   paths.length = 0;
   const second = await adapter.sync({
@@ -212,8 +214,8 @@ test("the next sync continues order history from the stored nextPagePath", async
 
   expect(paths.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toEqual([]);
   expect(paths).toContain("/next");
-  expect(second.trades).toMatchObject([{ symbol: "MSFT", side: "sell" }]);
-  expect(second.tradesComplete).toBe(true);
+  expect(second.sections.trades.rows).toMatchObject([{ symbol: "MSFT", side: "sell" }]);
+  expect(second.sections.trades.status).toBe("complete");
   expect(second.resume).toBeUndefined();
 });
 
@@ -226,10 +228,10 @@ test("holdings failure returns trades and holdings problem", async () => {
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.trades).toHaveLength(1);
-  expect(result.positions).toEqual([]);
-  expect(result.positionsComplete).toBe(false);
-  expect(result.tradesComplete).toBe(true);
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.positions.rows).toEqual([]);
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.sections.trades.status).toBe("complete");
   expect(result.problems).toEqual(["Trading 212 holdings request failed with HTTP 503"]);
 });
 
@@ -242,8 +244,8 @@ test("rejected credentials return empty arrays and Trading 212 problem", async (
     entity: "BV",
   });
 
-  expect(result.positions).toEqual([]);
-  expect(result.trades).toEqual([]);
+  expect(result.sections.positions.rows).toEqual([]);
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems[0]).toContain("Trading 212");
 });
 
@@ -268,7 +270,7 @@ test("retries rate-limited order-history request using Retry-After", async () =>
 
   expect(orderRequests).toBe(3);
   expect(result.problems).toEqual([]);
-  expect(result.trades).toHaveLength(1);
+  expect(result.sections.trades.rows).toHaveLength(1);
 });
 
 test("malformed order-history payload becomes a problem without throwing", async () => {
@@ -281,7 +283,7 @@ test("malformed order-history payload becomes a problem without throwing", async
     entity: "BV",
   });
 
-  expect(result.trades).toEqual([]);
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
@@ -316,7 +318,7 @@ test("maps sell fills with negative quantities to positive quantity and side sel
   });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
+  expect(result.sections.trades.rows).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
 });
 
 test("ignores non-trade fill rows and maps nested instruments", async () => {
@@ -366,7 +368,7 @@ test("ignores non-trade fill rows and maps nested instruments", async () => {
   });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
+  expect(result.sections.trades.rows).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
 });
 
 test("schema-mismatched order rows become problems instead of silent empty success", async () => {
@@ -378,7 +380,7 @@ test("schema-mismatched order rows become problems instead of silent empty succe
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.trades).toEqual([]);
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 historical order fill is missing or invalid"]);
 });
 
@@ -397,7 +399,7 @@ test("a pending order without a fill is skipped, not reported as a problem", asy
     entity: "BV",
   });
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL" }]);
+  expect(result.sections.trades.rows).toMatchObject([{ symbol: "AAPL" }]);
 });
 
 test("malformed holdings rows become problems without taking trades down", async () => {
@@ -409,8 +411,8 @@ test("malformed holdings rows become problems without taking trades down", async
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.trades).toHaveLength(1);
-  expect(result.positions).toEqual([]);
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.positions.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 position instrument is missing or invalid"]);
 });
 
@@ -500,16 +502,16 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
   });
 
   expect(result.problems).toEqual([]);
-  expect(result.cashBalances).toMatchObject([
+  expect(result.sections.cashBalances.rows).toMatchObject([
     { amount: 250, currency: "EUR", broker: "trading212" },
   ]);
-  expect(result.cashFlows).toMatchObject([
+  expect(result.sections.cashFlows.rows).toMatchObject([
     { brokerFlowId: "deposit-1", amount: 100, kind: "deposit", currency: "EUR" },
     { brokerFlowId: "fee-1", amount: -2, kind: "fee", currency: "EUR" },
     { brokerFlowId: "deposit-reversal", amount: -1, kind: "deposit", currency: "EUR" },
     { brokerFlowId: "withdraw-1", amount: -10, kind: "withdrawal", currency: "EUR" },
   ]);
-  expect(result.dividends).toMatchObject([
+  expect(result.sections.dividends.rows).toMatchObject([
     {
       brokerDividendId: "dividend-1",
       broker: "trading212",
@@ -561,10 +563,12 @@ test("counts inPies and reservedForOrders toward the balance instead of discardi
     entity: "BV",
   });
 
-  expect(result.cashBalances).toEqual([
+  expect(result.sections.cashBalances.rows).toEqual([
     expect.objectContaining({ broker: "trading212", currency: "EUR", amount: 107 }),
   ]);
-  expect(result.cashFlows).toMatchObject([{ brokerFlowId: "future-1", amount: -4, kind: "other" }]);
+  expect(result.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "future-1", amount: -4, kind: "other" },
+  ]);
   expect(result.problems).toEqual(
     expect.arrayContaining([
       "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
@@ -607,7 +611,7 @@ test("repeated order-history nextPagePath stops with an explicit partial-history
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.tradesComplete).toBe(false);
+  expect(result.sections.trades.status).toBe("partial");
   expect(result.problems).toContain("Trading 212 orders pagination repeated nextPagePath");
 });
 
@@ -650,10 +654,8 @@ test("skipped non-trade fills are counted per page in diagnostics", async () => 
     },
   }).sync({ entity: "BV" });
 
-  expect(result.trades).toHaveLength(1);
-  expect(events).toEqual([
-    { type: "history-page", skipped: 1, skippedTypes: ["STOCK_SPLIT"] },
-  ]);
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(events).toEqual([{ type: "history-page", skipped: 1, skippedTypes: ["STOCK_SPLIT"] }]);
 });
 
 test("average price falls back to walletImpact totalCost when averagePricePaid is missing", async () => {
@@ -675,5 +677,5 @@ test("average price falls back to walletImpact totalCost when averagePricePaid i
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.positions).toMatchObject([{ symbol: "AAPL", averagePrice: 150.25 }]);
+  expect(result.sections.positions.rows).toMatchObject([{ symbol: "AAPL", averagePrice: 150.25 }]);
 });
