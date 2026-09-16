@@ -11,8 +11,8 @@ test("DeGiro file import stamps caller entity on every trade", async () => {
   });
   expect(result.source).toBe("DeGiro");
   expect(result.problems).toEqual([]);
-  expect(result.positions).toEqual([]);
-  expect(result.trades).toMatchObject([
+  expect(result.sections.positions.rows).toEqual([]);
+  expect(result.sections.trades.rows).toMatchObject([
     { entity: "BV1", symbol: "ETF", side: "sell", quantity: 2 },
   ]);
 });
@@ -23,8 +23,8 @@ test("DeGiro file import returns problems for empty input", async () => {
     text: "",
     entity: "BV1",
   });
-  expect(result.positions).toEqual([]);
-  expect(result.trades).toEqual([]);
+  expect(result.sections.positions.rows).toEqual([]);
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems.length).toBeGreaterThan(0);
 });
 
@@ -38,8 +38,8 @@ test("DeGiro file import stamps caller entity and broker provenance on positions
   });
   expect(result.source).toBe("DeGiro");
   expect(result.problems).toEqual([]);
-  expect(result.trades).toEqual([]);
-  expect(result.positions).toEqual([
+  expect(result.sections.trades.rows).toEqual([]);
+  expect(result.sections.positions.rows).toEqual([
     {
       entity: "BV2",
       broker: "degiro",

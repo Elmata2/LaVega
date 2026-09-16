@@ -192,8 +192,8 @@ test("full order history syncs within the published Trading 212 rate limits", as
     }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
-    expect(result.trades).toHaveLength(TOTAL_ORDERS);
-    expect(result.positions).toHaveLength(1);
+    expect(result.sections.trades.rows).toHaveLength(TOTAL_ORDERS);
+    expect(result.sections.positions.rows).toHaveLength(1);
     // 150 orders at the provider maximum of 50 per page is 3 requests, well
     // inside the 6-per-minute window: no waiting, no rejection.
     expect(
@@ -220,7 +220,7 @@ test("paces across windows instead of burning retries on rejected requests", asy
     }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
-    expect(result.trades).toHaveLength(400);
+    expect(result.sections.trades.rows).toHaveLength(400);
     expect(result.retryAfter).toBeUndefined();
     // The budget headers say when the window reopens, so the sync waits it out
     // up front rather than spending a request to be told it is spent.
@@ -260,10 +260,10 @@ test("large order history continues across every required provider window", asyn
     }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
-    expect(result.trades).toHaveLength(3_000);
+    expect(result.sections.trades.rows).toHaveLength(3_000);
     expect(result.retryAfter).toBeUndefined();
     expect(clock.now() - START_MS).toBeGreaterThan(5 * 60_000);
-    expect(result.positions).toHaveLength(1);
+    expect(result.sections.positions.rows).toHaveLength(1);
   } finally {
     clock.restore();
   }
@@ -281,9 +281,9 @@ test("a host deadline stops before the rate-limit wait and leaves a resume curso
       deadlineMs: START_MS + 10_000,
     }).sync({ entity: "BV" });
 
-    expect(result.tradesComplete).toBe(false);
-    expect(result.trades).toHaveLength(300);
-    expect(result.positions).toHaveLength(1);
+    expect(result.sections.trades.status).toBe("partial");
+    expect(result.sections.trades.rows).toHaveLength(300);
+    expect(result.sections.positions.rows).toHaveLength(1);
     expect(result.resume?.ordersNextPagePath).toContain("cursor=300");
     expect(result.problems).toEqual(
       expect.arrayContaining([
@@ -317,8 +317,8 @@ test("a resumed sync continues from the stored cursor and finishes the history",
       baseUrl: "https://live.trading212.com",
     }).sync({ entity: "BV", resume: first.resume });
 
-    expect(second.trades).toHaveLength(100);
-    expect(second.tradesComplete).toBe(true);
+    expect(second.sections.trades.rows).toHaveLength(100);
+    expect(second.sections.trades.status).toBe("complete");
     expect(second.resume).toBeUndefined();
     expect(second.problems).toEqual([]);
   } finally {

@@ -51,16 +51,20 @@ test("adapters report missing credentials with their own wording", async () => {
 
   const ibkr = await adapters[0].adapter.sync({ entity: "personal" });
   expect(ibkr).toMatchObject({
-    positions: [],
-    trades: [],
+    sections: {
+      positions: { status: "unavailable", rows: [] },
+      trades: { status: "unavailable", rows: [] },
+    },
     source: "ibkr-flex",
     problems: ["IBKR: credentials are not configured"],
   });
 
   const trading212 = await adapters[1].adapter.sync({ entity: "personal" });
   expect(trading212).toMatchObject({
-    positions: [],
-    trades: [],
+    sections: {
+      positions: { status: "unavailable", rows: [] },
+      trades: { status: "unavailable", rows: [] },
+    },
     source: "trading-212",
     problems: ["Trading 212: credentials are not configured"],
   });
@@ -100,7 +104,7 @@ test("stored credentials reach the broker adapters together with env config", as
 
   const trading212 = await adapters[1].adapter.sync({ entity: "personal" });
   expect(trading212.problems).toEqual([]);
-  expect(trading212.positions).toEqual([]);
+  expect(trading212.sections.positions.rows).toEqual([]);
 
   // Diagnostics flow through to the caller and keep the structured-log line.
   const log = vi.spyOn(console, "log").mockImplementation(() => {});

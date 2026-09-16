@@ -9,16 +9,24 @@ import {
   type TradeSide,
 } from "@lavega/core";
 import type { TradeWithoutId } from "@lavega/core";
+import type { BrokerSection, BrokerSections } from "../BrokerAccessAdapter.js";
 
 type Attributes = Record<string, string>;
 export type FlexStatementResult = {
-  positions: Position[];
-  trades: TradeWithoutId[];
-  dividends: Dividend[];
-  cashBalances: CashBalance[];
-  cashFlows: CashFlow[];
+  sections: BrokerSections;
   problems: string[];
 };
+
+function section<T>(rows: T[], present: boolean, problems: string[]): BrokerSection<T> {
+  return {
+    status: !present ? "unavailable" : problems.length > 0 ? "partial" : "complete",
+    rows,
+  };
+}
+
+function hasTag(xml: string, tag: string): boolean {
+  return new RegExp(`<${tag}(?:\\s|>)`, "i").test(xml);
+}
 
 const numberOrNull = (value: string | undefined): number | null => {
   if (value === undefined || value.trim() === "") return null;
@@ -274,11 +282,13 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
 export function parseFlexStatement(xml: string, entity: string): FlexStatementResult {
   if (!xml.includes("<FlexStatements") && !xml.includes("<FlexQueryResponse")) {
     return {
-      positions: [],
-      trades: [],
-      dividends: [],
-      cashBalances: [],
-      cashFlows: [],
+      sections: {
+        positions: { status: "unavailable", rows: [] },
+        trades: { status: "unavailable", rows: [] },
+        dividends: { status: "unavailable", rows: [] },
+        cashBalances: { status: "unavailable", rows: [] },
+        cashFlows: { status: "unavailable", rows: [] },
+      },
       problems: ["IBKR Flex response is not a statement"],
     };
   }
@@ -287,23 +297,26 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
     (xml.includes("<FlexQueryResponse") && !xml.includes("</FlexQueryResponse>"))
   ) {
     return {
-      positions: [],
-      trades: [],
-      dividends: [],
-      cashBalances: [],
-      cashFlows: [],
+      sections: {
+        positions: { status: "unavailable", rows: [] },
+        trades: { status: "unavailable", rows: [] },
+        dividends: { status: "unavailable", rows: [] },
+        cashBalances: { status: "unavailable", rows: [] },
+        cashFlows: { status: "unavailable", rows: [] },
+      },
       problems: ["IBKR Flex response is malformed"],
     };
   }
 
   const positions: Position[] = [];
   const trades: TradeWithoutId[] = [];
-  const problems: string[] = [];
+  const positionProblems: string[] = [];
+  const tradeProblems: string[] = [];
   for (const attrs of rows(xml, "OpenPosition")) {
     try {
       positions.push(parsePosition(attrs, entity));
     } catch (error) {
-      problems.push(
+      positionProblems.push(
         error instanceof Error ? error.message : "IBKR Flex OpenPosition row is invalid",
       );
     }
@@ -312,17 +325,19 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
     try {
       trades.push(parseTrade(attrs, entity));
     } catch (error) {
-      problems.push(error instanceof Error ? error.message : "IBKR Flex Trade row is invalid");
+      tradeProblems.push(error instanceof Error ? error.message : "IBKR Flex Trade row is invalid");
     }
   }
   const cash = parseCashBalances(xml, entity);
   const funds = parseStatementFunds(xml, entity);
   return {
-    positions,
-    trades,
-    dividends: funds.dividends,
-    cashBalances: cash.cashBalances,
-    cashFlows: funds.cashFlows,
-    problems: [...problems, ...cash.problems, ...funds.problems],
+    sections: {
+      positions: section(positions, hasTag(xml, "OpenPositions"), positionProblems),
+      trades: section(trades, hasTag(xml, "Trades"), tradeProblems),
+      dividends: section(funds.dividends, hasTag(xml, "StatementOfFunds"), funds.problems),
+      cashBalances: section(cash.cashBalances, hasTag(xml, "CashReport"), cash.problems),
+      cashFlows: section(funds.cashFlows, hasTag(xml, "StatementOfFunds"), funds.problems),
+    },
+    problems: [...positionProblems, ...tradeProblems, ...cash.problems, ...funds.problems],
   };
 }

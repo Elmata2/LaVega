@@ -33,15 +33,11 @@ import {
   type Trade,
 } from "@lavega/core";
 import {
-  cashBalancesComplete,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
-  historyPending,
-  positionsComplete,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
-  tradesComplete,
   type BrokerSyncStateStore,
   type PriceStore,
   type ScheduledSyncResult,
@@ -229,6 +225,16 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
   return [...byId.values()];
 }
 
+function stableTradeId(trade: Omit<Trade, "id">): string {
+  if (trade.brokerTradeId) return trade.brokerTradeId;
+  let value = 2166136261;
+  for (const character of JSON.stringify(trade)) {
+    value ^= character.charCodeAt(0);
+    value = Math.imul(value, 16777619);
+  }
+  return `anonymous-${value >>> 0}`;
+}
+
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
   const tradesByBroker = new Map<string, Trade[]>();
@@ -263,6 +269,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         // them left the vault stale while the UI showed only the problem.
         if (outcome.result === null) continue;
         const incoming = outcome.result;
+<<<<<<< HEAD
         const complete = tradesComplete(incoming) && !historyPending(incoming.resume);
         const replaceHistory = complete && incoming.historyMode !== "incremental";
         // Holdings can fail independently of order history (different T212
@@ -287,27 +294,36 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         // or a Vercel time-limit stop would persist nothing.
         if (replaceHistory) tradesByBroker.set(outcome.broker, mappedTrades);
         else if (mappedTrades.length > 0)
+=======
+        const sections = incoming.sections;
+        if (sections.positions.status === "complete")
+          positionsByBroker.set(outcome.broker, sections.positions.rows);
+        const mappedTrades = sections.trades.rows.map((trade) => ({
+          ...trade,
+          id: `${outcome.broker}:${stableTradeId(trade)}`,
+        }));
+        if (sections.trades.status === "complete" && incoming.historyMode !== "incremental")
+          tradesByBroker.set(outcome.broker, mappedTrades);
+        else if (sections.trades.status !== "unavailable" && mappedTrades.length > 0)
+>>>>>>> 918cf78 (fix(brokers): preserve last-good snapshots)
           tradesByBroker.set(
             outcome.broker,
             mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades),
           );
-        const incomingDividends = incoming.dividends ?? [];
-        if (replaceHistory) dividendsByBroker.set(outcome.broker, incomingDividends);
-        else if (incomingDividends.length > 0)
+        const incomingDividends = sections.dividends.rows;
+        if (sections.dividends.status === "complete" && incoming.historyMode !== "incremental")
+          dividendsByBroker.set(outcome.broker, incomingDividends);
+        else if (sections.dividends.status !== "unavailable" && incomingDividends.length > 0)
           dividendsByBroker.set(
             outcome.broker,
             mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
           );
-        if (
-          (incoming.cashBalances?.length ?? 0) > 0 ||
-          (complete && cashBalancesComplete(incoming)) ||
-          !cashBalancesByBroker.has(outcome.broker)
-        ) {
-          cashBalancesByBroker.set(outcome.broker, incoming.cashBalances ?? []);
-        }
-        const incomingFlows = incoming.cashFlows ?? [];
-        if (replaceHistory) cashFlowsByBroker.set(outcome.broker, incomingFlows);
-        else if (incomingFlows.length > 0)
+        if (sections.cashBalances.status === "complete")
+          cashBalancesByBroker.set(outcome.broker, sections.cashBalances.rows);
+        const incomingFlows = sections.cashFlows.rows;
+        if (sections.cashFlows.status === "complete" && incoming.historyMode !== "incremental")
+          cashFlowsByBroker.set(outcome.broker, incomingFlows);
+        else if (sections.cashFlows.status !== "unavailable" && incomingFlows.length > 0)
           cashFlowsByBroker.set(
             outcome.broker,
             mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows),

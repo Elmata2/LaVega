@@ -10,32 +10,26 @@ export type BrokerSyncResume = {
   dividendsComplete?: boolean;
 };
 
+export type BrokerSectionStatus = "complete" | "partial" | "unavailable";
+
+export type BrokerSection<T> = {
+  status: BrokerSectionStatus;
+  rows: T[];
+};
+
+export type BrokerSections = {
+  positions: BrokerSection<Position>;
+  trades: BrokerSection<Omit<Trade, "id">>;
+  dividends: BrokerSection<Dividend>;
+  cashBalances: BrokerSection<CashBalance>;
+  cashFlows: BrokerSection<CashFlow>;
+};
+
 export type BrokerResult = {
-  positions: Position[];
-  trades: Omit<Trade, "id">[];
+  sections: BrokerSections;
   historyMode?: "snapshot" | "incremental";
-  /** Optional until each broker adapter maps its dividend records. */
-  dividends?: Dividend[];
-  cashBalances?: CashBalance[];
-  cashFlows?: CashFlow[];
   source: string;
   problems: string[];
-  /**
-   * False when the trade history could not be fully read (pagination failed
-   * mid-chain). Callers must then keep their existing trades instead of
-   * overwriting them with a truncated set. Defaults to true (complete).
-   */
-  tradesComplete?: boolean;
-  /**
-   * False when the holdings endpoint failed. Callers must then keep last-good
-   * positions instead of replacing them with an empty array. Defaults to true.
-   */
-  positionsComplete?: boolean;
-  /**
-   * False when the account-summary endpoint failed. Callers must then keep
-   * last-good cash instead of replacing it with empty. Defaults to true.
-   */
-  cashBalancesComplete?: boolean;
   /**
    * ISO timestamp before which the broker refused further requests. Set only
    * when the provider rate-limited the sync, so the scheduler can hold off
@@ -50,18 +44,6 @@ export interface BrokerAccessAdapter {
   sync(input: { entity: string; resume?: BrokerSyncResume }): Promise<BrokerResult>;
 }
 
-export function tradesComplete(result: BrokerResult): boolean {
-  return result.tradesComplete ?? true;
-}
-
-export function positionsComplete(result: BrokerResult): boolean {
-  return result.positionsComplete ?? true;
-}
-
-export function cashBalancesComplete(result: BrokerResult): boolean {
-  return result.cashBalancesComplete ?? true;
-}
-
 /** True when some history still has pages left to read. */
 export function historyPending(resume: BrokerSyncResume | null | undefined): boolean {
   if (!resume) return false;
@@ -72,4 +54,14 @@ export function historyPending(resume: BrokerSyncResume | null | undefined): boo
     resume.transactionsComplete !== true ||
     resume.dividendsComplete !== true
   );
+}
+
+export function allSections(status: BrokerSectionStatus): BrokerSections {
+  return {
+    positions: { status, rows: [] },
+    trades: { status, rows: [] },
+    dividends: { status, rows: [] },
+    cashBalances: { status, rows: [] },
+    cashFlows: { status, rows: [] },
+  };
 }

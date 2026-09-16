@@ -458,19 +458,23 @@ function result(
   retryAfterMs: number | null,
   tradesComplete = true,
   resume?: BrokerSyncResume,
-  completeness?: { positionsComplete?: boolean; cashBalancesComplete?: boolean },
+  completeness?: {
+    positions: "complete" | "partial" | "unavailable";
+    cashBalances: "complete" | "partial" | "unavailable";
+    dividends: "complete" | "partial" | "unavailable";
+    cashFlows: "complete" | "partial" | "unavailable";
+  },
 ): BrokerResult {
   return {
-    positions,
-    trades,
-    dividends,
-    cashBalances,
-    cashFlows,
+    sections: {
+      positions: { status: completeness?.positions ?? "complete", rows: positions },
+      trades: { status: tradesComplete ? "complete" : "partial", rows: trades },
+      dividends: { status: completeness?.dividends ?? "complete", rows: dividends },
+      cashBalances: { status: completeness?.cashBalances ?? "complete", rows: cashBalances },
+      cashFlows: { status: completeness?.cashFlows ?? "complete", rows: cashFlows },
+    },
     source: SOURCE,
     problems,
-    tradesComplete,
-    ...(completeness?.positionsComplete === false ? { positionsComplete: false } : {}),
-    ...(completeness?.cashBalancesComplete === false ? { cashBalancesComplete: false } : {}),
     ...(retryAfterMs !== null
       ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() }
       : {}),
@@ -684,6 +688,11 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         : undefined;
       let holdingsComplete = false;
       let summaryComplete = false;
+      let holdingsPartial = false;
+      let summaryPartial = false;
+      let ordersPartial = false;
+      let transactionsPartial = false;
+      let dividendsPartial = false;
 
       try {
         throwIfHostDeadline(config.deadlineMs, 0);
@@ -704,6 +713,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           try {
             positionsResult.push(mapPosition(holding, entity, asOf));
           } catch (error) {
+            holdingsPartial = true;
             problems.push(
               error instanceof Error ? error.message : "Trading 212 holding is invalid",
             );
@@ -726,6 +736,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         accountCurrency = string(summary.currency, "account summary currency");
         const mapped = mapCashBalance(summary, entity, snapshotDate());
         if (mapped.balance) cashBalances.push(mapped.balance);
+        if (mapped.problems.length > 0) summaryPartial = true;
         problems.push(...mapped.problems);
       } catch (error) {
         notePaused(error);
@@ -764,6 +775,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                   skippedTypes.add(String(fill ? (fill.type ?? "missing-fill") : "missing-fill"));
                 }
               } catch (error) {
+                ordersPartial = true;
                 problems.push(
                   error instanceof Error ? error.message : "Trading 212 order is invalid",
                 );
@@ -837,6 +849,8 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                   dividends.push(mapDividend(row, entity, accountCurrency));
                 }
               } catch (error) {
+                if (history === "transactions") transactionsPartial = true;
+                else dividendsPartial = true;
                 problems.push(
                   error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`,
                 );
@@ -902,11 +916,31 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         cashFlows,
         problems,
         retryAfterMs,
-        historyComplete,
+        historyComplete && !ordersPartial,
         nextResume,
         {
-          positionsComplete: holdingsComplete,
-          cashBalancesComplete: summaryComplete,
+          positions: holdingsComplete
+            ? holdingsPartial
+              ? "partial"
+              : "complete"
+            : positionsResult.length > 0
+              ? "partial"
+              : "unavailable",
+          cashBalances: summaryComplete ? (summaryPartial ? "partial" : "complete") : "unavailable",
+          dividends: dividendsComplete
+            ? dividendsPartial
+              ? "partial"
+              : "complete"
+            : dividends.length > 0
+              ? "partial"
+              : "unavailable",
+          cashFlows: transactionsComplete
+            ? transactionsPartial
+              ? "partial"
+              : "complete"
+            : cashFlows.length > 0
+              ? "partial"
+              : "unavailable",
         },
       );
       return {

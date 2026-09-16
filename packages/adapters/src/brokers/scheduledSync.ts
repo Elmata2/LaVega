@@ -1,9 +1,6 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
 import {
-  cashBalancesComplete,
   historyPending,
-  positionsComplete,
-  tradesComplete,
   type BrokerAccessAdapter,
   type BrokerResult,
   type BrokerSyncResume,
@@ -148,13 +145,9 @@ export async function syncScheduledBrokers(input: {
       // Unfinished pagination is not "delivered": the next run must continue
       // the cursor instead of waiting 24 hours.
       const delivered =
-        tradesComplete(result) &&
-        positionsComplete(result) &&
-        cashBalancesComplete(result) &&
-        !resume &&
-        (result.positions.length > 0 ||
-          result.trades.length > 0 ||
-          (result.cashBalances?.length ?? 0) > 0);
+        Object.values(result.sections).every((section) => section.status !== "unavailable") &&
+        result.sections.trades.status !== "partial" &&
+        !resume;
       if (delivered)
         pendingStates.set(entry.broker, {
           lastSyncedAt: nowIso,

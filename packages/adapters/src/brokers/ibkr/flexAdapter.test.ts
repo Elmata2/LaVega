@@ -54,6 +54,18 @@ function adapter(token = "valid-token") {
   });
 }
 
+function legacy(result: Awaited<ReturnType<ReturnType<typeof adapter>["sync"]>>) {
+  return {
+    positions: result.sections.positions.rows,
+    trades: result.sections.trades.rows,
+    dividends: result.sections.dividends.rows,
+    cashBalances: result.sections.cashBalances.rows,
+    cashFlows: result.sections.cashFlows.rows,
+    source: result.source,
+    problems: result.problems,
+  };
+}
+
 test("sync completes SendRequest plus not-ready then ready GetStatement flow", async () => {
   let polls = 0;
   handler = (request, response) => {
@@ -72,7 +84,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     );
   };
 
-  await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
+  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
     source: "ibkr-flex",
     problems: [],
     dividends: [],
@@ -136,9 +148,12 @@ test("sync reports bounded timeout without throwing", async () => {
         : "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
     );
 
-  await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
+  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
     positions: [],
     trades: [],
+    dividends: [],
+    cashBalances: [],
+    cashFlows: [],
     source: "ibkr-flex",
     problems: [expect.stringContaining("statement generation timed out")],
   });
@@ -151,12 +166,17 @@ test("sync reports rejected token without throwing", async () => {
       "<FlexStatementResponse><ErrorCode>1019</ErrorCode><ErrorMessage>Invalid token</ErrorMessage></FlexStatementResponse>",
     );
 
-  await expect(adapter("expired-token").sync({ entity: "personal" })).resolves.toEqual({
-    positions: [],
-    trades: [],
-    source: "ibkr-flex",
-    problems: [expect.stringContaining("IBKR error 1019: Invalid token")],
-  });
+  await expect(adapter("expired-token").sync({ entity: "personal" }).then(legacy)).resolves.toEqual(
+    {
+      positions: [],
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+      source: "ibkr-flex",
+      problems: [expect.stringContaining("IBKR error 1019: Invalid token")],
+    },
+  );
 });
 
 test("sync reports malformed or unexpected payload without throwing", async () => {
@@ -168,7 +188,7 @@ test("sync reports malformed or unexpected payload without throwing", async () =
         : '<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol="AAPL"',
     );
 
-  await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
+  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
     positions: [],
     trades: [],
     dividends: [],

@@ -1,6 +1,6 @@
 import { loadFlexStatement } from "./flexStatementClient.js";
 import type { FlexQueryConfig } from "./flexStatementClient.js";
-import type { BrokerAccessAdapter } from "../BrokerAccessAdapter.js";
+import { allSections, type BrokerAccessAdapter } from "../BrokerAccessAdapter.js";
 import { parseFlexStatement } from "./flexParser.js";
 
 export function createIbkrFlexAdapter(config: FlexQueryConfig): BrokerAccessAdapter {
@@ -12,8 +12,7 @@ export function createIbkrFlexAdapter(config: FlexQueryConfig): BrokerAccessAdap
         return { ...parsed, source: "ibkr-flex" };
       } catch (error) {
         return {
-          positions: [],
-          trades: [],
+          sections: allSections("unavailable"),
           source: "ibkr-flex",
           problems: [error instanceof Error ? error.message : "IBKR Flex sync failed"],
         };

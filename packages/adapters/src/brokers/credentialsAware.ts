@@ -1,5 +1,5 @@
 import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
-import type { BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
+import { allSections, type BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
 import { createIbkrFlexAdapter } from "./ibkr/flexAdapter.js";
 import { createTrading212Adapter, type Trading212DiagnosticEvent } from "./trading212/index.js";
 
@@ -50,8 +50,7 @@ export function createCredentialsAwareBrokerAdapters(
           const stored = await options.credentials.getCredentials(tenantId, "ibkr");
           if (!stored)
             return {
-              positions: [],
-              trades: [],
+              sections: allSections("unavailable"),
               source: "ibkr-flex",
               problems: ["IBKR: credentials are not configured"],
             };
@@ -70,8 +69,7 @@ export function createCredentialsAwareBrokerAdapters(
           const stored = await options.credentials.getCredentials(tenantId, "trading212");
           if (!stored)
             return {
-              positions: [],
-              trades: [],
+              sections: allSections("unavailable"),
               source: "trading-212",
               problems: ["Trading 212: credentials are not configured"],
             };
