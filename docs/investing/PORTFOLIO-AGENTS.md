@@ -19,6 +19,7 @@ LaVega implementation:
 - Agent input is a portfolio snapshot from the signed-in user's broker data and price cache.
 - Snapshot includes portfolio value, allocation, top positions, returns, price status, missing prices, and dashboard problems.
 - Agent output is normalized JSON: `signal`, `confidence`, `summary`, `reasoning`, `insights`, `model`, `snapshotHash`.
+- Agent workbench shows positions in a compact value-sorted context list. Desktop list stays inside a sticky viewport-bounded panel; mobile list uses its own scroll area. Each row links to position detail, with a separate link to the full positions view.
 - Provider routing uses OpenAI-compatible API settings:
   - `LAVEGA_AGENT_API_KEY`
   - `LAVEGA_AGENT_BASE_URL` (default `https://openrouter.ai/api/v1`)

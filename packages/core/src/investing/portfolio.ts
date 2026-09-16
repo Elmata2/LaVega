@@ -2,6 +2,7 @@ import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import { businessDateRange, isPriceFresh } from "./calendar.js";
+import { ownershipKey, type Ownership } from "./ownership.js";
 import { tradeDelta } from "./quantity.js";
 
 export type PortfolioValuePoint = {
@@ -112,7 +113,12 @@ function cashAmountOnDate(
   return covered ? anchoredAmountOnDate(date, anchors, events) : null;
 }
 
-/** One symbol held by one entity: broker quantity snapshots plus signed trades. */
+/** One symbol held by one owner: broker quantity snapshots plus signed trades.
+ *
+ *  The owner is the full ownership identity, not just the entity. Two brokers
+ *  holding the same instrument for the same entity each report their own dated
+ *  snapshots; folded into one holding those dates read as a single timeline and
+ *  whichever broker synced last silently replaces the other's anchor. */
 type Holding = { anchors: Map<string, number>; events: CashEvent[] };
 
 function holdingsBySymbol(
@@ -121,8 +127,8 @@ function holdingsBySymbol(
 ): Map<string, Holding[]> {
   const byKey = new Map<string, Holding>();
   const bySymbol = new Map<string, Holding[]>();
-  const holding = (symbol: string, entity: string): Holding => {
-    const key = `${symbol}\u0000${entity}`;
+  const holding = (symbol: string, owner: Ownership): Holding => {
+    const key = `${symbol}\u0000${ownershipKey(owner)}`;
     const existing = byKey.get(key);
     if (existing) return existing;
     const created: Holding = { anchors: new Map(), events: [] };
@@ -133,11 +139,11 @@ function holdingsBySymbol(
     return created;
   };
   for (const position of positions) {
-    const anchors = holding(position.symbol, position.entity).anchors;
+    const anchors = holding(position.symbol, position).anchors;
     anchors.set(position.asOf, (anchors.get(position.asOf) ?? 0) + position.quantity);
   }
   for (const trade of trades)
-    holding(trade.symbol, trade.entity).events.push({
+    holding(trade.symbol, trade).events.push({
       date: trade.date,
       amount: tradeDelta(trade),
     });

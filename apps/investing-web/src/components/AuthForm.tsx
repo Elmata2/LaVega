@@ -103,7 +103,7 @@ export function AuthForm() {
             type="button"
             data-action="switch-mode"
             onClick={switchMode}
-            className="pressable mt-4 rounded-sm text-sm font-semibold text-primary underline-offset-2 hover:underline"
+            className="pressable mt-4 rounded-xs text-sm font-semibold text-primary underline-offset-2 hover:underline"
           >
             {mode === "sign-up" ? "Already have an account? Sign in" : "No account yet? Sign up"}
           </button>

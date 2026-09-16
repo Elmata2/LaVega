@@ -253,7 +253,7 @@ export function PositionPriceChart({
               role="img"
               tabIndex={0}
               aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-pan-y select-none rounded-[12px] outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
                 chart.onKeyDown(event);
                 setActiveEventDate(null);

@@ -3,9 +3,9 @@ import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 import { createIbkrFlexAdapter } from "./flexAdapter.js";
 
 const report = `<FlexStatements><FlexStatement><OpenPositions>
-  <OpenPosition symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
+  <OpenPosition accountId="U1" symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
 </OpenPositions><Trades>
-  <Trade symbol="AAPL" transactionID="tx-1" tradeDate="20260818;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="1" currency="USD" />
+  <Trade accountId="U1" symbol="AAPL" transactionID="tx-1" tradeDate="20260818;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="1" currency="USD" />
 </Trades><CashReport>
   <CashReportCurrency accountId="U1" currency="USD" toDate="20260818" endingCash="150" />
 </CashReport><StatementOfFunds>
@@ -104,6 +104,8 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     positions: [
       {
         entity: "personal",
+        broker: "ibkr",
+        account: "U1",
         symbol: "AAPL",
         isin: "US0378331005",
         description: "Apple & Co",
@@ -118,6 +120,8 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     trades: [
       {
         entity: "personal",
+        broker: "ibkr",
+        account: "U1",
         date: "2026-08-18",
         symbol: "AAPL",
         side: "buy",

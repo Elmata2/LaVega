@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import {
   emptyInvestingDashboard,
   LOCAL_TENANT_ID,
-  buildSectorExposure,
   buildHistoricalRisk,
   validateBenchmarkSymbols,
   type BenchmarkInstrument,
@@ -43,6 +42,7 @@ import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
 } from "./inMemorySectorProfileStore.js";
+import { resolvePortfolioSectors } from "./sectorResolution.js";
 
 export type InvestingDashboardReader = (input: {
   symbol?: string;
@@ -234,22 +234,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
           symbol: position.symbol,
           weight: totalValue > 0 ? position.marketValue / totalValue : 0,
         }));
-      const sectorBySymbol = new Map<string, string>();
-      for (const position of priced) {
-        let profile = await sectorStore.get(position.symbol);
-        if (!profile) {
-          try {
-            profile = await sectorProfile(position.symbol);
-            if (profile) await sectorStore.set(position.symbol, profile);
-          } catch {
-            profile = null;
-          }
-        }
-        sectorBySymbol.set(position.symbol.toUpperCase(), profile?.sector ?? "Unknown");
-      }
+      /* Same classification rule as the portfolio-agent snapshot, which
+       * passes no fetchProfile. This route keeps the fetch-and-persist
+       * fallback; only the resolution itself is shared. */
+      const { exposure } = await resolvePortfolioSectors(data.positions, {
+        store: sectorStore,
+        fetchProfile: sectorProfile,
+      });
       return c.json({
         ...buildHistoricalRisk(data, range, benchmark),
-        sectors: buildSectorExposure(data.positions, sectorBySymbol),
+        sectors: exposure,
         topPositions,
         composition: {
           pricedHoldings: priced.length,

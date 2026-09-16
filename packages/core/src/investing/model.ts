@@ -2,6 +2,11 @@
  * instrument currency and quantities use broker units. */
 export type Position = {
   entity: string;
+  /** Which broker reported this holding. Optional because snapshots persisted
+   *  before provenance existed carry none; see `ownershipKey`. */
+  broker?: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   symbol: string;
   isin?: string;
   description?: string;
@@ -51,6 +56,11 @@ export type TradeSide = "buy" | "sell" | "other";
 export type Trade = {
   id: string;
   entity: string;
+  /** Which broker executed this trade. Optional for the same reason as on
+   *  `Position`: persisted trades predate provenance and keep their `id`. */
+  broker?: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   date: string;
   symbol: string;
   isin?: string;

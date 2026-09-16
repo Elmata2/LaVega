@@ -198,7 +198,7 @@ export function PortfolioSummaryCard({
           {(risk.missingPrices.length > 0 || risk.missingHoldings.length > 0) && (
             <details>
               <summary className="cursor-pointer">Affected instruments</summary>
-              <div className="mt-2 max-h-36 space-y-2 overflow-y-auto break-words">
+              <div className="mt-2 max-h-36 space-y-2 overflow-y-auto wrap-break-word">
                 {risk.missingPrices.length > 0 && (
                   <p>Missing prices: {risk.missingPrices.join(", ")}</p>
                 )}

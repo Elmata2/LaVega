@@ -9,7 +9,7 @@
     "build": "turbo run build",
     "start": "pnpm --filter @lavega/server start",
     "typecheck": "turbo run typecheck",
-    "lint": "oxlint .",
+    "lint": "oxlint . --max-warnings 101",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --check",
     "format:fix": "oxfmt .",
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@lavega/core": "workspace:*",
+    "@shadcn/lint": "^0.1.0",
     "@vercel/oidc": "3.2.0",
     "jsdom": "^30.0.1",
     "oxfmt": "^0.66.0",

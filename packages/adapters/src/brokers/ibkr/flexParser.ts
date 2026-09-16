@@ -239,8 +239,11 @@ function side(value: string | undefined): TradeSide {
 function parsePosition(attrs: Attributes, entity: string): Position {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
+  const account = first(attrs, "accountId", "accountID");
   return {
     entity,
+    broker: "ibkr",
+    ...(account ? { account } : {}),
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
     ...(first(attrs, "description") ? { description: first(attrs, "description") } : {}),
@@ -257,8 +260,11 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex Trade symbol is missing");
   const brokerTradeId = first(attrs, "transactionID", "tradeID", "tradeId");
+  const account = first(attrs, "accountId", "accountID");
   return {
     entity,
+    broker: "ibkr",
+    ...(account ? { account } : {}),
     date: date(first(attrs, "tradeDate", "dateTime", "date"), "trade date"),
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),

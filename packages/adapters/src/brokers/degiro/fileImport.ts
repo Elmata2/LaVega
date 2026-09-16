@@ -9,8 +9,16 @@ export function createDeGiroFileImport(): DeGiroFileImport {
   return {
     async load({ filename, text, entity }) {
       const parsed = parseBrokerFile(filename, text);
-      const trades: TradeWithoutId[] = parsed.trades.map((trade) => ({ ...trade, entity }));
-      const positions: Position[] = parsed.positions.map((position) => ({ ...position, entity }));
+      const trades: TradeWithoutId[] = parsed.trades.map((trade) => ({
+        ...trade,
+        entity,
+        broker: "degiro",
+      }));
+      const positions: Position[] = parsed.positions.map((position) => ({
+        ...position,
+        entity,
+        broker: "degiro",
+      }));
       const status = parsed.problems.length > 0 ? "partial" : "complete";
       return {
         sections: {

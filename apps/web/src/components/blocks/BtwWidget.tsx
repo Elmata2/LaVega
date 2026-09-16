@@ -215,7 +215,7 @@ export function BtwBlock({
 
   return (
     <Module
-      title="BTW"
+      title={c.title}
       span={span}
       height="short"
       menu={

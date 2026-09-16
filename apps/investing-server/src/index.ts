@@ -212,6 +212,10 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
   return [...byId.values()];
 }
 
+function withBroker<T extends { broker?: string }>(broker: string, rows: readonly T[]): T[] {
+  return rows.map((row) => (row.broker ? row : { ...row, broker }));
+}
+
 function stableTradeId(trade: Omit<Trade, "id">): string {
   if (trade.brokerTradeId) return trade.brokerTradeId;
   let value = 2166136261;
@@ -258,9 +262,9 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         const incoming = outcome.result;
         const sections = incoming.sections;
         if (sections.positions.status === "complete")
-          positionsByBroker.set(outcome.broker, sections.positions.rows);
+          positionsByBroker.set(outcome.broker, withBroker(outcome.broker, sections.positions.rows));
         const mappedTrades = sections.trades.rows.map((trade) => ({
-          ...trade,
+          ...withBroker(outcome.broker, [trade])[0],
           id: `${outcome.broker}:${stableTradeId(trade)}`,
         }));
         if (sections.trades.status === "complete" && incoming.historyMode !== "incremental")
@@ -272,17 +276,20 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
           );
         const incomingDividends = sections.dividends.rows;
         if (sections.dividends.status === "complete" && incoming.historyMode !== "incremental")
-          dividendsByBroker.set(outcome.broker, incomingDividends);
+          dividendsByBroker.set(outcome.broker, withBroker(outcome.broker, incomingDividends));
         else if (sections.dividends.status !== "unavailable" && incomingDividends.length > 0)
           dividendsByBroker.set(
             outcome.broker,
             mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
           );
         if (sections.cashBalances.status === "complete")
-          cashBalancesByBroker.set(outcome.broker, sections.cashBalances.rows);
+          cashBalancesByBroker.set(
+            outcome.broker,
+            withBroker(outcome.broker, sections.cashBalances.rows),
+          );
         const incomingFlows = sections.cashFlows.rows;
         if (sections.cashFlows.status === "complete" && incoming.historyMode !== "incremental")
-          cashFlowsByBroker.set(outcome.broker, incomingFlows);
+          cashFlowsByBroker.set(outcome.broker, withBroker(outcome.broker, incomingFlows));
         else if (sections.cashFlows.status !== "unavailable" && incomingFlows.length > 0)
           cashFlowsByBroker.set(
             outcome.broker,
