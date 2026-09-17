@@ -1,12 +1,12 @@
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
-import { isPriceFresh } from "./calendar.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
+import { valuePosition, type QuoteQuality } from "./valuation.js";
 
-export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
+export type PositionPriceStatus = QuoteQuality;
 export type PositionReturnStatus =
   | "available"
   | "broker-unrealized"
@@ -302,14 +302,11 @@ export function buildCurrentPositions(input: {
   // of the same tenant + symbol.
   const barsBySymbol = new Map<string, PriceBar[]>();
   for (const bar of input.priceBars) {
-    if (bar.date > input.today) continue;
     const listKey = bar.symbol.toUpperCase();
     const list = barsBySymbol.get(listKey);
     if (list) list.push(bar);
     else barsBySymbol.set(listKey, [bar]);
   }
-  for (const list of barsBySymbol.values())
-    list.sort((left, right) => left.date.localeCompare(right.date));
 
   const current = [...groups.entries()].flatMap(([groupKey, positions]) => {
     const anchors = latestOwnershipAnchors(positions);
@@ -318,24 +315,15 @@ export function buildCurrentPositions(input: {
     // A holding every owner has closed out is not a row, and neither is one
     // whose brokers' remaining quantities happen to cancel.
     if (Math.abs(quantity) <= EPSILON) return [];
-    const bars = barsBySymbol.get(sample.symbol.toUpperCase()) ?? [];
-    const latest = bars.at(-1);
-    let marketValue: number | null = null;
-    let priceStatus: PositionPriceStatus = "unpriced";
-    if (latest && isPriceFresh(latest.date, input.today)) {
-      try {
-        marketValue = convertCurrency(
-          quantity * latest.close,
-          latest.currency,
-          input.presentationCurrency,
-          input.today,
-          input.fxRates,
-        );
-        priceStatus = latest.date === input.today ? "priced" : "forward-filled";
-      } catch {
-        priceStatus = "missing-fx";
-      }
-    }
+    const valuation = valuePosition({
+      bars: barsBySymbol.get(sample.symbol.toUpperCase()) ?? [],
+      quantity,
+      valuationDate: input.today,
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+    });
+    const marketValue = valuation.value;
+    const priceStatus = valuation.quality;
     const calculatedReturns = calculatePositionReturn(
       quantity,
       marketValue,
@@ -343,7 +331,10 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date, brokerCost: brokerCostCoverage(anchors) },
+      {
+        ...(valuation.quoteDate ? { valuationDate: valuation.quoteDate } : {}),
+        brokerCost: brokerCostCoverage(anchors),
+      },
     );
     const returns =
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"

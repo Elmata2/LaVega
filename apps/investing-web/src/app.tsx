@@ -2028,8 +2028,17 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           <div className="rounded-[14px] bg-secondary/40 p-4">
             <dt className="text-xs font-semibold text-muted-foreground">Current value</dt>
             <dd className="mt-1 text-xl font-semibold tabular-nums">
-              {money(position.currentValue).replace(/^\+/, "")}
+              {position.currentValue === null ? (
+                <span className="text-base text-muted-foreground">
+                  {position.priceStatus === "missing-fx" ? "FX rate missing" : "Value unknown"}
+                </span>
+              ) : (
+                money(position.currentValue).replace(/^\+/, "")
+              )}
             </dd>
+            {position.priceStatus === "forward-filled" && position.quoteDate && (
+              <p className="mt-1 text-xs text-warning">Estimated price of {position.quoteDate}</p>
+            )}
           </div>
         )}
         {position.status === "open" && (

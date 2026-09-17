@@ -376,6 +376,13 @@ Implementation status: detail lookup resolves symbols from current snapshots, tr
 
 Show current value, daily change, and total return in EUR as primary values. Show quantity, average cost, current price, unrealized gain in EUR and percent, realized gain, dividends received, and first-buy date as secondary values.
 
+Detail values follow the same valuation freshness policy as the positions table, so one symbol never shows a value on one surface and none on the other ([Apply one valuation freshness policy to list and detail](https://github.com/Elmata2/LaVega/issues/111)).
+
+- Only closes dated at or before today can back a value. A future-dated bar never becomes the current price.
+- A close forward-filled within five business days stays usable and shows its quote date. After the cap, current value, current price, and daily change are all unavailable, while the chart keeps its full history.
+- Daily change needs a prior close that is itself within five business days of the backing close. A multiweek gap between observations yields no daily change rather than a fabricated one-day move.
+- Both closes convert at today's FX rate, so daily change reports price movement rather than same-day FX revaluation.
+
 Quantity expands to a dated history of quantity changes and their reason. Use an explicit control with `aria-expanded`; do not make plain text the only affordance.
 
 The chart shows daily end-of-day price only. Reuse the portfolio chart's range controls, crosshair, zoom model, keyboard behavior, and accessible exact-value list. Do not add position-value or position-return chart modes. Do not compare a position with the portfolio or a benchmark in v1.

@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { buildInvestingDashboard, emptyInvestingDashboard } from "./dashboard.js";
+import {
+  buildInvestingDashboard,
+  emptyInvestingDashboard,
+  type InvestingDashboardInput,
+} from "./dashboard.js";
 import {
   BENCHMARK_BARS,
   FX_RATES,
@@ -388,4 +392,121 @@ test("dashboard exposes cash-aware value fields and netted external TWR inputs",
     value: 2390.909090909091,
     cashUnknown: [],
   });
+});
+function freshnessInput() {
+  return {
+    positions: [
+      {
+        entity: "personal",
+        symbol: "A",
+        quantity: 1,
+        averagePrice: 15,
+        marketPrice: 15,
+        marketValue: 15,
+        currency: "EUR",
+        asOf: "2026-09-14",
+      },
+    ],
+    trades: [
+      {
+        id: "buy",
+        entity: "personal",
+        date: "2026-07-01",
+        symbol: "A",
+        side: "buy",
+        quantity: 1,
+        price: 15,
+        amount: 15,
+        currency: "EUR",
+        commission: 0,
+      },
+    ],
+    dividends: [],
+    priceBars: [],
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: [],
+    selectedSymbol: "a",
+    today: "2026-09-14",
+  } satisfies InvestingDashboardInput;
+}
+
+function freshnessDashboard(barDates: string[]) {
+  return buildInvestingDashboard({
+    ...freshnessInput(),
+    priceBars: barDates.map((date) => ({ symbol: "A", date, close: 20, currency: "EUR" })),
+  });
+}
+
+test("list and detail agree on availability at 0, 5 and 6 business days", () => {
+  for (const [barDate, expected] of [
+    ["2026-09-14", "priced"],
+    ["2026-09-07", "forward-filled"],
+    ["2026-09-04", "unpriced"],
+  ] as const) {
+    const dashboard = freshnessDashboard([barDate]);
+    const available = expected !== "unpriced";
+    expect(dashboard.positions[0]).toMatchObject({
+      priceStatus: expected,
+      marketValue: available ? 20 : null,
+    });
+    expect(dashboard.position).toMatchObject({
+      priceStatus: expected,
+      currentValue: available ? 20 : null,
+      currentPrice: available ? 20 : null,
+    });
+    expect(dashboard.position?.returns.unrealizedGain).toBe(available ? 5 : null);
+  }
+});
+
+test("a future-dated bar values neither list nor detail", () => {
+  const dashboard = freshnessDashboard(["2026-09-21"]);
+  expect(dashboard.positions[0]).toMatchObject({ marketValue: null, priceStatus: "unpriced" });
+  expect(dashboard.position).toMatchObject({
+    currentValue: null,
+    currentPrice: null,
+    priceStatus: "unpriced",
+    quoteDate: null,
+  });
+
+  const withToday = freshnessDashboard(["2026-09-14", "2026-09-21"]);
+  expect(withToday.positions[0]).toMatchObject({ marketValue: 20, priceStatus: "priced" });
+  expect(withToday.position).toMatchObject({
+    currentValue: 20,
+    priceStatus: "priced",
+    quoteDate: "2026-09-14",
+  });
+});
+
+test("a stale detail keeps its chart history and invents no daily change", () => {
+  const dashboard = freshnessDashboard(["2026-07-01", "2026-08-03"]);
+  expect(dashboard.position?.points.map((point) => point.date)).toEqual([
+    "2026-07-01",
+    "2026-08-03",
+  ]);
+  expect(dashboard.position).toMatchObject({
+    currentValue: null,
+    dailyChange: null,
+    dailyChangePercentage: null,
+    priceStatus: "unpriced",
+    quoteDate: "2026-08-03",
+  });
+});
+
+test("a multiweek quote gap is not reported as one day of movement", () => {
+  const gapped = freshnessDashboard(["2026-08-03", "2026-09-14"]);
+  expect(gapped.position).toMatchObject({
+    currentValue: 20,
+    dailyChange: null,
+    dailyChangePercentage: null,
+  });
+
+  const consecutive = buildInvestingDashboard({
+    ...freshnessInput(),
+    priceBars: [
+      { symbol: "A", date: "2026-09-11", close: 16, currency: "EUR" },
+      { symbol: "A", date: "2026-09-14", close: 20, currency: "EUR" },
+    ],
+  });
+  expect(consecutive.position).toMatchObject({ dailyChange: 4, dailyChangePercentage: 0.25 });
 });

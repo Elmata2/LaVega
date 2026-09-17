@@ -11,5 +11,6 @@ export * from "./dividend.js";
 export * from "./markers.js";
 export * from "./dashboard.js";
 export * from "./positions.js";
+export * from "./valuation.js";
 export * from "./benchmarks.js";
 export * from "./summary.js";

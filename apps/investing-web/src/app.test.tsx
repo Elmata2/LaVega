@@ -87,6 +87,8 @@ const dashboard: InvestingDashboardData = {
     dailyChange: 2,
     dailyChangePercentage: 0.017,
     currentPrice: 120,
+    priceStatus: "priced",
+    quoteDate: "2026-02-02",
     averageCost: 100,
     returns: {
       status: "available",
@@ -975,6 +977,54 @@ test("position detail shows returns, quantity disclosure, and activity", async (
   expect(container.textContent).toContain("2 January 2026 · Buy");
   expect(container.querySelector('a[href="/positions?sort=return&direction=asc"]')).not.toBeNull();
   root.unmount();
+});
+
+test("position detail reports an estimated price and an unavailable value", async () => {
+  async function detailText(position: InvestingDashboardData["position"]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).startsWith("/api/investing/dashboard")
+          ? Promise.resolve(new Response(JSON.stringify({ ...dashboard, position })))
+          : Promise.resolve(responseFor(input, init)),
+      ),
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/positions/ASML"]}>
+          <App />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const text = container.textContent ?? "";
+    root.unmount();
+    return text;
+  }
+
+  expect(
+    await detailText({
+      ...dashboard.position!,
+      priceStatus: "forward-filled",
+      quoteDate: "2026-01-28",
+    }),
+  ).toContain("Estimated price of 2026-01-28");
+
+  const stale = await detailText({
+    ...dashboard.position!,
+    currentValue: null,
+    currentPrice: null,
+    dailyChange: null,
+    dailyChangePercentage: null,
+    priceStatus: "unpriced",
+    quoteDate: "2026-01-05",
+  });
+  expect(stale).toContain("Value unknown");
+  expect(stale).toContain("Price history");
 });
 
 test("closed position omits current value and keeps realized history", async () => {

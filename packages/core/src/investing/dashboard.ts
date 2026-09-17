@@ -15,9 +15,11 @@ import {
   buildCurrentPositions,
   calculatePositionReturn,
   type CurrentPosition,
+  type PositionPriceStatus,
   type PositionReturn,
   type PositionReturnStatus,
 } from "./positions.js";
+import { valuePosition } from "./valuation.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { orderTrades, tradeDelta } from "./quantity.js";
 
@@ -42,6 +44,9 @@ export type InvestingPositionDetail = {
   dailyChange: number | null;
   dailyChangePercentage: number | null;
   currentPrice: number | null;
+  priceStatus: PositionPriceStatus;
+  /** Close backing the current value, so a forward-filled detail is readable. */
+  quoteDate: string | null;
   averageCost: number | null;
   returns: PositionReturn;
   returnStatus: PositionReturnStatus;
@@ -126,6 +131,7 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
 
 /** Shape local domain records once, before they cross the server boundary. */
 export function buildInvestingDashboard(input: InvestingDashboardInput): InvestingDashboardData {
+  const today = input.today ?? new Date().toISOString().slice(0, 10);
   const portfolioValues = computePortfolioValueSeries(
     [...input.positions],
     [...input.trades],
@@ -149,7 +155,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     priceBars: input.priceBars,
     presentationCurrency: input.presentationCurrency,
     fxRates: input.fxRates,
-    today: input.today ?? new Date().toISOString().slice(0, 10),
+    today,
   });
 
   const selected = input.selectedSymbol?.trim().toUpperCase();
@@ -178,6 +184,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
           bars: selectedBars,
           presentationCurrency: input.presentationCurrency,
           fxRates: input.fxRates,
+          today,
         })
       : null;
 
@@ -240,6 +247,7 @@ function buildPositionDetail(input: {
   bars: PriceBar[];
   presentationCurrency: string;
   fxRates: FxRates;
+  today: string;
 }): InvestingPositionDetail {
   const sourceOrderByTrade = new Map(input.trades.map((trade, index) => [trade, index]));
   const orderedTrades = orderTrades(input.trades).map((trade) => ({
@@ -263,45 +271,25 @@ function buildPositionDetail(input: {
   const snapshotQuantity = anchoredSnapshotQuantity(input.positions);
   const quantity = input.positions.length > 0 ? snapshotQuantity : reconstructedQuantity;
   const status = Math.abs(quantity) > 1e-9 ? "open" : "closed";
-  const bars = [...input.bars].sort((left, right) => left.date.localeCompare(right.date));
-  const latest = bars.at(-1);
-  const previous = bars.at(-2);
-  let currentPrice: number | null = null;
-  let currentValue: number | null = null;
-  let dailyChange: number | null = null;
-  let dailyChangePercentage: number | null = null;
-  if (status === "open" && latest) {
-    try {
-      currentPrice = convertCurrency(
-        latest.close,
-        latest.currency,
-        input.presentationCurrency,
-        latest.date,
-        input.fxRates,
-      );
-      currentValue = currentPrice * quantity;
-      if (previous) {
-        const priorPrice = convertCurrency(
-          previous.close,
-          previous.currency,
-          input.presentationCurrency,
-          previous.date,
-          input.fxRates,
-        );
-        dailyChange = (currentPrice - priorPrice) * quantity;
-        dailyChangePercentage =
-          Math.abs(priorPrice) <= 1e-9 ? null : (currentPrice - priorPrice) / priorPrice;
-      }
-    } catch {
-      currentPrice = null;
-      currentValue = null;
-      dailyChange = null;
-      dailyChangePercentage = null;
-    }
-  }
+  const bars = input.bars
+    .filter((bar) => bar.date <= input.today)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const valuation = valuePosition({
+    bars,
+    quantity,
+    valuationDate: input.today,
+    presentationCurrency: input.presentationCurrency,
+    fxRates: input.fxRates,
+  });
+  // A holding that is closed today holds no value; its closes stay history.
+  const open = status === "open";
+  const currentPrice = open ? valuation.price : null;
+  const currentValue = open ? valuation.value : null;
+  const dailyChange = open ? valuation.dailyChange : null;
+  const dailyChangePercentage = open ? valuation.dailyChangePercentage : null;
   const valuationDate =
     status === "open"
-      ? latest?.date
+      ? (valuation.quoteDate ?? undefined)
       : [
           ...input.trades.map((trade) => trade.date),
           ...input.dividends.map((dividend) => dividend.date),
@@ -356,13 +344,15 @@ function buildPositionDetail(input: {
     symbol: input.selected,
     ...(description ? { description } : {}),
     currency: input.presentationCurrency,
-    priceCurrency: latest?.currency ?? input.sampleCurrency,
+    priceCurrency: valuation.quoteCurrency ?? input.sampleCurrency,
     status,
     quantity,
     currentValue,
     dailyChange,
     dailyChangePercentage,
     currentPrice,
+    priceStatus: valuation.quality,
+    quoteDate: valuation.quoteDate,
     averageCost,
     returns,
     returnStatus: returns.status,
