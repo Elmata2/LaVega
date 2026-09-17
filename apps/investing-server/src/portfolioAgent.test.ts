@@ -90,7 +90,9 @@ test("runPortfolioAgent refuses to start without an API key", async () => {
   const { runPortfolioAgent } = await import("./portfolioAgent.js");
   vi.stubEnv("LAVEGA_AGENT_API_KEY", "");
   vi.stubEnv("OPENROUTER_API_KEY", "");
-  expect(() => resolveAgentConfig()).toThrow("LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set");
+  expect(() => resolveAgentConfig()).toThrow(
+    "LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set",
+  );
   await expect(runPortfolioAgent({ prompt: "hello" })).rejects.toThrow("LAVEGA_AGENT_API_KEY");
 });
 
@@ -199,14 +201,14 @@ function buildSnapshotDashboard(): InvestingDashboardData {
         portfolioWeight: 1,
         priceStatus: "priced",
         returns: {
-          status: "broker-average",
+          status: "broker-unrealized",
           remainingCostBasis: 20,
           realizedCostBasisRemoved: null,
           unrealizedGain: 10,
           realizedGain: null,
           dividendsReceived: 0,
-          totalReturn: 10,
-          totalReturnPercentage: 0.5,
+          totalReturn: null,
+          totalReturnPercentage: null,
           sinceFirstBuyPercentage: null,
           firstBuyDate: "2026-08-10",
         },
@@ -375,7 +377,13 @@ const unusableResponses: [string, string][] = [
   ],
   [
     "an empty summary",
-    JSON.stringify({ signal: "neutral", confidence: 10, summary: "", reasoning: "r", insights: [] }),
+    JSON.stringify({
+      signal: "neutral",
+      confidence: 10,
+      summary: "",
+      reasoning: "r",
+      insights: [],
+    }),
   ],
   [
     "non-string insights",
@@ -432,9 +440,8 @@ test("a never-answering provider is aborted on the deadline and no further round
 });
 
 test("the agent deadline defaults to sixty seconds and ignores nonsense overrides", async () => {
-  const { resolveAgentTimeoutMs, DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS } = await import(
-    "./portfolioAgent.js"
-  );
+  const { resolveAgentTimeoutMs, DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS } =
+    await import("./portfolioAgent.js");
   vi.stubEnv("LAVEGA_AGENT_TIMEOUT_MS", "");
   expect(DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS).toBe(60_000);
   expect(resolveAgentTimeoutMs()).toBe(DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS);

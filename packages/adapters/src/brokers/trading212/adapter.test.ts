@@ -666,16 +666,16 @@ test("skipped non-trade fills are counted per page in diagnostics", async () => 
   expect(events).toEqual([{ type: "history-page", skipped: 1, skippedTypes: ["STOCK_SPLIT"] }]);
 });
 
-test("average price falls back to walletImpact totalCost when averagePricePaid is missing", async () => {
+test("wallet total cost keeps wallet denomination when averagePricePaid is missing", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) return json(response, 200, { items: [] });
     if (isPositions(request)) {
       return json(response, 200, [
         {
-          quantity: 3,
+          quantity: 1,
           currentPrice: 175.5,
           instrument: { ticker: "AAPL", currency: "USD" },
-          walletImpact: { currency: "USD", currentValue: 526.5, totalCost: 450.75 },
+          walletImpact: { currency: "EUR", currentValue: 526.5, totalCost: 90 },
         },
       ]);
     }
@@ -685,5 +685,11 @@ test("average price falls back to walletImpact totalCost when averagePricePaid i
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
     entity: "BV",
   });
-  expect(result.sections.positions.rows).toMatchObject([{ symbol: "AAPL", averagePrice: 150.25 }]);
+  expect(result.sections.positions.rows).toMatchObject([
+    {
+      symbol: "AAPL",
+      averagePrice: null,
+      brokerCost: { status: "known", amount: 90, currency: "EUR" },
+    },
+  ]);
 });

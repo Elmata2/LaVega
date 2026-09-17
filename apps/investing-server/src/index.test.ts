@@ -343,6 +343,10 @@ test("a legacy snapshot gains broker provenance on load without its trade ids ch
     ["ibkr", 1],
     ["trading212", 2],
   ]);
+  expect(positions.map((position) => position.brokerCost)).toEqual([
+    { status: "unknown", reason: "legacy-denomination" },
+    { status: "unknown", reason: "legacy-denomination" },
+  ]);
   expect(trades[0]?.id).toBe("ibkr:legacy-1");
   expect(trades[0]?.broker).toBe("ibkr");
   expect(trades[1]).toEqual({

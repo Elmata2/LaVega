@@ -288,6 +288,53 @@ test("position detail does not estimate incomplete return history", () => {
   });
 });
 
+test("broker cost after an unreconciled sale exposes unrealized return only", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        symbol: "PARTIAL-SALE",
+        quantity: 2,
+        brokerCost: { status: "known", amount: 20, currency: "EUR" },
+        averagePrice: 10,
+        marketPrice: 15,
+        marketValue: 30,
+        currency: "EUR",
+        asOf: "2026-01-05",
+      },
+    ],
+    trades: [
+      {
+        id: "known-buy-only",
+        entity: "personal",
+        date: "2026-01-02",
+        symbol: "PARTIAL-SALE",
+        side: "buy",
+        quantity: 4,
+        price: 10,
+        amount: 40,
+        currency: "EUR",
+        commission: null,
+      },
+    ],
+    dividends: [],
+    priceBars: [{ symbol: "PARTIAL-SALE", date: "2026-01-05", close: 15, currency: "EUR" }],
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: [],
+    selectedSymbol: "PARTIAL-SALE",
+    today: "2026-01-05",
+  });
+
+  expect(dashboard.positions[0]).toMatchObject({
+    returns: { status: "broker-unrealized", unrealizedGain: 10, totalReturn: null },
+  });
+  expect(dashboard.position).toMatchObject({
+    returnStatus: "broker-unrealized",
+    returns: { realizedGain: null, unrealizedGain: 10, totalReturn: null },
+  });
+});
+
 test("dashboard exposes cash-aware value fields and netted external TWR inputs", () => {
   const dashboard = buildInvestingDashboard({
     positions: POSITIONS,

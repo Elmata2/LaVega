@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
-import { buildCurrentPositions, calculatePositionReturn } from "./positions.js";
+import { brokerCostCoverage, buildCurrentPositions, calculatePositionReturn } from "./positions.js";
 
 const rates = [
   { base: "EUR", date: "2026-01-02", rates: { USD: 2 } },
@@ -324,19 +324,23 @@ test("a holding whose order history misses fills falls back to the broker averag
       currency: "EUR",
     },
   ];
-  const brokerCost = [{ amount: 120, currency: "USD", date: "2026-01-03" }];
+  const brokerCost = {
+    status: "complete" as const,
+    heldQuantity: 10,
+    legs: [{ amount: 120, currency: "USD", date: "2026-01-03" }],
+  };
 
   expect(
     calculatePositionReturn(10, 200, partial, dividends, "EUR", rates, { brokerCost }),
   ).toEqual({
-    status: "broker-average",
+    status: "broker-unrealized",
     remainingCostBasis: 120,
     realizedCostBasisRemoved: null,
     unrealizedGain: 80,
     realizedGain: null,
     dividendsReceived: 3,
-    totalReturn: 83,
-    totalReturnPercentage: 83 / 120,
+    totalReturn: null,
+    totalReturnPercentage: null,
     sinceFirstBuyPercentage: null,
     firstBuyDate: "2026-01-02",
   });
@@ -358,6 +362,7 @@ test("a pie leg and a direct holding in one instrument sum into one cost basis",
     symbol: "ACME",
     quantity: 4,
     averagePrice: 20,
+    brokerCost: { status: "known", amount: 80, currency: "EUR" },
     marketPrice: null,
     marketValue: null,
     currency: "EUR",
@@ -367,7 +372,14 @@ test("a pie leg and a direct holding in one instrument sum into one cost basis",
   const bars: PriceBar[] = [{ symbol: "ACME", date: "2026-01-03", close: 30, currency: "EUR" }];
 
   const [merged] = buildCurrentPositions({
-    positions: [position({}), position({ quantity: 6, averagePrice: 25 })],
+    positions: [
+      position({}),
+      position({
+        quantity: 6,
+        averagePrice: 25,
+        brokerCost: { status: "known", amount: 150, currency: "EUR" },
+      }),
+    ],
     trades: [],
     dividends: [],
     priceBars: bars,
@@ -379,6 +391,105 @@ test("a pie leg and a direct holding in one instrument sum into one cost basis",
   expect(merged).toMatchObject({
     quantity: 10,
     marketValue: 300,
-    returns: { status: "broker-average", remainingCostBasis: 230, unrealizedGain: 70 },
+    returns: { status: "broker-unrealized", remainingCostBasis: 230, unrealizedGain: 70 },
+  });
+});
+
+test("unknown nonzero broker cost makes aggregate basis unavailable", () => {
+  const positions: Position[] = [
+    {
+      entity: "Holding BV",
+      symbol: "ACME",
+      quantity: 1,
+      brokerCost: { status: "known", amount: 10, currency: "EUR" },
+      averagePrice: 10,
+      marketPrice: null,
+      marketValue: null,
+      currency: "EUR",
+      asOf: "2026-01-03",
+    },
+    {
+      entity: "Holding BV",
+      symbol: "ACME",
+      quantity: 1,
+      brokerCost: { status: "unknown", reason: "not-reported" },
+      averagePrice: null,
+      marketPrice: null,
+      marketValue: null,
+      currency: "EUR",
+      asOf: "2026-01-03",
+    },
+  ];
+  const [result] = buildCurrentPositions({
+    positions,
+    trades: [],
+    dividends: [],
+    priceBars: [{ symbol: "ACME", date: "2026-01-03", close: 20, currency: "EUR" }],
+    presentationCurrency: "EUR",
+    fxRates: rates,
+    today: "2026-01-03",
+  });
+
+  expect(result).toMatchObject({
+    marketValue: 40,
+    returns: { status: "missing-cost", remainingCostBasis: null, totalReturn: null },
+  });
+});
+
+test("zero-quantity unknown broker cost does not invalidate held basis", () => {
+  expect(
+    brokerCostCoverage([
+      {
+        entity: "Holding BV",
+        symbol: "ACME",
+        quantity: 1,
+        brokerCost: { status: "known", amount: 10, currency: "EUR" },
+        averagePrice: 10,
+        marketPrice: null,
+        marketValue: null,
+        currency: "EUR",
+        asOf: "2026-01-03",
+      },
+      {
+        entity: "Holding BV",
+        symbol: "ACME",
+        quantity: 0,
+        brokerCost: { status: "unknown", reason: "not-reported" },
+        averagePrice: null,
+        marketPrice: null,
+        marketValue: null,
+        currency: "EUR",
+        asOf: "2026-01-03",
+      },
+    ]),
+  ).toEqual({
+    status: "complete",
+    heldQuantity: 1,
+    legs: [{ amount: 10, currency: "EUR", date: "2026-01-03" }],
+  });
+});
+
+test("broker cost converts wallet currency once", () => {
+  expect(
+    calculatePositionReturn(
+      1,
+      200,
+      [],
+      [],
+      "USD",
+      [{ base: "EUR", date: "2026-01-03", rates: { USD: 2 } }],
+      {
+        brokerCost: {
+          status: "complete",
+          heldQuantity: 1,
+          legs: [{ amount: 90, currency: "EUR", date: "2026-01-03" }],
+        },
+      },
+    ),
+  ).toMatchObject({
+    status: "broker-unrealized",
+    remainingCostBasis: 180,
+    unrealizedGain: 20,
+    totalReturn: null,
   });
 });
