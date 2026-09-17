@@ -28,6 +28,13 @@ import { signOut } from "./lib/auth-client";
 import { longDate } from "./lib/dates.js";
 import { useDashboard } from "./lib/dashboardResource";
 import {
+  runPortfolioAgent,
+  useAgentCatalog,
+  useAgentRequests,
+  type PortfolioAgentDefinition,
+  type PortfolioAgentInsight,
+} from "./lib/portfolioAgents";
+import {
   DASHBOARD_REFRESH_EVENT,
   runPriceSyncUntilComplete,
   type PriceSyncProgress,
@@ -77,79 +84,6 @@ type BrokerProgress = {
   message: string | null;
 };
 type PriceProgress = PriceSyncProgress;
-type PortfolioAgentDefinition = {
-  id: string;
-  displayName: string;
-  description: string;
-  investingStyle: string;
-};
-type PortfolioAgentInsight = {
-  agentId: string;
-  displayName: string;
-  signal: "bullish" | "bearish" | "neutral";
-  confidence: number;
-  summary: string;
-  reasoning: string;
-  insights: string[];
-  model: string;
-  snapshotHash: string;
-};
-function isPortfolioAgentDefinition(value: unknown): value is PortfolioAgentDefinition {
-  if (!value || typeof value !== "object") return false;
-  const agent = value as Partial<PortfolioAgentDefinition>;
-  return (
-    typeof agent.id === "string" &&
-    typeof agent.displayName === "string" &&
-    typeof agent.description === "string" &&
-    typeof agent.investingStyle === "string"
-  );
-}
-
-function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight {
-  if (!value || typeof value !== "object") return false;
-  const insight = value as Partial<PortfolioAgentInsight>;
-  return (
-    typeof insight.agentId === "string" &&
-    typeof insight.displayName === "string" &&
-    (insight.signal === "bullish" ||
-      insight.signal === "bearish" ||
-      insight.signal === "neutral") &&
-    typeof insight.confidence === "number" &&
-    typeof insight.summary === "string" &&
-    typeof insight.reasoning === "string" &&
-    Array.isArray(insight.insights) &&
-    typeof insight.model === "string" &&
-    typeof insight.snapshotHash === "string"
-  );
-}
-
-async function fetchPortfolioAgents(): Promise<PortfolioAgentDefinition[]> {
-  const response = await fetch("/api/agents/portfolio");
-  if (!response.ok) throw new Error("Failed to load agents.");
-  const payload = (await response.json()) as { agents?: unknown };
-  const agents = Array.isArray(payload.agents)
-    ? payload.agents.filter(isPortfolioAgentDefinition)
-    : [];
-  if (agents.length === 0) throw new Error("No portfolio agents available.");
-  return agents;
-}
-
-async function runPortfolioAgent(agentId: string, prompt?: string): Promise<PortfolioAgentInsight> {
-  const body = prompt ? { agentId, prompt } : { agentId };
-  const response = await fetch("/api/agents/portfolio/run", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    result?: unknown;
-    problems?: string[];
-  };
-  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent run failed.");
-  if (!isPortfolioAgentInsight(payload.result)) throw new Error("Agent gave an invalid answer.");
-  return payload.result;
-}
-
 function DashboardLoading() {
   return (
     <div
@@ -501,53 +435,110 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
   );
 }
 
-function PortfolioAgentCard() {
-  const [agents, setAgents] = useState<PortfolioAgentDefinition[]>([]);
-  const [selected, setSelected] = useState<string>("");
-  const [insight, setInsight] = useState<PortfolioAgentInsight | null>(null);
-  const [status, setStatus] = useState<"loading" | "idle" | "running" | "error">("loading");
-  const [message, setMessage] = useState<string | null>(null);
+function AgentCatalogProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="mt-4">
+      <p role="alert" className="text-sm text-negative">
+        {message}
+      </p>
+      <Button type="button" variant="outline" className="mt-3" onClick={onRetry}>
+        Try again
+      </Button>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    let current = true;
-    void fetchPortfolioAgents()
-      .then((items) => {
-        if (!current) return;
-        setAgents(items);
-        setSelected(items[0]?.id ?? "");
-        setStatus("idle");
-      })
-      .catch((error) => {
-        if (!current) return;
-        setStatus("error");
-        setMessage(error instanceof Error ? error.message : "Failed to load agents.");
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
+function PersonaRadioGroup({
+  agents,
+  selectedId,
+  onSelect,
+  onOpen,
+}: {
+  agents: PortfolioAgentDefinition[];
+  selectedId: string;
+  onSelect: (agentId: string) => void;
+  onOpen: (agentId: string) => void;
+}) {
+  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function moveSelection(from: number, step: number) {
+    const next = (from + step + agents.length) % agents.length;
+    onSelect(agents[next].id);
+    buttons.current[next]?.focus();
+  }
+
+  return (
+    <div role="radiogroup" aria-label="Choose agent" className="mt-4 grid grid-cols-2 gap-2">
+      {agents.map((agent, index) => {
+        const checked = agent.id === selectedId;
+        return (
+          <button
+            key={agent.id}
+            ref={(element) => {
+              buttons.current[index] = element;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => {
+              onSelect(agent.id);
+              onOpen(agent.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault();
+                moveSelection(index, 1);
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSelection(index, -1);
+              }
+            }}
+            className={`pressable rounded-[14px] border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
+          >
+            {agent.displayName}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PortfolioAgentCard() {
+  const { catalog, reload } = useAgentCatalog();
+  const { requestFor, start, settle } = useAgentRequests();
+  const [selectedId, setSelectedId] = useState("");
+  const [insights, setInsights] = useState<Record<string, PortfolioAgentInsight>>({});
+  const navigate = useNavigate();
+
+  const agents = catalog.status === "ready" ? catalog.agents : [];
+  /* Selection is derived, so a catalog reload that drops the chosen persona
+   * falls back to the first one instead of leaving Analyse pointed at an id
+   * the reader can no longer see. */
+  const active = agents.find((agent) => agent.id === selectedId) ?? agents[0];
+  const request = requestFor(active?.id ?? "");
+  const insight = active ? insights[active.id] : undefined;
 
   async function run() {
-    if (!selected) return;
-    setStatus("running");
-    setMessage(null);
+    if (!active) return;
+    const agentId = active.id;
+    start(agentId);
     try {
-      setInsight(await runPortfolioAgent(selected));
-      setStatus("idle");
+      const result = await runPortfolioAgent(agentId);
+      setInsights((current) => ({ ...current, [agentId]: result }));
+      settle(agentId, null);
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Agent run failed.");
+      settle(agentId, error instanceof Error ? error.message : "Agent run failed.");
     }
   }
 
-  const active = agents.find((agent) => agent.id === selected);
-  const navigate = useNavigate();
   function openAgentWindow(agentId: string) {
     const base = window.location.pathname.startsWith("/investing") ? "/investing" : "";
     const target = `${base}/agents/${encodeURIComponent(agentId)}`;
     const popup = window.open(target, "lavega-agent-workbench", "popup,width=1180,height=860");
     if (!popup) navigate(`/agents/${encodeURIComponent(agentId)}`);
   }
+
   const tone =
     insight?.signal === "bullish"
       ? "text-positive"
@@ -573,47 +564,39 @@ function PortfolioAgentCard() {
           </span>
         )}
       </div>
-      {status === "loading" ? (
+      {catalog.status === "loading" && (
         <p role="status" className="mt-4 text-sm text-muted-foreground">
           Loading agents…
         </p>
-      ) : (
+      )}
+      {catalog.status === "error" && (
+        <AgentCatalogProblem message={catalog.message} onRetry={reload} />
+      )}
+      {catalog.status === "empty" && (
+        <AgentCatalogProblem message="No portfolio agents available." onRetry={reload} />
+      )}
+      {active && (
         <>
-          <div role="radiogroup" aria-label="Choose agent" className="mt-4 grid grid-cols-2 gap-2">
-            {agents.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => openAgentWindow(agent.id)}
-                className={`pressable rounded-[14px] border px-3 py-2 text-left text-xs font-semibold transition-colors ${selected === agent.id ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
-              >
-                {agent.displayName}
-              </button>
-            ))}
-          </div>
-          {active && (
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
-          )}
-          {active && (
-            <Link
-              to={`/agents/${active.id}`}
-              className="pressable mt-4 flex items-center justify-between rounded-[14px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
-            >
-              <span>Open conversation with {active.displayName}</span>
-              <span aria-hidden="true">→</span>
-            </Link>
-          )}
-          <Button
-            type="button"
-            className="mt-4 w-full"
-            onClick={run}
-            disabled={status === "running" || agents.length === 0}
+          <PersonaRadioGroup
+            agents={agents}
+            selectedId={active.id}
+            onSelect={setSelectedId}
+            onOpen={openAgentWindow}
+          />
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
+          <Link
+            to={`/agents/${active.id}`}
+            className="pressable mt-4 flex items-center justify-between rounded-[14px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
           >
-            {status === "running" ? "Agent reading…" : "Analyse portfolio"}
+            <span>Open conversation with {active.displayName}</span>
+            <span aria-hidden="true">→</span>
+          </Link>
+          <Button type="button" className="mt-4 w-full" onClick={run} disabled={request.pending}>
+            {request.pending ? "Agent reading…" : "Analyse portfolio"}
           </Button>
-          {message && (
+          {request.error && (
             <p role="alert" className="mt-3 text-sm text-negative">
-              {message}
+              {request.error}
             </p>
           )}
           {insight && (
@@ -641,21 +624,16 @@ type AgentMessage = { role: "user" | "assistant"; content: string };
 function AgentView() {
   const { agentId } = useParams();
   const dashboard = useDashboard();
-  const [agents, setAgents] = useState<PortfolioAgentDefinition[]>([]);
+  const { catalog, reload } = useAgentCatalog();
+  const { requestFor, start, settle } = useAgentRequests();
   const [conversations, setConversations] = useState<Record<string, AgentMessage[]>>({});
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void fetchPortfolioAgents()
-      .then(setAgents)
-      .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Failed to load agents.");
-      });
-  }, []);
-
+  const agents = catalog.status === "ready" ? catalog.agents : [];
   const agent = agents.find((item) => item.id === agentId);
+  const request = requestFor(agent?.id ?? "");
+  const sending = request.pending;
+  const error = request.error;
 
   const initialMessage: AgentMessage | null = agent
     ? {
@@ -669,35 +647,47 @@ function AgentView() {
     event.preventDefault();
     const question = input.trim();
     if (!agent || !question || sending) return;
+    /* The reader can navigate to another persona while this runs, so the
+     * reply, the failure and the pending flag all travel with the id that
+     * started the request rather than with whatever is on screen later. */
+    const personaId = agent.id;
+    const opening = initialMessage!;
     setInput("");
-    setError(null);
     setConversations((current) => ({
       ...current,
-      [agent.id]: [
-        ...(current[agent.id] ?? [initialMessage!]),
-        { role: "user", content: question },
-      ],
+      [personaId]: [...(current[personaId] ?? [opening]), { role: "user", content: question }],
     }));
-    setSending(true);
+    start(personaId);
     try {
-      const insight = await runPortfolioAgent(agent.id, question);
+      const insight = await runPortfolioAgent(personaId, question);
       const response = [insight.summary, ...insight.insights].filter(Boolean).join("\n\n");
       setConversations((current) => ({
         ...current,
-        [agent.id]: [
-          ...(current[agent.id] ?? [initialMessage!]),
+        [personaId]: [
+          ...(current[personaId] ?? [opening]),
           { role: "assistant", content: response },
         ],
       }));
+      settle(personaId, null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Agent reply failed.");
-    } finally {
-      setSending(false);
+      settle(personaId, reason instanceof Error ? reason.message : "Agent reply failed.");
     }
   }
 
-  if (dashboard.status === "loading" || agents.length === 0) return <DashboardLoading />;
+  if (dashboard.status === "loading" || catalog.status === "loading") return <DashboardLoading />;
   if (dashboard.status === "error") return <DashboardError message={dashboard.message} />;
+  if (catalog.status === "error" || catalog.status === "empty") {
+    return (
+      <section className="rounded-card border border-border bg-card p-5 shadow-soft">
+        <h2 className="font-display text-2xl font-semibold">Agents unavailable</h2>
+        <AgentCatalogProblem
+          message={catalog.status === "error" ? catalog.message : "No portfolio agents available."}
+          onRetry={reload}
+        />
+      </section>
+    );
+  }
+  /* Only a resolved catalog can say an id is unknown. */
   if (!agent) {
     return <EmptyState title="Agent not found" description="Choose an agent from the overview." />;
   }

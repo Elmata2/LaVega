@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
@@ -1794,4 +1794,240 @@ test("a server-key vault asks for no passphrase and does not claim the key is th
     JSON.stringify({ broker: "ibkr", token: "flex-token", queryId: "123456" }),
   );
   root.unmount();
+});
+
+test("overview analyses the persona the reader selected", async () => {
+  vi.spyOn(window, "open").mockReturnValue({} as Window);
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    Array.from(container.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+      .find((button) => button.textContent === "Bill Ackman")
+      ?.click();
+  });
+
+  const agentCard = container.querySelector<HTMLElement>('[data-dashboard-section="agent"]')!;
+  expect(agentCard.textContent).toContain("Concentrated brands and catalysts.");
+  expect(agentCard.textContent).toContain("Open conversation with Bill Ackman");
+
+  await act(async () => {
+    Array.from(agentCard.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Analyse portfolio")
+      ?.click();
+    await Promise.resolve();
+  });
+
+  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/run");
+  expect(runRequest?.init?.body).toBe(JSON.stringify({ agentId: "bill_ackman" }));
+  root.unmount();
+});
+
+test("agent choice exposes radio semantics and moves with arrow keys", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(responseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const group = container.querySelector<HTMLElement>(
+    '[role="radiogroup"][aria-label="Choose agent"]',
+  )!;
+  const radios = Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  expect(radios).toHaveLength(3);
+  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual([
+    "true",
+    "false",
+    "false",
+  ]);
+  expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1, -1]);
+
+  await act(async () => {
+    radios[0].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+    );
+  });
+
+  const moved = Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  expect(moved.map((radio) => radio.getAttribute("aria-checked"))).toEqual([
+    "false",
+    "true",
+    "false",
+  ]);
+  expect(document.activeElement).toBe(moved[1]);
+  root.unmount();
+});
+
+test("agent catalog failure offers a retry instead of permanent loading", async () => {
+  let catalogAttempts = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/agents/portfolio") {
+        catalogAttempts += 1;
+        if (catalogAttempts === 1) return Promise.resolve(new Response("nope", { status: 500 }));
+      }
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const agentCard = container.querySelector<HTMLElement>('[data-dashboard-section="agent"]')!;
+  expect(agentCard.textContent).toContain("Failed to load agents.");
+  expect(agentCard.textContent).not.toContain("Loading agents…");
+
+  await act(async () => {
+    Array.from(agentCard.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Try again")
+      ?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(
+    container.querySelector<HTMLElement>('[data-dashboard-section="agent"]')!.textContent,
+  ).toContain("Warren Buffett");
+  root.unmount();
+});
+
+test("empty agent catalog resolves instead of loading forever", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/agents/portfolio")
+        return Promise.resolve(new Response(JSON.stringify({ agents: [] })));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const agentCard = container.querySelector<HTMLElement>('[data-dashboard-section="agent"]')!;
+  expect(agentCard.textContent).toContain("No portfolio agents available.");
+  expect(agentCard.textContent).not.toContain("Loading agents…");
+  expect(agentCard.textContent).not.toContain("Analyse portfolio");
+  root.unmount();
+});
+
+test("agent route keeps a reply with the persona that asked for it", async () => {
+  let releaseRun: ((value: Response) => void) | null = null;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/agents/portfolio/run" && init?.method === "POST")
+        return new Promise<Response>((resolve) => {
+          releaseRun = resolve;
+        });
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  window.history.pushState({}, "", "/agents/bill_ackman");
+  await act(async () => {
+    root.render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const input = container.querySelector<HTMLInputElement>("#agent-message")!;
+  const form = input.closest("form")!;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, "Waarom is ASML mijn grootste risico?");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Bill Ackman is reading positions…");
+
+  await act(async () => {
+    window.history.pushState({}, "", "/agents/warren_buffett");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Warren Buffett");
+  expect(container.textContent).not.toContain("is reading positions…");
+
+  await act(async () => {
+    releaseRun?.(new Response(JSON.stringify({ result: agentInsight })));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).not.toContain(
+    "ASML is concentrated but priced with clear conviction.",
+  );
+  expect(container.querySelector<HTMLInputElement>("#agent-message")?.disabled).toBe(false);
+
+  await act(async () => {
+    window.history.pushState({}, "", "/agents/bill_ackman");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
+  root.unmount();
+  window.history.pushState({}, "", "/");
 });
