@@ -89,6 +89,35 @@ test("position return stays unavailable for incomplete history and a zero denomi
   expect(zero.sinceFirstBuyPercentage).toBeNull();
 });
 
+test("future-only FX leaves historical basis unknown while current value stays usable", () => {
+  const result = buildCurrentPositions({
+    positions: [
+      {
+        entity: "Holding BV",
+        symbol: "ACME",
+        quantity: 1,
+        averagePrice: 100,
+        marketPrice: 200,
+        marketValue: 200,
+        currency: "USD",
+        asOf: "2026-09-17",
+      },
+    ],
+    trades: [trade({ date: "2026-01-02", quantity: 1, amount: 100, commission: 0 })],
+    dividends: [],
+    priceBars: [{ symbol: "ACME", date: "2026-09-17", close: 200, currency: "USD" }],
+    presentationCurrency: "EUR",
+    fxRates: [{ base: "EUR", date: "2026-09-17", rates: { USD: 2 } }],
+    today: "2026-09-17",
+  });
+
+  expect(result[0]).toMatchObject({
+    marketValue: 100,
+    priceStatus: "priced",
+    returns: { status: "missing-fx", remainingCostBasis: null },
+  });
+});
+
 test("unpriced open position retains known realized and dividend components", () => {
   const trades = [
     trade({ id: "buy", quantity: 2, amount: 20, currency: "EUR", commission: 0 }),

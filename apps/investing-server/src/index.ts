@@ -473,9 +473,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
       const priceProblems =
         prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
-      const fxResult = await fxProvider
-        .getLatestRate()
-        .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] }));
+      const today = new Date().toISOString().slice(0, 10);
+      const historyDates = [
+        ...positions.map((position) => position.asOf),
+        ...trades.map((trade) => trade.date),
+        ...dividends.map((dividend) => dividend.date),
+        ...cashBalances.map((balance) => balance.asOf),
+        ...cashFlows.map((flow) => flow.date),
+        ...prices.bars.map((bar) => bar.date),
+      ].filter((date) => date <= today);
+      const historyFrom = historyDates.sort()[0] ?? today;
+      const [latestFx, historicalFx] = await Promise.all([
+        fxProvider
+          .getLatestRate()
+          .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
+        fxProvider
+          .getHistoricalRates(historyFrom, today)
+          .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
+      ]);
       const data = buildInvestingDashboard({
         positions,
         trades,
@@ -491,9 +506,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
         })),
         presentationCurrency: "EUR",
-        fxRates: fxResult.rate,
+        fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
         selectedSymbol: symbol,
-        problems: [...problems, ...refreshProblems, ...priceProblems, ...fxResult.problems],
+        problems: [
+          ...problems,
+          ...refreshProblems,
+          ...priceProblems,
+          ...latestFx.problems,
+          ...historicalFx.problems,
+        ],
         dataVersion: version,
       });
       if (refreshProblems.length === 0)

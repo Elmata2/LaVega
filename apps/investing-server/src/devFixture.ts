@@ -206,5 +206,11 @@ export function createDevFixtureFxProvider() {
     async getLatestRate(): Promise<{ rate: FxRate; problems: string[] }> {
       return { rate: FIXTURE_FX_RATE, problems: [] };
     },
+    async getHistoricalRates(
+      _from: string,
+      _to: string,
+    ): Promise<{ rates: FxRate[]; problems: string[] }> {
+      return { rates: [FIXTURE_FX_RATE], problems: [] };
+    },
   };
 }

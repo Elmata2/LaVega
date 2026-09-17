@@ -17,3 +17,21 @@ test("supported pair returns the cross rate with no problems", async () => {
     problems: [],
   });
 });
+
+test("historical rates parse into dated observations", async () => {
+  const provider = createFrankfurterFxProvider({
+    client: {
+      fetchJson: async (url) =>
+        url.includes("..")
+          ? { base: "EUR", rates: { "2026-08-04": { USD: 1.1 }, "2026-08-05": { USD: 1.2 } } }
+          : ecbPayload,
+    },
+  });
+  await expect(provider.getHistoricalRates("2026-08-04", "2026-08-05")).resolves.toEqual({
+    rates: [
+      { base: "EUR", date: "2026-08-04", rates: { USD: 1.1 } },
+      { base: "EUR", date: "2026-08-05", rates: { USD: 1.2 } },
+    ],
+    problems: [],
+  });
+});

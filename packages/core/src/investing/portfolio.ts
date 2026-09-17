@@ -20,14 +20,28 @@ export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
 /** Undefined means the FX provider failed. Conversions then throw and every
  *  caller already reports that as missing-fx rather than a wrong number. */
 export type FxRates = FxRate | FxRate[] | undefined;
+const FX_CARRY_DAYS = 10;
+
+function daysSince(observation: string, date: string): number | null {
+  const observedAt = Date.parse(`${observation}T00:00:00Z`);
+  const requestedAt = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(observedAt) || !Number.isFinite(requestedAt)) return null;
+  return (requestedAt - observedAt) / 86_400_000;
+}
 
 function rateFor(rates: FxRates, date: string): FxRate {
   const candidates = rates === undefined ? [] : Array.isArray(rates) ? rates : [rates];
   if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
-  // Runtime often holds only the latest rate; fall forward to the nearest known
-  // rate instead of failing conversion for bars older than that rate's date.
   const sorted = [...candidates].sort((a, b) => a.date.localeCompare(b.date));
-  return sorted.filter((candidate) => candidate.date <= date).at(-1) ?? sorted[0]!;
+  const rate = sorted
+    .filter((candidate) => candidate.date <= date)
+    .filter((candidate) => {
+      const age = daysSince(candidate.date, date);
+      return age !== null && age >= 0 && age <= FX_CARRY_DAYS;
+    })
+    .at(-1);
+  if (!rate) throw new Error(`No FX rate available for ${date}`);
+  return rate;
 }
 
 export function convertCurrency(
