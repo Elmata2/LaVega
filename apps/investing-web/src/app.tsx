@@ -342,9 +342,24 @@ function PositionList({
                 )}
               </div>
               <div role="cell" className="pl-4 text-right text-sm tabular-nums">
-                {(position.returns.status === "available" ||
-                  position.returns.status === "broker-average") &&
-                position.returns.totalReturn !== null ? (
+                {position.returns.status === "broker-unrealized" &&
+                position.returns.unrealizedGain !== null ? (
+                  <>
+                    <span
+                      className={
+                        position.returns.unrealizedGain >= 0
+                          ? "font-semibold text-positive"
+                          : "font-semibold text-negative"
+                      }
+                    >
+                      {money(position.returns.unrealizedGain)}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      unrealized return on broker cost
+                    </span>
+                  </>
+                ) : position.returns.status === "available" &&
+                  position.returns.totalReturn !== null ? (
                   <>
                     <span
                       className={
@@ -358,11 +373,7 @@ function PositionList({
                         ? ""
                         : ` (${percent(position.returns.totalReturnPercentage)})`}
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {position.returns.status === "broker-average"
-                        ? "return on average purchase price"
-                        : "total return"}
-                    </span>
+                    <span className="block text-xs text-muted-foreground">total return</span>
                   </>
                 ) : (
                   <>
@@ -1985,8 +1996,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           maximumFractionDigits: 1,
           signDisplay: "always",
         });
-  const available =
-    position.returnStatus === "available" || position.returnStatus === "broker-average";
+  const available = position.returnStatus === "available";
+  const brokerUnrealized = position.returnStatus === "broker-unrealized";
   return (
     <section
       aria-labelledby="position-title"
@@ -2035,13 +2046,17 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </div>
         )}
         <div className="rounded-[14px] bg-secondary/40 p-4">
-          <dt className="text-xs font-semibold text-muted-foreground">Total return</dt>
+          <dt className="text-xs font-semibold text-muted-foreground">
+            {brokerUnrealized ? "Unrealized return" : "Total return"}
+          </dt>
           <dd
-            className={`mt-1 text-xl font-semibold tabular-nums ${!available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}
+            className={`mt-1 text-xl font-semibold tabular-nums ${brokerUnrealized && position.returns.unrealizedGain !== null ? (position.returns.unrealizedGain >= 0 ? "text-positive" : "text-negative") : !available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}
           >
-            {available
-              ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}`
-              : "Unavailable"}
+            {brokerUnrealized
+              ? money(position.returns.unrealizedGain)
+              : available
+                ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}`
+                : "Unavailable"}
           </dd>
         </div>
         {position.status === "closed" && (
@@ -2051,7 +2066,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </div>
         )}
       </dl>
-      {!available && (
+      {!available && !brokerUnrealized && (
         <p
           role="status"
           className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
@@ -2061,13 +2076,13 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             : "Import earlier transactions or connect your other brokers to calculate return."}
         </p>
       )}
-      {position.returnStatus === "broker-average" && (
+      {brokerUnrealized && (
         <p
           role="status"
           className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
-          Cost is based on your broker's average purchase price, because not every purchase is in
-          the order history. Realised profit and annual return therefore cannot be calculated.
+          Unrealized return uses your broker's current cost basis. Lifetime return remains
+          unavailable because trade history is incomplete.
         </p>
       )}
       <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">

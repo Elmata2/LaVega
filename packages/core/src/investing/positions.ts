@@ -9,14 +9,11 @@ import { orderTrades } from "./quantity.js";
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
 export type PositionReturnStatus =
   | "available"
-  | "broker-average"
+  | "broker-unrealized"
   | "missing-cost"
   | "missing-fx"
   | "unpriced";
 
-/** `broker-average` means the cost basis is the broker's own average price
- *  rather than a reconciled trade history. Realized gain and the annualized
- *  return need the full history, so they stay null there. */
 export type PositionReturn = {
   status: PositionReturnStatus;
   remainingCostBasis: number | null;
@@ -70,8 +67,10 @@ function tradeValue(trade: Trade): number | null {
   return null;
 }
 
-/** What a broker says one holding cost, before any trade history is consulted. */
-export type BrokerCostLeg = { amount: number; currency: string; date: string };
+type BrokerCostLeg = { amount: number; currency: string; date: string };
+export type BrokerCostCoverage =
+  | { status: "complete"; heldQuantity: number; legs: readonly BrokerCostLeg[] }
+  | { status: "incomplete"; heldQuantity: number; coveredQuantity: number };
 
 export function calculatePositionReturn(
   quantity: number,
@@ -80,16 +79,12 @@ export function calculatePositionReturn(
   dividends: readonly Dividend[],
   presentationCurrency: string,
   fxRates: FxRates,
-  options: { valuationDate?: string; brokerCost?: readonly BrokerCostLeg[] } = {},
+  options: { valuationDate?: string; brokerCost?: BrokerCostCoverage } = {},
 ): PositionReturn {
   const orderedTrades = orderTrades(trades);
   const firstBuyDate = orderedTrades.find((trade) => trade.side === "buy")?.date ?? null;
-  /* Trades that do not reconcile are not the end of the story. Brokers that
-   * fill through pies or autoinvest report the holding and its average price
-   * but leave those fills out of order history, so the average is the only
-   * cost this position will ever have. */
   const fallback = () =>
-    brokerAverageReturn(
+    brokerCostReturn(
       marketValue,
       dividends,
       presentationCurrency,
@@ -204,35 +199,47 @@ export function calculatePositionReturn(
   }
 }
 
-/** One leg per holding that reports an average price, so several accounts or a
- *  pie and a direct holding in the same instrument add up instead of one
- *  overwriting the other. */
-export function brokerCostLegs(positions: readonly Position[]): BrokerCostLeg[] {
-  return positions.flatMap((position) =>
-    position.averagePrice === null || Math.abs(position.quantity) <= EPSILON
-      ? []
-      : [
-          {
-            amount: position.averagePrice * position.quantity,
-            currency: position.currency,
-            date: position.asOf,
-          },
-        ],
+export function brokerCostCoverage(positions: readonly Position[]): BrokerCostCoverage {
+  const held = positions.filter((position) => Math.abs(position.quantity) > EPSILON);
+  const heldQuantity = held.reduce((sum, position) => sum + Math.abs(position.quantity), 0);
+  const known = held.filter(
+    (
+      position,
+    ): position is Position & {
+      brokerCost: Extract<Position["brokerCost"], { status: "known" }>;
+    } => position.brokerCost?.status === "known",
   );
+  const coveredQuantity = known.reduce((sum, position) => sum + Math.abs(position.quantity), 0);
+  if (coveredQuantity !== heldQuantity)
+    return { status: "incomplete", heldQuantity, coveredQuantity };
+  return {
+    status: "complete",
+    heldQuantity,
+    legs: known.map((position) => ({
+      amount: position.brokerCost.amount,
+      currency: position.brokerCost.currency,
+      date: position.asOf,
+    })),
+  };
 }
 
-function brokerAverageReturn(
+function brokerCostReturn(
   marketValue: number | null,
   dividends: readonly Dividend[],
   presentationCurrency: string,
   fxRates: FxRates,
   firstBuyDate: string | null,
-  brokerCost: readonly BrokerCostLeg[] | undefined,
+  brokerCost: BrokerCostCoverage | undefined,
 ): PositionReturn {
-  if (!brokerCost || brokerCost.length === 0) return emptyReturn("missing-cost", firstBuyDate);
+  if (
+    !brokerCost ||
+    brokerCost.status !== "complete" ||
+    Math.abs(brokerCost.heldQuantity) <= EPSILON
+  )
+    return emptyReturn("missing-cost", firstBuyDate);
   try {
     let remainingCostBasis = 0;
-    for (const leg of brokerCost)
+    for (const leg of brokerCost.legs)
       remainingCostBasis += convertCurrency(
         leg.amount,
         leg.currency,
@@ -250,19 +257,15 @@ function brokerAverageReturn(
         fxRates,
       );
     const unrealizedGain = marketValue === null ? null : marketValue - remainingCostBasis;
-    const totalReturn = unrealizedGain === null ? null : unrealizedGain + dividendsReceived;
     return {
-      status: "broker-average",
+      status: "broker-unrealized",
       remainingCostBasis,
       realizedCostBasisRemoved: null,
       unrealizedGain,
       realizedGain: null,
       dividendsReceived,
-      totalReturn,
-      totalReturnPercentage:
-        totalReturn === null || Math.abs(remainingCostBasis) <= EPSILON
-          ? null
-          : totalReturn / remainingCostBasis,
+      totalReturn: null,
+      totalReturnPercentage: null,
       sinceFirstBuyPercentage: null,
       firstBuyDate,
     };
@@ -340,7 +343,7 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date, brokerCost: brokerCostLegs(anchors) },
+      { valuationDate: latest?.date, brokerCost: brokerCostCoverage(anchors) },
     );
     const returns =
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"

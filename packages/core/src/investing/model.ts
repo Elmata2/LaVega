@@ -1,5 +1,9 @@
-/** A broker-reported holding at statement time. Monetary values use the
- * instrument currency and quantities use broker units. */
+export type BrokerCost =
+  | { status: "known"; amount: number; currency: string }
+  | { status: "unknown"; reason: "not-reported" | "legacy-denomination" };
+
+/** A broker-reported holding at statement time. `averagePrice`, market values,
+ * and quantities use instrument units. `brokerCost` carries its own currency. */
 export type Position = {
   entity: string;
   /** Which broker reported this holding. Optional because snapshots persisted
@@ -11,6 +15,7 @@ export type Position = {
   isin?: string;
   description?: string;
   quantity: number;
+  brokerCost?: BrokerCost;
   averagePrice: number | null;
   marketPrice: number | null;
   marketValue: number | null;

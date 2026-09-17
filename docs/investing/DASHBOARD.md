@@ -346,6 +346,7 @@ Use these data-quality states:
 - A close forward-filled within five business days remains usable and shows `Geschatte koers`.
 - After the cap, show `Waarde onbekend`; do not show weight.
 - When cost basis is missing, keep value and quantity and show `Rendement niet beschikbaar` with the import action defined below.
+- When every held broker leg has a denominated current cost but trade history is incomplete, show `Ongerealiseerd rendement` only. Do not show total return, realized gain, or return percentage.
 
 ## Position return
 
@@ -358,6 +359,8 @@ Calculate each position in EUR with weighted-average cost ([Position return: ave
 - `realizedGain` is sale proceeds minus removed basis and sell commission.
 - `dividendsReceived` is dividends for the symbol, converted at dividend-date FX.
 - `totalReturn` is unrealized gain plus realized gain plus dividends received.
+
+Broker cost supports current unrealized gain only when every nonzero holding has an explicitly denominated cost. A missing or legacy denomination makes all basis-dependent facts unavailable. Broker cost never establishes realized gain or lifetime total return.
 
 Show `+€X (+Y%) totaal rendement`. Use `remainingCostBasis + realizedCostBasisRemoved` as percentage denominator. This equals cost assigned to all bought shares under the weighted-average model and remains defined after partial sells. Return percentage is unavailable when that denominator is zero. Keep `Sinds eerste aankoop: +Z% vanaf YYYY-MM-DD` separate because it answers a different question.
 

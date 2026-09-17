@@ -11,7 +11,7 @@ import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
 import {
-  brokerCostLegs,
+  brokerCostCoverage,
   buildCurrentPositions,
   calculatePositionReturn,
   type CurrentPosition,
@@ -315,7 +315,7 @@ function buildPositionDetail(input: {
     input.dividends,
     input.presentationCurrency,
     input.fxRates,
-    { valuationDate, brokerCost: brokerCostLegs(latestOwnershipAnchors(input.positions)) },
+    { valuationDate, brokerCost: brokerCostCoverage(latestOwnershipAnchors(input.positions)) },
   );
   const averageCost =
     returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9

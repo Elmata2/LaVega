@@ -431,13 +431,16 @@ function mapPosition(raw: Trading212Order, entity: string, asOf: string): Positi
   const isin = optionalString(instrument.isin);
   const description = optionalString(instrument.name);
   const quantity = number(raw.quantity, "position quantity");
-  // averagePricePaid can be null while walletImpact.totalCost is present.
-  // totalCost / quantity is the same average, so use it instead of leaving
-  // the holding without a cost basis.
   const totalCost = walletImpact ? nullableNumber(walletImpact.totalCost) : null;
-  const averageFromTotal =
-    totalCost !== null && Math.abs(quantity) > 1e-9 ? totalCost / quantity : null;
-  const averagePrice = nullableNumber(raw.averagePricePaid) ?? averageFromTotal;
+  const averagePrice = nullableNumber(raw.averagePricePaid);
+  const walletCurrency = walletImpact ? optionalString(walletImpact.currency) : undefined;
+  const instrumentCurrency = string(instrument.currency ?? walletCurrency, "position currency");
+  const brokerCost =
+    averagePrice !== null
+      ? { status: "known" as const, amount: averagePrice * quantity, currency: instrumentCurrency }
+      : totalCost !== null && walletCurrency
+        ? { status: "known" as const, amount: totalCost, currency: walletCurrency }
+        : { status: "unknown" as const, reason: "not-reported" as const };
   return {
     entity,
     broker: "trading212",
@@ -445,10 +448,11 @@ function mapPosition(raw: Trading212Order, entity: string, asOf: string): Positi
     ...(isin ? { isin } : {}),
     ...(description ? { description } : {}),
     quantity,
+    brokerCost,
     averagePrice,
     marketPrice: nullableNumber(raw.currentPrice),
     marketValue: walletImpact ? nullableNumber(walletImpact.currentValue) : null,
-    currency: string(instrument.currency ?? walletImpact?.currency, "position currency"),
+    currency: instrumentCurrency,
     asOf,
   };
 }

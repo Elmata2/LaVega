@@ -170,14 +170,24 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
         const symbolValue = value(row, symbol);
         const quantityValue = parsedAmount(row, positionQuantity);
         if (!symbolValue || quantityValue == null) continue;
+        const currencyValue = value(row, currency) || "EUR";
+        const averagePriceValue = parsedAmount(row, averagePrice);
         positions.push({
           symbol: symbolValue,
           ...(value(row, isin) ? { isin: value(row, isin) } : {}),
           quantity: quantityValue,
-          averagePrice: parsedAmount(row, averagePrice),
+          brokerCost:
+            averagePriceValue === null
+              ? { status: "unknown", reason: "not-reported" }
+              : {
+                  status: "known",
+                  amount: averagePriceValue * quantityValue,
+                  currency: currencyValue,
+                },
+          averagePrice: averagePriceValue,
           marketPrice: parsedAmount(row, marketPrice),
           marketValue: parsedAmount(row, marketValue),
-          currency: value(row, currency) || "EUR",
+          currency: currencyValue,
           asOf: parseDate(value(row, asOf)) ?? "",
         });
       }

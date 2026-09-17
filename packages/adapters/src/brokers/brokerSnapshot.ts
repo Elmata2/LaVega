@@ -40,6 +40,17 @@ function restoreTrades(broker: string, trades: readonly Trade[]): Trade[] {
   );
 }
 
+function restorePositions(broker: string, positions: readonly Position[]): Position[] {
+  return withBroker(broker, positions).map((position) =>
+    position.brokerCost
+      ? position
+      : {
+          ...position,
+          brokerCost: { status: "unknown", reason: "legacy-denomination" },
+        },
+  );
+}
+
 function stableTradeId(trade: Omit<Trade, "id">): string {
   if (trade.brokerTradeId) return trade.brokerTradeId;
   let value = 2166136261;
@@ -67,7 +78,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
     cashFlowsByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
-      positionsByBroker.set(broker, structuredClone(withBroker(broker, data.positions)));
+      positionsByBroker.set(broker, structuredClone(restorePositions(broker, data.positions)));
       tradesByBroker.set(broker, structuredClone(restoreTrades(broker, data.trades)));
       dividendsByBroker.set(broker, structuredClone(withBroker(broker, data.dividends ?? [])));
       cashBalancesByBroker.set(
@@ -91,7 +102,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         if (sections.positions.status === "complete")
           positionsByBroker.set(
             outcome.broker,
-            withBroker(outcome.broker, sections.positions.rows),
+            restorePositions(outcome.broker, sections.positions.rows),
           );
         const mappedTrades = sections.trades.rows.map((trade) => ({
           ...withBroker(outcome.broker, [trade])[0],

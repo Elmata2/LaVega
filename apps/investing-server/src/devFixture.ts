@@ -120,6 +120,11 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     entity: ENTITY,
     symbol: entry.symbol,
     quantity: entry.quantity,
+    brokerCost: {
+      status: "known",
+      amount: entry.averagePrice * entry.quantity,
+      currency: entry.currency,
+    },
     averagePrice: entry.averagePrice,
     marketPrice: entry.marketPrice,
     marketValue: Math.round(entry.quantity * entry.marketPrice * 100) / 100,

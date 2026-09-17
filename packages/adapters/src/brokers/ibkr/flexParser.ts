@@ -256,6 +256,9 @@ function parsePosition(attrs: Attributes, entity: string): Position {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
   const account = first(attrs, "accountId", "accountID");
+  const quantity = requiredNumber(first(attrs, "position", "quantity"), "position quantity");
+  const averagePrice = numberOrNull(first(attrs, "avgPrice", "averagePrice"));
+  const currency = first(attrs, "currency", "currencyOfInstrument") || "";
   return {
     entity,
     broker: "ibkr",
@@ -263,11 +266,15 @@ function parsePosition(attrs: Attributes, entity: string): Position {
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
     ...(first(attrs, "description") ? { description: first(attrs, "description") } : {}),
-    quantity: requiredNumber(first(attrs, "position", "quantity"), "position quantity"),
-    averagePrice: numberOrNull(first(attrs, "avgPrice", "averagePrice")),
+    quantity,
+    brokerCost:
+      averagePrice === null
+        ? { status: "unknown", reason: "not-reported" }
+        : { status: "known", amount: averagePrice * quantity, currency },
+    averagePrice,
     marketPrice: numberOrNull(first(attrs, "markPrice", "marketPrice")),
     marketValue: numberOrNull(first(attrs, "positionValue", "marketValue")),
-    currency: first(attrs, "currency", "currencyOfInstrument") || "",
+    currency,
     asOf: date(first(attrs, "reportDate", "date"), "position date"),
   };
 }
