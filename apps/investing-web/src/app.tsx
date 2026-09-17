@@ -26,6 +26,7 @@ import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { signOut } from "./lib/auth-client";
 import { longDate } from "./lib/dates.js";
+import { useDashboard } from "./lib/dashboardResource";
 import {
   DASHBOARD_REFRESH_EVENT,
   runPriceSyncUntilComplete,
@@ -93,36 +94,6 @@ type PortfolioAgentInsight = {
   model: string;
   snapshotHash: string;
 };
-type DashboardState =
-  | { status: "loading" }
-  | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
-  | { status: "error"; message: string };
-
-function isDashboardData(value: unknown): value is InvestingDashboardData {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Partial<InvestingDashboardData>;
-  return (
-    typeof data.presentationCurrency === "string" &&
-    Boolean(data.portfolio && typeof data.portfolio === "object") &&
-    Boolean(data.allocation && typeof data.allocation === "object") &&
-    typeof data.dataVersion === "number" &&
-    (data.benchmarks === undefined || Array.isArray(data.benchmarks)) &&
-    Array.isArray(data.externalCashFlows) &&
-    Array.isArray(data.positions) &&
-    Array.isArray(data.problems) &&
-    (data.position === null || (Boolean(data.position) && typeof data.position === "object"))
-  );
-}
-
-async function fetchDashboard(symbol?: string): Promise<InvestingDashboardData> {
-  const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
-  const response = await fetch(`/api/investing/dashboard${query}`);
-  if (!response.ok) throw new Error(`Failed to load dashboard: ${response.status}`);
-  const payload: unknown = await response.json();
-  if (!isDashboardData(payload)) throw new Error("Dashboard data has an invalid format.");
-  return payload;
-}
-
 function isPortfolioAgentDefinition(value: unknown): value is PortfolioAgentDefinition {
   if (!value || typeof value !== "object") return false;
   const agent = value as Partial<PortfolioAgentDefinition>;
@@ -179,36 +150,6 @@ async function runPortfolioAgent(agentId: string, prompt?: string): Promise<Port
   return payload.result;
 }
 
-function useDashboard(symbol?: string): DashboardState {
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
-  useEffect(() => {
-    let current = true;
-    const load = () => {
-      setState((previous) => (previous.status === "ready" ? previous : { status: "loading" }));
-      void fetchDashboard(symbol)
-        .then((data) => {
-          if (current) setState({ status: "ready", data });
-        })
-        .catch((reason: unknown) => {
-          if (!current) return;
-          const message = reason instanceof Error ? reason.message : "Failed to load dashboard";
-          setState((previous) =>
-            previous.status === "ready"
-              ? { ...previous, refreshError: message }
-              : { status: "error", message },
-          );
-        });
-    };
-    load();
-    window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
-    return () => {
-      current = false;
-      window.removeEventListener(DASHBOARD_REFRESH_EVENT, load);
-    };
-  }, [symbol]);
-  return state;
-}
-
 function DashboardLoading() {
   return (
     <div
@@ -222,6 +163,15 @@ function DashboardLoading() {
 
 function DashboardError({ message }: { message: string }) {
   return <EmptyState title="Dashboard unavailable" description={message} />;
+}
+
+function DashboardRefreshError({ message }: { message: string }) {
+  return (
+    <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
+      <p className="font-semibold">Refresh failed</p>
+      <p className="mt-1 text-muted-foreground">{message} Cached data remains visible.</p>
+    </div>
+  );
 }
 
 function DashboardProblems({ problems }: { problems: string[] }) {
@@ -1952,17 +1902,7 @@ function Overview() {
         <DashboardError message={state.message} />
       ) : (
         <>
-          {state.refreshError && (
-            <div
-              role="alert"
-              className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"
-            >
-              <p className="font-semibold">Refresh failed</p>
-              <p className="mt-1 text-muted-foreground">
-                {state.refreshError} Cached data remains visible.
-              </p>
-            </div>
-          )}
+          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
           <DashboardProblems problems={state.data.problems} />
           <div
             className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
@@ -1972,7 +1912,7 @@ function Overview() {
               <div data-dashboard-section="performance">
                 <PortfolioBenchmarkChart
                   data={state.data.portfolio}
-                  benchmarks={state.data.benchmarks ?? []}
+                  benchmarks={state.data.benchmarks}
                   externalCashFlows={state.data.externalCashFlows}
                   currency={state.data.presentationCurrency}
                 />
@@ -2017,6 +1957,7 @@ function Positions() {
   if (state.status === "error") return <DashboardError message={state.message} />;
   return (
     <>
+      {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
       <DashboardProblems problems={state.data.problems} />
       <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
     </>
@@ -2343,6 +2284,7 @@ function PositionDetail() {
         <DashboardError message={state.message} />
       ) : state.data.position?.symbol.toUpperCase() === positionSymbol ? (
         <>
+          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
           <DashboardProblems problems={state.data.problems} />
           <CompletePositionDetail position={state.data.position} />
         </>

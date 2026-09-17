@@ -223,7 +223,10 @@ test("overview shell fetches and displays investing server health", async () => 
   expect(container.textContent).toContain("investing-server: beschikbaar");
   expect(container.textContent).toContain("Portfolio value");
   expect(container.textContent).toContain("ASML");
-  expect(fetch).toHaveBeenCalledWith("/api/investing/dashboard");
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/investing/dashboard",
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
   expect(fetch).toHaveBeenCalledWith("/api/investing/health");
   root.unmount();
 });
