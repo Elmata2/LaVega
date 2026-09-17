@@ -9,6 +9,7 @@ import {
   normalizeTradeQuantity,
 } from "@lavega/core";
 import {
+  hasBrokerSyncTime,
   historyPending,
   type BrokerAccessAdapter,
   type BrokerResult,
@@ -20,13 +21,10 @@ export type Trading212Config = {
   secret: string;
   baseUrl: string;
   diagnostics?: (event: Trading212DiagnosticEvent) => void;
-  /**
-   * Stop before this Unix ms so the host can persist. On Vercel the function
-   * otherwise dies mid-history and the next invocation restarts page one.
-   */
-  deadlineMs?: number;
   resume?: BrokerSyncResume;
 };
+
+type Trading212RequestConfig = Trading212Config & { deadlineMs?: number };
 
 export type Trading212DiagnosticEvent =
   | {
@@ -74,8 +72,6 @@ const MAX_RATE_LIMIT_RETRIES = 3;
 /** One order-history window is 60s; leave room for a reset timestamp plus clock skew. */
 const MAX_RATE_LIMIT_WAIT_MS = 120_000;
 const RATE_LIMIT_MARGIN_MS = 1_000;
-/** Leave time to persist the snapshot and answer the HTTP request. */
-const HOST_DEADLINE_MARGIN_MS = 5_000;
 const HOST_DEADLINE_MESSAGE =
   "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
 const RATE_LIMIT_MESSAGE =
@@ -98,9 +94,7 @@ class Trading212RateLimitError extends Trading212SyncPausedError {
 }
 
 function throwIfHostDeadline(deadlineMs: number | undefined, waitMs = 0): void {
-  if (deadlineMs === undefined) return;
-  const remaining = deadlineMs - Date.now();
-  if (remaining - HOST_DEADLINE_MARGIN_MS > waitMs) return;
+  if (hasBrokerSyncTime(deadlineMs, waitMs)) return;
   throw new Trading212SyncPausedError(HOST_DEADLINE_MESSAGE, Math.max(0, waitMs));
 }
 
@@ -495,7 +489,7 @@ function result(
 
 async function accountSummary(
   url: string,
-  config: Trading212Config,
+  config: Trading212RequestConfig,
   limiter: RateLimiter,
 ): Promise<Trading212Order> {
   const response = await request(url, config, limiter);
@@ -515,7 +509,7 @@ async function accountSummary(
 async function historyPage(
   url: string,
   label: "transaction" | "dividend",
-  config: Trading212Config,
+  config: Trading212RequestConfig,
   limiter: RateLimiter,
 ): Promise<Trading212Page> {
   const response = await request(url, config, limiter);
@@ -556,7 +550,7 @@ async function historyPage(
 
 async function page(
   url: string,
-  config: Trading212Config,
+  config: Trading212RequestConfig,
   limiter: RateLimiter,
 ): Promise<Trading212Page> {
   // Order history allows 6 requests per minute. `limiter` waits out a spent
@@ -591,12 +585,13 @@ async function page(
 
 async function request(
   url: string,
-  config: Trading212Config,
+  config: Trading212RequestConfig,
   limiter: RateLimiter,
 ): Promise<Response> {
   const path = new URL(url).pathname;
   for (let retry = 0; ; retry += 1) {
     await limiter.reserve(path);
+    throwIfHostDeadline(config.deadlineMs);
     const response = await fetch(url, {
       headers: { Authorization: basicAuth(config.token, config.secret) },
     });
@@ -623,7 +618,7 @@ async function request(
 
 async function positions(
   url: string,
-  config: Trading212Config,
+  config: Trading212RequestConfig,
   limiter: RateLimiter,
 ): Promise<Trading212Positions> {
   const response = await request(url, config, limiter);
@@ -661,7 +656,8 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
   return {
-    async sync({ entity, resume: inputResume }) {
+    async sync({ entity, resume: inputResume, deadlineMs }) {
+      const requestConfig: Trading212RequestConfig = { ...config, deadlineMs };
       const resume = inputResume ?? config.resume ?? {};
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
@@ -669,7 +665,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const cashBalances: CashBalance[] = [];
       const cashFlows: CashFlow[] = [];
       const problems: string[] = [];
-      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), config.deadlineMs);
+      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), deadlineMs);
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
         if (error instanceof Trading212SyncPausedError)
@@ -706,12 +702,12 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let dividendsPartial = false;
 
       try {
-        throwIfHostDeadline(config.deadlineMs, 0);
+        throwIfHostDeadline(deadlineMs, 0);
         // Holdings and cash are one request each. Read them before order
         // history so a host time limit still leaves the dashboard something
         // current to show.
         const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
-        const holdings = await positions(holdingsUrl, config, limiter);
+        const holdings = await positions(holdingsUrl, requestConfig, limiter);
         holdingsComplete = true;
         config.diagnostics?.({ type: "positions", count: holdings.length });
         // `asOf` is when the broker reported the holding, not when it was
@@ -737,10 +733,10 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
 
       let accountCurrency = "";
       try {
-        throwIfHostDeadline(config.deadlineMs, 0);
+        throwIfHostDeadline(deadlineMs, 0);
         const summary = await accountSummary(
           new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
-          config,
+          requestConfig,
           limiter,
         );
         summaryComplete = true;
@@ -764,11 +760,11 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         let ordersRead = 0;
         try {
           while (nextUrl) {
-            throwIfHostDeadline(config.deadlineMs, 0);
+            throwIfHostDeadline(deadlineMs, 0);
             if (seenOrderPaths.has(nextUrl))
               throw new Error("Trading 212 orders pagination repeated nextPagePath");
             seenOrderPaths.add(nextUrl);
-            const current = await page(nextUrl, config, limiter);
+            const current = await page(nextUrl, requestConfig, limiter);
             historyPages += 1;
             ordersRead += current.items.length;
             let skipped = 0;
@@ -826,14 +822,14 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         let pageNumber = 0;
         try {
           while (nextUrl) {
-            throwIfHostDeadline(config.deadlineMs, 0);
+            throwIfHostDeadline(deadlineMs, 0);
             if (seenPaths.has(nextUrl))
               throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
             seenPaths.add(nextUrl);
             const current = await historyPage(
               nextUrl,
               history === "transactions" ? "transaction" : "dividend",
-              config,
+              requestConfig,
               limiter,
             );
             pageNumber += 1;

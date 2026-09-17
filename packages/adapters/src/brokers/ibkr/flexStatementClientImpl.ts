@@ -1,5 +1,6 @@
 // First-party client based on Gloomberb implementation.
 import { httpFetch } from "../../../vendor/gloomberb/http-transport.js";
+import { hasBrokerSyncTime } from "../BrokerAccessAdapter.js";
 
 export interface FlexQueryConfig {
   token: string;
@@ -9,6 +10,8 @@ export interface FlexQueryConfig {
   initialWaitMs?: number;
   pollDelayMs?: number;
   maxDownloadAttempts?: number;
+  /** Absolute Unix time. Undefined keeps local sync unlimited. */
+  deadlineMs?: number;
 }
 
 export const IBKR_STATEMENT_URL =
@@ -19,6 +22,8 @@ const FLEX_USER_AGENT = "Gloomberb/1.0 Flex";
 const FLEX_STATEMENT_INITIAL_WAIT_MS = 3_000;
 const FLEX_STATEMENT_POLL_DELAY_MS = 5_000;
 const FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS = 60;
+const FLEX_DEADLINE_MESSAGE =
+  "IBKR Flex sync paused before the host time limit; retry on the next sync";
 
 type FlexRequestPhase = "request" | "download";
 
@@ -129,6 +134,10 @@ function flexError(providerMessage: string, context: FlexErrorContext): Error {
   return new Error(buildFlexErrorMessage(providerMessage, context));
 }
 
+function throwIfFlexDeadline(deadlineMs: number | undefined, workMs = 0): void {
+  if (!hasBrokerSyncTime(deadlineMs, workMs)) throw new Error(FLEX_DEADLINE_MESSAGE);
+}
+
 export async function requestFlexStatement(config: FlexQueryConfig): Promise<string> {
   const endpoint = config.endpoint || IBKR_STATEMENT_URL;
   const url = buildFlexUrl(endpoint, {
@@ -138,6 +147,7 @@ export async function requestFlexStatement(config: FlexQueryConfig): Promise<str
   });
   let resp: Response;
   let text: string;
+  throwIfFlexDeadline(config.deadlineMs);
   try {
     resp = await httpFetch(url, flexRequestInit());
     text = await resp.text();
@@ -170,13 +180,18 @@ async function getFlexStatement(
   context: Partial<
     Pick<
       FlexQueryConfig,
-      "endpoint" | "queryId" | "initialWaitMs" | "pollDelayMs" | "maxDownloadAttempts"
+      | "endpoint"
+      | "queryId"
+      | "initialWaitMs"
+      | "pollDelayMs"
+      | "maxDownloadAttempts"
+      | "deadlineMs"
     >
   > = {},
 ): Promise<string> {
-  await new Promise((resolve) =>
-    setTimeout(resolve, context.initialWaitMs ?? FLEX_STATEMENT_INITIAL_WAIT_MS),
-  );
+  const initialWaitMs = context.initialWaitMs ?? FLEX_STATEMENT_INITIAL_WAIT_MS;
+  throwIfFlexDeadline(context.deadlineMs, initialWaitMs);
+  await new Promise((resolve) => setTimeout(resolve, initialWaitMs));
 
   const endpoint = resolveFlexGetEndpoint(context.endpoint);
   const url = buildFlexUrl(endpoint, {
@@ -191,6 +206,7 @@ async function getFlexStatement(
   ) {
     let resp: Response;
     let text: string;
+    throwIfFlexDeadline(context.deadlineMs);
     try {
       resp = await httpFetch(url, flexRequestInit());
       text = await resp.text();
@@ -209,9 +225,9 @@ async function getFlexStatement(
     }
 
     if (text.includes("Statement generation in progress")) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, context.pollDelayMs ?? FLEX_STATEMENT_POLL_DELAY_MS),
-      );
+      const pollDelayMs = context.pollDelayMs ?? FLEX_STATEMENT_POLL_DELAY_MS;
+      throwIfFlexDeadline(context.deadlineMs, pollDelayMs);
+      await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
       continue;
     }
 

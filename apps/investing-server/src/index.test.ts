@@ -760,6 +760,44 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
   }
 });
 
+test("runtime forwards the request deadline through broker orchestration", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-deadline-"));
+  const credentialsFile = join(directory, "credentials.json");
+  let requests = 0;
+  try {
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
+    const baseUrl = await serve((_request, response) => {
+      requests += 1;
+      return json(response, { items: [], nextPagePath: null });
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+    vi.stubEnv("INVESTING_PRICE_SYNC_BUDGET_MS", "1");
+    vi.stubEnv("INVESTING_SYNC_BUDGET_MS", "60000");
+
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
+    const result = (await response.json()) as { problems: string[] };
+
+    expect(response.status).toBe(200);
+    expect(requests).toBe(0);
+    expect(result.problems).toContain(
+      "trading212: Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("sync status reports history completeness from durable state, not the invocation", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-history-"));
   try {

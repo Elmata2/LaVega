@@ -160,6 +160,19 @@ test("sync reports bounded timeout without throwing", async () => {
   });
 });
 
+test("sync returns a retryable problem when the host deadline is spent", async () => {
+  const result = await adapter().sync({
+    entity: "personal",
+    deadlineMs: Date.now() + 5_000,
+  });
+
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.problems).toEqual([
+    "IBKR Flex sync paused before the host time limit; retry on the next sync",
+  ]);
+  expect(requests).toEqual([]);
+});
+
 test("sync reports rejected token without throwing", async () => {
   handler = (_request, response) =>
     respond(

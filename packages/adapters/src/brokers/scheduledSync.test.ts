@@ -253,5 +253,24 @@ test("the next run after the cooldown passes the stored resume into sync", async
 
   await run(sync, state, new Date("2026-08-19T12:01:01.000Z"));
 
-  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume });
+  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume, deadlineMs: undefined });
+});
+
+test("the scheduler passes the same absolute deadline to the adapter", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({}));
+  const deadlineMs = 1_797_854_400_000;
+
+  await syncScheduledBrokers({
+    adapters: adapters(sync),
+    credentials,
+    state,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-08-19T12:00:00.000Z"),
+    deadlineMs,
+  });
+
+  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume: undefined, deadlineMs });
 });

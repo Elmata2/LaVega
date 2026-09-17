@@ -278,8 +278,7 @@ test("a host deadline stops before the rate-limit wait and leaves a resume curso
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-      deadlineMs: START_MS + 10_000,
-    }).sync({ entity: "BV" });
+    }).sync({ entity: "BV", deadlineMs: START_MS + 10_000 });
 
     expect(result.sections.trades.status).toBe("partial");
     expect(result.sections.trades.rows).toHaveLength(300);
@@ -309,8 +308,7 @@ test("a resumed sync continues from the stored cursor and finishes the history",
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-      deadlineMs: START_MS + 10_000,
-    }).sync({ entity: "BV" });
+    }).sync({ entity: "BV", deadlineMs: START_MS + 10_000 });
     const second = await createTrading212Adapter({
       token: "key",
       secret: "secret",

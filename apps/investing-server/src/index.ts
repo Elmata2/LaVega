@@ -135,20 +135,13 @@ export function createRuntimeBrokerSync(
   return async (force, deadlineMs) => {
     if (inFlight) return inFlight;
     const run = syncScheduledBrokers({
-      adapters:
-        deadlineMs === undefined
-          ? adapters
-          : createCredentialsAwareBrokerAdapters({
-              credentials,
-              tenantId,
-              deadlineMs,
-              onTrading212Diagnostic,
-            }),
+      adapters,
       credentials,
       state,
       tenantId,
       entity,
       force,
+      deadlineMs,
       onCompleted,
     });
     inFlight = run;
@@ -780,7 +773,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean) => (await currentRuntime()).brokerSync(force);
+  const brokerSync = async (force: boolean, deadlineMs?: number) =>
+    (await currentRuntime()).brokerSync(force, deadlineMs);
   const dashboardReader: InvestingDashboardReader = async ({ symbol }) =>
     (await currentRuntime()).dashboardReader({ symbol });
   const runPortfolioAgentOnce = async (

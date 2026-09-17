@@ -11,25 +11,11 @@ export type CredentialsAwareBrokerAdaptersOptions = {
   /** Config override for tests; defaults to reading process.env. */
   environment?: (name: string) => string | undefined;
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void;
-  deadlineMs?: number;
 };
 
 function defaultEnvironment(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value || undefined;
-}
-
-/** Host time left for one Trading 212 invocation. Unset locally so a Docker
- *  sync can wait out every provider window. On Vercel the function dies if
- *  that wait runs past maxDuration, so we stop early and resume. */
-export function trading212DeadlineMs(
-  environment: (name: string) => string | undefined,
-  now = Date.now(),
-): number | undefined {
-  const budget = Number(environment("INVESTING_SYNC_BUDGET_MS"));
-  if (Number.isFinite(budget) && budget > 0) return now + budget;
-  if (environment("VERCEL")) return now + 45_000;
-  return undefined;
 }
 
 /** One BrokerAccessAdapter per scheduled broker, with credential lookup and
@@ -77,7 +63,6 @@ export function createCredentialsAwareBrokerAdapters(
             token: stored.token,
             secret: stored.secret,
             baseUrl: environment("TRADING212_BASE_URL") ?? "https://live.trading212.com",
-            deadlineMs: options.deadlineMs ?? trading212DeadlineMs(environment),
             resume: input.resume,
             diagnostics: (details) => {
               console.log(JSON.stringify({ event: "investing.trading212.http", ...details }));

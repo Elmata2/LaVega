@@ -14,15 +14,15 @@ Acceptance: controlled delayed start write cannot overwrite done; rejected start
 
 ## R1 — P1: Preserve the request deadline through broker orchestration
 
-Evidence: `apps/investing-server/src/app.ts:335-343` calculates an absolute deadline and passes it to `brokerSync`. `apps/investing-server/src/index.ts:768` accepts only `force`, dropping the second argument. Inner runtime function at line 532 and factory at 128 already support `deadlineMs`. `packages/adapters/src/brokers/credentialsAware.ts:87` instead computes a fresh environment budget at Trading 212 start. IBKR construction at lines 61-65 receives no deadline.
+Status: implemented by Issue #114.
 
-Failure: request has spent time opening storage and polling IBKR, then Trading 212 receives a fresh 240-second budget. Total wall clock can exceed original host/proxy budget; snapshot and cursor persistence never execute. A request configured with a shorter price/request budget also ignores that budget during brokers.
+The request route creates one absolute `deadlineMs`. Current-runtime lookup, broker runtime, scheduler, credential-aware adapters, IBKR, Trading 212, and price sync receive that same value. No layer creates a replacement broker deadline. An absent deadline keeps local runs unlimited.
 
-Implementation: one request-budget interface (`deadlineMs`, remaining time) owned by broker sync module; forward unchanged through current-runtime lookup, scheduler and both broker adapters. Retain unlimited local mode. Reserve explicit persistence margin; stop before provider sleep/fetch/poll would exceed budget, return resumable result. Keep route shape compatible. First commit may simply forward missing argument plus regression; enforce IBKR budget next.
+Both brokers reserve five seconds for snapshot and cursor persistence. Trading 212 stops before requests or provider waits that exceed the remaining budget and returns its history cursor. IBKR stops before the statement request, initial wait, each poll request, and each poll sleep. Its adapter converts the stop into a problem result, so orchestration can persist completed broker data and retry IBKR later.
 
-Acceptance: runtime route test uses real composition with fake providers/time; simulate 20 seconds in IBKR then Trading 212 and assert both observe same epoch deadline; no later fresh budget; partial result and cursor saved before response. Test no-budget local sync unchanged. No new scheduler/queue product. Dependencies: none; coordinate with R2 if scheduler interface changes.
+Regression coverage proves real runtime forwarding, scheduler identity propagation, all IBKR stop boundaries, adapter problem conversion, Trading 212 cursor behavior, and unlimited local behavior. No scheduler or queue product was added.
 
-Depth/locality/leverage: budget belongs behind broker sync seam, not reconstructed in adapters. Deletion test: deleting pass-through wrapper alone merely moves code; value comes from eliminating independent budget decisions and testing through runtime interface.
+Depth/locality/leverage: budget belongs behind broker sync seam and is not reconstructed in adapters. One request type and one shared persistence-margin helper own the contract.
 
 ## R2 — P1: Make broker sync one durable tenant operation
 

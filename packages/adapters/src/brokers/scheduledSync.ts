@@ -3,6 +3,7 @@ import {
   historyPending,
   type BrokerAccessAdapter,
   type BrokerResult,
+  type BrokerSyncRequest,
   type BrokerSyncResume,
 } from "./BrokerAccessAdapter.js";
 
@@ -69,6 +70,7 @@ export async function syncScheduledBrokers(input: {
   entity: string;
   force?: boolean;
   now?: Date;
+  deadlineMs?: BrokerSyncRequest["deadlineMs"];
   onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>;
 }): Promise<ScheduledSyncResult> {
   const now = input.now ?? new Date();
@@ -116,6 +118,7 @@ export async function syncScheduledBrokers(input: {
       result = await entry.adapter.sync({
         entity: input.entity,
         resume: previous.resume ?? undefined,
+        deadlineMs: input.deadlineMs,
       });
     } catch (error) {
       const problem = `${entry.broker}: ${readableError(error, entry.broker)}`;

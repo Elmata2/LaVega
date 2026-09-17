@@ -5,9 +5,9 @@ import { parseFlexStatement } from "./flexParser.js";
 
 export function createIbkrFlexAdapter(config: FlexQueryConfig): BrokerAccessAdapter {
   return {
-    async sync({ entity }) {
+    async sync({ entity, deadlineMs }) {
       try {
-        const xml = await loadFlexStatement(config);
+        const xml = await loadFlexStatement({ ...config, deadlineMs });
         const parsed = parseFlexStatement(xml, entity);
         return { ...parsed, source: "ibkr-flex" };
       } catch (error) {

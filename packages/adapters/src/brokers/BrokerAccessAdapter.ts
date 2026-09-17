@@ -10,6 +10,24 @@ export type BrokerSyncResume = {
   dividendsComplete?: boolean;
 };
 
+export type BrokerSyncRequest = {
+  entity: string;
+  resume?: BrokerSyncResume;
+  /** Absolute Unix time. Undefined keeps local sync unlimited. */
+  deadlineMs?: number;
+};
+
+/** Leave time for snapshot and cursor persistence before the host stops the request. */
+export const BROKER_SYNC_PERSISTENCE_MARGIN_MS = 5_000;
+
+export function hasBrokerSyncTime(
+  deadlineMs: number | undefined,
+  workMs = 0,
+  now = Date.now(),
+): boolean {
+  return deadlineMs === undefined || deadlineMs - now - BROKER_SYNC_PERSISTENCE_MARGIN_MS > workMs;
+}
+
 export type BrokerSectionStatus = "complete" | "partial" | "unavailable";
 
 export type BrokerSection<T> = {
@@ -41,7 +59,7 @@ export type BrokerResult = {
 };
 
 export interface BrokerAccessAdapter {
-  sync(input: { entity: string; resume?: BrokerSyncResume }): Promise<BrokerResult>;
+  sync(input: BrokerSyncRequest): Promise<BrokerResult>;
 }
 
 /** True when some history still has pages left to read. */
