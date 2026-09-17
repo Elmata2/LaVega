@@ -1,3 +1,20 @@
+/* WRAPPED IN @layer components, AND THE REASON MATTERS.
+ *
+ * Tailwind's utilities compile into `@layer utilities`. Per the cascade-layers
+ * spec an UNLAYERED rule beats a layered one regardless of specificity, so
+ * while this file sat outside any layer it silently won against every utility
+ * touching the same property — no error, no failing test, the utility simply
+ * did nothing. Two workers hit that independently and worked around it by
+ * adding Tailwind's `!` modifier to hundreds of classes.
+ *
+ * Putting this file in `components` puts it where it belongs in the order
+ * tokens.css declares (theme, base, components, utilities): it still beats the
+ * theme, and a utility written on a converted element beats it, which is what
+ * a utility is for. The `!` workarounds become unnecessary.
+ *
+ * Relative order between these stylesheets is unchanged — they are all in the
+ * same layer, so main.tsx's import order still decides. */
+@layer components {
 /* Homescreen blocks — the styles the individual modules need on top of the
  * module primitive (styles/modules.css).
  *
@@ -52,86 +69,13 @@
 
 /* ---------- AandachtBlock ---------- */
 
-/* The empty state is two sentences now — the all-clear, then what "clear"
- * covers — so they need to be spaced as a paragraph pair, not run together. */
-.alert-empty {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.alert-empty p {
-  margin: 0;
-  line-height: 1.5;
-}
-
-/* Alerts grouped under their severity. Core already ranks them; grouping is
- * what makes that ranking visible — and readable to a screen reader, which the
- * bare aria-hidden 🔴/🟠/🟡 never were. */
-.alert-tiers {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-.alert-tier {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.alert-tier-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-/* The tier's own colour on the WORD only. The rows keep the app's normal ink:
- * colouring a whole block of text red is louder than the thing it describes. */
-.alert-tier-critical {
-  color: var(--neg);
-}
-.alert-tier-warning {
-  color: var(--warn);
-}
-.alert-tier-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  padding: 0 5px;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.alert-rows {
-  display: flex;
-  flex-direction: column;
-}
-.alert-row {
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--line);
-}
-.alert-row:first-child {
-  padding-top: 0;
-}
-.alert-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.alert-row-title {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-weight: 600;
-}
+/* .alert-empty, .alert-tiers, .alert-tier(-head/-critical/-warning/-count),
+ * .alert-rows, .alert-row(-title) are gone: converted to Tailwind utilities on
+ * AandachtBlock.tsx's own elements (docs/adr/0005). What is left below —
+ * .buffer-field and .module-head-wrap's descendant rules — targets
+ * .module-head/.module-controls on Module.tsx, which this worker does not own,
+ * so it stays hand-written CSS; .module-tabs/.module-tab(-on) belong to
+ * StatistiekBlock, out of scope here, and are untouched. */
 
 /* The buffer editor sits in the module's control slot, so it has to read as a
  * control rather than a form field. */
@@ -203,13 +147,12 @@
 
 /* ---------- SaldoBlock (Totale positie) ---------- */
 
-/* What the pill beside the big number is measured against, in words. Sits on
- * the figure's baseline so it reads as part of the same sentence. */
-.figure-vs {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
+/* .figure-vs, .position-graph-empty, .position-compare(-item/-figure/-value/
+ * -missing), .entity-rows and .entity-row(-name/-balance) are gone: converted
+ * to Tailwind utilities on SaldoBlock.tsx/PositieBlock.tsx/FacturenWidget.tsx's
+ * own elements (docs/adr/0005). .position-graph stays: TrendChart's own
+ * `.lv-chart-readout-value` is a descendant of it and TrendChart.tsx is not
+ * owned here. */
 .position-graph {
   margin-top: var(--sp-4);
 }
@@ -222,77 +165,8 @@
   font-weight: 600;
   letter-spacing: 0;
 }
-/* The "not enough history" sentence sits where the graph would be, at the
- * graph's height, so the card does not jump when the history arrives. */
-.position-graph-empty {
-  margin-top: var(--sp-4);
-  padding: var(--sp-4);
-  border: 1px dashed var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-
-.position-compare {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-6);
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-}
-.position-compare-item {
-  min-width: 0;
-}
-.position-compare-figure {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-.position-compare-value {
-  font-weight: 600;
-  font-size: 1.05rem;
-  font-variant-numeric: tabular-nums;
-}
-/* Muted, never a euro sign: there is no earlier figure, not a figure of zero. */
-.position-compare-missing {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
 
 /* ---------- PositieBlock (small) ---------- */
-
-.entity-rows {
-  display: flex;
-  flex-direction: column;
-  margin-top: var(--sp-3);
-}
-.entity-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--line);
-}
-.entity-row:last-child {
-  border-bottom: none;
-}
-.entity-row-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9rem;
-}
-.entity-row-balance {
-  flex: none;
-  font-weight: 600;
-  font-size: 0.9rem;
-  font-variant-numeric: tabular-nums;
-}
 
 /* ---------- StatistiekBlock ---------- */
 
@@ -448,36 +322,12 @@
 
 /* ---------- RecenteTransactiesBlock ---------- */
 
-/* The reference's per-row category chip. Neutral by design: the amount already
- * carries the money colour, so a coloured chip would compete with it. */
-.tx-chip {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.72rem;
-  padding: 3px 10px;
-  white-space: nowrap;
-}
-.tx-chip-button {
-  cursor: pointer;
-}
-.tx-chip-button:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.tx-row-right {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex: none;
-}
-/* Two cells (name+date · chip+amount). The monogram avatar that used to sit in
- * front of the name is gone — it repeated the name in two letters — so the name
- * takes the whole left column and truncates last. */
+/* .tx-chip(-button), .tx-row-right and .tx-search are gone: converted to
+ * Tailwind utilities on RecenteTransactiesBlock.tsx's own elements, including
+ * their max-width:520px overrides below (docs/adr/0005). What stays: .tx-row,
+ * .tx-row-info, .tx-desc and .tx-meta are base.css's own classes (reused, not
+ * owned here), so the descendant rules augmenting them for this block cannot
+ * move to Tailwind without editing base.css. */
 .tx-row .tx-row-info {
   flex: 1;
 }
@@ -488,56 +338,8 @@
   white-space: nowrap;
 }
 
-/* Search in the module's control slot. Narrow enough to sit beside the title,
- * and it gives up its width first when the header wraps on a phone. */
-.tx-search {
-  width: 15rem;
-  max-width: 100%;
-  border-radius: var(--pill);
-  padding: 6px 14px;
-  font-size: 0.8rem;
-}
-
-/* ---------- TopUitgavenBlock ---------- */
-
-/* Why there is no Δ column. Muted and dashed like every other "we do not know
- * this" surface in the app — it is a statement about what LaVega can support,
- * not a warning about the owner's spending. */
-.cat-nocompare {
-  margin: 0 0 var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px dashed var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-/* ---------- BetaalschemaBlock (Betaalagenda) ---------- */
-
-/* A row that came from pattern detection rather than a committed date. Muted
- * on purpose: it is a prediction, and it must never look like a bill. */
-.pay-tag {
-  flex: none;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.65rem;
-  font-weight: 500;
-  padding: 2px 8px;
-  white-space: nowrap;
-}
-
 /* ---------- KaartenBlock ---------- */
 
-.card-strip {
-  display: flex;
-  gap: var(--sp-4);
-  overflow-x: auto;
-  padding-bottom: var(--sp-2);
-  scroll-snap-type: x proximity;
-}
 .bank-card {
   flex: none;
   scroll-snap-align: start;
@@ -646,106 +448,23 @@
     0 22px 44px -26px rgba(26, 26, 23, 0.34),
     inset 0 0 0 1px rgba(255, 255, 255, 0.32);
 }
-.bank-card-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.bank-card-bank {
-  font-weight: 700;
-  font-size: 0.95rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bank-card-type {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  opacity: 0.75;
-}
-/* Where the reference prints a card number. LaVega has no PAN, so this is the
- * tail of the REAL IBAN — or a plain statement that there is no IBAN. */
-.bank-card-number {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  letter-spacing: 0.06em;
-}
-.bank-card-bottom {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-}
-.bank-card-caption {
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  opacity: 0.7;
-}
-/* De kolom met "Op naam van". Krijgt `min-width: 0` omdat een flexvak anders
- * nooit kleiner wordt dan zijn langste woord en de naam dan naast het saldo
- * schuift in plaats van eronder door te lopen. */
-.bank-card-who {
-  min-width: 0;
-}
-/* TWEE REGELS IN PLAATS VAN DERTIEN TEKENS. `max-width: 13ch` op één regel kapte
- * elke echte entiteitsnaam af ("Steunenberg Holding B.V." is er 24), en op een
- * kaart is er geen hover of tik om de rest alsnog te lezen — anders dan in de
- * betaalagenda hiernaast, waar de rij een knop is. De kaart heeft de ruimte wel:
- * twee regels passen binnen de 148 px die hij toch al hoog is, dus de naam kan
- * gewoon doorlopen. Boven twee regels wordt het weer afgekapt, want een kaart die
- * meegroeit met één lange naam trekt de hele strip scheef. */
-.bank-card-holder {
-  font-weight: 600;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.bank-card-saldo {
-  text-align: right;
-  flex: none;
-}
-.bank-card-unknown {
-  opacity: 0.7;
-  font-style: italic;
-}
 
 @media (max-width: 520px) {
   .bank-card {
     width: 232px;
   }
-  .tx-search {
-    width: 100%;
-  }
-  /* A phone row has space for the merchant, the date, the chip and the amount.
-   * Entity and bank are the first thing worth dropping — measured: keeping them
-   * wrapped every row onto three lines and truncated "Albert Heijn" to
-   * "Albert …". */
-  .tx-meta-extra {
-    display: none;
-  }
-  .tx-chip {
-    font-size: 0.68rem;
-    padding: 3px 8px;
-  }
 }
 
 /* ---------- BetaalschemaBlock ---------- */
 
-.pay-list {
-  display: flex;
-  flex-direction: column;
-}
+/* .pay-row and .pay-name are the only rules left here (see docs/adr/0005): the
+ * hover/focus/tap reveal below is `.pay-row:hover .pay-name`, a descendant
+ * combinator neither Tailwind's utility classes nor test-support/resolveStyle
+ * can express on a single element, and BetaalschemaBlock.test.tsx pins it by
+ * reading this file's text directly. Every other rule that used to live here
+ * (.pay-list, .pay-date, .pay-date-overdue, .pay-date-day, .pay-date-month,
+ * .pay-info, .pay-label, .pay-tag, .pay-meta, .pay-amount) is gone: converted
+ * to Tailwind utilities on BetaalschemaBlock.tsx's own elements. */
 
 /* DE RIJ IS EEN KNOP (review 4, punt 7). Niet om ergens heen te gaan — de agenda
  * gaat nergens heen — maar omdat de volle naam anders alleen met een muis te
@@ -795,55 +514,6 @@
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
-/* The reference's little date tile. Warn-tinted once the date has passed. */
-.pay-date {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 42px;
-  padding: 4px 0;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  line-height: 1.1;
-}
-.pay-date-overdue {
-  background: rgba(176, 120, 30, 0.12);
-  border-color: rgba(176, 120, 30, 0.35);
-}
-.pay-date-day {
-  font-weight: 700;
-  font-size: 0.95rem;
-  font-variant-numeric: tabular-nums;
-}
-.pay-date-month {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-/* Kolom, want de twee regels eronder zijn spans geworden toen de rij een knop
- * werd (een <button> mag alleen inline-inhoud dragen). Zonder deze kolom lopen
- * de naam en de eyebrow op één regel door elkaar. */
-.pay-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-/* De naam en de "voorspeld"-pil naast elkaar, elk met hun eigen ruimte. */
-.pay-label {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  width: 100%;
-  min-width: 0;
-  font-weight: 600;
-}
 /* HET AFKAPPEN ZIT ALLEEN OP DE NAAM. Toen het op `.pay-label` zat, deelde de
  * pil dezelfde regel en viel hij bij een lange naam buiten beeld — dan zag een
  * voorspelde regel eruit als een bevestigde afspraak. */
@@ -863,14 +533,6 @@
   text-overflow: clip;
   white-space: normal;
   overflow-wrap: anywhere;
-}
-.pay-meta {
-  width: 100%;
-}
-.pay-amount {
-  flex: none;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- TopUitgavenBlock ---------- */
@@ -892,21 +554,17 @@
 /* ---------- TravelBlock ---------- */
 
 /* The answer card (.travel-winner) and the three step cards (.travel-plan /
- * .travel-step) are already in base.css and reused as-is. Only the ranked
- * ROUTES are new, and they are built from the same parts: a surface-2 card, a
- * hairline border, tokenised spacing. No new colour is introduced here. */
-
-/* The answer card when nothing could be priced. The green left edge means "this
- * is the winning route"; there is no winning route here, so it is the muted
- * hairline instead. A reason is not a recommendation. */
-.travel-winner-unpriced {
-  border-left-color: var(--line);
-}
-
-/* Why there is no priced route, and the single control that changes it.
- * Directly under the answer, because "Ververs voorwaarden" in the module's "…"
- * corner was invisible (B3) — and because the sentence explaining the problem
- * and the button fixing it belong to each other. */
+ * .travel-step) are already in base.css and reused as-is. .travel-winner-unpriced,
+ * .travel-terms-blocked/-action, .travel-why, .travel-journeys,
+ * .travel-journey(-best/-head/-name/-cost/-unknown), .travel-legs and
+ * .travel-leg(-name/-cost) are gone: converted to Tailwind utilities on
+ * TravelBlock.tsx's own elements, including the .travel-journey-unknown
+ * .travel-journey-cost descendant rule, replaced by a conditional class on the
+ * cost span itself (docs/adr/0005). What is left: .travel-terms and its `p`/
+ * `code` descendants stay hand-written CSS, since this worker owns both the
+ * parent and every child paragraph across many render branches, and
+ * consolidating that onto Tailwind utilities would mean re-touching every one
+ * of them for no behavioural gain. */
 .travel-terms {
   display: flex;
   flex-direction: column;
@@ -922,88 +580,9 @@
   margin: 0;
   line-height: 1.5;
 }
-/* Blocked states — nothing a click here can fix (no key on this server, or a
- * lookup that came back empty). Amber, the app's existing attention token; no
- * new colour, and never the red of a money problem, because it is not one. */
-.travel-terms-blocked {
-  border-left: 4px solid var(--warn);
-}
 .travel-terms code {
   font-family: var(--font-mono);
   font-size: 0.8em;
-}
-.travel-terms-action {
-  flex: none;
-}
-
-.travel-why {
-  margin-top: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-.travel-journeys {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.travel-journey {
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-/* The winning route, marked the same way the answer card is. */
-.travel-journey-best {
-  border-left: 4px solid var(--pos);
-}
-.travel-journey-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-.travel-journey-name {
-  font-weight: 600;
-}
-.travel-journey-cost {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-/* An unknown route is muted, never green and never a zero — the price is
- * missing, not free. */
-.travel-journey-unknown .travel-journey-cost {
-  color: var(--muted);
-  font-weight: 500;
-}
-.travel-legs {
-  list-style: none;
-  margin: var(--sp-2) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.travel-leg {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.travel-leg-name {
-  min-width: 0;
-}
-.travel-leg-cost {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* ---------- PositieBlock ---------- */
@@ -1016,33 +595,15 @@
   }
 }
 
-/* Busy indicator for a lookup that runs on the SERVER, long after the request
-   that started it returned. Drawn, never fetched: an image would be a network
-   request that says who is using the app. */
-.travel-searching {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-}
-.travel-searching .spinner {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
-  border: 2px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: lavega-spin 900ms linear infinite;
-}
+/* .travel-searching and .spinner are gone (docs/adr/0005): both were owned
+ * only by this rule, so they moved to Tailwind utilities directly on
+ * TravelBlock.tsx's elements — `motion-reduce:[animation:none]` replaces the
+ * prefers-reduced-motion block below. The keyframe stays: Tailwind's arbitrary
+ * `[animation:lavega-spin_900ms_linear_infinite]` still names it. */
 @keyframes lavega-spin {
   to {
     transform: rotate(360deg);
   }
 }
-/* A turning thing is motion someone may have asked not to see. Stated rather
-   than animated: the border alone still reads as "working". */
-@media (prefers-reduced-motion: reduce) {
-  .travel-searching .spinner {
-    animation: none;
-  }
+
 }

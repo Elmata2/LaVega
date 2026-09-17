@@ -301,7 +301,7 @@ function PercentielLijst({
   }
 
   return (
-    <div className="lv-percentiel">
+    <div className="lv-percentiel mt-[var(--sp-3)] pt-[var(--sp-3)] border-t border-line">
       {/* De KOP blijft staan, de telling gaat achter het ⓘ. Welke maand met
           welke maanden vergeleken wordt, mag niet opvouwen — "hoger dan 8 van
           je laatste 10 maanden" is zonder die noemer een zwevende bewering, en
@@ -310,8 +310,10 @@ function PercentielLijst({
           afvielen) is de onderbouwing daarvan en die vouwt wel op. */}
       <ToonMeer
         variant="info"
-        className="lv-percentiel-basis"
-        heading={<strong>{c.tegenoverEerdereMaanden(month)}</strong>}
+        className="lv-percentiel-basis mt-0 mx-0 mb-[var(--sp-2)] text-[0.75rem] leading-[1.45] text-muted"
+        heading={
+          <strong className="text-ink font-semibold">{c.tegenoverEerdereMaanden(month)}</strong>
+        }
         summary={c.welkeDagenSummary}
       >
         <p>
@@ -322,16 +324,23 @@ function PercentielLijst({
             c.kortePeriodesTellenNiet(result.shortPeriods, result.comparedDays ?? 0)}
         </p>
       </ToonMeer>
-      <ul className="lv-percentiel-lijst">
+      <ul className="lv-percentiel-lijst list-none m-0 p-0 flex flex-col gap-[var(--sp-1)]">
         {rows.map((r) => (
-          <li key={r.category} className="lv-percentiel-rij">
-            <span className="lv-percentiel-naam">{categoryLabel(locale, r.category)}</span>
-            <span className="lv-percentiel-bedrag">{euroFromCents(locale, r.currentCents)}</span>
+          <li
+            key={r.category}
+            className="lv-percentiel-rij grid grid-cols-[minmax(0,9rem)_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-x-[var(--sp-3)] text-[0.78rem] leading-[1.4] [@media(max-width:560px)]:grid-cols-[minmax(0,1fr)_auto] [@media(max-width:560px)]:gap-y-[1px] [@media(max-width:560px)]:pb-[var(--sp-1)]"
+          >
+            <span className="lv-percentiel-naam text-ink [overflow-wrap:anywhere]">
+              {categoryLabel(locale, r.category)}
+            </span>
+            <span className="lv-percentiel-bedrag tabular-nums text-right text-ink">
+              {euroFromCents(locale, r.currentCents)}
+            </span>
             {/* "geen-verschil" telt hier als een gewoon antwoord: er is geen
                 percentiel, maar "even hoog als al je laatste 10 maanden" is een
                 meting en geen weigering. */}
             <span
-              className="lv-percentiel-positie"
+              className="lv-percentiel-positie text-muted [@media(max-width:560px)]:col-span-full"
               data-onbekend={r.reason !== null && r.reason !== "geen-verschil" ? "ja" : undefined}
             >
               {position(r, locale)}
@@ -715,7 +724,7 @@ export default function StatistiekBlock({
                       onClick={() => onSelectCategory(cat)}
                     >
                       <span
-                        className="lv-chart-swatch"
+                        className="lv-chart-swatch w-[10px] h-[10px] rounded-[3px] flex-none"
                         style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
                         aria-hidden="true"
                       />

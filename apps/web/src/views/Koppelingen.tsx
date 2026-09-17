@@ -9,6 +9,9 @@ import {
   ensureInvoiceForwardAddress,
   setInvoiceForwardAddress,
 } from "../settings";
+import Button from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 
 /* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
  *
@@ -91,7 +94,7 @@ function InfoEye({
   return (
     <button
       type="button"
-      className="field-info"
+      className="inline-flex items-center justify-center w-[24px] h-[24px] p-0 align-middle rounded-[50%] border border-line bg-surface-2 text-muted cursor-pointer hover:text-ink hover:border-accent aria-expanded:text-ink aria-expanded:border-accent"
       aria-label={label}
       title={label}
       aria-expanded={open}
@@ -105,7 +108,10 @@ function InfoEye({
 
 function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
   return (
-    <p className="field-note" id={`${id}-uitleg`}>
+    <p
+      className="mt-3 mb-0 py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem] [&_strong]:text-ink [&_code]:text-ink"
+      id={`${id}-uitleg`}
+    >
       {children}
     </p>
   );
@@ -184,7 +190,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
   }
 
   return (
-    <section className="card" aria-label="Koppelingen">
+    <Card as="section" aria-label="Koppelingen">
       {/* HET DOORSTUURADRES, TERUG ALS ÉÉN REGEL.
        *
        * Hij vroeg deze kaart weg en dat is gebeurd — de opzethulp, de uitleg en de
@@ -196,10 +202,10 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
        * Dus: één regel, het adres en een knop die er één maakt als hij er nog geen
        * heeft. Het adres verandert nooit meer nadat het bestaat — een doorstuuradres
        * dat wisselt is een adres waar post naartoe blijft gaan die niemand leest. */}
-      <div className="card-header">
+      <CardHeader>
         <h2>{c.forwardAddress.heading}</h2>
         <span className="eyebrow">{c.forwardAddress.eyebrow}</span>
-      </div>
+      </CardHeader>
       {/* INTYPEN GAAT VOOR GENEREREN, en dit commentaar noemt met opzet GEEN
           concreet adres meer. Het heeft er nu twee genoemd die geen van beide
           klopten: eerst het zelfverzonnen lavega-<random>@invoices.lavega.dev,
@@ -214,8 +220,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           staat ernaast voor wie nog niets heeft. */}
       <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
         {c.forwardAddress.addressLabel}
-        <input
-          className="saldo-input"
+        <SaldoInput
           value={forwardDraft}
           placeholder={c.forwardAddress.addressPlaceholder}
           aria-label={c.forwardAddress.addressAriaLabel}
@@ -241,9 +246,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
       {!forwardAddress && !forwardError && (
         <p style={{ margin: "0 0 var(--sp-3)" }} className="cell-sub">
           {c.forwardAddress.emptyIntroPrefix}
-          <button
-            type="button"
-            className="btn"
+          <Button
             onClick={() => {
               const made = ensureInvoiceForwardAddress();
               setForwardAddress(made);
@@ -251,11 +254,11 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
             }}
           >
             {c.forwardAddress.generateButton}
-          </button>
+          </Button>
           {c.forwardAddress.emptyIntroSuffix}
         </p>
       )}
-      <div className="card-header">
+      <CardHeader>
         <h2>{c.n8nLink.heading}</h2>
         <span className="eyebrow">
           {c.n8nLink.eyebrow}
@@ -267,7 +270,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
             onToggle={toggle("koppeling")}
           />
         </span>
-      </div>
+      </CardHeader>
       <p className="cell-sub">{renderSpans(c.n8nLink.intro)}</p>
 
       {info === "koppeling" && (
@@ -319,12 +322,10 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           />{" "}
           {c.n8nLink.form.showTokenLabel}
         </label>{" "}
-        <button type="button" className="btn btn-primary" onClick={handleSave}>
+        <Button variant="primary" onClick={handleSave}>
           {c.n8nLink.form.saveButton}
-        </button>{" "}
-        <button type="button" className="btn" onClick={handleClear}>
-          {c.n8nLink.form.clearButton}
-        </button>
+        </Button>{" "}
+        <Button onClick={handleClear}>{c.n8nLink.form.clearButton}</Button>
       </div>
 
       {info === "url" && <InfoNote id="url">{renderSpans(c.n8nLink.info.url)}</InfoNote>}
@@ -332,6 +333,6 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
 
       {urlLooksWrong && <p className="cell-sub text-neg">{c.n8nLink.urlWarning}</p>}
       {note && <p className="cell-sub">{note}</p>}
-    </section>
+    </Card>
   );
 }

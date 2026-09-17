@@ -1,3 +1,25 @@
+/* TAILWIND, WITHOUT ITS RESET, ON PURPOSE.
+ *
+ * This app is 6,300 lines of hand-written CSS that predates Tailwind. Importing
+ * `tailwindcss` whole would bring Preflight, which rewrites margins, box-sizing
+ * and the default look of headings, lists and form controls — silently
+ * restyling every screen while every test kept passing, because none of them
+ * assert on appearance.
+ *
+ * So only the theme and the utilities are imported. Existing CSS is untouched,
+ * Tailwind classes work alongside it, and a component can be converted one at a
+ * time rather than the whole app at once. Preflight can be adopted later, as a
+ * deliberate step with its own visual check, once little enough hand-written
+ * CSS is left for it to matter.
+ *
+ * The @theme block below maps Tailwind's namespaces onto the variables this
+ * file already defines, so `bg-surface` and `var(--surface)` are the same
+ * colour by construction. A converted component cannot drift from an
+ * unconverted one. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 /* LaVega design-system tokens. Warm editorial palette (EB Garamond headings +
  * Inter body — self-hosted via @fontsource in main.tsx). The app now sits as a
  * single floating, rounded "frame" on a soft gutter, with generously rounded
@@ -20,6 +42,16 @@
   --pos: #4e7a3a; /* money in — natural green */
   --neg: #b0442e; /* money out / debt — terracotta */
   --warn: #b0781e; /* attention — amber */
+  /* The 12% tints behind the delta pills. Derived rather than written out: they
+   * were rgba(78,122,58,.12) and rgba(176,68,46,.12), two hand-copied values
+   * that would not follow --pos/--neg if either changed.
+   *
+   * color-mix in srgb, not Tailwind's `bg-pos/12`. That modifier SILENTLY emits
+   * full opacity here, because @theme inline points --color-pos at another
+   * variable and Tailwind cannot resolve it at build time to mix against. A
+   * solid green pill, no error, no failing test. */
+  --pos-tint: color-mix(in srgb, var(--pos) 12%, transparent);
+  --neg-tint: color-mix(in srgb, var(--neg) 12%, transparent);
   /* Data-viz accents (charts, category dots) */
   --chart-blue: #3b6ea5;
   --chart-purple: #7b6cc4;
@@ -59,4 +91,59 @@
   --module-h-short: 200px;
   --module-h-tall: 360px;
   --module-pad: var(--sp-5);
+}
+
+/* Tailwind's namespace, pointed at the variables above. Adding a token means
+ * adding it in :root and naming it here — never a second hard-coded value. */
+@theme inline {
+  --color-gutter: var(--gutter);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-on-ink: var(--on-ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-warn: var(--warn);
+  --color-pos-tint: var(--pos-tint);
+  --color-neg-tint: var(--neg-tint);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-teal: var(--chart-teal);
+
+  --radius-lg: var(--r-lg);
+  --radius-card: var(--r-card);
+  /* `--radius`, not `--radius-DEFAULT`. Tailwind v4 keys the bare `rounded`
+   * utility off `--radius`; a `-DEFAULT` suffix is simply an unused token, so
+   * `rounded` silently fell back to Tailwind's own 0.25rem instead of this
+   * app's 18px. Wrong corner on every element using it, green suite. */
+  --radius: var(--r);
+  --radius-sm: var(--r-sm);
+  --radius-pill: var(--pill);
+
+  /* NO --spacing-* HERE, DELIBERATELY.
+   *
+   * Mapping Tailwind's numeric scale onto --sp-1..6 was the obvious move and it
+   * was wrong. Steps 1 to 4 happen to agree (4/8/12/16px), but --sp-5 is 24px
+   * where Tailwind's 5 is 20px, and --sp-6 is 32px where Tailwind's 6 is 24px.
+   * That made `p-6` mean 32px in this repo and 24px everywhere else, including
+   * apps/investing-web — the codebase this migration exists to align with. A
+   * reader coming from Tailwind would have been wrong about every spacing
+   * value above 4, silently.
+   *
+   * So the numeric scale stays standard (n x 4px): 24px is `6`, 32px is `8`.
+   * The app's own tokens remain available where they carry meaning the scale
+   * does not, as var(--sp-5) or an explicit p-[24px]. */
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-float: var(--shadow-float);
 }

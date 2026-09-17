@@ -38,6 +38,10 @@ import Import from "./Import";
 import Regels from "./Regels";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
+import Button from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
+import { Field } from "../components/ui/Field.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
  *
@@ -132,7 +136,7 @@ function AccountBlock() {
   if (state.kind === "loading") return null;
 
   return (
-    <section className="card" aria-label={c.profiel.account.ariaLabel}>
+    <Card as="section" aria-label={c.profiel.account.ariaLabel}>
       <h2>{c.profiel.account.heading}</h2>
       {state.kind === "unconfigured" && (
         <p className="cell-sub">{c.profiel.account.unconfigured}</p>
@@ -141,7 +145,7 @@ function AccountBlock() {
         <>
           <p className="cell-sub">{c.profiel.account.signedOutIntro}</p>
           <form onSubmit={(e) => void handleSignIn(e)}>
-            <div className="vault-field">
+            <Field>
               <label htmlFor="account-email">{c.profiel.account.emailLabel}</label>
               <input
                 id="account-email"
@@ -151,8 +155,8 @@ function AccountBlock() {
                 autoComplete="username"
                 onChange={(e) => setEmail(e.target.value)}
               />
-            </div>
-            <div className="vault-field">
+            </Field>
+            <Field>
               <label htmlFor="account-password">{c.profiel.account.passwordLabel}</label>
               <input
                 id="account-password"
@@ -162,31 +166,25 @@ function AccountBlock() {
                 autoComplete="current-password"
                 onChange={(e) => setPassword(e.target.value)}
               />
-            </div>
+            </Field>
             {error !== "" && (
               <p role="alert" className="text-warn">
                 {error}
               </p>
             )}
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={busy || !email || !password}
-            >
+            <Button type="submit" variant="primary" disabled={busy || !email || !password}>
               {c.profiel.account.signIn}
-            </button>
+            </Button>
           </form>
         </>
       )}
       {state.kind === "signed-in" && (
         <>
           <p className="cell-sub">{state.email}</p>
-          <button type="button" className="btn" onClick={() => void handleSignOut()}>
-            {c.profiel.account.signOut}
-          </button>
+          <Button onClick={() => void handleSignOut()}>{c.profiel.account.signOut}</Button>
         </>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -350,14 +348,14 @@ function CashbackCorrigeren({
   }
 
   return (
-    <section className="card" aria-label={c.profiel.cashback.ariaLabel}>
-      <div className="card-header">
+    <Card as="section" aria-label={c.profiel.cashback.ariaLabel}>
+      <CardHeader>
         <h2>{c.profiel.cashback.heading}</h2>
         <span className="eyebrow">
           {rows.length}{" "}
           {rows.length === 1 ? c.profiel.cashback.cardSingular : c.profiel.cashback.cardPlural}
         </span>
-      </div>
+      </CardHeader>
       <p className="cell-sub">{c.profiel.cashback.intro}</p>
       <p className="cell-sub">{c.profiel.cashback.privacyNote}</p>
       {/* DE KEERZIJDE VAN DE REGEL, en die is net zo hard: een uitgesproken nul
@@ -439,8 +437,7 @@ function CashbackCorrigeren({
                 </div>
                 <div>
                   <label>
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       inputMode="decimal"
                       aria-label={`${c.profiel.cashback.cashbackInputAriaLabelPrefix} ${row.product}`}
                       placeholder={pctNow === null ? "%" : String(pctNow)}
@@ -448,21 +445,13 @@ function CashbackCorrigeren({
                       onChange={(e) => setDrafts((d) => ({ ...d, [row.product]: e.target.value }))}
                     />
                   </label>{" "}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => void saveCorrection(row.product)}
-                  >
+                  <Button variant="primary" onClick={() => void saveCorrection(row.product)}>
                     {c.profiel.cashback.save}
-                  </button>{" "}
+                  </Button>{" "}
                   {entry !== null && entry.source === "user" && (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => void clearCorrection(row.product)}
-                    >
+                    <Button onClick={() => void clearCorrection(row.product)}>
                       {c.profiel.cashback.clearCorrection}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </li>
@@ -482,7 +471,7 @@ function CashbackCorrigeren({
           {saved}.
         </p>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -544,7 +533,7 @@ export default function Profiel({
 
   return (
     <>
-      <section className="card" aria-label={c.profiel.languageSwitch.ariaLabel}>
+      <Card as="section" aria-label={c.profiel.languageSwitch.ariaLabel}>
         <h2>{c.profiel.languageSwitch.cardLabel}</h2>
         <div className="scope-switch" role="group" aria-label={c.profiel.languageSwitch.ariaLabel}>
           <button
@@ -565,7 +554,7 @@ export default function Profiel({
             {c.profiel.languageSwitch.en}
           </button>
         </div>
-      </section>
+      </Card>
 
       <AccountBlock />
 
@@ -573,14 +562,24 @@ export default function Profiel({
           as a settings menu. The name is a local preference like the buffer and
           the country: this browser only, never in the vault, never in a
           back-up, and deliberately never in anything a model is given. */}
-      <section className="card profile-head" aria-label={c.profiel.head.ariaLabel}>
-        <span className="profile-head-avatar" aria-hidden="true">
+      <Card
+        as="section"
+        className="flex items-start gap-4 [@media(max-width:640px)]:flex-col"
+        aria-label={c.profiel.head.ariaLabel}
+      >
+        <span
+          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-display text-[1.15rem] font-semibold tracking-[0.02em]"
+          aria-hidden="true"
+          data-testid="profile-head-avatar"
+        >
           {initials}
         </span>
-        <div className="profile-head-text">
-          <h2 className="profile-head-name">{fullName || c.profiel.head.noName}</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="mb-1" data-testid="profile-head-name">
+            {fullName || c.profiel.head.noName}
+          </h2>
           <p className="cell-sub">{c.profiel.head.note}</p>
-          <div className="profile-head-fields">
+          <div className="mt-3">
             <label>
               {c.profiel.head.firstName}{" "}
               <input
@@ -601,37 +600,37 @@ export default function Profiel({
             </label>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="card" aria-label={c.profiel.modules.ariaLabel} ref={modulesRef}>
-        <div className="card-header">
+      <Card as="section" aria-label={c.profiel.modules.ariaLabel} ref={modulesRef}>
+        <CardHeader>
           <h2>{c.profiel.modules.heading}</h2>
           <span className="eyebrow">
             {enabledModules.length} {c.profiel.modules.countSuffix}
           </span>
-        </div>
+        </CardHeader>
         <p className="cell-sub">{c.profiel.modules.description}</p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
-      </section>
+      </Card>
 
       {/* The homescreen cards that are a choice rather than a fixture. Same
           switch as the modules above, one screen lower, because "welke tab" and
           "welke kaart" are the same question asked about a different surface.
           Both start off: he asked for a widget he can click on "instead of it
           always being default there". */}
-      <section className="card" aria-label={c.profiel.widgets.ariaLabel}>
-        <div className="card-header">
+      <Card as="section" aria-label={c.profiel.widgets.ariaLabel}>
+        <CardHeader>
           <h2>{c.profiel.widgets.heading}</h2>
           <span className="eyebrow">
             {widgets.length} {c.profiel.widgets.of} {WIDGETS.length} {c.profiel.widgets.on}
           </span>
-        </div>
+        </CardHeader>
         <p className="cell-sub">{c.profiel.widgets.description}</p>
         <WidgetPicker enabled={widgets} onChange={setWidgets} />
-      </section>
+      </Card>
 
-      <section className="card" aria-label={c.profiel.scopeSection.ariaLabel}>
-        <div className="card-header">
+      <Card as="section" aria-label={c.profiel.scopeSection.ariaLabel}>
+        <CardHeader>
           <h2>{c.profiel.scopeSection.heading}</h2>
           <span className="eyebrow">
             {entities.length}{" "}
@@ -639,7 +638,7 @@ export default function Profiel({
               ? c.profiel.scopeSection.unitSingular
               : c.profiel.scopeSection.unitPlural}
           </span>
-        </div>
+        </CardHeader>
         <p className="cell-sub">{c.profiel.scopeSection.description}</p>
 
         {entities.length === 0 ? (
@@ -687,9 +686,9 @@ export default function Profiel({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="card" aria-label={c.profiel.countryRegion.ariaLabel}>
+      <Card as="section" aria-label={c.profiel.countryRegion.ariaLabel}>
         <h2>{c.profiel.countryRegion.heading}</h2>
         <p className="cell-sub">{c.profiel.countryRegion.purpose}</p>
         <p className="cell-sub">{c.profiel.countryRegion.neverInferred}</p>
@@ -740,12 +739,12 @@ export default function Profiel({
             ? `${c.profiel.countryRegion.knownListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.knownListNoteSuffix}`
             : `${c.profiel.countryRegion.noListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.noListNoteSuffix}`}
         </p>
-      </section>
+      </Card>
 
-      <section className="card" aria-label={c.profiel.fx.ariaLabel}>
-        <div className="card-header">
+      <Card as="section" aria-label={c.profiel.fx.ariaLabel}>
+        <CardHeader>
           <h2>{c.profiel.fx.heading}</h2>
-        </div>
+        </CardHeader>
         <label>
           <input
             type="checkbox"
@@ -756,7 +755,7 @@ export default function Profiel({
           {c.profiel.fx.convertLabel}
         </label>
         <p className="cell-sub">{c.profiel.fx.description}</p>
-      </section>
+      </Card>
 
       <Import
         entity={entity}
@@ -782,13 +781,11 @@ export default function Profiel({
 
       <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
 
-      <section className="card" aria-label={c.profiel.lock.ariaLabel}>
+      <Card as="section" aria-label={c.profiel.lock.ariaLabel}>
         <h2>{c.profiel.lock.heading}</h2>
         <p className="cell-sub">{c.profiel.lock.description}</p>
-        <button type="button" className="btn" onClick={onLock}>
-          {c.profiel.lock.button}
-        </button>
-      </section>
+        <Button onClick={onLock}>{c.profiel.lock.button}</Button>
+      </Card>
       <p className="cell-sub" data-testid="build-stamp">
         LaVega build {__LAVEGA_BUILD__}
       </p>

@@ -97,7 +97,7 @@ test("the percentage beside the big number says what it is measured against", ()
   );
   // "▲ 1%" on its own is unreadable — one percent since when? The pill is the
   // move against the position one week ago, and the card now says so.
-  expect(html).toContain("delta-pill");
+  expect(html).toContain('data-testid="delta-pill"');
   expect(html).toContain("t.o.v. vorige week");
 });
 
@@ -112,7 +112,7 @@ test("with no week of history there is neither a pill nor a claim about one", ()
       {...SEPARATE}
     />,
   );
-  expect(html).not.toContain("delta-pill");
+  expect(html).not.toContain('data-testid="delta-pill"');
   expect(html).not.toContain("t.o.v. vorige week");
 });
 
@@ -134,7 +134,7 @@ test("SaldoBlock refuses to draw a line it cannot back with history", () => {
   expect(html).toContain("Nog geen week geschiedenis");
   expect(html).toContain("Nog geen maand geschiedenis");
   // And no 0% pill anywhere.
-  expect(html).not.toContain("delta-flat");
+  expect(html).not.toContain('data-delta="flat"');
 });
 
 test("SaldoBlock shows a dash and an instruction with no accounts at all", () => {

@@ -6,6 +6,7 @@ import { formatEuroIn } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
 import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
 
@@ -171,6 +172,20 @@ export function sheenTransform(
   return `translate3d(${x}px, ${y}px, 0)`;
 }
 
+/* .bank-card itself, .bank-card-sheen and the hover/focus-within box-shadow
+ * stay hand-written CSS (blocks.css): the sheen's two feature media queries
+ * (`hover: hover`, `prefers-reduced-motion`) are outside what
+ * test-support/resolveStyle can resolve (it only parses max-width blocks), and
+ * the hover contrast math is load-bearing (see brandFace.ts).
+ *
+ * NOT exported, deliberately. It was, so the test could assert against "the
+ * classes actually rendered" — but importing this constant is not that. It is
+ * the string the component happens to use today, and the assertion keeps
+ * passing if the component stops applying it to this element. That is the
+ * vacuous assertion the whole migration exists to avoid. The test now mounts
+ * the block and reads className off the strip itself. */
+const CARD_STRIP_CLASS = "flex gap-4 overflow-x-auto pb-2 [scroll-snap-type:x_proximity]";
+
 type KaartenBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
@@ -199,15 +214,13 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
       span={3}
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          {c.rekeningenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
       }
     >
       {cards.length === 0 ? (
         <p className="block-empty">{c.geenRekeningenGekoppeld}</p>
       ) : (
-        <div className="card-strip">
+        <div className={CARD_STRIP_CLASS}>
           {cards.map(({ account, kind }, i) => {
             const tail = ibanTail(account.iban);
             const logo = bankLogo(account.bank);
@@ -233,8 +246,8 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
               >
                 {/* Puur decoratief: een schermlezer heeft niets aan een lichtvlek. */}
                 <span className="bank-card-sheen" aria-hidden="true" />
-                <header className="bank-card-top">
-                  <span className="bank-card-bank">
+                <header className="flex items-baseline justify-between gap-3">
+                  <span className="font-bold text-[0.95rem] overflow-hidden text-ellipsis whitespace-nowrap">
                     {logo ? (
                       /* Decorative: the bank's name is right next to it, so a
                        * screen reader should not read the mark twice. The white
@@ -258,29 +271,38 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                     ) : null}
                     {account.bank || c.onbekendeBank}
                   </span>
-                  <span className="bank-card-type">{typeLabel(typesCopy, kind)}</span>
+                  <span className="flex-none font-mono text-[0.6rem] tracking-[0.1em] uppercase opacity-75">
+                    {typeLabel(typesCopy, kind)}
+                  </span>
                 </header>
 
-                <div className="bank-card-number">
+                <div className="font-mono text-[0.95rem] tracking-[0.06em]">
                   {tail ? (
                     <>
                       <span aria-hidden="true">•••• •••• ••••</span> {tail}
                     </>
                   ) : (
-                    <span className="bank-card-unknown">{c.geenIbanBekend}</span>
+                    <span className="opacity-70 italic">{c.geenIbanBekend}</span>
                   )}
                 </div>
 
-                <footer className="bank-card-bottom">
-                  <div className="bank-card-who">
-                    <div className="bank-card-caption">{c.opNaamVan}</div>
-                    <div className="bank-card-holder" title={account.entity || undefined}>
+                <footer className="flex items-end justify-between gap-3 text-[0.85rem] tabular-nums">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[0.55rem] tracking-[0.1em] uppercase opacity-70">
+                      {c.opNaamVan}
+                    </div>
+                    <div
+                      className="font-semibold line-clamp-2 [overflow-wrap:anywhere]"
+                      title={account.entity || undefined}
+                    >
                       {account.entity || c.geenEntiteitIngesteld}
                     </div>
                   </div>
-                  <div className="bank-card-saldo">
-                    <div className="bank-card-caption">{c.saldoLabel}</div>
-                    <div className={account.balance === null ? "bank-card-unknown" : ""}>
+                  <div className="text-right flex-none">
+                    <div className="font-mono text-[0.55rem] tracking-[0.1em] uppercase opacity-70">
+                      {c.saldoLabel}
+                    </div>
+                    <div className={account.balance === null ? "opacity-70 italic" : ""}>
                       {account.balance === null ? c.onbekend : formatEuroIn(locale, account.balance)}
                     </div>
                   </div>

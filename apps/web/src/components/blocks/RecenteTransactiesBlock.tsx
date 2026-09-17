@@ -4,6 +4,7 @@ import { categorize, enrichTxs } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, dayLabelIn, categoryLabel } from "../../copy/money.js";
 
@@ -84,7 +85,8 @@ export default function RecenteTransactiesBlock({
       period={
         <input
           type="search"
-          className="tx-search"
+          className="w-60 max-w-full rounded-pill py-[6px] px-[14px] text-[0.8rem] [@media(max-width:520px)]:w-full"
+          data-testid="tx-search"
           placeholder={c.zoekPlaceholder}
           aria-label={c.zoekenAria}
           value={query}
@@ -92,9 +94,7 @@ export default function RecenteTransactiesBlock({
         />
       }
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("transactions")}>
-          {c.bekijkAlles}
-        </button>
+        <CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>
       }
     >
       {all.length === 0 ? (
@@ -114,16 +114,17 @@ export default function RecenteTransactiesBlock({
                     {/* Where the account sits is context, not identity. On a
                         phone it is what gives way so the merchant name and the
                         amount keep their line. */}
-                    <span className="tx-meta-extra">
+                    <span className="[@media(max-width:520px)]:hidden">
                       {" · "}
                       {tx.entity} · {tx.bank}
                     </span>
                   </div>
                 </div>
-                <div className="tx-row-right">
+                <div className="flex items-center gap-3 flex-none">
                   <button
                     type="button"
-                    className="tx-chip tx-chip-button"
+                    className="inline-flex items-center flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.72rem] py-[3px] px-[10px] whitespace-nowrap [@media(max-width:520px)]:text-[0.68rem] [@media(max-width:520px)]:px-2 cursor-pointer hover:text-ink hover:border-accent"
+                    data-testid="tx-chip"
                     title={c.bekijkTransactiesIn(categoryLabel(locale, category))}
                     onClick={() => onSelectCategory(category)}
                   >

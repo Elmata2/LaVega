@@ -1,6 +1,9 @@
 import BankLink from "../components/BankLink";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
+import { buttonVariants } from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import { cn } from "../components/ui/utils.js";
 
 type ImportProps = {
   entity: string;
@@ -14,7 +17,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   return (
-    <section id="import" className="card" aria-label={c.import.ariaLabel}>
+    <Card as="section" id="import" aria-label={c.import.ariaLabel}>
       <h2>{c.import.heading}</h2>
       {/* One wrapping row: a native file input reports its own intrinsic width,
           which overflowed the page at phone width when it sat inline. */}
@@ -29,7 +32,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
             .STA). An unrecognized file is reported via `problems`, not a crash. */}
         <input
           type="file"
-          className="btn import-file"
+          className={cn(buttonVariants(), "import-file")}
           aria-label={c.import.fileInputAriaLabel}
           disabled={busy}
           onChange={(e) => {
@@ -45,6 +48,6 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
         </p>
       )}
       <BankLink busy={busy} />
-    </section>
+    </Card>
   );
 }

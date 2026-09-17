@@ -2,6 +2,7 @@ import { Fragment, useCallback, useState } from "react";
 import { API_BASE, apiErrorMessageIn } from "../api";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
+import Button from "./ui/Button.js";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
  * lets the user pick one, and redirects the browser to the bank to authorise.
@@ -108,14 +109,9 @@ export default function BankLink({ busy }: { busy: boolean }) {
         ))}
       </div>
       {aspsps === null ? (
-        <button
-          type="button"
-          className="btn"
-          disabled={busy || loading}
-          onClick={() => void loadBanks(psuType)}
-        >
+        <Button disabled={busy || loading} onClick={() => void loadBanks(psuType)}>
           {loading ? c.bankLink.laden : c.bankLink.koppelBankEnableBanking}
-        </button>
+        </Button>
       ) : aspsps.length === 0 ? (
         <p className="cell-sub">{c.bankLink.geenBankenBeschikbaar}</p>
       ) : (
@@ -138,14 +134,9 @@ export default function BankLink({ busy }: { busy: boolean }) {
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || loading}
-            onClick={() => void connect()}
-          >
+          <Button variant="primary" disabled={busy || loading} onClick={() => void connect()}>
             {loading ? c.bankLink.doorsturen : c.bankLink.autoriseer}
-          </button>
+          </Button>
         </span>
       )}
       {error && (

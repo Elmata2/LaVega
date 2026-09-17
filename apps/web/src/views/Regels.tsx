@@ -4,6 +4,9 @@ import { CATEGORY_OPTIONS } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
 import { categoryLabel } from "../copy/money.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 
 type RegelsProps = {
   rules: Rule[];
@@ -55,7 +58,7 @@ export default function Regels({
   );
 
   return (
-    <section className="card" aria-label={c.section.ariaLabel}>
+    <Card as="section" aria-label={c.section.ariaLabel}>
       <h2>{c.section.heading}</h2>
       <p className="cell-sub">{c.intro.autoCategorization}</p>
       <p className="cell-sub">
@@ -97,9 +100,8 @@ export default function Regels({
           ))}
         </datalist>
       </label>{" "}
-      <button
-        type="button"
-        className="btn btn-primary"
+      <Button
+        variant="primary"
         disabled={busy}
         onClick={() => {
           const match = ruleMatch.trim();
@@ -111,7 +113,7 @@ export default function Regels({
         }}
       >
         {c.form.addButton}
-      </button>
+      </Button>
       {isNewCategory && (
         <p className="cell-sub" role="status">
           {c.newCategoryWarning(ruleCategory.trim())}
@@ -120,41 +122,39 @@ export default function Regels({
       {rules.length === 0 ? (
         <p>{c.table.emptyState}</p>
       ) : (
-        <div className="table-wrap">
-          <table className="table">
+        <TableWrap>
+          <Table>
             <thead>
               <tr>
-                <th>{c.table.matchHeader}</th>
-                <th>{c.table.categoryHeader}</th>
-                <th></th>
+                <Th>{c.table.matchHeader}</Th>
+                <Th>{c.table.categoryHeader}</Th>
+                <Th></Th>
               </tr>
             </thead>
             <tbody>
               {sortedRules.map((rule) => (
                 <tr key={rule.id}>
-                  <td>{rule.match}</td>
-                  <td>{categoryLabel(locale, rule.category)}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn"
+                  <Td>{rule.match}</Td>
+                  <Td>{categoryLabel(locale, rule.category)}</Td>
+                  <Td>
+                    <Button
                       disabled={busy}
                       onClick={() => void onSaveRules(rules.filter((r) => r.id !== rule.id))}
                     >
                       {c.table.deleteButton}
-                    </button>
-                  </td>
+                    </Button>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {rules.length > 1 && (
             <p className="cell-sub" style={{ marginTop: ".5rem" }}>
               {c.table.sortNote}
             </p>
           )}
-        </div>
+        </TableWrap>
       )}
-    </section>
+    </Card>
   );
 }

@@ -339,16 +339,16 @@ test("the region is typed by hand, and the app never infers where he is", async 
 test("the profile opens with his own name, and says the name stays here", async () => {
   await render({ ownerName: { first: "Alexander", last: "Steunenberg" } });
   const head = section("Profiel");
-  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Alexander Steunenberg");
-  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("AS"); // drawn, never fetched
+  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe("Alexander Steunenberg");
+  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("AS"); // drawn, never fetched
   expect(head.textContent).toContain("nooit meegestuurd naar een model");
 });
 
 test("no name is 'no name', not a blank greeting", async () => {
   await render();
   const head = section("Profiel");
-  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Nog geen naam ingevuld");
-  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("");
+  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe("Nog geen naam ingevuld");
+  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("");
 });
 
 test("typing a name reports both halves back, unmangled", async () => {

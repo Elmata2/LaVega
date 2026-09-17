@@ -61,6 +61,10 @@ import type { Locale } from "../locale.js";
 import Module, { ModulePeriod } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
+import Badge from "../components/ui/Badge.js";
+import CardLink from "../components/ui/CardLink.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import "../styles/views.css";
 
 /* Optimalisatie — rebalanced (UI review, 2026-08-16).
@@ -547,7 +551,10 @@ function Productkosten({
         /* GEEN AANBEVELING, en zichtbaar waarom niet. Zijn beslissing, en de reden
            dat het bedrag erbij staat: hij moet kunnen zien dat iets afvalt omdat
            het te duur is, in plaats van het zelf te moeten uitrekenen. */
-        <p className="reason" data-testid={`${id}-geen`}>
+        <p
+          className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+          data-testid={`${id}-geen`}
+        >
           <strong>{pc.noRecommendation.heading}</strong>{" "}
           {pc.noRecommendation.body(euro(locale, net.grossCents), per, gainWord, euro(locale, net.costCents), costWord)}{" "}
           {net.netCents === 0
@@ -593,8 +600,7 @@ function RateCell({
     setDraft(initial);
   }
   return (
-    <input
-      className="saldo-input"
+    <SaldoInput
       inputMode="decimal"
       placeholder={ar.ratePct === null ? c.interest.rateCellUnknownPlaceholder : `${ar.ratePct}`}
       aria-label={c.interest.rateCellAriaLabel(ar.account.name)}
@@ -1096,9 +1102,11 @@ export default function Optimalisatie({
 
   return (
     <>
-      <div className="view-head">
-        <h2>{c.header.title}</h2>
-        <span className="eyebrow">{c.header.eyebrow}</span>
+      <div className="flex items-baseline justify-between gap-[var(--sp-4)] flex-wrap pb-[var(--sp-2)] mt-[var(--sp-5)] mb-[var(--sp-4)] border-b-2 border-b-ink first:mt-0">
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.header.title}
+        </h2>
+        <span className="eyebrow flex-none">{c.header.eyebrow}</span>
       </div>
 
       <div className="kpi-row">
@@ -1153,7 +1161,10 @@ export default function Optimalisatie({
         </div>
       </div>
 
-      <ModuleGrid className="grid-2" label={c.header.gridLabel}>
+      <ModuleGrid
+        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        label={c.header.gridLabel}
+      >
         {/* ── Abonnementen: de grote helft ──────────────────────────────── */}
         <Module
           title={c.subscriptions.title}
@@ -1194,7 +1205,7 @@ export default function Optimalisatie({
               A quarterly charge needs one full gap before there is a pattern at
               all, so with a short import "niets gevonden" and "kon niets vinden"
               are different answers — and only core knows which one this is. */}
-          <p className="reason">
+          <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]">
             {coverage.historyDays === 0 ? (
               c.subscriptions.coverage.noHistory
             ) : (
@@ -1225,8 +1236,8 @@ export default function Optimalisatie({
           </p>
 
           {subs.length === 0 ? (
-            <div className="empty-guide">
-              <p>
+            <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
+              <p className="m-0 mb-[var(--sp-3)] last:mb-0">
                 <strong>{c.subscriptions.empty.heading}</strong> {c.subscriptions.empty.intro}
                 {seen.outflows === 0 ? (
                   c.subscriptions.empty.noOutflows
@@ -1244,15 +1255,17 @@ export default function Optimalisatie({
                   )
                 )}
               </p>
-              <p className="cell-sub">{c.subscriptions.empty.rulesIntro}</p>
-              <ul>
+              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">{c.subscriptions.empty.rulesIntro}</p>
+              <ul className="m-0 mb-[var(--sp-3)] pl-[1.1rem] text-muted text-[0.88rem] last:mb-0">
                 {/* DRIE EN NIET TWEE, en dat is een correctie. Hier stond "minstens
                     twee betalingen" terwijl de maandband minstens DRIE afschrijvingen
                     eist (CADENCE_BANDS in subscriptions.ts: minOcc 3 voor 30 dagen,
                     2 voor kwartaal, halfjaar en jaar). Wie twee maandbedragen zag
                     staan en dit las, zocht de fout op de verkeerde plek. */}
                 {c.subscriptions.empty.rules.map((rule) => (
-                  <li key={rule}>{rule}</li>
+                  <li className="mb-[var(--sp-1)]" key={rule}>
+                    {rule}
+                  </li>
                 ))}
               </ul>
 
@@ -1265,52 +1278,52 @@ export default function Optimalisatie({
                   wat hier staat is wat hij zag. */}
               {tallies.length > 0 && (
                 <ToonMeer summary={c.subscriptions.empty.talliesSummary(tallies.length)}>
-                  <div className="table-wrap table-cards">
-                    <table className="table">
+                  <TableWrap>
+                    <Table cards>
                       <thead>
                         <tr>
                           {c.subscriptions.empty.talliesTableHeaders.map((h, i) => (
-                            <th key={h} className={i >= 1 && i <= 4 ? "num" : undefined}>
+                            <Th key={h} numeric={i >= 1 && i <= 4}>
                               {h}
-                            </th>
+                            </Th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {tallies.map((t) => (
                           <tr key={`${t.merchant}-${t.label}`}>
-                            <td>{t.label || c.subscriptions.empty.noNameFallback}</td>
-                            <td className="num">{t.charges}</td>
-                            <td className="num">{euro(locale, t.totalCents / 100)}</td>
-                            <td className="num">
+                            <Td>{t.label || c.subscriptions.empty.noNameFallback}</Td>
+                            <Td numeric>{t.charges}</Td>
+                            <Td numeric>{euro(locale, t.totalCents / 100)}</Td>
+                            <Td numeric>
                               {t.medianGapDays === null
                                 ? c.subscriptions.empty.reasonFallback
                                 : c.subscriptions.empty.gapDaysSuffix(t.medianGapDays)}
-                            </td>
-                            <td className="num">
+                            </Td>
+                            <Td numeric>
                               {t.amountCv === null
                                 ? c.subscriptions.empty.reasonFallback
                                 : t.amountCv.toFixed(2)}
-                            </td>
-                            <td>
+                            </Td>
+                            <Td>
                               {t.excluded === null
                                 ? c.subscriptions.empty.includedYes
                                 : t.excluded === "overboeking-of-persoon"
                                   ? c.subscriptions.empty.excludedTransferOrPerson
                                   : c.subscriptions.empty.excludedNoName}
-                            </td>
+                            </Td>
                             {/* WAAROM NIET, in de eigen woorden van de detector, niet
                                 in een samenvatting ernaast. `t.reason` is al leeg (null)
                                 voor de twee andere gevallen — een uitgesloten regel legt de
                                 "Meegenomen?"-cel al uit, en een regel die wél een abonnement
                                 werd heeft niets te verklaren — dus deze cel toont precies
                                 één ding: de poort die een geaccepteerde naam alsnog tegenhield. */}
-                            <td>{t.reason ?? c.subscriptions.empty.reasonFallback}</td>
+                            <Td>{t.reason ?? c.subscriptions.empty.reasonFallback}</Td>
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                    </Table>
+                  </TableWrap>
                   <p className="cell-sub">
                     {c.subscriptions.empty.talliesFootnote}
                     {woonlastenWeggelaten > 0 && (
@@ -1325,51 +1338,58 @@ export default function Optimalisatie({
                   </p>
                 </ToonMeer>
               )}
-              <p className="cell-sub">{c.subscriptions.empty.missingAccountNote}</p>
-              <details className="demo-preview">
-                <summary>{c.subscriptions.empty.demoDisclosureSummary}</summary>
-                <p className="badge demo-flag">{c.subscriptions.empty.demoBadge}</p>
-                <div className="table-wrap table-cards">
-                  <table className="table">
+              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">
+                {c.subscriptions.empty.missingAccountNote}
+              </p>
+              <details className="mt-[var(--sp-3)] p-[var(--sp-3)] border border-dashed border-line rounded-sm">
+                <summary className="cursor-pointer text-muted text-[0.85rem]">
+                  {c.subscriptions.empty.demoDisclosureSummary}
+                </summary>
+                <Badge className="inline-block mt-[var(--sp-3)] mb-[var(--sp-2)]">
+                  {c.subscriptions.empty.demoBadge}
+                </Badge>
+                <TableWrap>
+                  <Table cards className="opacity-75">
                     <thead>
                       <tr>
-                        <th>{c.subscriptions.empty.demoTableHeaders[0]}</th>
-                        <th>{c.subscriptions.empty.demoTableHeaders[1]}</th>
-                        <th className="num">{c.subscriptions.empty.demoTableHeaders[2]}</th>
-                        <th className="num">{c.subscriptions.empty.demoTableHeaders[3]}</th>
+                        <Th>{c.subscriptions.empty.demoTableHeaders[0]}</Th>
+                        <Th>{c.subscriptions.empty.demoTableHeaders[1]}</Th>
+                        <Th numeric>{c.subscriptions.empty.demoTableHeaders[2]}</Th>
+                        <Th numeric>{c.subscriptions.empty.demoTableHeaders[3]}</Th>
                       </tr>
                     </thead>
                     <tbody>
                       {EXAMPLE_SUBS.map((s, i) => (
                         <tr key={s.name}>
-                          <td data-label={c.subscriptions.empty.demoTableHeaders[0]} style={{ fontWeight: 600 }}>
+                          <Td data-label={c.subscriptions.empty.demoTableHeaders[0]} style={{ fontWeight: 600 }}>
                             {s.name}
-                          </td>
-                          <td data-label={c.subscriptions.empty.demoTableHeaders[1]}>
-                            <span className="badge">{c.subscriptions.empty.demoCategories[i]}</span>
-                          </td>
-                          <td className="num" data-label={c.subscriptions.empty.demoTableHeaders[2]}>
+                          </Td>
+                          <Td data-label={c.subscriptions.empty.demoTableHeaders[1]}>
+                            <Badge>{c.subscriptions.empty.demoCategories[i]}</Badge>
+                          </Td>
+                          <Td numeric data-label={c.subscriptions.empty.demoTableHeaders[2]}>
                             {euro(locale, s.monthly)}
-                          </td>
-                          <td
-                            className={`num ${s.change > 0 ? "text-neg" : s.change < 0 ? "text-pos" : ""}`}
+                          </Td>
+                          <Td
+                            numeric
+                            className={s.change > 0 ? "text-neg" : s.change < 0 ? "text-pos" : undefined}
                             data-label={c.subscriptions.empty.demoTableHeaders[3]}
                           >
                             {s.change === 0
                               ? c.subscriptions.empty.demoNoChange
                               : `${s.change > 0 ? "+" : ""}${Math.round(s.change * 100)}%`}
-                          </td>
+                          </Td>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                  </Table>
+                </TableWrap>
               </details>
             </div>
           ) : (
             <>
               {increases.length > 0 || overlaps.length > 0 ? (
-                <div className="reason-list" style={{ marginBottom: "var(--sp-4)" }}>
+                <div className="flex flex-col gap-[var(--sp-3)] mb-[var(--sp-4)]">
                   {/* HET VERSCHIL WORDT NIET MEER × 12 GEREKEND. `fromCents` en
                       `toCents` zijn de afgeschreven bedragen in het ritme van dát
                       abonnement, dus × 12 maakte van een verhoging van € 10,00 op
@@ -1388,7 +1408,11 @@ export default function Optimalisatie({
                       locale,
                     );
                     return (
-                      <p key={`inc-${p.sub.key}`} className="reason">
+                      <p
+                        key={`inc-${p.sub.key}`}
+                        data-testid="subscription-change"
+                        className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                      >
                         {c.subscriptions.increaseSentence(
                           extra.kind === "bedrag"
                             ? {
@@ -1422,7 +1446,11 @@ export default function Optimalisatie({
                     }, o.subs[0]);
                     const opzegbaar = subAmountIn(grootste, subTotal.unit, locale);
                     return (
-                      <p key={`ov-${o.function}`} className="reason">
+                      <p
+                        key={`ov-${o.function}`}
+                        data-testid="subscription-change"
+                        className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                      >
                         {c.subscriptions.overlapSentence({
                           count: o.subs.length,
                           functionName: o.function,
@@ -1451,16 +1479,16 @@ export default function Optimalisatie({
                   De oude kolommen "Per maand" en "Per jaar" stonden er samen, en
                   de tweede was de eerste × 12 — een jaarbedrag dat in geen enkel
                   afschrift staat. */}
-              <div className="table-wrap table-cards">
-                <table className="table">
+              <TableWrap>
+                <Table cards>
                   <thead>
                     <tr>
-                      <th>{subTableDienstH}</th>
-                      <th>{subTableFunctieH}</th>
-                      <th className="num">{subPeriodLabel}</th>
-                      <th className="num">{subTableAfschriftH}</th>
-                      <th className="num">{subTableVeranderingH}</th>
-                      <th>{subTableLaatstH}</th>
+                      <Th>{subTableDienstH}</Th>
+                      <Th>{subTableFunctieH}</Th>
+                      <Th numeric>{subPeriodLabel}</Th>
+                      <Th numeric>{subTableAfschriftH}</Th>
+                      <Th numeric>{subTableVeranderingH}</Th>
+                      <Th>{subTableLaatstH}</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1468,13 +1496,13 @@ export default function Optimalisatie({
                       const bedrag = subAmountIn(s, subPeriod, locale);
                       return (
                         <tr key={s.key}>
-                          <td data-label={subTableDienstH} style={{ fontWeight: 600 }}>
+                          <Td data-label={subTableDienstH} style={{ fontWeight: 600 }}>
                             {s.name}
-                          </td>
-                          <td data-label={subTableFunctieH}>
-                            <span className="badge">{s.function}</span>
-                          </td>
-                          <td className="num" data-label={subPeriodLabel}>
+                          </Td>
+                          <Td data-label={subTableFunctieH}>
+                            <Badge>{s.function}</Badge>
+                          </Td>
+                          <Td numeric data-label={subPeriodLabel}>
                             {bedrag.kind === "bedrag" ? (
                               <>
                                 {euro(locale, bedrag.cents)}
@@ -1486,28 +1514,29 @@ export default function Optimalisatie({
                                  rekeningprijs in de kostentabel. */
                               <span className="cell-sub">{c.subscriptions.unrekenbaarCell}</span>
                             )}
-                          </td>
-                          <td className="num" data-label={subTableAfschriftH}>
+                          </Td>
+                          <Td numeric data-label={subTableAfschriftH}>
                             {euro(locale, s.lastAmountCents)}
                             <div className="cell-sub">{cadenceName(s.cadenceDays)}</div>
-                          </td>
-                          <td
+                          </Td>
+                          <Td
+                            numeric
                             data-label={subTableVeranderingH}
-                            className={`num ${s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : ""}`}
+                            className={s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : undefined}
                           >
                             {s.changePct === 0
                               ? c.common.dash
                               : `${s.changePct > 0 ? "+" : ""}${Math.round(s.changePct * 100)}%`}
-                          </td>
-                          <td className="cell-sub" data-label={subTableLaatstH}>
+                          </Td>
+                          <Td className="cell-sub" data-label={subTableLaatstH}>
                             {s.lastDate}
-                          </td>
+                          </Td>
                         </tr>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                </Table>
+              </TableWrap>
               {/* WAT ER IS OMGEREKEND, geteld in het label en per rij uitgeschreven
                   in het paneel. De telling hoort vooraan en niet erin: wie de regel
                   dichtlaat moet nog steeds weten dát er onder deze bedragen een
@@ -1572,7 +1601,7 @@ export default function Optimalisatie({
                   wat je erop overhoudt, terwijl de rekening waar je heen gaat zelf
                   ook geld kan kosten: € 50 rente meer op een pakket van € 4,50 per
                   maand is € 4,00 achteruit. De aftrek staat onderaan dit blok. */}
-              <p className="reason-lead">
+              <p className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink">
                 {renderSegments(
                   c.interest.leadSentence({
                     amount: euro(locale, interest.totalExtraPerYearCents),
@@ -1589,9 +1618,12 @@ export default function Optimalisatie({
                   uitleg naast een tabel en geen tweede plek waar hetzelfde cijfer
                   voor het eerst staat. */}
               <ToonMeer summary={c.interest.toonMeerSummary}>
-                <div className="reason-list">
+                <div className="flex flex-col gap-[var(--sp-3)]">
                   {interest.suggestions.map((s) => (
-                    <p key={`sug-${s.account.key}`} className="reason">
+                    <p
+                      key={`sug-${s.account.key}`}
+                      className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                    >
                       {c.interest.suggestionSentence({
                         balance: euro(locale, s.balanceCents),
                         accountLabel: accountLabel(s.account),
@@ -1624,13 +1656,17 @@ export default function Optimalisatie({
               </ToonMeer>
             </>
           ) : (
-            <div className="empty-guide">
-              <p>
+            <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
+              <p className="m-0 mb-[var(--sp-3)] last:mb-0">
                 <strong>{c.interest.empty.heading}</strong> {c.interest.empty.explanation}
               </p>
-              <ul>
-                {noSaldo > 0 && <li>{c.interest.empty.noSaldoItem(noSaldo)}</li>}
-                {unknownRate > 0 && <li>{c.interest.empty.noRateItem(unknownRate)}</li>}
+              <ul className="m-0 mb-[var(--sp-3)] pl-[1.1rem] text-muted text-[0.88rem] last:mb-0">
+                {noSaldo > 0 && (
+                  <li className="mb-[var(--sp-1)]">{c.interest.empty.noSaldoItem(noSaldo)}</li>
+                )}
+                {unknownRate > 0 && (
+                  <li className="mb-[var(--sp-1)]">{c.interest.empty.noRateItem(unknownRate)}</li>
+                )}
                 {/* "Al op de beste plek" was a CONCLUSION drawn from an absence
                     of suggestions, and an absence has two causes: nothing to gain,
                     or nothing computed. He hit the second and was told the first.
@@ -1639,7 +1675,7 @@ export default function Optimalisatie({
                 {noSaldo === 0 &&
                   unknownRate === 0 &&
                   (interest.best && keptBest !== null ? (
-                    <li>
+                    <li className="mb-[var(--sp-1)]">
                       {c.interest.empty.bestKnown({
                         keptPct: pct(locale, keptBest),
                         bank: interest.best.bank,
@@ -1647,7 +1683,7 @@ export default function Optimalisatie({
                       })}
                     </li>
                   ) : (
-                    <li>{c.interest.empty.noRatesKnown}</li>
+                    <li className="mb-[var(--sp-1)]">{c.interest.empty.noRatesKnown}</li>
                   ))}
               </ul>
             </div>
@@ -1661,8 +1697,8 @@ export default function Optimalisatie({
               attached, and the euro figure below is per MONTH because that is the
               only unit an action is honestly priced in. */}
           {interest.bestPromo && (
-            <p className="reason" style={{ marginTop: "var(--sp-3)" }}>
-              <span className="badge">{c.interest.promo.badge}</span>{" "}
+            <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5] mt-[var(--sp-3)]">
+              <Badge>{c.interest.promo.badge}</Badge>{" "}
               {c.interest.promo.headline({
                 bank: interest.bestPromo.bank,
                 pct: pct(locale, interest.bestPromo.ratePct),
@@ -1677,19 +1713,19 @@ export default function Optimalisatie({
             </p>
           )}
 
-          <div className="table-wrap table-cards" style={{ marginTop: "var(--sp-4)" }}>
-            <table className="table">
+          <TableWrap style={{ marginTop: "var(--sp-4)" }}>
+            <Table cards>
               <thead>
                 <tr>
-                  <th>{c.interest.tableHeaders.rekening}</th>
-                  <th className="num">{c.interest.tableHeaders.saldo}</th>
-                  <th className="num">{c.interest.tableHeaders.rentePct}</th>
-                  <th>{c.interest.tableHeaders.bron}</th>
-                  <th className="num">
+                  <Th>{c.interest.tableHeaders.rekening}</Th>
+                  <Th numeric>{c.interest.tableHeaders.saldo}</Th>
+                  <Th numeric>{c.interest.tableHeaders.rentePct}</Th>
+                  <Th>{c.interest.tableHeaders.bron}</Th>
+                  <Th numeric>
                     {c.interest.tableHeaders.mogelijkPerJaar(
                       keptBest !== null ? pct(locale, keptBest) : undefined,
                     )}
-                  </th>
+                  </Th>
                 </tr>
               </thead>
               <tbody>
@@ -1712,17 +1748,17 @@ export default function Optimalisatie({
                   const bankKept = bankRow === null ? null : keptRate(bankRow);
                   return (
                     <tr key={ar.account.key}>
-                      <td data-label={c.interest.tableHeaders.rekening}>
+                      <Td data-label={c.interest.tableHeaders.rekening}>
                         <div style={{ fontWeight: 600 }}>{ar.account.bank || ar.account.name}</div>
                         <div className="cell-sub">{ar.account.name}</div>
-                      </td>
-                      <td className="num" data-label={c.interest.tableHeaders.saldo}>
+                      </Td>
+                      <Td numeric data-label={c.interest.tableHeaders.saldo}>
                         {ar.account.balance === null ? c.common.unknownBalance : euro(locale, ar.balanceCents)}
-                      </td>
-                      <td className="num" data-label={c.interest.tableHeaders.rentePct}>
+                      </Td>
+                      <Td numeric data-label={c.interest.tableHeaders.rentePct}>
                         <RateCell ar={ar} busy={busy} onCommit={onRateCommit} locale={locale} />
-                      </td>
-                      <td className="cell-sub" data-label={c.interest.tableHeaders.bron}>
+                      </Td>
+                      <Td className="cell-sub" data-label={c.interest.tableHeaders.bron}>
                         {c.interest.sourceLabels[ar.source]}
                         {/* Name the tariff, its bank and its date. "Geschat via
                             banktarief" asks to be believed; this can be checked. */}
@@ -1758,20 +1794,20 @@ export default function Optimalisatie({
                               })}
                             </div>
                           )}
-                      </td>
-                      <td className="num" data-label={c.interest.tableHeaders.mogelijkPerJaar()}>
+                      </Td>
+                      <Td numeric data-label={c.interest.tableHeaders.mogelijkPerJaar()}>
                         {gain > 0 ? (
                           <span className="text-warn">+{euro(locale, gain)}</span>
                         ) : (
                           c.common.dash
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableWrap>
 
           <details className="rates-benchmark">
             <summary className="eyebrow">
@@ -1781,21 +1817,21 @@ export default function Optimalisatie({
                 asOf: rates.asOf,
               })}
             </summary>
-            <div className="table-wrap table-cards">
-              <table className="table">
+            <TableWrap>
+              <Table cards>
                 <thead>
                   <tr>
                     {c.interest.benchmarkDetails.tableHeaders.map((h, i) => (
-                      <th key={h} className={i === 1 || i === 2 ? "num" : undefined}>
+                      <Th key={h} numeric={i === 1 || i === 2}>
                         {h}
-                      </th>
+                      </Th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rates.rates.map((r) => (
                     <tr key={`${r.bank}-${r.product}`}>
-                      <td data-label={c.interest.benchmarkDetails.tableHeaders[0]}>
+                      <Td data-label={c.interest.benchmarkDetails.tableHeaders[0]}>
                         <div style={{ fontWeight: 600 }}>
                           {r.bank}
                           {/* THE ASTERISK. Wise Rente and N26's flexible cash fund
@@ -1817,54 +1853,49 @@ export default function Optimalisatie({
                           ) : null}
                         </div>
                         <div className="cell-sub">{r.product}</div>
-                      </td>
-                      <td className="num text-pos" data-label={c.interest.benchmarkDetails.tableHeaders[1]}>
+                      </Td>
+                      <Td numeric className="text-pos" data-label={c.interest.benchmarkDetails.tableHeaders[1]}>
                         {pct(locale, r.ratePct)}
-                      </td>
+                      </Td>
                       {/* A teaser whose standing rate the source never states is
                           "onbekend" here, and it is left out of the ranking
                           entirely — Trade Republic's own catalogue conditions read
                           "NOT THE STANDING RATE — do not serve 3% bare". An em
                           dash would have read as "nothing changes afterwards". */}
-                      <td className="num cell-sub" data-label={c.interest.benchmarkDetails.tableHeaders[2]}>
+                      <Td numeric className="cell-sub" data-label={c.interest.benchmarkDetails.tableHeaders[2]}>
                         {keptRate(r) === null
                           ? c.interest.benchmarkDetails.unknownKept
                           : keptRate(r) === r.ratePct
                             ? c.interest.benchmarkDetails.sameAsHeadline
                             : keptLabel(locale, r)}
-                      </td>
-                      <td data-label={c.interest.benchmarkDetails.tableHeaders[3]}>
+                      </Td>
+                      <Td data-label={c.interest.benchmarkDetails.tableHeaders[3]}>
                         {r.promoNote ? (
-                          <span className="badge">🎁 {r.promoNote}</span>
+                          <Badge>🎁 {r.promoNote}</Badge>
                         ) : (
                           <span className="cell-sub">{c.interest.benchmarkDetails.noPromo}</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
               {rates.rates.some((r) => r.capitalAtRisk) ? (
                 <p className="cell-sub" style={{ marginTop: ".5rem" }}>
                   {c.interest.benchmarkDetails.capitalAtRiskFootnote}
                 </p>
               ) : null}
-            </div>
+            </TableWrap>
             <p className="eyebrow">
               {c.interest.benchmarkDetails.explanation({
                 sourceLabel: c.interest.ratesSourceLabels[rates.source],
                 asOf: rates.asOf,
               })}{" "}
-              <button
-                type="button"
-                className="card-link"
-                onClick={() => void refreshRates()}
-                disabled={refreshing}
-              >
+              <CardLink onClick={() => void refreshRates()} disabled={refreshing}>
                 {refreshing
                   ? c.interest.benchmarkDetails.refreshingButton
                   : c.interest.benchmarkDetails.refreshButton}
-              </button>
+              </CardLink>
               . {c.interest.benchmarkDetails.refreshNote}{" "}
               {rates.source !== "live" && c.interest.benchmarkDetails.offlineNote}
             </p>
@@ -1925,7 +1956,7 @@ export default function Optimalisatie({
               ALLEEN DE REGEL ZELF, sinds de top-downronde: waar die euro's over
               gerekend zijn staat in de plooi onderaan, bij de rest van de meting. */}
           {routing.length > 0 && (
-            <div className="reason-list">
+            <div className="flex flex-col gap-[var(--sp-3)]">
               {routing.map((a) => {
                 const routed = c.cashback.routingSentence({
                   toBank: a.to.bank,
@@ -1950,8 +1981,7 @@ export default function Optimalisatie({
           monthlyBaseCents !== null &&
           bestHeldCashback !== null ? (
             <div
-              className="reason-list"
-              style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}
+              className={`flex flex-col gap-[var(--sp-3)]${routing.length > 0 ? " mt-[var(--sp-4)]" : ""}`}
             >
               {/* HET ANTWOORD, IN ÉÉN REGEL. Welke kaart, tegen welke van hem, en
                   hoeveel dat bruto scheelt — daarna doet `Productkosten` er de
@@ -1970,7 +2000,10 @@ export default function Optimalisatie({
                      gevonden is. Het is dezelfde splitsing als in het reisblok:
                      een HERKEND kenmerk staat vooraan, de vrije brontekst
                      eromheen vouwt op. */}
-              <p className="reason-lead" data-testid="cashback-antwoord">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="cashback-antwoord"
+              >
                 {c.cashback.answerLine({
                   product: cashbackUpgrade.best.product,
                   bank: cashbackUpgrade.best.bank || undefined,
@@ -2079,7 +2112,7 @@ export default function Optimalisatie({
           {cashbackOnderbouwing && (
             <ToonMeer summary={c.cashback.onderbouwing.toonMeerSummary}>
               {cashbackUpgrade && monthlyBaseCents !== null && bestHeldCashback !== null && (
-                <div className="reason-list">
+                <div className="flex flex-col gap-[var(--sp-3)]">
                   {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
                       NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
                       spending sits on the 0% pas, so the first row is what that card
@@ -2104,7 +2137,7 @@ export default function Optimalisatie({
                       {bestHeld?.k.tier === "aangenomen" && (
                         <>
                           {" "}
-                          <span className="badge">{c.common.assumedBadge}</span>
+                          <Badge>{c.common.assumedBadge}</Badge>
                         </>
                       )}
                     </span>
@@ -2142,7 +2175,7 @@ export default function Optimalisatie({
                       {altKindLabel(locale, bestOfferKind) ? (
                         <>
                           {" "}
-                          <span className="badge">{altKindLabel(locale, bestOfferKind)}</span>
+                          <Badge>{altKindLabel(locale, bestOfferKind)}</Badge>
                         </>
                       ) : null}
                     </span>
@@ -2226,9 +2259,8 @@ export default function Optimalisatie({
                   hetzelfde antwoord. */}
               {lastMonthCompare && cashbackUpgrade && bestHeldCashback !== null && (
                 <div
-                  className="reason-list"
+                  className="flex flex-col gap-[var(--sp-3)] mt-[var(--sp-3)]"
                   data-testid="cashback-vorige-maand"
-                  style={{ marginTop: "var(--sp-3)" }}
                 >
                   <p style={{ margin: 0 }}>
                     <strong>
@@ -2250,7 +2282,7 @@ export default function Optimalisatie({
                       {bestHeld?.k.tier === "aangenomen" && (
                         <>
                           {" "}
-                          <span className="badge">{c.common.assumedBadge}</span>
+                          <Badge>{c.common.assumedBadge}</Badge>
                         </>
                       )}
                     </span>
@@ -2350,12 +2382,18 @@ export default function Optimalisatie({
                 WEIGERINGEN en dus zelf de uitkomst: ze staan vooraan en vouwen
                 nooit op. */}
             {costs.total.kind === "complete" && (
-              <p className="reason-lead" data-testid="kosten-totaal">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalComplete(euro(locale, costs.total.perYearCents), costs.total.accounts)}
               </p>
             )}
             {costs.total.kind === "incomplete" && (
-              <p className="reason-lead" data-testid="kosten-totaal">
+              <p
+                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalIncomplete({
                   known: costs.total.known,
                   total: costs.total.known + costs.total.unknown,
@@ -2365,7 +2403,10 @@ export default function Optimalisatie({
               </p>
             )}
             {costs.total.kind === "none" && (
-              <p className="reason" data-testid="kosten-totaal">
+              <p
+                className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                data-testid="kosten-totaal"
+              >
                 {c.costs.totalNone}
               </p>
             )}
@@ -2396,7 +2437,7 @@ export default function Optimalisatie({
                 cost.matchedBy === "product-name" ? cost.fee.product : `${bank} — ${row.account.name}`;
               return (
                 <p
-                  className="reason"
+                  className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
                   data-testid={`kosten-gratis-${row.account.key}`}
                   key={`gratis-${row.account.key}`}
                 >
@@ -2427,7 +2468,10 @@ export default function Optimalisatie({
               const free = row.candidates.filter((f) => f.amount.cents === 0);
               return (
                 <div key={`onbekend-${row.account.key}`}>
-                  <p className="reason" data-testid={`kosten-onbekend-${row.account.key}`}>
+                  <p
+                    className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
+                    data-testid={`kosten-onbekend-${row.account.key}`}
+                  >
                     {c.costs.unknownAccountLead(bank, row.account.name)}{" "}
                     {cost.reason === "no-bank"
                       ? c.costs.unknownReasons.noBank
@@ -2488,7 +2532,7 @@ export default function Optimalisatie({
                 peildatum — verhuist naar de bronnenlijst in de plooi, waar de
                 rest van de herkomst ook staat. */}
             {costTips.length > 0 && (
-              <div className="reason-list" style={{ marginTop: "var(--sp-4)" }}>
+              <div className="flex flex-col gap-[var(--sp-3)] mt-[var(--sp-4)]">
                 {costTips.map((row) => {
                   const cost = row.cost;
                   if (cost.kind !== "known") return null;
@@ -2501,7 +2545,7 @@ export default function Optimalisatie({
                   return alts.map(({ label, alt }) =>
                     alt === null ? null : (
                       <div key={`${row.account.key}-${alt.fee.productId}`}>
-                        <p className="reason">
+                        <p className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]">
                           {c.costs.tips.sentence({
                             label,
                             heldLabel: held,
@@ -2535,14 +2579,14 @@ export default function Optimalisatie({
                 afwezigheid die je wegvouwt lijkt een leeg scherm, en een gratis
                 rekening die je wegvouwt heeft hij nooit gezien. */}
             <ToonMeer summary={c.costs.detailsToonMeer.summary}>
-              <div className="table-wrap table-cards">
-                <table className="table">
+              <TableWrap>
+                <Table cards>
                   <thead>
                     <tr>
                       {c.costs.detailsToonMeer.tableHeaders.map((h, i) => (
-                        <th key={h} className={i === 1 || i === 2 ? "num" : undefined}>
+                        <Th key={h} numeric={i === 1 || i === 2}>
                           {h}
-                        </th>
+                        </Th>
                       ))}
                     </tr>
                   </thead>
@@ -2553,20 +2597,20 @@ export default function Optimalisatie({
                       const [rekeningH, kostenH, perJaarH, bronH] = c.costs.detailsToonMeer.tableHeaders;
                       return (
                         <tr key={row.account.key}>
-                          <td data-label={rekeningH}>
+                          <Td data-label={rekeningH}>
                             <div style={{ fontWeight: 600 }}>{bank}</div>
                             <div className="cell-sub">{row.account.name}</div>
-                          </td>
-                          <td className="num" data-label={kostenH}>
+                          </Td>
+                          <Td numeric data-label={kostenH}>
                             {cost.kind === "known"
                               ? feeLabel(locale, cost.amount)
                               : c.costs.detailsToonMeer.unknownCost}
-                          </td>
+                          </Td>
                           {/* "niet in het totaal" in plaats van een streepje: een em
                               dash naast euro's leest als nul, en dit is het enige
                               veld waar de lezer kan zien wat er met een onbekende
                               gebeurt. */}
-                          <td className="num" data-label={perJaarH}>
+                          <Td numeric data-label={perJaarH}>
                             {cost.kind === "known" ? (
                               <>
                                 {euro(locale, cost.amount.perYearCents)}
@@ -2577,8 +2621,8 @@ export default function Optimalisatie({
                             ) : (
                               <span className="cell-sub">{c.costs.detailsToonMeer.notInTotal}</span>
                             )}
-                          </td>
-                          <td data-label={bronH} className="cell-sub">
+                          </Td>
+                          <Td data-label={bronH} className="cell-sub">
                             {cost.kind === "known" ? (
                               <>
                                 <div>
@@ -2635,13 +2679,13 @@ export default function Optimalisatie({
                                 )}
                               </>
                             )}
-                          </td>
+                          </Td>
                         </tr>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                </Table>
+              </TableWrap>
 
               {/* De volledige vindplaats van elk bedrag dat vooraan meetelt, plus
                   die van elke goedkopere optie die hierboven is aangeraden. Eén

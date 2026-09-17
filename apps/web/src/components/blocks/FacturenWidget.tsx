@@ -4,6 +4,7 @@ import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -130,11 +131,11 @@ function SideRow({ locale, label, side }: { locale: Locale; label: string; side:
   if (side.count === 0) return null;
   const c = moneyCopy[locale].facturen;
   return (
-    <div className="entity-row">
-      <span className="entity-row-name">
+    <div className="flex items-center gap-2 py-2 px-0 border-b border-line last:border-b-0">
+      <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.9rem]">
         {label} · {c.sideRowCount(side.count)}
       </span>
-      <span className="entity-row-balance">
+      <span className="flex-none font-semibold text-[0.9rem] tabular-nums">
         {side.eurCount === 0 ? c.bedragOnbekend : formatEuroIn(locale, side.eurTotal)}
       </span>
     </div>
@@ -185,9 +186,7 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
       span={span}
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("facturen")}>
-          {c.facturenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>
       }
       footer={
         s.zonderEuroBedrag > 0 ? <>{c.vanNFacturenBedragOnbekend(s.zonderEuroBedrag)}</> : undefined
@@ -201,12 +200,12 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
         <>
           <div className="module-figure">
             <span className="module-figure-value">{s.open}</span>
-            <span className="figure-vs">{c.openstaand}</span>
+            <span className="text-muted text-[0.8rem]">{c.openstaand}</span>
           </div>
           <p className="module-figure-label">
             {late ?? c.geenEnkeleOpenstaandeFactuurOverVervaldatum}
           </p>
-          <div className="entity-rows">
+          <div className="flex flex-col mt-3">
             <SideRow locale={locale} label={c.teOntvangen} side={s.ontvangen} />
             <SideRow locale={locale} label={c.teBetalen} side={s.betalen} />
           </div>

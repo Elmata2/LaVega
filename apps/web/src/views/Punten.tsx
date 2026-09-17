@@ -14,6 +14,11 @@ import { formatEuroIn, localeTag } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
+import Badge from "../components/ui/Badge.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 import "../styles/views.css";
 
 /* Punten — the hand-kept side of the money picture.
@@ -248,9 +253,12 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].punten;
   return (
-    <details className="field-note punt-facts">
+    <details
+      className="mt-3 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+      data-testid="punt-facts"
+    >
       <summary className="punt-facts-lead" style={{ cursor: "pointer" }}>
-        <strong>{c.card.factsLead(facts.program)}</strong> {facts.noRateShort}{" "}
+        <strong className="text-ink">{c.card.factsLead(facts.program)}</strong> {facts.noRateShort}{" "}
         <span className="eyebrow">{c.card.factsShowRules}</span>
       </summary>
       <p style={{ margin: "0.5rem 0 0" }}>{facts.noRate}</p>
@@ -386,6 +394,22 @@ function ageSentence(s: TrackedStatus, locale: Locale): string {
 
 const INTERVAL_DAYS = [30, 90, 180, 365] as const;
 
+/** Left-edge accent on a punt-card: only a figure that is actually over its
+ *  term or due gets the attention colour (was `.punt-overdue`/`.punt-due` in
+ *  views.css); every other state keeps the plain hairline. */
+function puntCardBorderClass(state: TrackingState): string {
+  if (state === "overdue") return "border-l-warn";
+  if (state === "due") return "border-l-accent";
+  return "border-l-line";
+}
+
+/** Same rule for the status badge (was `.punt-badge-overdue`/`.punt-badge-due`). */
+function puntBadgeClass(state: TrackingState): string {
+  if (state === "overdue") return "border-warn text-warn";
+  if (state === "due") return "border-accent text-accent";
+  return "";
+}
+
 export default function Punten({
   balances,
   asOf,
@@ -497,16 +521,21 @@ export default function Punten({
   }
 
   return (
-    <section className="card" aria-label={c.header.ariaLabel}>
-      <div className="view-head">
-        <h2>{c.header.title}</h2>
+    <Card as="section" aria-label={c.header.ariaLabel}>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        data-testid="view-head"
+      >
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.header.title}
+        </h2>
         {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
             cijfer van heeft ingevoerd, en zolang dat de enige lijst op het scherm
             was, was "programma's" daar het goede woord voor. Sinds de
             programmalijst eronder staat is het dat niet meer: "0 programma's"
             stond boven een scherm dat er tien opsomde, en dan is een van de twee
             fout. Wat er wordt geteld, staat er nu ook. */}
-        <span className="eyebrow">
+        <span className="eyebrow flex-none">
           {c.header.countLabel(rows.length)}
           {attention > 0 ? c.header.attentionSuffix(attention) : ""}
         </span>
@@ -522,104 +551,113 @@ export default function Punten({
           die zin zou een lege plek als een ontbrekend cijfer lezen. */}
 
       {rows.length === 0 ? (
-        <div className="empty-guide">
-          <p>{c.empty.lead}</p>
-          <ul>
+        <div className="border border-dashed border-line rounded bg-surface-2 p-4" data-testid="empty-guide">
+          <p className="m-0 mb-3">{c.empty.lead}</p>
+          <ul className="m-0 pl-[1.1rem] text-muted text-[0.88rem]">
             {c.empty.steps.map((step) => (
-              <li key={step}>{step}</li>
+              <li className="mb-1" key={step}>
+                {step}
+              </li>
             ))}
           </ul>
         </div>
       ) : (
-        <div className="punt-list">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4 mt-4">
           {rows.map(({ balance: b, status, unit }) => {
             const category = programCategory(b.program);
             const facts = programFacts(b.program);
             const asking = ask && ask.id === b.id ? ask : null;
             return (
-              <article className={`punt-card punt-${status.state}`} key={b.id}>
-                <header className="punt-head">
-                  <div className="punt-id">
-                    <div className="punt-program">{b.program}</div>
-                    <div className="punt-category">{category ?? c.card.ownProgramCategory}</div>
+              <article
+                className={`flex flex-col border-t border-r border-b border-t-line border-r-line border-b-line rounded bg-surface-2 p-4 border-l-[3px] ${puntCardBorderClass(status.state)}`}
+                data-testid="punt-card"
+                data-state={status.state}
+                key={b.id}
+              >
+                <header className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-ink [overflow-wrap:anywhere]">{b.program}</div>
+                    <div className="text-[0.78rem] text-muted">
+                      {category ?? c.card.ownProgramCategory}
+                    </div>
                   </div>
-                  <span className={`badge punt-badge-${status.state}`}>
+                  <Badge className={puntBadgeClass(status.state)}>
                     {c.card.stateLabel[status.state]}
-                  </span>
+                  </Badge>
                 </header>
 
-                <div className="punt-figure">
-                  <span className="punt-value">
+                <div className="flex items-baseline gap-2 mt-3">
+                  <span
+                    className="font-display text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
+                    data-testid="punt-value"
+                  >
                     {unit === "eur"
                       ? formatEuroIn(locale, b.points)
                       : b.points.toLocaleString(localeTag(locale))}
                   </span>
-                  <span className="punt-unit">{unit === "eur" ? c.card.unitCashback : c.card.unitPoints}</span>
+                  <span className="text-[0.85rem] text-muted" data-testid="punt-unit">
+                    {unit === "eur" ? c.card.unitCashback : c.card.unitPoints}
+                  </span>
                 </div>
-                <p className="punt-asof">
+                <p className="mt-1 mb-0 text-[0.82rem] text-muted">
                   {c.card.asOfTemplate(dateIn(locale, b.updatedAt), ageSentence(status, locale))}
                 </p>
-                <p className="punt-worth">{worthLine(b.program, unit, locale)}</p>
+                <p className="mt-2 mb-0 text-[0.82rem] text-muted" data-testid="punt-worth">
+                  {worthLine(b.program, unit, locale)}
+                </p>
                 {facts ? <ProgramFactsBlock facts={facts} /> : null}
 
                 {asking ? (
-                  <div className="punt-ask">
-                    <label htmlFor={`punt-ask-${slug(b.id)}`}>{status.question}</label>
-                    <div className="punt-ask-row">
-                      <input
+                  <div className="mt-3 p-3 border border-line rounded-sm bg-surface" data-testid="punt-ask">
+                    <label className="block text-[0.85rem] text-ink mb-2" htmlFor={`punt-ask-${slug(b.id)}`}>
+                      {status.question}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <SaldoInput
                         id={`punt-ask-${slug(b.id)}`}
-                        className="saldo-input"
+                        className="flex-[1_1_120px] min-w-0"
                         inputMode="decimal"
                         placeholder={unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints}
                         value={asking.text}
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
                       />
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy}
-                        onClick={() => submitAsk(b.id)}
-                      >
+                      <Button variant="primary" disabled={busy} onClick={() => submitAsk(b.id)}>
                         {c.card.askSave}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={busy}
-                        onClick={() => setAsk(null)}
-                      >
+                      </Button>
+                      <Button disabled={busy} onClick={() => setAsk(null)}>
                         {c.card.askCancel}
-                      </button>
+                      </Button>
                     </div>
-                    {asking.error ? <p className="punt-error">{asking.error}</p> : null}
+                    {asking.error ? (
+                      <p className="mt-2 mb-0 text-[0.82rem] text-neg" data-testid="punt-error">
+                        {asking.error}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
-                <footer className="punt-actions">
+                <footer className="flex flex-wrap items-center gap-3 mt-auto pt-3">
                   {!asking && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => setAsk({ id: b.id, text: "", error: "" })}
                     >
                       {c.card.updateBalance}
-                    </button>
+                    </CardLink>
                   )}
                   {(status.state === "due" || status.state === "overdue") && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => onSave(snoozeTracker(balances, b.id, addDaysISO(asOf, 30)))}
                     >
                       {c.card.notNow}
-                    </button>
+                    </CardLink>
                   )}
-                  <label className="punt-interval">
+                  <label className="inline-flex items-center gap-1">
                     <span className="eyebrow">{c.card.remindMeLabel}</span>
                     <select
+                      className="text-[0.8rem] py-[2px] px-[6px]"
                       aria-label={c.card.reminderAriaLabel(b.program)}
                       value={String(b.intervalDays ?? 90)}
                       disabled={busy}
@@ -632,14 +670,9 @@ export default function Punten({
                       ))}
                     </select>
                   </label>
-                  <button
-                    type="button"
-                    className="card-link card-link-danger"
-                    disabled={busy}
-                    onClick={() => remove(b.id)}
-                  >
+                  <CardLink variant="danger" disabled={busy} onClick={() => remove(b.id)}>
                     {c.card.remove}
-                  </button>
+                  </CardLink>
                 </footer>
               </article>
             );
@@ -648,28 +681,38 @@ export default function Punten({
       )}
 
       {removed ? (
-        <p className="field-note punt-undo" role="status">
-          <strong>{removed.program}</strong>
+        <p
+          className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+          data-testid="punt-undo"
+          role="status"
+        >
+          <strong className="text-ink">{removed.program}</strong>
           {c.removedBanner.removedSuffix}
           {programUnit(removed.program) === "eur"
             ? `${formatEuroIn(locale, removed.points)} ${c.removedBanner.cashbackUnit}`
             : `${removed.points.toLocaleString(localeTag(locale))} ${c.removedBanner.pointsUnit}`}{" "}
           {c.removedBanner.dateOnlySuffix(dateIn(locale, removed.updatedAt))}{" "}
-          <button type="button" className="card-link" disabled={busy} onClick={undoRemove}>
+          <CardLink disabled={busy} onClick={undoRemove}>
             {c.removedBanner.undo}
-          </button>
+          </CardLink>
         </p>
       ) : null}
 
-      <div className="view-head">
-        <h3>{c.addForm.heading}</h3>
-        <span className="eyebrow">{c.addForm.overwriteHint}</span>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        data-testid="view-head"
+      >
+        <h3 className="m-0 font-display text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.addForm.heading}
+        </h3>
+        <span className="eyebrow flex-none">{c.addForm.overwriteHint}</span>
       </div>
-      <div className="stack-form punt-form">
-        <div className="stack-form-row">
-          <label>
+      <div className="flex flex-col gap-3 max-w-[720px]" data-testid="punt-form">
+        <div className="flex gap-3 [@media(max-width:640px)]:flex-col">
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
             {c.addForm.programLabel}
             <input
+              className="w-full box-border"
               list="reward-programs"
               value={program}
               disabled={busy}
@@ -685,10 +728,10 @@ export default function Punten({
               ))}
             </datalist>
           </label>
-          <label>
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
             {addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
-            <input
-              className="saldo-input"
+            <SaldoInput
+              className="w-full box-border"
               inputMode="decimal"
               value={points}
               disabled={busy}
@@ -697,9 +740,10 @@ export default function Punten({
               onChange={(e) => setPoints(e.target.value)}
             />
           </label>
-          <label>
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
             {c.addForm.seenOnLabel}
             <input
+              className="w-full box-border"
               type="date"
               value={updatedAt}
               disabled={busy}
@@ -715,15 +759,21 @@ export default function Punten({
             eigen id, náást ING Punten. Deze wijzer kan hier wél werken: de optie
             staat één veld hoger in dezelfde lijst. */}
         {norm(program) === "ing" ? (
-          <p className="field-note">
+          <p
+            className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+            data-testid="punt-ing-hint"
+          >
             {c.addForm.ingHintBefore}
-            <strong>{c.addForm.ingHintBold}</strong>
+            <strong className="text-ink">{c.addForm.ingHintBold}</strong>
             {c.addForm.ingHintAfter}
           </p>
         ) : null}
         {existing ? (
-          <p className="field-note punt-overwrite">
-            <strong>{existing.program}</strong>
+          <p
+            className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+            data-testid="punt-overwrite"
+          >
+            <strong className="text-ink">{existing.program}</strong>
             {c.addForm.existingOverwriteSuffix}
             {programUnit(existing.program) === "eur"
               ? `${formatEuroIn(locale, existing.points)} ${c.card.unitCashback}`
@@ -731,13 +781,17 @@ export default function Punten({
             {c.addForm.existingOverwriteDateSuffix(dateIn(locale, existing.updatedAt))}
           </p>
         ) : null}
-        <div className="stack-form-actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
+        <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
+          <Button variant="primary" disabled={busy} onClick={add}>
             {existing ? c.addForm.submitOverwrite : c.addForm.submitSave}
-          </button>
+          </Button>
         </div>
-        {addError ? <p className="punt-error">{addError}</p> : null}
+        {addError ? (
+          <p className="mt-2 text-[0.82rem] text-neg" data-testid="punt-error">
+            {addError}
+          </p>
+        ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

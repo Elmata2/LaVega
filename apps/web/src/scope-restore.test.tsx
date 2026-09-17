@@ -219,7 +219,7 @@ test("you come back to the module you left the half on, not the one the other ha
   const overzicht = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("button.card-link", "Rekeningen")); // the empty half's only offer
+  await click(button('[data-testid="card-link"]', "Rekeningen")); // the empty half's only offer
   expect(title()).toBe("Rekeningen");
 
   await click(scopeButton("Persoonlijk"));
@@ -253,8 +253,8 @@ test("a filter naming an account of one half never narrows the other half", asyn
   // filtered to that account.
   await click(button("a.nav-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
-  await click(buttonLike("button.bank-group-head", "TEST"));
-  await click(buttonLike("button.card-link", "4 transacties bekijken"));
+  await click(buttonLike("button[data-testid=bank-group-head]", "TEST"));
+  await click(buttonLike('[data-testid="card-link"]', "4 transacties bekijken"));
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
 

@@ -42,6 +42,9 @@ import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Grens, { type GrensAnswerRow } from "./Grens";
+import Badge from "../components/ui/Badge.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
 import "../styles/views.css";
 
 /* Belasting — one module per tax that is ACTUALLY relevant (UI review,
@@ -383,24 +386,24 @@ export default function Belasting({
   if (entities.length === 0) {
     return (
       <>
-        <div className="view-head">
-          <h2>
+        <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
+          <h2 className="m-0 text-[1.5rem]">
             {c.header.title} · {countryLabel}
           </h2>
-          <span className="eyebrow">
+          <span className="eyebrow flex-none">
             {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
           </span>
         </div>
-        <section className="card" aria-label={c.header.title}>
+        <Card as="section" aria-label={c.header.title}>
           <p>{c.header.entitiesEmpty}</p>
-        </section>
+        </Card>
       </>
     );
   }
 
   return (
     <>
-      <div className="view-head">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
         {/* HET ⓘ VERVANGT DE VOLLE-BREEDTE MODULE "Niet berekend" ONDERAAN.
             Die lijst is anders niet te beoordelen (zie de kop van dit bestand),
             maar hoeft niet standaard open te staan om dat te blijven doen —
@@ -409,24 +412,26 @@ export default function Belasting({
         <ToonMeer
           variant="info"
           heading={
-            <h2>
+            <h2 className="m-0 text-[1.5rem]">
               {c.header.title} · {countryLabel}
             </h2>
           }
           summary={c.header.caveatsSummary}
         >
-          <ul className="tax-caveats">
+          <ul className="m-0 pl-[1.1rem] text-[0.82rem] text-muted">
             {caveats.map((caveat) => (
-              <li key={caveat}>{caveat}</li>
+              <li className="mb-1" key={caveat}>
+                {caveat}
+              </li>
             ))}
           </ul>
         </ToonMeer>
-        <span className="eyebrow">
+        <span className="eyebrow flex-none">
           {c.header.taxCount(profitTax ? 2 : 1)} · {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
         </span>
       </div>
 
-      <section className="card tax-system" aria-label={c.header.taxSystemLabel}>
+      <Card as="section" className="tax-system" aria-label={c.header.taxSystemLabel}>
         <label htmlFor="tax-system">{c.header.taxSystemLabel}</label>
         <select
           id="tax-system"
@@ -448,9 +453,12 @@ export default function Belasting({
             {c.header.unsupportedCountry(countryNameIn(locale, taxCountry.unsupportedHome))}
           </p>
         )}
-      </section>
+      </Card>
 
-      <ModuleGrid className="grid-2" label={c.header.gridLabel}>
+      <ModuleGrid
+        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        label={c.header.gridLabel}
+      >
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
         <Module
           title={vatLabel}
@@ -477,11 +485,14 @@ export default function Belasting({
             const { period, stage, basis, netCents, direction, coverage, note } = p;
             const known = netCents !== null;
             return (
-              <div className="tax-entity" key={entity}>
-                <div className="tax-entity-head">
-                  <span className="tax-entity-name">{entity}</span>
+              <div
+                className="border-t border-t-line pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0"
+                key={entity}
+              >
+                <div className="flex items-baseline justify-between gap-3 mb-2">
+                  <span className="font-semibold text-ink">{entity}</span>
                   <span
-                    className={`tax-entity-figure ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+                    className={`font-display text-[1.2rem] font-semibold ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
                     {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
                   </span>
@@ -566,8 +577,8 @@ export default function Belasting({
                   )}
                 </ToonMeer>
 
-                <div className="tax-fields">
-                  <label>
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.frequencyLabel}
                     <select
                       value={s.frequency}
@@ -584,7 +595,7 @@ export default function Belasting({
                       ))}
                     </select>
                   </label>
-                  <label>
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.stelselLabel}
                     <select
                       value={s.vatBasis ?? ""}
@@ -604,10 +615,10 @@ export default function Belasting({
                       <option value="kasstelsel">{c.vat.fields.stelselKas}</option>
                     </select>
                   </label>
-                  <label>
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.ratePctLabel}
                     <input
-                      className="saldo-input"
+                      className="w-[110px]"
                       type="number"
                       step={1}
                       min={0}
@@ -621,10 +632,10 @@ export default function Belasting({
                       }
                     />
                   </label>
-                  <label>
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.manualAmountLabel}
                     <input
-                      className="saldo-input"
+                      className="w-[110px]"
                       type="number"
                       step={0.01}
                       min={0}
@@ -642,7 +653,7 @@ export default function Belasting({
                       }
                     />
                   </label>
-                  <label>
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.mixedRatesLabel}
                     <input
                       type="checkbox"
@@ -652,7 +663,7 @@ export default function Belasting({
                       onChange={(e) => patch(entity, { mixedRates: e.target.checked })}
                     />
                   </label>
-                  <label>
+                  <label className="flex flex-col gap-1 text-[0.78rem]">
                     {c.vat.fields.sheetLabel}
                     <input
                       type="file"
@@ -687,16 +698,21 @@ export default function Belasting({
              betalen. NL heeft die niet, dus NL ziet deze module niet. ─────── */}
         {profitTax && (
           <Module title={profitTax.label} height="tall" footer={<span>{profitTax.rateBasis}</span>}>
-            <p className="view-lead">{profitTax.what}</p>
+            <p className="mb-4 text-muted max-w-[68ch]">{profitTax.what}</p>
             {entities.map((entity) => {
               const s = resolve(entity);
               const flows = computeProfitTaxPrepayments(entityTxs(entity), s, asOf);
               const total = flows.reduce((sum, f) => sum + f.amountCents, 0);
               return (
-                <div className="tax-entity" key={entity}>
-                  <div className="tax-entity-head">
-                    <span className="tax-entity-name">{entity}</span>
-                    <span className={`tax-entity-figure ${total > 0 ? "text-neg" : ""}`}>
+                <div
+                  className="border-t border-t-line pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0"
+                  key={entity}
+                >
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
+                    <span className="font-semibold text-ink">{entity}</span>
+                    <span
+                      className={`font-display text-[1.2rem] font-semibold ${total > 0 ? "text-neg" : ""}`}
+                    >
                       {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
                     </span>
                   </div>
@@ -707,13 +723,13 @@ export default function Belasting({
                       )}
                     </p>
                   ) : (
-                    <div className="tax-flows">
+                    <div className="flex flex-col gap-1 mt-2 text-[0.85rem]">
                       {flows.map((f) => (
-                        <div className="tax-flow" key={f.id}>
+                        <div className="flex justify-between gap-3" key={f.id}>
                           <span>
                             {f.label} · {f.dueDate}{" "}
                             {f.status === "expected" && (
-                              <span className="badge">{c.profitTax.estimateBadge}</span>
+                              <Badge>{c.profitTax.estimateBadge}</Badge>
                             )}
                           </span>
                           <span className="text-neg">
@@ -723,11 +739,11 @@ export default function Belasting({
                       ))}
                     </div>
                   )}
-                  <div className="tax-fields" style={{ marginTop: "var(--sp-3)" }}>
-                    <label>
+                  <div className="flex flex-wrap gap-3" style={{ marginTop: "var(--sp-3)" }}>
+                    <label className="flex flex-col gap-1 text-[0.78rem]">
                       {c.profitTax.fields.ratePctLabel}
                       <input
-                        className="saldo-input"
+                        className="w-[110px]"
                         type="number"
                         step={0.1}
                         min={0}
@@ -743,10 +759,10 @@ export default function Belasting({
                         }
                       />
                     </label>
-                    <label>
+                    <label className="flex flex-col gap-1 text-[0.78rem]">
                       {c.profitTax.fields.imposedAmountLabel}
                       <input
-                        className="saldo-input"
+                        className="w-[110px]"
                         type="number"
                         step={0.01}
                         min={0}
@@ -795,10 +811,10 @@ export default function Belasting({
         )}
       </ModuleGrid>
 
-      <div className="stack-form-actions">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={berekenEnBewaar}>
+      <div className="flex flex-wrap gap-2 mt-2">
+        <Button variant="primary" disabled={busy} onClick={berekenEnBewaar}>
           {c.actions.saveButton}
-        </button>
+        </Button>
       </div>
       {savedNote && <p className="cell-sub">{savedNote}</p>}
     </>

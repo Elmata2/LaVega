@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ToonMeer from "./ToonMeer";
+import Button from "./ui/Button.js";
 import { useAppLocale } from "../appLocale.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import type { ValutaCopy } from "../copy/optimise.js";
@@ -794,29 +795,34 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     /* Eén kolom: de bol, de legenda eronder, dan het antwoord op de laatste keuze,
      * en onderaan het zoekveld met de landenlijst. Punt 6 in de kop legt uit waarom
      * het antwoord tussen de legenda en het zoekveld staat. */
-    <div className="lv-globe">
-      <div className="lv-globe-figure" ref={figureRef}>
-        <p className="lv-globe-readout" data-testid="bol-readout">
+    <div className="lv-globe flex flex-col gap-4 min-w-0">
+      <div className="lv-globe-figure flex flex-col gap-3 min-w-0" ref={figureRef}>
+        <p
+          className="lv-globe-readout flex items-baseline justify-between gap-3 m-0 min-h-[1.5rem] text-[0.95rem]"
+          data-testid="bol-readout"
+        >
           {readoutId ? (
             <>
-              <span className="lv-globe-readout-name">{countryLabel(locale, readoutId) || readoutId}</span>
+              <span className="lv-globe-readout-name font-semibold text-ink">
+                {countryLabel(locale, readoutId) || readoutId}
+              </span>
               {/* Niet `currencies.length ? codes : "onbekend"`: een leeg lijstje is
                   hier twee verschillende antwoorden, en `kind` is het enige dat
                   weet welke. Zie moneyLine. */}
-              <span className="lv-globe-readout-ccy">
+              <span className="lv-globe-readout-ccy font-mono text-[0.8rem] tracking-[0.04em] text-muted">
                 {readout
                   ? moneyLine(readout.currencies, readout.kind === "noTender", c.moneyLine)
                   : c.moneyLine.unknown}
               </span>
             </>
           ) : (
-            <span className="lv-globe-readout-empty">{c.readoutEmpty}</span>
+            <span className="lv-globe-readout-empty text-muted text-[0.88rem]">{c.readoutEmpty}</span>
           )}
         </p>
 
         <canvas
           ref={canvasRef}
-          className="lv-globe-canvas"
+          className='lv-globe-canvas block my-0 mx-auto max-w-full rounded-[50%] touch-none cursor-grab data-[dragging="1"]:cursor-grabbing focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[3px]'
           data-testid="bol-canvas"
           data-dragging={dragging ? "1" : undefined}
           width={Math.round(size * dpr)}
@@ -836,23 +842,45 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           onKeyDown={onCanvasKeyDown}
         />
 
-        <ul className="lv-globe-legend">
-          <li>
-            <span className="lv-globe-swatch" data-tone="euro" aria-hidden="true" /> {c.legend.euro}
+        <ul className="lv-globe-legend flex flex-wrap gap-y-2 gap-x-4 m-0 p-0 list-none text-[0.78rem] text-muted">
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-euro)]"
+              data-tone="euro"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.euro}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="rate" aria-hidden="true" /> {c.legend.rate}
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-rate)]"
+              data-tone="rate"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.rate}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="norate" aria-hidden="true" />{" "}
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-norate)]"
+              data-tone="norate"
+              aria-hidden="true"
+            />{" "}
             {c.legend.noRate}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="notender" aria-hidden="true" />{" "}
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-notender)]"
+              data-tone="notender"
+              aria-hidden="true"
+            />{" "}
             {c.legend.noTender}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="selected" aria-hidden="true" />{" "}
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-selected)]"
+              data-tone="selected"
+              aria-hidden="true"
+            />{" "}
             {c.legend.selected}
           </li>
         </ul>
@@ -865,9 +893,13 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         </span>
       </div>
 
-      <div className="lv-globe-answer" data-testid="bol-antwoord" aria-live="polite">
+      <div
+        className="lv-globe-answer py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-[0.9rem] leading-[1.5]"
+        data-testid="bol-antwoord"
+        aria-live="polite"
+      >
         {miss ? (
-          <p className="lv-globe-miss" data-testid="bol-misser">
+          <p className="lv-globe-miss text-muted" data-testid="bol-misser">
             {miss === "off"
               ? c.miss.off
               : miss === "beyond"
@@ -883,7 +915,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           <p>{c.noSelection(value)}</p>
         ) : effect.kind === "euro" ? (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} {c.effectEuro.leadSuffix}
             </p>
             {from.toUpperCase() === "EUR" ? (
@@ -894,7 +926,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "set" ? (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} — {currencyLabel(effect.code, locale)}
             </p>
             {/* "de rekenmachine" en niet "hierboven": de bol staat op een breed
@@ -904,7 +936,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "noRate" ? (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} {c.effectNoRate.leadSuffix}
             </p>
             <p>
@@ -921,7 +953,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "noTender" ? (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} {c.effectNoTender.leadSuffix}
             </p>
             {/* Geen praktische tip erbij ("neem dollars mee", "je betaalt bij je
@@ -937,22 +969,17 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "choice" ? (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} {c.effectChoice.leadSuffix}
             </p>
             <p>{c.effectChoice.prompt}</p>
-            <ul className="lv-globe-choice">
+            <ul className="lv-globe-choice flex flex-wrap gap-2 mb-2 p-0 list-none">
               {effect.currencies.map((cur) => (
                 <li key={cur.code}>
-                  <button
-                    type="button"
-                    className="btn"
-                    aria-pressed={pickedCode === cur.code}
-                    onClick={() => pickCurrency(cur)}
-                  >
+                  <Button aria-pressed={pickedCode === cur.code} onClick={() => pickCurrency(cur)}>
                     {cur.code}
                     {canPrice(cur) ? "" : c.effectChoice.noRateSuffix}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -966,7 +993,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : (
           <>
-            <p className="lv-globe-answer-lead">
+            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
               {label} {c.effectUnknown.leadSuffix}
             </p>
             <p>{c.effectUnknown.body}</p>
@@ -991,8 +1018,13 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
       {/* Het zoekveld met de landenlijst, onderaan zoals gevraagd. Geen eigen
           kolomwikkel meer: er is nog maar één kolom, en een <div> die niets doet
           is een <div> die iemand later gaat stylen. */}
-      <div className="lv-globe-search">
-        <label htmlFor="lv-globe-q">{c.search.label}</label>
+      <div className="lv-globe-search flex flex-col gap-2 min-w-0">
+        <label
+          htmlFor="lv-globe-q"
+          className="text-[0.78rem] tracking-[0.06em] uppercase text-muted"
+        >
+          {c.search.label}
+        </label>
         <input
           id="lv-globe-q"
           type="search"
@@ -1014,13 +1046,15 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         <ul
           id="lv-globe-list"
           ref={listRef}
-          className="lv-globe-results"
+          className="lv-globe-results flex flex-col gap-1 m-0 p-1 list-none max-h-[18rem] overflow-y-auto border border-line rounded-sm bg-surface"
           role="listbox"
           aria-label={c.search.resultsAriaLabel}
           data-testid="bol-landen"
         >
           {results.length === 0 ? (
-            <li className="lv-globe-results-empty">{c.search.emptyResults}</li>
+            <li className="lv-globe-results-empty py-2 px-3 text-muted text-[0.88rem]">
+              {c.search.emptyResults}
+            </li>
           ) : (
             results.map((country, i) => (
               <li
@@ -1031,6 +1065,16 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
                 data-country={country.id}
                 data-active={i === activeIndex ? "1" : undefined}
                 onClick={() => select(country.id, true)}
+                /* `bg-accent-soft` staat op een samengestelde variant en niet op
+                   `data-[active="1"]:`, want anders wint hij van
+                   `aria-selected:bg-surface-2` zodra beide gelden — in de oude CSS
+                   won aria-selected daar altijd (latere regel, gelijke
+                   specificiteit); Tailwinds eigen volgorde van gegenereerde
+                   utilities garandeert dat niet. `:not([aria-selected="true"])`
+                   maakt de twee voorwaarden weer wederzijds uitsluitend, zoals ze
+                   in de bron ook waren. De rand kleurt wel gewoon door — die
+                   eigenschap raakte aria-selected nooit. */
+                className='flex items-baseline justify-between gap-3 py-2 px-3 border border-transparent rounded-sm text-ink text-[0.9rem] cursor-pointer hover:border-accent data-[active="1"]:border-accent [&[data-active="1"]:not([aria-selected="true"])]:bg-accent-soft aria-selected:bg-surface-2 aria-selected:font-semibold'
               >
                 <span>{countryLabel(locale, country.id) || country.name}</span>
                 {/* Twee verschillende dingen en dus twee verschillende teksten. Een
@@ -1038,7 +1082,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
                     straks een stip. Een land zonder speld kan hij niet vinden, en dan
                     hoort dat hier al te staan en niet pas nadat je erop hebt geklikt
                     en er niets gebeurde. */}
-                <span className="cell-sub">
+                <span className="cell-sub mt-0 whitespace-nowrap">
                   {moneyLine(country.currencies, country.noTender === true, c.moneyLine)}
                   {country.rings !== null
                     ? ""
@@ -1052,7 +1096,10 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         </ul>
       </div>
 
-      <ToonMeer className="lv-globe-source" summary={c.source.summary}>
+      <ToonMeer
+        className="lv-globe-source m-0 text-muted text-[0.75rem] leading-[1.45]"
+        summary={c.source.summary}
+      >
         <p>
           {c.source.body(
             WORLD_MAP_SOURCES.fetchedAt,

@@ -16,6 +16,7 @@ import TravelBlock, {
 // hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
 // slagen op een klasse die niet meer bestaat.
 import { TOONMEER_CLASS } from "../ToonMeer";
+import { moduleClass } from "../../module-grid.js";
 import { optimiseCopy } from "../../copy/optimise.js";
 import type { CatalogueEntryLike } from "@lavega/core";
 import { formatEuro } from "../../format";
@@ -42,7 +43,8 @@ const props: TravelBlockProps = {
 
 test("TravelBlock renders as a module and asks for a destination first", () => {
   const html = renderToStaticMarkup(<TravelBlock {...props} />);
-  expect(html).toContain('class="module module-span-3 module-tall"');
+  // The exact class string is pinned once, in module-grid.ts / .test.ts.
+  expect(html).toContain(`class="${moduleClass({ span: 3, height: "tall" })}"`);
   // Named after the question he asks, not after the software that answers it
   // (review 3, item 4). The Module puts the title in its aria-label too.
   expect(html).toContain("Travel");
@@ -224,7 +226,7 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
   // in het paneel van de uitklap, en die is dicht. Ze staan wél in de DOM — zo
   // werkt <details> — dus getoetst wordt de stand en de plaats, niet afwezigheid.
   expect(fold(c).open).toBe(false);
-  expect(c.querySelector(".travel-winner .travel-journeys")).toBeNull();
+  expect(c.querySelector('.travel-winner [data-testid="travel-journeys"]')).toBeNull();
   expect(foldText(c)).toContain("Bewaren");
   expect(c.querySelector(".travel-winner")!.textContent).not.toContain("Bewaren");
 });
@@ -233,15 +235,15 @@ test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () =>
   const c = renderWithDestination();
   openFold();
 
-  const journeys = [...c.querySelectorAll(".travel-journey")];
+  const journeys = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(journeys.length).toBeGreaterThan(1);
 
   // Cheapest first, and the winner is the one the headline named.
-  expect(journeys[0].classList.contains("travel-journey-best")).toBe(true);
+  expect(journeys[0].getAttribute("data-best")).toBe("true");
   expect(journeys[0].textContent).toContain("Via Revolut betaalpas");
   expect(journeys[0].textContent).toContain("vanaf ING");
 
-  const legs = [...journeys[0].querySelectorAll(".travel-leg-name")].map(
+  const legs = [...journeys[0].querySelectorAll('[data-testid="travel-leg-name"]')].map(
     (n) => n.textContent ?? "",
   );
   expect(legs[0]).toContain("Overzetten");
@@ -262,18 +264,18 @@ test("a route with an unknown leg says so and never renders as free", () => {
   const c = renderWithDestination();
   openFold();
 
-  const unknown = c.querySelector(".travel-journey-unknown");
+  const unknown = c.querySelector('[data-testid="travel-journey"][data-unknown="true"]');
   expect(unknown).not.toBeNull();
   // ING's conversion leg was never learned, so the whole route is unpriced.
   expect(unknown!.textContent).toContain("Via ING betaalpas");
 
-  const total = unknown!.querySelector(".travel-journey-cost")!.textContent ?? "";
+  const total = unknown!.querySelector('[data-testid="travel-journey-cost"]')!.textContent ?? "";
   expect(total).toBe("onbekend");
   expect(total).not.toMatch(/[0-9]/); // not "€ 0,00", not any number
   expect(unknown!.textContent).toContain("Onbekend is niet gratis");
 
   // ...and it sorts behind the known winner.
-  const all = [...c.querySelectorAll(".travel-journey")];
+  const all = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(all.indexOf(unknown as Element)).toBeGreaterThan(0);
 });
 
@@ -399,7 +401,7 @@ test("never looked up says exactly that, and puts the lookup one click away", ()
 
   const button = byText("button", "Zoek voorwaarden");
   expect(button.textContent).toContain("(2)"); // both cards, counted
-  expect(button.className).toContain("btn-primary");
+  expect(button.dataset.testid).toBe("btn-primary");
 });
 
 test("a lookup that came back empty is not the same sentence as one never run", () => {
@@ -429,8 +431,8 @@ test("a lookup that came back empty is not the same sentence as one never run", 
 
 test("an unpriced answer card is not marked as a winning route", () => {
   const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
-  expect(c.querySelector(".travel-winner-unpriced")).not.toBeNull();
-  expect(c.querySelector(".travel-journey-best")).toBeNull();
+  expect(c.querySelector('.travel-winner[data-priced="false"]')).not.toBeNull();
+  expect(c.querySelector('[data-testid="travel-journey"][data-best="true"]')).toBeNull();
 
   // ...and the "Wisselen" step does not repeat the impossible advice either.
   openFold();
@@ -576,7 +578,7 @@ test("while the server is looking, the block SHOWS it working and counts up", ()
     />,
   );
 
-  expect(html).toContain("spinner");
+  expect(html).toContain('data-testid="spinner"');
   expect(html).toContain("2 van 4 gevonden"); // 4 asked, 2 still pending
   expect(html).toContain("werkt zichzelf bij");
   expect(html).toContain('aria-live="polite"'); // it changes under him; say so
@@ -729,7 +731,7 @@ test("cards he does not hold sit in their own section and are never offered to p
   expect(offers.textContent).toContain("212 Card");
   expect(offers.textContent).toContain("geen kaarten van jou");
   // Marked per row, not only in the section's intro sentence.
-  expect(offers.querySelectorAll(".badge").length).toBeGreaterThan(0);
+  expect(offers.querySelectorAll('[data-testid="badge"]').length).toBeGreaterThan(0);
   // And it is NOT inside the list of things to pay with.
   const spend = [...el.querySelectorAll(".travel-step")].find((s) =>
     s.textContent?.startsWith("Betalen"),
@@ -754,7 +756,7 @@ test("a cheaper card he does not hold LEADS the answer, and is marked as not his
   expect(winner.textContent).toContain("€ 10,00"); // 1% of € 1.000 saved
   expect(winner.textContent).toMatch(/nog niet van jou|heb je nog niet/i);
   // A card he cannot tap tomorrow morning must LOOK different from one he can.
-  expect(winner.querySelector(".badge")).not.toBeNull();
+  expect(winner.querySelector('[data-testid="badge"]')).not.toBeNull();
 });
 
 test("wat hij vandaag kan betalen blijft bestaan, maar staat in de uitklap", () => {
@@ -793,7 +795,7 @@ test("the cash line recommends the proven cheapest and names the card it cannot 
   expect(cash).toContain("ING betaalpas"); // his own cheapest proven, for comparison
   expect(cash).toContain("Revolut betaalpas"); // the gap, named
   expect(cash).not.toMatch(/gratis|kost je niets/i);
-  expect(el.querySelector(".travel-winner-cash .badge")).not.toBeNull();
+  expect(el.querySelector('.travel-winner-cash [data-testid="badge"]')).not.toBeNull();
 });
 
 test("catalogue cashback is shown with its gate, never subtracted from the price", () => {
@@ -803,7 +805,7 @@ test("catalogue cashback is shown with its gate, never subtracted from the price
   expect(offers.textContent).toContain("0,5% cashback");
   expect(offers.textContent).toMatch(/crypto/i);
   // 1,5% minus 0,5% would have put Wirex above Revolut's 1%; it does not.
-  const rows = [...offers.querySelectorAll(".travel-journey-name")].map((n) => n.textContent ?? "");
+  const rows = [...offers.querySelectorAll('[data-testid="travel-journey-name"]')].map((n) => n.textContent ?? "");
   expect(rows.indexOf("212 Card")).toBeLessThan(rows.findIndex((r) => r.includes("Wirex")));
 });
 
@@ -1395,7 +1397,7 @@ for (const t of TOESTANDEN) {
 
     // Het merkteken blijft vooraan: geen van deze drie kaarten heeft hij, en dat
     // moet zichtbaar anders zijn dan een kaart die hij morgen kan pinnen.
-    expect(el.querySelector(".travel-winner-name .badge")).not.toBeNull();
+    expect(el.querySelector('.travel-winner-name [data-testid="badge"]')).not.toBeNull();
 
     // En de herkomst is verplaatst, niet weggegooid.
     expect(foldText(el)).toContain("staat in de catalogus");

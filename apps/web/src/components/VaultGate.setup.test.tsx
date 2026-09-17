@@ -52,7 +52,7 @@ function fillBoth(container: HTMLElement, value: string) {
   fill(container.querySelector<HTMLInputElement>("#setup-pass1")!, value);
   fill(container.querySelector<HTMLInputElement>("#setup-pass2")!, value);
   const box = container.querySelector<HTMLInputElement>(
-    '.vault-checkbox-field input[type="checkbox"]',
+    '[data-testid="vault-checkbox-field"] input[type="checkbox"]',
   )!;
   if (!box.checked) act(() => box.click());
 }

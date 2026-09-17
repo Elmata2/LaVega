@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import type { EntityScope } from "@lavega/core";
+import Pill from "./ui/Pill.js";
 import type { View } from "../App";
 import { SCOPE_ORDER } from "../scope.js";
 import { useAppLocale } from "../appLocale.js";
@@ -52,10 +53,10 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
           ))}
         </div>
 
-        <button type="button" className="pill topbar-add" onClick={onAddWidget}>
+        <Pill className="topbar-add" onClick={onAddWidget}>
           <span aria-hidden="true">+</span>
           <span>{c.topBar.addWidget}</span>
-        </button>
+        </Pill>
       </div>
     </div>
   );

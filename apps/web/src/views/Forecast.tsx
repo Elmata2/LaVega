@@ -14,6 +14,7 @@ import {
   type BannerState,
 } from "../forecast-view";
 import TrendChart, { type TrendPoint } from "../components/TrendChart";
+import Card, { CardHeader } from "../components/ui/Card.js";
 
 type ForecastProps = {
   txs: Tx[];
@@ -104,7 +105,7 @@ function ForecastBanner({
   const atRisk = f.atRisk ?? null;
 
   return (
-    <section className={`card forecast-banner ${stateClass}`} aria-label={c.tekortSignaleringAria}>
+    <Card as="section" className={`forecast-banner ${stateClass}`} aria-label={c.tekortSignaleringAria}>
       <div>
         <p className={`forecast-banner-title ${titleClass}`}>
           {state === "shortfall" &&
@@ -141,7 +142,7 @@ function ForecastBanner({
           <p className="forecast-banner-note">{c.geenLopendeStromenNote}</p>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -304,18 +305,18 @@ export default function Forecast({
       />
 
       <div className="card-grid forecast-grid">
-        <section className="card" aria-label={c.cashflowForecastAria}>
-          <div className="card-header">
+        <Card as="section" aria-label={c.cashflowForecastAria}>
+          <CardHeader>
             <h2>{c.cashflowForecastTitle}</h2>
             <span className="eyebrow">
               {scopeLabel}
               {f.basis && <> · {confidenceLabel(locale, f.basis.confidence)}</>}
             </span>
-          </div>
+          </CardHeader>
           <ForecastChart f={f} lowest={lowest} bufferCents={bufferCents} locale={locale} />
-        </section>
+        </Card>
 
-        <section className="card" aria-label={c.driversAria}>
+        <Card as="section" aria-label={c.driversAria}>
           <h2>{c.driversTitle}</h2>
           {f.drivers.length === 0 ? (
             <p>{c.nogGeenLopendeStromen}</p>
@@ -372,7 +373,7 @@ export default function Forecast({
               </div>
             </>
           )}
-        </section>
+        </Card>
       </div>
 
       {/* REMOVED 20 Aug (app review 2): the "Waar deze prognose op rust" notes

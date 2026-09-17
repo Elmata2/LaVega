@@ -27,6 +27,11 @@ import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, categoryLabel } from "../copy/money";
 import { getAiCategorizeEnabled, setAiCategorizeEnabled, type ConversionMode } from "../settings";
 import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
+import Badge from "../components/ui/Badge.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import Pill from "../components/ui/Pill.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 
 /* Which UnknownReason maps to which moneyCopy.transacties.reason entry, and
  * whether the AI pass can help with that reason. The `ai` flag stays local —
@@ -244,16 +249,16 @@ export default function Transacties({
     return (
       <>
         {c.transacties.onbekendLabel}{" "}
-        <span className="badge" title={reasonCopy.what}>
+        <Badge title={reasonCopy.what}>
           {reasonCopy.label}
           {cc ? ` ${cc}` : ""}
-        </span>
+        </Badge>
       </>
     );
   }
 
   return (
-    <section className="card" aria-label={c.transacties.heading}>
+    <Card as="section" aria-label={c.transacties.heading}>
       <h2 style={{ margin: 0 }}>{c.transacties.heading}</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
@@ -283,19 +288,17 @@ export default function Transacties({
               </strong>
             </div>
             <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className={"pill" + (fCategory === "onbekend" ? " pill-active" : "")}
+              <Pill
+                active={fCategory === "onbekend"}
                 onClick={() => onFCategoryChange(fCategory === "onbekend" ? "" : "onbekend")}
               >
                 {fCategory === "onbekend"
                   ? c.transacties.toonAlles
                   : c.transacties.toonAlleenOnbekend}
-              </button>
+              </Pill>
               {configured && batch.items.length > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
+                <Button
+                  variant="primary"
                   onClick={onCategorizeClick}
                   aria-label={c.transacties.laatDeAiLezenAria}
                 >
@@ -303,7 +306,7 @@ export default function Transacties({
                       there are. The batch is capped at 200 per request. */}
                   {c.transacties.laatDeAiZeLezen}
                   {c.transacties.batchCountSuffix(batch.items.length, unknown.count)}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -313,7 +316,7 @@ export default function Transacties({
               const t = c.transacties.reason[REASON_KEY[b.reason]];
               return (
                 <li key={b.reason} style={{ marginBottom: "var(--sp-2)" }}>
-                  <span className="badge">{t.label}</span>{" "}
+                  <Badge>{t.label}</Badge>{" "}
                   <span style={{ fontVariantNumeric: "tabular-nums" }}>
                     {b.count}× · {formatEuroIn(locale, b.amount)}
                   </span>
@@ -345,12 +348,10 @@ export default function Transacties({
             <strong>{c.transacties.consentStrong}</strong>
             {c.transacties.consentAfter}
           </p>
-          <button type="button" className="btn btn-primary" onClick={enableAndRun}>
+          <Button variant="primary" onClick={enableAndRun}>
             {c.transacties.aanzettenEnCategoriseren}
-          </button>{" "}
-          <button type="button" className="btn" onClick={() => setAiPhase("idle")}>
-            {c.transacties.annuleer}
-          </button>
+          </Button>{" "}
+          <Button onClick={() => setAiPhase("idle")}>{c.transacties.annuleer}</Button>
         </div>
       )}
 
@@ -362,27 +363,27 @@ export default function Transacties({
             {c.transacties.voorstellenCount(proposals.length)}
             {c.transacties.voorstellenRest}
           </p>
-          <div className="table-wrap table-cards">
-            <table className="table">
+          <TableWrap>
+            <Table cards>
               <thead>
                 <tr>
-                  <th>{c.transacties.tegenpartij}</th>
-                  <th>{c.transacties.omschrijving}</th>
-                  <th>{c.transacties.bedrag}</th>
-                  <th>{c.transacties.categorie}</th>
+                  <Th>{c.transacties.tegenpartij}</Th>
+                  <Th>{c.transacties.omschrijving}</Th>
+                  <Th>{c.transacties.bedrag}</Th>
+                  <Th>{c.transacties.categorie}</Th>
                 </tr>
               </thead>
               <tbody>
                 {proposals.map((p, i) => (
                   <tr key={p.tx.id}>
-                    <td data-label={c.transacties.tegenpartij}>{p.tx.counterparty}</td>
-                    <td data-label={c.transacties.omschrijving}>{p.tx.description}</td>
-                    <td data-label={c.transacties.bedrag}>
+                    <Td data-label={c.transacties.tegenpartij}>{p.tx.counterparty}</Td>
+                    <Td data-label={c.transacties.omschrijving}>{p.tx.description}</Td>
+                    <Td data-label={c.transacties.bedrag}>
                       <span className={p.tx.amount >= 0 ? "text-pos" : "text-neg"}>
                         {formatEuroIn(locale, p.tx.amount)}
                       </span>
-                    </td>
-                    <td data-label={c.transacties.categorie}>
+                    </Td>
+                    <Td data-label={c.transacties.categorie}>
                       <select
                         value={p.category}
                         aria-label={c.transacties.categorieVoor(p.tx.counterparty)}
@@ -400,23 +401,21 @@ export default function Transacties({
                           </option>
                         ))}
                       </select>
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableWrap>
           {aiNote && (
             <p className="cell-sub" role="alert">
               {aiNote}
             </p>
           )}
-          <button type="button" className="btn btn-primary" onClick={() => void applyReview()}>
+          <Button variant="primary" onClick={() => void applyReview()}>
             {c.transacties.toepassen}
-          </button>{" "}
-          <button type="button" className="btn" onClick={cancelReview}>
-            {c.transacties.annuleer}
-          </button>
+          </Button>{" "}
+          <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
         </div>
       )}
       {/* Task-1 scope fix: with a top-bar entity scope active, this dropdown
@@ -492,29 +491,29 @@ export default function Transacties({
       {rows.length === 0 ? (
         <p>{c.transacties.geenTransacties}</p>
       ) : (
-        <div className="table-wrap table-cards">
-          <table className="table">
+        <TableWrap>
+          <Table cards>
             <thead>
               <tr>
-                <th>{c.transacties.tableDatum}</th>
-                <th>{c.transacties.tableTegenpartij}</th>
-                <th>{c.transacties.tableOmschrijving}</th>
-                <th>{c.transacties.tableRekening}</th>
-                <th>{c.transacties.tableBedrag}</th>
-                <th>{c.transacties.tableEntiteit}</th>
-                <th>{c.transacties.tableCategorie}</th>
+                <Th>{c.transacties.tableDatum}</Th>
+                <Th>{c.transacties.tableTegenpartij}</Th>
+                <Th>{c.transacties.tableOmschrijving}</Th>
+                <Th>{c.transacties.tableRekening}</Th>
+                <Th>{c.transacties.tableBedrag}</Th>
+                <Th>{c.transacties.tableEntiteit}</Th>
+                <Th>{c.transacties.tableCategorie}</Th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td data-label={c.transacties.tableDatum}>{t.date}</td>
-                  <td data-label={c.transacties.tableTegenpartij}>{t.counterparty}</td>
-                  <td data-label={c.transacties.tableOmschrijving}>{t.description}</td>
-                  <td data-label={c.transacties.tableRekening}>
+                  <Td data-label={c.transacties.tableDatum}>{t.date}</Td>
+                  <Td data-label={c.transacties.tableTegenpartij}>{t.counterparty}</Td>
+                  <Td data-label={c.transacties.tableOmschrijving}>{t.description}</Td>
+                  <Td data-label={c.transacties.tableRekening}>
                     {t.bank} · {t.accountKey}
-                  </td>
-                  <td data-label={c.transacties.tableBedrag}>
+                  </Td>
+                  <Td data-label={c.transacties.tableBedrag}>
                     <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
                       {isEurCurrency(t.currency)
                         ? formatEuroIn(locale, t.amount)
@@ -528,15 +527,15 @@ export default function Transacties({
                           <span className="cell-sub"> ≈ {formatEuroIn(locale, eur)}</span>
                         );
                       })()}
-                  </td>
-                  <td data-label={c.transacties.tableEntiteit}>{t.entity}</td>
-                  <td data-label={c.transacties.tableCategorie}>{categoryCell(t)}</td>
+                  </Td>
+                  <Td data-label={c.transacties.tableEntiteit}>{t.entity}</Td>
+                  <Td data-label={c.transacties.tableCategorie}>{categoryCell(t)}</Td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableWrap>
       )}
-    </section>
+    </Card>
   );
 }

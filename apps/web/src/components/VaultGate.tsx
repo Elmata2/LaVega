@@ -7,6 +7,9 @@ import { parseBackup } from "../backup.js";
 import { vaultPasswordProblem, MIN_VAULT_PASSWORD, type VaultPasswordProblem } from "../vaultPassword.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy, type ShellCopy } from "../copy/shell.js";
+import Button from "./ui/Button.js";
+import Card from "./ui/Card.js";
+import { Field, CheckboxField } from "./ui/Field.js";
 
 function weakPasswordMessage(c: ShellCopy, kind: VaultPasswordProblem | null): string | null {
   if (kind === "tooShort") return c.vaultGate.passwordProblem.tooShort(MIN_VAULT_PASSWORD);
@@ -67,9 +70,9 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
 
   return (
     <div className="vault-gate">
-      <form className="card vault-gate-card" onSubmit={submit}>
+      <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.unlock.title}</h2>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="unlock-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="unlock-pass"
@@ -79,16 +82,16 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
             autoFocus
           />
-        </div>
+        </Field>
         {error && (
           <p role="alert" className="text-warn">
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={busy || pass.length === 0}>
+        <Button type="submit" variant="primary" disabled={busy || pass.length === 0}>
           {c.vaultGate.unlock.submit}
-        </button>
-      </form>
+        </Button>
+      </Card>
     </div>
   );
 }
@@ -136,10 +139,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
 
   return (
     <div className="vault-gate">
-      <form className="card vault-gate-card" onSubmit={submit}>
+      <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.setup.title}</h2>
         <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="setup-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-pass1"
@@ -149,8 +152,8 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
             autoFocus
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="setup-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="setup-pass2"
@@ -159,10 +162,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             onChange={(e) => setPass2(e.target.value)}
             disabled={busy}
           />
-        </div>
+        </Field>
         {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
-        <label className="vault-checkbox-field">
+        <CheckboxField>
           <input
             type="checkbox"
             checked={understood}
@@ -170,22 +173,22 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
           />
           {c.vaultGate.understood}
-        </label>
+        </CheckboxField>
         {error && (
           <p role="alert" className="text-warn">
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
           {c.vaultGate.setup.submit}
-        </button>
+        </Button>
         <p>
           {c.vaultGate.setup.haveBackupQuestion}{" "}
-          <button type="button" className="btn" onClick={() => setMode("restore")} disabled={busy}>
+          <Button onClick={() => setMode("restore")} disabled={busy}>
             {c.vaultGate.setup.restoreFromBackup}
-          </button>
+          </Button>
         </p>
-      </form>
+      </Card>
     </div>
   );
 }
@@ -227,10 +230,10 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
 
   return (
     <div className="vault-gate">
-      <form className="card vault-gate-card" onSubmit={submit}>
+      <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.restoreOnSetup.title}</h2>
         <p>{c.vaultGate.restoreOnSetup.intro}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="setup-restore-file">{c.vaultGate.restoreOnSetup.fileLabel}</label>
           <input
             id="setup-restore-file"
@@ -239,8 +242,8 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
             disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="setup-restore-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-restore-pass"
@@ -250,21 +253,21 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
             disabled={busy}
             autoFocus
           />
-        </div>
+        </Field>
         {error && (
           <p role="alert" className="text-warn">
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
           {c.vaultGate.restoreOnSetup.submit}
-        </button>
+        </Button>
         <p>
-          <button type="button" className="btn" onClick={onCancel} disabled={busy}>
+          <Button onClick={onCancel} disabled={busy}>
             {c.vaultGate.restoreOnSetup.back}
-          </button>
+          </Button>
         </p>
-      </form>
+      </Card>
     </div>
   );
 }
@@ -303,28 +306,26 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
   if (migrated) {
     return (
       <div className="vault-gate">
-        <div className="card vault-gate-card">
+        <Card className="vault-gate-card">
           <h2>{c.vaultGate.migrate.done.title}</h2>
           <p>{c.vaultGate.migrate.done.body}</p>
           <p className="text-warn">{c.vaultGate.migrate.done.warning}</p>
-          <button type="button" className="btn btn-primary" onClick={onBackup}>
+          <Button variant="primary" onClick={onBackup}>
             {c.vaultGate.migrate.done.backupNow}
-          </button>{" "}
-          <button type="button" className="btn" onClick={onReady}>
-            {c.vaultGate.migrate.done.later}
-          </button>
-        </div>
+          </Button>{" "}
+          <Button onClick={onReady}>{c.vaultGate.migrate.done.later}</Button>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="vault-gate">
-      <form className="card vault-gate-card" onSubmit={submit}>
+      <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.migrate.title}</h2>
         <p>{c.vaultGate.migrate.intro}</p>
         <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="migrate-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="migrate-pass1"
@@ -334,8 +335,8 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             disabled={busy}
             autoFocus
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="migrate-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="migrate-pass2"
@@ -344,10 +345,10 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             onChange={(e) => setPass2(e.target.value)}
             disabled={busy}
           />
-        </div>
+        </Field>
         {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
-        <label className="vault-checkbox-field">
+        <CheckboxField>
           <input
             type="checkbox"
             checked={understood}
@@ -355,16 +356,16 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             disabled={busy}
           />
           {c.vaultGate.understood}
-        </label>
+        </CheckboxField>
         {error && (
           <p role="alert" className="text-warn">
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
           {busy ? c.vaultGate.migrate.submitBusy : c.vaultGate.migrate.submitIdle}
-        </button>
-      </form>
+        </Button>
+      </Card>
     </div>
   );
 }

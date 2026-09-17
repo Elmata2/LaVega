@@ -14,6 +14,11 @@ import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { API_BASE } from "../api";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import Badge from "../components/ui/Badge.js";
+import Button, { buttonVariants } from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
@@ -147,6 +152,20 @@ type FacturenProps = {
    *  falling back to the plaintext it replaced. */
   storage?: VaultStorage;
 };
+
+/** The drop zone's border/background/text colour while a file is (or isn't)
+ *  being dragged over it (was `.dropzone`/`.dropzone-over` in views.css). Kept
+ *  as one non-overlapping string per state rather than two classes touching
+ *  the same property, so there is never a same-layer utility ordering
+ *  question about which one wins. */
+function dropzoneClass(dragOver: boolean): string {
+  const base =
+    "flex flex-col items-center justify-center gap-2 flex-1 min-h-[150px] p-6 text-center border-2 border-dashed rounded cursor-pointer";
+  const state = dragOver
+    ? "border-accent bg-accent-soft text-ink"
+    : "border-line bg-surface-2 text-muted hover:border-accent hover:text-ink focus-visible:border-accent focus-visible:text-ink";
+  return `${base} ${state}`;
+}
 
 function isPdf(file: File): boolean {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -796,9 +815,14 @@ export default function Facturen({
 
   return (
     <>
-      <div className="view-head">
-        <h2>{c.head.title}</h2>
-        <span className="eyebrow">{c.head.eyebrow}</span>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        data-testid="view-head"
+      >
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.head.title}
+        </h2>
+        <span className="eyebrow flex-none">{c.head.eyebrow}</span>
       </div>
 
       <ModuleGrid label={c.forms.sectionLabel}>
@@ -806,18 +830,11 @@ export default function Facturen({
         <Module title={c.forms.auto.moduleTitle} height="tall">
           <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
           <p className="cell-sub">{c.forms.auto.gateNote(entities.length)}</p>
-          <div className="stack-form-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={busy || n8nBusy}
-              onClick={() => void handleFetchN8n()}
-            >
+          <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
+            <Button variant="primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
               {c.forms.auto.fetchButton}
-            </button>
-            <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
-              {c.forms.auto.connectionsButton}
-            </button>
+            </Button>
+            <Button onClick={() => onNavigate("koppelingen")}>{c.forms.auto.connectionsButton}</Button>
           </div>
           {n8nNote && <p className="cell-sub">{n8nNote}</p>}
           {pending.length > 0 && (
@@ -828,7 +845,8 @@ export default function Facturen({
         {/* ── 2. sleep een factuurbestand hierheen ────────────────────── */}
         <Module title={c.forms.drop.moduleTitle} height="tall">
           <label
-            className={`dropzone${dragOver ? " dropzone-over" : ""}`}
+            className={dropzoneClass(dragOver)}
+            data-testid="dropzone"
             aria-label={c.forms.drop.dropzoneAriaLabel}
             onDragOver={(e) => {
               e.preventDefault();
@@ -842,13 +860,13 @@ export default function Facturen({
               if (file) handleFile(file);
             }}
           >
-            <span className="dropzone-title">{c.forms.drop.dropzoneTitle}</span>
-            <span className="dropzone-sub">{c.forms.drop.dropzoneSub}</span>
+            <span className="font-display text-[1.15rem] text-ink">{c.forms.drop.dropzoneTitle}</span>
+            <span className="text-[0.8rem] max-w-[34ch]">{c.forms.drop.dropzoneSub}</span>
             {/* No `accept` filter for the non-PDF formats, same rationale as
                 Import.tsx: format is sniffed from content, not extension. */}
             <input
               type="file"
-              className="dropzone-input"
+              className="absolute w-px h-px p-0 -m-px overflow-hidden [clip:rect(0,0,0,0)] whitespace-nowrap [border:0]"
               disabled={busy || aiBusy}
               aria-label={c.forms.drop.fileInputAriaLabel}
               onChange={(e) => {
@@ -879,13 +897,14 @@ export default function Facturen({
           height="tall"
           footer={<span>{c.forms.manual.footer}</span>}
         >
-          <div className="stack-form">
-            <div className="stack-form-row">
+          <div className="flex flex-col gap-3" data-testid="stack-form">
+            <div className="flex gap-3" data-testid="stack-form-row">
               {/* Geen ondernemingen = geen keuze = geen keuzelijst. */}
               {hasEntities && (
-                <label>
+                <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                   {c.forms.manual.entityLabel}
                   <select
+                    className="w-full box-border"
                     value={selectedEntity}
                     disabled={busy}
                     aria-label={c.forms.manual.entityAriaLabel}
@@ -899,9 +918,10 @@ export default function Facturen({
                   </select>
                 </label>
               )}
-              <label>
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.directionLabel}
                 <select
+                  className="w-full box-border"
                   value={direction}
                   disabled={busy}
                   aria-label={c.forms.manual.directionAriaLabel}
@@ -912,28 +932,31 @@ export default function Facturen({
                 </select>
               </label>
             </div>
-            <label>
+            <label className="flex flex-col gap-1 text-[0.82rem] text-muted">
               {c.forms.manual.counterpartyLabel}
               <input
+                className="w-full box-border"
                 value={counterparty}
                 disabled={busy}
                 aria-label={c.forms.manual.counterpartyAriaLabel}
                 onChange={(e) => setCounterparty(e.target.value)}
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1 text-[0.82rem] text-muted">
               {c.forms.manual.invoiceNumberLabel}
               <input
+                className="w-full box-border"
                 value={invoiceNumber}
                 disabled={busy}
                 aria-label={c.forms.manual.invoiceNumberAriaLabel}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
               />
             </label>
-            <div className="stack-form-row">
-              <label>
+            <div className="flex gap-3" data-testid="stack-form-row">
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.issueDateLabel}
                 <input
+                  className="w-full box-border"
                   type="date"
                   value={issueDate}
                   disabled={busy}
@@ -941,9 +964,10 @@ export default function Facturen({
                   onChange={(e) => setIssueDate(e.target.value)}
                 />
               </label>
-              <label>
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.dueDateLabel}
                 <input
+                  className="w-full box-border"
                   type="date"
                   value={dueDate}
                   disabled={busy}
@@ -952,14 +976,14 @@ export default function Facturen({
                 />
               </label>
             </div>
-            <div className="stack-form-row">
-              <label>
+            <div className="flex gap-3" data-testid="stack-form-row">
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.amountLabel}
                 {pendingSource === "llm" && (
-                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
+                  <Badge>{c.forms.manual.aiDraftBadge}</Badge>
                 )}
-                <input
-                  className="saldo-input"
+                <SaldoInput
+                  className="w-full box-border"
                   type="number"
                   step={0.01}
                   min={0}
@@ -969,7 +993,7 @@ export default function Facturen({
                   onChange={(e) => setAmount(e.target.value)}
                 />
               </label>
-              <label>
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {/* BTW BIJ DE HAND, want de facturenbasis leest juist dit veld.
                     Het stond er niet: vatAmount kwam alleen mee met een AI-concept,
                     dus een handmatig ingevoerde factuur maakte het kwartaal
@@ -981,10 +1005,10 @@ export default function Facturen({
                     zeggen (btw verlegd, ICP, 0%-export), dan typt hij 0. */}
                 {c.forms.manual.vatLabel} <span className="cell-sub">{c.forms.manual.vatHint}</span>
                 {pendingSource === "llm" && pendingVat !== null && (
-                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
+                  <Badge>{c.forms.manual.aiDraftBadge}</Badge>
                 )}
-                <input
-                  className="saldo-input"
+                <SaldoInput
+                  className="w-full box-border"
                   type="number"
                   step={0.01}
                   min={0}
@@ -995,10 +1019,10 @@ export default function Facturen({
                   onChange={(e) => setVatInput(e.target.value)}
                 />
               </label>
-              <label>
+              <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.currencyLabel}
-                <input
-                  className="saldo-input"
+                <SaldoInput
+                  className="w-full box-border"
                   value={currency}
                   maxLength={3}
                   placeholder={c.forms.manual.currencyPlaceholder}
@@ -1008,14 +1032,14 @@ export default function Facturen({
                 />
               </label>
             </div>
-            <div className="stack-form-actions">
-              <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
+            <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
+              <Button variant="primary" disabled={busy} onClick={handleAdd}>
                 {c.forms.manual.addButton}
-              </button>
+              </Button>
               {pendingSource === "llm" && (
-                <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
+                <Button disabled={busy} onClick={discardDraft}>
                   {c.forms.manual.discardDraftButton}
-                </button>
+                </Button>
               )}
             </div>
             {manualError && <p className="cell-sub text-neg">{manualError}</p>}
@@ -1025,11 +1049,11 @@ export default function Facturen({
 
       {/* ── De confirm-first wachtrij. Ongewijzigd gedrag. ─────────────── */}
       {pending.length > 0 && (
-        <section className="card n8n-block" aria-label={c.queue.sectionAriaLabel}>
-          <div className="card-header">
+        <Card as="section" className="n8n-block" aria-label={c.queue.sectionAriaLabel}>
+          <CardHeader>
             <h2>{c.queue.heading}</h2>
             <span className="eyebrow">{c.queue.eyebrow(pending.length)}</span>
-          </div>
+          </CardHeader>
           <p className="cell-sub text-neg">
             <strong>{c.queue.warningLead}</strong>
             {c.queue.warningBody(pending.length)}
@@ -1115,8 +1139,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.amountLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       type="number"
                       step={0.01}
                       min={0}
@@ -1127,8 +1150,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.currencyLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       value={p.currency}
                       maxLength={3}
                       placeholder={c.queue.currencyPlaceholder}
@@ -1140,8 +1162,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.vatLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       type="number"
                       step={0.01}
                       min={0}
@@ -1151,22 +1172,12 @@ export default function Facturen({
                       onChange={(e) => patchRow(p.messageId, { vat: e.target.value })}
                     />
                   </label>{" "}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy}
-                    onClick={() => confirmRow(p)}
-                  >
+                  <Button variant="primary" disabled={busy} onClick={() => confirmRow(p)}>
                     {c.queue.confirmButton}
-                  </button>{" "}
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={busy}
-                    onClick={() => rejectRow(p)}
-                  >
+                  </Button>{" "}
+                  <Button disabled={busy} onClick={() => rejectRow(p)}>
                     {c.queue.rejectButton}
-                  </button>
+                  </Button>
                 </div>
                 {!p.dueDate && <p className="cell-sub">{c.queue.missingDueDateNote}</p>}
                 {!p.currency && <p className="cell-sub">{c.queue.missingCurrencyNote}</p>}
@@ -1177,16 +1188,16 @@ export default function Facturen({
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* ── Zelf ophalen: mail die geen boekbare factuur was ───────────── */}
       {notices.length > 0 && (
-        <section className="card n8n-block" aria-label={c.notices.sectionAriaLabel}>
-          <div className="card-header">
+        <Card as="section" className="n8n-block" aria-label={c.notices.sectionAriaLabel}>
+          <CardHeader>
             <h2>{c.notices.heading}</h2>
             <span className="eyebrow">{c.notices.eyebrow(notices.length)}</span>
-          </div>
+          </CardHeader>
           <p className="cell-sub">
             {c.notices.introLead} <strong>{c.notices.introStrong}</strong> {c.notices.introTail}
           </p>
@@ -1199,28 +1210,36 @@ export default function Facturen({
                   {n.from ? ` · ${n.from}` : ""}
                 </p>
                 <p className="cell-sub">{n.reason}</p>
-                <div className="stack-form-actions">
+                <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
                   {n.mailUrl ? (
-                    <a className="btn" href={n.mailUrl} target="_blank" rel="noreferrer noopener">
+                    <a
+                      className={buttonVariants()}
+                      href={n.mailUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
                       {c.notices.openInGmail}
                     </a>
                   ) : (
                     <span className="cell-sub">{c.notices.noLinkFallback}</span>
                   )}
-                  <button type="button" className="btn" onClick={() => dismissNotice(n)}>
-                    {c.notices.doneButton}
-                  </button>
+                  <Button onClick={() => dismissNotice(n)}>{c.notices.doneButton}</Button>
                 </div>
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* ── Wat er binnen is ───────────────────────────────────────────── */}
-      <div className="view-head">
-        <h2>{c.list.heading}</h2>
-        <span className="eyebrow">
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        data-testid="view-head"
+      >
+        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.list.heading}
+        </h2>
+        <span className="eyebrow flex-none">
           {c.list.eyebrowCount(flows.length)}
           <span className={netCents >= 0 ? "text-pos" : "text-neg"}>
             {formatEuroIn(locale, netCents / 100)}
@@ -1228,25 +1247,25 @@ export default function Facturen({
         </span>
       </div>
 
-      <section className="card" aria-label={c.list.sectionAriaLabel}>
+      <Card as="section" aria-label={c.list.sectionAriaLabel}>
         {invoices.length === 0 ? (
           <p className="cell-sub">{c.list.empty}</p>
         ) : (
-          <div className="table-wrap table-cards">
-            <table className="table">
+          <TableWrap>
+            <Table cards>
               <thead>
                 <tr>
-                  <th>{c.list.columns.counterparty}</th>
+                  <Th>{c.list.columns.counterparty}</Th>
                   {/* De onderneming staat er alleen als er meer dan één is. Bij
                       één (of geen) zou de kolom op elke regel hetzelfde zeggen,
                       en dan is het geen informatie maar ruis — en voor de
                       zelfstandige zonder entiteiten is het bovendien jargon. */}
-                  {showEntityColumn && <th>{c.list.columns.company}</th>}
-                  <th>{c.list.columns.direction}</th>
-                  <th className="num">{c.list.columns.amount}</th>
-                  <th>{c.list.columns.dueDate}</th>
-                  <th>{c.list.columns.status}</th>
-                  <th></th>
+                  {showEntityColumn && <Th>{c.list.columns.company}</Th>}
+                  <Th>{c.list.columns.direction}</Th>
+                  <Th numeric>{c.list.columns.amount}</Th>
+                  <Th>{c.list.columns.dueDate}</Th>
+                  <Th>{c.list.columns.status}</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
@@ -1254,84 +1273,68 @@ export default function Facturen({
                   const signed = inv.direction === "in" ? inv.amount : -inv.amount;
                   return (
                     <tr key={inv.id}>
-                      <td data-label={c.list.columns.counterparty}>
+                      <Td data-label={c.list.columns.counterparty}>
                         {inv.counterparty}
                         {inv.invoiceNumber ? (
                           <span className="cell-sub"> · {inv.invoiceNumber}</span>
                         ) : null}
-                      </td>
+                      </Td>
                       {showEntityColumn && (
-                        <td data-label={c.list.columns.company}>{inv.entity}</td>
+                        <Td data-label={c.list.columns.company}>{inv.entity}</Td>
                       )}
-                      <td data-label={c.list.columns.direction}>
-                        <span className="badge">
+                      <Td data-label={c.list.columns.direction}>
+                        <Badge>
                           {inv.direction === "in"
                             ? c.list.directionBadge.in
                             : c.list.directionBadge.out}
-                        </span>
+                        </Badge>
                         {autoBookedIds.has(inv.id) && (
                           <>
                             {" "}
-                            <span className="badge" title={c.list.autoBadgeTitle}>
-                              {c.list.autoBadge}
-                            </span>
+                            <Badge title={c.list.autoBadgeTitle}>{c.list.autoBadge}</Badge>
                           </>
                         )}
-                      </td>
-                      <td
-                        className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`}
+                      </Td>
+                      <Td
+                        numeric
+                        className={signed >= 0 ? "text-pos" : "text-neg"}
                         data-label={c.list.columns.amount}
                       >
                         {formatEuroIn(locale, signed)}
-                      </td>
-                      <td data-label={c.list.columns.dueDate}>{inv.dueDate}</td>
-                      <td data-label={c.list.columns.status}>
-                        <span className="badge">{c.list.statusLabels[inv.status]}</span>
-                      </td>
-                      <td>
+                      </Td>
+                      <Td data-label={c.list.columns.dueDate}>{inv.dueDate}</Td>
+                      <Td data-label={c.list.columns.status}>
+                        <Badge>{c.list.statusLabels[inv.status]}</Badge>
+                      </Td>
+                      <Td>
                         {inv.status === "expected" ? (
                           <>
                             {autoBookedIds.has(inv.id) && (
                               <>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  disabled={busy}
-                                  onClick={() => undoAutoBooked(inv.id)}
-                                >
+                                <Button disabled={busy} onClick={() => undoAutoBooked(inv.id)}>
                                   {c.list.undoButton}
-                                </button>{" "}
+                                </Button>{" "}
                               </>
                             )}
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={busy}
-                              onClick={() => setStatus(inv.id, "paid")}
-                            >
+                            <Button disabled={busy} onClick={() => setStatus(inv.id, "paid")}>
                               {c.list.markPaidButton}
-                            </button>{" "}
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={busy}
-                              onClick={() => setStatus(inv.id, "cancelled")}
-                            >
+                            </Button>{" "}
+                            <Button disabled={busy} onClick={() => setStatus(inv.id, "cancelled")}>
                               {c.list.cancelButton}
-                            </button>
+                            </Button>
                           </>
                         ) : (
                           <span className="cell-sub">{c.list.noActions}</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableWrap>
         )}
-      </section>
+      </Card>
     </>
   );
 }

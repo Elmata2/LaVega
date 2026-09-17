@@ -1,3 +1,20 @@
+/* WRAPPED IN @layer components, AND THE REASON MATTERS.
+ *
+ * Tailwind's utilities compile into `@layer utilities`. Per the cascade-layers
+ * spec an UNLAYERED rule beats a layered one regardless of specificity, so
+ * while this file sat outside any layer it silently won against every utility
+ * touching the same property — no error, no failing test, the utility simply
+ * did nothing. Two workers hit that independently and worked around it by
+ * adding Tailwind's `!` modifier to hundreds of classes.
+ *
+ * Putting this file in `components` puts it where it belongs in the order
+ * tokens.css declares (theme, base, components, utilities): it still beats the
+ * theme, and a utility written on a converted element beats it, which is what
+ * a utility is for. The `!` workarounds become unnecessary.
+ *
+ * Relative order between these stylesheets is unchanged — they are all in the
+ * same layer, so main.tsx's import order still decides. */
+@layer components {
 /* De draaibare wereldbol in de Valuta-tab (components/Globe.tsx).
  *
  * De bestandsnaam is worldmap.css gebleven terwijl de platte kaart eruit is. Dat
@@ -56,12 +73,11 @@
  * eigen laag. Slepen is geen animatie — daar beweegt de vinger — maar een bol die
  * ergens naartoe zweeft of een land dat invloeit, is dat wel. */
 
+/* Opstelling (display/flex-direction/gap/min-width) staat als Tailwind-utilities
+ * op dit element in Globe.tsx: `flex flex-col gap-4 min-w-0`. Deze regel houdt
+ * alleen de kleurtokens vast — Globe.test.tsx leest de --lv-globe-*-regels
+ * hieronder met een regex, dus die blijven woordelijk staan. */
 .lv-globe {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-
   --lv-globe-sea: var(--surface-2);
   --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
   --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
@@ -130,41 +146,12 @@
  *
  * Wat het kost staat in Globe.tsx en herhaal ik hier omdat het een echte
  * achteruitgang is: de landenlijst is de enige besturing voor wie het doek niet
- * ziet, en die begint nu lager op de pagina. */
-.lv-globe-figure {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
-}
-
-/* ---------- De leesregel (naam + valutacode) ---------- */
-
-/* Vaste hoogte: de regel is leeg tot er iets aangewezen wordt, en de bol mag niet
- * een paar pixels omhoog springen zodra de muis erover gaat. */
-.lv-globe-readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  margin: 0;
-  min-height: 1.5rem;
-  font-size: 0.95rem;
-}
-.lv-globe-readout-name {
-  font-weight: 600;
-  color: var(--ink);
-}
-.lv-globe-readout-ccy {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-.lv-globe-readout-empty {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
+ * ziet, en die begint nu lager op de pagina.
+ *
+ * (Opstelling nu als Tailwind-utilities in Globe.tsx: `flex flex-col gap-3
+ * min-w-0` op .lv-globe-figure. Vaste hoogte van de leesregel — zodat de bol
+ * niet omhoog springt zodra de muis erover gaat — is daar `min-h-[1.5rem]` op
+ * .lv-globe-readout.) */
 
 /* ---------- Het doek ---------- */
 
@@ -176,22 +163,12 @@
  * De maat komt uit de component (style width/height in px) omdat het aantal
  * pixels in het doek en de maat op het scherm bij elkaar moeten horen. `max-width`
  * staat er als vangnet voor het beeld tussen twee metingen in: liever een bol die
- * een fractie kleiner staat dan een kolom die overloopt. */
-.lv-globe-canvas {
-  display: block;
-  max-width: 100%;
-  margin: 0 auto;
-  border-radius: 50%;
-  touch-action: none;
-  cursor: grab;
-}
-.lv-globe-canvas[data-dragging="1"] {
-  cursor: grabbing;
-}
-.lv-globe-canvas:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-}
+ * een fractie kleiner staat dan een kolom die overloopt.
+ *
+ * (Als Tailwind-utilities in Globe.tsx: `block my-0 mx-auto max-w-full
+ * rounded-[50%] touch-none cursor-grab`, met `data-[dragging="1"]:cursor-grabbing`
+ * en `focus-visible:outline-2 focus-visible:outline-[var(--ink)]
+ * focus-visible:outline-offset-[3px]`.) */
 
 /* De kleuren van het doek, leesbaar gemaakt voor de component. Zie de kop. Geen
  * display:none maar nul bij nul: zo staat buiten kijf dat de stijl echt berekend
@@ -233,57 +210,20 @@
   color: var(--lv-globe-pin);
 }
 
-/* ---------- Legenda ---------- */
-
-.lv-globe-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-.lv-globe-legend li {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.lv-globe-swatch {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  border: 1px solid var(--line);
-  background: var(--lv-globe-norate);
-}
-.lv-globe-swatch[data-tone="euro"] {
-  background: var(--lv-globe-euro);
-}
-.lv-globe-swatch[data-tone="rate"] {
-  background: var(--lv-globe-rate);
-}
-.lv-globe-swatch[data-tone="notender"] {
-  background: var(--lv-globe-notender);
-}
-.lv-globe-swatch[data-tone="selected"] {
-  background: var(--lv-globe-selected);
-}
+/* ---------- Legenda ----------
+ *
+ * Als Tailwind-utilities in Globe.tsx: .lv-globe-legend is
+ * `flex flex-wrap gap-y-2 gap-x-4 m-0 p-0 list-none text-[0.78rem] text-muted`;
+ * elke <li> erin is `flex items-center gap-2`; .lv-globe-swatch is
+ * `w-[11px] h-[11px] rounded-[3px] border border-line` met de achtergrond per
+ * element als `bg-[var(--lv-globe-<tone>)]` — dezelfde tokens als hierboven,
+ * gelezen via overerving en niet via een attribuutselector. */
 
 /* ---------- Zoeken en de landenlijst ---------- */
 
-.lv-globe-search {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-.lv-globe-search label {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+/* Als Tailwind-utilities in Globe.tsx: `flex flex-col gap-2 min-w-0` op
+ * .lv-globe-search, en op het <label> erin `text-[0.78rem] tracking-[0.06em]
+ * uppercase text-muted`. */
 
 /* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
  * altijd — ook met een leeg zoekveld, en dan staan alle 250 landen erin. Een
@@ -295,100 +235,43 @@
  * naast een bol van 420 px mocht hij die hoogte vullen, eronder telt hij op bij
  * alles erboven. Acht regels plus de scrollbalk is genoeg om te zien dat het een
  * lijst is en dat hij verder loopt. */
-.lv-globe-results {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: 0;
-  padding: var(--sp-1);
-  list-style: none;
-  max-height: 18rem;
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-}
-.lv-globe-results li[role="option"] {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  color: var(--ink);
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-.lv-globe-results li[role="option"]:hover {
-  border-color: var(--accent);
-}
-/* Waar de pijltjes staan. Een rand en niet alleen een achtergrond: op het gekozen
- * land liggen die twee anders over elkaar en zie je niet meer welke van de twee
- * je aanwijst. */
-.lv-globe-results li[data-active="1"] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.lv-globe-results li[aria-selected="true"] {
-  background: var(--surface-2);
-  font-weight: 600;
-}
-.lv-globe-results .cell-sub {
-  margin-top: 0;
-  white-space: nowrap;
-}
-.lv-globe-results-empty {
-  padding: var(--sp-2) var(--sp-3);
-  color: var(--muted);
-  font-size: 0.88rem;
-}
+/* Als Tailwind-utilities in Globe.tsx: .lv-globe-results is
+ * `flex flex-col gap-1 m-0 p-1 list-none max-h-[18rem] overflow-y-auto border
+ * border-line rounded-sm bg-surface`; elke <li role="option"> erin is
+ * `flex items-baseline justify-between gap-3 py-2 px-3 border border-transparent
+ * rounded-sm text-ink text-[0.9rem] cursor-pointer hover:border-accent`, met
+ * `data-[active="1"]:border-accent data-[active="1"]:bg-accent-soft` (zie
+ * onder — een rand en niet alleen een achtergrond, want die twee liggen op het
+ * gekozen land anders over elkaar) en `aria-selected:bg-surface-2
+ * aria-selected:font-semibold`; de .cell-sub daarbinnen krijgt `mt-0
+ * whitespace-nowrap` erbij. .lv-globe-results-empty is
+ * `py-2 px-3 text-muted text-[0.88rem]`. */
 
 /* ---------- Het antwoord ---------- */
 
-.lv-globe-answer {
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
+/* Als Tailwind-utilities in Globe.tsx: .lv-globe-answer is
+ * `py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm
+ * bg-surface-2 text-[0.9rem] leading-[1.5]`, en .lv-globe-answer-lead is
+ * `font-display text-[1.1rem] text-ink`. */
 .lv-globe-answer p {
   margin: 0 0 var(--sp-2);
 }
 .lv-globe-answer p:last-child {
   margin-bottom: 0;
 }
-.lv-globe-answer-lead {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  color: var(--ink);
-}
 
 /* Een klik die geen land raakte. Niet rood: er is niets fout gegaan, er is alleen
- * niets te kiezen op die plek. */
-.lv-globe-miss {
-  color: var(--muted);
-}
+ * niets te kiezen op die plek.
+ *
+ * (Als Tailwind-utility in Globe.tsx: `text-muted` op .lv-globe-miss.
+ * .lv-globe-choice is `flex flex-wrap gap-2 mb-2 p-0 list-none`.
+ *
+ * `.lv-globe-choice .btn[aria-pressed="true"]` stond hier ook, en is
+ * verwijderd zonder Tailwind-vervanger: Button.tsx (docs/adr/0005) heeft
+ * `.btn` al vervangen door cva-utilities, dus deze regel raakte al niets meer
+ * — dode CSS van vóór die conversie, geen gedrag om over te zetten.) */
 
-.lv-globe-choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin: 0 0 var(--sp-2);
-  padding: 0;
-  list-style: none;
-}
-.lv-globe-choice .btn[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--ink);
-}
+/* Als Tailwind-utilities in Globe.tsx: `m-0 text-muted text-[0.75rem]
+ * leading-[1.45]` op .lv-globe-source. */
 
-.lv-globe-source {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.45;
 }

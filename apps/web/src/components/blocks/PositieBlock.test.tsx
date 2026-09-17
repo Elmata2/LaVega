@@ -21,9 +21,10 @@ test("PositieBlock renders one compact row per entity in a small card", () => {
   expect(html).toContain(formatEuro(182_310));
   expect(html).toContain(formatEuro(21_900));
   expect(html).toContain("proportion-bar");
-  // Shrunk: the per-entity sparkline is gone, and so is the tall card.
-  expect(html).toContain("module-short");
-  expect(html).not.toContain("module-tall");
+  // Shrunk: the per-entity sparkline is gone, and so is the tall card. The
+  // height utility string is pinned once, in module-grid.ts / .test.ts.
+  expect(html).toContain("min-h-[var(--module-h-short)]");
+  expect(html).not.toContain("min-h-[var(--module-h-tall)]");
   expect(html).not.toContain("sparkline");
 });
 

@@ -50,6 +50,10 @@ import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optim
 import type { Locale } from "../../locale.js";
 import Module from "../Module.js";
 import ToonMeer from "../ToonMeer.js";
+import Badge from "../ui/Badge.js";
+import Button from "../ui/Button.js";
+import CardLink from "../ui/CardLink.js";
+import SaldoInput from "../ui/SaldoInput.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
@@ -174,24 +178,21 @@ function FactCorrection({
 
   if (!editing) {
     return (
-      <button type="button" className="card-link" onClick={() => setEditing(true)} disabled={busy}>
+      <CardLink onClick={() => setEditing(true)} disabled={busy}>
         {fill(c.factCorrection.adjust, { label })}
-      </button>
+      </CardLink>
     );
   }
   return (
     <span className="confirm-inline">
-      <input
-        className="saldo-input"
+      <SaldoInput
         inputMode="decimal"
         aria-label={fill(c.factCorrection.fieldAriaLabel, { label, provider: displayLabel })}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}
       />
-      <button
-        type="button"
-        className="card-link"
+      <CardLink
         disabled={busy}
         onClick={() => {
           const trimmed = draft.trim().replace(",", ".").replace("%", "");
@@ -211,10 +212,10 @@ function FactCorrection({
         }}
       >
         {c.factCorrection.save}
-      </button>
-      <button type="button" className="card-link" onClick={() => setEditing(false)} disabled={busy}>
+      </CardLink>
+      <CardLink onClick={() => setEditing(false)} disabled={busy}>
         {c.factCorrection.cancel}
-      </button>
+      </CardLink>
     </span>
   );
 }
@@ -618,7 +619,7 @@ function withdrawalHeadlineSentence(h: WithdrawalHeadline, c: TravelCopy, locale
  *  existing `.badge` chip and not another sentence. */
 function NotYours() {
   const [locale] = useAppLocale();
-  return <span className="badge">{optimiseCopy[locale].travel.badge.notYours}</span>;
+  return <Badge>{optimiseCopy[locale].travel.badge.notYours}</Badge>;
 }
 
 /* ══════════════════════ WAT DE KAART ZELF KOST, als eigen velden ══════════════
@@ -1092,14 +1093,14 @@ export function TermsNotice({
   const zelfInvullen = fill(c.terms.fillInHint, { heading: c.terms.routesHeading });
 
   const searchButton = (primary: boolean, label: string) => (
-    <button
-      type="button"
-      className={primary ? "btn btn-primary travel-terms-action" : "btn travel-terms-action"}
+    <Button
+      variant={primary ? "primary" : "default"}
+      className="flex-none"
       onClick={onSearch}
       disabled={busy}
     >
       {busy ? c.terms.searchingButton : label}
-    </button>
+    </Button>
   );
 
   // A control, not only a sentence. LaVega asks the server whether it has a key
@@ -1118,9 +1119,9 @@ export function TermsNotice({
         <code>MISTRAL_API_KEY</code>
         {noKeyAfter}
       </p>
-      <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
+      <CardLink onClick={onRecheckAi} disabled={busy}>
         {c.terms.noKeyRecheck}
-      </button>
+      </CardLink>
     </>
   );
 
@@ -1173,7 +1174,7 @@ export function TermsNotice({
 
   if (state.kind === "no-key") {
     return (
-      <div className="travel-terms travel-terms-blocked" role="status">
+      <div className="travel-terms border-l-4 border-l-warn" role="status">
         <p className="cell-sub">{fill(c.terms.unknownList, { names: nameList(state.unknown, c) })}</p>
         {noKeyLine}
       </div>
@@ -1187,8 +1188,12 @@ export function TermsNotice({
     const found = Math.max(0, termsAsked - state.pending.length);
     return (
       <div className="travel-terms" role="status" aria-live="polite">
-        <p className="cell-sub travel-searching">
-          <span className="spinner" aria-hidden="true" />
+        <p className="cell-sub flex items-start gap-2">
+          <span
+            className="flex-none w-[14px] h-[14px] mt-[2px] border-2 border-line rounded-full [border-top-color:var(--accent)] [animation:lavega-spin_900ms_linear_infinite] motion-reduce:[animation:none]"
+            data-testid="spinner"
+            aria-hidden="true"
+          />
           <span>
             {fill(c.terms.searchingBody, { names: nameList(state.pending, c) })}
             {termsAsked > 0 && fill(c.terms.searchingFoundSuffix, { found, total: termsAsked })}
@@ -1215,7 +1220,7 @@ export function TermsNotice({
   }
 
   return (
-    <div className="travel-terms travel-terms-blocked" role="status">
+    <div className="travel-terms border-l-4 border-l-warn" role="status">
       <p className="cell-sub">
         {fill(c.terms.searchedEmptyBody, { names: nameList(state.unknown, c), hint: zelfInvullen })}
       </p>
@@ -1306,15 +1311,20 @@ export function CashSection({
       {options.length === 0 ? (
         <p className="cell-sub">{c.common.noAccountsKnown}</p>
       ) : (
-        <ul className="travel-legs">
+        <ul className="list-none mt-2 mx-0 mb-0 p-0 flex flex-col gap-1">
           {options.map((o) => (
-            <li key={o.provider} className="travel-leg">
-              <span className="travel-leg-name">
+            <li
+              key={o.provider}
+              className="flex items-baseline justify-between gap-3 text-[0.85rem] text-muted"
+            >
+              <span className="min-w-0">
                 {productLabel(o.bank, o.productKind, c)}
                 {o.fee.known && <span className="eyebrow"> · {describeWithdrawalFee(o.fee)}</span>}
                 {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
               </span>
-              <span className="travel-leg-cost">{cashCost(locale, c, o.costOnReference)}</span>
+              <span className="flex-none tabular-nums whitespace-nowrap">
+                {cashCost(locale, c, o.costOnReference)}
+              </span>
             </li>
           ))}
         </ul>
@@ -1398,13 +1408,18 @@ export function OffersSection({
           months: tripMonths,
         })}
       </p>
-      <ul className="travel-journeys">
+      <ul className="list-none m-0 p-0 flex flex-col gap-3">
         {top.map((o) => (
-          <li key={o.productId} className="travel-journey">
-            <div className="travel-journey-head">
-              <span className="travel-journey-name">{displayProduct(o.product, c)}</span>
+          <li
+            key={o.productId}
+            className="py-3 px-4 border border-line rounded bg-surface-2"
+          >
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <span className="font-semibold" data-testid="travel-journey-name">
+                {displayProduct(o.product, c)}
+              </span>
               <NotYours />
-              <span className="travel-journey-cost">
+              <span className="font-semibold tabular-nums whitespace-nowrap" data-testid="travel-journey-cost">
                 {fill(c.offers.amountOnReference, {
                   amount: formatEuroIn(locale, costOnReferenceSpend(o.netCostPct) ?? 0),
                   reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
@@ -1654,7 +1669,10 @@ export default function TravelBlock({
           {/* DE SAMENVATTING. Twee antwoorden — waarmee betaal je, waar kun je
               pinnen — en wat die twee kosten. Verder niets: alles wat een van die
               twee onderbouwt staat in de <ToonMeer> hieronder. */}
-          <div className={`travel-winner${bestJourney ? "" : " travel-winner-unpriced"}`}>
+          <div
+            className={`travel-winner${bestJourney ? "" : " border-l-line"}`}
+            data-priced={bestJourney ? "true" : "false"}
+          >
             <div className="travel-winner-name">
               {/* HET MERKTEKEN BLIJFT VOORAAN, de uitleg erachter niet. De kop
                   zegt zelf al "die heb je nog niet", maar een woord alleen is niet
@@ -1732,7 +1750,7 @@ export default function TravelBlock({
           </div>
 
           <ToonMeer summary={foldLabel}>
-            <div className="travel-why">
+            <div className="flex flex-col gap-4 mt-3">
               {/* DE BRONREGEL. Dit is de vrije tekst van het geleerde feit, en bij
                   bank.nl is dat "1,4% koersopslag Bron: bank.nl-vergelijking,
                   laatst gecontroleerd 15-1-2026" — een citaat, met "Let op:" ervoor
@@ -1837,26 +1855,37 @@ export default function TravelBlock({
                   {plan.currency === "EUR" ? c.journeys.noRouteEuro : c.common.noAccountsKnown}
                 </p>
               ) : (
-                <ul className="travel-journeys">
+                <ul className="list-none m-0 p-0 flex flex-col gap-3" data-testid="travel-journeys">
                   {plan.journeys.map((j) => (
                     <li
                       key={journeyKey(j)}
-                      className={`travel-journey${j === bestJourney ? " travel-journey-best" : ""}${j.known ? "" : " travel-journey-unknown"}`}
+                      className={`py-3 px-4 border border-line rounded bg-surface-2${j === bestJourney ? " border-l-4 border-l-pos" : ""}`}
+                      data-testid="travel-journey"
+                      data-best={j === bestJourney ? "true" : undefined}
+                      data-unknown={j.known ? undefined : "true"}
                     >
-                      <div className="travel-journey-head">
-                        <span className="travel-journey-name">{journeyTitle(j, c)}</span>
-                        <span className="travel-journey-cost">
+                      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                        <span className="font-semibold" data-testid="travel-journey-name">
+                          {journeyTitle(j, c)}
+                        </span>
+                        <span
+                          className={`font-semibold tabular-nums whitespace-nowrap${j.known ? "" : " text-muted font-medium"}`}
+                          data-testid="travel-journey-cost"
+                        >
                           {j.known ? legCost(locale, c, j.totalCostPct) : c.common.unknown}
                         </span>
                       </div>
 
-                      <ul className="travel-legs">
+                      <ul className="list-none mt-2 mx-0 mb-0 p-0 flex flex-col gap-1">
                         {legsOf(j, locale, c).map((leg) => (
-                          <li key={leg.name} className="travel-leg">
-                            <span className="travel-leg-name">
+                          <li
+                            key={leg.name}
+                            className="flex items-baseline justify-between gap-3 text-[0.85rem] text-muted"
+                          >
+                            <span className="min-w-0" data-testid="travel-leg-name">
                               {leg.name} · {leg.detail}
                             </span>
-                            <span className="travel-leg-cost">{leg.cost}</span>
+                            <span className="flex-none tabular-nums whitespace-nowrap">{leg.cost}</span>
                           </li>
                         ))}
                       </ul>
@@ -1929,12 +1958,15 @@ export default function TravelBlock({
                   {plan.spend.length === 0 ? (
                     <p className="cell-sub">{c.common.noAccountsKnown}</p>
                   ) : (
-                    <ul className="travel-legs">
+                    <ul className="list-none mt-2 mx-0 mb-0 p-0 flex flex-col gap-1">
                       {plan.spend.map((option) => {
                         const cost = costOnReferenceSpend(option.netCostPct);
                         return (
-                          <li key={option.provider} className="travel-leg">
-                            <span className="travel-leg-name">
+                          <li
+                            key={option.provider}
+                            className="flex items-baseline justify-between gap-3 text-[0.85rem] text-muted"
+                          >
+                            <span className="min-w-0">
                               {productLabel(option.bank, option.productKind, c)}
                               {(option.pointsPerEuro ?? 0) > 0 && (
                                 <span className="eyebrow">
@@ -1952,7 +1984,7 @@ export default function TravelBlock({
                                 </span>
                               )}
                             </span>
-                            <span className="travel-leg-cost">
+                            <span className="flex-none tabular-nums whitespace-nowrap">
                               {cost === null ? c.common.unknown : legCost(locale, c, option.netCostPct)}
                             </span>
                           </li>

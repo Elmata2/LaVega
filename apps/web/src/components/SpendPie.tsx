@@ -184,9 +184,9 @@ export default function SpendPie({
   const canOpen = onSelect !== undefined && reading !== null && reading.category !== "Overig";
 
   return (
-    <div className="spend-pie">
+    <div className="spend-pie flex flex-wrap items-center gap-6 pt-1 pb-2 [@media(max-width:560px)]:gap-4">
       <div
-        className="spend-pie-ring"
+        className="spend-pie-ring flex-none w-[168px] h-[168px] [@media(max-width:560px)]:w-[132px] [@media(max-width:560px)]:h-[132px] rounded-full grid place-items-center cursor-default data-[open=yes]:cursor-pointer"
         style={{ background: `conic-gradient(${stops.join(", ")})` }}
         role="img"
         aria-label={shown.map((s) => `${label(s.category)} ${Math.round(s.share * 100)}%`).join(", ")}
@@ -201,27 +201,33 @@ export default function SpendPie({
             or a row is being read — what THAT slice cost and how much of the
             period it is. A bare euro amount in the middle of a ring would
             otherwise be read as the total it is sitting in. */}
-        <div className="spend-pie-hole">
+        <div className="spend-pie-hole w-[108px] h-[108px] [@media(max-width:560px)]:w-[86px] [@media(max-width:560px)]:h-[86px] rounded-full bg-white grid place-items-center content-center gap-px text-center leading-[1.15]">
           {reading ? (
             <>
-              <div className="spend-pie-slice">{label(reading.category)}</div>
-              <div className="spend-pie-total">{euro(reading.cents)}</div>
+              <div className="spend-pie-slice font-mono text-[0.6rem] tracking-[0.03em] uppercase text-muted max-w-[92%] whitespace-normal [overflow-wrap:anywhere]">
+                {label(reading.category)}
+              </div>
+              <div className="spend-pie-total font-[650] text-[1rem] tabular-nums">
+                {euro(reading.cents)}
+              </div>
               {/* "van totaal" and not "van de uitgaven": the phrase has to fit
                   on one line inside a 108px hole, and the caption it replaces
                   already said "uitgaven" one state ago. */}
-              <div className="spend-pie-caption spend-pie-share-of">
+              <div className="spend-pie-caption spend-pie-share-of text-[0.62rem] leading-[1.15] max-w-[92%] whitespace-nowrap opacity-60">
                 {Math.round(reading.share * 100)}% van totaal
               </div>
             </>
           ) : (
             <>
-              <div className="spend-pie-total">{euro(totalCents)}</div>
-              <div className="spend-pie-caption">uitgaven</div>
+              <div className="spend-pie-total font-[650] text-[1rem] tabular-nums">
+                {euro(totalCents)}
+              </div>
+              <div className="spend-pie-caption text-[0.72rem] opacity-60">uitgaven</div>
             </>
           )}
         </div>
       </div>
-      <ul className="spend-pie-legend">
+      <ul className="spend-pie-legend m-0 p-0 list-none grid gap-[0.15rem] min-w-0 [flex:1_1_14rem]">
         {shown.map((s, i) => {
           // "Overig" is several categories, so there is nothing to filter to; it
           // is still a button, because reading it — and lighting up its arc —
@@ -233,7 +239,7 @@ export default function SpendPie({
                   impossible to hit on the ring itself. */}
               <button
                 type="button"
-                className="spend-pie-item"
+                className="spend-pie-item grid grid-cols-[0.75rem_1fr_auto_2.6rem] items-center gap-2 w-full [padding:0.2rem_0.25rem] border-0 rounded-[6px] [background:none] [font:inherit] text-inherit text-left data-[filter=yes]:cursor-pointer hover:bg-[rgb(0_0_0/4%)] focus-visible:bg-[rgb(0_0_0/4%)] data-[active=on]:bg-[rgb(0_0_0/4%)] focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[-2px]"
                 data-filter={filters ? "yes" : "no"}
                 data-active={active === i ? "on" : "off"}
                 onClick={filters ? () => onSelect?.(s.category) : undefined}
@@ -245,13 +251,22 @@ export default function SpendPie({
                 onBlur={() => setActive((a) => (a === i ? null : a))}
               >
                 <span
-                  className="spend-pie-swatch"
+                  className="spend-pie-swatch w-[0.7rem] h-[0.7rem] rounded-[3px]"
                   style={{ background: sliceColor(i) }}
                   aria-hidden="true"
                 />
-                <span className="spend-pie-name">{label(s.category)}</span>
-                <span className="spend-pie-value">{euro(s.cents)}</span>
-                <span className="spend-pie-share">{Math.round(s.share * 100)}%</span>
+                {/* spend-pie-item / spend-pie-name stay as class hooks: the
+                    un-clip on hover/focus/tap is a PARENT-state → CHILD-style
+                    rule (charts.css), which no utility variant can express
+                    without the same descendant selector underneath — see
+                    charts.css for why it stays hand-written. */}
+                <span className="spend-pie-name overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                  {label(s.category)}
+                </span>
+                <span className="spend-pie-value tabular-nums text-right">{euro(s.cents)}</span>
+                <span className="spend-pie-share tabular-nums text-right opacity-60">
+                  {Math.round(s.share * 100)}%
+                </span>
               </button>
             </li>
           );
