@@ -1395,6 +1395,9 @@ export type ValutaCopy = {
       termsLinkLabel: string;
       rateHeading: string;
       rateFallbackLive: (date: string) => string;
+      /** The rate service could not be reached. Distinct from the bundled line:
+       *  one says these are older rates, the other says we do not know. */
+      rateUnreachable: (date: string) => string;
       rateFallbackBundled: (date: string) => string;
       costsHeading: string;
       costsBody: string;
@@ -1632,6 +1635,8 @@ const valutaCopy_nl: ValutaCopy = {
       termsLinkLabel: `voorwaarden`,
       rateHeading: `Koers:`,
       rateFallbackLive: (date) => `live ECB-middenkoers via Frankfurter, peildatum ${date}.`,
+      rateUnreachable: (date) =>
+        `de koersendienst was niet bereikbaar, dus dit zijn de meegeleverde koersen van ${date}. Ververs later voor de dagkoers.`,
       rateFallbackBundled: (date) =>
         `de meegebundelde ECB-middenkoers van ${date}, want er staat nu geen live koers in dit scherm.`,
       costsHeading: `Kosten:`,
@@ -1878,6 +1883,8 @@ const valutaCopy_en: ValutaCopy = {
       termsLinkLabel: `terms`,
       rateHeading: `Rate:`,
       rateFallbackLive: (date) => `live ECB mid-rate via Frankfurter, as of ${date}.`,
+      rateUnreachable: (date) =>
+        `the rate service could not be reached, so these are the bundled rates from ${date}. Refresh later for today's rate.`,
       rateFallbackBundled: (date) =>
         `the bundled ECB mid-rate from ${date}, because there is no live rate in this screen right now.`,
       costsHeading: `Fees:`,

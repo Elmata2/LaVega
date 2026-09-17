@@ -857,3 +857,41 @@ test("een onbekende aanbieder levert een melding met de ECHTE oorzaak, niet 'bro
   expect(tekst).toContain("die dit scherm niet kent");
   expect(tekst).not.toContain("er staat geen tweede laag in dit scherm");
 });
+
+/* A RATE SERVICE THAT IS DOWN MUST NOT LOOK LIKE A RATE.
+ *
+ * The fetch failure used to be swallowed by an empty catch, leaving `source` as
+ * "offline" — the same state the screen starts in. So an unreachable service was
+ * indistinguishable from a screen that had simply not loaded yet: rates appeared
+ * to vanish and nothing said why. Reported from a real review session, where the
+ * API server was not running and the screen gave no clue that was the reason. */
+test("an unreachable rate service says so, instead of quietly showing bundled rates", async () => {
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = (async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+
+  const el = render();
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  const text = el.textContent ?? "";
+  expect(text).toContain("niet bereikbaar");
+  /* And it must NOT claim the bundled line, which asserts the rates are merely
+   * older rather than unknown. */
+  expect(text).not.toContain("meegeleverde koersen van de peildatum");
+});
+
+test("a rate service that answers is still reported as live", async () => {
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = (async () => ({
+    ok: true,
+    json: async () => ({ base: "EUR", date: FX_RATE_FALLBACK.date, rates: FX_RATE_FALLBACK.rates }),
+  })) as unknown as typeof fetch;
+
+  const el = render();
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(el.textContent ?? "").not.toContain("niet bereikbaar");
+});

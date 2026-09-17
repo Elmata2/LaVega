@@ -482,7 +482,11 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
   const c = optimiseCopy[locale].valuta.view;
   const [served, setServed] = useState<FxRate>(FX_RATE_FALLBACK);
   const [prov, setProv] = useState<FxProvenance | null>(null);
-  const [source, setSource] = useState<"live" | "offline">("offline");
+  /* Three states, not two. "offline" used to mean both "not fetched yet" and
+   * "the fetch failed", so a rate service that was down looked identical to a
+   * screen that had simply not loaded — rates appeared to vanish with nothing
+   * saying why. */
+  const [source, setSource] = useState<"live" | "offline" | "unreachable">("offline");
   const [amount, setAmount] = useState("1000");
   const [from, setFrom] = useState("EUR");
   const [to, setTo] = useState("USD");
@@ -511,7 +515,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
         }
       })
       .catch(() => {
-        /* keep fallback */
+        if (ok) setSource("unreachable");
       });
     return () => {
       ok = false;
@@ -1157,7 +1161,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                 <strong>{c.sourcesPanel.rateHeading}</strong>{" "}
                 {source === "live"
                   ? c.sourcesPanel.rateFallbackLive(rate.date)
-                  : c.sourcesPanel.rateFallbackBundled(rate.date)}
+                  : source === "unreachable"
+                    ? c.sourcesPanel.rateUnreachable(rate.date)
+                    : c.sourcesPanel.rateFallbackBundled(rate.date)}
               </p>
             )}
             <p>
