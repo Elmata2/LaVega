@@ -58,11 +58,27 @@ const AI_UNAVAILABLE_MESSAGE = "De AI-dienst is tijdelijk niet beschikbaar.";
 const AI_UPSTREAM_LIMIT_MESSAGE =
   "De AI-aanbieder weigert nu verzoeken (limiet van het account bereikt). Controleer je Mistral-account; opnieuw proberen helpt pas daarna.";
 
-/** 429 from the provider means their ceiling, anything else means a fault. */
+/* A key the provider rejects is not a transient fault either, and "probeer het
+ * later opnieuw" is actively wrong advice for it: retrying a rejected key fails
+ * forever. Same reasoning as the 429 message above — the owner is the only
+ * reader of this app, and the only person who can fix it, so the message has to
+ * name the thing he must go and change. It says nothing about the account
+ * beyond "these credentials were refused", which the browser's own operator
+ * already knows.
+ *
+ * Found on 17 Sep: `/api/agent/status` reported `configured: true` and the
+ * screen still said "gaf een fout", because `configured` only checks that the
+ * env var is SET. A key that is present and refused looked identical to a
+ * model that fell over. */
+const AI_CREDENTIALS_MESSAGE =
+  "De AI-aanbieder weigert de sleutel van deze server (401/403). Controleer MISTRAL_API_KEY in de omgeving; opnieuw proberen helpt niet.";
+
+/** 429 is their ceiling, 401/403 is our key, anything else is a fault. */
 function aiFailureMessage(e: unknown): string {
-  return e instanceof MistralHttpError && e.status === 429
-    ? AI_UPSTREAM_LIMIT_MESSAGE
-    : AI_ERROR_MESSAGE;
+  if (!(e instanceof MistralHttpError)) return AI_ERROR_MESSAGE;
+  if (e.status === 429) return AI_UPSTREAM_LIMIT_MESSAGE;
+  if (e.status === 401 || e.status === 403) return AI_CREDENTIALS_MESSAGE;
+  return AI_ERROR_MESSAGE;
 }
 
 function logAiError(route: string, e: unknown): void {
@@ -228,7 +244,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
         logAiError("chat", e);
-        await stream.writeSSE({ event: "error", data: AI_ERROR_MESSAGE });
+        /* aiFailureMessage(e), not the bare AI_ERROR_MESSAGE this used to send.
+         * The other two AI routes already told a provider ceiling apart from a
+         * fault; chat did not, so the one route the owner uses most was the one
+         * route that could only ever say "probeer het later opnieuw" — whether
+         * the real cause was a 429 he had to fix in his Mistral account or a
+         * key the provider was refusing outright. */
+        await stream.writeSSE({ event: "error", data: aiFailureMessage(e) });
       }
     });
   });

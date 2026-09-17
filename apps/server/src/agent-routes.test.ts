@@ -271,6 +271,63 @@ test("categorize: an upstream error's raw body never reaches the client, only a 
   });
 });
 
+/* WHICH CAUSE IS IT. Every AI failure used to reach the owner as one sentence,
+ * "De AI-dienst gaf een fout; probeer het later opnieuw." That sentence is
+ * actively wrong for two of the three causes: a provider rate limit clears only
+ * when he opens a billing page, and a refused key never clears at all. He spent
+ * a session on 14 Sep retrying a 429 because the screen told him to, and on
+ * 17 Sep could not tell a refused key from a broken model — `/api/agent/status`
+ * said `configured: true`, because that only checks the env var is SET.
+ *
+ * Chat was the worst of the three: the other routes already told a ceiling from
+ * a fault, and chat's SSE path sent the generic message unconditionally. So the
+ * route the owner uses most was the one that could say least. These three cases
+ * pin each cause to its own sentence, on the route that had none. */
+async function chatErrorBody(thrown: unknown): Promise<string> {
+  /* withApiKey returns void, so the body is captured rather than returned
+   * through it — reading its return value silently yields undefined, and every
+   * assertion below then fails on the assertion's own type check instead of on
+   * the message. */
+  let captured = "";
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAgentRoutes(app, {
+      // eslint-disable-next-line require-yield
+      chat: async function* () {
+        throw thrown;
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+    );
+    captured = await res.text();
+    errSpy.mockRestore();
+  });
+  return captured;
+}
+
+test("chat: a provider rate limit reads as their ceiling, not as 'try again later'", async () => {
+  const body = await chatErrorBody(new MistralHttpError(429, "conversation", "rate limited"));
+  expect(body).toContain("limiet van het account bereikt");
+  expect(body).not.toContain("probeer het later opnieuw");
+});
+
+test("chat: a refused key reads as a refused key, and does not tell him to retry", async () => {
+  for (const status of [401, 403]) {
+    const body = await chatErrorBody(new MistralHttpError(status, "conversation", "unauthorized"));
+    expect(body, `status ${status}`).toContain("MISTRAL_API_KEY");
+    expect(body, `status ${status}`).not.toContain("probeer het later opnieuw");
+  }
+});
+
+test("chat: anything else is still the generic fault", async () => {
+  const body = await chatErrorBody(new MistralHttpError(500, "conversation", "boom"));
+  expect(body).toContain("De AI-dienst gaf een fout");
+  expect(body).not.toContain("MISTRAL_API_KEY");
+});
+
 test("chat: an upstream error's raw body never reaches the client via the SSE error event, only a fixed Dutch message", async () => {
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();

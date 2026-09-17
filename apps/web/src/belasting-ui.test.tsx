@@ -167,6 +167,36 @@ test("countryLabel and caveatsByCountry (copy/admin.ts) stay byte-identical to t
   expect(adminCopy.nl.belasting.header.countryLabel.DE).toBe(DE_TAX_PACK.label);
   expect(adminCopy.nl.belasting.header.caveatsByCountry.NL).toEqual(NL_TAX_PACK.caveats);
   expect(adminCopy.nl.belasting.header.caveatsByCountry.DE).toEqual(DE_TAX_PACK.caveats);
+  /* The German profit-tax prose was rendered STRAIGHT FROM THE PACK until
+   * 17 Sep, so an English reader got two Dutch paragraphs on the Tax screen
+   * while every other string on it was translated. Same pattern as the
+   * caveats above: the pack stays the Dutch source, copy mirrors it, English
+   * is authored. */
+  expect(adminCopy.nl.belasting.header.profitTaxDE.what).toBe(DE_TAX_PACK.profitTax?.what);
+  expect(adminCopy.nl.belasting.header.profitTaxDE.rateBasis).toBe(
+    DE_TAX_PACK.profitTax?.rateBasis,
+  );
+});
+
+/* The bug itself, not just its cause: read the rendered German tax screen in
+ * English and insist no Dutch survives it. A key-parity check cannot catch
+ * this — both languages HAD a key, the view just never asked for it. */
+test("the German profit-tax screen has no Dutch left in it when the reader is English", () => {
+  setHomeCountry("DE");
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = render([]);
+  for (const dutch of [
+    "vooruitbetalen op vier vaste data",
+    "kort na afloop van het jaar",
+    "daarover",
+    "afgerond op",
+    "waar ondernemers op stuklopen",
+  ])
+    expect(html, `Dutch leaked into the English Tax screen: ${dutch}`).not.toContain(dutch);
+  expect(html).toContain("four fixed dates");
+  /* The statutory terms are NOT translated, deliberately: "Vorauszahlung" and
+   * "Nachzahlung" are what the Finanzamt calls them. */
+  expect(html).toContain("Vorauszahlung");
 });
 
 test("the grey instruction sentence under the title is gone", () => {

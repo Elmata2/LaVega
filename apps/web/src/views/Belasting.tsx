@@ -697,8 +697,12 @@ export default function Belasting({
         {/* ── Module 2: alleen in een land dat winstbelasting vooruit laat
              betalen. NL heeft die niet, dus NL ziet deze module niet. ─────── */}
         {profitTax && (
-          <Module title={profitTax.label} height="tall" footer={<span>{profitTax.rateBasis}</span>}>
-            <p className="mb-4 text-muted max-w-[68ch]">{profitTax.what}</p>
+          <Module
+            title={profitTax.label}
+            height="tall"
+            footer={<span>{c.header.profitTaxDE.rateBasis}</span>}
+          >
+            <p className="mb-4 text-muted max-w-[68ch]">{c.header.profitTaxDE.what}</p>
             {entities.map((entity) => {
               const s = resolve(entity);
               const flows = computeProfitTaxPrepayments(entityTxs(entity), s, asOf);

@@ -309,6 +309,15 @@ export type BelastingCopy = {
     /** Localized copy of taxpacks/{nl,de}.ts's `pack.caveats`, for the same
      *  reason and under the same drift guard as `countryLabel` above. */
     caveatsByCountry: { NL: readonly string[]; DE: readonly string[] };
+    /** Localized copy of `pack.profitTax.what` and `.rateBasis`. Only DE has a
+     *  profit tax — taxpacks/nl.ts sets `profitTax: null` — so there is one
+     *  entry, not a country map with a dead half. Same drift guard as above.
+     *
+     *  `pack.profitTax.label`/`settlementLabel` deliberately stay on the pack
+     *  and are NOT mirrored here: "Vorauszahlung" and "Nachzahlung" are what
+     *  the German tax authority calls these things, and translating a statutory
+     *  term would be a worse answer in every language. */
+    profitTaxDE: { what: string; rateBasis: string };
   };
 
   vat: {
@@ -882,6 +891,11 @@ const nlBelasting: BelastingCopy = {
         "Indicatieve momentopname; controleer bij het Finanzamt.",
         "LaVega leest je bankrekeningen en je facturen. Wat er in je aangiftes of in je boekhouding staat, ziet het niet — ook een boekhoudbestand dat je hier importeert blijft één bestand in dit tabblad en is geen administratie.",
       ],
+    },
+    profitTaxDE: {
+      what: "Duitsland laat winstbelasting vooruitbetalen op vier vaste data. Wat de vooruitbetalingen niet dekken, komt als Nachzahlung kort na afloop van het jaar — dat is het bedrag waar ondernemers op stuklopen.",
+      rateBasis:
+        "15% KSt + 5,5% Soli daarover + Gewerbesteuer bij Hebesatz 400% ≈ 29,8% — afgerond op 30%.",
     },
   },
 
@@ -1492,6 +1506,11 @@ const enBelasting: BelastingCopy = {
         "Indicative snapshot; check with the Finanzamt.",
         "LaVega reads your bank accounts and your invoices. It does not see what is in your tax returns or your bookkeeping — a bookkeeping file you import here also stays a single file in this tab, not a set of accounts.",
       ],
+    },
+    profitTaxDE: {
+      what: "Germany collects profit tax as prepayments on four fixed dates. Whatever the prepayments do not cover arrives as a Nachzahlung shortly after the year closes — that is the amount owners get caught out by.",
+      rateBasis:
+        "15% KSt + 5.5% Soli on top of that + Gewerbesteuer at a Hebesatz of 400% ≈ 29.8% — rounded up to 30%.",
     },
   },
 
