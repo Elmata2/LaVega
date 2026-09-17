@@ -50,6 +50,7 @@ import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optim
 import type { Locale } from "../../locale.js";
 import Module from "../Module.js";
 import ToonMeer from "../ToonMeer.js";
+import Button from "../ui/Button.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
@@ -1092,14 +1093,14 @@ export function TermsNotice({
   const zelfInvullen = fill(c.terms.fillInHint, { heading: c.terms.routesHeading });
 
   const searchButton = (primary: boolean, label: string) => (
-    <button
-      type="button"
-      className={primary ? "btn btn-primary flex-none" : "btn flex-none"}
+    <Button
+      variant={primary ? "primary" : "default"}
+      className="flex-none"
       onClick={onSearch}
       disabled={busy}
     >
       {busy ? c.terms.searchingButton : label}
-    </button>
+    </Button>
   );
 
   // A control, not only a sentence. LaVega asks the server whether it has a key

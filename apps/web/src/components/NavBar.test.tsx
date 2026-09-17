@@ -137,12 +137,18 @@ test("the per-company pills are gone from the chrome, the entity scope is not", 
 });
 
 test("every section header is a title with a rule under it, not a round-edged tile", () => {
-  // The shared header classes the views and the blocks already use.
-  expect(resolved(["card-header"], "border-bottom")).toBe("1px solid var(--ink)");
+  /* Card/CardHeader (components/ui/Card.tsx, docs/adr/0005) render Tailwind
+   * utilities, not `.card-header`/`.card` — so this resolves the classes
+   * THEY emit instead. `border-b` decomposes the old `border-bottom: 1px
+   * solid var(--ink)` shorthand into longhand properties; width and color
+   * together pin the same visible line (style itself is the indirect
+   * `var(--tw-border-style)`, universally `solid` — not a literal to assert). */
+  expect(resolved(["border-b", "border-ink"], "border-bottom-width")).toBe("1px");
+  expect(resolved(["border-b", "border-ink"], "border-color")).toBe("var(--ink)");
   expect(resolved(["module-head"], "border-bottom")).toBe("1px solid var(--ink)");
   // ...and the tiles themselves stopped shouting.
-  expect(resolved(["card"], "border-radius")).toBe("var(--r-sm)");
-  expect(resolved(["card"], "box-shadow")).toBeUndefined();
+  expect(resolved(["rounded-sm"], "border-radius")).toBe("var(--r-sm)");
+  expect(resolved(["rounded-sm"], "box-shadow")).toBeUndefined();
   expect(resolved(["module"], "border-radius")).toBe("var(--r-sm)");
   expect(resolved(["module"], "box-shadow")).toBeUndefined();
 });

@@ -137,30 +137,7 @@ button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
-/* Buttons (component classes) */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  border-radius: var(--pill);
-  padding: 8px 18px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--ink);
-  font-weight: 500;
-  cursor: pointer;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
+/* .btn/.btn-primary extracted to components/ui/Button.tsx (docs/adr/0005). */
 
 /* Tables */
 table {
@@ -207,32 +184,10 @@ table tbody tr:hover {
   letter-spacing: 0.02em;
 }
 
-/* ---------- Header language (shared by every section, card and module) ------
- *
- * The reference announces a section with a title and a black rule under it, not
- * by wrapping it in a round-edged tile. So the tiles lost most of their radius
- * and all of their shadow — the hairline border is enough to hold a section
- * together — and the rule under the title does the announcing. The same three
- * declarations sit on .module-head in modules.css, so a block written against
- * the design system inherits the treatment without touching the block.
- *
- * Applies to a card's own <h2> as well as to .card-header, because half the
- * views title a card with a bare heading and the two must not read differently. */
-.card-header,
-.card > h2 {
-  padding-bottom: var(--sp-3);
-  margin-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--ink);
-}
-
-/* Card */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: var(--sp-5);
-  margin-bottom: var(--sp-5);
-}
+/* .card/.card-header extracted to components/ui/Card.tsx (docs/adr/0005). The
+ * shared header language (padding-bottom/margin-bottom/border-bottom under a
+ * section title) lives on there now; .module-head in modules.css still carries
+ * the same three declarations independently for the (excluded) module grid. */
 
 /* KPI tile */
 .kpi-row {
@@ -291,18 +246,6 @@ table tbody tr:hover {
 }
 .card-grid .span-2 {
   grid-column: 1 / -1;
-}
-.card-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-/* The rule belongs to the header row, not to the heading inside it. */
-.card-header h2 {
-  margin: 0;
-  padding-bottom: 0;
-  border-bottom: none;
 }
 .card-link {
   background: none;

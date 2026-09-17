@@ -14,6 +14,8 @@ import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { API_BASE } from "../api";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import Button, { buttonVariants } from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
@@ -826,17 +828,10 @@ export default function Facturen({
           <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
           <p className="cell-sub">{c.forms.auto.gateNote(entities.length)}</p>
           <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={busy || n8nBusy}
-              onClick={() => void handleFetchN8n()}
-            >
+            <Button variant="primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
               {c.forms.auto.fetchButton}
-            </button>
-            <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
-              {c.forms.auto.connectionsButton}
-            </button>
+            </Button>
+            <Button onClick={() => onNavigate("koppelingen")}>{c.forms.auto.connectionsButton}</Button>
           </div>
           {n8nNote && <p className="cell-sub">{n8nNote}</p>}
           {pending.length > 0 && (
@@ -1035,13 +1030,13 @@ export default function Facturen({
               </label>
             </div>
             <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
-              <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
+              <Button variant="primary" disabled={busy} onClick={handleAdd}>
                 {c.forms.manual.addButton}
-              </button>
+              </Button>
               {pendingSource === "llm" && (
-                <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
+                <Button disabled={busy} onClick={discardDraft}>
                   {c.forms.manual.discardDraftButton}
-                </button>
+                </Button>
               )}
             </div>
             {manualError && <p className="cell-sub text-neg">{manualError}</p>}
@@ -1051,11 +1046,11 @@ export default function Facturen({
 
       {/* ── De confirm-first wachtrij. Ongewijzigd gedrag. ─────────────── */}
       {pending.length > 0 && (
-        <section className="card n8n-block" aria-label={c.queue.sectionAriaLabel}>
-          <div className="card-header">
+        <Card as="section" className="n8n-block" aria-label={c.queue.sectionAriaLabel}>
+          <CardHeader>
             <h2>{c.queue.heading}</h2>
             <span className="eyebrow">{c.queue.eyebrow(pending.length)}</span>
-          </div>
+          </CardHeader>
           <p className="cell-sub text-neg">
             <strong>{c.queue.warningLead}</strong>
             {c.queue.warningBody(pending.length)}
@@ -1177,22 +1172,12 @@ export default function Facturen({
                       onChange={(e) => patchRow(p.messageId, { vat: e.target.value })}
                     />
                   </label>{" "}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy}
-                    onClick={() => confirmRow(p)}
-                  >
+                  <Button variant="primary" disabled={busy} onClick={() => confirmRow(p)}>
                     {c.queue.confirmButton}
-                  </button>{" "}
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={busy}
-                    onClick={() => rejectRow(p)}
-                  >
+                  </Button>{" "}
+                  <Button disabled={busy} onClick={() => rejectRow(p)}>
                     {c.queue.rejectButton}
-                  </button>
+                  </Button>
                 </div>
                 {!p.dueDate && <p className="cell-sub">{c.queue.missingDueDateNote}</p>}
                 {!p.currency && <p className="cell-sub">{c.queue.missingCurrencyNote}</p>}
@@ -1203,16 +1188,16 @@ export default function Facturen({
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* ── Zelf ophalen: mail die geen boekbare factuur was ───────────── */}
       {notices.length > 0 && (
-        <section className="card n8n-block" aria-label={c.notices.sectionAriaLabel}>
-          <div className="card-header">
+        <Card as="section" className="n8n-block" aria-label={c.notices.sectionAriaLabel}>
+          <CardHeader>
             <h2>{c.notices.heading}</h2>
             <span className="eyebrow">{c.notices.eyebrow(notices.length)}</span>
-          </div>
+          </CardHeader>
           <p className="cell-sub">
             {c.notices.introLead} <strong>{c.notices.introStrong}</strong> {c.notices.introTail}
           </p>
@@ -1227,20 +1212,23 @@ export default function Facturen({
                 <p className="cell-sub">{n.reason}</p>
                 <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
                   {n.mailUrl ? (
-                    <a className="btn" href={n.mailUrl} target="_blank" rel="noreferrer noopener">
+                    <a
+                      className={buttonVariants()}
+                      href={n.mailUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
                       {c.notices.openInGmail}
                     </a>
                   ) : (
                     <span className="cell-sub">{c.notices.noLinkFallback}</span>
                   )}
-                  <button type="button" className="btn" onClick={() => dismissNotice(n)}>
-                    {c.notices.doneButton}
-                  </button>
+                  <Button onClick={() => dismissNotice(n)}>{c.notices.doneButton}</Button>
                 </div>
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* ── Wat er binnen is ───────────────────────────────────────────── */}
@@ -1259,7 +1247,7 @@ export default function Facturen({
         </span>
       </div>
 
-      <section className="card" aria-label={c.list.sectionAriaLabel}>
+      <Card as="section" aria-label={c.list.sectionAriaLabel}>
         {invoices.length === 0 ? (
           <p className="cell-sub">{c.list.empty}</p>
         ) : (
@@ -1324,32 +1312,17 @@ export default function Facturen({
                           <>
                             {autoBookedIds.has(inv.id) && (
                               <>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  disabled={busy}
-                                  onClick={() => undoAutoBooked(inv.id)}
-                                >
+                                <Button disabled={busy} onClick={() => undoAutoBooked(inv.id)}>
                                   {c.list.undoButton}
-                                </button>{" "}
+                                </Button>{" "}
                               </>
                             )}
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={busy}
-                              onClick={() => setStatus(inv.id, "paid")}
-                            >
+                            <Button disabled={busy} onClick={() => setStatus(inv.id, "paid")}>
                               {c.list.markPaidButton}
-                            </button>{" "}
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={busy}
-                              onClick={() => setStatus(inv.id, "cancelled")}
-                            >
+                            </Button>{" "}
+                            <Button disabled={busy} onClick={() => setStatus(inv.id, "cancelled")}>
                               {c.list.cancelButton}
-                            </button>
+                            </Button>
                           </>
                         ) : (
                           <span className="cell-sub">{c.list.noActions}</span>
@@ -1362,7 +1335,7 @@ export default function Facturen({
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </>
   );
 }

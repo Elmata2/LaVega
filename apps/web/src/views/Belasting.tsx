@@ -42,6 +42,8 @@ import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Grens, { type GrensAnswerRow } from "./Grens";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
 import "../styles/views.css";
 
 /* Belasting — one module per tax that is ACTUALLY relevant (UI review,
@@ -391,9 +393,9 @@ export default function Belasting({
             {c.header.rulesAsOfPrefix} {pack.rulesAsOf}
           </span>
         </div>
-        <section className="card" aria-label={c.header.title}>
+        <Card as="section" aria-label={c.header.title}>
           <p>{c.header.entitiesEmpty}</p>
-        </section>
+        </Card>
       </>
     );
   }
@@ -428,7 +430,7 @@ export default function Belasting({
         </span>
       </div>
 
-      <section className="card tax-system" aria-label={c.header.taxSystemLabel}>
+      <Card as="section" className="tax-system" aria-label={c.header.taxSystemLabel}>
         <label htmlFor="tax-system">{c.header.taxSystemLabel}</label>
         <select
           id="tax-system"
@@ -450,7 +452,7 @@ export default function Belasting({
             {c.header.unsupportedCountry(countryNameIn(locale, taxCountry.unsupportedHome))}
           </p>
         )}
-      </section>
+      </Card>
 
       <ModuleGrid className="grid-2" label={c.header.gridLabel}>
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
@@ -806,9 +808,9 @@ export default function Belasting({
       </ModuleGrid>
 
       <div className="flex flex-wrap gap-2 mt-2">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={berekenEnBewaar}>
+        <Button variant="primary" disabled={busy} onClick={berekenEnBewaar}>
           {c.actions.saveButton}
-        </button>
+        </Button>
       </div>
       {savedNote && <p className="cell-sub">{savedNote}</p>}
     </>

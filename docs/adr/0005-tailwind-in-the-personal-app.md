@@ -150,6 +150,30 @@ sheets are layered, a utility beats a component class by design — so
 `.pill-active`'s own background. Apply the utility only in the states where it
 belongs, or convert the state class with it. Found on the Rekeningen bank tabs.
 
+## A shared primitive becomes a component, not an inlined string
+
+`base.css` is different in kind from the view stylesheets. Its 228 class rules
+include the app's shared primitives, and they are shared widely: `.card` in 25
+files, `.btn` in 16, `.cell-sub` in 16.
+
+Writing `.card`'s utility string into 25 call sites duplicates the definition 25
+times and destroys the single source of truth. That is strictly worse than the
+CSS class it replaces. Extract a component instead — `<Button variant="primary">`,
+one definition, 16 importers. `class-variance-authority`, `clsx` and
+`tailwind-merge` are already dependencies, and this is what aligning with shadcn
+means as opposed to merely using utilities.
+
+Its 22 bare-tag rules stay. `html`, `body`, `h1`-`h3`, `p`, `a`, `button`,
+`input` are element defaults with no class to attach a utility to. Replacing
+them is what adopting Preflight means, which is the last step and the only
+irreversible one.
+
+Note the interaction between those two facts: a kept bare-tag rule now sits in
+`components` while a utility sits in `utilities`, so the utility wins. An
+unconditional `cursor-pointer` on a Button would beat
+`button:disabled { cursor: not-allowed }`. Scope such utilities to the state
+they belong in (`enabled:cursor-pointer`) and leave the rest to the bare rule.
+
 ## How to continue
 
 Convert one component per change, smallest first, each with its own visual

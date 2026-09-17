@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ToonMeer from "./ToonMeer";
+import Button from "./ui/Button.js";
 import { useAppLocale } from "../appLocale.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import type { ValutaCopy } from "../copy/optimise.js";
@@ -944,15 +945,10 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             <ul className="lv-globe-choice">
               {effect.currencies.map((cur) => (
                 <li key={cur.code}>
-                  <button
-                    type="button"
-                    className="btn"
-                    aria-pressed={pickedCode === cur.code}
-                    onClick={() => pickCurrency(cur)}
-                  >
+                  <Button aria-pressed={pickedCode === cur.code} onClick={() => pickCurrency(cur)}>
                     {cur.code}
                     {canPrice(cur) ? "" : c.effectChoice.noRateSuffix}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

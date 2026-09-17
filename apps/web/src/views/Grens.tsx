@@ -24,6 +24,7 @@ import { optimiseCopy } from "../copy/optimise.js";
 import type { GrensCopy } from "../copy/optimise.js";
 import Module from "../components/Module";
 import ToonMeer from "../components/ToonMeer";
+import Button from "../components/ui/Button.js";
 
 /* ── PRIVÉ EN ZAKELIJK — de grens op het scherm ─────────────────────────────
  *
@@ -402,9 +403,7 @@ export default function Grens({
            lokaal concept, en pas "Bewaar antwoorden" schrijft iets weg. ─────── */}
       {unanswered.length > 0 && phase === "idle" && (
         <div className="flex flex-wrap gap-2 mt-2">
-          <button
-            type="button"
-            className="btn"
+          <Button
             disabled={busy}
             onClick={() => {
               setNote(null);
@@ -412,7 +411,7 @@ export default function Grens({
             }}
           >
             {copy.answerForm.reviewButtonLabel(unanswered.length)}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -475,17 +474,10 @@ export default function Grens({
                   </tbody>
                 </table>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={saveAnswers}
-              >
+              <Button variant="primary" disabled={busy} onClick={saveAnswers}>
                 {bewaarLabel}
-              </button>{" "}
-              <button
-                type="button"
-                className="btn"
+              </Button>{" "}
+              <Button
                 disabled={busy}
                 onClick={() => {
                   setDrafts({});
@@ -493,7 +485,7 @@ export default function Grens({
                 }}
               >
                 {annuleerLabel}
-              </button>
+              </Button>
             </div>
           );
         })()}

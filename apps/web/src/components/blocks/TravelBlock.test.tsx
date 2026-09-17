@@ -399,7 +399,7 @@ test("never looked up says exactly that, and puts the lookup one click away", ()
 
   const button = byText("button", "Zoek voorwaarden");
   expect(button.textContent).toContain("(2)"); // both cards, counted
-  expect(button.className).toContain("btn-primary");
+  expect(button.dataset.testid).toBe("btn-primary");
 });
 
 test("a lookup that came back empty is not the same sentence as one never run", () => {

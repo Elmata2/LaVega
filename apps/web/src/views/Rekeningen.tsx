@@ -14,6 +14,7 @@ import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import type { MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
+import Card, { CardHeader } from "../components/ui/Card.js";
 import "../styles/views.css";
 
 type RekeningenProps = {
@@ -899,8 +900,8 @@ export default function Rekeningen({
   const latest = latestTxDates(txs);
 
   return (
-    <section className="card" aria-label={c.heading}>
-      <div className="card-header">
+    <Card as="section" aria-label={c.heading}>
+      <CardHeader>
         <h2>{c.heading}</h2>
         {accounts.length > 0 && (
           <div
@@ -927,7 +928,7 @@ export default function Rekeningen({
             </button>
           </div>
         )}
-      </div>
+      </CardHeader>
 
       {shownGroups.map((group) => {
         const others = group.accounts.filter((a) => a.key !== group.survivor.key);
@@ -1147,6 +1148,6 @@ export default function Rekeningen({
           </table>
         </div>
       )}
-    </section>
+    </Card>
   );
 }

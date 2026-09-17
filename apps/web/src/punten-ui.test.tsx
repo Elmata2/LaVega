@@ -193,7 +193,7 @@ test("answering with just the number stores it and re-dates it to today", () => 
   render([mr(200_000, "2026-01-01")]);
   click(byText('[data-testid="punt-card"] .card-link', "Saldo bijwerken"));
   type(container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!, "245k");
-  click(byText('[data-testid="punt-ask"] .btn-primary', "Opslaan"));
+  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(1);
   expect(saved[0][0].points).toBe(245_000);
   expect(saved[0][0].updatedAt).toBe(ASOF);
@@ -206,7 +206,7 @@ test("a reply that is a sentence is refused out loud — nothing is guessed into
     container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!,
     "ergens tussen 240000 en 250000",
   );
-  click(byText('[data-testid="punt-ask"] .btn-primary', "Opslaan"));
+  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain("stuur alleen het saldo");
 });
@@ -240,7 +240,7 @@ test("the add form takes '245k' and refuses text, saying why", () => {
     container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
     "geen idee",
   );
-  click(byText('[data-testid="stack-form-actions"] .btn-primary', "Opslaan"));
+  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain("geen getal");
 
@@ -248,7 +248,7 @@ test("the add form takes '245k' and refuses text, saying why", () => {
     container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
     "245k",
   );
-  click(byText('[data-testid="stack-form-actions"] .btn-primary', "Opslaan"));
+  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved[0][0].points).toBe(245_000);
 });
 

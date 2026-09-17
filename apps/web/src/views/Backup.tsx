@@ -6,6 +6,8 @@ import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vault
 import { adminCopy } from "../copy/admin.js";
 import { useAppLocale } from "../appLocale.js";
 import type { Locale } from "../locale.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -123,27 +125,17 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
         {updatedAt ? c.server.lastBackup(formatDateTime(locale, updatedAt)) : c.server.noBackupYet}{" "}
         {c.server.encryptionNote}
       </p>
-      <button
-        type="button"
-        className="btn btn-primary"
-        disabled={busy || erasing}
-        onClick={() => void upload(false)}
-      >
+      <Button variant="primary" disabled={busy || erasing} onClick={() => void upload(false)}>
         {busy ? c.common.busy : c.server.backupNowButton}
-      </button>
+      </Button>
       {conflict && (
         <>
           <p role="alert" className="text-warn">
             {c.server.conflict.message(formatDateTime(locale, conflict))}
           </p>
-          <button
-            type="button"
-            className="btn"
-            disabled={busy || erasing}
-            onClick={() => void upload(true)}
-          >
+          <Button disabled={busy || erasing} onClick={() => void upload(true)}>
             {c.server.conflict.overwriteButton}
-          </button>
+          </Button>
         </>
       )}
       {message && <p>{message}</p>}
@@ -155,9 +147,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       {serverBlob && (
         <p>
           {c.server.restoreFromServer.prompt}{" "}
-          <button
-            type="button"
-            className="btn"
+          <Button
             onClick={() => {
               const url = URL.createObjectURL(
                 new Blob([serializeBackup(serverBlob)], { type: "application/json" }),
@@ -170,14 +160,12 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             }}
           >
             {c.server.restoreFromServer.button}
-          </button>
+          </Button>
         </p>
       )}
       {!confirmErase && (
         <p>
-          <button
-            type="button"
-            className="btn"
+          <Button
             disabled={busy || erasing}
             onClick={() => {
               setConfirmErase(true);
@@ -186,7 +174,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             }}
           >
             {c.server.erase.button}
-          </button>
+          </Button>
         </p>
       )}
       {confirmErase && (
@@ -194,22 +182,12 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
           <p role="alert" className="text-warn">
             {c.server.erase.warning}
           </p>
-          <button
-            type="button"
-            className="btn"
-            disabled={busy || erasing}
-            onClick={() => void eraseData()}
-          >
+          <Button disabled={busy || erasing} onClick={() => void eraseData()}>
             {erasing ? c.common.busy : c.server.erase.confirmButton}
-          </button>{" "}
-          <button
-            type="button"
-            className="btn"
-            disabled={busy || erasing}
-            onClick={() => setConfirmErase(false)}
-          >
+          </Button>{" "}
+          <Button disabled={busy || erasing} onClick={() => setConfirmErase(false)}>
             {c.server.erase.cancelButton}
-          </button>
+          </Button>
         </>
       )}
       {eraseMessage && <p>{eraseMessage}</p>}
@@ -272,14 +250,14 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
   }
 
   return (
-    <section className="card" aria-label={c.ariaLabel}>
+    <Card as="section" aria-label={c.ariaLabel}>
       <h2>{c.title}</h2>
 
       <h3>{c.download.title}</h3>
       <p>{c.download.description}</p>
-      <button type="button" className="btn btn-primary" onClick={handleDownload}>
+      <Button variant="primary" onClick={handleDownload}>
         {c.download.button}
-      </button>
+      </Button>
 
       <ServerBackup storage={storage} />
 
@@ -321,14 +299,14 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
           </p>
         )}
         {restored && <p>{c.restore.success}</p>}
-        <button
+        <Button
           type="submit"
-          className="btn btn-primary"
+          variant="primary"
           disabled={busy || !file || pass.length === 0 || !confirmed}
         >
           {c.restore.submitButton}
-        </button>
+        </Button>
       </form>
-    </section>
+    </Card>
   );
 }

@@ -14,6 +14,8 @@ import { formatEuroIn, localeTag } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
 import "../styles/views.css";
 
 /* Punten — the hand-kept side of the money picture.
@@ -516,7 +518,7 @@ export default function Punten({
   }
 
   return (
-    <section className="card" aria-label={c.header.ariaLabel}>
+    <Card as="section" aria-label={c.header.ariaLabel}>
       <div
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
         data-testid="view-head"
@@ -617,22 +619,12 @@ export default function Punten({
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
                       />
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy}
-                        onClick={() => submitAsk(b.id)}
-                      >
+                      <Button variant="primary" disabled={busy} onClick={() => submitAsk(b.id)}>
                         {c.card.askSave}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={busy}
-                        onClick={() => setAsk(null)}
-                      >
+                      </Button>
+                      <Button disabled={busy} onClick={() => setAsk(null)}>
                         {c.card.askCancel}
-                      </button>
+                      </Button>
                     </div>
                     {asking.error ? (
                       <p className="mt-2 mb-0 text-[0.82rem] text-neg" data-testid="punt-error">
@@ -796,9 +788,9 @@ export default function Punten({
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
+          <Button variant="primary" disabled={busy} onClick={add}>
             {existing ? c.addForm.submitOverwrite : c.addForm.submitSave}
-          </button>
+          </Button>
         </div>
         {addError ? (
           <p className="mt-2 text-[0.82rem] text-neg" data-testid="punt-error">
@@ -806,6 +798,6 @@ export default function Punten({
           </p>
         ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { streamChat } from "../api.js";
 import { getChatEnabled, setChatEnabled } from "../settings.js";
+import Button from "./ui/Button.js";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
@@ -156,9 +157,9 @@ export default function ChatWidget({
                   jouw sleutel) om te antwoorden. Voor actuele cijfers zoek ik op het web. Er wordt
                   niets opgeslagen.
                 </p>
-                <button type="button" className="btn btn-primary" onClick={enableAssistant}>
+                <Button variant="primary" onClick={enableAssistant}>
                   Zet assistent aan
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -190,14 +191,9 @@ export default function ChatWidget({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onKeyDown}
                 />
-                <button
-                  type="button"
-                  className="btn btn-primary chat-send"
-                  disabled={!canSend}
-                  onClick={send}
-                >
+                <Button variant="primary" className="chat-send" disabled={!canSend} onClick={send}>
                   Verstuur
-                </button>
+                </Button>
               </div>
             </>
           )}

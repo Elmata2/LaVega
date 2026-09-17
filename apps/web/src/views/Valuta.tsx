@@ -37,6 +37,7 @@ import { optimiseCopy, formatPercentIn } from "../copy/optimise.js";
 import type { ValutaCopy } from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
 import catalogue from "../../../../docs/catalog/catalog.json";
+import Button from "../components/ui/Button.js";
 import "../styles/views.css";
 
 /* Valuta — "Transfer money": from where, to where, how much, and what ARRIVES.
@@ -1026,14 +1027,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     de module die hier stond; die kop is weg, en een knop hoort toch
                     bij de lijst waarin je de andere keuze maakte. */}
                 {pickedBank && auto && pickedBank !== auto.key && (
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ marginBottom: "var(--sp-3)" }}
-                    onClick={() => setPickedBank(null)}
-                  >
+                  <Button style={{ marginBottom: "var(--sp-3)" }} onClick={() => setPickedBank(null)}>
                     {c.bankList.backToBest}
-                  </button>
+                  </Button>
                 )}
                 <ul className="travel-journeys">
                   {visible.map((r) => (
@@ -1049,14 +1045,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   ))}
                 </ul>
                 {hidden > 0 && (
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ marginTop: "var(--sp-3)" }}
-                    onClick={() => setShowAll(true)}
-                  >
+                  <Button style={{ marginTop: "var(--sp-3)" }} onClick={() => setShowAll(true)}>
                     {hidden === 1 ? c.bankList.showMoreOne(hidden) : c.bankList.showMoreMany(hidden)}
-                  </button>
+                  </Button>
                 )}
                 {/* Wat de lijst wél en niet beweert. Stond achter een eigen ⓘ in de
                     modulekop; dat was een tweede uitklapper voor tekst die over deze

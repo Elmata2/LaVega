@@ -27,6 +27,8 @@ import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, categoryLabel } from "../copy/money";
 import { getAiCategorizeEnabled, setAiCategorizeEnabled, type ConversionMode } from "../settings";
 import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
 
 /* Which UnknownReason maps to which moneyCopy.transacties.reason entry, and
  * whether the AI pass can help with that reason. The `ai` flag stays local —
@@ -253,7 +255,7 @@ export default function Transacties({
   }
 
   return (
-    <section className="card" aria-label={c.transacties.heading}>
+    <Card as="section" aria-label={c.transacties.heading}>
       <h2 style={{ margin: 0 }}>{c.transacties.heading}</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
@@ -293,9 +295,8 @@ export default function Transacties({
                   : c.transacties.toonAlleenOnbekend}
               </button>
               {configured && batch.items.length > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
+                <Button
+                  variant="primary"
                   onClick={onCategorizeClick}
                   aria-label={c.transacties.laatDeAiLezenAria}
                 >
@@ -303,7 +304,7 @@ export default function Transacties({
                       there are. The batch is capped at 200 per request. */}
                   {c.transacties.laatDeAiZeLezen}
                   {c.transacties.batchCountSuffix(batch.items.length, unknown.count)}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -345,12 +346,10 @@ export default function Transacties({
             <strong>{c.transacties.consentStrong}</strong>
             {c.transacties.consentAfter}
           </p>
-          <button type="button" className="btn btn-primary" onClick={enableAndRun}>
+          <Button variant="primary" onClick={enableAndRun}>
             {c.transacties.aanzettenEnCategoriseren}
-          </button>{" "}
-          <button type="button" className="btn" onClick={() => setAiPhase("idle")}>
-            {c.transacties.annuleer}
-          </button>
+          </Button>{" "}
+          <Button onClick={() => setAiPhase("idle")}>{c.transacties.annuleer}</Button>
         </div>
       )}
 
@@ -411,12 +410,10 @@ export default function Transacties({
               {aiNote}
             </p>
           )}
-          <button type="button" className="btn btn-primary" onClick={() => void applyReview()}>
+          <Button variant="primary" onClick={() => void applyReview()}>
             {c.transacties.toepassen}
-          </button>{" "}
-          <button type="button" className="btn" onClick={cancelReview}>
-            {c.transacties.annuleer}
-          </button>
+          </Button>{" "}
+          <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
         </div>
       )}
       {/* Task-1 scope fix: with a top-bar entity scope active, this dropdown
@@ -537,6 +534,6 @@ export default function Transacties({
           </table>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
