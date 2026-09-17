@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -46,6 +46,32 @@ await exec(
   ],
   execOptions,
 );
+
+/* THE AGENT PROMPTS ARE DATA, AND esbuild DOES NOT SHIP DATA.
+ *
+ * Every agent's instructions live in Markdown next to prompts.ts, which reads
+ * them at runtime with readFileSync against a directory derived from
+ * import.meta.url. Bundled, that resolves to this function directory — and
+ * nothing was putting the Markdown here, so every readFileSync threw, prompts.ts
+ * swallowed it (`catch { return "" }`) and EVERY agent in production ran with an
+ * empty system prompt. Invoice extraction, chat, categorize, travel.
+ *
+ * It was invisible from every angle that gets checked: local dev runs from
+ * source so the files are always there, the unit tests read the same source
+ * tree, and the failure produces a plausible-looking answer rather than an
+ * error. Found 17 Sep 2026 when an invoice extraction came back with every
+ * field blank.
+ *
+ * The assertion below is the point, not the copy: if this ever stops landing,
+ * the build fails here instead of the agents quietly going stupid. */
+await cp(`${root}/apps/server/src/agent/prompts`, `${functionDir}/prompts`, { recursive: true });
+{
+  const shipped = (await readdir(`${functionDir}/prompts`)).filter((f) => f.endsWith(".md"));
+  if (shipped.length === 0) throw new Error("vercel-build: no agent prompts shipped");
+  for (const required of ["_base.md", "facturen-extract.md"])
+    if (!shipped.includes(required))
+      throw new Error(`vercel-build: ${required} did not ship into the function`);
+}
 
 /* Nothing is left external: the function ships no node_modules of its own, so
  * anything not inlined here would only fail at runtime. */
