@@ -5,14 +5,28 @@ import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
 import { MISTRAL_SMALL } from "./models.js";
 
-/** The seven fields we ask the model to pull off one invoice. */
+/* WHAT IS PRINTED, NOT WHO THE OWNER IS.
+ *
+ * This used to carry `counterparty` and `direction`, both defined relative to
+ * the owner — and this agent is deliberately never told who the owner is. So
+ * the model guessed, identically on every model measured (17 Sep 2026,
+ * mistral-small and mistral-medium): always `direction: "out"`, always the
+ * issuer as counterparty. Correct for a bill received, wrong for every invoice
+ * he sends, and wrong in the direction that books revenue as cost.
+ *
+ * Both fields now come out of apps/web/src/invoiceParty.ts, against accounts
+ * and entity labels that never leave the browser. */
 export type ExtractedInvoice = {
-  counterparty: string;
+  /** The party that issued the invoice and is owed the money, as printed. */
+  seller: string;
+  /** The party that must pay it, as printed. */
+  buyer: string;
+  /** The IBAN to pay into, when the document prints one. */
+  payeeIban?: string;
   amount: number;
   currency: string;
   issueDate: string;
   dueDate: string;
-  direction: "in" | "out";
   vatAmount?: number;
 };
 
@@ -105,14 +119,20 @@ export async function extractInvoiceFields(
   if (!parsed || typeof parsed !== "object") throw new Error("geen extractie");
 
   const f = parsed as Record<string, unknown>;
+  /* Number(), then a finiteness check. `Number("1.234,56")` is NaN, not 0, and
+   * `?? 0` never fires for it because NaN is not null — so a model that answers
+   * with a formatted string used to put NaN straight into the amount field. */
+  const amount = Number(f.amount ?? 0);
+  const vat = Number(f.vatAmount);
   const fields: ExtractedInvoice = {
-    counterparty: String(f.counterparty ?? ""),
-    amount: Number(f.amount ?? 0),
+    seller: String(f.seller ?? ""),
+    buyer: String(f.buyer ?? ""),
+    payeeIban: typeof f.payeeIban === "string" && f.payeeIban.trim() ? f.payeeIban.trim() : undefined,
+    amount: Number.isFinite(amount) ? amount : 0,
     currency: String(f.currency ?? "EUR"),
     issueDate: String(f.issueDate ?? ""),
     dueDate: String(f.dueDate ?? f.issueDate ?? ""),
-    direction: f.direction === "in" ? "in" : "out",
-    vatAmount: typeof f.vatAmount === "number" ? f.vatAmount : undefined,
+    vatAmount: Number.isFinite(vat) ? vat : undefined,
   };
   // The model's OWN self-reported certainty (0..1), or null when it gave none —
   // we never fabricate a number, so the UI only shows a percentage it actually

@@ -25,12 +25,13 @@ test("a PDF input is OCR'd first, and the OCR markdown (not input.text) reaches 
   ocrMock.mockResolvedValue({ markdown: "factuur van ACME", pages: 1 });
   completeMock.mockResolvedValue({
     text: JSON.stringify({
-      counterparty: "ACME BV",
+      seller: "ACME BV",
+      buyer: "Steunenberg Holding BV",
+      payeeIban: "NL02 INGB 0123 4567 89",
       amount: 121,
       currency: "EUR",
       issueDate: "2026-07-01",
       dueDate: "2026-07-31",
-      direction: "in",
       vatAmount: 21,
       confidence: 0.9,
     }),
@@ -41,12 +42,13 @@ test("a PDF input is OCR'd first, and the OCR markdown (not input.text) reaches 
 
   expect(res).toEqual({
     fields: {
-      counterparty: "ACME BV",
+      seller: "ACME BV",
+      buyer: "Steunenberg Holding BV",
+      payeeIban: "NL02 INGB 0123 4567 89",
       amount: 121,
       currency: "EUR",
       issueDate: "2026-07-01",
       dueDate: "2026-07-31",
-      direction: "in",
       vatAmount: 21,
     },
     confidence: 0.9, // the model's own self-reported value, passed through
@@ -104,13 +106,55 @@ test("onUsage still fires with the OCR page count when a blank/unreadable scan t
   expect(onUsage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, pages: 2 });
 });
 
+/* A EUROPEAN AMOUNT AS A STRING USED TO BECOME NaN, NOT ZERO.
+ *
+ * `Number("1.234,56")` is NaN, and `f.amount ?? 0` never fires for it, because
+ * NaN is not null. So the old coercion put NaN into `amount`, the browser did
+ * `String(NaN)` into the form, and the field read "NaN". The model is asked for
+ * a plain number and normally gives one — this is the guard for when it does
+ * not, and it must land on a value the form can refuse, not on NaN. */
+test("an unparseable amount lands on 0 rather than NaN", async () => {
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({
+      seller: "X",
+      buyer: "Y",
+      amount: "1.234,56",
+      vatAmount: "n.v.t.",
+      issueDate: "2026-01-02",
+    }),
+    usage: { input: 0, output: 0 },
+  });
+  const { fields } = await extractInvoiceFields({ text: "t" }, "k");
+  expect(Number.isNaN(fields.amount)).toBe(false);
+  expect(fields.amount).toBe(0);
+  expect(fields.vatAmount).toBeUndefined();
+});
+
+/* The IBAN comes back as printed, spaces and all — invoiceParty.ts normalises
+ * it. A blank or whitespace-only value is dropped rather than forwarded as "",
+ * because an empty string would read as "the document printed an IBAN". */
+test("a blank payee IBAN is dropped, a printed one is kept verbatim", async () => {
+  for (const [given, expected] of [
+    ["  ", undefined],
+    ["", undefined],
+    [" NL91 ABNA 0417 1643 00 ", "NL91 ABNA 0417 1643 00"],
+  ] as const) {
+    completeMock.mockResolvedValue({
+      text: JSON.stringify({ seller: "X", buyer: "Y", amount: 1, issueDate: "2026-01-02", payeeIban: given }),
+      usage: { input: 0, output: 0 },
+    });
+    const { fields } = await extractInvoiceFields({ text: "t" }, "k");
+    expect(fields.payeeIban, JSON.stringify(given)).toBe(expected);
+  }
+});
+
 test("a text-only input never calls ocrPdf, and input.text reaches complete()", async () => {
   completeMock.mockResolvedValue({
     text: JSON.stringify({
-      counterparty: "X",
+      seller: "X",
+      buyer: "Y",
       amount: "50",
       issueDate: "2026-01-02",
-      direction: "weird",
     }),
     usage: { input: 0, output: 0 },
   });
@@ -119,7 +163,6 @@ test("a text-only input never calls ocrPdf, and input.text reaches complete()", 
 
   expect(ocrMock).not.toHaveBeenCalled();
   expect(completeMock.mock.calls[0][0].user).toBe("Factuurtekst:\nfactuurtekst");
-  expect(fields.direction).toBe("out"); // anything other than "in"
   expect(fields.dueDate).toBe("2026-01-02"); // fell back to issueDate
   expect(fields.currency).toBe("EUR"); // default
   expect(fields.amount).toBe(50); // Number("50")

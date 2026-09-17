@@ -7,12 +7,12 @@ import { recordUsage, resetBudgetMemory } from "./agent/budget.js";
 
 const FAKE_RESULT: { fields: ExtractedInvoice; confidence: number } = {
   fields: {
-    counterparty: "Acme BV",
+    seller: "Acme BV",
+    buyer: "Steunenberg Holding BV",
     amount: 121,
     currency: "EUR",
     issueDate: "2026-01-01",
     dueDate: "2026-01-31",
-    direction: "out",
     vatAmount: 21,
   },
   confidence: 0.9,

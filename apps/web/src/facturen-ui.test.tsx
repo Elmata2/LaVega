@@ -50,6 +50,7 @@ function Harness({
   return (
     <Facturen
       entities={entities}
+      ownIbans={[]}
       invoices={invoices}
       txs={[]}
       asOf="2026-08-16"

@@ -18,6 +18,7 @@ import Badge from "../components/ui/Badge.js";
 import Button, { buttonVariants } from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import { resolveInvoiceParties } from "../invoiceParty.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import {
   addHandledInvoiceMessageIds,
@@ -95,12 +96,20 @@ import "../styles/views.css";
  *  The browser only ever talks to our server — never api.mistral.ai. */
 type ExtractResponse = {
   fields: {
-    counterparty: string;
+    /* WHAT IS PRINTED, not who the owner is. The agent used to answer
+     * `counterparty` and `direction`, both of which are defined relative to
+     * him — and it is deliberately never told who he is. Measured 17 Sep on
+     * mistral-small and mistral-medium: both answered "out" every time and
+     * named the issuer, so every invoice he SENT booked as a cost. Direction
+     * is now decided in invoiceParty.ts, against accounts and entity labels
+     * that never leave the browser. */
+    seller: string;
+    buyer: string;
+    payeeIban?: string;
     amount: number;
     currency?: string;
     issueDate: string;
     dueDate?: string;
-    direction: "in" | "out";
     vatAmount?: number;
   };
   /** The model's OWN self-reported certainty (0..1), or null when it gave none.
@@ -125,6 +134,10 @@ function fileToBase64(file: File): Promise<string> {
 
 type FacturenProps = {
   entities: string[];
+  /* IBANs of his own accounts, used ONLY to decide which side of an invoice is
+   * him (invoiceParty.ts). They never leave the browser — the extraction agent
+   * still receives nothing but the document. */
+  ownIbans: readonly string[];
   invoices: Invoice[];
   txs: Tx[];
   asOf: string;
@@ -198,6 +211,7 @@ export function holdSentence(c: AdminCopy["facturen"], hold: AutoBookHold): stri
 
 export default function Facturen({
   entities,
+  ownIbans,
   invoices,
   txs,
   busy,
@@ -214,7 +228,11 @@ export default function Facturen({
   const [locale] = useAppLocale();
   const c = adminCopy[locale].facturen;
   const [entity, setEntity] = useState(defaultEntity);
-  const [direction, setDirection] = useState<Invoice["direction"]>("out");
+  /* `""` is "we could not tell", and it is reachable only from an extraction
+   * where neither party matched something of his. The manual form still opens
+   * on "out", which is what a person typing an invoice by hand almost always
+   * means. */
+  const [direction, setDirection] = useState<Invoice["direction"] | "">("out");
   const [counterparty, setCounterparty] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [issueDate, setIssueDate] = useState("");
@@ -620,6 +638,7 @@ export default function Facturen({
     const ccy = currency.trim().toUpperCase();
     // Refuse, and SAY why. Each of these was previously a silent no-op.
     if (!cp) return setManualError(c.manualErrors.missingCounterparty);
+    if (!direction) return setManualError(c.manualErrors.missingDirection);
     if (!issueDate) return setManualError(c.manualErrors.missingIssueDate);
     if (!dueDate) return setManualError(c.manualErrors.missingDueDate);
     if (!Number.isFinite(amt) || amt <= 0) return setManualError(c.manualErrors.missingAmount);
@@ -783,8 +802,16 @@ export default function Facturen({
         return;
       }
       const { fields, confidence } = (await res.json()) as ExtractResponse;
-      setDirection(fields.direction);
-      setCounterparty(fields.counterparty);
+      /* The model read the page; this decides what it means for HIM. An
+       * unresolved case leaves the direction empty on purpose — handleAdd
+       * refuses to book until he picks one, exactly as it does for a currency
+       * it could not read. */
+      const party = resolveInvoiceParties(
+        { seller: fields.seller, buyer: fields.buyer, payeeIban: fields.payeeIban },
+        { ibans: ownIbans, entityNames: entities },
+      );
+      setDirection(party.kind === "unknown" ? "" : party.kind === "sales" ? "in" : "out");
+      setCounterparty(party.counterparty);
       setIssueDate(fields.issueDate);
       setDueDate(fields.dueDate || fields.issueDate);
       setAmount(String(fields.amount));
@@ -925,8 +952,19 @@ export default function Facturen({
                   value={direction}
                   disabled={busy}
                   aria-label={c.forms.manual.directionAriaLabel}
-                  onChange={(e) => setDirection(e.target.value as Invoice["direction"])}
+                  /* Narrowed, not cast. The option list can yield "" while the
+                     direction is unresolved, so `as Invoice["direction"]` was
+                     telling the compiler something untrue — harmless today only
+                     because handleAdd refuses an empty direction, which is a
+                     runtime guard standing in for a type. */
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDirection(v === "in" || v === "out" ? v : "");
+                  }}
                 >
+                  {/* Present only while unresolved, so the list cannot be put
+                      back into "unknown" by hand once he has answered. */}
+                  {!direction && <option value="">{c.directionOptions.unset}</option>}
                   <option value="out">{c.directionOptions.out}</option>
                   <option value="in">{c.directionOptions.in}</option>
                 </select>

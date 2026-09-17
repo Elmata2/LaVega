@@ -109,11 +109,16 @@ type FacturenCopy = {
 
   /** Shared <option> labels for Invoice["direction"] — same enum, same two
    *  labels, rendered both in the manual form and in each n8n queue row. */
-  directionOptions: { out: string; in: string };
+  /* `unset` is the option shown when neither party on the document matched one
+   * of his own accounts or entities. It is a real state, not a placeholder:
+   * until 17 Sep the extractor guessed "out" here and booked sales invoices as
+   * costs. See invoiceParty.ts. */
+  directionOptions: { out: string; in: string; unset: string };
 
   /** handleAdd()'s five refusal messages, in the order they're checked. */
   manualErrors: {
     missingCounterparty: string;
+    missingDirection: string;
     missingIssueDate: string;
     missingDueDate: string;
     missingAmount: string;
@@ -694,10 +699,16 @@ const nlFacturen: FacturenCopy = {
     },
   },
 
-  directionOptions: { out: "Uitgaand (inkoop)", in: "Inkomend (verkoop)" },
+  directionOptions: {
+    out: "Uitgaand (inkoop)",
+    in: "Inkomend (verkoop)",
+    unset: "— kies zelf —",
+  },
 
   manualErrors: {
     missingCounterparty: "Vul een relatie in.",
+    missingDirection:
+      "Kies of dit een inkoop- of verkoopfactuur is. LaVega kon het niet van de factuur aflezen.",
     missingIssueDate: "Vul een factuurdatum in.",
     missingDueDate: "Vul een vervaldatum in.",
     missingAmount: "Vul een geldig bedrag in — zonder bedrag wordt er niets geboekt.",
@@ -1310,10 +1321,16 @@ const enFacturen: FacturenCopy = {
     },
   },
 
-  directionOptions: { out: "Outgoing (purchase)", in: "Incoming (sales)" },
+  directionOptions: {
+    out: "Outgoing (purchase)",
+    in: "Incoming (sales)",
+    unset: "— pick one —",
+  },
 
   manualErrors: {
     missingCounterparty: "Enter a counterparty.",
+    missingDirection:
+      "Choose whether this is a purchase or a sales invoice. LaVega could not read it off the document.",
     missingIssueDate: "Enter an invoice date.",
     missingDueDate: "Enter a due date.",
     missingAmount: "Enter a valid amount — without an amount nothing gets booked.",
