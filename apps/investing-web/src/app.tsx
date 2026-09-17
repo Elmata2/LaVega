@@ -34,32 +34,15 @@ import {
   type PortfolioAgentDefinition,
   type PortfolioAgentInsight,
 } from "./lib/portfolioAgents";
+import { type PriceSyncProgress } from "./lib/priceSync";
 import {
-  DASHBOARD_REFRESH_EVENT,
-  runPriceSyncUntilComplete,
-  type PriceSyncProgress,
-} from "./lib/priceSync";
-
-const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
+  continuePriceSync,
+  startBrokerSync,
+  useSyncSession,
+  type BrokerProgress,
+} from "./lib/syncSession";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
-
-function brokerSyncActive(status?: BrokerProgress["status"]): boolean {
-  return status === "running" || status === "waiting";
-}
-
-function priceSyncActive(status?: PriceProgress["status"]): boolean {
-  return status === "running" || status === "waiting" || status === "paused";
-}
-
-function notifyBrokerSyncStarted() {
-  window.dispatchEvent(new Event(BROKER_SYNC_STARTED_EVENT));
-}
-
-/* An initial full sync takes longer than the edge timeout: Cloudflare cuts the request off after about 100 seconds with an HTML page (524) while the server keeps working. A response without JSON is therefore not a failure, and the parse error should not appear as an on-screen error. */
-async function readSyncResult(response: Response): Promise<{ problems?: string[] } | null> {
-  return (await response.json().catch(() => null)) as { problems?: string[] } | null;
-}
 
 function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
   const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
@@ -73,16 +56,6 @@ function filterVisibleSyncProblems(problems: readonly string[]): string[] {
 /* `service` only comes back from the investing server itself. Mounted on
  * lavega.dev the personal server answers /health, and it names no service. */
 type Health = { ok: boolean; service?: string };
-type BrokerProgress = {
-  status: "idle" | "running" | "waiting" | "completed" | "problem";
-  pages: number;
-  ordersRead: number;
-  positionsRead: number;
-  waitUntil: string | null;
-  remaining: number | null;
-  updatedAt: string | null;
-  message: string | null;
-};
 type PriceProgress = PriceSyncProgress;
 function DashboardLoading() {
   return (
@@ -861,76 +834,7 @@ function StatusChip({
 }
 
 function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
-  const [broker, setBroker] = useState<BrokerProgress | null>(null);
-  const [price, setPrice] = useState<PriceProgress | null>(null);
-  const [vault, setVault] = useState<"empty" | "locked" | "unlocked" | "unknown">("unknown");
-  const refreshedPriceRun = useRef<string | null>(null);
-  useEffect(() => {
-    let current = true;
-    let timer: number | null = null;
-    const clearTimer = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = null;
-    };
-    const load = async () => {
-      const [brokerResult, priceResult, vaultResult] = await Promise.allSettled([
-        fetch("/api/brokers/sync/status").then(async (response) =>
-          response.ok ? ((await response.json()) as BrokerProgress) : null,
-        ),
-        fetch("/api/prices/sync/status").then(async (response) =>
-          response.ok ? ((await response.json()) as PriceProgress) : null,
-        ),
-        fetch("/api/brokers/credentials/status").then(async (response) =>
-          response.ok ? ((await response.json()) as { status?: string }) : null,
-        ),
-      ]);
-      if (!current) return;
-      let active = false;
-      if (
-        brokerResult.status === "fulfilled" &&
-        brokerResult.value &&
-        ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)
-      ) {
-        setBroker(brokerResult.value);
-        active = active || brokerSyncActive(brokerResult.value.status);
-      }
-      if (
-        priceResult.status === "fulfilled" &&
-        priceResult.value &&
-        ["idle", "running", "waiting", "paused", "completed", "problem"].includes(
-          priceResult.value.status,
-        )
-      ) {
-        setPrice(priceResult.value);
-        active = active || priceSyncActive(priceResult.value.status);
-        if (
-          (priceResult.value.status === "completed" || priceResult.value.status === "problem") &&
-          priceResult.value.updatedAt &&
-          refreshedPriceRun.current !== priceResult.value.updatedAt
-        ) {
-          refreshedPriceRun.current = priceResult.value.updatedAt;
-          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        }
-      }
-      if (
-        vaultResult.status === "fulfilled" &&
-        ["empty", "locked", "unlocked"].includes(vaultResult.value?.status ?? "")
-      )
-        setVault(vaultResult.value!.status as "empty" | "locked" | "unlocked");
-      if (active) timer = window.setTimeout(load, 1_000);
-    };
-    const wake = () => {
-      clearTimer();
-      void load();
-    };
-    void load();
-    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    return () => {
-      current = false;
-      clearTimer();
-      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    };
-  }, []);
+  const { broker, price, priceProblem, vault } = useSyncSession();
   const brokerValue =
     broker?.status === "running"
       ? "In progress"
@@ -943,8 +847,9 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
             : broker?.status === "idle"
               ? "Ready"
               : "Unknown";
-  const priceValue =
-    price?.status === "running" || price?.status === "paused"
+  const priceValue = priceProblem
+    ? "Incomplete"
+    : price?.status === "running" || price?.status === "paused"
       ? `${price.completed} of ${price.total} loaded`
       : price?.status === "waiting"
         ? "Waiting"
@@ -990,15 +895,17 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
         <StatusChip
           label="Price history"
           value={priceValue}
-          tone={statusTone(price?.status)}
+          tone={priceProblem ? "problem" : statusTone(price?.status)}
           detail={
-            price?.status === "running" || price?.status === "paused"
-              ? price.currentSymbol
-                ? `${price.currentSymbol} is loading`
-                : `${price.remainingSymbols.length} symbols remaining`
-              : price?.status === "problem"
-                ? `${price.problems.length} symbol problems; cache remains available`
-                : undefined
+            priceProblem
+              ? priceProblem
+              : price?.status === "running" || price?.status === "paused"
+                ? price.currentSymbol
+                  ? `${price.currentSymbol} is loading`
+                  : `${price.remainingSymbols.length} symbols remaining`
+                : price?.status === "problem"
+                  ? `${price.problems.length} symbol problems; cache remains available`
+                  : undefined
           }
         />
         <StatusChip
@@ -1034,12 +941,9 @@ function AppOpenSync() {
   const [consentBusy, setConsentBusy] = useState(false);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
-      notifyBrokerSyncStarted();
-      const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
-      const brokerResult = await readSyncResult(brokerResponse);
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+      const brokerResult = await startBrokerSync();
       if (current()) setProblems(filterVisibleSyncProblems(brokerResult?.problems ?? []));
-      const priceProblems = await runPriceSyncUntilComplete(current);
+      const priceProblems = await continuePriceSync();
       if (current() && priceProblems.length > 0)
         setProblems((existing) => [...existing, ...priceProblems]);
     } catch {
@@ -1247,14 +1151,10 @@ function BrokerSyncAction() {
     setStatus("loading");
     setProblems([]);
     try {
-      notifyBrokerSyncStarted();
-      const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const result = (await response.json()) as { problems?: string[] };
-      if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker sync failed.");
-      const nextProblems = filterVisibleSyncProblems(result.problems ?? []);
+      const result = await startBrokerSync(true);
+      const nextProblems = filterVisibleSyncProblems(result?.problems ?? []);
       setProblems(nextProblems);
       setStatus(nextProblems.length > 0 ? "error" : "success");
-      if (nextProblems.length === 0) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {
       setProblems([error instanceof Error ? error.message : "Broker sync failed."]);
       setStatus("error");
@@ -1297,44 +1197,8 @@ function BrokerSyncAction() {
 }
 
 function BrokerSyncProgressCard() {
-  const [progress, setProgress] = useState<BrokerProgress | null>(null);
+  const { broker: progress } = useSyncSession();
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    let current = true;
-    let timer: number | null = null;
-    const clearTimer = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = null;
-    };
-    const load = async () => {
-      try {
-        const response = await fetch("/api/brokers/sync/status");
-        if (!response.ok) return;
-        const next = (await response.json()) as Partial<BrokerProgress>;
-        if (
-          !current ||
-          !["idle", "running", "waiting", "completed", "problem"].includes(next.status ?? "")
-        )
-          return;
-        setProgress(next as BrokerProgress);
-        if (brokerSyncActive(next.status)) timer = window.setTimeout(load, 1_000);
-      } catch {
-        /* Existing sync result surfaces network errors. */
-      }
-    };
-    const wake = () => {
-      clearTimer();
-      void load();
-    };
-    void load();
-    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    return () => {
-      current = false;
-      clearTimer();
-      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    };
-  }, []);
 
   useEffect(() => {
     if (!progress?.waitUntil || progress.status !== "waiting") return;
@@ -1453,26 +1317,18 @@ function BrokerVaultUnlock() {
       if (!unlockResponse.ok)
         throw new Error(unlockResult.problems?.[0] ?? "Failed to unlock vault.");
       setPassphrase("");
-      notifyBrokerSyncStarted();
-      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await readSyncResult(syncResponse);
+      const syncResult = await startBrokerSync(true);
       if (!syncResult) {
         setVaultStatus("unlocked");
         setMessage(`Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}`);
-        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        void runPriceSyncUntilComplete();
         return;
       }
-      if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker sync failed.");
       setVaultStatus("unlocked");
       setMessage(
         (syncResult.problems ?? []).length === 0
           ? "Vault unlocked. Sync completed."
           : `Vault unlocked. ${syncResult.problems?.join(" · ")}`,
       );
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-      /* An initial sync provides the positions; the prices behind them only arrive while someone keeps asking. This page is that someone. */
-      void runPriceSyncUntilComplete();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to unlock vault.");
     } finally {
@@ -1572,9 +1428,7 @@ function BrokerCredentialForm() {
       const saveResult = (await saveResponse.json().catch(() => ({}))) as { problems?: string[] };
       if (!saveResponse.ok)
         throw new Error(saveResult.problems?.[0] ?? "Failed to save credentials.");
-      notifyBrokerSyncStarted();
-      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await readSyncResult(syncResponse);
+      const syncResult = await startBrokerSync(true);
       if (!syncResult) {
         setStatus("success");
         setMessage(`Credentials saved. ${SYNC_BACKGROUND_MESSAGE}`);
@@ -1582,13 +1436,12 @@ function BrokerCredentialForm() {
         setQueryId("");
         setSecret("");
         setPassphrase("");
-        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
         return;
       }
       const blocking = (syncResult.problems ?? []).filter(
         (problem) => !otherBrokerUnconfigured(problem, broker),
       );
-      if (!syncResponse.ok || blocking.length > 0)
+      if (blocking.length > 0)
         throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker sync failed.");
       setStatus("success");
       setMessage("Credentials saved. Sync completed.");
@@ -1596,7 +1449,6 @@ function BrokerCredentialForm() {
       setQueryId("");
       setSecret("");
       setPassphrase("");
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Failed to connect broker.");

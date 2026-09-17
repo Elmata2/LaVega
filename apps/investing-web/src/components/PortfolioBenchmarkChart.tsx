@@ -7,7 +7,7 @@ import {
   type PortfolioRange,
   type PortfolioValuePoint,
 } from "@lavega/core";
-import { runPriceSyncUntilComplete } from "../lib/priceSync";
+import { continuePriceSync } from "../lib/syncSession";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
@@ -163,7 +163,7 @@ export function PortfolioBenchmarkChart({
       );
       window.dispatchEvent(new Event("lavega:dashboard-refresh"));
       /* A newly chosen benchmark has no prices yet. The server only fetches them while a request is in flight, so the page asks for them. */
-      await runPriceSyncUntilComplete();
+      await continuePriceSync();
     } catch (error) {
       setSelectionError(error instanceof Error ? error.message : "Failed to save selection");
     } finally {

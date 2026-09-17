@@ -14,6 +14,8 @@ export const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
 /* Per call the server handles as many symbols as time allows and queues the rest; work that continues after the response does not survive a serverless function. "paused" therefore means: not done yet, ask again. The limit is an emergency brake, not an expectation — each round is shorter than the previous one because already fetched symbols are skipped. */
 const MAX_ROUNDS = 40;
+export const PRICE_SYNC_EXHAUSTED_MESSAGE =
+  "Price history is still loading after 40 rounds. Start sync again to continue.";
 
 /* A round can be cut off before the server answers: Cloudflare closes a request after about 100 seconds (524) while the server keeps working and simply writes away its progress. Asking again picks up that progress. If it keeps failing, it is not a cutoff but an outage. */
 const MAX_INTERRUPTIONS = 3;
@@ -46,5 +48,5 @@ export async function runPriceSyncUntilComplete(
       ? progress.problems
       : [];
   }
-  return [];
+  return [PRICE_SYNC_EXHAUSTED_MESSAGE];
 }

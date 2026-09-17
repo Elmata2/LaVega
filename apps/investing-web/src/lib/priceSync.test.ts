@@ -1,6 +1,5 @@
-// @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { runPriceSyncUntilComplete } from "./priceSync";
+import { PRICE_SYNC_EXHAUSTED_MESSAGE, runPriceSyncUntilComplete } from "./priceSync";
 
 const progress = (status: string, extra: Record<string, unknown> = {}) =>
   new Response(
@@ -83,4 +82,12 @@ test("a server that keeps failing is reported rather than hammered", async () =>
     "Price history could not be updated.",
   ]);
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test("reports when bounded continuation cannot finish", async () => {
+  const fetchMock = vi.fn(() => Promise.resolve(progress("paused")));
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual([PRICE_SYNC_EXHAUSTED_MESSAGE]);
+  expect(fetchMock).toHaveBeenCalledTimes(40);
 });
