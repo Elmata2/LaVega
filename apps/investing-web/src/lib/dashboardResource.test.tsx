@@ -151,6 +151,39 @@ test("a refresh failure after a valid response keeps the data and reports the er
   root.unmount();
 });
 
+test("a symbol refresh failure keeps symbol data visible", async () => {
+  const first = deferred<Response>();
+  const second = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => (vi.mocked(fetch).mock.calls.length === 1 ? first.promise : second.promise)),
+  );
+  const states: DashboardState[] = [];
+  const { root, Probe } = mount("AAA", states);
+  await act(async () => {
+    root.render(<Probe querySymbol="AAA" />);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    first.resolve(new Response(JSON.stringify(dashboardWithVersion(1))));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(states.at(-1)!.status).toBe("ready");
+
+  await act(async () => {
+    window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    second.resolve(new Response("", { status: 503 }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const finalState = states.at(-1)!;
+  expect(finalState.status).toBe("ready");
+  expect(finalState.status === "ready" && finalState.data.dataVersion).toBe(1);
+  expect(finalState.status === "ready" && finalState.refreshError).toBeTruthy();
+  root.unmount();
+});
+
 test("a payload missing a required field is rejected instead of crashing the page", async () => {
   const { benchmarks: _benchmarks, ...withoutBenchmarks } = dashboardWithVersion(1);
   vi.stubGlobal(

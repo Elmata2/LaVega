@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { PORTFOLIO_RANGES, type InvestingDashboardData, type PortfolioRange } from "@lavega/core";
+import {
+  PORTFOLIO_RANGES,
+  type Allocation,
+  type InvestingDashboardData,
+  type PortfolioRange,
+} from "@lavega/core";
 import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
 
 export type DashboardState =
@@ -15,8 +20,18 @@ function isPortfolioRanges(value: unknown): value is Record<PortfolioRange, unkn
   return isRecord(value) && PORTFOLIO_RANGES.every((range) => Array.isArray(value[range]));
 }
 
-function isAllocation(value: unknown): boolean {
+function isAllocation(value: unknown): value is { buckets: unknown[]; unpriced: unknown[] } {
   return isRecord(value) && Array.isArray(value.buckets) && Array.isArray(value.unpriced);
+}
+
+function isAllocationBucket(value: unknown): value is Allocation["buckets"][number] {
+  return (
+    isRecord(value) &&
+    typeof value.key === "string" &&
+    typeof value.label === "string" &&
+    (typeof value.value === "number" || value.value === null) &&
+    typeof value.unpriced === "boolean"
+  );
 }
 
 /** Decodes the network contract; rejects a payload missing a required field. */
@@ -45,11 +60,22 @@ function normalizeDashboardData(data: InvestingDashboardData): InvestingDashboar
     InvestingDashboardData["portfolio"][PortfolioRange]
   >;
   for (const range of PORTFOLIO_RANGES) portfolio[range] = data.portfolio[range].filter(isRecord);
+  const normalizeAllocation = (allocation: {
+    buckets: unknown[];
+    unpriced: unknown[];
+  }): Allocation => ({
+    buckets: allocation.buckets.filter(isAllocationBucket),
+    unpriced: allocation.unpriced.filter((entry): entry is string => typeof entry === "string"),
+  });
   return {
     ...data,
     portfolio,
     benchmarks: data.benchmarks.filter(isRecord),
     positions: data.positions.filter(isRecord),
+    allocation: {
+      instrument: normalizeAllocation(data.allocation.instrument),
+      entity: normalizeAllocation(data.allocation.entity),
+    },
   };
 }
 
@@ -80,14 +106,16 @@ export function useDashboard(symbol?: string): DashboardState {
     const queryChanged = queryRef.current !== symbol;
     queryRef.current = symbol;
     let cancelled = false;
+    let queryChangedForNextLoad = queryChanged;
     let activeController: AbortController | null = null;
     const load = () => {
       activeController?.abort();
       const controller = new AbortController();
       activeController = controller;
       setState((previous) =>
-        !queryChanged && previous.status === "ready" ? previous : { status: "loading" },
+        !queryChangedForNextLoad && previous.status === "ready" ? previous : { status: "loading" },
       );
+      queryChangedForNextLoad = false;
       void fetchDashboard(symbol, controller.signal)
         .then((data) => {
           if (cancelled || controller.signal.aborted) return;
