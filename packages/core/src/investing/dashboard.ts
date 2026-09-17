@@ -14,7 +14,9 @@ import {
   brokerCostLegs,
   buildCurrentPositions,
   calculatePositionReturn,
+  valuePosition,
   type CurrentPosition,
+  type PositionPriceStatus,
   type PositionReturn,
   type PositionReturnStatus,
 } from "./positions.js";
@@ -39,6 +41,7 @@ export type InvestingPositionDetail = {
   status: "open" | "closed";
   quantity: number;
   currentValue: number | null;
+  priceStatus: PositionPriceStatus;
   dailyChange: number | null;
   dailyChangePercentage: number | null;
   currentPrice: number | null;
@@ -142,6 +145,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
   const portfolio = Object.fromEntries(
     PORTFOLIO_RANGES.map((range) => [range, filterPortfolioValueRange(portfolioValues, range)]),
   ) as Record<PortfolioRange, PortfolioValuePoint[]>;
+  const today = input.today ?? new Date().toISOString().slice(0, 10);
   const positions = buildCurrentPositions({
     positions: input.positions,
     trades: input.trades,
@@ -149,7 +153,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     priceBars: input.priceBars,
     presentationCurrency: input.presentationCurrency,
     fxRates: input.fxRates,
-    today: input.today ?? new Date().toISOString().slice(0, 10),
+    today,
   });
 
   const selected = input.selectedSymbol?.trim().toUpperCase();
@@ -178,6 +182,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
           bars: selectedBars,
           presentationCurrency: input.presentationCurrency,
           fxRates: input.fxRates,
+          today,
         })
       : null;
 
@@ -240,6 +245,7 @@ function buildPositionDetail(input: {
   bars: PriceBar[];
   presentationCurrency: string;
   fxRates: FxRates;
+  today: string;
 }): InvestingPositionDetail {
   const sourceOrderByTrade = new Map(input.trades.map((trade, index) => [trade, index]));
   const orderedTrades = orderTrades(input.trades).map((trade) => ({
@@ -263,42 +269,25 @@ function buildPositionDetail(input: {
   const snapshotQuantity = anchoredSnapshotQuantity(input.positions);
   const quantity = input.positions.length > 0 ? snapshotQuantity : reconstructedQuantity;
   const status = Math.abs(quantity) > 1e-9 ? "open" : "closed";
+  // Historical bars stay intact for the chart even when the position is
+  // unpriced today; only the valuation itself is gated on freshness.
   const bars = [...input.bars].sort((left, right) => left.date.localeCompare(right.date));
-  const latest = bars.at(-1);
-  const previous = bars.at(-2);
-  let currentPrice: number | null = null;
-  let currentValue: number | null = null;
-  let dailyChange: number | null = null;
-  let dailyChangePercentage: number | null = null;
-  if (status === "open" && latest) {
-    try {
-      currentPrice = convertCurrency(
-        latest.close,
-        latest.currency,
-        input.presentationCurrency,
-        latest.date,
-        input.fxRates,
-      );
-      currentValue = currentPrice * quantity;
-      if (previous) {
-        const priorPrice = convertCurrency(
-          previous.close,
-          previous.currency,
-          input.presentationCurrency,
-          previous.date,
-          input.fxRates,
-        );
-        dailyChange = (currentPrice - priorPrice) * quantity;
-        dailyChangePercentage =
-          Math.abs(priorPrice) <= 1e-9 ? null : (currentPrice - priorPrice) / priorPrice;
-      }
-    } catch {
-      currentPrice = null;
-      currentValue = null;
-      dailyChange = null;
-      dailyChangePercentage = null;
-    }
-  }
+  const valuation =
+    status === "open"
+      ? valuePosition({
+          quantity,
+          bars,
+          valuationDate: input.today,
+          presentationCurrency: input.presentationCurrency,
+          fxRates: input.fxRates,
+        })
+      : null;
+  const priceStatus: PositionPriceStatus = valuation?.status ?? "unpriced";
+  const currentPrice = valuation?.price ?? null;
+  const currentValue = valuation?.value ?? null;
+  const dailyChange = valuation?.dailyChange ?? null;
+  const dailyChangePercentage = valuation?.dailyChangePercentage ?? null;
+  const latest = valuation?.latestBar ?? bars.at(-1);
   const valuationDate =
     status === "open"
       ? latest?.date
@@ -360,6 +349,7 @@ function buildPositionDetail(input: {
     status,
     quantity,
     currentValue,
+    priceStatus,
     dailyChange,
     dailyChangePercentage,
     currentPrice,
