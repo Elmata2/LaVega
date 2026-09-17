@@ -25,6 +25,7 @@ import type { GrensCopy } from "../copy/optimise.js";
 import Module from "../components/Module";
 import ToonMeer from "../components/ToonMeer";
 import Button from "../components/ui/Button.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 
 /* ── PRIVÉ EN ZAKELIJK — de grens op het scherm ─────────────────────────────
  *
@@ -431,13 +432,13 @@ export default function Grens({
           return (
             <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
               {paragraphs(copy.answerForm.explanation({ streams: unanswered.length }), "uitleg")}
-              <div className="table-wrap table-cards">
-                <table className="table">
+              <TableWrap>
+                <Table cards>
                   <thead>
                     <tr>
-                      <th>{kolomStroom}</th>
-                      <th>{kolomGemeten}</th>
-                      <th>{kolomWatWasDit}</th>
+                      <Th>{kolomStroom}</Th>
+                      <Th>{kolomGemeten}</Th>
+                      <Th>{kolomWatWasDit}</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -445,12 +446,12 @@ export default function Grens({
                       const label = `${sideLabel(s.fromEntity, s.fromScope)} → ${sideLabel(s.toEntity, s.toScope)}`;
                       return (
                         <tr key={s.key}>
-                          <td data-label={kolomStroom}>{label}</td>
-                          <td data-label={kolomGemeten}>
+                          <Td data-label={kolomStroom}>{label}</Td>
+                          <Td data-label={kolomGemeten}>
                             {formatEuroIn(locale, s.totalCents / 100)} · {s.count}× ·{" "}
                             {s.firstDate} {copy.answerForm.dateRangeSeparator} {s.lastDate}
-                          </td>
-                          <td data-label={kolomWatWasDit}>
+                          </Td>
+                          <Td data-label={kolomWatWasDit}>
                             <select
                               value={drafts[s.key] ?? ""}
                               disabled={busy}
@@ -467,13 +468,13 @@ export default function Grens({
                               <option value="dividend">{dividendLabel}</option>
                               <option value="onbekend">{onbekendLabel}</option>
                             </select>
-                          </td>
+                          </Td>
                         </tr>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                </Table>
+              </TableWrap>
               <Button variant="primary" disabled={busy} onClick={saveAnswers}>
                 {bewaarLabel}
               </Button>{" "}

@@ -44,22 +44,51 @@ function css(): string {
     .join("\n");
 }
 
-const SHEET = css().replace(/\/\*[\s\S]*?\*\//g, "");
+/* Two more bodyless statements, alongside comments, that must not reach the
+ * rule regex below: `@layer base,components;` and `@layer components;`,
+ * Vite's chunk-boundary layer-order markers with no `{}` body at all. Left
+ * in, one sits between two real rules with nothing but whitespace of its
+ * own — "…}@layer components;\n\n.\[grid-column…" — and `[^{}]+` in the rule
+ * regex greedily pulls it into the NEXT selector's capture. That selector
+ * then contains a space and `targets()`'s own combinator guard (rightly
+ * suspicious of whitespace in a selector) rejects it, so a real, matching
+ * rule for a class actually in play is silently skipped, and `resolved()`
+ * returns whatever an earlier rule for that property said instead of
+ * throwing. Reproduced directly: the same rule text with and without the
+ * bodyless statement in front of it parses to one glued selector or to the
+ * real one. Found converting styles/modules.css, on a breakpoint override
+ * that was, on direct inspection of the built CSS, correctly there. */
+const SHEET = css()
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/@layer[^{;]*;/g, "");
 
-/** The stylesheet outside any media block, plus each max-width block by width. */
+/** The stylesheet outside any media block, plus each max-width block by width.
+ *
+ * `@keyframes` is extracted and discarded alongside the non-max-width `@media`
+ * blocks. Not because a keyframes block was observed to break the parse — it
+ * was not, and it does not: a step is itself `0%{decls}`, which the rule regex
+ * below matches and resyncs on cleanly, and `0%`/`from` can never satisfy
+ * `targets()` since neither starts with a dot. It is discarded because the rule
+ * regex models exactly one nesting level and a keyframes block is a second one
+ * sitting in `base` for no reason. Hardening, not a fix. The failure that
+ * prompted this pass was the `@layer` one above.
+ */
 function scopes(source: string): { base: string; media: Map<number, string> } {
   const media = new Map<number, string>();
   let base = "";
   let i = 0;
   while (i < source.length) {
-    const at = source.indexOf("@media", i);
+    const mediaAt = source.indexOf("@media", i);
+    const framesAt = source.indexOf("@keyframes", i);
+    const at =
+      mediaAt === -1 ? framesAt : framesAt === -1 ? mediaAt : Math.min(mediaAt, framesAt);
     if (at === -1) {
       base += source.slice(i);
       break;
     }
     base += source.slice(i, at);
+    const isMedia = at === mediaAt;
     const open = source.indexOf("{", at);
-    const width = Number(/max-width:\s*(\d+)px/.exec(source.slice(at, open))?.[1] ?? NaN);
     let depth = 1;
     let j = open + 1;
     while (j < source.length && depth > 0) {
@@ -67,8 +96,11 @@ function scopes(source: string): { base: string; media: Map<number, string> } {
       else if (source[j] === "}") depth -= 1;
       j += 1;
     }
-    const body = source.slice(open + 1, j - 1);
-    if (Number.isFinite(width)) media.set(width, (media.get(width) ?? "") + body);
+    if (isMedia) {
+      const width = Number(/max-width:\s*(\d+)px/.exec(source.slice(at, open))?.[1] ?? NaN);
+      const body = source.slice(open + 1, j - 1);
+      if (Number.isFinite(width)) media.set(width, (media.get(width) ?? "") + body);
+    }
     i = j;
   }
   return { base, media };

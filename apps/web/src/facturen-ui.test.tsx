@@ -309,7 +309,7 @@ test("met meerdere ondernemingen zegt de tabel bij welke een factuur hoort", () 
     ["Holding BV", "Werk BV"],
     "Holding BV",
   );
-  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  const headers = [...c.querySelectorAll("[data-testid=table] th")].map((n) => n.textContent);
   expect(headers).toContain("Onderneming");
   expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual(
     ["Holding BV", "Werk BV"],
@@ -320,7 +320,7 @@ test("met meerdere ondernemingen zegt de tabel bij welke een factuur hoort", () 
 
 test("met één onderneming blijft die kolom weg: hij zou op elke regel hetzelfde zeggen", () => {
   const c = render([invoice("BV1", "ACME BV")]);
-  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  const headers = [...c.querySelectorAll("[data-testid=table] th")].map((n) => n.textContent);
   expect(headers).not.toContain("Onderneming");
 });
 

@@ -2,11 +2,12 @@
  * clashes with the app's base.css. Warm cream + espresso + tan, big EB Garamond
  * serif (shared fonts), tasteful float/reveal/marquee animations. */
 
-/* Hero, device, FAQ, waitlist and footer now live in Tailwind utilities on
- * Landing.tsx (docs/adr/0005). What's left here is either shared with
- * sections outside that pass (nav, strengths, agents, privacy, how, the GSAP
+/* Hero, device, FAQ, waitlist, footer and nav now live in Tailwind utilities
+ * on Landing.tsx (docs/adr/0005). What's left here is either shared with
+ * sections outside that pass (strengths, agents, privacy, how, the GSAP
  * card spiral) or a rule an element still needs by selector, not by style
- * (`.lp-faq-item` for its `[open]`/`::-webkit-details-marker` hooks). This
+ * (`.lp-faq-item` for its `[open]`/`::-webkit-details-marker` hooks, `.lp-lang`
+ * for Landing.click.test.tsx's `querySelector(".lp-lang")`). This
  * file is unlayered CSS; without `@layer components` it would silently beat
  * every Tailwind utility regardless of source order, since unlayered rules
  * always win over layered ones — the third trap this conversion found.
@@ -55,97 +56,12 @@ body.lp-scroll #root {
 }
 
 /* ---- Nav ---- */
-.lp-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 22px 28px;
-}
-.lp-brand {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.5rem;
-  letter-spacing: -0.01em;
-  color: var(--lp-ink);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.lp-nav-links {
-  display: flex;
-  gap: 28px;
-}
-.lp-nav-links a {
-  color: var(--lp-ink2);
-  text-decoration: none;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-.lp-nav-links a:hover {
-  color: var(--lp-ink);
-}
-
-/* Language switcher. Deliberately quiet — a Dutch visitor is on the page they
- * should be on, so this is an escape hatch for the minority who need it, not a
- * decision the majority has to make before reading anything. */
-.lp-lang {
-  color: var(--lp-ink2);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--lp-line, rgba(0, 0, 0, 0.12));
-  margin-right: 10px;
-  white-space: nowrap;
-  transition: color 140ms ease, border-color 140ms ease;
-}
-.lp-lang:hover {
-  color: var(--lp-ink);
-  border-color: var(--lp-ink2);
-}
-@media (max-width: 720px) {
-  .lp-lang {
-    display: none;
-  }
-}
+/* .lp-nav, .lp-brand, .lp-nav-links (+ its links), .lp-lang, .lp-btn and
+ * .lp-btn-dark are now Tailwind utilities on Landing.tsx's header markup
+ * (docs/adr/0005). `.lp-lang` stays as a bare hook: Landing.click.test.tsx
+ * finds the locale-switch link with `querySelector(".lp-lang")`. */
 
 /* ---- Buttons ---- */
-/* Still used by the nav "Inloggen" button and the strengths-tile CTA (both
- * outside this pass). Landing.tsx's own buttons (hero, waitlist, footer) are
- * now pure Tailwind — mixing `.lp-btn`'s unlayered padding with a Tailwind
- * size override would lose to it under the layer rule above. */
-.lp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 999px;
-  padding: 11px 22px;
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease,
-    background 0.12s ease;
-}
-.lp-btn:hover {
-  transform: translateY(-1px);
-}
-.lp-btn-dark {
-  background: var(--lp-ink);
-  color: var(--lp-cream);
-  box-shadow: 0 12px 26px -14px rgba(43, 33, 23, 0.6);
-}
 
 /* ---- Sections ---- */
 /* `.lp-section`, `.lp-h2`, `.lp-eyebrow` and `.lp-sub` still back the
@@ -377,8 +293,15 @@ body.lp-scroll #root {
     left: calc(100% - 23px);
   }
 }
-/* rings — encryption */
-.lp-ill-rings .ring,
+/* rings — encryption.
+ *
+ * `.lp-ring`, not `.ring`: `ring` is a real Tailwind utility, so the moment any
+ * file in the scanned tree writes it as a class token Tailwind GENERATES
+ * `.ring{--tw-ring-shadow:… 0 0 0 1px currentcolor; box-shadow:…}` into
+ * @layer utilities. That layer beats @layer components regardless of
+ * specificity, so these rings were being drawn with an extra 1px currentColor
+ * ring that no stylesheet asks for. See trap 10 in docs/adr/0005. */
+.lp-ill-rings .lp-ring,
 .lp-ill-rings .core,
 .lp-ill-rings .orbit {
   position: absolute;
@@ -386,7 +309,7 @@ body.lp-scroll #root {
   left: 50%;
   translate: -50% -50%;
 }
-.lp-ill-rings .ring {
+.lp-ill-rings .lp-ring {
   border-radius: 50%;
   border: 1.5px solid var(--lp-line);
 }
@@ -714,9 +637,6 @@ body.lp-scroll #root {
 
 /* ---- Responsive ---- */
 @media (max-width: 860px) {
-  .lp-nav-links {
-    display: none;
-  }
   .lp-tiles {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -749,9 +669,9 @@ body.lp-scroll #root {
   .lp-ill-tree .tree-leaf {
     animation: none;
   }
-  .lp-btn:hover {
-    transform: none;
-  }
+  /* .lp-btn:hover's transform:none is now LP_BTN's own
+   * `motion-safe:hover:-translate-y-px` in Landing.tsx: the hover lift only
+   * applies when motion is safe, so there is nothing left to cancel here. */
 }
 
 } /* @layer components */

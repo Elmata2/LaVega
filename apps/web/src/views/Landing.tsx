@@ -42,6 +42,9 @@ const LP_BTN =
   "cursor-pointer! no-underline whitespace-nowrap transition-[transform,box-shadow,background] " +
   "duration-[120ms] ease-[ease] motion-safe:hover:-translate-y-px";
 const LP_BTN_LG = "px-[28px]! py-[15px]! text-[1.02rem]!";
+/** `.lp-btn`'s own (non-`-lg`) padding — the nav "Inloggen" button and the
+ *  strengths-tile CTA, converted from `.lp-btn`/`.lp-btn-dark` below. */
+const LP_BTN_MD = "px-[22px]! py-[11px]!";
 const LP_BTN_DARK =
   "bg-[var(--lp-ink)]! text-[var(--lp-cream)]! border-transparent! shadow-[0_12px_26px_-14px_rgba(43,33,23,.6)]";
 const LP_BTN_LIGHT = "bg-[var(--lp-card)]! text-[var(--lp-ink)]! border-[var(--lp-line)]!";
@@ -186,21 +189,42 @@ export default function Landing({
   return (
     <div className="lp" ref={rootRef}>
       {/* Nav */}
-      <header className="lp-nav">
+      <header className="flex items-center justify-between gap-[var(--sp-4)] max-w-[1200px] mx-auto px-[28px] py-[22px]">
         <button
           type="button"
-          className="lp-brand"
+          className="font-display font-semibold text-[1.5rem] tracking-[-0.01em] text-[var(--lp-ink)] bg-transparent border-none border-[var(--lp-ink)] cursor-pointer p-0"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
           LaVega
         </button>
-        <nav className="lp-nav-links">
-          <a href="#agents">{c.nav.agents}</a>
-          <a href="#privacy">{c.nav.privacy}</a>
-          <a href="#how">{c.nav.how}</a>
-          <a href="#wachtlijst">{c.nav.waitlist}</a>
+        <nav className="flex gap-[28px] [@media(max-width:860px)]:hidden">
+          <a
+            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
+            href="#agents"
+          >
+            {c.nav.agents}
+          </a>
+          <a
+            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
+            href="#privacy"
+          >
+            {c.nav.privacy}
+          </a>
+          <a
+            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
+            href="#how"
+          >
+            {c.nav.how}
+          </a>
+          <a
+            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
+            href="#wachtlijst"
+          >
+            {c.nav.waitlist}
+          </a>
           {INVESTING_URL && (
             <a
+              className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
               href={INVESTING_URL}
               {...(INVESTING_URL.startsWith("http")
                 ? { target: "_blank", rel: "noopener noreferrer" }
@@ -211,7 +235,7 @@ export default function Landing({
           )}
         </nav>
         <a
-          className="lp-lang"
+          className="lp-lang text-[var(--lp-ink2)] no-underline text-[0.85rem] font-medium tracking-[0.02em] px-[10px] py-[6px] rounded-pill border border-[var(--lp-line)] mr-[10px] whitespace-nowrap [transition:color_140ms_ease,border-color_140ms_ease] hover:text-[var(--lp-ink)] hover:border-[var(--lp-ink2)] [@media(max-width:720px)]:hidden"
           href={alternatePath(locale)}
           hrefLang={otherLocale}
           title={c.langSwitch.to}
@@ -219,7 +243,11 @@ export default function Landing({
         >
           {c.langSwitch.label}
         </a>
-        <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
+        <button
+          type="button"
+          className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
+          onClick={onEnter}
+        >
           {c.nav.login}
         </button>
       </header>
@@ -278,13 +306,13 @@ export default function Landing({
               </div>
             </div>
           </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 max-[560px]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 [@media(max-width:560px)]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
               {c.device.savedLabel}
             </div>
             <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">+€420</div>
           </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 max-[560px]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 [@media(max-width:560px)]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
               {c.device.forecastLabel}
             </div>
@@ -307,7 +335,7 @@ export default function Landing({
           <h2 className="lp-h2 lp-strengths-title">{c.strengths.title}</h2>
           <div className="lp-strengths-aside">
             <p className="lp-sub lp-strengths-sub">{c.strengths.sub}</p>
-            <a className="lp-btn lp-btn-dark" href="#agents">
+            <a className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`} href="#agents">
               {c.strengths.cta} <span aria-hidden="true">→</span>
             </a>
           </div>
@@ -333,8 +361,8 @@ export default function Landing({
           <article className="lp-tile">
             <h3 className="lp-tile-title">{c.strengths.tiles[2]}</h3>
             <div className="lp-ill lp-ill-rings" aria-hidden="true">
-              <span className="ring r1" />
-              <span className="ring r2" />
+              <span className="lp-ring r1" />
+              <span className="lp-ring r2" />
               <span className="orbit">
                 <span className="odot" />
               </span>
@@ -560,7 +588,7 @@ export default function Landing({
               />
               <button
                 type="submit"
-                className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK} flex-none max-[560px]:flex-1 max-[560px]:justify-center disabled:opacity-60!`}
+                className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK} flex-none [@media(max-width:560px)]:flex-1 [@media(max-width:560px)]:justify-center disabled:opacity-60!`}
                 disabled={!wlReady || wlStatus === "sending"}
               >
                 {wlReady
@@ -594,7 +622,7 @@ export default function Landing({
             {c.footer.cta} <span aria-hidden="true">→</span>
           </a>
         </div>
-        <div className="max-w-[1100px] mx-auto py-[32px] px-[28px] grid grid-cols-[1.6fr_1fr_1fr] gap-[32px] border-t border-[color-mix(in_srgb,var(--lp-cream)_12%,transparent)] max-[860px]:grid-cols-1 max-[860px]:gap-[24px]">
+        <div className="max-w-[1100px] mx-auto py-[32px] px-[28px] grid grid-cols-[1.6fr_1fr_1fr] gap-[32px] border-t border-[color-mix(in_srgb,var(--lp-cream)_12%,transparent)] [@media(max-width:860px)]:grid-cols-1 [@media(max-width:860px)]:gap-[24px]">
           <div>
             <div className="font-display font-semibold text-[1.4rem]">LaVega</div>
             <p className="text-[color-mix(in_srgb,var(--lp-cream)_70%,transparent)] text-[0.95rem] max-w-[320px] mt-[10px]!">

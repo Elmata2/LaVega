@@ -50,7 +50,10 @@ import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optim
 import type { Locale } from "../../locale.js";
 import Module from "../Module.js";
 import ToonMeer from "../ToonMeer.js";
+import Badge from "../ui/Badge.js";
 import Button from "../ui/Button.js";
+import CardLink from "../ui/CardLink.js";
+import SaldoInput from "../ui/SaldoInput.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
@@ -175,24 +178,21 @@ function FactCorrection({
 
   if (!editing) {
     return (
-      <button type="button" className="card-link" onClick={() => setEditing(true)} disabled={busy}>
+      <CardLink onClick={() => setEditing(true)} disabled={busy}>
         {fill(c.factCorrection.adjust, { label })}
-      </button>
+      </CardLink>
     );
   }
   return (
     <span className="confirm-inline">
-      <input
-        className="saldo-input"
+      <SaldoInput
         inputMode="decimal"
         aria-label={fill(c.factCorrection.fieldAriaLabel, { label, provider: displayLabel })}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}
       />
-      <button
-        type="button"
-        className="card-link"
+      <CardLink
         disabled={busy}
         onClick={() => {
           const trimmed = draft.trim().replace(",", ".").replace("%", "");
@@ -212,10 +212,10 @@ function FactCorrection({
         }}
       >
         {c.factCorrection.save}
-      </button>
-      <button type="button" className="card-link" onClick={() => setEditing(false)} disabled={busy}>
+      </CardLink>
+      <CardLink onClick={() => setEditing(false)} disabled={busy}>
         {c.factCorrection.cancel}
-      </button>
+      </CardLink>
     </span>
   );
 }
@@ -619,7 +619,7 @@ function withdrawalHeadlineSentence(h: WithdrawalHeadline, c: TravelCopy, locale
  *  existing `.badge` chip and not another sentence. */
 function NotYours() {
   const [locale] = useAppLocale();
-  return <span className="badge">{optimiseCopy[locale].travel.badge.notYours}</span>;
+  return <Badge>{optimiseCopy[locale].travel.badge.notYours}</Badge>;
 }
 
 /* ══════════════════════ WAT DE KAART ZELF KOST, als eigen velden ══════════════
@@ -1119,9 +1119,9 @@ export function TermsNotice({
         <code>MISTRAL_API_KEY</code>
         {noKeyAfter}
       </p>
-      <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
+      <CardLink onClick={onRecheckAi} disabled={busy}>
         {c.terms.noKeyRecheck}
-      </button>
+      </CardLink>
     </>
   );
 

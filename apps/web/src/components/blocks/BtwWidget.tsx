@@ -5,6 +5,7 @@ import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -219,9 +220,7 @@ export function BtwBlock({
       span={span}
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("belasting")}>
-          {c.belastingArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>
       }
       footer={
         <>

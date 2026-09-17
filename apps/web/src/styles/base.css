@@ -113,11 +113,7 @@ button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.saldo-input {
-  width: 120px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* .saldo-input extracted to components/ui/SaldoInput.tsx (docs/adr/0005). */
 input:disabled,
 select:disabled,
 button:disabled {
@@ -140,41 +136,13 @@ button:hover:not(:disabled) {
 /* .btn/.btn-primary extracted to components/ui/Button.tsx (docs/adr/0005). */
 
 /* Tables */
+/* `table { border-collapse; width:100% }` stays — a bare-tag default with no
+ * class to attach a utility to (docs/adr/0005). `.table`/`.table-wrap`/
+ * `.table-cards` and their th/td/thead/tbody tr:hover descendants moved to
+ * components/ui/Table.tsx (Table, TableWrap, Th, Td). */
 table {
   border-collapse: collapse;
   width: 100%;
-}
-.table-wrap {
-  overflow-x: auto;
-}
-.table th,
-table th {
-  text-align: left;
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  font-weight: 500;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-.table td,
-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 0.9rem;
-}
-.table tbody tr:hover,
-table tbody tr:hover {
-  background: var(--surface-2);
-}
-.table th.num,
-.table td.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .cell-sub {
   margin-top: 2px;
@@ -247,20 +215,8 @@ table tbody tr:hover {
 .card-grid .span-2 {
   grid-column: 1 / -1;
 }
-.card-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--accent);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.card-link:hover {
-  filter: brightness(1.2);
-  text-decoration: underline;
-}
+/* .card-link/.card-link:hover extracted to components/ui/CardLink.tsx
+ * (docs/adr/0005). */
 
 /* Positie over je bedrijven */
 .position-rows {
@@ -329,42 +285,9 @@ table tbody tr:hover {
   font-weight: 600;
 }
 
-/* Pill */
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: var(--pill);
-  padding: 6px 14px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--line);
-  cursor: pointer;
-}
-.pill:hover:not(:disabled) {
-  color: var(--ink);
-}
-.pill.pill-active {
-  background: var(--accent-soft);
-  color: var(--ink);
-  border-color: var(--accent);
-}
+/* .pill/.pill-active extracted to components/ui/Pill.tsx (docs/adr/0005). */
 
-/* Badge */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--r-sm);
-  padding: 2px 8px;
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  background: var(--surface-2);
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
+/* .badge extracted to components/ui/Badge.tsx (docs/adr/0005). */
 
 /* Eyebrow (muted mono label) */
 .eyebrow {
@@ -1061,25 +984,8 @@ table tbody tr:hover {
   width: 100%;
   max-width: 420px;
 }
-.vault-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin-bottom: var(--sp-3);
-}
-.vault-field label {
-  color: var(--muted);
-}
-.vault-field input {
-  width: 100%;
-}
-.vault-checkbox-field {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: var(--sp-2) 0 var(--sp-4);
-  color: var(--ink);
-}
+/* .vault-field/.vault-checkbox-field extracted to components/ui/Field.tsx
+ * (docs/adr/0005). */
 
 @media (max-width: 900px) {
   /* Phone: the frame goes full-bleed, the page scrolls normally, and the shell
@@ -1201,86 +1107,14 @@ table tbody tr:hover {
   }
 }
 
-/* ---------- Tables become stacked cards on a phone ----------
- *
- * A seven-column transactions table inside a horizontal scroller is a table
- * you cannot read on a phone: the columns that matter (amount, category) are
- * always the ones off-screen. Below 620px each row becomes its own card and
- * each cell becomes a label/value line, taking its label from the td's
- * data-label — which is why Transacties.tsx and Rekeningen.tsx set that
- * attribute. Same DOM, same order, one column, as the mobile reference asks.
- *
- * Only tables inside .table-cards opt in; a table that is genuinely narrow
- * keeps its columns. */
+/* Tables becoming stacked cards on a phone (`<Table cards>`) moved to
+ * components/ui/Table.tsx (docs/adr/0005) — the `.rename-cell` override that
+ * lived in this block moved to its one call site, Rekeningen.tsx. */
 @media (max-width: 620px) {
   /* Two KPI tiles side by side on a phone leave ~170px each, which a euro
    * amount does not fit. One per row. */
   .kpi-row {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .table-cards table,
-  .table-cards thead,
-  .table-cards tbody,
-  .table-cards tr,
-  .table-cards td {
-    display: block;
-    width: 100%;
-  }
-  /* The header row's labels are repeated per cell instead. */
-  .table-cards thead {
-    display: none;
-  }
-  .table-cards tr {
-    margin-bottom: var(--sp-3);
-    padding: var(--sp-3);
-    border: 1px solid var(--line);
-    border-radius: var(--r-sm);
-    background: var(--surface-2);
-  }
-  .table-cards tbody tr:hover {
-    background: var(--surface-2);
-  }
-  .table-cards td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    /* A cell with several children (bank + IBAN + "Hernoem") is wider than a
-     * 320px card on one line; let it run onto a second. */
-    flex-wrap: wrap;
-    gap: var(--sp-3);
-    padding: 4px 0;
-    border-bottom: none;
-    text-align: left;
-  }
-  .table-cards td > * {
-    min-width: 0;
-  }
-  .table-cards td.num {
-    text-align: right;
-  }
-  /* An empty action cell would render as a stray blank line. */
-  .table-cards td:empty {
-    display: none;
-  }
-  .table-cards td::before {
-    content: attr(data-label);
-    flex: none;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-  }
-  .table-cards td[data-label=""]::before {
-    content: none;
-  }
-  /* The cell's own content aligns right against its label. */
-  .table-cards td > * {
-    text-align: right;
-  }
-  .table-cards .rename-cell {
-    align-items: flex-end;
   }
 }
 

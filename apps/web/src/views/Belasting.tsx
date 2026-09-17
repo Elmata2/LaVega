@@ -42,6 +42,7 @@ import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Grens, { type GrensAnswerRow } from "./Grens";
+import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import "../styles/views.css";
@@ -454,7 +455,10 @@ export default function Belasting({
         )}
       </Card>
 
-      <ModuleGrid className="grid-2" label={c.header.gridLabel}>
+      <ModuleGrid
+        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        label={c.header.gridLabel}
+      >
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
         <Module
           title={vatLabel}
@@ -725,7 +729,7 @@ export default function Belasting({
                           <span>
                             {f.label} · {f.dueDate}{" "}
                             {f.status === "expected" && (
-                              <span className="badge">{c.profitTax.estimateBadge}</span>
+                              <Badge>{c.profitTax.estimateBadge}</Badge>
                             )}
                           </span>
                           <span className="text-neg">

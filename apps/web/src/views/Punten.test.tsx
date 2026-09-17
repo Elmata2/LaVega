@@ -264,7 +264,7 @@ test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen 
   // erin, en dat is een ander gegeven. Op volgorde selecteren zou deze test op
   // een dag stilletjes het verkeerde veld gaan keuren.
   const saldoField = [...panel.querySelectorAll<HTMLElement>("[data-testid=bank-field]")].find((f) =>
-    f.querySelector(".saldo-input"),
+    f.querySelector('[data-testid="saldo-input"]'),
   )!;
   expect(saldoField.querySelector(".cell-sub")!.textContent).not.toMatch(/\d/);
   const dated = datedSentences(age.textContent ?? "");
@@ -300,7 +300,7 @@ test("een geïmporteerd saldo zegt van welke dag het is, en dat er nieuwere tran
 
 test("de platte tabel zegt per rij hetzelfde, en vult ook daar geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText("[data-testid=bank-modes] .pill", "Alle rekeningen"));
+  click(byText('[data-testid=bank-modes] [data-testid="pill"]', "Alle rekeningen"));
   const cells = [...container!.querySelectorAll<HTMLElement>('td[data-label="Saldo"]')];
   const texts = cells.map((c) => c.querySelector(".cell-sub")!.textContent);
   expect(texts).toContain("stand van 31 juli 2026");

@@ -8,6 +8,7 @@ import { useAppLocale } from "../appLocale.js";
 import type { Locale } from "../locale.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import { Field, CheckboxField } from "../components/ui/Field.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -264,7 +265,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
       <h3>{c.restore.title}</h3>
       <p className="text-warn">{c.restore.warning}</p>
       <form onSubmit={handleRestore}>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
           <input
             id="backup-restore-file"
@@ -273,8 +274,8 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="backup-restore-pass">{c.restore.passwordLabel}</label>
           <input
             id="backup-restore-pass"
@@ -283,8 +284,8 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             onChange={(e) => setPass(e.target.value)}
             disabled={busy}
           />
-        </div>
-        <label className="vault-checkbox-field">
+        </Field>
+        <CheckboxField>
           <input
             type="checkbox"
             checked={confirmed}
@@ -292,7 +293,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             disabled={busy}
           />
           {c.restore.confirmLabel}
-        </label>
+        </CheckboxField>
         {error && (
           <p role="alert" className="text-warn">
             {error}

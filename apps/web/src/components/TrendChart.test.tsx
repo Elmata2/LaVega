@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import TrendChart, { axisIndices, keyToIndex } from "./TrendChart";
+import { resolved } from "../test-support/resolveStyle.js";
 
 /* Real renders via renderToStaticMarkup (no render library in this repo), plus
  * a read of styles/charts.css so a class rename on either side fails here. The
@@ -39,6 +40,14 @@ function mount(ui: ReactElement): HTMLDivElement {
     root.render(ui);
   });
   return el;
+}
+
+/** The classes an ACTUAL element in the mounted tree carries, so an assertion
+ *  never drifts from what TrendChart.tsx renders — a hand-typed class list
+ *  would still resolve against the built stylesheet even if the component
+ *  stopped emitting it. */
+function classesOf(el: Element): string[] {
+  return el.className.split(/\s+/).filter(Boolean);
 }
 
 function press(el: HTMLElement, key: string) {
@@ -205,11 +214,14 @@ test("keyToIndex moves one step at a time and never walks off the series", () =>
 });
 
 test("every class TrendChart emits has a rule in charts.css", () => {
+  // lv-chart-readout and lv-chart-readout-value are NOT in this list any more:
+  // they are now class hooks over Tailwind utilities (see TrendChart.tsx), so
+  // reading charts.css for them would pass while describing dead CSS — the
+  // class name still turns up, but only in the comment explaining the
+  // conversion. The next test proves the styling itself instead.
   for (const cls of [
     "lv-chart",
     "lv-chart-withaxis",
-    "lv-chart-readout",
-    "lv-chart-readout-value",
     "lv-chart-plot",
     "lv-chart-area",
     "lv-chart-svg",
@@ -225,6 +237,22 @@ test("every class TrendChart emits has a rule in charts.css", () => {
   ]) {
     expect(css, `.${cls} missing from charts.css`).toContain(`.${cls}`);
   }
+});
+
+test("the readout's layout and register survive the Tailwind conversion", () => {
+  const el = mount(<TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />);
+  const readout = classesOf(el.querySelector(".lv-chart-readout")!);
+  const value = classesOf(el.querySelector(".lv-chart-readout-value")!);
+
+  expect(resolved(readout, "display")).toBe("flex");
+  expect(resolved(readout, "flex-direction")).toBe("column");
+  expect(resolved(readout, "min-height")).toBe("3rem");
+
+  expect(resolved(value, "font-size")).toBe("1.6rem");
+  expect(resolved(value, "font-weight")).toBe("var(--font-weight-bold)");
+  // The mobile reference's big-number register: one column, full width, so
+  // the readout grows rather than staying laptop-sized.
+  expect(resolved(value, "font-size", 900)).toBe("1.9rem");
 });
 
 test("the scrubber shows where the keyboard is", () => {

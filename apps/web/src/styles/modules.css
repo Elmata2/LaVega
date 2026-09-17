@@ -37,22 +37,11 @@
   margin-bottom: var(--sp-5);
 }
 
-.module-span-1 {
-  grid-column: span 1;
-}
-.module-span-2 {
-  grid-column: span 2;
-}
-.module-span-3 {
-  grid-column: 1 / -1;
-}
-
-.module-short {
-  min-height: var(--module-h-short);
-}
-.module-tall {
-  min-height: var(--module-h-tall);
-}
+/* module-span-1/2/3 and module-short/tall used to live here as hand-written
+ * rules. They are now Tailwind utility strings computed by moduleClass() in
+ * module-grid.ts (SPAN_CLASS / HEIGHT_CLASS) — the grid-column and min-height
+ * declarations below are gone because a Tailwind class carries its own
+ * declaration, not because the layout changed. */
 
 /* ---------- Module card ---------- */
 
@@ -187,25 +176,18 @@
   .module-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .module-span-2,
-  .module-span-3 {
-    grid-column: 1 / -1;
-  }
+  /* span-2/span-3 clamping to the full row at this width is now the
+   * `[@media(max-width:1200px)]:col-span-full` variant on module-span-2 in
+   * module-grid.ts (span-3 is always the full row and carries no variant). */
 }
 
 @media (max-width: 900px) {
   .module-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .module-span-1,
-  .module-span-2,
-  .module-span-3 {
-    grid-column: 1 / -1;
-  }
-  /* One column of stacked cards: a fixed tall height only adds dead space. */
-  .module-tall {
-    min-height: var(--module-h-short);
-  }
+  /* span-1/2/3 clamping to the full row, and module-tall collapsing to the
+   * short height, at this width are now the `[@media(max-width:900px)]:…`
+   * variants in module-grid.ts's SPAN_CLASS / HEIGHT_CLASS. */
   .module {
     padding: var(--sp-4);
   }

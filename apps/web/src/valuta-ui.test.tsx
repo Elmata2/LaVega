@@ -335,8 +335,9 @@ test("twee kolommen: de rekenmachine links, de bol rechts", () => {
   const modules = [...c.querySelectorAll<HTMLElement>(".module-grid > .module")];
   expect(modules.map((m) => m.getAttribute("aria-label"))).toEqual(["Overzetten", "Bestemming"]);
   // Allebei één kolom breed in een raster van twee: de bol stond over de volle
-  // breedte onder de kolommen (span 2) en is nu zelf de rechterkolom.
-  expect(modules.every((m) => m.classList.contains("module-span-1"))).toBe(true);
+  // breedte onder de kolommen (span 2) en is nu zelf de rechterkolom. De
+  // span-1 klasse is nu een Tailwind-utility-string, gepind in module-grid.ts.
+  expect(modules.every((m) => m.classList.contains("[grid-column:span_1]"))).toBe(true);
   expect(c.querySelector(".module-grid")!.className).toContain("grid-2");
   expect(modules[1].querySelector(".lv-globe")).not.toBeNull();
   // En de bol staat in geen enkel opzicht in de linkerkolom.

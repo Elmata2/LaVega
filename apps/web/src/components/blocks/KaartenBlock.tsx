@@ -6,6 +6,7 @@ import { formatEuroIn } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
 import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
 
@@ -175,10 +176,15 @@ export function sheenTransform(
  * stay hand-written CSS (blocks.css): the sheen's two feature media queries
  * (`hover: hover`, `prefers-reduced-motion`) are outside what
  * test-support/resolveStyle can resolve (it only parses max-width blocks), and
- * the hover contrast math is load-bearing (see brandFace.ts). Exported so
- * KaartenBlock.test.tsx asserts against the classes actually rendered, not a
- * copy that can drift from them. */
-export const CARD_STRIP_CLASS = "flex gap-4 overflow-x-auto pb-2 [scroll-snap-type:x_proximity]";
+ * the hover contrast math is load-bearing (see brandFace.ts).
+ *
+ * NOT exported, deliberately. It was, so the test could assert against "the
+ * classes actually rendered" — but importing this constant is not that. It is
+ * the string the component happens to use today, and the assertion keeps
+ * passing if the component stops applying it to this element. That is the
+ * vacuous assertion the whole migration exists to avoid. The test now mounts
+ * the block and reads className off the strip itself. */
+const CARD_STRIP_CLASS = "flex gap-4 overflow-x-auto pb-2 [scroll-snap-type:x_proximity]";
 
 type KaartenBlockProps = {
   accounts: Account[];
@@ -208,9 +214,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
       span={3}
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          {c.rekeningenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
       }
     >
       {cards.length === 0 ? (

@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL as NodeURL } from "node:url";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import KaartenBlock, { CARD_STRIP_CLASS, bankLogo, ibanTail } from "./KaartenBlock";
+import KaartenBlock, { bankLogo, ibanTail } from "./KaartenBlock";
 import { resolved } from "../../test-support/resolveStyle.js";
 import { BANK_LOGOS } from "../../assets/bank-logos.generated";
 import { accounts } from "./fixtures";
+
+// React 18 only treats act() as real when this flag is set; without it the
+// mount below logs "the current testing environment is not configured".
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const amex: Account = {
   key: "amex-2026.csv",
@@ -200,11 +206,23 @@ test("geen animatie op de kaart — een toestand mag, een overgang niet", () => 
     expect(body).not.toContain("animation");
   }
   // .card-strip converted to Tailwind (docs/adr/0005): resolved against the
-  // classes the strip actually renders, not the deleted rule's text.
-  const stripClasses = CARD_STRIP_CLASS.split(" ");
+  // classes the strip's own DOM element actually carries once mounted, not a
+  // hand-typed list or the exported constant — either of those would keep
+  // matching even after a future conditional class merge changed what the div
+  // renders, which is the vacuous-assertion failure resolved() exists to stop.
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
+  });
+  const strip = container.querySelector(".bank-card")!.parentElement!;
+  const stripClasses = strip.className.split(" ").filter(Boolean);
   expect(resolved(stripClasses, "transition")).toBeUndefined();
   // Tailwind's transition-* utilities emit transition-property, not the
   // shorthand — checked separately or a transition-all would go undetected.
   expect(resolved(stripClasses, "transition-property")).toBeUndefined();
   expect(resolved(stripClasses, "animation")).toBeUndefined();
+  act(() => root.unmount());
+  container.remove();
 });

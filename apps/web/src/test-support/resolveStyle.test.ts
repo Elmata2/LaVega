@@ -41,15 +41,17 @@ test("throws rather than passing vacuously when nothing matches", () => {
  * `hover:bg-surface` compiles to `.hover\:bg-surface:hover`. Without this the
  * migration could verify a component at rest and nothing else. */
 test("resolves a rule that only applies in a state", () => {
-  expect(resolved(["card-link"], "text-decoration", undefined, ":hover")).toBe("underline");
+  expect(resolved(["cat-compare"], "text-decoration", undefined, ":hover")).toBe("underline");
 });
 
 /* The state must not leak into the resting style, or a test would assert a
- * hover colour on an element nobody is pointing at. card-link has both, and
- * they must come back different. */
+ * hover colour on an element nobody is pointing at. cat-compare has both, and
+ * they must come back different (was card-link, extracted to
+ * components/ui/CardLink.tsx — docs/adr/0005 — which deleted the hand-written
+ * rule this test used as its example). */
 test("a state rule does not leak into the resting style", () => {
-  const rest = resolved(["card-link"], "text-decoration");
-  const hover = resolved(["card-link"], "text-decoration", undefined, ":hover");
+  const rest = resolved(["cat-compare"], "text-decoration");
+  const hover = resolved(["cat-compare"], "text-decoration", undefined, ":hover");
   expect(hover).toBe("underline");
   expect(rest).not.toBe(hover);
 });

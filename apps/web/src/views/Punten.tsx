@@ -14,8 +14,11 @@ import { formatEuroIn, localeTag } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
+import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 import "../styles/views.css";
 
 /* Punten — the hand-kept side of the money picture.
@@ -578,9 +581,9 @@ export default function Punten({
                       {category ?? c.card.ownProgramCategory}
                     </div>
                   </div>
-                  <span className={`badge ${puntBadgeClass(status.state)}`}>
+                  <Badge className={puntBadgeClass(status.state)}>
                     {c.card.stateLabel[status.state]}
-                  </span>
+                  </Badge>
                 </header>
 
                 <div className="flex items-baseline gap-2 mt-3">
@@ -610,9 +613,9 @@ export default function Punten({
                       {status.question}
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      <input
+                      <SaldoInput
                         id={`punt-ask-${slug(b.id)}`}
-                        className="saldo-input flex-[1_1_120px] min-w-0"
+                        className="flex-[1_1_120px] min-w-0"
                         inputMode="decimal"
                         placeholder={unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints}
                         value={asking.text}
@@ -636,24 +639,20 @@ export default function Punten({
 
                 <footer className="flex flex-wrap items-center gap-3 mt-auto pt-3">
                   {!asking && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => setAsk({ id: b.id, text: "", error: "" })}
                     >
                       {c.card.updateBalance}
-                    </button>
+                    </CardLink>
                   )}
                   {(status.state === "due" || status.state === "overdue") && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => onSave(snoozeTracker(balances, b.id, addDaysISO(asOf, 30)))}
                     >
                       {c.card.notNow}
-                    </button>
+                    </CardLink>
                   )}
                   <label className="inline-flex items-center gap-1">
                     <span className="eyebrow">{c.card.remindMeLabel}</span>
@@ -671,14 +670,9 @@ export default function Punten({
                       ))}
                     </select>
                   </label>
-                  <button
-                    type="button"
-                    className="card-link card-link-danger"
-                    disabled={busy}
-                    onClick={() => remove(b.id)}
-                  >
+                  <CardLink variant="danger" disabled={busy} onClick={() => remove(b.id)}>
                     {c.card.remove}
-                  </button>
+                  </CardLink>
                 </footer>
               </article>
             );
@@ -698,9 +692,9 @@ export default function Punten({
             ? `${formatEuroIn(locale, removed.points)} ${c.removedBanner.cashbackUnit}`
             : `${removed.points.toLocaleString(localeTag(locale))} ${c.removedBanner.pointsUnit}`}{" "}
           {c.removedBanner.dateOnlySuffix(dateIn(locale, removed.updatedAt))}{" "}
-          <button type="button" className="card-link" disabled={busy} onClick={undoRemove}>
+          <CardLink disabled={busy} onClick={undoRemove}>
             {c.removedBanner.undo}
-          </button>
+          </CardLink>
         </p>
       ) : null}
 
@@ -714,7 +708,7 @@ export default function Punten({
         <span className="eyebrow flex-none">{c.addForm.overwriteHint}</span>
       </div>
       <div className="flex flex-col gap-3 max-w-[720px]" data-testid="punt-form">
-        <div className="flex gap-3 max-[640px]:flex-col">
+        <div className="flex gap-3 [@media(max-width:640px)]:flex-col">
           <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
             {c.addForm.programLabel}
             <input
@@ -736,8 +730,8 @@ export default function Punten({
           </label>
           <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
             {addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
-            <input
-              className="saldo-input w-full box-border"
+            <SaldoInput
+              className="w-full box-border"
               inputMode="decimal"
               value={points}
               disabled={busy}

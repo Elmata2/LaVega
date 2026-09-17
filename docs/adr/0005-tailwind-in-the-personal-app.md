@@ -1,6 +1,7 @@
 # 0005 — Tailwind and shadcn in the personal app, without a rewrite
 
-**Status:** foundation landed on `feat/web-tailwind-shadcn`, conversion not started.
+**Status:** conversion in progress on `feat/web-tailwind-shadcn`. Stylesheets
+6,343 lines at the start, 4,436 as of 17 September. Preflight not adopted.
 **Date:** 16 September 2026.
 
 ## Why
@@ -76,8 +77,16 @@ That splits the stylesheet in two:
 
 | under test contract | free |
 | --- | --- |
-| `base.css` 1588, `blocks.css` 1048, `charts.css` 816, `modules.css` 358 | `landing.css` 1129, `views.css` 921, `worldmap.css` 394 |
-| 3,810 lines, 11 test files | 2,444 lines, none |
+| `base.css`, `blocks.css`, `charts.css`, `modules.css`, `worldmap.css` | `landing.css`, `views.css` |
+| 12 test files | none |
+
+`worldmap.css` was originally listed as free and is not. `Globe.test.tsx` reads
+it through a `blad("worldmap.css")` helper rather than a literal
+`styles/worldmap.css` path, so the grep that built this table missed it — and
+the rule it reads is load-bearing, since the test regex-parses the
+`--lv-globe-*` custom properties to recompute WCAG contrast over the map's
+`color-mix()` palette. Before trusting this column for any sheet, grep the
+basename, not the path.
 
 `ModuleGrid` and `Module` are **excluded for now** for a second reason too: their
 media queries are desktop-first (`max-width: 1200px`, `900px`) while Tailwind is
@@ -95,7 +104,7 @@ available now in a way it was not when those tests were written.
 So the order is: convert what is free, and before touching the rest, replace the
 stylesheet-reading assertions with computed-style ones.
 
-## Four traps, all of which fail silently
+## Ten traps, all of which fail silently
 
 Every one of these produces a wrong screen with a green suite. That is the
 shape of the risk in this migration, and none of them is caught by a test.
@@ -149,6 +158,89 @@ sheets are layered, a utility beats a component class by design — so
 `className="pill bg-surface"` paints the ACTIVE pill white too, hiding
 `.pill-active`'s own background. Apply the utility only in the states where it
 belongs, or convert the state class with it. Found on the Rekeningen bank tabs.
+
+**8. Converting two competing rules to utilities loses their source-order
+tie-break.** `[data-active="1"]` and `[aria-selected="true"]` had equal
+specificity in `worldmap.css`, so the later rule won when a row was both — the
+selected background beat the active one, by file order. As utilities that order
+is gone: Tailwind emits the generated classes in its own sequence, not in the
+order the `className` lists them, so the tie flipped and a row that was both
+active and selected painted the wrong colour. Nothing failed. Encode the
+exclusivity in the selector instead of relying on order:
+`[&[data-active="1"]:not([aria-selected="true"])]:bg-accent-soft`. This applies
+to every pair of same-specificity state rules in these sheets, and there are
+several.
+
+**9. Deleting a class rule does not remove the property, it uncovers the
+bare-tag default.** This is the inverse of trap 2 and it is the easiest one to
+walk into, because the conversion looks complete. `base.css` still styles
+`button` with a background, a border, a radius, padding, colour and cursor, and
+does the same for `input`, `select`, `textarea`, `table` and the headings. Those
+rules STAY until Preflight. So when you delete `.lp-brand` and move its
+declarations to utilities, any property you did not carry over does not fall to
+the browser default — it falls to the bare-tag rule underneath. `.lp-brand`'s
+border-colour silently became the generic `button` border, on the landing page's
+brand mark.
+
+Enumerate the element's bare-tag rule before deleting its class rule, and carry
+over or explicitly re-state every property that rule sets. A diff of
+`getComputedStyle` across the whole element catches this; reading the class rule
+you are converting does not, because the value is not in it.
+
+**10. Naming a hand-written class after a Tailwind utility hands the utility the
+element.** `.table` and `.ring` are both real Tailwind utilities and both were
+also hand-written class names here. Tailwind generates a utility whenever its
+scanner finds the token anywhere in the scanned tree, and utilities beat
+`@layer components` regardless of specificity — so the generated rule silently
+took over every element carrying that class name.
+
+`.table{display:table}` defeated the `.table-cards table{display:block}` mobile
+collapse on four views, costing about 12px of height per card table. `.ring`
+was worse in kind: it sets `--tw-ring-shadow` to `0 0 0 1px currentcolor`, and
+Tailwind registers the `@property` initial values that make that render, so the
+landing page's encryption illustration was drawn with a 1px ring no stylesheet
+asks for.
+
+The scanner does not care whether the token is a class. `.ring` is still
+generated in this build because `worldMap.test.ts` uses `ring` as a **loop
+variable**. A local variable name in a test file is enough to emit a utility
+that will override a component-layer rule. So the defence is not "check your
+classNames" — it is never to name a hand-written class after a utility.
+`.ring` is renamed `.lp-ring`; the generated `.ring` rule remains and is now
+inert because nothing carries that class.
+
+Note this landmine was created by the trap-2 fix. While the hand-written sheets
+were unlayered they beat the generated utilities and the collision was
+invisible. Wrapping them in `@layer components` was correct and also armed this.
+It is branch-only: master has no Tailwind at all, so nothing here is live in
+production.
+
+## What `resolveStyle.ts` cannot see
+
+It is the replacement for stylesheet-text assertions and it has three blind
+spots, all of which return a clean pass rather than an error.
+
+Two are by design and documented in the file: it refuses descendant, child and
+sibling combinators, since it is given one element's class list and those
+describe a relationship between two.
+
+**Hand-typing the class list defeats the whole tool.** `resolved()` throws when
+nothing matches, and that throw is the safety property — it is what stops a
+converted component turning a real assertion into a vacuous one. But it can only
+check the list you hand it. Type the classes by hand and you have rebuilt the
+original problem: the list describes what you believe the component renders, not
+what it renders, and it keeps passing after the component stops carrying them.
+Worse, a hand-typed list can match some unrelated rule elsewhere in the built
+sheet by coincidence and pass for a reason that has nothing to do with the
+component. That happened here, to a worker who caught it only because the
+assertion passed too easily. **Mount the component, read the real `className`
+off the DOM, and pass that.** The assertion is then about the element, which is
+the only thing worth asserting about.
+
+The third was found in use. A `hover:` utility compiles inside
+`@media (hover:hover)`, and the resolver's media handling only indexes
+`max-width` blocks, so a hover rule is invisible to it. Ask it for a hover value
+and it reports the base one. Verify interactive states in a real browser.
 
 ## A shared primitive becomes a component, not an inlined string
 

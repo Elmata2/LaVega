@@ -4,6 +4,7 @@ import { isEurCurrency, toEur } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
@@ -122,9 +123,7 @@ export default function PositieBlock({
       title="Positie"
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          {c.rekeningenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
       }
       footer={
         rows.length > 0 ? (

@@ -191,7 +191,7 @@ test("a fresh balance says when it will be asked about, and is not nagged at", (
 
 test("answering with just the number stores it and re-dates it to today", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] .card-link', "Saldo bijwerken"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
   type(container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!, "245k");
   click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(1);
@@ -201,7 +201,7 @@ test("answering with just the number stores it and re-dates it to today", () => 
 
 test("a reply that is a sentence is refused out loud — nothing is guessed into the vault", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] .card-link', "Saldo bijwerken"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
   type(
     container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!,
     "ergens tussen 240000 en 250000",
@@ -213,7 +213,7 @@ test("a reply that is a sentence is refused out loud — nothing is guessed into
 
 test("'Niet nu' snoozes exactly one month and asks nothing in between", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] .card-link', "Niet nu"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Niet nu"));
   expect(saved[0][0].snoozedUntil).toBe("2026-09-16");
 });
 
@@ -230,7 +230,7 @@ test("the reminder interval is set per programme", () => {
 
 test("a balance can be removed", () => {
   render([fb(60_000, ASOF), mr(1, ASOF)]);
-  click(byText('[data-testid="punt-card"] .card-link-danger', "Verwijder"));
+  click(byText('[data-testid="punt-card"] [data-variant="danger"]', "Verwijder"));
   expect(saved[0]).toHaveLength(1);
 });
 

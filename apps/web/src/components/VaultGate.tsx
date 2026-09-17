@@ -9,6 +9,7 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy, type ShellCopy } from "../copy/shell.js";
 import Button from "./ui/Button.js";
 import Card from "./ui/Card.js";
+import { Field, CheckboxField } from "./ui/Field.js";
 
 function weakPasswordMessage(c: ShellCopy, kind: VaultPasswordProblem | null): string | null {
   if (kind === "tooShort") return c.vaultGate.passwordProblem.tooShort(MIN_VAULT_PASSWORD);
@@ -71,7 +72,7 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
     <div className="vault-gate">
       <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.unlock.title}</h2>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="unlock-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="unlock-pass"
@@ -81,7 +82,7 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
             autoFocus
           />
-        </div>
+        </Field>
         {error && (
           <p role="alert" className="text-warn">
             {error}
@@ -141,7 +142,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
       <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.setup.title}</h2>
         <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="setup-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-pass1"
@@ -151,8 +152,8 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
             autoFocus
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="setup-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="setup-pass2"
@@ -161,10 +162,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             onChange={(e) => setPass2(e.target.value)}
             disabled={busy}
           />
-        </div>
+        </Field>
         {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
-        <label className="vault-checkbox-field">
+        <CheckboxField>
           <input
             type="checkbox"
             checked={understood}
@@ -172,7 +173,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
           />
           {c.vaultGate.understood}
-        </label>
+        </CheckboxField>
         {error && (
           <p role="alert" className="text-warn">
             {error}
@@ -232,7 +233,7 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
       <Card as="form" className="vault-gate-card" onSubmit={submit}>
         <h2>{c.vaultGate.restoreOnSetup.title}</h2>
         <p>{c.vaultGate.restoreOnSetup.intro}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="setup-restore-file">{c.vaultGate.restoreOnSetup.fileLabel}</label>
           <input
             id="setup-restore-file"
@@ -241,8 +242,8 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
             disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="setup-restore-pass">{c.vaultGate.passwordLabel}</label>
           <input
             id="setup-restore-pass"
@@ -252,7 +253,7 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
             disabled={busy}
             autoFocus
           />
-        </div>
+        </Field>
         {error && (
           <p role="alert" className="text-warn">
             {error}
@@ -324,7 +325,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
         <h2>{c.vaultGate.migrate.title}</h2>
         <p>{c.vaultGate.migrate.intro}</p>
         <p className="text-warn">{c.vaultGate.dataLossWarning}</p>
-        <div className="vault-field">
+        <Field>
           <label htmlFor="migrate-pass1">{c.vaultGate.passwordLabel}</label>
           <input
             id="migrate-pass1"
@@ -334,8 +335,8 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             disabled={busy}
             autoFocus
           />
-        </div>
-        <div className="vault-field">
+        </Field>
+        <Field>
           <label htmlFor="migrate-pass2">{c.vaultGate.repeatPasswordLabel}</label>
           <input
             id="migrate-pass2"
@@ -344,10 +345,10 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             onChange={(e) => setPass2(e.target.value)}
             disabled={busy}
           />
-        </div>
+        </Field>
         {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">{c.vaultGate.mismatch}</p>}
-        <label className="vault-checkbox-field">
+        <CheckboxField>
           <input
             type="checkbox"
             checked={understood}
@@ -355,7 +356,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             disabled={busy}
           />
           {c.vaultGate.understood}
-        </label>
+        </CheckboxField>
         {error && (
           <p role="alert" className="text-warn">
             {error}

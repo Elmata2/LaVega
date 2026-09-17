@@ -40,6 +40,8 @@ import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import { Field } from "../components/ui/Field.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
  *
@@ -143,7 +145,7 @@ function AccountBlock() {
         <>
           <p className="cell-sub">{c.profiel.account.signedOutIntro}</p>
           <form onSubmit={(e) => void handleSignIn(e)}>
-            <div className="vault-field">
+            <Field>
               <label htmlFor="account-email">{c.profiel.account.emailLabel}</label>
               <input
                 id="account-email"
@@ -153,8 +155,8 @@ function AccountBlock() {
                 autoComplete="username"
                 onChange={(e) => setEmail(e.target.value)}
               />
-            </div>
-            <div className="vault-field">
+            </Field>
+            <Field>
               <label htmlFor="account-password">{c.profiel.account.passwordLabel}</label>
               <input
                 id="account-password"
@@ -164,7 +166,7 @@ function AccountBlock() {
                 autoComplete="current-password"
                 onChange={(e) => setPassword(e.target.value)}
               />
-            </div>
+            </Field>
             {error !== "" && (
               <p role="alert" className="text-warn">
                 {error}
@@ -435,8 +437,7 @@ function CashbackCorrigeren({
                 </div>
                 <div>
                   <label>
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       inputMode="decimal"
                       aria-label={`${c.profiel.cashback.cashbackInputAriaLabelPrefix} ${row.product}`}
                       placeholder={pctNow === null ? "%" : String(pctNow)}
@@ -563,7 +564,7 @@ export default function Profiel({
           back-up, and deliberately never in anything a model is given. */}
       <Card
         as="section"
-        className="flex items-start gap-4 max-[640px]:flex-col"
+        className="flex items-start gap-4 [@media(max-width:640px)]:flex-col"
         aria-label={c.profiel.head.ariaLabel}
       >
         <span

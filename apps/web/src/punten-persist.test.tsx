@@ -182,7 +182,7 @@ test("a removed balance can be put back — one click never destroys a hand-type
     makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" }),
     makeRewardsBalance({ program: FLYING_BLUE, points: 60_000, updatedAt: "2026-05-12" }),
   ]);
-  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>('[data-variant="danger"]')].find((n) =>
     (n.textContent ?? "").includes("Verwijder"),
   )!;
   click(del);
@@ -206,7 +206,7 @@ test("the undo keeps the reminder the owner set on the row he removed", () => {
     },
   ]);
   click(
-    [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+    [...cardFor(AMEX).querySelectorAll<HTMLElement>('[data-variant="danger"]')].find((n) =>
       (n.textContent ?? "").includes("Verwijder"),
     )!,
   );
@@ -217,7 +217,7 @@ test("the undo keeps the reminder the owner set on the row he removed", () => {
 test("saving something else lets the undo go, so it can never overwrite a newer figure", () => {
   render([makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" })]);
   click(
-    [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+    [...cardFor(AMEX).querySelectorAll<HTMLElement>('[data-variant="danger"]')].find((n) =>
       (n.textContent ?? "").includes("Verwijder"),
     )!,
   );

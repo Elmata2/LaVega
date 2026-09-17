@@ -14,7 +14,12 @@ import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import type { MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
+import Badge from "../components/ui/Badge.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
+import Pill from "../components/ui/Pill.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import "../styles/views.css";
 
 type RekeningenProps = {
@@ -222,22 +227,16 @@ function ConfirmAction({
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
-      <button
-        type="button"
-        className="card-link card-link-danger"
-        onClick={() => setAsking(true)}
-        disabled={busy}
-      >
+      <CardLink variant="danger" onClick={() => setAsking(true)} disabled={busy}>
         {label}
-      </button>
+      </CardLink>
     );
   }
   return (
     <span className="confirm-inline">
       <span className="confirm-q">{question}</span>
-      <button
-        type="button"
-        className="card-link card-link-danger"
+      <CardLink
+        variant="danger"
         onClick={() => {
           setAsking(false);
           onConfirm();
@@ -245,10 +244,10 @@ function ConfirmAction({
         disabled={busy}
       >
         {c.ja}
-      </button>
-      <button type="button" className="card-link" onClick={() => setAsking(false)} disabled={busy}>
+      </CardLink>
+      <CardLink onClick={() => setAsking(false)} disabled={busy}>
         {c.nee}
-      </button>
+      </CardLink>
     </span>
   );
 }
@@ -299,14 +298,14 @@ function NameCell({
         ) : (
           <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
         )}
-        <button type="button" className="card-link" onClick={() => setEdit(true)} disabled={busy}>
+        <CardLink onClick={() => setEdit(true)} disabled={busy}>
           {account.bank ? c.hernoem : c.bankInvullen}
-        </button>
+        </CardLink>
       </>
     );
   }
   return (
-    <div className="rename-cell">
+    <div className="rename-cell [@media(max-width:620px)]:items-end">
       <input
         aria-label={c.bankVanLabel(account.name || account.key)}
         placeholder={c.bankPlaceholder}
@@ -323,9 +322,9 @@ function NameCell({
         onBlur={() => onCommit(account)}
         disabled={busy}
       />
-      <button type="button" className="card-link" onClick={() => setEdit(false)} disabled={busy}>
+      <CardLink onClick={() => setEdit(false)} disabled={busy}>
         {c.klaar}
-      </button>
+      </CardLink>
     </div>
   );
 }
@@ -368,8 +367,8 @@ function SaldoCell({
         className={`dot${account.balance === null ? "" : account.balance >= 0 ? " dot-pos" : " dot-neg"}`}
         aria-hidden="true"
       />{" "}
-      <input
-        className={`saldo-input${cls}`}
+      <SaldoInput
+        className={cls}
         inputMode="decimal"
         placeholder={c.saldoOnbekendPlaceholder}
         aria-label={card ? c.openstaandBedragVanLabel(account.name) : c.saldoVanLabel(account.name)}
@@ -560,14 +559,12 @@ function AccountPanel({
         {txCount === 0 ? (
           <span className="cell-sub">{c.nogGeenTransactiesGeimporteerd}</span>
         ) : (
-          <button
-            type="button"
-            className="card-link"
+          <CardLink
             onClick={() => onSelectAccount(account.key)}
             title={c.bekijkTransactiesVan(account.name)}
           >
             {c.transactiesBekijken(txCount)}
-          </button>
+          </CardLink>
         )}
         <ConfirmAction
           label={c.verwijder}
@@ -852,12 +849,12 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
         {formatEuroIn(locale, group.total)}
       </span>
       {group.unknownCount > 0 && (
-        <span className="badge">{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</span>
+        <Badge>{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</Badge>
       )}
       {/* Niet "verouderd" en geen datum: we weten van deze bedragen niet op welke
           dag ze gelden. Zie SaldoAgeNote — het totaal blijft staan, want het is
           wél de som van wat we hebben. */}
-      {group.undatedCount > 0 && <span className="badge">{c.dagOnbekend}</span>}
+      {group.undatedCount > 0 && <Badge>{c.dagOnbekend}</Badge>}
     </span>
   );
 }
@@ -910,22 +907,16 @@ export default function Rekeningen({
             role="group"
             aria-label={c.weergaveGroepAria}
           >
-            <button
-              type="button"
-              className={`pill${mode === "bank" ? " pill-active" : ""}`}
-              aria-pressed={mode === "bank"}
-              onClick={() => setMode("bank")}
-            >
+            <Pill active={mode === "bank"} aria-pressed={mode === "bank"} onClick={() => setMode("bank")}>
               {c.perBank}
-            </button>
-            <button
-              type="button"
-              className={`pill${mode === "lijst" ? " pill-active" : ""}`}
+            </Pill>
+            <Pill
+              active={mode === "lijst"}
               aria-pressed={mode === "lijst"}
               onClick={() => setMode("lijst")}
             >
               {c.alleRekeningen}
-            </button>
+            </Pill>
           </div>
         )}
       </CardHeader>
@@ -978,7 +969,7 @@ export default function Rekeningen({
               >
                 <button
                   type="button"
-                  className="flex items-center gap-4 w-full py-3 px-4 [border:0] bg-transparent text-left cursor-pointer [font:inherit] text-ink hover:bg-surface-2 max-[640px]:flex-wrap"
+                  className="flex items-center gap-4 w-full py-3 px-4 [border:0] bg-transparent text-left cursor-pointer [font:inherit] text-ink hover:bg-surface-2 [@media(max-width:640px)]:flex-wrap"
                   data-testid="bank-group-head"
                   aria-expanded={open}
                   onClick={() => setOpenBank(open ? null : g.id)}
@@ -999,7 +990,7 @@ export default function Rekeningen({
                     </span>
                   </span>
                   <GroupSaldo group={g} locale={locale} />
-                  <span className="flex items-center gap-1 flex-none text-accent text-[0.85rem] max-[640px]:w-full">
+                  <span className="flex items-center gap-1 flex-none text-accent text-[0.85rem] [@media(max-width:640px)]:w-full">
                     {open ? c.verbergen : g.rows.length === 1 ? c.rekeningTonen : c.rekeningenTonen}
                     <span
                       className={`inline-block [transition:transform_0.15s_ease] ${open ? "rotate-180" : ""}`}
@@ -1020,18 +1011,20 @@ export default function Rekeningen({
                       >
                         {g.rows.map((r) => {
                           const isActive = r.account.key === activeKey;
-                          // bg-surface only while NOT active: a utility class always outranks
-                          // `.pill`/`.pill-active` regardless of specificity (the layering fix in
-                          // docs/adr/0005), so applying it unconditionally would paint an ACTIVE
-                          // tab white too, overriding `.pill-active`'s own accent-soft background
-                          // instead of only replacing `.pill`'s plain transparent one.
+                          // bg-surface only while NOT active, passed as `className` rather
+                          // than baked into a variant: Pill's `active` variant already covers
+                          // the accent-soft background for the active tab, and `cn()`'s
+                          // `twMerge` keeps this `bg-surface` over the variant's own
+                          // `bg-transparent` only when both are present — passing it
+                          // unconditionally would win over the active tab's accent-soft
+                          // background too (trap 7, docs/adr/0005).
                           return (
-                            <button
+                            <Pill
                               key={r.account.key}
-                              type="button"
                               role="tab"
                               id={tabId(g.id, r.account.key)}
-                              className={`pill${isActive ? " pill-active" : " bg-surface"}`}
+                              active={isActive}
+                              className={isActive ? undefined : "bg-surface"}
                               aria-selected={isActive}
                               onClick={() => setSelected((s) => ({ ...s, [g.id]: r.account.key }))}
                             >
@@ -1043,7 +1036,7 @@ export default function Rekeningen({
                               <span className="text-muted text-[0.75rem]">
                                 {typeOptionLabel(moneyCopy[locale].accountTypes, accountTypeKind(r.account))}
                               </span>
-                            </button>
+                            </Pill>
                           );
                         })}
                       </div>
@@ -1075,22 +1068,22 @@ export default function Rekeningen({
           })}
         </div>
       ) : (
-        <div className="table-wrap table-cards">
-          <table className="table">
+        <TableWrap>
+          <Table cards>
             <thead>
               <tr>
-                <th>{c.tabelBank}</th>
-                <th>{c.tabelType}</th>
-                <th>{c.tabelEntiteit}</th>
-                <th className="num">{c.tabelSaldo}</th>
-                <th className="num">{c.tabelTransacties}</th>
-                <th />
+                <Th>{c.tabelBank}</Th>
+                <Th>{c.tabelType}</Th>
+                <Th>{c.tabelEntiteit}</Th>
+                <Th numeric>{c.tabelSaldo}</Th>
+                <Th numeric>{c.tabelTransacties}</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
               {rows.map(({ account, txCount }) => (
                 <tr key={account.key}>
-                  <td data-label={c.tabelBank}>
+                  <Td data-label={c.tabelBank}>
                     <NameCell
                       account={account}
                       busy={busy}
@@ -1098,11 +1091,11 @@ export default function Rekeningen({
                       onCommit={onAccountCommit}
                       locale={locale}
                     />
-                  </td>
-                  <td data-label={c.tabelType}>
+                  </Td>
+                  <Td data-label={c.tabelType}>
                     <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} locale={locale} />
-                  </td>
-                  <td data-label={c.tabelEntiteit}>
+                  </Td>
+                  <Td data-label={c.tabelEntiteit}>
                     <input
                       value={account.entity}
                       placeholder="—"
@@ -1110,8 +1103,8 @@ export default function Rekeningen({
                       onBlur={() => void onAccountCommit(account)}
                       disabled={busy}
                     />
-                  </td>
-                  <td className="num" data-label={c.tabelSaldo}>
+                  </Td>
+                  <Td numeric data-label={c.tabelSaldo}>
                     <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} locale={locale} />
                     {/* Dezelfde waarschuwing als in het paneel, maar de tabel
                         heeft geen ruimte voor de uitleg: hier alleen de dag (of
@@ -1121,19 +1114,17 @@ export default function Rekeningen({
                     <div className="cell-sub">
                       {saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null), locale)}
                     </div>
-                  </td>
-                  <td className="num" data-label={c.tabelTransacties}>
-                    <button
-                      type="button"
-                      className="card-link"
+                  </Td>
+                  <Td numeric data-label={c.tabelTransacties}>
+                    <CardLink
                       onClick={() => onSelectAccount(account.key)}
                       title={c.bekijkTransactiesVan(account.name)}
                       disabled={txCount === 0}
                     >
                       {txCount}
-                    </button>
-                  </td>
-                  <td className="num" data-label="">
+                    </CardLink>
+                  </Td>
+                  <Td numeric data-label="">
                     <ConfirmAction
                       label={c.verwijder}
                       question={deleteQuestion(account, txCount, locale)}
@@ -1141,12 +1132,12 @@ export default function Rekeningen({
                       onConfirm={() => onDeleteAccount(account.key)}
                       locale={locale}
                     />
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableWrap>
       )}
     </Card>
   );

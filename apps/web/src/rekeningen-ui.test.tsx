@@ -294,12 +294,12 @@ test("the panel still carries every edit the table had", () => {
   type(panel.querySelector<HTMLInputElement>('[aria-label="Entiteit Betaalrekening"]')!, "BV2");
   // Saldo commits on blur, unchanged.
   blur(panel.querySelector<HTMLInputElement>('[aria-label="Saldo Betaalrekening"]')!);
-  click(byText("[data-testid=bank-panel] .card-link", "transacties bekijken"));
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "transacties bekijken"));
   // Delete asks first — one click never deletes.
-  click(byText("[data-testid=bank-panel] .card-link-danger", "Verwijder"));
+  click(byText('[data-testid=bank-panel] [data-variant="danger"]', "Verwijder"));
   expect(container!.textContent).toContain("Betaalrekening en 2 transacties verwijderen?");
   expect(seen).not.toContain("delete:NL01INGB");
-  click(byText("[data-testid=bank-panel] .card-link-danger", "Ja"));
+  click(byText('[data-testid=bank-panel] [data-variant="danger"]', "Ja"));
 
   expect(seen).toEqual([
     "type:NL01INGB:Spaarrekening",
@@ -333,7 +333,7 @@ test("typing a bank name does not move the row to another group mid-word", () =>
   act(() => root!.render(<Shell />));
 
   click(byText("[data-testid=bank-group-head]", UNKNOWN_BANK));
-  click(byText("[data-testid=bank-panel] .card-link", "Bank invullen"));
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "Bank invullen"));
   const bank = container.querySelector<HTMLInputElement>('[aria-label="Bank van 0123456789"]')!;
 
   for (const partial of ["I", "IN", "ING"]) {
@@ -346,14 +346,14 @@ test("typing a bank name does not move the row to another group mid-word", () =>
   expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(4);
 
   // "Klaar" ends the rename, and only then does the account join ING.
-  click(byText("[data-testid=bank-panel] .card-link", "Klaar"));
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "Klaar"));
   expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(3);
   expect(byText("[data-testid=bank-group-head]", "ING").textContent).toContain("3 rekeningen");
 });
 
 test("'Alle rekeningen' falls back to the flat table, with every account in it", () => {
   render();
-  act(() => byText("[data-testid=bank-modes] .pill", "Alle rekeningen").click());
+  act(() => byText('[data-testid=bank-modes] [data-testid="pill"]', "Alle rekeningen").click());
   expect(container!.querySelectorAll("table tbody tr")).toHaveLength(5);
   expect(container!.querySelectorAll("[data-testid=bank-group]")).toHaveLength(0);
 });

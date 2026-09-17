@@ -4,6 +4,7 @@ import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -185,9 +186,7 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
       span={span}
       height="short"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("facturen")}>
-          {c.facturenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>
       }
       footer={
         s.zonderEuroBedrag > 0 ? <>{c.vanNFacturenBedragOnbekend(s.zonderEuroBedrag)}</> : undefined

@@ -3,6 +3,7 @@ import type { CategoryComparison, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categoryComparison } from "@lavega/core";
 import { formatEuroIn, monthLabel } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, categoryLabel } from "../../copy/money.js";
 
@@ -119,14 +120,12 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
             {rows.map((r) => (
               <div className="cat-row" key={r.category}>
                 <div className="cat-row-top">
-                  <button
-                    type="button"
-                    className="card-link"
+                  <CardLink
                     onClick={() => onSelectCategory(r.category)}
                     title={c.bekijkTransactiesIn(categoryLabel(locale, r.category))}
                   >
                     {categoryLabel(locale, r.category)}
-                  </button>
+                  </CardLink>
                   <span className="cat-fig">
                     <span className="cat-share">{r.sharePct.toFixed(0)}%</span>
                     <span className="cat-amt">{formatEuroIn(locale, r.out)}</span>

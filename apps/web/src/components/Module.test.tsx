@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
+import { moduleClass } from "../module-grid.js";
 import Module, { ModuleMenu, ModulePeriod } from "./Module";
 
 /* There is no DOM render lib in this repo, but react-dom is already a
@@ -24,7 +25,9 @@ test("a module carries its span and height onto the card element", () => {
       inhoud
     </Module>,
   );
-  expect(html).toContain('class="module module-span-2 module-tall"');
+  // The exact class string is pinned once, in module-grid.ts / .test.ts — this
+  // just proves Module.tsx actually applies it, not what it says.
+  expect(html).toContain(`class="${moduleClass({ span: 2, height: "tall" })}"`);
 });
 
 test("the period control and the … menu render in the controls slot", () => {

@@ -14,8 +14,11 @@ import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { API_BASE } from "../api";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import Badge from "../components/ui/Badge.js";
 import Button, { buttonVariants } from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
@@ -977,10 +980,10 @@ export default function Facturen({
               <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.amountLabel}
                 {pendingSource === "llm" && (
-                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
+                  <Badge>{c.forms.manual.aiDraftBadge}</Badge>
                 )}
-                <input
-                  className="saldo-input w-full box-border"
+                <SaldoInput
+                  className="w-full box-border"
                   type="number"
                   step={0.01}
                   min={0}
@@ -1002,10 +1005,10 @@ export default function Facturen({
                     zeggen (btw verlegd, ICP, 0%-export), dan typt hij 0. */}
                 {c.forms.manual.vatLabel} <span className="cell-sub">{c.forms.manual.vatHint}</span>
                 {pendingSource === "llm" && pendingVat !== null && (
-                  <span className="badge">{c.forms.manual.aiDraftBadge}</span>
+                  <Badge>{c.forms.manual.aiDraftBadge}</Badge>
                 )}
-                <input
-                  className="saldo-input w-full box-border"
+                <SaldoInput
+                  className="w-full box-border"
                   type="number"
                   step={0.01}
                   min={0}
@@ -1018,8 +1021,8 @@ export default function Facturen({
               </label>
               <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.currencyLabel}
-                <input
-                  className="saldo-input w-full box-border"
+                <SaldoInput
+                  className="w-full box-border"
                   value={currency}
                   maxLength={3}
                   placeholder={c.forms.manual.currencyPlaceholder}
@@ -1136,8 +1139,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.amountLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       type="number"
                       step={0.01}
                       min={0}
@@ -1148,8 +1150,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.currencyLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       value={p.currency}
                       maxLength={3}
                       placeholder={c.queue.currencyPlaceholder}
@@ -1161,8 +1162,7 @@ export default function Facturen({
                   </label>{" "}
                   <label>
                     {c.queue.vatLabel}{" "}
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       type="number"
                       step={0.01}
                       min={0}
@@ -1251,21 +1251,21 @@ export default function Facturen({
         {invoices.length === 0 ? (
           <p className="cell-sub">{c.list.empty}</p>
         ) : (
-          <div className="table-wrap table-cards">
-            <table className="table">
+          <TableWrap>
+            <Table cards>
               <thead>
                 <tr>
-                  <th>{c.list.columns.counterparty}</th>
+                  <Th>{c.list.columns.counterparty}</Th>
                   {/* De onderneming staat er alleen als er meer dan één is. Bij
                       één (of geen) zou de kolom op elke regel hetzelfde zeggen,
                       en dan is het geen informatie maar ruis — en voor de
                       zelfstandige zonder entiteiten is het bovendien jargon. */}
-                  {showEntityColumn && <th>{c.list.columns.company}</th>}
-                  <th>{c.list.columns.direction}</th>
-                  <th className="num">{c.list.columns.amount}</th>
-                  <th>{c.list.columns.dueDate}</th>
-                  <th>{c.list.columns.status}</th>
-                  <th></th>
+                  {showEntityColumn && <Th>{c.list.columns.company}</Th>}
+                  <Th>{c.list.columns.direction}</Th>
+                  <Th numeric>{c.list.columns.amount}</Th>
+                  <Th>{c.list.columns.dueDate}</Th>
+                  <Th>{c.list.columns.status}</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
@@ -1273,41 +1273,40 @@ export default function Facturen({
                   const signed = inv.direction === "in" ? inv.amount : -inv.amount;
                   return (
                     <tr key={inv.id}>
-                      <td data-label={c.list.columns.counterparty}>
+                      <Td data-label={c.list.columns.counterparty}>
                         {inv.counterparty}
                         {inv.invoiceNumber ? (
                           <span className="cell-sub"> · {inv.invoiceNumber}</span>
                         ) : null}
-                      </td>
+                      </Td>
                       {showEntityColumn && (
-                        <td data-label={c.list.columns.company}>{inv.entity}</td>
+                        <Td data-label={c.list.columns.company}>{inv.entity}</Td>
                       )}
-                      <td data-label={c.list.columns.direction}>
-                        <span className="badge">
+                      <Td data-label={c.list.columns.direction}>
+                        <Badge>
                           {inv.direction === "in"
                             ? c.list.directionBadge.in
                             : c.list.directionBadge.out}
-                        </span>
+                        </Badge>
                         {autoBookedIds.has(inv.id) && (
                           <>
                             {" "}
-                            <span className="badge" title={c.list.autoBadgeTitle}>
-                              {c.list.autoBadge}
-                            </span>
+                            <Badge title={c.list.autoBadgeTitle}>{c.list.autoBadge}</Badge>
                           </>
                         )}
-                      </td>
-                      <td
-                        className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`}
+                      </Td>
+                      <Td
+                        numeric
+                        className={signed >= 0 ? "text-pos" : "text-neg"}
                         data-label={c.list.columns.amount}
                       >
                         {formatEuroIn(locale, signed)}
-                      </td>
-                      <td data-label={c.list.columns.dueDate}>{inv.dueDate}</td>
-                      <td data-label={c.list.columns.status}>
-                        <span className="badge">{c.list.statusLabels[inv.status]}</span>
-                      </td>
-                      <td>
+                      </Td>
+                      <Td data-label={c.list.columns.dueDate}>{inv.dueDate}</Td>
+                      <Td data-label={c.list.columns.status}>
+                        <Badge>{c.list.statusLabels[inv.status]}</Badge>
+                      </Td>
+                      <Td>
                         {inv.status === "expected" ? (
                           <>
                             {autoBookedIds.has(inv.id) && (
@@ -1327,13 +1326,13 @@ export default function Facturen({
                         ) : (
                           <span className="cell-sub">{c.list.noActions}</span>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableWrap>
         )}
       </Card>
     </>

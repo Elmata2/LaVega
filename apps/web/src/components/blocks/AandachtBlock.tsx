@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import CardLink from "../ui/CardLink.js";
+import SaldoInput from "../ui/SaldoInput.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -120,8 +122,7 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
         <label className="buffer-field eyebrow">
           {c.waarschuwOnderBuffer}
           {" "}
-          <input
-            className="saldo-input"
+          <SaldoInput
             inputMode="decimal"
             placeholder="0"
             aria-label={c.waarschuwingsbufferAria}
@@ -164,9 +165,7 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
                   </span>
                 </h3>
                 {folded ? (
-                  <button type="button" className="card-link" onClick={() => setShowInfo(true)}>
-                    {c.toonNTerInfo(rows.length)}
-                  </button>
+                  <CardLink onClick={() => setShowInfo(true)}>{c.toonNTerInfo(rows.length)}</CardLink>
                 ) : (
                   <div className="flex flex-col">
                     {rows.map((a) => (

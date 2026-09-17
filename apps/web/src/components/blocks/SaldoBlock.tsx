@@ -5,6 +5,7 @@ import type { View } from "../../App";
 import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart from "../TrendChart.js";
+import CardLink from "../ui/CardLink.js";
 import DeltaPill from "./DeltaPill.js";
 import { daysBetween, shiftDate } from "./dates.js";
 import type { Locale } from "../../locale.js";
@@ -282,9 +283,7 @@ export default function SaldoBlock({
       span={span}
       height="tall"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          {c.rekeningenArrow}
-        </button>
+        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
       }
       footer={
         <>

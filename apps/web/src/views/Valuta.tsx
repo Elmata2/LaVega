@@ -37,6 +37,7 @@ import { optimiseCopy, formatPercentIn } from "../copy/optimise.js";
 import type { ValutaCopy } from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
 import catalogue from "../../../../docs/catalog/catalog.json";
+import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import "../styles/views.css";
 
@@ -450,11 +451,11 @@ function RouteRow({
         <div className="travel-journey-head">
           <span className="travel-journey-name">
             {route.bank}{" "}
-            <span className="badge">{route.held ? c.routeRow.heldBadge : c.routeRow.notHeldBadge}</span>
+            <Badge>{route.held ? c.routeRow.heldBadge : c.routeRow.notHeldBadge}</Badge>
             {kindLabel ? (
               <>
                 {" "}
-                <span className="badge">{kindLabel}</span>
+                <Badge>{kindLabel}</Badge>
               </>
             ) : null}
           </span>
@@ -781,7 +782,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
           dropdown en het kiezen van een rekening. Wie de code van de valuta al weet
           hoeft de bol nooit te zien; wie hem niet weet scrollt één scherm. Andersom
           zou iedereen langs een bol van 420 px moeten om bij het bedrag te komen. */}
-      <ModuleGrid className="grid-2" label={c.moduleLabels.grid}>
+      <ModuleGrid
+        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        label={c.moduleLabels.grid}
+      >
         <Module title={c.moduleLabels.transferTitle} height="tall">
           <div className="flex flex-col gap-2 relative">
             <div className="border border-line rounded bg-surface-2 p-4">

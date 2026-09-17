@@ -93,6 +93,7 @@ import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
+import CardLink from "./components/ui/CardLink.js";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -1176,9 +1177,7 @@ export default function App() {
             <p className="text-muted shell-problems">
               Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is
               dit scherm leeg. Zet dat per rekening bij{" "}
-              <button type="button" className="card-link" onClick={() => setView("accounts")}>
-                Rekeningen
-              </button>
+              <CardLink onClick={() => setView("accounts")}>Rekeningen</CardLink>
               .
             </p>
           )}

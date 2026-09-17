@@ -46,22 +46,13 @@
   --lv-axis-w: 3.6rem;
 }
 
-/* ---------- Readout (the number the chart is about) ---------- */
-
-.lv-chart-readout {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: var(--sp-3);
-  min-height: 3rem;
-}
-.lv-chart-readout-value {
-  font-size: 1.6rem;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
+/* ---------- Readout (the number the chart is about) ----------
+ *
+ * Converted to Tailwind utilities on TrendChart.tsx's own elements. Pure
+ * typography and flex layout on a single element, no descendant selector and
+ * no absolute geometry — .lv-chart-readout and .lv-chart-readout-value are
+ * class hooks only now; the built stylesheet carries their utilities instead
+ * of a hand-written rule. */
 
 /* ---------- Plot ---------- */
 
@@ -218,30 +209,13 @@
   transform: translateX(-100%);
 }
 
-/* ---------- Legend (shared) ---------- */
-
-.lv-chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-3);
-}
-.lv-chart-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.lv-chart-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex: none;
-}
+/* ---------- Legend (shared) ----------
+ *
+ * Converted to Tailwind utilities on CategoryBars.tsx's (and StatistiekBlock's
+ * own legend-jump) elements: plain flex layout, typography and a small fixed
+ * swatch box, no descendant selector and no data-driven geometry.
+ * .lv-chart-legend / .lv-chart-legend-item / .lv-chart-swatch stay as class
+ * hooks; the built stylesheet carries their utilities. */
 
 /* ---------- Side-by-side bars ---------- */
 
@@ -502,11 +476,10 @@
 /* ---------- Phone ---------- */
 
 @media (max-width: 900px) {
-  /* One column means every chart gets the full width, so the readout can grow
+  /* .lv-chart-readout-value's own mobile size is now the
+   * [@media(max-width:900px)]: variant on TrendChart.tsx's utility class —
+   * one column means every chart gets the full width, so the readout can grow
    * into the big-number register the mobile reference uses. */
-  .lv-chart-readout-value {
-    font-size: 1.9rem;
-  }
   .lv-chart-withaxis {
     --lv-axis-w: 3rem;
   }
@@ -577,79 +550,15 @@
  *
  * Geen transitions en geen animatie hier, op afspraak: er beweegt niets, dus er
  * valt niets te bewegen. */
-.lv-percentiel {
-  margin-top: var(--sp-3);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-}
-
-.lv-percentiel-basis {
-  margin: 0 0 var(--sp-2);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-/* De maand die vergeleken wordt, in de tekstkleur: de rest van de regel is de
- * verantwoording, dit is waar hij naar kijkt. */
-.lv-percentiel-basis strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.lv-percentiel-lijst {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.lv-percentiel-rij {
-  display: grid;
-  /* Naam en bedrag zo smal als ze mogen zijn, de zin krijgt de rest: bij een
-   * lange categorienaam mag de naam afbreken, maar de zin nooit — een halve zin
-   * ("hoger dan 8 van je…") is een bewering zonder haar noemer. */
-  grid-template-columns: minmax(0, 9rem) minmax(0, auto) minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: var(--sp-3);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.lv-percentiel-naam {
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.lv-percentiel-bedrag {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--ink);
-}
-
-.lv-percentiel-positie {
-  color: var(--muted);
-}
-/* Een positie die niet te bepalen was, staat er als reden en niet als getal.
- * Cursief houdt hem zichtbaar anders dan een telling zonder hem weg te dimmen
- * tot iets dat over het hoofd te zien is — de reden is hier de informatie. */
+/* This block (the wrapper's spacing/hairline, the ⓘ heading's typography, the
+ * three-column row grid and its narrow-screen collapse, the name/bedrag/positie
+ * colours) is converted to Tailwind utilities on StatistiekBlock.tsx's own
+ * elements — plain box/grid/typography, no descendant selector, no
+ * data-driven geometry. The one rule below stays hand-written because it is a
+ * same-element attribute selector `resolved()` can still verify, and leaving
+ * it costs nothing. */
 .lv-percentiel-positie[data-onbekend="ja"] {
   font-style: italic;
-}
-
-/* Op een smal scherm past de zin niet naast naam en bedrag; dan zakt hij naar
- * een eigen regel onder het paar in plaats van tot twee woorden per regel te
- * verkruimelen. */
-@media (max-width: 560px) {
-  .lv-percentiel-rij {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: 1px;
-    padding-bottom: var(--sp-1);
-  }
-  .lv-percentiel-positie {
-    grid-column: 1 / -1;
-  }
 }
 
 }

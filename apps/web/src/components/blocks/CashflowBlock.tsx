@@ -3,6 +3,7 @@ import type { View } from "../../App";
 import { formatEuroIn, formatEuroAxisIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart, { type TrendPoint } from "../TrendChart.js";
+import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -67,9 +68,7 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
       span={2}
       height="tall"
       menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("forecast")}>
-          Forecast →
-        </button>
+        <CardLink onClick={() => onNavigate("forecast")}>Forecast →</CardLink>
       }
       footer={
         hasChart ? (

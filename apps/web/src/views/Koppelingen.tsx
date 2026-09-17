@@ -11,6 +11,7 @@ import {
 } from "../settings";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
 
 /* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
  *
@@ -219,8 +220,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           staat ernaast voor wie nog niets heeft. */}
       <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
         {c.forwardAddress.addressLabel}
-        <input
-          className="saldo-input"
+        <SaldoInput
           value={forwardDraft}
           placeholder={c.forwardAddress.addressPlaceholder}
           aria-label={c.forwardAddress.addressAriaLabel}

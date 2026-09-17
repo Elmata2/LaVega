@@ -127,12 +127,15 @@ export default function TrendChart({
 
   return (
     <div className={`lv-chart${showAxis ? " lv-chart-withaxis" : ""}`}>
-      <div className="lv-chart-readout">
+      <div className="lv-chart-readout flex flex-col gap-[2px] mb-[var(--sp-3)] min-h-[3rem]">
         <span className="eyebrow">
           {readoutLabel ? `${readoutLabel} · ` : ""}
           {active.label}
         </span>
-        <span className="lv-chart-readout-value" style={{ color }}>
+        <span
+          className="lv-chart-readout-value text-[1.6rem] font-bold leading-[1.1] tracking-[-0.02em] tabular-nums [@media(max-width:900px)]:text-[1.9rem]"
+          style={{ color }}
+        >
           {format(active.value)}
         </span>
       </div>
