@@ -86,6 +86,58 @@ test("dashboard builder returns finished chart series and selected position mark
   expect(dashboard.position?.currentValue).toBeCloseTo(1200 / 1.1);
 });
 
+test("position detail hides a daily change across a price gap and ignores a future-dated bar", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        symbol: "GAPCO",
+        quantity: 10,
+        averagePrice: 100,
+        marketPrice: 110,
+        marketValue: 1100,
+        currency: "USD",
+        asOf: "2026-01-08",
+      },
+    ],
+    trades: [
+      {
+        id: "0",
+        entity: "personal",
+        date: "2026-01-02",
+        symbol: "GAPCO",
+        side: "buy",
+        quantity: 10,
+        price: 100,
+        amount: 1000,
+        currency: "USD",
+        commission: 0,
+      },
+    ],
+    dividends: [],
+    priceBars: [
+      { symbol: "GAPCO", date: "2026-01-02", close: 100, currency: "USD" },
+      { symbol: "GAPCO", date: "2026-01-05", close: 102, currency: "USD" },
+      { symbol: "GAPCO", date: "2026-01-08", close: 110, currency: "USD" },
+      { symbol: "GAPCO", date: "2026-01-09", close: 999, currency: "USD" },
+    ],
+    benchmarkBars: [],
+    presentationCurrency: "USD",
+    fxRates: FX_RATES,
+    selectedSymbol: "GAPCO",
+    today: "2026-01-08",
+  });
+
+  // Bugfix regression: buildPositionDetail used to read bars.at(-1)/bars.at(-2)
+  // directly, so a future-dated bar could become "latest" and a stale
+  // neighbor across a gap could feed dailyChange. valuePosition() gates both.
+  expect(dashboard.position?.priceStatus).toBe("priced");
+  expect(dashboard.position?.currentPrice).toBe(110);
+  expect(dashboard.position?.currentValue).toBe(1100);
+  expect(dashboard.position?.dailyChange).toBeNull();
+  expect(dashboard.position?.dailyChangePercentage).toBeNull();
+});
+
 test("undefined fxRates (a failed FX provider) marks foreign positions missing-fx instead of crashing or pricing wrong", () => {
   const dashboard = buildInvestingDashboard({
     positions: POSITIONS,

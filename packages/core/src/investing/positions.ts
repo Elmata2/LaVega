@@ -1,7 +1,7 @@
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
-import { isPriceFresh } from "./calendar.js";
+import { businessDaysAfter, isPriceFresh } from "./calendar.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
@@ -275,6 +275,77 @@ function key(value: Pick<Position | Trade | Dividend, "entity" | "symbol">): str
   return `${value.entity}\u0000${value.symbol.toUpperCase()}`;
 }
 
+export type PositionValuation = {
+  price: number | null;
+  value: number | null;
+  status: PositionPriceStatus;
+  latestBar: PriceBar | null;
+  dailyChange: number | null;
+  dailyChangePercentage: number | null;
+};
+
+const EMPTY_VALUATION: PositionValuation = {
+  price: null,
+  value: null,
+  status: "unpriced",
+  latestBar: null,
+  dailyChange: null,
+  dailyChangePercentage: null,
+};
+
+/** One freshness and daily-change rule for both the position list and the
+ * detail view: a bar backs a value only within five business days of
+ * valuationDate, future-dated bars never count, and a daily change only
+ * comes from the bar immediately preceding the latest one, never a stale
+ * neighbor across a data gap. */
+export function valuePosition(input: {
+  quantity: number;
+  bars: readonly PriceBar[];
+  valuationDate: string;
+  presentationCurrency: string;
+  fxRates: FxRates;
+}): PositionValuation {
+  const bars = input.bars
+    .filter((bar) => bar.date <= input.valuationDate)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const latest = bars.at(-1);
+  if (!latest || !isPriceFresh(latest.date, input.valuationDate)) return EMPTY_VALUATION;
+  try {
+    const price = convertCurrency(
+      latest.close,
+      latest.currency,
+      input.presentationCurrency,
+      input.valuationDate,
+      input.fxRates,
+    );
+    const value = price * input.quantity;
+    const status: PositionPriceStatus =
+      latest.date === input.valuationDate ? "priced" : "forward-filled";
+    const previous = bars.at(-2);
+    let dailyChange: number | null = null;
+    let dailyChangePercentage: number | null = null;
+    if (previous && businessDaysAfter(previous.date, latest.date) === 1) {
+      try {
+        const priorPrice = convertCurrency(
+          previous.close,
+          previous.currency,
+          input.presentationCurrency,
+          previous.date,
+          input.fxRates,
+        );
+        dailyChange = (price - priorPrice) * input.quantity;
+        dailyChangePercentage =
+          Math.abs(priorPrice) <= EPSILON ? null : (price - priorPrice) / priorPrice;
+      } catch {
+        // Prior close's FX is unavailable; leave the daily change null rather than guess.
+      }
+    }
+    return { price, value, status, latestBar: latest, dailyChange, dailyChangePercentage };
+  } catch {
+    return { ...EMPTY_VALUATION, status: "missing-fx" };
+  }
+}
+
 export function buildCurrentPositions(input: {
   positions: readonly Position[];
   trades: readonly Trade[];
@@ -316,23 +387,15 @@ export function buildCurrentPositions(input: {
     // whose brokers' remaining quantities happen to cancel.
     if (Math.abs(quantity) <= EPSILON) return [];
     const bars = barsBySymbol.get(sample.symbol.toUpperCase()) ?? [];
-    const latest = bars.at(-1);
-    let marketValue: number | null = null;
-    let priceStatus: PositionPriceStatus = "unpriced";
-    if (latest && isPriceFresh(latest.date, input.today)) {
-      try {
-        marketValue = convertCurrency(
-          quantity * latest.close,
-          latest.currency,
-          input.presentationCurrency,
-          input.today,
-          input.fxRates,
-        );
-        priceStatus = latest.date === input.today ? "priced" : "forward-filled";
-      } catch {
-        priceStatus = "missing-fx";
-      }
-    }
+    const valuation = valuePosition({
+      quantity,
+      bars,
+      valuationDate: input.today,
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+    });
+    const marketValue = valuation.value;
+    const priceStatus = valuation.status;
     const calculatedReturns = calculatePositionReturn(
       quantity,
       marketValue,
@@ -340,7 +403,7 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date, brokerCost: brokerCostLegs(anchors) },
+      { valuationDate: valuation.latestBar?.date, brokerCost: brokerCostLegs(anchors) },
     );
     const returns =
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
