@@ -95,8 +95,16 @@ export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
 }
 
 export type EncryptedBrokerRepository = {
-  get<T>(broker: string): Promise<{ credentials: T; snapshot: unknown | null } | null>;
+  get<T>(
+    broker: string,
+  ): Promise<{ credentials: T; snapshot: unknown | null; credentialGeneration: number } | null>;
+  /** Writing credentials starts a new generation: whatever a running sync is
+   *  reading belongs to the connection this call replaces. */
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
+  /** Stores broker data alone. The credential blob is left untouched, so a
+   *  reconnect that lands mid-sync is not reverted by the snapshot write that
+   *  follows it. False means the credentials moved on and the data was dropped. */
+  putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number): Promise<boolean>;
 };
 
 export function createBrokerRepository(
@@ -107,7 +115,7 @@ export function createBrokerRepository(
     async get<T>(broker: string) {
       return withTenant(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          "SELECT credentials_blob, snapshot_blob FROM investing.broker_vaults WHERE broker = $1",
+          "SELECT credentials_blob, snapshot_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
           [broker],
         );
         const row = result.rows[0];
@@ -126,6 +134,7 @@ export function createBrokerRepository(
         return {
           credentials: credentials.value,
           snapshot: snapshot?.readable ? snapshot.value : null,
+          credentialGeneration: Number(row.credential_generation ?? 1),
         };
       });
     },
@@ -134,9 +143,19 @@ export function createBrokerRepository(
       const snapshotBlob = snapshot === undefined ? null : encryptBlob(snapshot);
       await withTenant(db, userId, async (client) => {
         await client.query(
-          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
           [broker, credentialsBlob, snapshotBlob],
         );
+      });
+    },
+    async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
+      const snapshotBlob = encryptBlob(snapshot);
+      return withTenant(db, userId, async (client) => {
+        const result = await client.query(
+          "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
+          [broker, snapshotBlob, credentialGeneration],
+        );
+        return result.rows.length > 0;
       });
     },
   };
@@ -284,9 +303,26 @@ export function createPreferencesRepository(
   };
 }
 
+/** The worker that currently owns a broker's sync, and when it last said so. */
+export type SyncLeaseRow = {
+  id: string;
+  startedAt: string;
+  heartbeatAt: string;
+};
+
+/** What a status request on any instance reports about the run. */
+export type SyncProgressRow = {
+  status: "idle" | "running" | "waiting" | "completed" | "problem";
+  message: string | null;
+  updatedAt: string | null;
+  leaseId: string | null;
+};
+
 export type SyncStateRow = {
   lastSyncedAt: string | null;
   retryAfter?: string | null;
+  lease?: SyncLeaseRow | null;
+  progress?: SyncProgressRow | null;
   resume?: {
     ordersNextPagePath?: string | null;
     transactionsNextPagePath?: string | null;
@@ -326,6 +362,173 @@ export function createSyncStateRepository(
         await client.query(
           "INSERT INTO investing.sync_state (user_id, broker, status, state, last_succeeded_at) VALUES (current_setting('app.user_id'), $1, 'idle', $2::jsonb, $3) ON CONFLICT (user_id, broker) DO UPDATE SET state = EXCLUDED.state, last_succeeded_at = EXCLUDED.last_succeeded_at, updated_at = CURRENT_TIMESTAMP",
           [broker, JSON.stringify(state), state.lastSyncedAt],
+        );
+      });
+    },
+  };
+}
+
+export type BrokerSyncCommit = {
+  leaseId: string;
+  state: SyncStateRow;
+  progress: SyncProgressRow;
+  /** Omitted when a run produced no data worth storing. */
+  snapshot?: { value: unknown; credentialGeneration: number };
+};
+
+export type BrokerSyncOperationRepository = {
+  claim(
+    broker: string,
+    input: { leaseId: string; staleBefore: string; progress: SyncProgressRow },
+  ): Promise<{ claimed: boolean; state: SyncStateRow; credentialGeneration: number }>;
+  /** The run is alive and this is what it is doing. Rejected once the lease is gone. */
+  publish(broker: string, leaseId: string, progress: SyncProgressRow): Promise<boolean>;
+  progress(broker: string): Promise<SyncProgressRow | null>;
+  /** Broker data and cursor in one transaction, or neither. */
+  commit(broker: string, input: BrokerSyncCommit): Promise<boolean>;
+  release(broker: string, leaseId: string, progress: SyncProgressRow): Promise<void>;
+};
+
+const EMPTY_SYNC_STATE: SyncStateRow = { lastSyncedAt: null, retryAfter: null };
+
+/** Thrown to roll a commit back; never leaves this module. */
+class RejectedCommit extends Error {}
+
+/**
+ * Broker synchronization as one durable operation.
+ *
+ * A run claims the tenant's broker, works, and commits what it read. Both
+ * guards are in the WHERE clause rather than in a read the caller did earlier:
+ * a worker whose lease expired and was taken over cannot commit, and a run that
+ * started before a reconnect cannot write the old account's holdings over the
+ * new ones. Snapshot and cursor move together, so a failure leaves neither
+ * changed and the next run resumes from what it can prove it stored.
+ */
+export function createBrokerSyncOperationRepository(
+  db: Database,
+  userId: string | undefined | null,
+): BrokerSyncOperationRepository {
+  const tenantId = requireUserId(userId);
+  const readState = (value: unknown): SyncStateRow => {
+    const state = value as SyncStateRow | undefined;
+    return state && Object.keys(state).length > 0 ? state : EMPTY_SYNC_STATE;
+  };
+  return {
+    async claim(broker, input) {
+      return withTenant(db, tenantId, async (client) => {
+        const lease: SyncLeaseRow = {
+          id: input.leaseId,
+          startedAt: input.progress.updatedAt ?? new Date().toISOString(),
+          heartbeatAt: input.progress.updatedAt ?? new Date().toISOString(),
+        };
+        const claim = JSON.stringify({ lease, progress: input.progress });
+        /* The cursor already in the row is the whole point of resuming, so the
+         * claim merges into it instead of replacing it. */
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, 'running', $2::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = 'running',
+                   state = investing.sync_state.state || $2::jsonb,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE investing.sync_state.state->'lease'->>'id' IS NULL
+                OR (investing.sync_state.state->'lease'->>'heartbeatAt')::timestamptz < $3::timestamptz
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [broker, claim, input.staleBefore],
+        );
+        const row = result.rows[0];
+        const vault = await client.query<QueryResultRow>(
+          "SELECT credential_generation FROM investing.broker_vaults WHERE broker = $1",
+          [broker],
+        );
+        return {
+          claimed: Boolean(row?.claimed),
+          state: readState(row?.state),
+          credentialGeneration: Number(vault.rows[0]?.credential_generation ?? 0),
+        };
+      });
+    },
+    async publish(broker, leaseId, progress) {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query(
+          `UPDATE investing.sync_state
+             SET state = state || jsonb_build_object(
+                   'progress', $3::jsonb,
+                   'lease', state->'lease' || jsonb_build_object('heartbeatAt', $4::text)
+                 ),
+                 updated_at = CURRENT_TIMESTAMP
+           WHERE broker = $1 AND state->'lease'->>'id' = $2
+           RETURNING broker`,
+          [broker, leaseId, JSON.stringify(progress), progress.updatedAt ?? new Date().toISOString()],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async progress(broker) {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state->'progress' AS progress FROM investing.sync_state WHERE broker = $1",
+          [broker],
+        );
+        return (result.rows[0]?.progress as SyncProgressRow | null) ?? null;
+      });
+    },
+    async commit(broker, input) {
+      const snapshotBlob = input.snapshot ? encryptBlob(input.snapshot.value) : null;
+      try {
+        return await withTenant(db, tenantId, async (client) => {
+          if (input.snapshot) {
+            const stored = await client.query(
+              "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
+              [broker, snapshotBlob, input.snapshot.credentialGeneration],
+            );
+            if (stored.rows.length === 0) throw new RejectedCommit();
+          }
+          const state = await client.query(
+            `UPDATE investing.sync_state
+               SET status = $3,
+                   state = $4::jsonb,
+                   last_succeeded_at = CASE WHEN $5::text IS NULL THEN last_succeeded_at ELSE $5::timestamptz END,
+                   last_error = $6,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE broker = $1 AND state->'lease'->>'id' = $2
+             RETURNING broker`,
+            [
+              broker,
+              input.leaseId,
+              input.progress.status === "problem" ? "failed" : "succeeded",
+              JSON.stringify({ ...input.state, lease: null, progress: input.progress }),
+              input.state.lastSyncedAt,
+              input.progress.status === "problem" ? input.progress.message : null,
+            ],
+          );
+          if (state.rows.length === 0) throw new RejectedCommit();
+          return true;
+        });
+      } catch (error) {
+        if (error instanceof RejectedCommit) return false;
+        throw error;
+      }
+    },
+    async release(broker, leaseId, progress) {
+      await withTenant(db, tenantId, async (client) => {
+        await client.query(
+          `UPDATE investing.sync_state
+             SET status = $4,
+                 state = (state - 'lease') || jsonb_build_object('progress', $3::jsonb),
+                 updated_at = CURRENT_TIMESTAMP
+           WHERE broker = $1 AND state->'lease'->>'id' = $2`,
+          [broker, leaseId, JSON.stringify(progress), progress.status === "problem" ? "failed" : "idle"],
         );
       });
     },

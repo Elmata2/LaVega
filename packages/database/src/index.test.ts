@@ -365,7 +365,11 @@ test("a snapshot sealed under an older key reads as absent instead of crashing t
 
   // The snapshot is a cache of broker data; a sync rebuilds it. Losing it must
   // not take the credentials — and the whole account — down with it.
-  expect(row).toEqual({ credentials: { broker: "trading212", token: "t" }, snapshot: null });
+  expect(row).toEqual({
+    credentials: { broker: "trading212", token: "t" },
+    snapshot: null,
+    credentialGeneration: 1,
+  });
 });
 
 test("credentials sealed under an older key fail loudly, naming the key", async () => {
