@@ -84,18 +84,20 @@ test("resumed broker history survives final pages, file reload, and a later full
       secret: "test",
     });
     const state = createMemoryBrokerSyncStateStore();
-    const syncOnce = async (failPersistence = false) => {
+    /* A store that refuses to commit stands in for every way the write can
+     * fail: an expired lease, a reconnect, a database that said no. */
+    const rejecting = { ...state, commit: async () => false };
+    const syncOnce = async (rejectCommit = false) => {
       const restored = createFileCredentialStore(file);
       expect(await restored.unlock("test-passphrase")).toBe(true);
       const cache = createRuntimeBrokerDataCache(await restored.getBrokerData());
       const sync = createRuntimeBrokerSync(
         async (result) => {
           cache.apply(result);
-          if (failPersistence) throw new Error("Snapshot persistence failed");
           await restored.putBrokerData(cache.snapshot());
         },
         restored,
-        state,
+        rejectCommit ? rejecting : state,
       );
       await sync(true);
       return cache.read();
@@ -111,7 +113,10 @@ test("resumed broker history survives final pages, file reload, and a later full
     expect((await state.get("trading212")).resume?.ordersComplete).toBe(true);
     run = 3;
     const pausedState = await state.get("trading212");
-    await expect(syncOnce(true)).rejects.toThrow("Snapshot persistence failed");
+    const rejected = await syncOnce(true);
+    expect(rejected.problems).toContain(
+      "trading212: the result was discarded, this run is no longer current",
+    );
     expect(await state.get("trading212")).toEqual(pausedState);
     const final = await syncOnce();
     expect(final.trades.map((trade) => trade.brokerTradeId)).toEqual(["1", "2"]);

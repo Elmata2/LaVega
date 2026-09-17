@@ -2,7 +2,26 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
+import type { BrokerSyncOperationStore, BrokerSyncState } from "@lavega/adapters";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
+
+const progress = { status: "completed" as const, message: null, updatedAt: null, leaseId: null };
+
+/** Stores a cursor the way a finished run would. */
+async function store(operations: BrokerSyncOperationStore, state: BrokerSyncState) {
+  await operations.claim("trading212", {
+    leaseId: "seed",
+    staleBefore: "9999-12-31T23:59:59.999Z",
+    progress,
+  });
+  await operations.commit("trading212", {
+    leaseId: "seed",
+    credentialGeneration: 1,
+    state,
+    progress,
+    data: null,
+  });
+}
 
 const directories: string[] = [];
 
@@ -20,7 +39,7 @@ async function statePath(): Promise<string> {
 
 test("state survives a restart, which is what stops every restart re-syncing", async () => {
   const filePath = await statePath();
-  await createFileBrokerSyncStateStore(filePath).put("trading212", {
+  await store(createFileBrokerSyncStateStore(filePath), {
     lastSyncedAt: "2026-08-19T12:00:00.000Z",
     retryAfter: "2026-08-19T12:05:00.000Z",
   });
@@ -31,14 +50,107 @@ test("state survives a restart, which is what stops every restart re-syncing", a
   });
 });
 
-test("brokers keep separate state", async () => {
+test("brokers keep separate state and separate claims", async () => {
   const filePath = await statePath();
-  const store = createFileBrokerSyncStateStore(filePath);
-  await store.put("trading212", { lastSyncedAt: "2026-08-19T12:00:00.000Z", retryAfter: null });
-  await store.put("ibkr", { lastSyncedAt: "2026-08-18T09:00:00.000Z", retryAfter: null });
+  const operations = createFileBrokerSyncStateStore(filePath);
+  const staleBefore = new Date(0).toISOString();
+  await store(operations, { lastSyncedAt: "2026-08-19T12:00:00.000Z", retryAfter: null });
+  await operations.claim("ibkr", { leaseId: "ibkr-run", staleBefore, progress });
+  await operations.commit("ibkr", {
+    leaseId: "ibkr-run",
+    credentialGeneration: 1,
+    state: { lastSyncedAt: "2026-08-18T09:00:00.000Z", retryAfter: null },
+    progress,
+    data: null,
+  });
 
-  expect((await store.get("trading212")).lastSyncedAt).toBe("2026-08-19T12:00:00.000Z");
-  expect((await store.get("ibkr")).lastSyncedAt).toBe("2026-08-18T09:00:00.000Z");
+  expect((await operations.get("trading212")).lastSyncedAt).toBe("2026-08-19T12:00:00.000Z");
+  expect((await operations.get("ibkr")).lastSyncedAt).toBe("2026-08-18T09:00:00.000Z");
+});
+
+test("a claim survives a restart, so a crashed run does not hold the broker forever", async () => {
+  const filePath = await statePath();
+  const now = new Date("2026-08-19T12:00:00.000Z").toISOString();
+  const claimed = await createFileBrokerSyncStateStore(filePath).claim("trading212", {
+    leaseId: "first",
+    staleBefore: new Date(0).toISOString(),
+    progress: { status: "running", message: "Positions are loaded", updatedAt: now, leaseId: null },
+  });
+  expect(claimed.claimed).toBe(true);
+
+  const restarted = createFileBrokerSyncStateStore(filePath);
+  const second = await restarted.claim("trading212", {
+    leaseId: "second",
+    staleBefore: new Date("2026-08-19T11:45:00.000Z").toISOString(),
+    progress: { status: "running", message: null, updatedAt: now, leaseId: "second" },
+  });
+  expect(second.claimed).toBe(false);
+  expect(await restarted.progress("trading212")).toMatchObject({
+    status: "running",
+    message: "Positions are loaded",
+  });
+
+  const afterExpiry = await restarted.claim("trading212", {
+    leaseId: "third",
+    staleBefore: new Date("2026-08-19T12:20:00.000Z").toISOString(),
+    progress: { status: "running", message: null, updatedAt: now, leaseId: "third" },
+  });
+  expect(afterExpiry.claimed).toBe(true);
+});
+
+test("a commit writes the broker data with the cursor", async () => {
+  const filePath = await statePath();
+  const data = { trading212: { positions: [], trades: [], dividends: [] } };
+  let written = data;
+  const operations = createFileBrokerSyncStateStore(filePath, {
+    read: async () => written,
+    write: async (snapshot) => {
+      written = snapshot as typeof data;
+    },
+  });
+  await operations.claim("trading212", {
+    leaseId: "run",
+    staleBefore: new Date(0).toISOString(),
+    progress,
+  });
+
+  const committed = await operations.commit("trading212", {
+    leaseId: "run",
+    credentialGeneration: 1,
+    state: { lastSyncedAt: "2026-08-19T12:00:00.000Z", retryAfter: null },
+    progress,
+    data: { positions: [{ id: "p1" }], trades: [], dividends: [] } as never,
+  });
+
+  expect(committed).toBe(true);
+  expect(written.trading212.positions).toHaveLength(1);
+  expect((await operations.get("trading212")).lastSyncedAt).toBe("2026-08-19T12:00:00.000Z");
+});
+
+test("a run that no longer holds the claim commits nothing", async () => {
+  const filePath = await statePath();
+  const operations = createFileBrokerSyncStateStore(filePath);
+  await operations.claim("trading212", {
+    leaseId: "evicted",
+    staleBefore: new Date(0).toISOString(),
+    progress,
+  });
+  await operations.claim("trading212", {
+    leaseId: "fresh",
+    staleBefore: "9999-12-31T23:59:59.999Z",
+    progress,
+  });
+
+  const committed = await operations.commit("trading212", {
+    leaseId: "evicted",
+    credentialGeneration: 1,
+    state: { lastSyncedAt: "2026-08-19T12:00:00.000Z", retryAfter: null },
+    progress,
+    data: null,
+  });
+
+  expect(committed).toBe(false);
+  expect((await operations.get("trading212")).lastSyncedAt).toBeNull();
 });
 
 test("a missing or corrupt file reads as no state rather than blocking a sync", async () => {
@@ -58,7 +170,7 @@ test("a missing or corrupt file reads as no state rather than blocking a sync", 
 test("a resume cursor survives a restart", async () => {
   const filePath = await statePath();
   const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
-  await createFileBrokerSyncStateStore(filePath).put("trading212", {
+  await store(createFileBrokerSyncStateStore(filePath), {
     lastSyncedAt: null,
     retryAfter: "2026-08-19T12:05:00.000Z",
     resume,

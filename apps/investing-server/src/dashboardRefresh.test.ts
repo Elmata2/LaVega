@@ -37,17 +37,43 @@ vi.mock("./credentialStore.js", () => ({
   }),
 }));
 
+/* The Neon operation store reads the stored broker data when it claims and
+ * writes it when it commits, so the fake keeps those on the same map the
+ * credential store uses. */
 vi.mock("./neonStores.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("./neonStores.js")>();
+  const { createMemoryBrokerSyncStateStore } = await import("@lavega/adapters");
   return {
     ...original,
-    createNeonBrokerSyncStateStore: () => ({
-      get: async (broker: string) => ({
+    createNeonBrokerSyncStateStore: (_database: unknown, tenantId: string) => {
+      const leases = createMemoryBrokerSyncStateStore();
+      const state = (broker: string) => ({
         lastSyncedAt: null,
         resume: broker === "trading212" ? persistence.resume : null,
-      }),
-      put: async () => undefined,
-    }),
+      });
+      return {
+        ...leases,
+        get: async (broker: string) => state(broker),
+        claim: async (broker: string, input: Parameters<typeof leases.claim>[1]) => {
+          const claim = await leases.claim(broker as "trading212", input);
+          persistence.reads(tenantId);
+          return {
+            ...claim,
+            state: state(broker),
+            data: persistence.snapshots.get(tenantId)?.[broker as "trading212"] ?? null,
+          };
+        },
+        commit: async (broker: string, input: Parameters<typeof leases.commit>[1]) => {
+          const committed = await leases.commit(broker as "trading212", input);
+          if (committed && input.data)
+            persistence.snapshots.set(tenantId, {
+              ...persistence.snapshots.get(tenantId),
+              [broker]: structuredClone(input.data),
+            });
+          return committed;
+        },
+      };
+    },
   };
 });
 
@@ -146,7 +172,8 @@ test("dashboard refresh does not replace broker data during a local sync", async
     const response = await app.request("/api/investing/dashboard");
     const data = (await response.json()) as InvestingDashboardData;
     expect(data.positions[0]?.quantity).toBe(1);
-    expect(persistence.reads).toHaveBeenCalledTimes(1);
+    // The dashboard, plus the claim the running sync took: the refresh read none.
+    expect(persistence.reads).toHaveBeenCalledTimes(2);
   } finally {
     release(null);
     await sync;
@@ -211,5 +238,6 @@ test("a resumed sync merges the latest persisted history instead of its warm sna
   expect(persistence.snapshots.get("tenant")?.trading212?.trades).toEqual(
     updated.trading212!.trades.map((trade) => ({ ...trade, broker: "trading212" })),
   );
-  expect(persistence.reads).toHaveBeenCalledTimes(2);
+  // The dashboard, plus one claim per scheduled broker.
+  expect(persistence.reads).toHaveBeenCalledTimes(3);
 });

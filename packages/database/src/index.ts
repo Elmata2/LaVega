@@ -380,7 +380,12 @@ export type BrokerSyncOperationRepository = {
   claim(
     broker: string,
     input: { leaseId: string; staleBefore: string; progress: SyncProgressRow },
-  ): Promise<{ claimed: boolean; state: SyncStateRow; credentialGeneration: number }>;
+  ): Promise<{
+    claimed: boolean;
+    state: SyncStateRow;
+    snapshot: unknown | null;
+    credentialGeneration: number;
+  }>;
   /** The run is alive and this is what it is doing. Rejected once the lease is gone. */
   publish(broker: string, leaseId: string, progress: SyncProgressRow): Promise<boolean>;
   progress(broker: string): Promise<SyncProgressRow | null>;
@@ -447,13 +452,19 @@ export function createBrokerSyncOperationRepository(
           [broker, claim, input.staleBefore],
         );
         const row = result.rows[0];
+        /* The stored broker data is read under the same claim that grants the
+         * right to replace it, so the run merges into what it will overwrite. */
         const vault = await client.query<QueryResultRow>(
-          "SELECT credential_generation FROM investing.broker_vaults WHERE broker = $1",
+          "SELECT snapshot_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
           [broker],
         );
+        const stored = vault.rows[0]?.snapshot_blob
+          ? tryDecryptBlob(vault.rows[0].snapshot_blob as Buffer)
+          : null;
         return {
           claimed: Boolean(row?.claimed),
           state: readState(row?.state),
+          snapshot: stored?.readable ? stored.value : null,
           credentialGeneration: Number(vault.rows[0]?.credential_generation ?? 0),
         };
       });
@@ -469,7 +480,12 @@ export function createBrokerSyncOperationRepository(
                  updated_at = CURRENT_TIMESTAMP
            WHERE broker = $1 AND state->'lease'->>'id' = $2
            RETURNING broker`,
-          [broker, leaseId, JSON.stringify(progress), progress.updatedAt ?? new Date().toISOString()],
+          [
+            broker,
+            leaseId,
+            JSON.stringify(progress),
+            progress.updatedAt ?? new Date().toISOString(),
+          ],
         );
         return result.rows.length > 0;
       });
@@ -528,7 +544,12 @@ export function createBrokerSyncOperationRepository(
                  state = (state - 'lease') || jsonb_build_object('progress', $3::jsonb),
                  updated_at = CURRENT_TIMESTAMP
            WHERE broker = $1 AND state->'lease'->>'id' = $2`,
-          [broker, leaseId, JSON.stringify(progress), progress.status === "problem" ? "failed" : "idle"],
+          [
+            broker,
+            leaseId,
+            JSON.stringify(progress),
+            progress.status === "problem" ? "failed" : "idle",
+          ],
         );
       });
     },

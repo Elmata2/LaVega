@@ -2,22 +2,29 @@ import { expect, test, vi } from "vitest";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
 import type { EncryptedBrokerRepository } from "@lavega/database";
 
-function fakeRepository(): EncryptedBrokerRepository & {
-  rows: Map<string, { credentials: unknown; snapshot: unknown | null }>;
-} {
-  const rows = new Map<string, { credentials: unknown; snapshot: unknown | null }>();
+type Row = { credentials: unknown; snapshot: unknown | null; credentialGeneration: number };
+
+function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, Row> } {
+  const rows = new Map<string, Row>();
   return {
     rows,
     async get<T>(broker: string) {
       const row = rows.get(broker);
-      return row ? { credentials: row.credentials as T, snapshot: row.snapshot } : null;
+      return row ? { ...row, credentials: row.credentials as T } : null;
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const existing = rows.get(broker);
       rows.set(broker, {
         credentials,
         snapshot: snapshot === undefined ? (existing?.snapshot ?? null) : snapshot,
+        credentialGeneration: (existing?.credentialGeneration ?? 0) + 1,
       });
+    },
+    async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
+      const existing = rows.get(broker);
+      if (!existing || existing.credentialGeneration !== credentialGeneration) return false;
+      rows.set(broker, { ...existing, snapshot });
+      return true;
     },
   };
 }

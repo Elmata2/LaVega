@@ -7,6 +7,7 @@ import {
   createInMemoryPriceStore,
   createMemoryBrokerSyncStateStore,
   type BrokerResult,
+  type ScheduledSyncResult,
 } from "@lavega/adapters";
 import {
   createRuntimeApp,
@@ -123,7 +124,7 @@ test("credential setup rejects wrong passphrase before replacing stored credenti
   expect(vault.putCredentials).not.toHaveBeenCalled();
 });
 
-test("runtime broker sync coalesces concurrent runs", async () => {
+test("a second concurrent run waits instead of spending the same rate limit", async () => {
   let orderRequests = 0;
   let positionRequests = 0;
   const baseUrl = await serve(async (request, response) => {
@@ -180,7 +181,13 @@ test("runtime broker sync coalesces concurrent runs", async () => {
 
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
-  expect(first.problems).toEqual(second.problems);
+  const trading212 = (result: ScheduledSyncResult) =>
+    result.outcomes.find((outcome) => outcome.broker === "trading212");
+  const ran = trading212(first)?.result != null ? first : second;
+  const waited = ran === first ? second : first;
+  expect(trading212(ran)?.result).not.toBeNull();
+  expect(trading212(waited)?.status).toBe("skipped");
+  expect(waited.problems).toContain("trading212: a synchronization is already running");
 });
 
 test("runtime broker sync passes the signed-in tenant to credential-aware adapters", async () => {

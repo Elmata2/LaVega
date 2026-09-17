@@ -24,28 +24,21 @@ import { createProblemReporter } from "./observability.js";
 import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
-  type CashBalance,
-  type CashFlow,
-  type Dividend,
   type InvestingDashboardData,
-  type Position,
-  type Trade,
 } from "@lavega/core";
 import {
+  createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
-  type BrokerSyncStateStore,
+  type BrokerSyncOperationStore,
   type PriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
-import {
-  createFileCredentialStore,
-  type RuntimeBrokerDataSnapshot,
-} from "./fileCredentialStore.js";
+import { createFileCredentialStore } from "./fileCredentialStore.js";
 import {
   createRuntimeCredentialStore,
   credentialsArePerTenant,
@@ -118,14 +111,16 @@ export function createRuntimeBrokerCredentialSetup(
   };
 }
 
+/* No process-local dedupe: the claim in the store is what stops two runs, and
+ * it holds across instances and restarts, which a promise in one process never
+ * did. */
 export function createRuntimeBrokerSync(
   onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>,
   credentials = createFileCredentialStore(),
-  state: BrokerSyncStateStore = createFileBrokerSyncStateStore(),
+  operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
 ): (force: boolean, deadlineMs?: number) => Promise<ScheduledSyncResult> {
-  let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
@@ -133,23 +128,17 @@ export function createRuntimeBrokerSync(
     onTrading212Diagnostic,
   });
   return async (force, deadlineMs) => {
-    if (inFlight) return inFlight;
-    const run = syncScheduledBrokers({
+    const result = await syncScheduledBrokers({
       adapters,
       credentials,
-      state,
+      operations,
       tenantId,
       entity,
       force,
       deadlineMs,
-      onCompleted,
     });
-    inFlight = run;
-    try {
-      return await run;
-    } finally {
-      if (inFlight === run) inFlight = null;
-    }
+    await onCompleted?.(result);
+    return result;
   };
 }
 
@@ -199,149 +188,9 @@ function normalizePortfolioAgentInsight(
   };
 }
 
-function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
-  const byId = new Map(existing.map((item) => [item.id, item]));
-  for (const item of incoming) byId.set(item.id, item);
-  return [...byId.values()];
-}
-
-function withBroker<T extends { broker?: string }>(broker: string, rows: readonly T[]): T[] {
-  return rows.map((row) => (row.broker ? row : { ...row, broker }));
-}
-
-function restoreTrades(broker: string, trades: readonly Trade[]): Trade[] {
-  return withBroker(broker, trades).map((trade) =>
-    (trade.side === "buy" || trade.side === "sell") &&
-    Number.isFinite(trade.quantity) &&
-    trade.quantity !== 0
-      ? { ...trade, quantity: Math.abs(trade.quantity) }
-      : trade,
-  );
-}
-
-function stableTradeId(trade: Omit<Trade, "id">): string {
-  if (trade.brokerTradeId) return trade.brokerTradeId;
-  let value = 2166136261;
-  for (const character of JSON.stringify(trade)) {
-    value ^= character.charCodeAt(0);
-    value = Math.imul(value, 16777619);
-  }
-  return `anonymous-${value >>> 0}`;
-}
-
-export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
-  const positionsByBroker = new Map<string, Position[]>();
-  const tradesByBroker = new Map<string, Trade[]>();
-  const dividendsByBroker = new Map<string, Dividend[]>();
-  const cashBalancesByBroker = new Map<string, CashBalance[]>();
-  const cashFlowsByBroker = new Map<string, CashFlow[]>();
-  let problems: string[] = [];
-  let dataVersion = 0;
-
-  const restore = (snapshot: RuntimeBrokerDataSnapshot) => {
-    positionsByBroker.clear();
-    tradesByBroker.clear();
-    dividendsByBroker.clear();
-    cashBalancesByBroker.clear();
-    cashFlowsByBroker.clear();
-    for (const [broker, data] of Object.entries(snapshot)) {
-      if (!data) continue;
-      positionsByBroker.set(broker, structuredClone(withBroker(broker, data.positions)));
-      tradesByBroker.set(broker, structuredClone(restoreTrades(broker, data.trades)));
-      dividendsByBroker.set(broker, structuredClone(withBroker(broker, data.dividends ?? [])));
-      cashBalancesByBroker.set(
-        broker,
-        structuredClone(withBroker(broker, data.cashBalances ?? [])),
-      );
-      cashFlowsByBroker.set(broker, structuredClone(withBroker(broker, data.cashFlows ?? [])));
-    }
-    dataVersion += 1;
-  };
-  restore(initial);
-
-  return {
-    apply(result: ScheduledSyncResult) {
-      for (const outcome of result.outcomes) {
-        // Partial results with problems still carry fresh broker data; discarding
-        // them left the vault stale while the UI showed only the problem.
-        if (outcome.result === null) continue;
-        const incoming = outcome.result;
-        const sections = incoming.sections;
-        if (sections.positions.status === "complete")
-          positionsByBroker.set(
-            outcome.broker,
-            withBroker(outcome.broker, sections.positions.rows),
-          );
-        const mappedTrades = sections.trades.rows.map((trade) => ({
-          ...withBroker(outcome.broker, [trade])[0],
-          id: `${outcome.broker}:${stableTradeId(trade)}`,
-        }));
-        if (sections.trades.status === "complete" && incoming.historyMode !== "incremental")
-          tradesByBroker.set(outcome.broker, mappedTrades);
-        else if (sections.trades.status !== "unavailable" && mappedTrades.length > 0)
-          tradesByBroker.set(
-            outcome.broker,
-            mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades),
-          );
-        const incomingDividends = sections.dividends.rows;
-        if (sections.dividends.status === "complete" && incoming.historyMode !== "incremental")
-          dividendsByBroker.set(outcome.broker, withBroker(outcome.broker, incomingDividends));
-        else if (sections.dividends.status !== "unavailable" && incomingDividends.length > 0)
-          dividendsByBroker.set(
-            outcome.broker,
-            mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
-          );
-        if (sections.cashBalances.status === "complete")
-          cashBalancesByBroker.set(
-            outcome.broker,
-            withBroker(outcome.broker, sections.cashBalances.rows),
-          );
-        const incomingFlows = sections.cashFlows.rows;
-        if (sections.cashFlows.status === "complete" && incoming.historyMode !== "incremental")
-          cashFlowsByBroker.set(outcome.broker, withBroker(outcome.broker, incomingFlows));
-        else if (sections.cashFlows.status !== "unavailable" && incomingFlows.length > 0)
-          cashFlowsByBroker.set(
-            outcome.broker,
-            mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows),
-          );
-      }
-      problems = result.problems;
-      if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;
-    },
-    read() {
-      return {
-        positions: [...positionsByBroker.values()].flat(),
-        trades: [...tradesByBroker.values()].flat(),
-        dividends: [...dividendsByBroker.values()].flat(),
-        cashBalances: [...cashBalancesByBroker.values()].flat(),
-        cashFlows: [...cashFlowsByBroker.values()].flat(),
-        problems: [...problems],
-        dataVersion,
-      };
-    },
-    restore,
-    snapshot(): RuntimeBrokerDataSnapshot {
-      const snapshot: RuntimeBrokerDataSnapshot = {};
-      for (const broker of new Set([
-        ...positionsByBroker.keys(),
-        ...tradesByBroker.keys(),
-        ...dividendsByBroker.keys(),
-        ...cashBalancesByBroker.keys(),
-        ...cashFlowsByBroker.keys(),
-      ])) {
-        if (broker !== "ibkr" && broker !== "trading212") continue;
-        snapshot[broker] = {
-          positions: structuredClone(positionsByBroker.get(broker) ?? []),
-          trades: structuredClone(tradesByBroker.get(broker) ?? []),
-          dividends: structuredClone(dividendsByBroker.get(broker) ?? []),
-          cashBalances: structuredClone(cashBalancesByBroker.get(broker) ?? []),
-          cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
-        };
-      }
-      return snapshot;
-    },
-  };
-}
+/* The merge rules and the snapshot shape live with the sync that produces
+ * them. The runtime keeps the name it has always exported. */
+export { createBrokerDataCache as createRuntimeBrokerDataCache };
 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
@@ -396,7 +245,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
-    const brokerData = createRuntimeBrokerDataCache(
+    const brokerData = createBrokerDataCache(
       (await credentials.status()) === "unlocked" ? await credentials.getBrokerData() : {},
     );
     if (devFixtureEnabled) {
@@ -487,7 +336,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
      * shared store would let one user's run clear another's rate-limit cooldown. */
     const syncStateStore = database
       ? createNeonBrokerSyncStateStore(database, tenantId)
-      : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
+      : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId), {
+          read: () => credentials.getBrokerData(),
+          write: (snapshot) => credentials.putBrokerData(snapshot),
+        });
     const readHistoryProgress = async (): Promise<BrokerHistoryProgress> => {
       const entries = await Promise.all(
         SCHEDULED_BROKERS.map(async (broker) => {
@@ -512,24 +364,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       return Object.fromEntries(entries) as BrokerHistoryProgress;
     };
     const scheduledBrokerSync = createRuntimeBrokerSync(
+      /* The run stored what it read, so this only mirrors the stored data into
+       * the cache. Reading, merging and writing it here is what let two
+       * instances overwrite each other. */
       async (result) => {
-        if (!result.outcomes.some((outcome) => outcome.result !== null)) {
-          brokerData.apply(result);
-          return;
-        }
-        const pendingData = createRuntimeBrokerDataCache(
-          database ? await credentials.getBrokerData() : brokerData.snapshot(),
-        );
-        pendingData.apply(result);
-        try {
-          await credentials.putBrokerData(pendingData.snapshot());
-        } catch (error) {
-          throw new Error(
-            `Broker snapshot could not be stored: ${error instanceof Error ? error.message : "unknown error"}`,
-          );
-        }
-        brokerData.restore(pendingData.snapshot());
         brokerData.apply({ outcomes: [], problems: result.problems });
+        if (Object.keys(result.committed).length === 0) return;
+        brokerData.restore({ ...brokerData.snapshot(), ...result.committed });
         brokerDataReadAt = Date.now();
       },
       credentials,
@@ -550,7 +391,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           message: "Dev fixture data active — real broker sync skipped",
           history: syncProgress.history,
         };
-        return { outcomes: [], problems: [] };
+        return { outcomes: [], problems: [], committed: {} };
       }
       if (syncProgress.status !== "running" && syncProgress.status !== "waiting") {
         syncProgress = {

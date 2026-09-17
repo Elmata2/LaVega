@@ -1,5 +1,6 @@
 import {
   createAgentRunRepository,
+  createBrokerSyncOperationRepository,
   createPreferencesRepository,
   createPriceBarRepository,
   createPriceSyncStateRepository,
@@ -13,7 +14,12 @@ import {
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
-import type { BrokerSyncStateStore, PriceStore, ScheduledBroker } from "@lavega/adapters";
+import type {
+  BrokerAccountSnapshot,
+  BrokerSyncOperationStore,
+  PriceStore,
+  ScheduledBroker,
+} from "@lavega/adapters";
 import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
 
 /**
@@ -94,11 +100,27 @@ export function createNeonMarketDataConsentStore(db: Database): MarketDataConsen
 export function createNeonBrokerSyncStateStore(
   db: Database,
   tenantId: string,
-): BrokerSyncStateStore {
-  const repository = createSyncStateRepository(db, tenantId);
+): BrokerSyncOperationStore {
+  const state = createSyncStateRepository(db, tenantId);
+  const operations = createBrokerSyncOperationRepository(db, tenantId);
   return {
-    get: (broker: ScheduledBroker) => repository.get(broker),
-    put: (broker: ScheduledBroker, state) => repository.put(broker, state),
+    get: (broker: ScheduledBroker) => state.get(broker),
+    async claim(broker, input) {
+      const claim = await operations.claim(broker, input);
+      return { ...claim, data: (claim.snapshot as BrokerAccountSnapshot | null) ?? null };
+    },
+    publish: (broker, leaseId, progress) => operations.publish(broker, leaseId, progress),
+    progress: (broker) => operations.progress(broker),
+    commit: (broker, input) =>
+      operations.commit(broker, {
+        leaseId: input.leaseId,
+        state: input.state,
+        progress: input.progress,
+        snapshot: input.data
+          ? { value: input.data, credentialGeneration: input.credentialGeneration }
+          : undefined,
+      }),
+    release: (broker, leaseId, progress) => operations.release(broker, leaseId, progress),
   };
 }
 

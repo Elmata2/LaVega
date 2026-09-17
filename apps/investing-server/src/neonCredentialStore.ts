@@ -86,7 +86,10 @@ export function createNeonCredentialStore(
          * removed connection, so it is dropped rather than resurrected. */
         const row = await repository.get(broker);
         if (!row) continue;
-        await repository.put(broker, row.credentials, brokerSnapshot);
+        /* Written on its own, against the connection it was read from. Writing
+         * it through `put` carried the credential blob along, which reverted a
+         * reconnect that landed while the sync was running. */
+        await repository.putSnapshot(broker, brokerSnapshot, row.credentialGeneration);
       }
     },
   };

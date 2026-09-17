@@ -1,7 +1,12 @@
 import { type CredentialStore, type Position } from "@lavega/core";
 import { expect, test, vi } from "vitest";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
-import { createMemoryBrokerSyncStateStore, syncScheduledBrokers } from "./scheduledSync.js";
+import {
+  createMemoryBrokerSyncStateStore,
+  syncScheduledBrokers,
+  type BrokerSyncOperationStore,
+  type BrokerSyncState,
+} from "./scheduledSync.js";
 
 const credentials = {
   async getCredentials(tenantId: string, broker: "ibkr" | "trading212") {
@@ -48,16 +53,33 @@ const empty = (overrides: {
   retryAfter: overrides.retryAfter,
 });
 
+/** Stores a cursor the way a finished run would, so a test can start from it. */
+async function seed(store: BrokerSyncOperationStore, state: BrokerSyncState) {
+  const progress = { status: "completed" as const, message: null, updatedAt: null, leaseId: null };
+  await store.claim("trading212", {
+    leaseId: "seed",
+    staleBefore: "9999-12-31T23:59:59.999Z",
+    progress,
+  });
+  await store.commit("trading212", {
+    leaseId: "seed",
+    credentialGeneration: 1,
+    state,
+    progress,
+    data: null,
+  });
+}
+
 function run(
   sync: () => Promise<BrokerResult>,
-  state: ReturnType<typeof createMemoryBrokerSyncStateStore>,
+  operations: BrokerSyncOperationStore,
   now: Date,
   force = true,
 ) {
   return syncScheduledBrokers({
     adapters: adapters(sync),
     credentials,
-    state,
+    operations,
     tenantId: "local",
     entity: "BV",
     force,
@@ -107,7 +129,7 @@ test("a problem that is not a rate limit stays immediately retryable", async () 
 
 test("a successful sync clears a stored hold-off", async () => {
   const state = createMemoryBrokerSyncStateStore();
-  await state.put("trading212", { lastSyncedAt: null, retryAfter: "2026-08-19T12:05:00.000Z" });
+  await seed(state, { lastSyncedAt: null, retryAfter: "2026-08-19T12:05:00.000Z" });
   const sync = vi.fn(async () => empty({}));
 
   await run(sync, state, new Date("2026-08-19T12:06:00.000Z"));
@@ -244,11 +266,7 @@ test("a holdings failure does not set lastSyncedAt, so the next open retries", a
 test("the next run after the cooldown passes the stored resume into sync", async () => {
   const state = createMemoryBrokerSyncStateStore();
   const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
-  await state.put("trading212", {
-    lastSyncedAt: null,
-    retryAfter: "2026-08-19T12:01:00.000Z",
-    resume,
-  });
+  await seed(state, { lastSyncedAt: null, retryAfter: "2026-08-19T12:01:00.000Z", resume });
   const sync = vi.fn(async () => empty({}));
 
   await run(sync, state, new Date("2026-08-19T12:01:01.000Z"));
@@ -264,7 +282,7 @@ test("the scheduler passes the same absolute deadline to the adapter", async () 
   await syncScheduledBrokers({
     adapters: adapters(sync),
     credentials,
-    state,
+    operations: state,
     tenantId: "local",
     entity: "BV",
     force: true,
@@ -273,4 +291,47 @@ test("the scheduler passes the same absolute deadline to the adapter", async () 
   });
 
   expect(sync).toHaveBeenCalledWith({ entity: "BV", resume: undefined, deadlineMs });
+});
+
+test("a second run while one is in flight waits for it instead of syncing again", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const sync = vi.fn(async () => {
+    await held;
+    return empty({});
+  });
+
+  const first = run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  const second = await run(sync, state, new Date("2026-08-19T12:00:01.000Z"));
+  release();
+  await first;
+
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(second.outcomes[0]?.status).toBe("skipped");
+  expect(second.problems).toEqual(["trading212: a synchronization is already running"]);
+});
+
+test("a run that lost its lease stores neither its data nor its cursor", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const slow = vi.fn(async () => {
+    await held;
+    return empty({ positions: [{ id: "p1" } as unknown as Position] });
+  });
+
+  const evicted = run(slow, state, new Date("2026-08-19T12:00:00.000Z"));
+  await run(async () => empty({}), state, new Date("2026-08-19T12:20:00.000Z"));
+  release();
+  const result = await evicted;
+
+  expect(result.outcomes[0]?.status).toBe("skipped");
+  expect(result.problems).toEqual([
+    "trading212: the result was discarded, this run is no longer current",
+  ]);
+  expect(result.committed.trading212).toBeUndefined();
+  expect(await state.get("trading212")).toMatchObject({
+    lastSyncedAt: "2026-08-19T12:20:00.000Z",
+  });
 });
