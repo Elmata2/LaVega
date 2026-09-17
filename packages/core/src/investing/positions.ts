@@ -4,6 +4,7 @@ import { convertCurrency, type FxRates } from "./portfolio.js";
 import { isPriceFresh } from "./calendar.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
+import { orderTrades } from "./quantity.js";
 
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
 export type PositionReturnStatus =
@@ -81,7 +82,7 @@ export function calculatePositionReturn(
   fxRates: FxRates,
   options: { valuationDate?: string; brokerCost?: readonly BrokerCostLeg[] } = {},
 ): PositionReturn {
-  const orderedTrades = [...trades].sort((left, right) => left.date.localeCompare(right.date));
+  const orderedTrades = orderTrades(trades);
   const firstBuyDate = orderedTrades.find((trade) => trade.side === "buy")?.date ?? null;
   /* Trades that do not reconcile are not the end of the story. Brokers that
    * fill through pies or autoinvest report the holding and its average price

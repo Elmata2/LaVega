@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { assignTradeIds } from "@lavega/core";
+import { assignTradeIds, calculatePositionReturn } from "@lavega/core";
 import { parseFlexStatement } from "./flexParser.js";
 
 const xml = `<FlexStatements><FlexStatement><OpenPositions>
@@ -43,6 +43,7 @@ describe("parseFlexStatement", () => {
         entity: "personal",
         side: "buy",
         date: "2026-08-18",
+        executionAt: "2026-08-18T10:15:00",
         quantity: 2,
         amount: -200,
         brokerTradeId: "tx-1",
@@ -85,6 +86,58 @@ describe("parseFlexStatement", () => {
     const result = parseFlexStatement(xml, "personal");
     const [withId] = assignTradeIds(result.sections.trades.rows);
     expect(withId?.id).toBeTruthy();
+  });
+
+  test("normalizes a signed sell and reconstructs same-day fills by execution time", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>
+        <Trade symbol="AAPL" transactionID="sell" tradeDate="20260818;100000" buySell="SELL" quantity="-2" tradePrice="12" proceeds="24" ibCommission="0" currency="EUR" />
+        <Trade symbol="AAPL" transactionID="buy" tradeDate="20260818;090000" buySell="BUY" quantity="10" tradePrice="10" proceeds="-100" ibCommission="0" currency="EUR" />
+      </Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    const trades = assignTradeIds(result.sections.trades.rows);
+
+    expect(result.problems).toEqual([]);
+    expect(
+      trades.map(({ side, quantity, date, executionAt }) => ({
+        side,
+        quantity,
+        date,
+        executionAt,
+      })),
+    ).toEqual([
+      {
+        side: "sell",
+        quantity: 2,
+        date: "2026-08-18",
+        executionAt: "2026-08-18T10:00:00",
+      },
+      {
+        side: "buy",
+        quantity: 10,
+        date: "2026-08-18",
+        executionAt: "2026-08-18T09:00:00",
+      },
+    ]);
+    expect(calculatePositionReturn(8, 80, trades, [], "EUR", [])).toMatchObject({
+      status: "available",
+      remainingCostBasis: 80,
+      realizedCostBasisRemoved: 20,
+      realizedGain: 4,
+    });
+  });
+
+  test("keeps date-only trades without inventing an execution timestamp", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>
+        <Trade symbol="AAPL" tradeDate="20260818" buySell="BUY" quantity="1" tradePrice="10" proceeds="-10" ibCommission="0" currency="EUR" />
+      </Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+
+    expect(result.sections.trades.rows[0]).toMatchObject({ date: "2026-08-18", quantity: 1 });
+    expect(result.sections.trades.rows[0]).not.toHaveProperty("executionAt");
   });
 
   test("keeps partial cash history and reports invalid cash rows", () => {

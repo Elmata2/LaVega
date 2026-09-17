@@ -6,6 +6,7 @@ import {
   type Position,
   type TradeSide,
   type TradeWithoutId,
+  normalizeTradeQuantity,
 } from "@lavega/core";
 import {
   historyPending,
@@ -211,11 +212,15 @@ function number(valueToParse: unknown, field: string): number {
 }
 
 function date(valueToParse: unknown, field: string): string {
+  return timestamp(valueToParse, field).slice(0, 10);
+}
+
+function timestamp(valueToParse: unknown, field: string): string {
   const raw = String(valueToParse ?? "");
   const parsed = new Date(raw);
   if (!raw || Number.isNaN(parsed.getTime()))
     throw new Error(`Trading 212 ${field} is missing or invalid`);
-  return parsed.toISOString().slice(0, 10);
+  return parsed.toISOString();
 }
 
 function side(valueToParse: unknown): TradeSide {
@@ -384,7 +389,12 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   const fillPrice = number(fill.price, "order fill price");
   // Trading 212 reports sell fills as negative quantities; the trade model
   // carries direction in `side`, so magnitudes stay positive.
-  const fillQuantity = Math.abs(number(fill.quantity, "order fill quantity"));
+  const tradeSide = side(order.side);
+  const fillQuantity = normalizeTradeQuantity(
+    tradeSide,
+    number(fill.quantity, "order fill quantity"),
+  );
+  const executionAt = timestamp(fill.filledAt, "order fill date");
   const brokerTradeId = value(fill, "id") ?? value(order, "id");
   const walletImpact = optionalObject(fill.walletImpact, "order fill wallet impact");
   const isin = optionalString(value(instrument, "isin"));
@@ -399,11 +409,12 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   return {
     entity,
     broker: "trading212",
-    date: date(fill.filledAt, "order fill date"),
+    date: executionAt.slice(0, 10),
+    executionAt,
     symbol,
     ...(isin ? { isin } : {}),
     ...(description ? { description } : {}),
-    side: side(order.side),
+    side: tradeSide,
     quantity: fillQuantity,
     price: fillPrice,
     amount: fillPrice * fillQuantity,

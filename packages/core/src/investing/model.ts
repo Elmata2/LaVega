@@ -52,7 +52,8 @@ export type CashFlow = {
 
 export type TradeSide = "buy" | "sell" | "other";
 
-/** A broker-reported execution. `amount` and `commission` use currency. */
+/** A broker-reported execution. `quantity` is a positive magnitude; `side`
+ *  carries direction. `amount` and `commission` use currency. */
 export type Trade = {
   id: string;
   entity: string;
@@ -62,6 +63,7 @@ export type Trade = {
   /** Which account at that broker, when the broker distinguishes several. */
   account?: string;
   date: string;
+  executionAt?: string;
   symbol: string;
   isin?: string;
   description?: string;

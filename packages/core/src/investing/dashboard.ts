@@ -19,7 +19,7 @@ import {
   type PositionReturnStatus,
 } from "./positions.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
-import { tradeDelta } from "./quantity.js";
+import { orderTrades, tradeDelta } from "./quantity.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -61,6 +61,7 @@ export type PositionQuantityChange = {
 
 export type PositionActivity = {
   date: string;
+  executionAt?: string;
   kind: "buy" | "sell" | "dividend";
   quantity?: number;
   executionPrice?: number | null;
@@ -240,12 +241,11 @@ function buildPositionDetail(input: {
   presentationCurrency: string;
   fxRates: FxRates;
 }): InvestingPositionDetail {
-  const orderedTrades = input.trades
-    .map((trade, sourceOrder) => ({ trade, sourceOrder }))
-    .sort(
-      (left, right) =>
-        left.trade.date.localeCompare(right.trade.date) || left.sourceOrder - right.sourceOrder,
-    );
+  const sourceOrderByTrade = new Map(input.trades.map((trade, index) => [trade, index]));
+  const orderedTrades = orderTrades(input.trades).map((trade) => ({
+    trade,
+    sourceOrder: sourceOrderByTrade.get(trade)!,
+  }));
   let reconstructedQuantity = 0;
   const quantityHistory: PositionQuantityChange[] = [];
   for (const { trade, sourceOrder } of orderedTrades) {
@@ -322,19 +322,20 @@ function buildPositionDetail(input: {
       ? null
       : returns.remainingCostBasis / quantity;
   const activity: PositionActivity[] = [
-    ...input.trades.flatMap((trade, sourceOrder): PositionActivity[] =>
+    ...orderTrades(input.trades, "reverse-chronological").flatMap((trade): PositionActivity[] =>
       trade.side === "other"
         ? []
         : [
             {
               date: trade.date,
+              ...(trade.executionAt ? { executionAt: trade.executionAt } : {}),
               kind: trade.side,
               quantity: trade.quantity,
               executionPrice: trade.price,
               amount: trade.amount,
               commission: trade.commission,
               currency: trade.currency,
-              sourceOrder,
+              sourceOrder: sourceOrderByTrade.get(trade)!,
             },
           ],
     ),
@@ -346,9 +347,7 @@ function buildPositionDetail(input: {
       currency: dividend.currency,
       sourceOrder: input.trades.length + index,
     })),
-  ].sort(
-    (left, right) => right.date.localeCompare(left.date) || left.sourceOrder - right.sourceOrder,
-  );
+  ].sort((left, right) => right.date.localeCompare(left.date));
   const description =
     input.positions.find((item) => item.description)?.description ??
     input.trades.find((item) => item.description)?.description ??

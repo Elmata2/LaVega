@@ -216,6 +216,16 @@ function withBroker<T extends { broker?: string }>(broker: string, rows: readonl
   return rows.map((row) => (row.broker ? row : { ...row, broker }));
 }
 
+function restoreTrades(broker: string, trades: readonly Trade[]): Trade[] {
+  return withBroker(broker, trades).map((trade) =>
+    (trade.side === "buy" || trade.side === "sell") &&
+    Number.isFinite(trade.quantity) &&
+    trade.quantity !== 0
+      ? { ...trade, quantity: Math.abs(trade.quantity) }
+      : trade,
+  );
+}
+
 function stableTradeId(trade: Omit<Trade, "id">): string {
   if (trade.brokerTradeId) return trade.brokerTradeId;
   let value = 2166136261;
@@ -243,11 +253,14 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
     cashFlowsByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
-      positionsByBroker.set(broker, structuredClone(data.positions));
-      tradesByBroker.set(broker, structuredClone(data.trades));
-      dividendsByBroker.set(broker, structuredClone(data.dividends ?? []));
-      cashBalancesByBroker.set(broker, structuredClone(data.cashBalances ?? []));
-      cashFlowsByBroker.set(broker, structuredClone(data.cashFlows ?? []));
+      positionsByBroker.set(broker, structuredClone(withBroker(broker, data.positions)));
+      tradesByBroker.set(broker, structuredClone(restoreTrades(broker, data.trades)));
+      dividendsByBroker.set(broker, structuredClone(withBroker(broker, data.dividends ?? [])));
+      cashBalancesByBroker.set(
+        broker,
+        structuredClone(withBroker(broker, data.cashBalances ?? [])),
+      );
+      cashFlowsByBroker.set(broker, structuredClone(withBroker(broker, data.cashFlows ?? [])));
     }
     dataVersion += 1;
   };
@@ -262,7 +275,10 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         const incoming = outcome.result;
         const sections = incoming.sections;
         if (sections.positions.status === "complete")
-          positionsByBroker.set(outcome.broker, withBroker(outcome.broker, sections.positions.rows));
+          positionsByBroker.set(
+            outcome.broker,
+            withBroker(outcome.broker, sections.positions.rows),
+          );
         const mappedTrades = sections.trades.rows.map((trade) => ({
           ...withBroker(outcome.broker, [trade])[0],
           id: `${outcome.broker}:${stableTradeId(trade)}`,

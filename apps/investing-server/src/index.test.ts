@@ -295,6 +295,19 @@ test("a legacy snapshot gains broker provenance on load without its trade ids ch
           currency: "EUR",
           commission: 0,
         },
+        {
+          id: "ibkr:legacy-sell",
+          entity: "BV",
+          date: "2026-09-11",
+          executionAt: "2026-09-11T15:30:00",
+          symbol: "AAPL",
+          side: "sell",
+          quantity: -0.25,
+          price: 12,
+          amount: 3,
+          currency: "EUR",
+          commission: 0,
+        },
       ],
       dividends: [],
     },
@@ -325,6 +338,21 @@ test("a legacy snapshot gains broker provenance on load without its trade ids ch
   ]);
   expect(trades[0]?.id).toBe("ibkr:legacy-1");
   expect(trades[0]?.broker).toBe("ibkr");
+  expect(trades[1]).toEqual({
+    id: "ibkr:legacy-sell",
+    entity: "BV",
+    broker: "ibkr",
+    date: "2026-09-11",
+    executionAt: "2026-09-11T15:30:00",
+    symbol: "AAPL",
+    side: "sell",
+    quantity: 0.25,
+    price: 12,
+    amount: 3,
+    currency: "EUR",
+    commission: 0,
+  });
+  expect(cache.snapshot().ibkr?.trades[1]).toEqual(trades[1]);
 });
 
 test("runtime broker cache restores encrypted snapshot after restart", () => {

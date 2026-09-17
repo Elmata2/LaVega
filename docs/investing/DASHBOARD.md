@@ -381,6 +381,8 @@ Show buy, sell, and dividend markers. One date-level tooltip lists the close and
 
 Below the chart, show newest-first activity grouped by date. Columns are date, type, quantity, execution price, amount, commission, and currency. Use timestamps for same-date ordering when available. Otherwise preserve stable broker or import order.
 
+`Trade.date` remains an ISO day for daily grouping. `Trade.executionAt` is optional. Trading 212 values use UTC instants. IBKR values preserve broker-local clock time because Flex does not provide an offset. Date-only trades keep their source slots; LaVega does not invent execution times or order events across incomparable time bases.
+
 A closed position shows closed state, realized gain, dividends, first-buy date, chart, and activity history. Omit current value or show zero only where the label makes that meaning explicit.
 
 Provide `← Terug naar posities`. Browser Back and this link return to the URL-backed positions sort state. Missing cost basis and incomplete history use the explicit import prompt. Never generate an estimated return.

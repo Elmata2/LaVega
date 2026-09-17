@@ -123,6 +123,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
         broker: "ibkr",
         account: "U1",
         date: "2026-08-18",
+        executionAt: "2026-08-18T10:15:00",
         symbol: "AAPL",
         side: "buy",
         quantity: 2,

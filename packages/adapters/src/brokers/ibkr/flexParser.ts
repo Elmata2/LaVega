@@ -7,6 +7,7 @@ import {
   type Dividend,
   type Position,
   type TradeSide,
+  normalizeTradeQuantity,
 } from "@lavega/core";
 import type { TradeWithoutId } from "@lavega/core";
 import type { BrokerSection, BrokerSections } from "../BrokerAccessAdapter.js";
@@ -219,6 +220,21 @@ function date(value: string | undefined, field: string): string {
   return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
 }
 
+function tradeTime(value: string | undefined): { date: string; executionAt?: string } {
+  const tradeDate = date(value, "trade date");
+  const rawTime = value?.split(";")[1];
+  if (rawTime === undefined || rawTime === "") return { date: tradeDate };
+  if (!/^\d{6}$/.test(rawTime)) throw new Error("IBKR Flex trade time is invalid");
+  const hour = Number(rawTime.slice(0, 2));
+  const minute = Number(rawTime.slice(2, 4));
+  const second = Number(rawTime.slice(4, 6));
+  if (hour > 23 || minute > 59 || second > 59) throw new Error("IBKR Flex trade time is invalid");
+  return {
+    date: tradeDate,
+    executionAt: `${tradeDate}T${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}:${rawTime.slice(4, 6)}`,
+  };
+}
+
 function first(attrs: Attributes, ...names: string[]): string | undefined {
   return names.map((name) => attrs[name]).find((value) => value !== undefined);
 }
@@ -261,16 +277,22 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
   if (!symbol) throw new Error("IBKR Flex Trade symbol is missing");
   const brokerTradeId = first(attrs, "transactionID", "tradeID", "tradeId");
   const account = first(attrs, "accountId", "accountID");
+  const time = tradeTime(first(attrs, "tradeDate", "dateTime", "date"));
+  const tradeSide = side(first(attrs, "buySell", "side"));
+  const quantity = normalizeTradeQuantity(
+    tradeSide,
+    requiredNumber(first(attrs, "quantity", "tradeQuantity"), "trade quantity"),
+  );
   return {
     entity,
     broker: "ibkr",
     ...(account ? { account } : {}),
-    date: date(first(attrs, "tradeDate", "dateTime", "date"), "trade date"),
+    ...time,
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
     ...(first(attrs, "description") ? { description: first(attrs, "description") } : {}),
-    side: side(first(attrs, "buySell", "side")),
-    quantity: requiredNumber(first(attrs, "quantity", "tradeQuantity"), "trade quantity"),
+    side: tradeSide,
+    quantity,
     price: numberOrNull(first(attrs, "tradePrice", "price")),
     amount: numberOrNull(first(attrs, "proceeds", "amount")),
     currency: first(attrs, "currency", "currencyOfTrade") || "",

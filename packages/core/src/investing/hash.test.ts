@@ -31,4 +31,11 @@ describe("assignTradeIds", () => {
 
     expect(one?.id).not.toBe(two?.id);
   });
+
+  test("keeps existing trade IDs when execution timestamps become available", () => {
+    const [legacy] = assignTradeIds([trade]);
+    const [timestamped] = assignTradeIds([{ ...trade, executionAt: "2026-08-18T10:15:00Z" }]);
+
+    expect(timestamped?.id).toBe(legacy?.id);
+  });
 });

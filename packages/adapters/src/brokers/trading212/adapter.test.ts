@@ -318,7 +318,15 @@ test("maps sell fills with negative quantities to positive quantity and side sel
   });
 
   expect(result.problems).toEqual([]);
-  expect(result.sections.trades.rows).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
+  expect(result.sections.trades.rows).toMatchObject([
+    {
+      side: "sell",
+      quantity: 1.5,
+      amount: 18,
+      date: "2026-08-18",
+      executionAt: "2026-08-18T10:15:00.000Z",
+    },
+  ]);
 });
 
 test("ignores non-trade fill rows and maps nested instruments", async () => {
