@@ -42,6 +42,41 @@ test("composePrompt skips missing files and caches per file set", () => {
   expect(composePrompt("_base.md", "travel.md")).toBe(loadAgentPrompt("travel"));
 });
 
+/* THE PRODUCTION FAILURE THESE FILES SHIPPED WITH, found 17 Sep 2026.
+ *
+ * The Markdown is read at runtime from a directory derived from
+ * import.meta.url. The Vercel build bundles the whole server into a single
+ * .mjs, so that path resolved to the function directory — and nothing copied
+ * the Markdown there. Every readFileSync threw, `read()` returned "", and EVERY
+ * agent ran in production with no system prompt at all while still answering
+ * plausibly. The first visible symptom was an invoice draft with every field
+ * blank, weeks after the feature was called shipped.
+ *
+ * The tests above pass from source, which is precisely why none of them caught
+ * it. The real guard is the assertion in scripts/vercel-build.mjs; what this
+ * pins is the other half — that a composition resolving to nothing is now a
+ * thrown error rather than a silent empty string that reaches a model. */
+test("a composition that resolves to nothing throws instead of returning an empty prompt", () => {
+  expect(() => composePrompt("bestaat-niet.md")).toThrow(/agent prompt missing/);
+  expect(() => composePrompt("")).toThrow(/agent prompt missing/);
+});
+
+/* The extractor's own contract, so a prompt edit cannot quietly drop the field
+ * names invoiceExtract.ts coerces against. */
+test("the extraction prompt names the fields the coercion reads", () => {
+  const p = loadAgentPrompt("facturen-extract");
+  for (const field of ["seller", "buyer", "payeeIban", "amount", "issueDate"])
+    expect(p, field).toContain(field);
+});
+
+/* It cannot know who the owner is — the redaction boundary sees to that — and
+ * asking anyway made every model answer "inkoopfactuur" for every invoice. */
+test("the extraction prompt does not ask the model who the owner is", () => {
+  const p = loadAgentPrompt("facturen-extract");
+  expect(p).not.toContain('"direction"');
+  expect(p).not.toContain('"counterparty"');
+});
+
 test("the tax agent is told the country decides, not Nederland by default", () => {
   const prompt = loadChatPrompt("belasting");
   // the shared charter no longer assumes a Dutch owner …

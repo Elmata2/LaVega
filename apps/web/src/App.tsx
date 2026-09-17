@@ -428,6 +428,15 @@ export default function App() {
    * rows moves a currency's earliest date back, which needs a backfill for
    * the same reason, so the date is part of the signature too. */
   const fxNeed = useMemo(() => fxNeedSignature(accounts, txs), [accounts, txs]);
+  /* His own IBANs, for deciding which side of an invoice is him. Every account
+   * he holds, not just the ones in scope: an invoice paid into his personal
+   * account is still his invoice, and scoping this would silently reintroduce
+   * the bug invoiceParty.ts exists to fix. */
+  const ownIbans = useMemo(
+    () => accounts.map((a) => a.iban).filter((i): i is string => typeof i === "string" && !!i),
+    [accounts],
+  );
+
 
   useEffect(() => {
     if (gate !== "ready" || fxNeed === "") return;
@@ -1351,6 +1360,7 @@ export default function App() {
             <Facturen
               storage={storage}
               entities={entityOptions}
+              ownIbans={ownIbans}
               invoices={invoices}
               txs={txs}
               asOf={asOf}
