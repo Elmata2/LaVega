@@ -93,6 +93,20 @@ class Trading212RateLimitError extends Trading212SyncPausedError {
   }
 }
 
+const CREDENTIALS_REJECTED_MESSAGE =
+  "Trading 212 rejected the API key and secret (HTTP 401). Generate a new key in the Trading 212 app under Settings > API and reconnect.";
+const SCOPE_MISSING_MESSAGE =
+  "Trading 212 refused the request because the API key is missing a scope (HTTP 403). Grant the key read access to positions, orders and history, then reconnect.";
+
+/** Signals that the stored key pair itself is the problem, not the endpoint.
+ * A retry cannot fix it and every other endpoint answers the same way, so the
+ * sync stops at the first one and asks for a reconnect instead. */
+class Trading212CredentialsError extends Error {
+  constructor(status: number) {
+    super(status === 403 ? SCOPE_MISSING_MESSAGE : CREDENTIALS_REJECTED_MESSAGE);
+  }
+}
+
 function throwIfHostDeadline(deadlineMs: number | undefined, waitMs = 0): void {
   if (hasBrokerSyncTime(deadlineMs, waitMs)) return;
   throw new Trading212SyncPausedError(HOST_DEADLINE_MESSAGE, Math.max(0, waitMs));
@@ -477,7 +491,12 @@ function result(
   return {
     sections: {
       positions: { status: completeness?.positions ?? "complete", rows: positions },
-      trades: { status: tradesComplete ? "complete" : "partial", rows: trades },
+      // A history read that failed before its first row is not a partial read:
+      // it has nothing to replace the cached trades with.
+      trades: {
+        status: tradesComplete ? "complete" : trades.length > 0 ? "partial" : "unavailable",
+        rows: trades,
+      },
       dividends: { status: completeness?.dividends ?? "complete", rows: dividends },
       cashBalances: { status: completeness?.cashBalances ?? "complete", rows: cashBalances },
       cashFlows: { status: completeness?.cashFlows ?? "complete", rows: cashFlows },
@@ -610,6 +629,8 @@ async function request(
       resetAt: reset === null ? null : new Date(reset).toISOString(),
     });
     limiter.observe(path, response);
+    if (response.status === 401 || response.status === 403)
+      throw new Trading212CredentialsError(response.status);
     if (response.status !== 429) return response;
     if (retry >= MAX_RATE_LIMIT_RETRIES)
       throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
@@ -671,9 +692,21 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const problems: string[] = [];
       const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), deadlineMs);
       let retryAfterMs: number | null = null;
+      let rejected: Trading212CredentialsError | null = null;
       const notePaused = (error: unknown) => {
         if (error instanceof Trading212SyncPausedError)
           retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
+        if (error instanceof Trading212CredentialsError) rejected ??= error;
+      };
+      /** Every section calls this first: once the key is refused, the rest of
+       * the sync has nothing left to ask. */
+      const throwIfRejected = () => {
+        if (rejected) throw rejected;
+      };
+      const noteProblem = (error: unknown, fallback: string) => {
+        notePaused(error);
+        if (error instanceof Trading212CredentialsError) return;
+        problems.push(error instanceof Error ? error.message : fallback);
       };
       const firstHistoryUrl = () => {
         const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
@@ -731,12 +764,12 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           }
         }
       } catch (error) {
-        notePaused(error);
-        problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
+        noteProblem(error, "Trading 212 holdings sync failed");
       }
 
       let accountCurrency = "";
       try {
+        throwIfRejected();
         throwIfHostDeadline(deadlineMs, 0);
         const summary = await accountSummary(
           new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
@@ -750,10 +783,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         if (mapped.problems.length > 0) summaryPartial = true;
         problems.push(...mapped.problems);
       } catch (error) {
-        notePaused(error);
-        problems.push(
-          error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
-        );
+        noteProblem(error, "Trading 212 account-summary sync failed");
       }
 
       let historyComplete = ordersComplete;
@@ -763,6 +793,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         let historyPages = 0;
         let ordersRead = 0;
         try {
+          throwIfRejected();
           while (nextUrl) {
             throwIfHostDeadline(deadlineMs, 0);
             if (seenOrderPaths.has(nextUrl))
@@ -812,8 +843,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           historyComplete = false;
           ordersComplete = false;
           ordersResume = nextUrl || firstHistoryUrl();
-          notePaused(error);
-          problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
+          noteProblem(error, "Trading 212 sync failed");
         }
       }
 
@@ -825,6 +855,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         let nextUrl = stored ?? firstCashUrl(path);
         let pageNumber = 0;
         try {
+          throwIfRejected();
           while (nextUrl) {
             throwIfHostDeadline(deadlineMs, 0);
             if (seenPaths.has(nextUrl))
@@ -894,10 +925,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               dividendsResume = undefined;
             }
           } catch (error) {
-            notePaused(error);
-            problems.push(
-              error instanceof Error ? error.message : `Trading 212 ${history} sync failed`,
-            );
+            noteProblem(error, `Trading 212 ${history} sync failed`);
           }
         }
       }
@@ -919,6 +947,9 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             ? { dividendsNextPagePath: dividendsResume }
             : {}),
       };
+      // One line, first, and instead of the per-endpoint failures it caused:
+      // the user has exactly one thing to do about it.
+      if (rejected) problems.unshift(rejected.message);
       const synced = result(
         positionsResult,
         trades,

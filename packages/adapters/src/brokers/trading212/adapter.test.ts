@@ -235,10 +235,12 @@ test("holdings failure returns trades and holdings problem", async () => {
   expect(result.problems).toEqual(["Trading 212 holdings request failed with HTTP 503"]);
 });
 
-test("rejected credentials return empty arrays and Trading 212 problem", async () => {
-  const baseUrl = await serve((_request, response) =>
-    json(response, 401, { error: "unauthorized" }),
-  );
+test("rejected credentials report one reconnect problem and stop after one request", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    paths.push(request.url ?? "");
+    json(response, 401, { error: "unauthorized" });
+  });
 
   const result = await createTrading212Adapter({ token: "wrong", secret: "wrong", baseUrl }).sync({
     entity: "BV",
@@ -246,7 +248,25 @@ test("rejected credentials return empty arrays and Trading 212 problem", async (
 
   expect(result.sections.positions.rows).toEqual([]);
   expect(result.sections.trades.rows).toEqual([]);
-  expect(result.problems[0]).toContain("Trading 212");
+  // A bad key fails every endpoint the same way. Asking the rest anyway spends
+  // the account's rate-limit budget to collect four copies of one answer.
+  expect(paths).toHaveLength(1);
+  expect(result.problems).toEqual([
+    "Trading 212 rejected the API key and secret (HTTP 401). Generate a new key in the Trading 212 app under Settings > API and reconnect.",
+  ]);
+  for (const section of Object.values(result.sections)) expect(section.status).toBe("unavailable");
+});
+
+test("missing key scope reports the scope problem, not a bad key", async () => {
+  const baseUrl = await serve((_request, response) => json(response, 403, { error: "forbidden" }));
+
+  const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+
+  expect(result.problems).toEqual([
+    "Trading 212 refused the request because the API key is missing a scope (HTTP 403). Grant the key read access to positions, orders and history, then reconnect.",
+  ]);
 });
 
 test("retries rate-limited order-history request using Retry-After", async () => {
