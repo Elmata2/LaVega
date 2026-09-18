@@ -5,6 +5,50 @@ Vercel serves the web application and Hono API. Neon project `lavega`
 `personal` and `investing` schemas. Personal vault data must be encrypted before
 storage. Better Auth integration remains pending.
 
+## Migrations
+
+`db/migrations/*.sql` is applied by `scripts/migrate.ts`, which records each
+file in `public.schema_migrations`. Migrations used to be applied by hand, and
+`0006_broker_sync_lease.sql` was committed but never run: the Brokers page then
+failed with `column "credential_generation" does not exist` for weeks. The
+ledger replaces remembering with checking.
+
+```
+pnpm db:migrate           # apply everything pending
+pnpm db:migrate:check     # exit 1 if a migration is unapplied — run before a deploy
+pnpm db:migrate:status    # how far this database is
+pnpm db:migrate:baseline  # record every file as applied, executing none
+```
+
+Connect as the **schema owner**, not `lavega_runtime`, which cannot ALTER the
+tables it reads:
+
+```
+MIGRATION_DATABASE_URL=$(neonctl connection-string main \
+  --project-id royal-surf-52181032 --role-name lavega_owner --database-name lavega) \
+  pnpm db:migrate
+```
+
+`MIGRATION_DATABASE_URL` is read first; `DATABASE_URL` only when it is unset, so
+the runtime connection string in `apps/server/.env` is never used by accident.
+
+Rules the runner enforces:
+
+- **Every migration must be rerunnable.** A file and its ledger row cannot share
+  one transaction, because the files open their own, so a crash between the two
+  costs one repeated apply. `packages/database/src/migrate.test.ts` applies the
+  whole directory twice to keep this true.
+- **Never edit an applied migration.** The checksum in the ledger would no
+  longer match and the next run refuses to start. Write a new file instead.
+- **No two files may share a numeric prefix**, which is why the purge migration
+  is `0003a_purge_local_price_bars.sql` — lexical order is apply order, and two
+  `0003_` files have no order at all.
+
+Production (`main`) and preview branches that predate the runner are baselined
+already. A **new** database — a fresh Neon branch, a self-host — runs
+`pnpm db:migrate` from empty instead; `baseline` on an empty database is
+refused.
+
 ## What's already wired
 
 - `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
