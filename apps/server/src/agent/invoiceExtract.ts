@@ -23,6 +23,8 @@ export type ExtractedInvoice = {
   buyer: string;
   /** The IBAN to pay into, when the document prints one. */
   payeeIban?: string;
+  /** The invoice's own number, when it prints one. */
+  invoiceNumber?: string;
   amount: number;
   currency: string;
   issueDate: string;
@@ -128,6 +130,10 @@ export async function extractInvoiceFields(
     seller: String(f.seller ?? ""),
     buyer: String(f.buyer ?? ""),
     payeeIban: typeof f.payeeIban === "string" && f.payeeIban.trim() ? f.payeeIban.trim() : undefined,
+    invoiceNumber:
+      typeof f.invoiceNumber === "string" && f.invoiceNumber.trim()
+        ? f.invoiceNumber.trim()
+        : undefined,
     amount: Number.isFinite(amount) ? amount : 0,
     currency: String(f.currency ?? "EUR"),
     issueDate: String(f.issueDate ?? ""),

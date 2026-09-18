@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import { expect, test } from "vitest";
-import { NODE_SPECS, buildCodeNode } from "./codeNodes.js";
+import { NODE_SPECS, buildCodeNode, stripModuleSyntax } from "./codeNodes.js";
 
 /* De drift-test. De Code-nodes in de workflow-JSON zijn gegenereerd uit de
  * bestanden hiernaast; deze test bouwt ze opnieuw en vergelijkt. Loopt de JSON
@@ -30,10 +31,49 @@ for (const spec of NODE_SPECS) {
   });
 }
 
-test("er staat geen export-regel in de gegenereerde nodes: n8n kent geen modules", () => {
+/* GEEN MODULE-SYNTAX, IMPORT ÉN EXPORT.
+ *
+ * Deze test keek alleen naar `export` — de helft van wat stripModuleSyntax
+ * weghaalt. De andere helft brak stil: de import-regex matchte alleen
+ * `from '...'`, en toen oxfmt (15c4a85) alles op dubbele quotes zette, matchte
+ * hij niets meer. De generator schreef vanaf dat moment een echte
+ * `import { … } from "./normalizeGmailMessage.js";` in de workflow-JSON.
+ *
+ * Niets zag het. De bronbestanden zijn geldige ESM en testen prima, de JSON is
+ * gegenereerde uitvoer die niemand leest, en de fout bestaat alleen ín n8n:
+ * "Cannot use import statement outside a module", met een regelnummer in een
+ * blob. Vandaar dat dit nu op beide vormen let, en per node zegt welke. */
+test("er staat geen import- of export-regel in de gegenereerde nodes: n8n kent geen modules", () => {
   for (const spec of NODE_SPECS) {
-    expect(node(spec.id).parameters.jsCode).not.toMatch(/^export /m);
+    const jsCode: string = node(spec.id).parameters.jsCode;
+    expect(jsCode, `${spec.name}: export`).not.toMatch(/^export /m);
+    expect(jsCode, `${spec.name}: import`).not.toMatch(/^import /m);
   }
+});
+
+/* PARSEERT HET, ZOALS n8n HET PARSEERT.
+ *
+ * De twee tests hierboven zoeken naar bekende fouten. Deze zoekt naar álle
+ * syntaxfouten, door precies te doen wat n8n's task-runner doet: de body in een
+ * async functie wikkelen en er een vm.Script van maken. Dat is de stap die op
+ * 18 sep omviel met "Cannot use import statement outside a module", en het is
+ * de goedkoopste volledige controle die er is — een grep vindt alleen wat je al
+ * weet, een parser vindt de rest. */
+test("elke gegenereerde node parseert in een kale vm, net als in n8n", () => {
+  for (const spec of NODE_SPECS) {
+    const jsCode: string = node(spec.id).parameters.jsCode;
+    expect(() => new Script(`(async function(){${jsCode}})`), spec.name).not.toThrow();
+  }
+});
+
+/* De stripper zelf, op beide quote-vormen. De regressie hierboven was precies
+ * dat de ene vorm wel en de andere niet werd herkend, dus beide staan hier. */
+test("stripModuleSyntax haalt imports weg ongeacht de quotes", () => {
+  for (const q of ["'", '"'])
+    expect(
+      stripModuleSyntax(`import {\n  a,\n  b,\n} from ${q}./x.js${q};\n\nconst y = 1;`),
+      `quote ${q}`,
+    ).not.toMatch(/import/);
 });
 
 test("Download Attachments staat IN options — daar en nergens anders leest n8n hem", () => {

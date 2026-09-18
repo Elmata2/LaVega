@@ -133,6 +133,32 @@ test("an unparseable amount lands on 0 rather than NaN", async () => {
 /* The IBAN comes back as printed, spaces and all — invoiceParty.ts normalises
  * it. A blank or whitespace-only value is dropped rather than forwarded as "",
  * because an empty string would read as "the document printed an IBAN". */
+/* The form has always had an "Inv. no." field and the Invoice model has always
+ * had `invoiceNumber`. The agent was simply never asked for it, so every AI
+ * draft left it blank and it had to be typed in by hand off the same document
+ * the model had just read. */
+test("the invoice number is extracted, trimmed, and dropped when blank", async () => {
+  for (const [given, expected] of [
+    ["INV-2026-0311", "INV-2026-0311"],
+    ["  2026/44  ", "2026/44"],
+    ["   ", undefined],
+    [undefined, undefined],
+  ] as const) {
+    completeMock.mockResolvedValue({
+      text: JSON.stringify({
+        seller: "X",
+        buyer: "Y",
+        amount: 1,
+        issueDate: "2026-01-02",
+        invoiceNumber: given,
+      }),
+      usage: { input: 0, output: 0 },
+    });
+    const { fields } = await extractInvoiceFields({ text: "t" }, "k");
+    expect(fields.invoiceNumber, JSON.stringify(given)).toBe(expected);
+  }
+});
+
 test("a blank payee IBAN is dropped, a printed one is kept verbatim", async () => {
   for (const [given, expected] of [
     ["  ", undefined],
