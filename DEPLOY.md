@@ -18,7 +18,12 @@ pnpm db:migrate           # apply everything pending
 pnpm db:migrate:check     # exit 1 if a migration is unapplied — run before a deploy
 pnpm db:migrate:status    # how far this database is
 pnpm db:migrate:baseline  # record every file as applied, executing none
+pnpm db:migrate:adopt     # run every file, then record them — for an unknown database
 ```
+
+`baseline` is for a database you know is current. `adopt` is for one you do not:
+it runs every migration, which is safe because each is rerunnable, and then
+records them. The preview branch needed `adopt`; `main` needed `baseline`.
 
 Connect as the **schema owner**, not `lavega_runtime`, which cannot ALTER the
 tables it reads:

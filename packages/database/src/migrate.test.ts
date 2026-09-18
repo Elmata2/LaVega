@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
+  adoptMigrations,
   applyMigrations,
   baselineMigrations,
   LEDGER_TABLE,
@@ -109,6 +110,27 @@ test("baseline records files without running them", async () => {
   expect(rows[0]?.exists).toBe(false);
   expect((await planMigrations(client, [file("0001_a.sql", "x")])).pending).toEqual([]);
 });
+
+/* The preview branch: real tables, no ledger, and no way to tell which of the
+ * newer migrations ever ran against it. Adopt runs them all and records them. */
+test("adopt runs every migration against a database that predates the ledger", async () => {
+  const files = readMigrations(migrationsDirectory);
+  for (const entry of files.slice(0, 3)) await client.exec(entry.sql);
+  expect(await ledgerExists(client)).toBe(false);
+
+  const adopted = await adoptMigrations(client, files);
+
+  expect(adopted.length).toBe(files.length);
+  expect(await ledgerNames()).toEqual(files.map((entry) => entry.name).sort());
+  const { rows } = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'investing' AND table_name = 'broker_vaults'
+         AND column_name = 'credential_generation'
+     ) AS exists`,
+  );
+  expect(rows[0]?.exists).toBe(true);
+}, 60_000);
 
 test("two migrations sharing a numeric prefix are refused, because their order is undefined", () => {
   const directory = mkdtempSync(join(tmpdir(), "lavega-migrations-"));

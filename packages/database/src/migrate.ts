@@ -165,6 +165,29 @@ export async function baselineMigrations(
   return plan.pending;
 }
 
+/**
+ * Runs every migration and records them all, ignoring what the ledger says.
+ *
+ * For a database that predates the runner and is NOT known to be current: the
+ * preview branch, a self-host that stopped applying files by hand halfway.
+ * `baseline` would claim those files ran when they did not, so this runs them
+ * instead — safe only because every migration is required to be rerunnable,
+ * which is the same property the runner already depends on after a crash.
+ */
+export async function adoptMigrations(
+  client: MigrationClient,
+  files: MigrationFile[],
+  options: RunOptions = {},
+): Promise<MigrationFile[]> {
+  await ensureLedger(client);
+  for (const file of files) {
+    await client.exec(file.sql);
+    await record(client, file);
+    options.onEvent?.({ kind: "applied", name: file.name });
+  }
+  return files;
+}
+
 export function assertNoDrift(plan: MigrationPlan): void {
   if (plan.drifted.length === 0) return;
   const detail = plan.drifted

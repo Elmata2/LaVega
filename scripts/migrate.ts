@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "@neondatabase/serverless";
 import {
+  adoptMigrations,
   applyMigrations,
   baselineMigrations,
   ledgerExists,
@@ -27,17 +28,14 @@ import {
 
 const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
-type Command = "apply" | "check" | "status" | "baseline";
+type Command = "apply" | "check" | "status" | "baseline" | "adopt";
+
+const COMMANDS: readonly Command[] = ["apply", "check", "status", "baseline", "adopt"];
 
 function parseCommand(argument = "apply"): Command {
-  if (
-    argument === "apply" ||
-    argument === "check" ||
-    argument === "status" ||
-    argument === "baseline"
-  )
-    return argument;
-  throw new Error(`Unknown command ${argument}. Use apply, check, status or baseline.`);
+  const command = COMMANDS.find((candidate) => candidate === argument);
+  if (command) return command;
+  throw new Error(`Unknown command ${argument}. Use one of: ${COMMANDS.join(", ")}.`);
 }
 
 function connectionString(): string {
@@ -61,10 +59,11 @@ async function main(): Promise<number> {
     return await withMigrationLock(client, async () => {
       if (!(await ledgerExists(client))) {
         if (await schemaExists(client)) {
-          if (command !== "baseline") {
+          if (command !== "baseline" && command !== "adopt") {
             console.error(
               "This database has tables but no migration ledger. It predates the runner.\n" +
-                "Confirm its schema matches db/migrations, then run: pnpm db:migrate:baseline",
+                "If its schema already matches db/migrations: pnpm db:migrate:baseline\n" +
+                "If you are not sure it does:                 pnpm db:migrate:adopt",
             );
             return 1;
           }
@@ -72,6 +71,14 @@ async function main(): Promise<number> {
           console.error("This database is empty. Run pnpm db:migrate instead of baseline.");
           return 1;
         }
+      }
+
+      if (command === "adopt") {
+        const adopted = await adoptMigrations(client, files, {
+          onEvent: (event) => console.log(`applied ${event.name}`),
+        });
+        console.log(`Adopted ${adopted.length} migration(s), running each one.`);
+        return 0;
       }
 
       if (command === "baseline") {
