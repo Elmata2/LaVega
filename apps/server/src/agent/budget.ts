@@ -68,6 +68,7 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   categorize: 5,
   chat: 25,
   travel: 20,
+  "portfolio-persona": 1,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost?

@@ -12,12 +12,9 @@ import {
   type AgentRunStore,
 } from "./fileAgentRunStore.js";
 import {
-  createPortfolioAgentTools,
-  getPortfolioAgent,
   listPortfolioAgents,
   runPortfolioAgent,
-  type PortfolioAgentId,
-  type PortfolioAgentInsight,
+  type PortfolioJudgmentRun,
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
@@ -143,8 +140,8 @@ export function createRuntimeBrokerSync(
 }
 
 export type PortfolioAgentRunner = (
-  options: RunPortfolioAgentOptions & { prompt: string },
-) => Promise<PortfolioAgentInsight | string>;
+  options: RunPortfolioAgentOptions,
+) => Promise<PortfolioJudgmentRun>;
 export type RuntimeAppOptions = {
   priceStore: PriceStore;
   resolveTenantId?: () => string | Promise<string>;
@@ -156,37 +153,8 @@ export type RuntimeAppOptions = {
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
-  runPortfolioAgentOnce: (
-    agentId?: PortfolioAgentId,
-    model?: string,
-    prompt?: string,
-  ) => Promise<AgentRunRecord>;
+  runPortfolioAgentOnce: (model?: string) => Promise<AgentRunRecord>;
 };
-
-const PORTFOLIO_AGENT_PROMPT = [
-  "You are the portfolio health assistant of a personal investing dashboard.",
-  "Use the read-only tools to look at the current positions, prices and total portfolio value, then summarize the portfolio's health in at most five sentences:",
-  "total value, largest position, and anything that looks off such as missing prices or empty broker data.",
-].join(" ");
-
-function normalizePortfolioAgentInsight(
-  value: PortfolioAgentInsight | string,
-  agentId: PortfolioAgentId,
-): PortfolioAgentInsight {
-  if (typeof value !== "string") return value;
-  const agent = getPortfolioAgent(agentId);
-  return {
-    agentId: agent.id,
-    displayName: agent.displayName,
-    signal: "neutral",
-    confidence: 0,
-    summary: value,
-    reasoning: value,
-    insights: [],
-    model: "injected",
-    snapshotHash: "",
-  };
-}
 
 /* The merge rules and the snapshot shape live with the sync that produces
  * them. The runtime keeps the name it has always exported. */
@@ -523,17 +491,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     };
     const agentInFlight = new Map<string, Promise<AgentRunRecord>>();
     const runPortfolioAgentOnce = async (
-      agentId?: PortfolioAgentId,
       model?: string,
-      prompt: string = PORTFOLIO_AGENT_PROMPT,
     ): Promise<AgentRunRecord> => {
-      const agent = getPortfolioAgent(agentId);
-      const runKey = `${agent.id}\u0000${model?.trim() ?? ""}\u0000${prompt}`;
+      const runKey = model?.trim() ?? "";
       const inFlight = agentInFlight.get(runKey);
       if (inFlight) return inFlight;
       const record: AgentRunRecord = {
         id: crypto.randomUUID(),
-        agentId: agent.id,
+        agentId: "portfolio-judgments",
         startedAt: new Date().toISOString(),
         finishedAt: null,
         status: "running",
@@ -545,25 +510,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         try {
           if ((await credentials.status()) === "unlocked") await restoreBrokerData();
           const dashboard = await dashboardReader({});
-          const insight = options.runAgent
-            ? await options.runAgent({
-                agentId: agent.id,
-                dashboard,
-                model,
-                prompt,
-                tools: createPortfolioAgentTools({
-                  readBrokerData: () => brokerData.read(),
-                  priceStore,
-                }),
-              })
-            : await runPortfolioAgent({ agentId: agent.id, dashboard, model, prompt });
-          const normalized = normalizePortfolioAgentInsight(insight, agent.id);
+          const result = options.runAgent
+            ? await options.runAgent({ dashboard, model })
+            : await runPortfolioAgent({ dashboard, model });
           const done: AgentRunRecord = {
             ...record,
             finishedAt: new Date().toISOString(),
             status: "done",
-            summary: normalized.summary,
-            result: normalized,
+            summary: null,
+            result,
           };
           await agentRunStore.put(done);
           return done;
@@ -639,32 +594,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await currentRuntime()).brokerSync(force, deadlineMs);
   const dashboardReader: InvestingDashboardReader = async ({ symbol }) =>
     (await currentRuntime()).dashboardReader({ symbol });
-  const runPortfolioAgentOnce = async (
-    agentId?: PortfolioAgentId,
-    model?: string,
-    prompt?: string,
-  ): Promise<AgentRunRecord> =>
-    (await currentRuntime()).runPortfolioAgentOnce(agentId, model, prompt);
+  const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
+    (await currentRuntime()).runPortfolioAgentOnce(model);
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
-        agents: listPortfolioAgents().map(({ systemPrompt: _systemPrompt, ...agent }) => agent),
+        agents: listPortfolioAgents().map(({ instructions: _instructions, criteria: _criteria, ...agent }) => agent),
       }),
     );
     honoApp.post("/api/agents/portfolio/run", async (c) => {
-      const body: { agentId?: unknown; model?: unknown; prompt?: unknown } = await c.req
-        .json<{ agentId?: unknown; model?: unknown; prompt?: unknown }>()
+      const body: { model?: unknown } = await c.req
+        .json<{ model?: unknown }>()
         .catch(() => ({}));
-      const agentId =
-        typeof body.agentId === "string" ? getPortfolioAgent(body.agentId).id : undefined;
       const model =
         typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
-      const prompt =
-        typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : undefined;
       try {
-        const run = await runPortfolioAgentOnce(agentId, model, prompt);
-        return c.json({ summary: run.summary, result: run.result ?? null });
+        const run = await runPortfolioAgentOnce(model);
+        return c.json({ result: run.result ?? null });
       } catch (error) {
         return c.json(
           { problems: [error instanceof Error ? error.message : "Portfolio agent run failed"] },

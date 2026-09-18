@@ -14,17 +14,18 @@ Source components inspected:
 LaVega implementation:
 
 - Backend route `GET /api/agents/portfolio` returns available personas for UI selection.
-- Backend route `POST /api/agents/portfolio/run` accepts `{ "agentId": "bill_ackman", "model": "openai/gpt-5-mini" }`.
+- Backend route `POST /api/agents/portfolio/run` evaluates all six lenses against one snapshot.
 - Supported personas: `warren_buffett`, `charlie_munger`, `bill_ackman`, `ben_graham`, `peter_lynch`, `stanley_druckenmiller`.
 - Agent input is a portfolio snapshot from the signed-in user's broker data and price cache.
 - Snapshot includes portfolio value, allocation, top positions, returns, price status, missing prices, and dashboard problems.
-- Agent output is normalized JSON: `signal`, `confidence`, `summary`, `reasoning`, `insights`, `model`, `snapshotHash`.
+- Agent output is typed judgment data. Each persona has a `Choice` signal (`bullish`, `bearish`, `neutral`, or `no_view`) and a `Score` conviction. Confidence derives from answer probability concentration, never model self-report.
+- One TypeSafe System One request contains all persona question pairs. The result records model and snapshot hash. A missing answer affects only its persona; other judgments remain usable.
 - Agent workbench shows positions in a compact value-sorted context list. Desktop list stays inside a sticky viewport-bounded panel; mobile list uses its own scroll area. Each row links to position detail, with a separate link to the full positions view.
-- Provider routing uses OpenAI-compatible API settings:
-  - `LAVEGA_AGENT_API_KEY`
-  - `LAVEGA_AGENT_BASE_URL` (default `https://openrouter.ai/api/v1`)
-  - `LAVEGA_AGENT_MODEL`
-- Local or self-hosted models can use their OpenAI-compatible base URL in `LAVEGA_AGENT_BASE_URL`.
+- Typed judgments use TypeSafe System One:
+  - `TYPESAFE_API_KEY` is required at runtime.
+  - `TYPESAFE_MODEL` defaults to `jev-1.13.0`.
+  - `AI_DAILY_BUDGET_CENTS` and `AI_MONTHLY_BUDGET_CENTS` gate usage before each request.
+- Written explanation remains separate and on-demand. It must receive typed judgment context and must not replace it.
 
 Not copied:
 

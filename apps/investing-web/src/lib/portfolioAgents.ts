@@ -10,7 +10,7 @@ export type PortfolioAgentDefinition = {
 export type PortfolioAgentInsight = {
   agentId: string;
   displayName: string;
-  signal: "bullish" | "bearish" | "neutral";
+  signal: "bullish" | "bearish" | "neutral" | "no_view";
   confidence: number;
   summary: string;
   reasoning: string;
@@ -50,7 +50,8 @@ function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight
     typeof insight.displayName === "string" &&
     (insight.signal === "bullish" ||
       insight.signal === "bearish" ||
-      insight.signal === "neutral") &&
+      insight.signal === "neutral" ||
+      insight.signal === "no_view") &&
     typeof insight.confidence === "number" &&
     typeof insight.summary === "string" &&
     typeof insight.reasoning === "string" &&
@@ -58,6 +59,38 @@ function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight
     typeof insight.model === "string" &&
     typeof insight.snapshotHash === "string"
   );
+}
+
+function judgmentInsight(value: unknown, agentId: string): PortfolioAgentInsight | null {
+  if (!value || typeof value !== "object") return null;
+  const run = value as { model?: unknown; snapshotHash?: unknown; judgments?: unknown };
+  if (!Array.isArray(run.judgments) || typeof run.model !== "string" || typeof run.snapshotHash !== "string")
+    return null;
+  const judgment = run.judgments.find(
+    (item): item is { agentId: string; displayName: string; signal: { choice?: unknown; probabilities?: Record<string, unknown> } | null } =>
+      !!item && typeof item === "object" &&
+      (item as { agentId?: unknown }).agentId === agentId &&
+      typeof (item as { displayName?: unknown }).displayName === "string",
+  );
+  if (!judgment) return null;
+  const signal = judgment.signal?.choice;
+  if (signal !== "bullish" && signal !== "bearish" && signal !== "neutral" && signal !== "no_view")
+    return null;
+  const probability = judgment.signal?.probabilities?.[signal];
+  const confidence = typeof probability === "number" && Number.isFinite(probability)
+    ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
+    : 0;
+  return {
+    agentId,
+    displayName: judgment.displayName,
+    signal,
+    confidence,
+    summary: signal === "no_view" ? "No view from this lens. Portfolio data is insufficient." : "Typed portfolio judgment.",
+    reasoning: "Educational analysis only. Expand this agent for written explanation.",
+    insights: [],
+    model: run.model,
+    snapshotHash: run.snapshotHash,
+  };
 }
 
 export async function fetchPortfolioAgents(): Promise<PortfolioAgentDefinition[]> {
@@ -82,8 +115,10 @@ export async function runPortfolioAgent(
     problems?: string[];
   };
   if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent run failed.");
-  if (!isPortfolioAgentInsight(payload.result)) throw new Error("Agent gave an invalid answer.");
-  return payload.result;
+  if (isPortfolioAgentInsight(payload.result)) return payload.result;
+  const insight = judgmentInsight(payload.result, agentId);
+  if (!insight) throw new Error("Agent gave an invalid answer.");
+  return insight;
 }
 
 export function useAgentCatalog(): { catalog: AgentCatalog; reload: () => void } {

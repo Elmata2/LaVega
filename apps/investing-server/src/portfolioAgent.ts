@@ -1,5 +1,10 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText, jsonSchema, stepCountIs, tool, type ToolSet } from "ai";
+import { jsonSchema, tool, type ToolSet } from "ai";
+import type {
+  ChoiceQuestion,
+  ChoiceResponse,
+  ScoreQuestion,
+  ScoreResponse,
+} from "@typesafe-ai/sdk";
 import {
   computePortfolioValueSeries,
   type CashBalance,
@@ -12,13 +17,13 @@ import {
 } from "@lavega/core";
 import type { PriceStore } from "@lavega/adapters";
 import { readPriceBars } from "./priceReader.js";
+import {
+  createSystemOneProvider,
+  type SystemOneProvider,
+  type SystemOneQuestion,
+} from "./systemOne.js";
 
 const TENANT_ID = "local";
-export const DEFAULT_PORTFOLIO_AGENT_MODEL = "inclusionai/ling-3.0-flash-fin:free";
-/** Wall-clock budget for one agent run. `stepCountIs` bounds how many tool
- *  rounds may happen, not how long they may take, so a provider that never
- *  answers would otherwise hold the request open forever. */
-export const DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS = 60_000;
 
 export type PortfolioAgentBrokerData = {
   positions: Position[];
@@ -105,15 +110,13 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
 }
 
 export type RunPortfolioAgentOptions = {
-  prompt?: string;
-  tools?: ToolSet;
   model?: string;
-  agentId?: PortfolioAgentId;
   dashboard?: InvestingDashboardData;
   /** Sector exposure resolved by `sectorResolution.ts` from stored sector
    *  profiles. Absent or empty renders as `"unavailable"` — never as an
    *  entity name and never as a guessed industry. */
   sectors?: readonly SectorExposure[];
+  provider?: SystemOneProvider;
 };
 
 export const PORTFOLIO_AGENT_IDS = [
@@ -132,31 +135,27 @@ export type PortfolioAgentDefinition = {
   displayName: string;
   description: string;
   investingStyle: string;
-  systemPrompt: string;
+  instructions: string;
+  criteria: string;
 };
 
-export type PortfolioAgentInsight = {
+export type PortfolioJudgmentChoice = PortfolioAgentSignal | "no_view";
+export type PortfolioJudgment = {
   agentId: PortfolioAgentId;
   displayName: string;
-  signal: PortfolioAgentSignal;
-  confidence: number;
-  summary: string;
-  reasoning: string;
-  insights: string[];
+  signal: ChoiceResponse | null;
+  conviction: ScoreResponse | null;
+};
+export type PortfolioJudgmentRun = {
+  judgments: PortfolioJudgment[];
   model: string;
   snapshotHash: string;
 };
-
-const JSON_SCHEMA = [
-  "Return JSON only:",
-  "{",
-  '  "signal": "bullish" | "bearish" | "neutral",',
-  '  "confidence": number,',
-  '  "summary": "one sentence",',
-  '  "reasoning": "2-4 sentences",',
-  '  "insights": ["specific portfolio insight", "specific portfolio insight"]',
-  "}",
-].join("\n");
+export type PortfolioJudgmentComposition = {
+  signal: PortfolioJudgmentChoice;
+  confidence: number;
+  contributingAgents: number;
+};
 
 const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
   warren_buffett: {
@@ -164,12 +163,10 @@ const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
     displayName: "Warren Buffett",
     description: "Quality business owner",
     investingStyle: "Durable moats, financial strength, fair price, long holding period.",
-    systemPrompt: [
-      "You are a Warren Buffett-style portfolio analyst. You review one user's real positions as a long-term business owner, not a trader.",
-      "Focus on circle of competence, durable competitive advantages, stable cash generation, financial strength, valuation discipline, concentration risk, and whether the user could hold the businesses for ten years.",
-      "Be neutral when prices, costs, or business evidence are missing. Do not invent company facts outside the provided portfolio data.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio as a long-term business owner. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material.",
+    criteria:
+      "Focus on circle of competence, durable advantages, cash generation, financial strength, valuation discipline, concentration risk, and ten-year holding quality.",
   },
   charlie_munger: {
     id: "charlie_munger",
@@ -177,12 +174,10 @@ const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
     description: "Quality filter",
     investingStyle:
       "Avoid stupidity first: quality, predictability, incentives, low leverage, fair price.",
-    systemPrompt: [
-      "You are a Charlie Munger-style portfolio analyst. You review one user's real positions with severe standards.",
-      "Invert first: what could make this portfolio fail? Look for weak position evidence, concentration in things the user may not understand, leverage-like exposure, bad cost basis, low-quality winners, and too-hard positions.",
-      "Prefer a small number of unmistakably good holdings over many mediocre ideas. Be blunt, but use only provided portfolio data.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio with severe standards. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material.",
+    criteria:
+      "Invert first. Look for failure risk, weak evidence, concentration, leverage-like exposure, bad cost basis, low-quality winners, and too-hard positions.",
   },
   bill_ackman: {
     id: "bill_ackman",
@@ -190,48 +185,40 @@ const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
     description: "Activist lens",
     investingStyle:
       "Concentrated high-quality brands, value unlock, catalysts, financial discipline.",
-    systemPrompt: [
-      "You are a Bill Ackman-style portfolio analyst. You review one user's real positions through an activist investor lens.",
-      "Look for concentrated high-conviction holdings, brand or platform strength implied by position choice, underperformance where operational change could unlock value, catalysts, downside from leverage or poor capital allocation, and whether position size matches conviction.",
-      "Do not claim actual activism facts unless provided. If catalyst data is absent, say data is absent.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio through an activist investor lens. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material.",
+    criteria:
+      "Look for concentrated conviction, implied brand strength, value-unlock evidence, catalysts, leverage or capital-allocation downside, and position size versus conviction.",
   },
   ben_graham: {
     id: "ben_graham",
     displayName: "Ben Graham",
     description: "Margin of safety",
     investingStyle: "Defensive value, downside protection, valuation discipline.",
-    systemPrompt: [
-      "You are a Ben Graham-style portfolio analyst. You review one user's real positions as a defensive investor.",
-      "Focus on margin of safety, cost basis versus market value, overvaluation risk, position sizing, liquidity of evidence, and protection against permanent loss.",
-      "Speculative growth gets little credit unless the provided numbers show adequate downside protection. Use only provided data.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio as a defensive investor. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material.",
+    criteria:
+      "Focus on margin of safety, cost basis versus market value, overvaluation risk, position sizing, evidence quality, and protection from permanent loss.",
   },
   peter_lynch: {
     id: "peter_lynch",
     displayName: "Peter Lynch",
     description: "Growth at reasonable price",
     investingStyle: "Know what you own, simple story, growth visible in results.",
-    systemPrompt: [
-      "You are a Peter Lynch-style portfolio analyst. You review one user's real positions and ask whether the portfolio has clear, understandable stories.",
-      "Look for winners the user may let run, over-owned story stocks, stale losers, missing cost basis, diversification that hides ignorance, and whether each large position has a simple reason to own it.",
-      "Plain language only. If the story is not visible from provided data, mark it as unknown.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio for clear, understandable ownership stories. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material.",
+    criteria:
+      "Look for winners, over-owned stories, stale losers, missing cost basis, diversification that hides ignorance, and whether large positions have simple ownership reasons.",
   },
   stanley_druckenmiller: {
     id: "stanley_druckenmiller",
     displayName: "Stanley Druckenmiller",
     description: "Asymmetric setup",
     investingStyle: "Inflections, concentration, risk control, asymmetric payoff.",
-    systemPrompt: [
-      "You are a Stanley Druckenmiller-style portfolio analyst. You review one user's real positions for asymmetric setups and risk.",
-      "Focus on recent price and return inflections, large winners or losers, position concentration, missing prices, downside if the current trend reverses, and whether the portfolio is sized around the best idea or diluted across weak ones.",
-      "You have no macro data unless it is in the snapshot. Do not pretend otherwise.",
-      JSON_SCHEMA,
-    ].join("\n\n"),
+    instructions:
+      "Review this portfolio for asymmetric setups and risk. Educational analysis only. Never give individual trade instruction or invent facts. Name missing prices or cost basis when material. Do not claim macro data not in state.",
+    criteria:
+      "Focus on price and return inflections, winners or losers, concentration, missing prices, reversal downside, and best-idea sizing versus weak diversification.",
   },
 };
 
@@ -249,102 +236,119 @@ export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinit
   return PERSONAS.warren_buffett;
 }
 
-/** Thrown when the model answers with something that is not an insight. The
- *  run fails; it never degrades into a neutral zero-confidence "result". */
-export class PortfolioAgentResponseError extends Error {
-  constructor(problem: string) {
-    super(`Portfolio agent returned an unusable response: ${problem}`);
-    this.name = "PortfolioAgentResponseError";
-  }
-}
-
-export function resolveAgentTimeoutMs(): number {
-  const raw = process.env.LAVEGA_AGENT_TIMEOUT_MS?.trim();
-  if (!raw) return DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PORTFOLIO_AGENT_TIMEOUT_MS;
-}
-
-export function resolveAgentConfig(model?: string) {
-  const apiKey =
-    process.env.LAVEGA_AGENT_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey)
-    throw new Error(
-      "LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set; configure an OpenAI-compatible API key to run the portfolio agent",
-    );
+export async function runPortfolioAgent({
+  model,
+  dashboard,
+  sectors,
+  provider = createSystemOneProvider(),
+}: RunPortfolioAgentOptions): Promise<PortfolioJudgmentRun> {
+  if (!dashboard) throw new Error("Portfolio dashboard is required for typed judgments");
+  const result = await provider.judge({
+    state: JSON.parse(renderPortfolioSnapshot(dashboard, sectors)),
+    questions: portfolioJudgmentQuestions(),
+    model: model?.trim() || undefined,
+  });
   return {
-    apiKey,
-    baseURL: process.env.LAVEGA_AGENT_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
-    modelId:
-      model?.trim() || process.env.LAVEGA_AGENT_MODEL?.trim() || DEFAULT_PORTFOLIO_AGENT_MODEL,
+    judgments: PORTFOLIO_AGENT_IDS.map((agentId) => ({
+      agentId,
+      displayName: PERSONAS[agentId].displayName,
+      signal: choiceAnswer(result.answers[questionKey(agentId, "signal")]),
+      conviction: scoreAnswer(result.answers[questionKey(agentId, "conviction")]),
+    })),
+    model: result.model,
+    snapshotHash: await portfolioSnapshotHash(dashboard, sectors),
   };
 }
 
-export async function runPortfolioAgent({
-  prompt,
-  tools,
-  model,
-  agentId,
-  dashboard,
-  sectors,
-}: RunPortfolioAgentOptions): Promise<PortfolioAgentInsight> {
-  const config = resolveAgentConfig(model);
-  if (!config.modelId)
-    throw new Error("LAVEGA_AGENT_MODEL is not set and no model override was given");
-  const provider = createOpenAICompatible({
-    name: "lavega-agent",
-    baseURL: config.baseURL,
-    apiKey: config.apiKey,
-  });
-  const agent = getPortfolioAgent(agentId);
-  const userPrompt = prompt
-    ? dashboard
-      ? [prompt, "", "Portfolio snapshot:", renderPortfolioSnapshot(dashboard, sectors)].join("\n")
-      : prompt
-    : buildPortfolioAgentPrompt(agent, dashboard, sectors);
-  const { text } = await generateText({
-    model: provider.chatModel(config.modelId),
-    tools,
-    stopWhen: tools ? stepCountIs(8) : undefined,
-    system: dashboard ? agent.systemPrompt : undefined,
-    prompt: userPrompt,
-    abortSignal: AbortSignal.timeout(resolveAgentTimeoutMs()),
-  });
-  if (!dashboard) {
-    return {
-      agentId: agent.id,
-      displayName: agent.displayName,
-      signal: "neutral",
-      confidence: 0,
-      summary: text,
-      reasoning: text,
-      insights: [],
-      model: config.modelId,
-      snapshotHash: "",
-    };
-  }
-  return parsePortfolioAgentResponse(
-    text,
-    agent,
-    config.modelId,
-    await portfolioSnapshotHash(dashboard, sectors),
+type JudgmentDimension = "signal" | "conviction";
+function questionKey(agentId: PortfolioAgentId, dimension: JudgmentDimension): string {
+  return `${agentId}.${dimension}`;
+}
+
+export function portfolioJudgmentQuestions(): Record<string, SystemOneQuestion> {
+  return Object.fromEntries(
+    PORTFOLIO_AGENT_IDS.flatMap((agentId) => {
+      const agent = PERSONAS[agentId];
+      const instructions = `${agent.instructions}\n${agent.criteria}`;
+      return [
+        [
+          questionKey(agentId, "signal"),
+          {
+            type: "choice",
+            instructions,
+            criteria: {
+              bullish: "Evidence in state supports this lens.",
+              bearish: "Evidence in state warns against this lens.",
+              neutral: "State has balanced or inconclusive evidence for this lens.",
+              no_view:
+                "State lacks evidence this lens needs. This is absence of view, not neutral.",
+            },
+          } satisfies ChoiceQuestion,
+        ],
+        [
+          questionKey(agentId, "conviction"),
+          {
+            type: "score",
+            instructions: `${instructions}\nScore certainty of signal evidence, not expected return or correctness.`,
+            criteria: [
+              "No usable evidence.",
+              "Weak, incomplete evidence.",
+              "Some direct portfolio evidence.",
+              "Strong, consistent portfolio evidence.",
+              "Very strong direct evidence with little material uncertainty.",
+            ],
+          } satisfies ScoreQuestion,
+        ],
+      ];
+    }),
   );
 }
 
-export function buildPortfolioAgentPrompt(
-  agent: PortfolioAgentDefinition,
-  dashboard: InvestingDashboardData | undefined,
-  sectors?: readonly SectorExposure[],
-): string {
-  if (!dashboard) return `Give a concise ${agent.displayName} view on this portfolio.`;
-  return [
-    `Agent: ${agent.displayName}`,
-    "Task: read this user's current personal investing positions and give one new agent-specific insight.",
-    "Rules: educational analysis only, no individualized trade instruction, no invented data, mention missing prices or missing cost basis when relevant.",
-    "",
-    "Portfolio snapshot:",
-    renderPortfolioSnapshot(dashboard, sectors),
-  ].join("\n");
+function choiceAnswer(answer: unknown): ChoiceResponse | null {
+  return answer && typeof answer === "object" && (answer as { type?: unknown }).type === "choice"
+    ? (answer as ChoiceResponse)
+    : null;
+}
+
+function scoreAnswer(answer: unknown): ScoreResponse | null {
+  return answer && typeof answer === "object" && (answer as { type?: unknown }).type === "score"
+    ? (answer as ScoreResponse)
+    : null;
+}
+
+export function composePortfolioJudgments(
+  judgments: readonly PortfolioJudgment[],
+  weights: Partial<Record<PortfolioAgentId, number>> = {},
+): PortfolioJudgmentComposition {
+  let totalWeight = 0;
+  let weightedSignal = 0;
+  let weightedConfidence = 0;
+  let contributingAgents = 0;
+  for (const judgment of judgments) {
+    const choice = judgment.signal?.choice;
+    if (choice !== "bullish" && choice !== "bearish" && choice !== "neutral") continue;
+    const weight = Math.max(0, weights[judgment.agentId] ?? 1);
+    if (weight === 0) continue;
+    const confidence = probabilityForChoice(judgment.signal!);
+    const direction = choice === "bullish" ? 1 : choice === "bearish" ? -1 : 0;
+    totalWeight += weight;
+    weightedSignal += direction * weight;
+    weightedConfidence += confidence * weight;
+    contributingAgents += 1;
+  }
+  if (totalWeight === 0) return { signal: "no_view", confidence: 0, contributingAgents: 0 };
+  return {
+    signal: weightedSignal > 0 ? "bullish" : weightedSignal < 0 ? "bearish" : "neutral",
+    confidence: Number(((weightedConfidence / totalWeight) * 100).toFixed(2)),
+    contributingAgents,
+  };
+}
+
+function probabilityForChoice(answer: ChoiceResponse): number {
+  const probability = answer.probabilities[answer.choice];
+  return typeof probability === "number" && Number.isFinite(probability)
+    ? Math.max(0, Math.min(1, probability))
+    : 0;
 }
 
 export function renderPortfolioSnapshot(
@@ -386,75 +390,11 @@ export function renderPortfolioSnapshot(
       entityAllocation: dashboard.allocation.entity.buckets.slice(0, 10),
       sectors: sectors && sectors.length > 0 ? sectors.slice(0, 10) : "unavailable",
       topPositions,
-      problems: dashboard.problems,
+      problems: dashboard.problems.slice(0, 20),
     },
     null,
     2,
   );
-}
-
-function parsePortfolioAgentResponse(
-  text: string,
-  agent: PortfolioAgentDefinition,
-  model: string,
-  snapshotHash: string,
-): PortfolioAgentInsight {
-  const parsed = extractJsonObject(text);
-  const signal = parsed.signal;
-  if (signal !== "bullish" && signal !== "bearish" && signal !== "neutral")
-    throw new PortfolioAgentResponseError(
-      'signal must be exactly "bullish", "bearish" or "neutral"',
-    );
-  const confidence = parsed.confidence;
-  if (
-    typeof confidence !== "number" ||
-    !Number.isFinite(confidence) ||
-    confidence < 0 ||
-    confidence > 100
-  )
-    throw new PortfolioAgentResponseError("confidence must be a number between 0 and 100");
-  const summary = requireText(parsed.summary, "summary");
-  const reasoning = requireText(parsed.reasoning, "reasoning");
-  if (!Array.isArray(parsed.insights) || parsed.insights.some((item) => typeof item !== "string"))
-    throw new PortfolioAgentResponseError("insights must be an array of strings");
-  return {
-    agentId: agent.id,
-    displayName: agent.displayName,
-    signal,
-    confidence,
-    summary,
-    reasoning,
-    insights: (parsed.insights as string[]).filter((item) => item.trim()).slice(0, 5),
-    model,
-    snapshotHash,
-  };
-}
-
-function requireText(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim())
-    throw new PortfolioAgentResponseError(`${field} must be a non-empty string`);
-  return value;
-}
-
-function extractJsonObject(text: string): Record<string, unknown> {
-  const fence = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/.exec(text);
-  if (fence) return JSON.parse(fence[1]!);
-  try {
-    return JSON.parse(text.trim()) as Record<string, unknown>;
-  } catch {
-    const start = text.indexOf("{");
-    if (start < 0) throw new Error("Portfolio agent returned no JSON object");
-    let depth = 0;
-    for (let index = start; index < text.length; index += 1) {
-      const char = text[index];
-      if (char === "{") depth += 1;
-      if (char === "}") {
-        depth -= 1;
-        if (depth === 0) return JSON.parse(text.slice(start, index + 1)) as Record<string, unknown>;
-      }
-    }
-    throw new Error("Portfolio agent returned incomplete JSON");
-  }
 }
 
 export async function portfolioSnapshotHash(
