@@ -23,6 +23,38 @@ const esbuild = `${root}/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/
 const output = `${root}/.vercel/output`;
 const functionDir = `${output}/functions/api/[...route].func`;
 
+/*
+ * REFUSE TO DEPLOY CODE THE DATABASE IS NOT READY FOR.
+ *
+ * 0006_broker_sync_lease.sql was committed, merged and deployed while the ALTER
+ * was never run against Neon, so the Brokers page failed with `column
+ * "credential_generation" does not exist` — in production, on a page that had
+ * passed every test, because the tests bring their own database. A deploy is
+ * the last moment where that difference is still cheap to notice.
+ *
+ * This only reads the ledger; applying stays a deliberate act by the schema
+ * owner (`pnpm db:migrate`). A build that applies DDL on its own would let a
+ * rolled-back deploy leave the schema ahead of the code that ran it.
+ *
+ * Without DATABASE_URL there is no database to be behind — a build for the file
+ * stores, or a fork's preview — so the check reports that and moves on.
+ */
+if (process.env.DATABASE_URL?.trim()) {
+  try {
+    const { stdout } = await exec("pnpm", ["db:migrate:check"], execOptions);
+    process.stdout.write(stdout);
+  } catch (error) {
+    process.stdout.write(error.stdout ?? "");
+    process.stderr.write(error.stderr ?? "");
+    throw new Error(
+      "vercel-build: the database is missing a migration in db/migrations. " +
+        "Apply it as the schema owner (pnpm db:migrate), then redeploy.",
+    );
+  }
+} else {
+  console.log("vercel-build: no DATABASE_URL, skipping the migration check");
+}
+
 await rm(output, { recursive: true, force: true });
 await mkdir(functionDir, { recursive: true });
 

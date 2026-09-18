@@ -44,6 +44,17 @@ Rules the runner enforces:
   is `0003a_purge_local_price_bars.sql` — lexical order is apply order, and two
   `0003_` files have no order at all.
 
+**The Vercel build runs `db:migrate:check` before it builds anything.** A deploy
+whose database is missing a migration fails there, with the file named, instead
+of shipping and breaking a page — which is exactly how 0006 got to production.
+The build reads the ledger with `DATABASE_URL` (the `lavega_runtime` role, which
+`0007_migration_ledger_grants.sql` grants SELECT on it); it never applies
+anything, because a rolled-back deploy must not leave the schema ahead of the
+code. A build with no `DATABASE_URL` skips the check and says so.
+
+So the order for a schema change is: merge, `pnpm db:migrate`, then deploy. Out
+of order, the deploy fails closed rather than half-working.
+
 Production (`main`) and preview branches that predate the runner are baselined
 already. A **new** database — a fresh Neon branch, a self-host — runs
 `pnpm db:migrate` from empty instead; `baseline` on an empty database is
