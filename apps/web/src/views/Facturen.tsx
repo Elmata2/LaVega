@@ -106,6 +106,7 @@ type ExtractResponse = {
     seller: string;
     buyer: string;
     payeeIban?: string;
+    invoiceNumber?: string;
     amount: number;
     currency?: string;
     issueDate: string;
@@ -812,6 +813,9 @@ export default function Facturen({
       );
       setDirection(party.kind === "unknown" ? "" : party.kind === "sales" ? "in" : "out");
       setCounterparty(party.counterparty);
+      /* The form has always had this field; the agent was simply never asked
+       * for it, so an AI draft left it blank every time. */
+      setInvoiceNumber(fields.invoiceNumber ?? "");
       setIssueDate(fields.issueDate);
       setDueDate(fields.dueDate || fields.issueDate);
       setAmount(String(fields.amount));
