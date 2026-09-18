@@ -255,6 +255,13 @@ export default function Facturen({
   // input, but the Invoice keeps vatAmount for the (later) tax agent, so we
   // carry it through the confirm rather than silently dropping it.
   const [pendingVat, setPendingVat] = useState<number | null>(null);
+  /* Both names off an extraction whose direction could not be resolved. Kept so
+   * that picking a direction can fill the counterparty with the correct half —
+   * the seller for a purchase, the buyer for a sale. Null once resolved or
+   * discarded. */
+  const [draftParties, setDraftParties] = useState<{ seller: string; buyer: string } | null>(
+    null,
+  );
   /** Het btw-veld op het formulier, als tekst — leeg is een echte staat en niet 0. */
   const [vatInput, setVatInput] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
@@ -714,6 +721,7 @@ export default function Facturen({
   // not to use it.
   function discardDraft() {
     clearDraftTags();
+    setDraftParties(null);
     setCounterparty("");
     setInvoiceNumber("");
     setIssueDate("");
@@ -813,6 +821,9 @@ export default function Facturen({
       );
       setDirection(party.kind === "unknown" ? "" : party.kind === "sales" ? "in" : "out");
       setCounterparty(party.counterparty);
+      setDraftParties(
+        party.kind === "unknown" ? { seller: fields.seller, buyer: fields.buyer } : null,
+      );
       /* The form has always had this field; the agent was simply never asked
        * for it, so an AI draft left it blank every time. */
       setInvoiceNumber(fields.invoiceNumber ?? "");
@@ -963,7 +974,13 @@ export default function Facturen({
                      runtime guard standing in for a type. */
                   onChange={(e) => {
                     const v = e.target.value;
-                    setDirection(v === "in" || v === "out" ? v : "");
+                    const next = v === "in" || v === "out" ? v : "";
+                    setDirection(next);
+                    /* Answering the direction also answers which printed name
+                     * is the counterparty. Only fills an EMPTY field: if he has
+                     * already typed one, his text wins. */
+                    if (next && draftParties && !counterparty.trim())
+                      setCounterparty(next === "in" ? draftParties.buyer : draftParties.seller);
                   }}
                 >
                   {/* Present only while unresolved, so the list cannot be put

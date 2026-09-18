@@ -138,9 +138,16 @@ export function resolveInvoiceParties(
   if (buyerIsOwn && !sellerIsOwn)
     return { kind: "purchase", counterparty: seller, because: "buyer-is-own-entity" };
 
-  /* No match. The counterparty falls back to the SELLER because that is the
-   * more useful half to prefill — most documents a person uploads are bills
-   * they received — but the direction stays unset, so nothing books until he
-   * says which way it goes. */
-  return { kind: "unknown", counterparty: seller, because: "no-match" };
+  /* NO COUNTERPARTY, not "probably the seller".
+   *
+   * The first version prefilled the seller here, on the reasoning that most
+   * uploads are bills received. His own invoice to a UK client disproved it:
+   * the seller is HIM, so the form offered "Alexander Steunenberg Consulting"
+   * as the counterparty — his own name in the field naming the other party,
+   * which is the exact mistake this file was written to stop the model making.
+   *
+   * Which side is the counterparty is not knowable until the direction is, so
+   * it stays empty and Facturen fills it from `seller`/`buyer` the moment he
+   * picks one. */
+  return { kind: "unknown", counterparty: "", because: "no-match" };
 }

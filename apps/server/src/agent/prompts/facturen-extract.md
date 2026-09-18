@@ -20,6 +20,10 @@ Regels:
 - `seller` is de partij die de factuur UITSCHRIJFT en het geld krijgt. `buyer` is
   de partij die moet BETALEN. Schrijf beide namen over zoals ze op het document
   staan — niet afkorten, niet vertalen, geen rechtsvorm weglaten.
+- **Alleen de bedrijfsnaam, niet het adresblok.** Bij een naam staan meestal een
+  contactpersoon, straat, postcode en land; die horen er niet bij. "Penshee LTD",
+  niet "Penshee LTD, Sam Naief, Thames Tower, Station Rd, Reading RG1 1LX,
+  United Kingdom". Eén regel, geen regeleinden.
 - `payeeIban` is het rekeningnummer waarop betaald moet worden, als de factuur er
   een noemt. Neem hem letterlijk over.
 - `invoiceNumber` is het factuurnummer ("Factuurnummer", "Factuur nr.", "Invoice

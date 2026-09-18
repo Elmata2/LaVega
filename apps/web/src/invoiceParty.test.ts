@@ -88,9 +88,10 @@ test("no match leaves the direction unset rather than guessing", () => {
   const r = resolveInvoiceParties({ seller: "Acme GmbH", buyer: "Globex Ltd" }, OWN);
   expect(r.kind).toBe("unknown");
   expect(r.because).toBe("no-match");
-  /* Still prefills the seller, because a bill received is the common upload
-   * and half an answer beats an empty form — but the direction stays open. */
-  expect(r.counterparty).toBe("Acme GmbH");
+  /* And NO counterparty. Prefilling the seller looked helpful until his own
+   * outgoing invoice made the seller himself — the form then offered his own
+   * name as the other party. Facturen fills this once he picks a direction. */
+  expect(r.counterparty).toBe("");
 });
 
 /* An invoice between two of his OWN entities. Picking a side here would turn an
