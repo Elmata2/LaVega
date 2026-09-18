@@ -18,6 +18,7 @@
     "@lavega/core": "workspace:*",
     "@lavega/database": "workspace:*",
     "@sentry/node": "^10.70.0",
+    "@typesafe-ai/sdk": "0.6.0",
     "ai": "^7.0.77",
     "hono": "^4.13.7",
     "tsx": "^4.23.1"

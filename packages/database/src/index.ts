@@ -986,7 +986,7 @@ export function createEbFlowRepository(db: Database) {
 
 export type AiUsage = {
   day: string; // "YYYY-MM-DD"
-  route: "categorize" | "extract-invoice" | "chat" | "travel";
+  route: "categorize" | "extract-invoice" | "chat" | "travel" | "portfolio-persona";
   model: string;
   inputTokens: number;
   outputTokens: number;

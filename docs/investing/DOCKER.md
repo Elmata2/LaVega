@@ -25,10 +25,12 @@ docker run --rm -p 8788:8788 \
   -e LAVEGA_AGENT_API_KEY=... \
   -e LAVEGA_AGENT_MODEL=inclusionai/ling-3.0-flash-fin:free \
   -e LAVEGA_AGENT_BASE_URL=https://openrouter.ai/api/v1 \
+  -e TYPESAFE_API_KEY=... \
+  -e TYPESAFE_MODEL=jev-1.13.0 \
   lavega-investing
 ```
 
-`PORT` changes listening port. `SENTRY_DSN` and `LAVEGA_AGENT_*` are optional. Broker credentials stay encrypted in credential vault.
+`PORT` changes listening port. `SENTRY_DSN`, `LAVEGA_AGENT_*`, and `TYPESAFE_*` are optional. Broker credentials stay encrypted in credential vault.
 
 After process restart, encrypted vault is locked. Open **Broker koppelen** and enter only vault passphrase to unlock it. Broker API keys do not need re-entry. Last successful positions, trades, and dividends stay inside same AES-GCM vault and restore after unlock; cached sync cannot erase them. For unattended sync, set `LAVEGA_VAULT_PASSPHRASE`; runtime unlocks vault and restores broker data during startup. Environment value is plaintext secret outside encrypted vault, so use container/Railway secret storage. Never put it in image layer or source control.
 
