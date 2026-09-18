@@ -46,10 +46,26 @@
  * @returns {string}
  */
 function stripModuleSyntax(source) {
-  return source
-    .replace(/^export \{[\s\S]*?\};[ \t]*$/gm, "")
-    .replace(/^import [\s\S]*?from '[^']*';[ \t]*$/gm, "")
-    .trimEnd();
+  return (
+    source
+      .replace(/^export \{[\s\S]*?\};[ \t]*$/gm, "")
+      /* EITHER QUOTE, and that is the whole point of this character class.
+       *
+       * This used to match only `from '...'`. Adopting oxfmt (15c4a85)
+       * reformatted every source in this directory to double quotes, so the
+       * pattern silently stopped matching — and the generator kept writing a
+       * real `import { … } from "./normalizeGmailMessage.js";` into the
+       * workflow JSON. An n8n Code node runs in a bare vm with no module
+       * system, so it died at runtime with "Cannot use import statement outside
+       * a module", pointing at a line number inside a generated blob.
+       *
+       * Nothing caught it: the sources are valid ESM and test fine on their
+       * own, the JSON is generated output nobody reads, and the only place the
+       * defect exists is inside n8n. Hence the assertion in codeNodes.test.ts
+       * that no built node may contain module syntax at all. */
+      .replace(/^import [\s\S]*?from ['"][^'"]*['"];[ \t]*$/gm, "")
+      .trimEnd()
+  );
 }
 
 /**
