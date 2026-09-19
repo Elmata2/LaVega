@@ -10,6 +10,7 @@ import { getFxRate } from "./fx.js";
 import { getFxHistory, validateCurrency, validateFromDate } from "./fxHistory.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
+import { registerN8nRoutes, n8nRouteDependencies } from "./n8n-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
@@ -233,6 +234,12 @@ app.get("/api/eb/status", (c) => {
  * function does not survive between /auth and the bank's redirect back. */
 const ebDependencies = ebRouteDependencies();
 if (ebDependencies) registerEbRoutes(app, ebDependencies);
+
+/* Invoice-queue proxy: /api/n8n/queue. The server holds the n8n webhook
+ * credential and derives `queueKey` from the caller's own session — see
+ * docs/adr/0006-invoice-queue-server-proxy.md. */
+const n8nDependencies = n8nRouteDependencies();
+if (n8nDependencies) registerN8nRoutes(app, n8nDependencies);
 
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */

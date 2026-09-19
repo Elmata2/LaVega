@@ -317,14 +317,14 @@ test("an empty queue, a refused token and a dead connection each say their own t
     json: async () => ({}),
   })) as unknown as typeof fetch;
   const c2 = await fetchOnce(denied);
-  expect(c2.textContent).toContain("weigerde het token (401)");
+  expect(c2.textContent).toContain("Je bent uitgelogd (401)");
   expect(c2.textContent).toContain("Er is niets opgehaald");
 
   const dead = (async () => {
     throw new TypeError("Failed to fetch");
   }) as unknown as typeof fetch;
   const c3 = await fetchOnce(dead);
-  expect(c3.textContent).toContain("Geen antwoord van n8n");
+  expect(c3.textContent).toContain("Geen antwoord van de LaVega-server");
 
   const garbled = (async () => ({
     ok: true,
@@ -349,11 +349,9 @@ test("the token-refused and network notices lead with a short line and fold the 
   expect(unauthorizedDetails).toHaveLength(1);
   // Closed by default — dicht betekent niet weg, zie ToonMeer.tsx.
   expect(unauthorizedDetails[0].open).toBe(false);
-  expect(unauthorizedDetails[0].textContent).toContain(
-    "de workflow is niet eens gestart",
-  );
+  expect(unauthorizedDetails[0].textContent).toContain("er is geen verzoek naar n8n geweest");
   // The short line is a sibling <p>, not itself inside the closed <details>.
-  const shortLine = byText("p.cell-sub", "weigerde het token (401)");
+  const shortLine = byText("p.cell-sub", "Je bent uitgelogd (401)");
   expect(shortLine.closest("details")).toBeNull();
   expect(shortLine.textContent).toContain("Er is niets opgehaald");
   // Opens on a click of its own summary, like every other ToonMeer.
@@ -367,21 +365,24 @@ test("the token-refused and network notices lead with a short line and fold the 
   const networkDetails = [...c2.querySelectorAll<HTMLDetailsElement>(`.${TOONMEER_CLASS.root}`)];
   expect(networkDetails).toHaveLength(1);
   expect(networkDetails[0].open).toBe(false);
-  expect(networkDetails[0].textContent).toContain("CORS-controle");
-  expect(networkDetails[0].textContent).toContain("curl");
-  const networkShort = byText("p.cell-sub", "Geen antwoord van n8n");
+  expect(networkDetails[0].textContent).toContain("verbindingsprobleem met LaVega zelf");
+  const networkShort = byText("p.cell-sub", "Geen antwoord van de LaVega-server");
   expect(networkShort.closest("details")).toBeNull();
-  expect(networkShort.textContent).toContain("Allowed Origins");
+  expect(networkShort.textContent).toContain("hier is niets binnengekomen");
 });
 
-test("without a URL and token nothing is fetched, and it says so", async () => {
+test("without the server configured nothing is fetched successfully, and it says so", async () => {
+  // The manual button now always calls LaVega's own server — the vault no
+  // longer gates it (docs/adr/0006-invoice-queue-server-proxy.md). Whether
+  // the queue is configured is the SERVER's answer (503), not a client-side
+  // read of now-vestigial vault fields.
   let called = 0;
-  const counting = (async () => {
+  const notConfigured = (async () => {
     called++;
-    return { ok: true, status: 200, json: async () => ({ invoices: [] }) };
+    return { ok: false, status: 503, json: async () => ({ error: "not configured" }) };
   }) as unknown as typeof fetch;
-  const c = await fetchOnce(counting, [], [], ["BV1"], fakeVault());
-  expect(called).toBe(0);
+  const c = await fetchOnce(notConfigured, [], [], ["BV1"], fakeVault());
+  expect(called).toBe(1);
   expect(c.textContent).toContain("Nog niet ingesteld");
 });
 

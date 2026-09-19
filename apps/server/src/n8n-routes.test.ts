@@ -1,0 +1,144 @@
+import { Hono } from "hono";
+import { beforeEach, expect, test, vi } from "vitest";
+
+/* THE ONE RULE THIS SUITE EXISTS TO PROVE: a request's own `key` (query,
+ * header, body — anywhere) never reaches n8n. queueKey comes exclusively from
+ * the session's own row in personal.n8n_forwarding, looked up server-side.
+ * Reading the wrong partition doesn't just misinform, it drains and deletes
+ * someone else's queue (packages/core/src/n8n/queue.js's drainQueue). */
+
+type N8nQueueConfig = { configured: boolean; url: string | null; token: string | null };
+
+const { loadN8nQueueConfigMock } = vi.hoisted(() => ({
+  loadN8nQueueConfigMock: vi.fn<() => N8nQueueConfig>(),
+}));
+
+vi.mock("./config.js", async () => {
+  const actual = await vi.importActual<typeof import("./config.js")>("./config.js");
+  return { ...actual, loadN8nQueueConfig: loadN8nQueueConfigMock };
+});
+
+const { registerN8nRoutes } = await import("./n8n-routes.js");
+
+/** Records every URL and header set the fake n8n endpoint was called with. */
+function fakeFetchQueue(status: number, body: unknown) {
+  const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+  const impl = (async (input: string | URL, init?: RequestInit) => {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of new Headers(init?.headers).entries()) headers[key] = value;
+    calls.push({ url: input.toString(), headers });
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  return { impl, calls };
+}
+
+let signedInAs: string | null = "user-123";
+const localParts = new Map<string, string>();
+const getLocalPartCalls: string[] = [];
+async function getLocalPart(userId: string): Promise<string | null> {
+  getLocalPartCalls.push(userId);
+  return localParts.get(userId) ?? null;
+}
+
+beforeEach(() => {
+  signedInAs = "user-123";
+  localParts.clear();
+  localParts.set("user-123", "ale");
+  getLocalPartCalls.length = 0;
+  loadN8nQueueConfigMock.mockReset();
+  loadN8nQueueConfigMock.mockReturnValue({
+    configured: true,
+    url: "https://n8n.example/webhook/invoice-queue",
+    token: "shh-shared-secret",
+  });
+});
+
+function buildApp(fetchImpl: typeof fetch) {
+  const app = new Hono();
+  registerN8nRoutes(app, { tenantId: async () => signedInAs, getLocalPart, fetchImpl });
+  return app;
+}
+
+test("a request's own ?key= is never sent to n8n — the session's own local part always wins", async () => {
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  await app.request("/api/n8n/queue?key=someone-elses-local-part");
+
+  expect(calls).toHaveLength(1);
+  const url = new URL(calls[0]!.url);
+  expect(url.searchParams.get("key")).toBe("ale");
+});
+
+test("no session: 401, and n8n is never called", async () => {
+  signedInAs = null;
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(401);
+  expect(calls).toHaveLength(0);
+});
+
+test("no address on file: 200 with an explicitly-flagged empty queue, and n8n is never called", async () => {
+  // This is the fallback-to-OWNER_KEY prevention: a brand new user with no row
+  // in personal.n8n_forwarding must never trigger a keyless fetch, because
+  // queue.js falls back to OWNER_KEY when no key is given — that would hand a
+  // new user the owner's own invoices.
+  signedInAs = "user-without-address";
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ invoices: [], notices: [], noAddress: true });
+  expect(calls).toHaveLength(0);
+});
+
+test("server not configured: 503, and n8n is never called", async () => {
+  loadN8nQueueConfigMock.mockReturnValue({ configured: false, url: null, token: null });
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(503);
+  expect(calls).toHaveLength(0);
+});
+
+test("n8n answering 401 (bad shared token) comes back as this route's 502, not 401", async () => {
+  // 401 from THIS route means "you're signed out of LaVega". Passing n8n's own
+  // 401 straight through would mislabel an operator misconfiguration (the
+  // shared token) as the end user's own session lapsing.
+  const { impl } = fakeFetchQueue(401, { error: "bad token" });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(502);
+});
+
+test("the x-lavega-token header sent to n8n is the server's configured secret, never anything from the request", async () => {
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  await app.request("/api/n8n/queue", { headers: { "x-lavega-token": "attacker-supplied" } });
+
+  expect(calls[0]!.headers["x-lavega-token"]).toBe("shh-shared-secret");
+});
+
+test("a healthy response relays n8n's JSON body unchanged", async () => {
+  const body = { invoices: [{ id: "inv-1" }], notices: [{ kind: "info" }] };
+  const { impl } = fakeFetchQueue(200, body);
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(body);
+});

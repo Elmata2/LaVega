@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
 import { adminCopy } from "./copy/admin.js";
+import { API_BASE } from "./api.js";
 import type { N8nAutoBooked } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import {
@@ -123,61 +124,30 @@ test("a body that isn't the documented shape is a failure, not an empty queue", 
   expect(parseQueue({ invoices: [] })).toEqual({ rows: [], notices: [], dropped: 0 });
 });
 
-test("fetchQueue sends the token in x-lavega-token and returns the rows", async () => {
+test("fetchQueue calls LaVega's own server, never n8n directly", async () => {
   const { impl, calls } = fakeFetch(200, { invoices: [ROW] });
-  const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  const out = await fetchQueue(impl);
   expect(out.kind).toBe("ok");
   expect(out.kind === "ok" && out.rows).toHaveLength(1);
-  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen");
-  expect(calls[0].token).toBe("sekret");
+  expect(calls[0].url).toBe(`${API_BASE}/api/n8n/queue`);
 });
 
-/* De drain-node in n8n partitioneert nu op queueKey (packages/core/src/n8n/
- * queue.js). Deze twee tests dekken het enige stuk van dat contract dat aan
- * DEZE kant van de streep zit: de sleutel moet als `?key=` querystring
- * meegaan, en bij afwezigheid mag de URL niet veranderen — vandaag heeft geen
- * enkele aanroeper nog een sleutel om mee te geven, en die aanroeper moet
- * precies dezelfde URL blijven raken als vóór de partitionering. */
-test("fetchQueue stuurt de sleutel mee als ?key= wanneer die is meegegeven", async () => {
-  const { impl, calls } = fakeFetch(200, { invoices: [] });
-  await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl, "ale");
-  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen?key=ale");
-});
-
-test("zonder sleutel blijft de URL precies zoals hij was", async () => {
-  const { impl, calls } = fakeFetch(200, { invoices: [] });
-  await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
-  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen");
-});
+/* Which queueKey the server sends to n8n is now a server-side decision, made
+ * from the caller's own session — see apps/server/src/n8n-routes.test.ts.
+ * This module no longer has a `key` parameter to test. */
 
 test("every failure mode is its own outcome, and none of them is 'ok'", async () => {
-  expect(await fetchQueue("", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
-  expect(await fetchQueue("https://x", "", fakeFetch(200, {}).impl)).toEqual({
-    kind: "not-configured",
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(401, {}).impl)).toEqual({
-    kind: "unauthorized",
-    status: 401,
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(403, {}).impl)).toEqual({
-    kind: "unauthorized",
-    status: 403,
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(404, {}).impl)).toEqual({
-    kind: "http-error",
-    status: 404,
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { throws: true }).impl)).toEqual({
-    kind: "network",
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { badJson: true }).impl)).toEqual({
-    kind: "unreadable",
-  });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { ok: true }).impl)).toEqual({
-    kind: "unreadable",
-  });
-  // The empty queue IS ok — it just carries no rows.
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({
+  expect(await fetchQueue(fakeFetch(503, {}).impl)).toEqual({ kind: "not-configured" });
+  expect(await fetchQueue(fakeFetch(401, {}).impl)).toEqual({ kind: "unauthorized", status: 401 });
+  expect(await fetchQueue(fakeFetch(403, {}).impl)).toEqual({ kind: "unauthorized", status: 403 });
+  expect(await fetchQueue(fakeFetch(500, {}).impl)).toEqual({ kind: "http-error", status: 500 });
+  expect(await fetchQueue(fakeFetch(200, {}, { throws: true }).impl)).toEqual({ kind: "network" });
+  expect(await fetchQueue(fakeFetch(200, {}, { badJson: true }).impl)).toEqual({ kind: "unreadable" });
+  expect(await fetchQueue(fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
+  expect(
+    await fetchQueue(fakeFetch(200, { invoices: [], notices: [], noAddress: true }).impl),
+  ).toEqual({ kind: "no-address" });
+  expect(await fetchQueue(fakeFetch(200, { invoices: [] }).impl)).toEqual({
     kind: "ok",
     rows: [],
     notices: [],
@@ -316,7 +286,7 @@ test("every notice kind has a label in both languages", () => {
 
 test("fetchQueue hands the notices through", async () => {
   const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
-  const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  const out = await fetchQueue(impl);
   expect(out.kind === "ok" && out.notices).toHaveLength(1);
 });
 

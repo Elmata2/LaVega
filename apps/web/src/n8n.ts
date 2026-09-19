@@ -1,18 +1,26 @@
-/* Pulling invoices out of the owner's OWN n8n (docs/n8n/FACTUREN.md).
+/* Pulling invoices out of n8n (docs/n8n/FACTUREN.md).
  *
- * The path is: his mailbox -> his n8n -> this browser. The LaVega server is not
- * in it, so nothing here talks to API_BASE; the browser calls his webhook
- * directly with the token he stored under Koppelingen.
+ * The path is: his mailbox -> n8n -> LaVega's server -> this browser. This
+ * USED to skip the server entirely — the browser held the n8n webhook URL and
+ * the shared token in the vault, and called n8n directly. That could only
+ * ever serve one person: the credential and the `queueKey` it read were both
+ * something the BROWSER chose, so a second user would either need the
+ * owner's own secret or would have no way to prove which rows were theirs.
+ * See docs/adr/0006-invoice-queue-server-proxy.md for why that changed —
+ * the server now holds the credential and derives `queueKey` from the
+ * caller's own session, and this module just calls `/api/n8n/queue`.
  *
- * The one fact everything below is shaped around: the webhook EMPTIES its queue
- * as it responds. One GET, one copy. So this module never throws data away —
- * a row that fails validation is REPORTED (dropped count), not silently
- * skipped, and the caller keeps the rows until the owner has decided on each.
+ * The one fact everything below is still shaped around: the webhook EMPTIES
+ * its queue as it responds. One GET, one copy. So this module never throws
+ * data away — a row that fails validation is REPORTED (dropped count), not
+ * silently skipped, and the caller keeps the rows until the owner has decided
+ * on each.
  */
 
 import type { Invoice, N8nAutoBooked } from "@lavega/core";
 import { makeInvoice } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
+import { API_BASE } from "./api.js";
 
 /** Where a row came in, and whether the sending domain survived the mail
  *  authentication checks Cloudflare ran on it.
@@ -84,6 +92,7 @@ export type N8nNotice = {
 export type FetchOutcome =
   | { kind: "ok"; rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number }
   | { kind: "not-configured" }
+  | { kind: "no-address" }
   | { kind: "unauthorized"; status: number }
   | { kind: "http-error"; status: number }
   | { kind: "network" }
@@ -205,39 +214,24 @@ export function parseQueue(
 }
 
 /**
- * GET the queue from his n8n. `fetchImpl` is injectable so the review flow can
- * be tested without a network.
+ * GET the queue via LaVega's own server (`/api/n8n/queue`), never n8n
+ * directly. The server holds the n8n credential and derives `queueKey` from
+ * the caller's session — there is no `key` parameter here anymore, and that
+ * is deliberate: a client that could choose its own key could read anyone's
+ * queue (see the route's own comment, apps/server/src/n8n-routes.ts).
  *
- * `key` is the `queueKey` he is fetching for — n8n's drain node now partitions
- * its store by that key (packages/core/src/n8n/queue.js), so a fetch with no
- * key gets only the owner's own rows, never a stranger's. It travels as a
- * `?key=` query parameter, the same route the webhook already reads request
- * data from. Left undefined today because there is no per-user identity to
- * put here yet on this side — that is the server-side proxy the queue-store
- * change makes room for, not this function's job.
+ * `fetchImpl` is injectable so the review flow can be tested without a
+ * network; production uses the browser's own `fetch`, which sends the
+ * session cookie same-origin.
  */
-export async function fetchQueue(
-  url: string,
-  token: string,
-  fetchImpl: typeof fetch = globalThis.fetch,
-  key?: string,
-): Promise<FetchOutcome> {
-  if (!url.trim() || !token.trim()) return { kind: "not-configured" };
-  let target = url.trim();
-  if (key && key.trim()) {
-    const withKey = new URL(target);
-    withKey.searchParams.set("key", key.trim());
-    target = withKey.toString();
-  }
+export async function fetchQueue(fetchImpl: typeof fetch = globalThis.fetch): Promise<FetchOutcome> {
   let res: Response;
   try {
-    res = await fetchImpl(target, {
-      method: "GET",
-      headers: { "x-lavega-token": token.trim() },
-    });
+    res = await fetchImpl(`${API_BASE}/api/n8n/queue`, { method: "GET" });
   } catch {
     return { kind: "network" };
   }
+  if (res.status === 503) return { kind: "not-configured" };
   if (res.status === 401 || res.status === 403) return { kind: "unauthorized", status: res.status };
   if (!res.ok) return { kind: "http-error", status: res.status };
   let body: unknown;
@@ -245,6 +239,9 @@ export async function fetchQueue(
     body = await res.json();
   } catch {
     return { kind: "unreadable" };
+  }
+  if (body && typeof body === "object" && (body as { noAddress?: unknown }).noAddress === true) {
+    return { kind: "no-address" };
   }
   const parsed = parseQueue(body);
   if (!parsed) return { kind: "unreadable" };

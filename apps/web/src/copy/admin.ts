@@ -142,6 +142,7 @@ type FacturenCopy = {
     vaultNotLinked: string;
     fetching: string;
     notConfigured: string;
+    noAddress: string;
     unauthorized: { short: (status: number) => string; detail: string; detailSummary: string };
     httpError: (status: number) => string;
     network: { short: string; detail: string; detailSummary: string };
@@ -741,24 +742,24 @@ const nlFacturen: FacturenCopy = {
     vaultNotLinked: "De kluis is nog niet gekoppeld aan dit scherm. Er is niets opgehaald.",
     fetching: "Bezig met ophalen…",
     notConfigured:
-      "Nog niet ingesteld: vul eerst de webhook-URL en het token in onder Koppelingen. Er is niets opgehaald.",
+      "Nog niet ingesteld: de factuur-wachtrij is niet geconfigureerd op de server. Er is niets opgehaald.",
+    noAddress:
+      "Er is nog geen doorstuuradres aan je account gekoppeld. Er is niets opgehaald.",
     unauthorized: {
-      short: (status) =>
-        `n8n weigerde het token (${status}). Er is niets opgehaald. Controleer het token onder Koppelingen.`,
-      detail: "De wachtrij in n8n staat er nog, want de workflow is niet eens gestart.",
+      short: (status) => `Je bent uitgelogd (${status}). Er is niets opgehaald. Log opnieuw in.`,
+      detail: "De wachtrij in n8n staat er nog; er is geen verzoek naar n8n geweest.",
       detailSummary: "Wat dit voor de wachtrij in n8n betekent",
     },
     httpError: (status) =>
       `n8n antwoordde met status ${status}. Er is niets opgehaald. Staat de workflow aan?`,
     network: {
-      short:
-        "Geen antwoord van n8n; hier is niets binnengekomen. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen.",
+      short: "Geen antwoord van de LaVega-server; hier is niets binnengekomen.",
       detail:
-        "Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig.",
+        "Dit is een verbindingsprobleem met LaVega zelf, niet met n8n — de wachtrij in n8n is niet aangeraakt.",
       detailSummary: "Wat hier waarschijnlijk misgaat",
     },
     unreadable:
-      "Het antwoord van n8n was niet te lezen. Er is niets overgenomen — en omdat de wachtrij bij het ophalen geleegd wordt, kan die rij verloren zijn. Kijk in n8n.",
+      "Het antwoord van de server was niet te lezen. Er is niets overgenomen — en omdat het ophalen de wachtrij in n8n al geleegd kan hebben, kan die rij verloren zijn.",
     emptyQueue:
       "De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.",
     nothingNew: "Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.",
@@ -1219,10 +1220,12 @@ const nlKoppelingen: KoppelingenCopy = {
       link: [
         [
           {
-            text: "Je eigen n8n leest je mailbox, laat Mistral bepalen of er een factuur in zit, en houdt die vast in een wachtrij. LaVega haalt die rij rechtstreeks op: ",
+            text: "n8n leest de doorgestuurde mail, laat Mistral bepalen of er een factuur in zit, en houdt die vast in een wachtrij. LaVega haalt die rij voor je op: ",
           },
-          { text: "jouw mailbox → jouw n8n → jouw browser", mark: "strong" },
-          { text: ". De LaVega-server komt er niet aan te pas en ziet dus nooit een factuurbedrag." },
+          { text: "je mailbox → n8n → de LaVega-server → jouw browser", mark: "strong" },
+          {
+            text: ". De server geeft de rij ongewijzigd door en bewaart hem niet, maar hij ziet de bedragen wel — anders zou je zelf een webhook-adres en een token moeten invullen.",
+          },
         ],
         [
           { text: "Opzetten doe je één keer, in n8n zelf: importeer " },
@@ -1377,24 +1380,23 @@ const enFacturen: FacturenCopy = {
     vaultNotLinked: "The vault is not yet connected to this screen. Nothing was fetched.",
     fetching: "Fetching…",
     notConfigured:
-      "Not set up yet: first fill in the webhook URL and the token under Connections. Nothing was fetched.",
+      "Not set up yet: the invoice queue is not configured on the server. Nothing was fetched.",
+    noAddress: "No forwarding address is linked to your account yet. Nothing was fetched.",
     unauthorized: {
-      short: (status) =>
-        `n8n refused the token (${status}). Nothing was fetched. Check the token under Connections.`,
-      detail: "The queue in n8n is still there, because the workflow never even started.",
+      short: (status) => `You're signed out (${status}). Nothing was fetched. Log back in.`,
+      detail: "The queue in n8n is untouched; no request to n8n was made.",
       detailSummary: "What this means for the n8n queue",
     },
     httpError: (status) =>
       `n8n responded with status ${status}. Nothing was fetched. Is the workflow switched on?`,
     network: {
-      short:
-        "No response from n8n; nothing came in here. In the Webhook node, under Allowed Origins (CORS), set this page's address, or * to try it out.",
+      short: "No response from the LaVega server; nothing arrived here.",
       detail:
-        "If n8n also shows no execution, this is almost certainly the CORS check: LaVega sends along a token header, so the browser first asks permission with an OPTIONS request — and that request leaves no trace in n8n if the webhook does not allow this page's origin. If you first want to know whether the URL is alive at all, paste it with the token into a terminal with curl: that request bypasses the browser and so needs no CORS.",
+        "This is a connection problem with LaVega itself, not with n8n — the queue in n8n was not touched.",
       detailSummary: "What's likely going wrong here",
     },
     unreadable:
-      "n8n's response could not be read. Nothing was taken over — and because the queue is emptied on fetch, that row may be lost. Check in n8n.",
+      "The server's response could not be read. Nothing was taken over — and because fetching may already have emptied the n8n queue, that row may be lost.",
     emptyQueue:
       "The queue in n8n was empty. Nothing was fetched — that is not confirmation that there are invoices.",
     nothingNew: "Nothing new: everything n8n sent was already handled here.",
@@ -1857,10 +1859,12 @@ const enKoppelingen: KoppelingenCopy = {
       link: [
         [
           {
-            text: "Your own n8n reads your mailbox, lets Mistral decide whether it contains an invoice, and holds it in a queue. LaVega fetches that queue directly: ",
+            text: "n8n reads the forwarded mail, lets Mistral decide whether it contains an invoice, and holds it in a queue. LaVega fetches that queue for you: ",
           },
-          { text: "your mailbox → your n8n → your browser", mark: "strong" },
-          { text: ". The LaVega server is never involved, so it never sees an invoice amount." },
+          { text: "your mailbox → n8n → the LaVega server → your browser", mark: "strong" },
+          {
+            text: ". The server passes the queue through unchanged and stores none of it, but it does see the amounts — the alternative is you filling in a webhook address and a token yourself.",
+          },
         ],
         [
           { text: "You set this up once, in n8n itself: import " },

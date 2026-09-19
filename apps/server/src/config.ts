@@ -171,6 +171,17 @@ export function loadIngestConfig(): { configured: boolean; token: string | null 
   return { configured: typeof token === "string" && token.length >= 16, token };
 }
 
+/** Shared credential for the invoice-queue webhook (n8n's "Geef de rij en leeg
+ *  hem" node) — server-only now; the browser used to hold this in the vault
+ *  (see docs/adr/0006-invoice-queue-server-proxy.md). `configured` is false
+ *  until both the URL and the token are set, same shape as loadIngestConfig
+ *  so the route answers a clean 503 rather than proxying to an empty URL. */
+export function loadN8nQueueConfig(): { configured: boolean; url: string | null; token: string | null } {
+  const url = process.env.N8N_QUEUE_URL?.trim() || null;
+  const token = process.env.N8N_QUEUE_TOKEN?.trim() || null;
+  return { configured: Boolean(url) && Boolean(token), url, token };
+}
+
 const DEFAULT_DAY_BUDGET_CENTS = 400;
 const DEFAULT_MONTH_BUDGET_CENTS = 2000;
 

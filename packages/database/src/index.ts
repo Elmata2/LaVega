@@ -801,7 +801,7 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-/* The eight tables that hold anything belonging to a person. Deliberately a
+/* The nine tables that hold anything belonging to a person. Deliberately a
  * literal list rather than a query over the catalogue: a table added later
  * should have to be considered here by a human, not silently swept up or —
  * worse — silently missed. Order is child-before-parent; nothing here has a
@@ -809,6 +809,7 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
 const USER_DATA_TABLES = [
   "personal.eb_sessions",
   "personal.eb_pending_auth",
+  "personal.n8n_forwarding",
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
@@ -1045,6 +1046,62 @@ export function createAiUsageRepository(db: Database) {
       } finally {
         client.release();
       }
+    },
+  };
+}
+
+/**
+ * Where each user's invoice-forwarding local part lives.
+ *
+ * n8n partitions its invoice queue by `queueKey` — the local part of the
+ * address a forwarded invoice mail arrived on (packages/core/src/n8n/queue.js).
+ * The browser used to send that key itself; the server now derives it from the
+ * caller's session and this table is where it looks it up
+ * (docs/adr/0006-invoice-queue-server-proxy.md). At most one row per user
+ * (`user_id` is the primary key), and `local_part` carries its own UNIQUE
+ * index — two users sharing a local part would each drain the other's queue,
+ * so the database refuses that before it can ever happen.
+ */
+export function createN8nForwardingRepository(db: Database) {
+  return {
+    /** The caller's own local part, or null when none is recorded yet. RLS
+     *  means another user's row is invisible here regardless of what `userId`
+     *  claims — but callers must still pass the SESSION's id, never one a
+     *  request supplied. */
+    async getLocalPart(userId: string | undefined | null): Promise<string | null> {
+      const identity = requireUserId(userId);
+      return withTenant(db, identity, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT local_part FROM personal.n8n_forwarding WHERE user_id = $1",
+          [identity],
+        );
+        return (result.rows[0]?.local_part as string | undefined) ?? null;
+      });
+    },
+
+    /** Record or replace the caller's own local part. No route calls this
+     *  yet — assigning an address is still an operator action (see the ADR) —
+     *  it exists so a future self-serve flow, and this package's own tests,
+     *  don't have to reach past the repository into raw SQL. */
+    async setLocalPart(userId: string | undefined | null, localPart: string): Promise<void> {
+      const identity = requireUserId(userId);
+      /* SAME CANONICAL FORM THE COLUMN ENFORCES, applied here so an ordinary
+       * copy-paste does not become a constraint violation the caller has to
+       * interpret. Lowercase, because the email worker lowercases when it
+       * decides which n8n bucket a mail goes into and n8n does not lowercase
+       * when it reads one back — a capitalised row and its lowercase twin are
+       * two rows here and one bucket there, and the one that matches drains
+       * the other's invoices. The CHECK stays the backstop for every writer
+       * that is not this function. */
+      const trimmed = localPart.trim().toLowerCase();
+      if (!/^[a-z0-9._%+-]{1,120}$/.test(trimmed))
+        throw new Error("localPart is not a usable email local part");
+      await withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.n8n_forwarding (user_id, local_part) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET local_part = EXCLUDED.local_part, updated_at = CURRENT_TIMESTAMP",
+          [identity, trimmed],
+        );
+      });
     },
   };
 }

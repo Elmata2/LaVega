@@ -1,0 +1,99 @@
+import type { Hono } from "hono";
+import { loadN8nQueueConfig } from "./config.js";
+import { createN8nForwardingRepository } from "@lavega/database";
+import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { investingTenantId } from "./investing-mount.js";
+
+/* The invoice-queue proxy. Moved off a direct browser-to-n8n call
+ * (docs/adr/0006-invoice-queue-server-proxy.md) so a user configures nothing:
+ * the server holds the n8n credential and derives `queueKey` from the caller's
+ * OWN session, never from anything the request carries.
+ *
+ * THE ONE RULE THIS FILE EXISTS TO ENFORCE: nothing below ever reads a `key`
+ * off the request (query, body, or otherwise). n8n partitions its queue
+ * store by that key, and reading it DESTROYS the bucket it returns
+ * (packages/core/src/n8n/queue.js's `drainQueue`) — there is no second chance
+ * to notice a leaked key. `localPart` comes from exactly one place: the
+ * caller's row in `personal.n8n_forwarding`, looked up by the session's own
+ * user id. */
+
+/** n8n answers from a workflow, not a CDN; generous, but not unbounded. */
+const N8N_TIMEOUT_MS = 20_000;
+
+export type N8nRouteDependencies = {
+  /** The signed-in user, or null. Never read from the request's own body. */
+  tenantId: (request: Request) => Promise<string | null>;
+  getLocalPart: (userId: string) => Promise<string | null>;
+  fetchImpl?: typeof fetch;
+};
+
+export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies): void {
+  const { tenantId, getLocalPart } = dependencies;
+  const fetchImpl = dependencies.fetchImpl ?? fetch;
+
+  app.get("/api/n8n/queue", async (c) => {
+    const cfg = loadN8nQueueConfig();
+    if (!cfg.configured || !cfg.url || !cfg.token)
+      return c.json({ error: "De factuur-wachtrij is niet ingesteld op de server." }, 503);
+
+    const userId = await tenantId(c.req.raw);
+    if (!userId) return c.json({ error: "Log in om je facturen op te halen." }, 401);
+
+    const localPart = await getLocalPart(userId);
+    // No address on file: an empty, explicitly-flagged queue — never a fetch
+    // to n8n with no key, which would fall through to `OWNER_KEY` on n8n's
+    // side and hand a brand new user the owner's own invoices.
+    if (!localPart) return c.json({ invoices: [], notices: [], noAddress: true });
+
+    /* A MALFORMED URL IS AN OPERATOR ERROR, and there is already a shape for
+     * that. Outside the try below this threw an unhandled 500, which the client
+     * maps to "did the workflow not start?" — pointing the reader at n8n for a
+     * mistake in our own environment. */
+    let target: URL;
+    try {
+      target = new URL(cfg.url);
+    } catch {
+      return c.json({ error: "De n8n-URL op de server is ongeldig." }, 503);
+    }
+    target.searchParams.set("key", localPart);
+
+    let res: Response;
+    try {
+      res = await fetchImpl(target.toString(), {
+        method: "GET",
+        headers: { "x-lavega-token": cfg.token },
+        /* THE ONLY OUTBOUND CALL HERE WHOSE UPSTREAM DELETES WHAT IT RETURNS,
+         * and it was the only one in this server without a timeout — bankNl,
+         * fx, fxHistory and rates all carry one. Without it a slow n8n hangs
+         * the function until the platform kills it, long after `drainQueue`
+         * emptied the bucket, and the reader is told nothing was fetched. A
+         * bounded wait does not save those rows, but it turns an indefinite
+         * hang into one failure the client can name. */
+        signal: AbortSignal.timeout(N8N_TIMEOUT_MS),
+      });
+    } catch {
+      return c.json({ error: "Kon n8n niet bereiken." }, 502);
+    }
+    // n8n's own answer never becomes THIS route's 401/403: that status is
+    // reserved above for "you are signed out of LaVega". An upstream refusal
+    // here is a server/operator fault (the shared token, or n8n itself), and
+    // reads as one — never as the browser's own session lapsing.
+    if (!res.ok) return c.json({ error: `n8n antwoordde met status ${res.status}.` }, 502);
+
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return c.json({ error: "Onleesbaar antwoord van n8n." }, 502);
+    }
+    return c.json(body as Record<string, unknown>);
+  });
+}
+
+/** Wiring for the real server: Neon storage, session identity. */
+export function n8nRouteDependencies(): N8nRouteDependencies | null {
+  const database = runtimeDatabase();
+  if (!database) return null;
+  const repository = createN8nForwardingRepository(database);
+  return { tenantId: investingTenantId, getLocalPart: (userId) => repository.getLocalPart(userId) };
+}

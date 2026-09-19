@@ -53,6 +53,45 @@ test("the real migrations apply from empty and record themselves", async () => {
   expect(await ledgerNames()).toEqual(files.map((entry) => entry.name).sort());
 }, 60_000);
 
+/* THE TENANT BOUNDARY IS THIS CONSTRAINT, so it gets tested against a real
+ * Postgres rather than reasoned about.
+ *
+ * The queue key is normalised twice and differently. The email worker names an
+ * n8n bucket `address.slice(0, at).trim().toLowerCase()`; n8n reads one named
+ * `v.trim().slice(0, 120)`, which does not lowercase. So a byte-exact unique
+ * index does NOT stop two users sharing one partition — and sharing it means
+ * one drains the other's invoices, which `drainQueue` then deletes. Review
+ * demonstrated every row below against the real modules.
+ *
+ * `btrim(x) <> ''` was the original guard and is not enough twice over: it
+ * permits padding, and its default trim set is the space character alone, so a
+ * single tab survived it and then normalised to "" at n8n — which returns
+ * OWNER_KEY, the owner's own queue. */
+test("a forwarding local part that n8n would rewrite cannot be stored at all", async () => {
+  await applyMigrations(client, readMigrations(migrationsDirectory));
+
+  const store = (localPart: string) =>
+    client.query("INSERT INTO personal.n8n_forwarding (user_id, local_part) VALUES ($1, $2)", [
+      `u-${Math.random().toString(36).slice(2)}`,
+      localPart,
+    ]);
+
+  for (const [value, why] of [
+    ["Alice-7f3a", "uppercase: the worker lowercases, so this is one bucket with its twin"],
+    ["alice-7f3a ", "trailing space: n8n trims, so this is one bucket with its twin"],
+    [" alice-7f3a", "leading space, same reason"],
+    ["\t", "a tab survives btrim and becomes OWNER_KEY at n8n"],
+    ["owner@lavega.internal", "the owner sentinel itself"],
+    ["a".repeat(121), "n8n slices at 120, so anything longer collides on its prefix"],
+  ] as const) {
+    await expect(store(value), why).rejects.toThrow();
+  }
+
+  /* And the form both ends already agree on is storable, or the constraint
+   * would be protecting the queue by refusing to have one. */
+  await expect(store("alice-7f3a")).resolves.toBeDefined();
+}, 60_000);
+
 /* The runner cannot wrap a file and its ledger row in one transaction, because
  * the files open their own. Idempotence is what makes a half-recorded run safe. */
 test("every migration is rerunnable, so a repeated apply changes nothing", async () => {

@@ -416,14 +416,13 @@ export default function Facturen({
     setN8nBusy(true);
     showN8nNote(c.n8nNotices.fetching);
     try {
-      const settings = await getN8nSettings(vault);
-      const outcome = await fetchQueue(
-        settings.invoiceUrl ?? "",
-        settings.invoiceToken ?? "",
-        fetchImpl,
-      );
+      const outcome = await fetchQueue(fetchImpl);
       if (outcome.kind === "not-configured") {
         showN8nNote(c.n8nNotices.notConfigured);
+        return;
+      }
+      if (outcome.kind === "no-address") {
+        showN8nNote(c.n8nNotices.noAddress);
         return;
       }
       if (outcome.kind === "unauthorized") {
