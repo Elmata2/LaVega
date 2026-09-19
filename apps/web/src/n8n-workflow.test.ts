@@ -339,7 +339,21 @@ function checkAllowedOriginsOnlyOnQueue(wf: Workflow): void {
     origins(byName(wf, QUEUE_HOOK)).length,
     "allowedOrigins is leeg — de browser krijgt dan een CORS-fout bij Ophalen uit n8n",
   ).toBeGreaterThan(0);
-  expect(origins(byName(wf, QUEUE_HOOK))).toContain("https://lavega.dev");
+  /* DE ORIGIN WAAR DE APP ÉCHT OP DRAAIT, niet de kale domeinnaam.
+   *
+   * Deze test eiste alleen "https://lavega.dev", en dat slaagt ook als dát de
+   * enige origin in de lijst is. Maar lavega.dev antwoordt met een 308 naar
+   * https://www.lavega.dev, dus de browser draait de app NOOIT op de kale naam:
+   * de preflight komt van www, staat die er niet bij, dan faalt Ophalen uit n8n
+   * met "Geen antwoord van n8n" — en de OPTIONS-request laat in n8n geen enkel
+   * spoor na, dus het lijkt alsof er niets is aangekomen.
+   *
+   * Precies dat gebeurde op 19 sep met lavega-invoices.json, het bestand waar
+   * DOORSTUURADRES.md naar verwijst: het had alleen de kale naam. */
+  expect(
+    origins(byName(wf, QUEUE_HOOK)),
+    "de app draait op https://www.lavega.dev (lavega.dev 308-redirect daarheen)",
+  ).toContain("https://www.lavega.dev");
   expect(
     origins(byName(wf, MAIL_HOOK)),
     "de intake heeft allowedOrigins gekregen; de worker is geen browser en stuurt geen Origin",
