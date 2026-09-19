@@ -350,10 +350,20 @@ function checkAllowedOriginsOnlyOnQueue(wf: Workflow): void {
    *
    * Precies dat gebeurde op 19 sep met lavega-invoices.json, het bestand waar
    * DOORSTUURADRES.md naar verwijst: het had alleen de kale naam. */
+  /* EERST, niet ergens in de lijst. Gemeten tegen de echte n8n op 19 sep:
+   *
+   *   Origin: https://www.lavega.dev  -> allow-origin: https://lavega.dev
+   *   Origin: https://lavega.dev      -> allow-origin: https://lavega.dev
+   *   Origin: https://example.invalid -> allow-origin: https://lavega.dev
+   *
+   * n8n vergelijkt de Origin van het verzoek dus NIET met de lijst; hij geeft
+   * één vaste waarde terug, en dat is de eerste. Een komma-lijst is hier geen
+   * allowlist. Zolang de browser op www draait en de eerste waarde de kale naam
+   * is, faalt de preflight — wat de lijst verderop ook bevat. */
   expect(
-    origins(byName(wf, QUEUE_HOOK)),
-    "de app draait op https://www.lavega.dev (lavega.dev 308-redirect daarheen)",
-  ).toContain("https://www.lavega.dev");
+    origins(byName(wf, QUEUE_HOOK)).split(",")[0].trim(),
+    "n8n geeft alleen de EERSTE origin terug; de app draait op www (lavega.dev 308't daarheen)",
+  ).toBe("https://www.lavega.dev");
   expect(
     origins(byName(wf, MAIL_HOOK)),
     "de intake heeft allowedOrigins gekregen; de worker is geen browser en stuurt geen Origin",

@@ -80,9 +80,26 @@ toevoegen.
    je de rij op met **Ophalen uit n8n** in _Facturen_, en bevestig je hem regel
    voor regel.
 
-De node staat ingesteld op `allowedOrigins: https://lavega.dev,
-http://localhost:5173`. Draai je LaVega op een andere poort, pas dat dan aan,
-anders blokkeert de browser het antwoord.
+De node staat ingesteld op `allowedOrigins: https://www.lavega.dev,
+https://lavega.dev, http://localhost:5173`.
+
+**Alleen de EERSTE waarde doet iets.** Gemeten tegen de echte n8n op 19 september
+2026: hij vergelijkt de `Origin` van het verzoek niet met de lijst, maar geeft
+altijd dezelfde vaste waarde terug — ook aan een origin die er helemaal niet in
+staat:
+
+```
+Origin: https://www.lavega.dev   -> access-control-allow-origin: https://lavega.dev
+Origin: https://lavega.dev       -> access-control-allow-origin: https://lavega.dev
+Origin: https://example.invalid  -> access-control-allow-origin: https://lavega.dev
+```
+
+Een komma-lijst is hier dus géén allowlist. Draai je LaVega ergens anders — op
+`localhost:5173`, of op een preview-URL — zet die origin dan vóóraan, of zet er
+`*` neer. `https://lavega.dev` antwoordt met een 308 naar `https://www.lavega.dev`,
+dus de browser draait de app altijd op `www`; staat de kale naam vooraan, dan
+blokkeert de browser elk antwoord en zie je in n8n géén enkele execution, want
+een geweigerde preflight bereikt de workflow nooit.
 
 ## Wat er in de Gmail-node is gezet, en waarom
 

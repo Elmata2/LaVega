@@ -238,7 +238,7 @@
         "path": "lavega-facturen",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://lavega.dev, https://www.lavega.dev, https://lavegaweb-production.up.railway.app, http://localhost:5173"
+          "allowedOrigins": "https://www.lavega.dev, https://lavega.dev, https://lavegaweb-production.up.railway.app, http://localhost:5173"
         },
         "authentication": "headerAuth"
       },

@@ -232,7 +232,7 @@
         "path": "lavega-facturen",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "https://lavega.dev, https://www.lavega.dev, http://localhost:5173"
+          "allowedOrigins": "https://www.lavega.dev, https://lavega.dev, http://localhost:5173"
         }
       },
       "id": "b1000000-0000-4000-8000-00000000000d",
