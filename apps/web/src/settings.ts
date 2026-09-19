@@ -165,6 +165,22 @@ export function setFxConversionMode(mode: ConversionMode): void {
   }
 }
 
+/** The owner's live production webhook (docs/n8n/FACTUREN.md) — a DEFAULT for
+ *  the Koppelingen field, so it starts filled in instead of blank, never a
+ *  value this file writes to the vault on its own: `getN8nSettings` above
+ *  returns exactly what the vault holds, unmodified, and Koppelingen is the
+ *  only place that falls back to this constant when the vault has none.
+ *
+ *  The TOKEN is deliberately not here and never will be. Measured 19 Sep
+ *  2026: this webhook answers `access-control-allow-origin` to any origin at
+ *  all, so CORS restricts nothing on it — the token is the entire access
+ *  control on an endpoint that returns his parsed invoices (counterparties,
+ *  amounts, IBANs). This bundle ships to anyone who loads the public landing
+ *  page, so a bundled token would be a public one; it stays hand-entered,
+ *  encrypted, in the vault. */
+export const DEFAULT_N8N_INVOICE_URL =
+  "https://n8n-production-3fce.up.railway.app/webhook/lavega-facturen";
+
 /* --- The owner's own n8n webhook/API credentials (docs/n8n/FACTUREN.md,
  * n8n-provision.ts). URL, token, base URL and API key are HIS, for HIS n8n:
  * never in the repo, never sent to the LaVega server. The whole point of the
@@ -264,6 +280,12 @@ export async function setN8nInvoiceToken(vault: VaultStorage, token: string): Pr
  * --- */
 
 export const INVOICE_FORWARD_DOMAIN = "invoices.lavega.dev";
+/** A specific, readable address (his own choice, confirmed working 23 Aug)
+ *  offered as a one-click suggestion in the empty state, alongside — not
+ *  instead of — the random generator below. Cloudflare routes the whole
+ *  domain as a catch-all, so this is one valid local part among many, not a
+ *  default this file ever writes on its own. */
+export const SUGGESTED_INVOICE_FORWARD_ADDRESS = `ale@${INVOICE_FORWARD_DOMAIN}`;
 const FORWARD_KEY = "lavega.invoiceForwardAddress";
 /** Zo veel willekeur dat niemand hem kan raden, kort genoeg om over te typen. */
 const FORWARD_RANDOM_CHARS = 10;

@@ -126,14 +126,25 @@ type FacturenCopy = {
   };
 
   /** Every string routed through setN8nNote — the fetch/confirm/reject/undo/
-   *  dismiss status line rendered once, under "1 · Automatisch". */
+   *  dismiss status line rendered once, under "1 · Automatisch".
+   *
+   *  `unauthorized` and `network` are the two that used to read as a debugging
+   *  log: a paragraph of diagnosis (CORS/OPTIONS mechanics, a curl fallback,
+   *  why an unauthorized fetch leaves the n8n queue untouched) aimed at
+   *  whoever built the integration, not at the owner glancing at the screen.
+   *  `short` is what he needs in one breath — what happened, and what to do —
+   *  and stays honest about consequence (nothing lost, or check the token).
+   *  `detail` keeps every specific from the old paragraph, verbatim, rendered
+   *  behind ToonMeer so it doesn't crowd the short line. `detailSummary` is
+   *  the disclosure's promise label. Every other notice here is already a
+   *  short, non-diagnostic sentence and stays a plain string. */
   n8nNotices: {
     vaultNotLinked: string;
     fetching: string;
     notConfigured: string;
-    unauthorized: (status: number) => string;
+    unauthorized: { short: (status: number) => string; detail: string; detailSummary: string };
     httpError: (status: number) => string;
-    network: string;
+    network: { short: string; detail: string; detailSummary: string };
     unreadable: string;
     emptyQueue: string;
     nothingNew: string;
@@ -564,12 +575,23 @@ type KoppelingenCopy = {
     addressAriaLabel: string;
     /** shown when onBlur rejects the typed value; previous address kept */
     invalidError: string;
-    /** shown only while no address exists yet; ends right before generateButton */
-    emptyIntroPrefix: string;
+    /** the copy-to-clipboard button next to an address that is already set */
+    copyButton: string;
+    /** the copy button's label for the ~1.5s after a successful copy */
+    copiedLabel: string;
+    /** aria-label on the copy button; names WHAT gets copied */
+    copyButtonAriaLabel: string;
+    /** shown only while no address exists yet, above the two options */
+    emptyIntro: string;
+    /** button offering the specific readable address; takes it as an argument
+     *  so the address itself stays a single fact in settings.ts, not copy */
+    suggestedButton: (address: string) => string;
+    /** one line under suggestedButton: readable and easy to type, but guessable */
+    suggestedTradeoff: string;
     /** the inline button that calls ensureInvoiceForwardAddress() */
     generateButton: string;
-    /** the "." that follows the button with no space */
-    emptyIntroSuffix: string;
+    /** one line under generateButton: unguessable, but harder to type */
+    generateTradeoff: string;
   };
   n8nLink: {
     /** <h2> */
@@ -720,12 +742,21 @@ const nlFacturen: FacturenCopy = {
     fetching: "Bezig met ophalen…",
     notConfigured:
       "Nog niet ingesteld: vul eerst de webhook-URL en het token in onder Koppelingen. Er is niets opgehaald.",
-    unauthorized: (status) =>
-      `n8n weigerde het token (${status}). Er is niets opgehaald; de wachtrij in n8n staat er nog, want de workflow is niet eens gestart. Controleer het token onder Koppelingen.`,
+    unauthorized: {
+      short: (status) =>
+        `n8n weigerde het token (${status}). Er is niets opgehaald. Controleer het token onder Koppelingen.`,
+      detail: "De wachtrij in n8n staat er nog, want de workflow is niet eens gestart.",
+      detailSummary: "Wat dit voor de wachtrij in n8n betekent",
+    },
     httpError: (status) =>
       `n8n antwoordde met status ${status}. Er is niets opgehaald. Staat de workflow aan?`,
-    network:
-      "Geen antwoord van n8n. Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig. Hier is niets binnengekomen.",
+    network: {
+      short:
+        "Geen antwoord van n8n; hier is niets binnengekomen. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen.",
+      detail:
+        "Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig.",
+      detailSummary: "Wat hier waarschijnlijk misgaat",
+    },
     unreadable:
       "Het antwoord van n8n was niet te lezen. Er is niets overgenomen — en omdat de wachtrij bij het ophalen geleegd wordt, kan die rij verloren zijn. Kijk in n8n.",
     emptyQueue:
@@ -1159,9 +1190,14 @@ const nlKoppelingen: KoppelingenCopy = {
     addressPlaceholder: "invoices@lavega.dev",
     addressAriaLabel: "Doorstuuradres",
     invalidError: "Dat is geen e-mailadres. Niets opgeslagen — het vorige adres staat er nog.",
-    emptyIntroPrefix: "Nog geen adres. Typ het adres dat je in Cloudflare hebt aangemaakt, of ",
-    generateButton: "laat LaVega er een maken",
-    emptyIntroSuffix: ".",
+    copyButton: "Kopieer",
+    copiedLabel: "Gekopieerd",
+    copyButtonAriaLabel: "Doorstuuradres kopiëren",
+    emptyIntro: "Nog geen adres. Typ zelf een adres dat je in Cloudflare hebt aangemaakt, of kies er een:",
+    suggestedButton: (address) => `Gebruik ${address}`,
+    suggestedTradeoff: "Makkelijk te onthouden en over te typen — maar wel te raden.",
+    generateButton: "Genereer een willekeurig adres",
+    generateTradeoff: "Niet te raden — maar lastiger over te typen.",
   },
   n8nLink: {
     heading: "Koppeling met n8n",
@@ -1342,12 +1378,21 @@ const enFacturen: FacturenCopy = {
     fetching: "Fetching…",
     notConfigured:
       "Not set up yet: first fill in the webhook URL and the token under Connections. Nothing was fetched.",
-    unauthorized: (status) =>
-      `n8n refused the token (${status}). Nothing was fetched; the queue in n8n is still there, because the workflow never even started. Check the token under Connections.`,
+    unauthorized: {
+      short: (status) =>
+        `n8n refused the token (${status}). Nothing was fetched. Check the token under Connections.`,
+      detail: "The queue in n8n is still there, because the workflow never even started.",
+      detailSummary: "What this means for the n8n queue",
+    },
     httpError: (status) =>
       `n8n responded with status ${status}. Nothing was fetched. Is the workflow switched on?`,
-    network:
-      "No response from n8n. If n8n also shows no execution, this is almost certainly the CORS check: LaVega sends along a token header, so the browser first asks permission with an OPTIONS request — and that request leaves no trace in n8n if the webhook does not allow this page's origin. In the Webhook node, under Allowed Origins (CORS), set this page's address, or * to try it out. If you first want to know whether the URL is alive at all, paste it with the token into a terminal with curl: that request bypasses the browser and so needs no CORS. Nothing came in here.",
+    network: {
+      short:
+        "No response from n8n; nothing came in here. In the Webhook node, under Allowed Origins (CORS), set this page's address, or * to try it out.",
+      detail:
+        "If n8n also shows no execution, this is almost certainly the CORS check: LaVega sends along a token header, so the browser first asks permission with an OPTIONS request — and that request leaves no trace in n8n if the webhook does not allow this page's origin. If you first want to know whether the URL is alive at all, paste it with the token into a terminal with curl: that request bypasses the browser and so needs no CORS.",
+      detailSummary: "What's likely going wrong here",
+    },
     unreadable:
       "n8n's response could not be read. Nothing was taken over — and because the queue is emptied on fetch, that row may be lost. Check in n8n.",
     emptyQueue:
@@ -1783,9 +1828,14 @@ const enKoppelingen: KoppelingenCopy = {
     addressAriaLabel: "Forwarding address",
     invalidError:
       "That's not an email address. Nothing was saved — the previous address is still there.",
-    emptyIntroPrefix: "No address yet. Type the address you created in Cloudflare, or ",
-    generateButton: "have LaVega create one",
-    emptyIntroSuffix: ".",
+    copyButton: "Copy",
+    copiedLabel: "Copied",
+    copyButtonAriaLabel: "Copy forwarding address",
+    emptyIntro: "No address yet. Type one you created in Cloudflare yourself, or pick one:",
+    suggestedButton: (address) => `Use ${address}`,
+    suggestedTradeoff: "Easy to remember and type — but guessable.",
+    generateButton: "Generate a random address",
+    generateTradeoff: "Not guessable — but harder to type.",
   },
   n8nLink: {
     heading: "Connection with n8n",

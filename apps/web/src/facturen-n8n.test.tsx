@@ -8,6 +8,7 @@ import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
 import { getHandledInvoiceMessageIds } from "./settings";
 import { adminCopy } from "./copy/admin.js";
+import { TOONMEER_CLASS } from "./components/ToonMeer";
 
 /** An in-memory vault, enough for Facturen's n8n block: URL/token and the
  *  auto-booked fallback log (privacy/security review 2026-08-28, M4/L6 — both
@@ -333,6 +334,44 @@ test("an empty queue, a refused token and a dead connection each say their own t
   const c4 = await fetchOnce(garbled);
   expect(c4.textContent).toContain("niet te lezen");
   expect(c4.textContent).toContain("kan die rij verloren zijn");
+});
+
+test("the token-refused and network notices lead with a short line and fold the diagnosis behind ToonMeer", async () => {
+  const denied = (async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
+  const c = await fetchOnce(denied);
+  const unauthorizedDetails = [
+    ...c.querySelectorAll<HTMLDetailsElement>(`.${TOONMEER_CLASS.root}`),
+  ];
+  expect(unauthorizedDetails).toHaveLength(1);
+  // Closed by default — dicht betekent niet weg, zie ToonMeer.tsx.
+  expect(unauthorizedDetails[0].open).toBe(false);
+  expect(unauthorizedDetails[0].textContent).toContain(
+    "de workflow is niet eens gestart",
+  );
+  // The short line is a sibling <p>, not itself inside the closed <details>.
+  const shortLine = byText("p.cell-sub", "weigerde het token (401)");
+  expect(shortLine.closest("details")).toBeNull();
+  expect(shortLine.textContent).toContain("Er is niets opgehaald");
+  // Opens on a click of its own summary, like every other ToonMeer.
+  click(unauthorizedDetails[0].querySelector(`.${TOONMEER_CLASS.summary}`)!);
+  expect(unauthorizedDetails[0].open).toBe(true);
+
+  const dead = (async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+  const c2 = await fetchOnce(dead);
+  const networkDetails = [...c2.querySelectorAll<HTMLDetailsElement>(`.${TOONMEER_CLASS.root}`)];
+  expect(networkDetails).toHaveLength(1);
+  expect(networkDetails[0].open).toBe(false);
+  expect(networkDetails[0].textContent).toContain("CORS-controle");
+  expect(networkDetails[0].textContent).toContain("curl");
+  const networkShort = byText("p.cell-sub", "Geen antwoord van n8n");
+  expect(networkShort.closest("details")).toBeNull();
+  expect(networkShort.textContent).toContain("Allowed Origins");
 });
 
 test("without a URL and token nothing is fetched, and it says so", async () => {

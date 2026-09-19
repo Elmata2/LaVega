@@ -18,6 +18,7 @@ import Badge from "../components/ui/Badge.js";
 import Button, { buttonVariants } from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import ToonMeer from "../components/ToonMeer.js";
 import { resolveInvoiceParties } from "../invoiceParty.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import {
@@ -270,7 +271,24 @@ export default function Facturen({
   // --- Ophalen uit n8n. `n8nNote` is disposable UI text; the ROWS live in App
   // (see the `pending` prop) because they are the only copy that exists.
   const [n8nBusy, setN8nBusy] = useState(false);
-  const [n8nNote, setN8nNote] = useState<string | null>(null);
+  /** Most notices are one short line. A few (network, unauthorized) also carry
+   *  a technical detail kept behind ToonMeer — see the n8nNotices docstring in
+   *  copy/admin.ts. `detail`/`detailSummary` are only ever set together, from
+   *  one of those two notices; every other call site passes a bare string. */
+  const [n8nNote, setN8nNoteState] = useState<{
+    text: string;
+    detail?: string;
+    detailSummary?: string;
+  } | null>(null);
+  function showN8nNote(
+    note: string | { short: string; detail: string; detailSummary: string },
+  ): void {
+    setN8nNoteState(
+      typeof note === "string"
+        ? { text: note }
+        : { text: note.short, detail: note.detail, detailSummary: note.detailSummary },
+    );
+  }
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
   // The vault's fallback auto-booked log (see `autoBookedIds` below).
@@ -391,12 +409,12 @@ export default function Facturen({
 
   async function runFetchN8n() {
     if (!storage) {
-      setN8nNote(c.n8nNotices.vaultNotLinked);
+      showN8nNote(c.n8nNotices.vaultNotLinked);
       return;
     }
     const vault = storage;
     setN8nBusy(true);
-    setN8nNote(c.n8nNotices.fetching);
+    showN8nNote(c.n8nNotices.fetching);
     try {
       const settings = await getN8nSettings(vault);
       const outcome = await fetchQueue(
@@ -405,15 +423,19 @@ export default function Facturen({
         fetchImpl,
       );
       if (outcome.kind === "not-configured") {
-        setN8nNote(c.n8nNotices.notConfigured);
+        showN8nNote(c.n8nNotices.notConfigured);
         return;
       }
       if (outcome.kind === "unauthorized") {
-        setN8nNote(c.n8nNotices.unauthorized(outcome.status));
+        showN8nNote({
+          short: c.n8nNotices.unauthorized.short(outcome.status),
+          detail: c.n8nNotices.unauthorized.detail,
+          detailSummary: c.n8nNotices.unauthorized.detailSummary,
+        });
         return;
       }
       if (outcome.kind === "http-error") {
-        setN8nNote(c.n8nNotices.httpError(outcome.status));
+        showN8nNote(c.n8nNotices.httpError(outcome.status));
         return;
       }
       if (outcome.kind === "network") {
@@ -429,11 +451,11 @@ export default function Facturen({
          * De oude tekst zette netwerk, URL en allowedOrigins als gelijke
          * kandidaten naast elkaar. Drie oorzaken noemen waarvan er één de echte
          * is, is bijna net zo onbruikbaar als er geen noemen. */
-        setN8nNote(c.n8nNotices.network);
+        showN8nNote(c.n8nNotices.network);
         return;
       }
       if (outcome.kind === "unreadable") {
-        setN8nNote(c.n8nNotices.unreadable);
+        showN8nNote(c.n8nNotices.unreadable);
         return;
       }
 
@@ -533,7 +555,7 @@ export default function Facturen({
       if (freshNotices.length > 0) {
         parts.push(c.n8nNotices.noticesWaiting(freshNotices.length));
       }
-      setN8nNote(parts.join(" "));
+      showN8nNote(parts.join(" "));
     } finally {
       setN8nBusy(false);
     }
@@ -567,7 +589,7 @@ export default function Facturen({
     addHandledInvoiceMessageIds([p.messageId]);
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
-    setN8nNote(
+    showN8nNote(
       duplicate
         ? c.n8nNotices.confirmedDuplicate(p.counterparty.trim())
         : c.n8nNotices.confirmedNew(result.invoice.counterparty),
@@ -580,7 +602,7 @@ export default function Facturen({
     addHandledInvoiceMessageIds([p.messageId]);
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
-    setN8nNote(c.n8nNotices.rejected);
+    showN8nNote(c.n8nNotices.rejected);
   }
 
   // Een melding "Gedaan" zetten boekt niets — het is een to-do die van de lijst
@@ -588,7 +610,7 @@ export default function Facturen({
   function dismissNotice(notice: N8nNotice) {
     addHandledInvoiceMessageIds([notice.messageId]);
     onNoticesChange(notices.filter((n) => n.messageId !== notice.messageId));
-    setN8nNote(c.n8nNotices.noticeDismissed);
+    showN8nNote(c.n8nNotices.noticeDismissed);
   }
 
   // Live projection: what the forecast will actually see from open invoices.
@@ -704,7 +726,7 @@ export default function Facturen({
   function undoAutoBooked(id: string) {
     setStatus(id, "cancelled");
     if (storage) void forgetAutoBooked(storage, id).then(refreshLegacyAutoBooked, () => {});
-    setN8nNote(c.n8nNotices.undone);
+    showN8nNote(c.n8nNotices.undone);
   }
 
   // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
@@ -878,7 +900,16 @@ export default function Facturen({
             </Button>
             <Button onClick={() => onNavigate("koppelingen")}>{c.forms.auto.connectionsButton}</Button>
           </div>
-          {n8nNote && <p className="cell-sub">{n8nNote}</p>}
+          {n8nNote && (
+            <>
+              <p className="cell-sub">{n8nNote.text}</p>
+              {n8nNote.detail && n8nNote.detailSummary && (
+                <ToonMeer summary={n8nNote.detailSummary}>
+                  <p className="cell-sub">{n8nNote.detail}</p>
+                </ToonMeer>
+              )}
+            </>
+          )}
           {pending.length > 0 && (
             <p className="cell-sub text-warn">{c.forms.auto.pendingWarning(pending.length)}</p>
           )}

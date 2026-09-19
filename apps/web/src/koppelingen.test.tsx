@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { VaultStorage } from "@lavega/adapters";
 import Koppelingen from "./views/Koppelingen";
 import { getInvoiceForwardAddress } from "./settings";
@@ -222,6 +222,32 @@ test("een oude localStorage-URL/token wordt bij het openen naar de kluis gemigre
   expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
 });
 
+/* ── De vooraf ingevulde webhook-URL (nooit het token) ──────────────────────
+ *
+ * https://n8n-production-3fce.up.railway.app/webhook/lavega-facturen is zijn
+ * eigen productie-webhook. Alleen de URL mag hier staan: het token is het
+ * enige dat de wachtrij afschermt (de webhook antwoordt
+ * access-control-allow-origin op elke origin, dus CORS beschermt niets), en
+ * deze bundel gaat naar iedereen die de landingspagina opent. */
+
+test("het webhook-veld begint gevuld met de eigen productie-URL, zonder dat de kluis iets heeft", async () => {
+  const c = await render(fakeVault().storage);
+  expect((c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement).value).toBe(
+    "https://n8n-production-3fce.up.railway.app/webhook/lavega-facturen",
+  );
+  // En het token blijft leeg — dat wordt nooit voorgevuld.
+  expect((c.querySelector('[aria-label="n8n token"]') as HTMLInputElement).value).toBe("");
+});
+
+test("een URL die al in de kluis staat wint van de standaard-URL", async () => {
+  const { storage } = fakeVault();
+  await storage.putN8nSettings({ invoiceUrl: "https://n8n.example/webhook/x", invoiceToken: "" });
+  const c = await render(storage);
+  expect((c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement).value).toBe(
+    "https://n8n.example/webhook/x",
+  );
+});
+
 /* ── Opschonen richting MVP (review 3, item 9) ──────────────────────────────
  *
  * "Remove the connect with n8n as well as the forward address in the profile.
@@ -260,7 +286,7 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", asy
   // het scherm maakt er nog steeds NIET zelf een aan door open te gaan.
   expect(getInvoiceForwardAddress()).toBe("");
   const maak = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("laat LaVega er een maken"),
+    (b.textContent ?? "").includes("Genereer een willekeurig adres"),
   );
   expect(maak).not.toBeUndefined();
   click(maak as HTMLButtonElement);
@@ -271,6 +297,66 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", asy
   expect([...c.querySelectorAll("button")].some((b) => /test/i.test(b.textContent ?? ""))).toBe(
     false,
   );
+});
+
+/* ── De lege staat biedt twee opties, geen winnaar ──────────────────────────
+ *
+ * Hij vroeg om zijn eigen leesbare adres (ale@invoices.lavega.dev) als
+ * één-klik-suggestie NAAST de generator, niet in plaats ervan — elk met één
+ * regel over de afweging. */
+
+test("de lege staat biedt het leesbare adres en de generator naast elkaar, elk met zijn afweging", async () => {
+  const c = await render(fakeVault().storage);
+  const suggested = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
+  );
+  const random = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Genereer een willekeurig adres"),
+  );
+  expect(suggested).not.toBeUndefined();
+  expect(random).not.toBeUndefined();
+  // Elk heeft zijn eigen afwegingsregel, en ze zeggen niet hetzelfde.
+  expect(c.textContent).toContain("Makkelijk te onthouden en over te typen");
+  expect(c.textContent).toContain("Niet te raden");
+});
+
+test("op het leesbare adres klikken slaat precies ale@invoices.lavega.dev op", async () => {
+  const c = await render(fakeVault().storage);
+  const suggested = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
+  ) as HTMLButtonElement;
+  click(suggested);
+  expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
+  expect((c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement).value).toBe(
+    "ale@invoices.lavega.dev",
+  );
+});
+
+/* ── Kopieer-knop ────────────────────────────────────────────────────────── */
+
+test("een gezet adres krijgt een kopieerknop, die het adres naar het klembord schrijft", async () => {
+  const originalClipboard = (navigator as unknown as { clipboard?: unknown }).clipboard;
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText } });
+  try {
+    const { storage } = fakeVault();
+    const c = await render(storage);
+    // Nog geen adres: geen kopieerknop — er is niets om te kopiëren.
+    expect(c.querySelector('[aria-label="Doorstuuradres kopiëren"]')).toBeNull();
+    const suggested = [...c.querySelectorAll("button")].find((b) =>
+      (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
+    ) as HTMLButtonElement;
+    click(suggested);
+    const copyButton = c.querySelector(
+      '[aria-label="Doorstuuradres kopiëren"]',
+    ) as HTMLButtonElement;
+    expect(copyButton).not.toBeNull();
+    await clickAsync(copyButton);
+    expect(writeText).toHaveBeenCalledWith("ale@invoices.lavega.dev");
+    expect(copyButton.textContent).toBe("Gekopieerd");
+  } finally {
+    Object.assign(navigator, { clipboard: originalClipboard });
+  }
 });
 
 test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vindt", async () => {

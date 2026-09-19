@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type CopySpan } from "../copy/admin.js";
@@ -8,10 +8,11 @@ import {
   getInvoiceForwardAddress,
   ensureInvoiceForwardAddress,
   setInvoiceForwardAddress,
+  SUGGESTED_INVOICE_FORWARD_ADDRESS,
+  DEFAULT_N8N_INVOICE_URL,
 } from "../settings";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
-import SaldoInput from "../components/ui/SaldoInput.js";
 
 /* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
  *
@@ -130,7 +131,16 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
   const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
   const [forwardError, setForwardError] = useState(false);
-  const [url, setUrl] = useState("");
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+  }, []);
+  /* DEFAULT, NIET CONSTANTE: het veld begint gevuld met zijn eigen productie-
+   * webhook (URL only — nooit het token, zie DEFAULT_N8N_INVOICE_URL in
+   * settings.ts) zodat hij niet blanco begint. Zodra de kluis iets anders
+   * teruggeeft wint die waarde, zowel hier als in de effect hieronder. */
+  const [url, setUrl] = useState(DEFAULT_N8N_INVOICE_URL);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -145,7 +155,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
     void getN8nSettings(storage).then(
       (settings) => {
         if (cancelled) return;
-        setUrl(settings.invoiceUrl ?? "");
+        setUrl(settings.invoiceUrl || DEFAULT_N8N_INVOICE_URL);
         setToken(settings.invoiceToken ?? "");
       },
       () => {
@@ -156,6 +166,26 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
       cancelled = true;
     };
   }, [storage, c.status.vaultReadFailed]);
+
+  function handleUseSuggestedAddress() {
+    setInvoiceForwardAddress(SUGGESTED_INVOICE_FORWARD_ADDRESS);
+    const now = getInvoiceForwardAddress();
+    setForwardAddress(now);
+    setForwardDraft(now);
+  }
+
+  async function handleCopyAddress() {
+    try {
+      await navigator.clipboard.writeText(forwardAddress);
+      setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard permission denied, or unavailable (older browser, insecure
+       * context) — the address is still plain text in the field, selectable
+       * by hand. Nothing to recover from, so nothing to show. */
+    }
+  }
 
   const urlLooksWrong = url.trim().length > 0 && !/^https?:\/\//i.test(url.trim());
 
@@ -216,11 +246,24 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           Cloudflare, niet deze code, en elk adres dat wij hier hardop noemen is
           een gok die op een dag onwaar wordt. Een adres dat wij bedenken en dat
           niets routeert is erger dan geen adres — de post komt nergens aan
-          terwijl het scherm zegt van wel. Dus typt hij het in, en de generator
-          staat ernaast voor wie nog niets heeft. */}
-      <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
+          terwijl het scherm zegt van wel. Dus typt hij het in, en de lege staat
+          hieronder biedt twee kant-en-klare opties naast elkaar, ieder met zijn
+          eigen afweging erbij — geen van beide is de "winnaar".
+
+          Het invoerveld is met opzet een gewone brede tekstregel en niet
+          SaldoInput: dat onderdeel is rechts uitgelijnd en 120px breed, gemaakt
+          voor een banksaldo, en een e-mailadres in dat vakje moet je met de
+          cursor heen en weer scrollen om te lezen. */}
+      <label htmlFor="forward-address" style={{ display: "block", margin: "0 0 var(--sp-1)" }}>
         {c.forwardAddress.addressLabel}
-        <SaldoInput
+      </label>
+      <div
+        className="flex gap-2"
+        style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}
+      >
+        <input
+          id="forward-address"
+          className="w-full"
           value={forwardDraft}
           placeholder={c.forwardAddress.addressPlaceholder}
           aria-label={c.forwardAddress.addressAriaLabel}
@@ -237,26 +280,49 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
             }
           }}
         />
-      </label>
+        {forwardAddress && (
+          <Button
+            type="button"
+            onClick={() => void handleCopyAddress()}
+            aria-label={c.forwardAddress.copyButtonAriaLabel}
+          >
+            {copied ? c.forwardAddress.copiedLabel : c.forwardAddress.copyButton}
+          </Button>
+        )}
+      </div>
       {forwardError && (
         <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
           {c.forwardAddress.invalidError}
         </p>
       )}
       {!forwardAddress && !forwardError && (
-        <p style={{ margin: "0 0 var(--sp-3)" }} className="cell-sub">
-          {c.forwardAddress.emptyIntroPrefix}
-          <Button
-            onClick={() => {
-              const made = ensureInvoiceForwardAddress();
-              setForwardAddress(made);
-              setForwardDraft(made);
-            }}
-          >
-            {c.forwardAddress.generateButton}
-          </Button>
-          {c.forwardAddress.emptyIntroSuffix}
-        </p>
+        <div style={{ margin: "0 0 var(--sp-3)" }}>
+          <p className="cell-sub">{c.forwardAddress.emptyIntro}</p>
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <Button onClick={handleUseSuggestedAddress}>
+                {c.forwardAddress.suggestedButton(SUGGESTED_INVOICE_FORWARD_ADDRESS)}
+              </Button>
+              <p className="cell-sub text-muted text-[0.85rem]" style={{ margin: "var(--sp-1) 0 0" }}>
+                {c.forwardAddress.suggestedTradeoff}
+              </p>
+            </div>
+            <div>
+              <Button
+                onClick={() => {
+                  const made = ensureInvoiceForwardAddress();
+                  setForwardAddress(made);
+                  setForwardDraft(made);
+                }}
+              >
+                {c.forwardAddress.generateButton}
+              </Button>
+              <p className="cell-sub text-muted text-[0.85rem]" style={{ margin: "var(--sp-1) 0 0" }}>
+                {c.forwardAddress.generateTradeoff}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
       <CardHeader>
         <h2>{c.n8nLink.heading}</h2>
