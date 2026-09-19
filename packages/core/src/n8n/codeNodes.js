@@ -300,6 +300,21 @@ const QUEUE_ADAPTER = [
   "return [{ json: addToQueue(store, batch, new Date().toISOString()) }];",
 ].join("\n");
 
+const DRAIN_ADAPTER = [
+  SHARED_NOTE,
+  "",
+  "// ?key=<queueKey> in de GET zegt WIE ophaalt. Geen sleutel (of een lege) is",
+  "// 'de eigenaar' — dezelfde rij die hij al kreeg vóórdat hier meer mensen bij",
+  "// konden komen, en waar zijn Gmail-berichten sowieso in horen: er is maar één",
+  "// Gmail-postbus gekoppeld en die is van hem.",
+  "const store = $getWorkflowStaticData('global');",
+  "const trigger = $('LaVega vraagt de rij op').first();",
+  "const query = (trigger && trigger.json && trigger.json.query) || {};",
+  "const key = typeof query.key === 'string' ? query.key : '';",
+  "const { invoices, notices, servedAt } = drainQueue(store, key, new Date().toISOString());",
+  "return [{ json: { invoices, notices, servedAt } }];",
+].join("\n");
+
 /** @type {CodeNodeSpec[]} */
 const NODE_SPECS = [
   {
@@ -340,6 +355,12 @@ const NODE_SPECS = [
     name: "Zet in de wachtrij",
     sources: ["queue.js"],
     adapter: QUEUE_ADAPTER,
+  },
+  {
+    id: "b1000000-0000-4000-8000-00000000000e",
+    name: "Geef de rij en leeg hem",
+    sources: ["queue.js"],
+    adapter: DRAIN_ADAPTER,
   },
 ];
 

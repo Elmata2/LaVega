@@ -144,14 +144,22 @@ function reach(wf: Workflow, start: string): Set<string> {
 }
 
 /** De leegmaak-node, gevonden op wat hij DOET en niet op zijn naam: een rename
- *  in de n8n-UI mag de wacht hieronder niet omzeilen. */
+ *  in de n8n-UI mag de wacht hieronder niet omzeilen.
+ *
+ *  Sinds de partitionering (packages/core/src/n8n/queue.js) staat de
+ *  leegmaak-logica zelf niet meer letterlijk in déze node — hij ROEPT
+ *  `drainQueue()` AAN. Beide gegenereerde nodes bevatten de VOLLEDIGE inhoud
+ *  van queue.js (dus ook de functie-DEFINITIE `function drainQueue(...) {`),
+ *  dus de locator moet een AANROEP vinden en geen definitie: het patroon sluit
+ *  `function ` ervoor uit. */
 function drainNode(wf: Workflow): Node {
-  const found = wf.nodes.filter((n) => jsCodeOf(n).includes("store.queue = []"));
+  const CALLS_DRAIN_QUEUE = /(?<!function )\bdrainQueue\(/;
+  const found = wf.nodes.filter((n) => CALLS_DRAIN_QUEUE.test(jsCodeOf(n)));
   // Vindt de locator niets, dan slaagt de bereikbaarheidstest hieronder
   // gratis — dus eerst bewijzen dat hij precies één node vond.
   expect(
     found.map((n) => n.name),
-    "geen (of meer dan één) node die `store.queue = []` doet — de locator van de leegmaak-node klopt niet meer",
+    "geen (of meer dan één) node die `drainQueue(...)` aanroept — de locator van de leegmaak-node klopt niet meer",
   ).toHaveLength(1);
   return found[0];
 }
@@ -411,9 +419,11 @@ function checkDedupBrakes(wf: Workflow): void {
   }
 }
 
-/** De leegmaak-node heeft GEEN bronbestand in packages/core/src/n8n en valt dus
- *  buiten de drift-test daar. Dit is zijn enige contract met de consument: de
- *  drie sleutels die apps/web/src/n8n.ts:166 parseQueue verwacht.
+/** De leegmaak-node heeft SINDS de partitionering wél een bronbestand
+ *  (packages/core/src/n8n/queue.js, via codeNodes.js) en valt dus ook onder de
+ *  drift-test daar (codeNodes.test.ts). Deze wacht blijft toch bestaan als
+ *  onafhankelijke controle op zijn contract met de consument: de drie sleutels
+ *  die apps/web/src/n8n.ts:166 parseQueue verwacht.
  *  Valt dit om: de app krijgt 200 terug en ziet geen enkele factuur. */
 function checkDrainContract(wf: Workflow): void {
   const code = jsCodeOf(drainNode(wf));
@@ -802,10 +812,12 @@ describe("een teruggekeerde bevinding wordt afgekeurd (mutatie in het geheugen)"
   test("de leegmaak-node kan niet stil van vorm veranderen", () => {
     const mutant = clone(good);
     const node = drainNode(mutant);
-    node.parameters!.jsCode = jsCodeOf(node).replace(
-      "invoices, notices, servedAt",
-      "rows, notices, servedAt",
-    );
+    // Elke "invoices" hernoemen, ook binnen drainQueue's eigen return: die
+    // functie-body staat VOOR het eigen return-statement van de node in de
+    // gegenereerde tekst, dus `.replace()` op alleen de eerste match zou de
+    // laatste `return` (waar checkDrainContract naar kijkt) ongemoeid laten en
+    // deze wacht voor niets laten slagen.
+    node.parameters!.jsCode = jsCodeOf(node).replaceAll("invoices", "rows");
     expect(() => checkDrainContract(mutant)).toThrow();
   });
 });

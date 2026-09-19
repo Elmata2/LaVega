@@ -207,16 +207,31 @@ export function parseQueue(
 /**
  * GET the queue from his n8n. `fetchImpl` is injectable so the review flow can
  * be tested without a network.
+ *
+ * `key` is the `queueKey` he is fetching for — n8n's drain node now partitions
+ * its store by that key (packages/core/src/n8n/queue.js), so a fetch with no
+ * key gets only the owner's own rows, never a stranger's. It travels as a
+ * `?key=` query parameter, the same route the webhook already reads request
+ * data from. Left undefined today because there is no per-user identity to
+ * put here yet on this side — that is the server-side proxy the queue-store
+ * change makes room for, not this function's job.
  */
 export async function fetchQueue(
   url: string,
   token: string,
   fetchImpl: typeof fetch = globalThis.fetch,
+  key?: string,
 ): Promise<FetchOutcome> {
   if (!url.trim() || !token.trim()) return { kind: "not-configured" };
+  let target = url.trim();
+  if (key && key.trim()) {
+    const withKey = new URL(target);
+    withKey.searchParams.set("key", key.trim());
+    target = withKey.toString();
+  }
   let res: Response;
   try {
-    res = await fetchImpl(url.trim(), {
+    res = await fetchImpl(target, {
       method: "GET",
       headers: { "x-lavega-token": token.trim() },
     });

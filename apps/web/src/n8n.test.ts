@@ -132,6 +132,24 @@ test("fetchQueue sends the token in x-lavega-token and returns the rows", async 
   expect(calls[0].token).toBe("sekret");
 });
 
+/* De drain-node in n8n partitioneert nu op queueKey (packages/core/src/n8n/
+ * queue.js). Deze twee tests dekken het enige stuk van dat contract dat aan
+ * DEZE kant van de streep zit: de sleutel moet als `?key=` querystring
+ * meegaan, en bij afwezigheid mag de URL niet veranderen — vandaag heeft geen
+ * enkele aanroeper nog een sleutel om mee te geven, en die aanroeper moet
+ * precies dezelfde URL blijven raken als vóór de partitionering. */
+test("fetchQueue stuurt de sleutel mee als ?key= wanneer die is meegegeven", async () => {
+  const { impl, calls } = fakeFetch(200, { invoices: [] });
+  await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl, "ale");
+  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen?key=ale");
+});
+
+test("zonder sleutel blijft de URL precies zoals hij was", async () => {
+  const { impl, calls } = fakeFetch(200, { invoices: [] });
+  await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen");
+});
+
 test("every failure mode is its own outcome, and none of them is 'ok'", async () => {
   expect(await fetchQueue("", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
   expect(await fetchQueue("https://x", "", fakeFetch(200, {}).impl)).toEqual({

@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
 import { buildClaudeRequest, requestSize } from "./buildClaudeRequest.js";
 import { noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
-import { addToQueue } from "./queue.js";
+import { addToQueue, OWNER_KEY } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
 import {
   RAW_HTML_ONLY,
@@ -126,9 +126,12 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
   });
 
   // Het antwoord aan LaVega, zoals "Geef de rij en leeg hem" het samenstelt.
+  // Gmail-berichten dragen geen queueKey: ze horen bij de eigenaar (OWNER_KEY).
+  const byKey = store.queueByKey as Record<string, unknown>;
+  const noticesByKey = store.noticesByKey as Record<string, unknown>;
   const body = {
-    invoices: store.queue,
-    notices: store.notices,
+    invoices: byKey[OWNER_KEY],
+    notices: noticesByKey[OWNER_KEY],
     servedAt: "2026-08-17T08:00:01.000Z",
   };
   expect((body.invoices as { amountCents: number }[]).map((i) => i.amountCents)).toEqual([
@@ -173,7 +176,12 @@ test("een doorgestuurde mail loopt door precies hetzelfde pad en komt met herkom
   );
   expect(result.addedInvoices).toBe(1);
 
-  const row = (store.queue as Record<string, unknown>[])[0];
+  // Deze rij draagt een echte queueKey ("alexander-7f3a") en landt dus in zijn
+  // EIGEN vak, niet bij de eigenaar (OWNER_KEY) — dat vak bestaat hier niet
+  // eens, want er kwam geen enkel Gmail-bericht of sleutelloze mail binnen.
+  const byKey = store.queueByKey as Record<string, Record<string, unknown>[]>;
+  expect(byKey[OWNER_KEY]).toBeUndefined();
+  const row = byKey["alexander-7f3a"][0];
   expect(row).toMatchObject({
     source: "inbound-mail",
     amountCents: 96800,

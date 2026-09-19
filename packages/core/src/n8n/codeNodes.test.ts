@@ -142,8 +142,15 @@ test("de binnengekomen-mail-node valt om op een lege body in plaats van hem te s
   expect(code).not.toContain("seen.has(");
 });
 
-test("de webhook geeft de meldingen mee terug en leegt beide rijen", () => {
+test("de webhook leegt alleen de sleutel die gevraagd werd, en geeft die terug", () => {
   const serve = node("b1000000-0000-4000-8000-00000000000e");
-  expect(serve.parameters.jsCode).toContain("store.notices = [];");
-  expect(serve.parameters.jsCode).toContain("invoices, notices, servedAt");
+  const code = serve.parameters.jsCode as string;
+  // De sleutel komt uit de query van de GET, niet uit iets dat om te raden is.
+  expect(code).toContain("trigger.json.query");
+  expect(code).toContain("drainQueue(store, key");
+  // queue.js leegt per sleutel — geen `store.queue = []` meer dat de HELE rij
+  // zou platslaan voor iedereen die ooit doorstuurde.
+  expect(code).toContain("delete maps.queueByKey[");
+  expect(code).toContain("delete maps.noticesByKey[");
+  expect(code).toContain("invoices, notices, servedAt");
 });
