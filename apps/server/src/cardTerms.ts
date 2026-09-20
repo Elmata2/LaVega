@@ -61,24 +61,35 @@ function fresh(e: Entry | undefined): boolean {
   return e != null && Date.now() - e.at < TTL_MS;
 }
 
+/** A field is unstated whether the JS caller left the key out entirely
+ *  (`undefined`) or an external JSON body carried it as `null` — the ingest
+ *  route casts an n8n-supplied body straight through (`body.terms as never`),
+ *  bypassing the type checker, and a template that has nothing to put in a
+ *  field commonly emits `null` there rather than omitting the key. Both must
+ *  read as "not stated", never as a value, or a boundary-crossing `null`
+ *  would overwrite a figure another source already established. */
+function isStated(v: unknown): boolean {
+  return v !== undefined && v !== null;
+}
+
 /** Does this reply contain anything we can actually rank with? A note alone is
  *  not an answer — the ranking needs a number. */
 function usable(t: ProviderTerms): boolean {
   return (
-    t.fxFeePct !== undefined ||
-    t.convertFeePct !== undefined ||
-    t.cashbackPct !== undefined ||
-    t.pointsPerEuro !== undefined ||
-    t.transferFreeViaIdeal !== undefined
+    isStated(t.fxFeePct) ||
+    isStated(t.convertFeePct) ||
+    isStated(t.cashbackPct) ||
+    isStated(t.pointsPerEuro) ||
+    isStated(t.transferFreeViaIdeal)
   );
 }
 
-/** Drop keys whose value is `undefined` — the lookup builds every field and
- *  leaves the unverified ones undefined, and "unverified" must not erase a
- *  figure another source already established. */
+/** Drop keys that are not stated (see `isStated`) — the lookup builds every
+ *  field and leaves the unverified ones unstated, and "unverified" must not
+ *  erase a figure another source already established. */
 function stated(t: ProviderTerms): Partial<ProviderTerms> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(t)) if (v !== undefined) out[k] = v;
+  for (const [k, v] of Object.entries(t)) if (isStated(v)) out[k] = v;
   return out as Partial<ProviderTerms>;
 }
 
@@ -141,7 +152,7 @@ function write(key: string, terms: ProviderTerms, source: TermsSource): boolean 
   // opgezocht op 15 jan 2026" about something minutes old. A source that states
   // no date is as of now, which `at` already records.
   const merged = prev ? { ...prev.terms, ...stated(terms) } : { ...terms };
-  if (terms.checkedAt === undefined) delete merged.checkedAt;
+  if (!isStated(terms.checkedAt)) delete merged.checkedAt;
   cache.set(key, { terms: merged, at: Date.now(), source });
   return true;
 }

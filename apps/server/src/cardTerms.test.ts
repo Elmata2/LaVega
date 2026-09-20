@@ -461,24 +461,64 @@ test("a source's check date does not outlive the figure it described", () => {
 });
 
 test("a field the incoming row does not state is still kept", () => {
+  // Anchored to the SAME day as the row's own checkedAt. `write` weighs that
+  // date against the real clock (STALE_GAP_MS), so an unanchored run drifts
+  // out of range a month after this was written and the second ingest gets
+  // refused as "much older" — a staleness rejection, not the field-dropping
+  // this test exists to catch. Pinning "now" next to the fixture date is what
+  // the "EXPIRED entry" test above does too; it keeps this test about merging,
+  // not about which day it happens to run on.
+  const anchored = Date.parse("2026-08-18T12:00:00Z");
+  const realNow = Date.now;
+  Date.now = () => anchored;
+  try {
+    ingestCardTerms(
+      "NL",
+      "USD",
+      [{ provider: "bunq betaalpas", fxFeePct: 2, cashbackPct: 1 }],
+      "agent",
+    );
+    // bank.nl publishes only a koersopslag; it must not wipe the cashback.
+    ingestCardTerms(
+      "NL",
+      "USD",
+      [{ provider: "bunq betaalpas", fxFeePct: 1.9, checkedAt: "2026-08-18" }],
+      "comparison",
+    );
+
+    const row = getCardTerms(input(["bunq betaalpas"]), "k", { lookup: (async () => []) as never })
+      .terms[0];
+    expect(row.cashbackPct).toBe(1);
+    expect(row.checkedAt).toBe("2026-08-18");
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("an explicit null in an incoming row is treated as unstated, not as an erasing value", () => {
+  // /api/card-terms/ingest casts an n8n-supplied body straight through
+  // (`body.terms as never`) with no runtime validation. JSON has no
+  // `undefined` — a workflow with nothing to put in a field is at least as
+  // likely to template `null` there as to omit the key. `null` must be kept
+  // out of the cache the same way an omitted key already is, or the exact bug
+  // the test above guards against comes back in through the boundary.
   ingestCardTerms(
     "NL",
     "USD",
-    [{ provider: "bunq betaalpas", fxFeePct: 2, cashbackPct: 1 }],
-    "agent",
+    [{ provider: "ING betaalpas", fxFeePct: 1.2, cashbackPct: 1 }],
+    "provider",
   );
-  // bank.nl publishes only a koersopslag; it must not wipe the cashback.
   ingestCardTerms(
     "NL",
     "USD",
-    [{ provider: "bunq betaalpas", fxFeePct: 1.9, checkedAt: "2026-08-18" }],
-    "comparison",
+    [{ provider: "ING betaalpas", fxFeePct: 1.3, cashbackPct: null } as never],
+    "provider",
   );
 
-  const row = getCardTerms(input(["bunq betaalpas"]), "k", { lookup: (async () => []) as never })
+  const row = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never })
     .terms[0];
-  expect(row.cashbackPct).toBe(1);
-  expect(row.checkedAt).toBe("2026-08-18");
+  expect(row.fxFeePct).toBe(1.3); // the update itself still applies
+  expect(row.cashbackPct).toBe(1); // ...but the null did not wipe what was known
 });
 
 test("a comparison row is served AND still sent to the agent, because it answers only one question", async () => {
