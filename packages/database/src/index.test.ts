@@ -571,12 +571,18 @@ test("AiUsage.spentCents reads back day and month totals", async () => {
     month: "2026-09",
   });
   expect(spent).toEqual({ dayCents: 150, monthCents: 150 });
+  // The freshness clause (see RESERVATION_FRESH_SQL) excludes a reservation's
+  // worst-case placeholder from the total once it goes stale, unreconciled —
+  // covered behaviourally in aiUsageReservation.test.ts against a real
+  // Postgres; this only checks the SQL text this fake driver received.
+  const freshness =
+    "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
   expect(calls[0]).toEqual({
-    sql: "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE day = $1",
+    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE day = $1 AND ${freshness}`,
     values: ["2026-09-08"],
   });
   expect(calls[1]).toEqual({
-    sql: "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE to_char(day, 'YYYY-MM') = $1",
+    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE to_char(day, 'YYYY-MM') = $1 AND ${freshness}`,
     values: ["2026-09"],
   });
 });

@@ -1,7 +1,13 @@
 import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
-import { checkBudget, recordUsage, spentCents } from "./agent/budget.js";
+import {
+  checkBudget,
+  recordUsage,
+  releaseReservation,
+  spentCents,
+  type ReservationHandle,
+} from "./agent/budget.js";
 import type { AiUsage } from "@lavega/database";
 import { MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
 import { MistralHttpError } from "./agent/mistral.js";
@@ -93,18 +99,23 @@ function budgetErrorMessage(scope: "day" | "month"): string {
 
 /** The shared pre-flight budget check for the three routes that answer with
  *  plain JSON (extract-invoice, categorize, travel-facts — chat does its own
- *  version inline, since it has to speak SSE instead). Returns a Response to
- *  send immediately (429 over cap, 503 if checkBudget() itself failed — Neon
- *  down must not read the same as "the model failed" or "over cap"), or
- *  `null` to proceed. */
-async function requireBudget(c: Context, route: AiUsage["route"]): Promise<Response | null> {
+ *  version inline, since it has to speak SSE instead). `blocked` is a
+ *  Response to send immediately (429 over cap, 503 if checkBudget() itself
+ *  failed — Neon down must not read the same as "the model failed" or "over
+ *  cap"), or `null` to proceed — in which case `reservation` is the hold this
+ *  call now owns and MUST either pass to `recordUsage` on success or release
+ *  via `releaseReservation` on failure (see checkBudget's own comment). */
+async function requireBudget(
+  c: Context,
+  route: AiUsage["route"],
+): Promise<{ blocked: Response } | { blocked: null; reservation?: ReservationHandle }> {
   try {
     const budget = await checkBudget(route);
-    if (!budget.ok) return c.json({ error: budgetErrorMessage(budget.scope) }, 429);
-    return null;
+    if (!budget.ok) return { blocked: c.json({ error: budgetErrorMessage(budget.scope) }, 429) };
+    return { blocked: null, reservation: budget.reservation };
   } catch (e) {
     logAiError("budget", e);
-    return c.json({ error: AI_UNAVAILABLE_MESSAGE }, 503);
+    return { blocked: c.json({ error: AI_UNAVAILABLE_MESSAGE }, 503) };
   }
 }
 
@@ -159,8 +170,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
     if (!limit(bucket(c, "extract")))
       return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c, "extract-invoice");
-    if (budgetBlocked) return budgetBlocked;
+    const budget = await requireBudget(c, "extract-invoice");
+    if (budget.blocked) return budget.blocked;
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
     try {
@@ -170,14 +181,16 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // invoice FIELD, never per counterparty) — sanitized like every input.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.facturen);
     } catch (e) {
+      await releaseReservation(budget.reservation);
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
     try {
       const result = await extract(input, apiKey, facts, (usage) =>
-        recordUsage({ route: "extract-invoice", model: MISTRAL_SMALL, ...usage }),
+        recordUsage({ route: "extract-invoice", model: MISTRAL_SMALL, ...usage }, budget.reservation),
       );
       return c.json(result);
     } catch (e) {
+      await releaseReservation(budget.reservation);
       logAiError("extract-invoice", e);
       return c.json({ error: aiFailureMessage(e) }, 502);
     }
@@ -237,12 +250,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           facts,
           apiKey,
           onUsage: (usage) =>
-            recordUsage({ route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 }),
+            recordUsage({ route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 }, budget.reservation),
         })) {
           await stream.writeSSE({ data: chunk });
         }
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
+        await releaseReservation(budget.reservation);
         logAiError("chat", e);
         /* aiFailureMessage(e), not the bare AI_ERROR_MESSAGE this used to send.
          * The other two AI routes already told a provider ceiling apart from a
@@ -265,8 +279,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
     if (!limit(bucket(c, "categorize")))
       return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c, "categorize");
-    if (budgetBlocked) return budgetBlocked;
+    const budget = await requireBudget(c, "categorize");
+    if (budget.blocked) return budget.blocked;
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
     try {
@@ -276,14 +290,16 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // to category, so no merchant can ride along.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.categorize);
     } catch (e) {
+      await releaseReservation(budget.reservation);
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
     try {
       const result = await categorize(input, apiKey, facts, (usage) =>
-        recordUsage({ route: "categorize", model: MISTRAL_SMALL, ...usage }),
+        recordUsage({ route: "categorize", model: MISTRAL_SMALL, ...usage }, budget.reservation),
       );
       return c.json(result);
     } catch (e) {
+      await releaseReservation(budget.reservation);
       logAiError("categorize", e);
       return c.json({ error: aiFailureMessage(e) }, 502);
     }
@@ -303,8 +319,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
     if (!limit(bucket(c, "travel")))
       return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
-    const budgetBlocked = await requireBudget(c, "travel");
-    if (budgetBlocked) return budgetBlocked;
+    const budget = await requireBudget(c, "travel");
+    if (budget.blocked) return budget.blocked;
+    // This gate only answers "is there room for one more travel call right
+    // now" — it releases its own hold immediately rather than keeping it,
+    // because it never becomes a real call itself. The actual spend, and the
+    // reservation that actually guards it, happens once per BACKGROUNDED
+    // lookup inside travel.ts's checkBudget("travel")/recordUsage() pair
+    // (see the comment above this route and travel.ts's own).
+    await releaseReservation(budget.reservation);
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());

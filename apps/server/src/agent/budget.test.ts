@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { checkBudget, recordUsage, resetBudgetMemory, spentCents } from "./budget.js";
+import {
+  checkBudget,
+  recordUsage,
+  releaseReservation,
+  resetBudgetMemory,
+  spentCents,
+  WORST_CASE_CENTS,
+} from "./budget.js";
 import { MISTRAL_SMALL } from "./models.js";
 
 let prevDay: string | undefined;
@@ -110,6 +117,89 @@ test("recorded spend is visible to the next gate read", async () => {
     outputTokens: 1_000_000,
   });
   expect((await spentCents()).dayCents).toBeGreaterThan(before);
+});
+
+/* THE RACE THIS FILE EXISTS TO CLOSE.
+ *
+ * checkBudget() used to only READ spend; recordUsage() wrote it afterwards,
+ * separately. Two concurrent callers could both read "under cap" before
+ * either had written anything, so the cap was decided by a number both of
+ * them had already read as stale — the shape that once let 240 concurrent
+ * card-terms lookups clear a one-cent cap by EUR 14.39 (see cardTerms.ts).
+ * checkBudget() now reserves the worst case atomically as part of the same
+ * call that answers "is there room", so this fires ten of them together and
+ * asserts exactly one wins.
+ *
+ * This IS genuinely concurrent, not just fired-and-hoped: Promise.all's
+ * array literal invokes each checkBudget() call synchronously, in order,
+ * before any of the returned promises are awaited, and the memory path's
+ * read-decide-write (see checkBudget's own comment) never hits an `await` —
+ * so if it raced, it would race HERE, inside this synchronous phase, not
+ * merely appear serialized by a test harness the way the DB-backed
+ * equivalent in packages/database/src/aiUsageReservation.test.ts is (that
+ * test's own comment explains why PGlite can't offer the same guarantee).
+ *
+ * Checked by reverting, not just asserted: I temporarily routed this memory
+ * path's read through `await spentCents()` instead of a direct, synchronous
+ * `memory.get()` — reintroducing exactly the kind of await-shaped gap this
+ * function exists to close — and reran this test. It failed, admitting more
+ * than one of the ten. Restoring the synchronous read fixed it back to
+ * exactly one. */
+test("checkBudget admits exactly one of ten concurrent callers when the cap has room for exactly one worst-case reservation", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = String(WORST_CASE_CENTS.categorize + 1); // room for exactly one
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+
+  const results = await Promise.all(
+    Array.from({ length: 10 }, () => checkBudget("categorize")),
+  );
+
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  expect(results.filter((r) => !r.ok && r.scope === "day")).toHaveLength(9);
+});
+
+test("recordUsage reconciles a reservation to the real cost in place, instead of stacking the real cost on top of the worst case", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "1000000";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+  const budget = await checkBudget("categorize");
+  if (!budget.ok) throw new Error("expected the reservation to succeed");
+  expect((await spentCents()).dayCents).toBe(WORST_CASE_CENTS.categorize); // held at worst case first
+
+  await recordUsage(
+    { route: "categorize", model: MISTRAL_SMALL, inputTokens: 1000, outputTokens: 1000 },
+    budget.reservation,
+  );
+
+  // A ~1k-token call costs far less than the 5-cent worst case categorize is
+  // held at — proves this replaced the hold rather than adding to it.
+  expect((await spentCents()).dayCents).toBeLessThan(WORST_CASE_CENTS.categorize);
+});
+
+test("releaseReservation frees a hold that never turned into a real call", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = String(WORST_CASE_CENTS.categorize + 1);
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+  const first = await checkBudget("categorize");
+  expect(first.ok).toBe(true);
+  expect(await checkBudget("categorize")).toEqual({ ok: false, scope: "day" });
+
+  if (first.ok) await releaseReservation(first.reservation);
+
+  expect((await checkBudget("categorize")).ok).toBe(true);
+});
+
+test("releaseReservation after recordUsage is a no-op — a late release cannot erase a charge already recorded", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "1000000";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+  const budget = await checkBudget("categorize");
+  if (!budget.ok) throw new Error("expected the reservation to succeed");
+  await recordUsage(
+    { route: "categorize", model: MISTRAL_SMALL, inputTokens: 1000, outputTokens: 1000 },
+    budget.reservation,
+  );
+  const afterRecord = (await spentCents()).dayCents;
+
+  await releaseReservation(budget.reservation); // e.g. a caller that recorded, then still threw later
+
+  expect((await spentCents()).dayCents).toBe(afterRecord);
 });
 
 test("recordUsage with an unrecognized model logs loudly and does not throw or record any spend — pricing.ts's throw is caught here, not propagated to the caller", async () => {
