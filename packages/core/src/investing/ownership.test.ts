@@ -141,9 +141,10 @@ test("the same symbol in two entities stays two holdings", () => {
 });
 
 test("a broker's average cost counts once per anchor, not once per dated snapshot", () => {
+  const brokerCost = { status: "known" as const, amount: 8, currency: "EUR" };
   const positions = [
-    position({ broker: "ibkr", quantity: 2, averagePrice: 4, asOf: "2026-09-11" }),
-    position({ broker: "ibkr", quantity: 2, averagePrice: 4, asOf: "2026-09-14" }),
+    position({ broker: "ibkr", quantity: 2, averagePrice: 4, brokerCost, asOf: "2026-09-11" }),
+    position({ broker: "ibkr", quantity: 2, averagePrice: 4, brokerCost, asOf: "2026-09-14" }),
   ];
 
   const rows = buildCurrentPositions({

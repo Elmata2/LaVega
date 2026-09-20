@@ -127,7 +127,6 @@ export function useAgentCatalog(): { catalog: AgentCatalog; reload: () => void }
 
   useEffect(() => {
     let current = true;
-    setCatalog({ status: "loading" });
     void fetchPortfolioAgents()
       .then((agents) => {
         if (!current) return;
@@ -145,7 +144,13 @@ export function useAgentCatalog(): { catalog: AgentCatalog; reload: () => void }
     };
   }, [attempt]);
 
-  const reload = useCallback(() => setAttempt((value) => value + 1), []);
+  /* The mount's loading state comes from useState's initial value. A retry
+   * is the event that should show loading again, so it sets that state
+   * itself instead of the effect inferring it from `attempt` changing. */
+  const reload = useCallback(() => {
+    setCatalog({ status: "loading" });
+    setAttempt((value) => value + 1);
+  }, []);
   return { catalog, reload };
 }
 
