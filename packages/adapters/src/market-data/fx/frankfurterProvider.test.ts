@@ -35,3 +35,15 @@ test("historical rates parse into dated observations", async () => {
     problems: [],
   });
 });
+
+test("a hung historical request degrades within the configured timeout", async () => {
+  const provider = createFrankfurterFxProvider({
+    client: { fetchJson: () => new Promise(() => undefined) },
+    timeoutMs: 5,
+  });
+
+  await expect(provider.getHistoricalRates("2026-08-04", "2026-08-05")).resolves.toEqual({
+    rates: [],
+    problems: ["Frankfurter historical FX request failed: Frankfurter request timed out after 5ms"],
+  });
+});

@@ -174,6 +174,8 @@ the existing degraded-data warning rather than issuing a second wave of individu
 Dashboard cache entries expire after 15 seconds. On expiry, database-backed runtimes reload
 the persisted broker snapshot so another server instance's sync becomes visible. An active
 local sync prevents snapshot restoration; a version check rejects a read overtaken by a sync.
+Frankfurter latest and historical FX calls have a five-second limit. On expiry the dashboard
+uses its cached/fallback FX data and reports the FX problem; it never delays broker positions.
 
 Trading 212 resumed history batches are incremental, including the final batch. Completion
 does not make that final page a full snapshot: earlier trades, dividends, and cash flows
