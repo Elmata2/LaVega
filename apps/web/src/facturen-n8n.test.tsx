@@ -20,6 +20,8 @@ function fakeVault(seed: { invoiceUrl?: string; invoiceToken?: string } = {}): V
       string | undefined
     >,
     autoBooked: [] as N8nAutoBooked[],
+    pendingInvoices: [] as unknown[],
+    pendingNotices: [] as unknown[],
   };
   return {
     getN8nSettings: async () => ({ ...state.settings }),
@@ -29,6 +31,14 @@ function fakeVault(seed: { invoiceUrl?: string; invoiceToken?: string } = {}): V
     getAutoBookedInvoices: async () => [...state.autoBooked],
     putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
       state.autoBooked = [...list];
+    },
+    getPendingInvoices: async () => [...state.pendingInvoices],
+    putPendingInvoices: async (list: unknown[]) => {
+      state.pendingInvoices = [...list];
+    },
+    getPendingNotices: async () => [...state.pendingNotices],
+    putPendingNotices: async (list: unknown[]) => {
+      state.pendingNotices = [...list];
     },
   } as unknown as VaultStorage;
 }

@@ -147,6 +147,11 @@ type FacturenCopy = {
     httpError: (status: number) => string;
     network: { short: string; detail: string; detailSummary: string };
     unreadable: string;
+    /** The rows/notices from THIS fetch render on screen, but the vault write
+     *  behind them failed: n8n has already deleted its own copy, so this
+     *  browser tab is currently the only place they exist. Same short/detail
+     *  split as `unauthorized`/`network` — see that pair's docstring. */
+    pendingSaveFailed: { short: string; detail: string; detailSummary: string };
     emptyQueue: string;
     nothingNew: string;
     fetched: (n: number) => string;
@@ -760,6 +765,13 @@ const nlFacturen: FacturenCopy = {
     },
     unreadable:
       "Het antwoord van de server was niet te lezen. Er is niets overgenomen — en omdat het ophalen de wachtrij in n8n al geleegd kan hebben, kan die rij verloren zijn.",
+    pendingSaveFailed: {
+      short:
+        "Opgehaald, maar niet opgeslagen in de kluis. Sluit dit tabblad niet en laad niet opnieuw.",
+      detail:
+        "n8n heeft zijn eigen kopie van deze rijen al gewist — dit tabblad is nu de enige plek waar ze nog bestaan. Ze staan hieronder zodat je ze niet kwijtraakt, maar de opslag in de kluis is mislukt. Probeer het opnieuw (bijvoorbeeld door de kluis te ontgrendelen) voordat je dit tabblad sluit of herlaadt.",
+      detailSummary: "Wat dit voor deze rijen betekent",
+    },
     emptyQueue:
       "De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.",
     nothingNew: "Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.",
@@ -1397,6 +1409,12 @@ const enFacturen: FacturenCopy = {
     },
     unreadable:
       "The server's response could not be read. Nothing was taken over — and because fetching may already have emptied the n8n queue, that row may be lost.",
+    pendingSaveFailed: {
+      short: "Fetched, but not saved to the vault. Don't close or reload this tab.",
+      detail:
+        "n8n has already deleted its own copy of these rows — this tab is now the only place they still exist. They are shown below so you don't lose them, but saving them to the vault failed. Try again (for example by unlocking the vault) before closing or reloading this tab.",
+      detailSummary: "What this means for these rows",
+    },
     emptyQueue:
       "The queue in n8n was empty. Nothing was fetched — that is not confirmation that there are invoices.",
     nothingNew: "Nothing new: everything n8n sent was already handled here.",

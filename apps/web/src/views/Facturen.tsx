@@ -521,13 +521,35 @@ export default function Facturen({
         for (const b of bookedFrom) await rememberAutoBooked(vault, b);
         await refreshLegacyAutoBooked();
       }
-      if (proposals.length > 0) onPendingChange([...currentPending, ...proposals]);
+      const nextPending = [...currentPending, ...proposals];
       // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
       const knownNotices = new Set(currentNotices.map((n) => n.messageId));
       const freshNotices = outcome.notices.filter(
         (n) => !handled.has(n.messageId) && !knownNotices.has(n.messageId),
       );
-      if (freshNotices.length > 0) onNoticesChange([...currentNotices, ...freshNotices]);
+      const nextNotices = [...currentNotices, ...freshNotices];
+
+      // Durable before reported: n8n has already emptied its queue of these
+      // rows, so the vault write below is the last chance to keep them past
+      // this tab closing. Only on success does the normal summary render.
+      try {
+        if (proposals.length > 0) await vault.putPendingInvoices(nextPending);
+        if (freshNotices.length > 0) await vault.putPendingNotices(nextNotices);
+      } catch {
+        // The write failed, but the rows are still shown — refusing to render
+        // them would lose them a second time, since n8n's copy is already
+        // gone. Say so loudly instead of silently under-reporting them.
+        if (proposals.length > 0) onPendingChange(nextPending);
+        if (freshNotices.length > 0) onNoticesChange(nextNotices);
+        showN8nNote({
+          short: c.n8nNotices.pendingSaveFailed.short,
+          detail: c.n8nNotices.pendingSaveFailed.detail,
+          detailSummary: c.n8nNotices.pendingSaveFailed.detailSummary,
+        });
+        return;
+      }
+      if (proposals.length > 0) onPendingChange(nextPending);
+      if (freshNotices.length > 0) onNoticesChange(nextNotices);
       const parts: string[] = [];
       if (outcome.rows.length === 0) {
         parts.push(c.n8nNotices.emptyQueue);
@@ -586,7 +608,9 @@ export default function Facturen({
     // the screen instead of at the next bank sync.
     if (!duplicate) onSaveInvoices(reconcileInvoices([...invoices, result.invoice], txs));
     addHandledInvoiceMessageIds([p.messageId]);
-    onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
+    const filtered = pending.filter((x) => x.messageId !== p.messageId);
+    onPendingChange(filtered);
+    if (storage) void storage.putPendingInvoices(filtered);
     dropRowError(p.messageId);
     showN8nNote(
       duplicate
@@ -599,7 +623,9 @@ export default function Facturen({
   // of the same week of mail can't put it back in front of him.
   function rejectRow(p: PendingInvoice) {
     addHandledInvoiceMessageIds([p.messageId]);
-    onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
+    const filtered = pending.filter((x) => x.messageId !== p.messageId);
+    onPendingChange(filtered);
+    if (storage) void storage.putPendingInvoices(filtered);
     dropRowError(p.messageId);
     showN8nNote(c.n8nNotices.rejected);
   }
@@ -608,7 +634,9 @@ export default function Facturen({
   // gaat en, net als een verworpen regel, niet opnieuw wordt aangeboden.
   function dismissNotice(notice: N8nNotice) {
     addHandledInvoiceMessageIds([notice.messageId]);
-    onNoticesChange(notices.filter((n) => n.messageId !== notice.messageId));
+    const filtered = notices.filter((n) => n.messageId !== notice.messageId);
+    onNoticesChange(filtered);
+    if (storage) void storage.putPendingNotices(filtered);
     showN8nNote(c.n8nNotices.noticeDismissed);
   }
 

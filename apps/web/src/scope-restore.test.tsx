@@ -77,6 +77,13 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       putEntityProfiles: async () => {},
       getFxHistory: async () => ({}),
       putFxHistory: async () => {},
+      // App's unlock-time load effect now also reads these two (n8n pending
+      // rows persistence); this test isn't about the n8n queue, so empty/no-op
+      // is enough to keep it from throwing.
+      getPendingInvoices: async () => [],
+      putPendingInvoices: async () => {},
+      getPendingNotices: async () => [],
+      putPendingNotices: async () => {},
     }),
     createRatesProvider: () => ({
       getRates: async () => ({ rates: [], asOf: "2026-01-01", source: "bundled" as const }),

@@ -49,6 +49,14 @@ type VaultData = {
    *  localStorage it replaces. */
   n8nSettings?: N8nSettings;
   n8nAutoBooked?: N8nAutoBooked[];
+  /** n8n rows still under review in apps/web (PendingInvoice[] / N8nNotice[] —
+   *  those types live in apps/web/src/n8n.ts, which this package must not
+   *  depend on, so they round-trip here as opaque JSON). The webhook that fed
+   *  them already deleted its own copy, so once fetched this vault field is
+   *  the only place they still exist until the owner confirms or discards
+   *  each one. */
+  n8nPendingInvoices?: unknown[];
+  n8nPendingNotices?: unknown[];
   /** ECB history per non-EUR currency (isoDate -> units-per-1-EUR), merged
    *  across currencies. Lives in the vault (not refetched every load) so a
    *  euro figure already converted from a past date stays the same number
@@ -84,6 +92,10 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putN8nSettings(settings: N8nSettings): Promise<void>;
   getAutoBookedInvoices(): Promise<N8nAutoBooked[]>;
   putAutoBookedInvoices(list: N8nAutoBooked[]): Promise<void>;
+  getPendingInvoices(): Promise<unknown[]>;
+  putPendingInvoices(list: unknown[]): Promise<void>;
+  getPendingNotices(): Promise<unknown[]>;
+  putPendingNotices(list: unknown[]): Promise<void>;
   getFxHistory(): Promise<Record<string, Record<string, number>>>;
   putFxHistory(h: Record<string, Record<string, number>>): Promise<void>;
 }
@@ -396,6 +408,32 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, n8nAutoBooked: [...list] };
+        await persist();
+      });
+    },
+
+    // Rows apps/web is still reviewing from the n8n queue (n8n.ts). Same
+    // replace-all shape as getAutoBookedInvoices/putAutoBookedInvoices above —
+    // opaque JSON here because this package cannot import apps/web's types.
+    async getPendingInvoices(): Promise<unknown[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.n8nPendingInvoices ?? [])];
+    },
+    putPendingInvoices(list: unknown[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, n8nPendingInvoices: [...list] };
+        await persist();
+      });
+    },
+    async getPendingNotices(): Promise<unknown[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.n8nPendingNotices ?? [])];
+    },
+    putPendingNotices(list: unknown[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, n8nPendingNotices: [...list] };
         await persist();
       });
     },

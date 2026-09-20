@@ -139,6 +139,29 @@ const RATES_URL: string | undefined =
  * post-migration screen sends you to Back-up ("Maak nu een back-up",
  * VaultGate.tsx:284 → onBackup → setView("backup")). Both also render inline in
  * Profiel; these two are the deep links into them, so their branches stay. */
+
+// The vault stores pending n8n rows as opaque `unknown[]` (packages/adapters
+// cannot import apps/web's PendingInvoice/N8nNotice types), so a load off
+// disk is untrusted the same way n8n.ts's own queue parsing treats network
+// JSON as untrusted — narrow before trusting it rather than casting blindly.
+function isPendingInvoiceLike(v: unknown): v is PendingInvoice {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { messageId?: unknown }).messageId === "string" &&
+    (v as { messageId: string }).messageId.length > 0
+  );
+}
+function isN8nNoticeLike(v: unknown): v is N8nNotice {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { messageId?: unknown }).messageId === "string" &&
+    (v as { messageId: string }).messageId.length > 0 &&
+    typeof (v as { kind?: unknown }).kind === "string"
+  );
+}
+
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -159,15 +182,18 @@ export default function App() {
   // Invoice rows fetched from his own n8n and not yet decided on. Held HERE,
   // not in the Facturen view: that webhook empties its queue as it responds, so
   // these rows are the only copy in existence and must not die when the view
-  // unmounts on a navigation. Deliberately not persisted — the vault is the
-  // only place invoice amounts are allowed to rest, and until he confirms a
-  // row it isn't an invoice yet. Vergrendel therefore clears them too, which
-  // the view says out loud.
+  // unmounts on a navigation. They DO live in the vault now — Facturen.tsx
+  // durably writes them on every fetch/confirm/reject/dismiss, the same vault
+  // methods getAutoBookedInvoices uses — so this state is just the in-memory
+  // mirror loaded on unlock (see the "Load persisted data" effect below).
+  // Vergrendel clears the mirror, not the vault copy: `setPendingInvoices([])`
+  // in handleLock only drops what's rendered, and the next unlock reloads it.
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   // Meldingen uit n8n: mail die WEL over een factuur ging maar er geen is (staat
   // klaar bij de leverancier, aanmaning, onleesbaar). Ze horen hier om dezelfde
-  // reden als de rijen hierboven: de webhook leegt zichzelf, dus dit is de enige
-  // kopie. Ze bevatten geen bedrag en kunnen dus nooit een boeking worden.
+  // reden als de rijen hierboven, en overleven een herlaad op dezelfde manier:
+  // de vault-kopie blijft staan, alleen deze in-memory spiegel wordt geleegd bij
+  // Vergrendel. Ze bevatten geen bedrag en kunnen dus nooit een boeking worden.
   const [pendingNotices, setPendingNotices] = useState<N8nNotice[]>([]);
   // What the agents have learned (and what he corrected). Lives in the vault.
   const [facts, setFacts] = useState<LearnedFact[]>([]);
@@ -385,6 +411,8 @@ export default function App() {
         loadedFacts,
         loadedProfiles,
         loadedFxHistory,
+        loadedPendingInvoices,
+        loadedPendingNotices,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -396,6 +424,8 @@ export default function App() {
         storage.getFacts(),
         storage.getEntityProfiles(),
         storage.getFxHistory(),
+        storage.getPendingInvoices(),
+        storage.getPendingNotices(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -407,6 +437,8 @@ export default function App() {
       setFacts(loadedFacts);
       setEntityProfiles(loadedProfiles);
       setFxHistoryState(loadedFxHistory);
+      setPendingInvoices(loadedPendingInvoices.filter(isPendingInvoiceLike));
+      setPendingNotices(loadedPendingNotices.filter(isN8nNoticeLike));
       // Fire, don't block: refresh the ECB history against what's ALREADY on
       // screen. A slow or failed fetch must never delay showing the vault's
       // own data — it just leaves fxHistory as it was until this lands. The
