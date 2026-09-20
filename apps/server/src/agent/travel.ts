@@ -188,13 +188,16 @@ export async function lookupProviderTerms(
      * a timeout here is expected rather than exotic — and the searches were
      * bought before it fired. Recording at the ceiling keeps a run of timeouts
      * from being free. */
-    await recordUsage({
-      route: "travel",
-      model: MISTRAL_MEDIUM,
-      inputTokens: 0,
-      outputTokens: 0,
-      searches: 1,
-    });
+    await recordUsage(
+      {
+        route: "travel",
+        model: MISTRAL_MEDIUM,
+        inputTokens: 0,
+        outputTokens: 0,
+        searches: 1,
+      },
+      budget.reservation,
+    );
     throw e;
   }
   // The one place the actual model call happens for travel, and the only
@@ -202,13 +205,16 @@ export async function lookupProviderTerms(
   // backgrounded past the route's return, see cardTerms.ts), so the route
   // can't record it; this has to. `usage` is optional here defensively: a
   // test double built before Part 2 can still omit it.
-  await recordUsage({
-    route: "travel",
-    model: MISTRAL_MEDIUM,
-    inputTokens: usage?.input,
-    outputTokens: usage?.output,
-    searches: 1,
-  });
+  await recordUsage(
+    {
+      route: "travel",
+      model: MISTRAL_MEDIUM,
+      inputTokens: usage?.input,
+      outputTokens: usage?.output,
+      searches: 1,
+    },
+    budget.reservation,
+  );
 
   let parsed: unknown;
   try {

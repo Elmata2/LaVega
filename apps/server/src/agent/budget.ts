@@ -17,12 +17,36 @@ export type UsageInput = {
   searches?: number;
 };
 
-export type BudgetGate = { ok: true } | { ok: false; scope: "day" | "month" };
+/** A held reservation, returned by `checkBudget()` and threaded into
+ *  `recordUsage()` (to turn it into the real spend) or `releaseReservation()`
+ *  (when the call it was holding room for never happened). `settled` is only
+ *  meaningful for the memory kind: since reconcile and release are two
+ *  separate, independently-callable functions rather than one guarded SQL
+ *  statement, this flag is what stops one call site's reconcile racing a
+ *  different call site's release into double-counting the same reservation —
+ *  the DB kind gets the same guarantee from `reconciled_at IS NULL` in the
+ *  UPDATE/DELETE itself. */
+export type ReservationHandle =
+  | { readonly kind: "db"; readonly id: number }
+  | {
+      readonly kind: "memory";
+      readonly day: string;
+      readonly month: string;
+      readonly amount: number;
+      settled: boolean;
+    };
+
+export type BudgetGate =
+  | { ok: true; reservation?: ReservationHandle }
+  | { ok: false; scope: "day" | "month" };
 
 // Per-process fallback for a deployment with no DATABASE_URL (local dev,
 // self-hosting). Keyed by "day:<YYYY-MM-DD>" / "month:<YYYY-MM>" so day and
 // month totals never collide. Lost on restart — acceptable, the guard it
-// feeds only needs to be roughly right within one process's lifetime.
+// feeds only needs to be roughly right within one process's lifetime, and a
+// restart also wipes any reservation an in-flight call was holding, so there
+// is nothing here that can leak past the process the way an orphaned DB row
+// theoretically could.
 const memory = new Map<string, number>();
 let warnedNoDatabase = false;
 
@@ -49,11 +73,6 @@ export async function spentCents(): Promise<{ dayCents: number; monthCents: numb
   };
 }
 
-// checkBudget()'s read and recordUsage()'s write are not atomic — concurrent
-// requests can both read "under cap" before either's spend lands, so the cap
-// is best-effort, not a hard ceiling. Accepted for a single-owner, low-volume
-// deployment; closing it for real would need a reservation step (check AND
-// provisionally charge before the call, reconcile after), not worth it here.
 /** The most a single call on each route can cost, in euro cents, derived from
  *  that route's own input bounds: OCR is capped at a 20-page window, categorize
  *  at 200 short items, and the two search-backed routes now send a max_tokens.
@@ -71,18 +90,74 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   "portfolio-persona": 1,
 };
 
-/** Is there room for a call on `route`, counting what that call could cost?
+/** Is there room for a call on `route`, counting what that call could cost —
+ *  and if so, HOLD that room, atomically, before answering yes.
  *
  *  Refuses slightly early by design: a route is blocked once its worst case no
  *  longer fits under the cap, rather than once the cap is already breached.
- *  That is the difference between a ceiling and a speed bump. */
+ *  That is the difference between a ceiling and a speed bump.
+ *
+ *  The check and the hold are one operation because two of them are not: a
+ *  request that reads "under cap" and only reserves afterwards leaves a gap
+ *  for a second request to read the same "under cap" before the first has
+ *  written anything — which is exactly how 240 concurrent card-terms lookups
+ *  once cleared a one-cent cap by EUR 14.39 (see cardTerms.ts's own account of
+ *  it). Every caller of `checkBudget(route)` that gets `{ ok: true }` back
+ *  MUST eventually call either `recordUsage(usage, reservation)` (the call
+ *  happened; turn the hold into the real charge) or
+ *  `releaseReservation(reservation)` (it didn't; give the room back) —
+ *  `reservation` is `undefined` only when `route` itself was omitted, the
+ *  read-only form used to just peek at the caps without charging anything. */
 export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate> {
   const caps = loadBudgetConfig();
-  const spent = await spentCents();
-  const headroom = route ? WORST_CASE_CENTS[route] : 0;
-  if (spent.dayCents + headroom >= caps.dayCents) return { ok: false, scope: "day" };
-  if (spent.monthCents + headroom >= caps.monthCents) return { ok: false, scope: "month" };
-  return { ok: true };
+
+  if (!route) {
+    // Nothing to attribute a hold to — read-only, as this always was.
+    const spent = await spentCents();
+    if (spent.dayCents >= caps.dayCents) return { ok: false, scope: "day" };
+    if (spent.monthCents >= caps.monthCents) return { ok: false, scope: "month" };
+    return { ok: true };
+  }
+
+  const worstCase = WORST_CASE_CENTS[route];
+  const { day, month } = todayParts();
+  const db = runtimeDatabase();
+
+  if (db) {
+    const result = await createAiUsageRepository(db).reserve({
+      day,
+      month,
+      route,
+      worstCaseCents: worstCase,
+      dayCapCents: caps.dayCents,
+      monthCapCents: caps.monthCents,
+    });
+    if (!result.ok) return { ok: false, scope: result.scope };
+    return { ok: true, reservation: { kind: "db", id: result.id } };
+  }
+
+  if (!warnedNoDatabase) {
+    warnedNoDatabase = true;
+    console.warn("agent/budget: no DATABASE_URL — using an in-memory, per-process spend counter");
+  }
+  // No DATABASE_URL: the read and the hold below are plain Map access with no
+  // `await` between them, which is what makes this atomic rather than the SQL
+  // transaction above — an `async function` body runs synchronously up to its
+  // first real `await`, and this path never reaches one, so two calls fired
+  // together (e.g. `Promise.all([checkBudget(r), checkBudget(r)])`) cannot
+  // interleave here: the first call's read-decide-write finishes before the
+  // second call's body even starts. Reintroducing an `await` in between (e.g.
+  // routing this through the async `spentCents()` above) would reopen exactly
+  // the gap this function exists to close.
+  const dayKey = `day:${day}`;
+  const monthKey = `month:${month}`;
+  const dayCents = memory.get(dayKey) ?? 0;
+  const monthCents = memory.get(monthKey) ?? 0;
+  if (dayCents + worstCase >= caps.dayCents) return { ok: false, scope: "day" };
+  if (monthCents + worstCase >= caps.monthCents) return { ok: false, scope: "month" };
+  memory.set(dayKey, dayCents + worstCase);
+  memory.set(monthKey, monthCents + worstCase);
+  return { ok: true, reservation: { kind: "memory", day, month, amount: worstCase, settled: false } };
 }
 
 /** Log and persist one AI call's cost.
@@ -98,8 +173,15 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
  *
  *  So the promise is returned and the caller awaits it before responding. The
  *  original guarantee is kept by never rejecting: every failure is swallowed
- *  into a log, exactly as before. */
-export async function recordUsage(input: UsageInput): Promise<void> {
+ *  into a log, exactly as before.
+ *
+ *  `reservation`, when given, is the hold `checkBudget()` returned for this
+ *  same call — this turns it into the real charge in place (see the
+ *  repository's `reconcile`/memory equivalent) instead of adding a second,
+ *  separate row on top of the worst-case one. Omitted, this inserts a plain
+ *  finalized row directly, exactly as before this reservation step existed —
+ *  every existing caller that never reserves keeps working unchanged. */
+export async function recordUsage(input: UsageInput, reservation?: ReservationHandle): Promise<void> {
   const inputTokens = input.inputTokens ?? 0;
   const outputTokens = input.outputTokens ?? 0;
   const pages = input.pages ?? 0;
@@ -113,8 +195,11 @@ export async function recordUsage(input: UsageInput): Promise<void> {
     // model going invisibly free, but this function's own contract is to never
     // fail a request that already succeeded, so the failure surfaces as a
     // loud log instead of a thrown error, and this one call's spend is not
-    // recorded.
+    // recorded — which means any hold this call was given has to be released
+    // here too, or an unrecognized model would leak its reservation the same
+    // way a thrown call does, just one step later.
     console.error(`agent/budget: ${e instanceof Error ? e.message : String(e)}`);
+    await releaseReservation(reservation);
     return;
   }
   console.log(
@@ -125,16 +210,33 @@ export async function recordUsage(input: UsageInput): Promise<void> {
     const { day, month } = todayParts();
     const db = runtimeDatabase();
     if (db) {
-      await createAiUsageRepository(db).record({
-        day,
-        route: input.route,
-        model: input.model,
-        inputTokens,
-        outputTokens,
-        pages,
-        searches,
-        costCents,
-      });
+      const repo = createAiUsageRepository(db);
+      if (reservation?.kind === "db") {
+        await repo.reconcile({
+          id: reservation.id,
+          model: input.model,
+          inputTokens,
+          outputTokens,
+          pages,
+          searches,
+          costCents,
+        });
+      } else {
+        await repo.record({ day, route: input.route, model: input.model, inputTokens, outputTokens, pages, searches, costCents });
+      }
+      return;
+    }
+    if (reservation?.kind === "memory") {
+      if (reservation.settled) return; // already reconciled or released — see ReservationHandle's own comment
+      reservation.settled = true;
+      memory.set(
+        `day:${reservation.day}`,
+        (memory.get(`day:${reservation.day}`) ?? 0) - reservation.amount + costCents,
+      );
+      memory.set(
+        `month:${reservation.month}`,
+        (memory.get(`month:${reservation.month}`) ?? 0) - reservation.amount + costCents,
+      );
       return;
     }
     memory.set(`day:${day}`, (memory.get(`day:${day}`) ?? 0) + costCents);
@@ -142,6 +244,41 @@ export async function recordUsage(input: UsageInput): Promise<void> {
   } catch (e) {
     console.error(
       `agent/budget: failed to persist usage: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+/** The call `reservation` was holding room for never reached `recordUsage` —
+ *  it threw first. Gives the held room back instead of leaving it stuck until
+ *  the DB path's own 10-minute freshness window ages it out (see
+ *  RESERVATION_FRESH_SQL in packages/database) or, on the memory path,
+ *  forever (nothing else ever frees a memory reservation). Never throws, for
+ *  the same reason `recordUsage` never does: this always runs from inside a
+ *  route's own catch block, which must not itself fail. Safe to call on a
+ *  reservation that was already turned into a real charge by `recordUsage` —
+ *  a no-op then, not a double-release — see ReservationHandle's own comment
+ *  and `reconcile`/`release`'s shared `reconciled_at IS NULL` guard. */
+export async function releaseReservation(reservation: ReservationHandle | undefined): Promise<void> {
+  if (!reservation) return;
+  try {
+    if (reservation.kind === "db") {
+      const db = runtimeDatabase();
+      if (db) await createAiUsageRepository(db).release(reservation.id);
+      return;
+    }
+    if (reservation.settled) return;
+    reservation.settled = true;
+    memory.set(
+      `day:${reservation.day}`,
+      Math.max(0, (memory.get(`day:${reservation.day}`) ?? 0) - reservation.amount),
+    );
+    memory.set(
+      `month:${reservation.month}`,
+      Math.max(0, (memory.get(`month:${reservation.month}`) ?? 0) - reservation.amount),
+    );
+  } catch (e) {
+    console.error(
+      `agent/budget: failed to release reservation: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 }

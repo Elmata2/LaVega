@@ -996,6 +996,17 @@ export type AiUsage = {
   costCents: number;
 };
 
+export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope: "day" | "month" };
+
+/* How long an unreconciled reservation still counts toward the cap. Wide
+ * enough that no call actually in flight can ever age out from under itself —
+ * mistral.ts's own SEARCH_TIMEOUT_MS ceiling is 240s, so this clears it with
+ * a 2.5x margin — narrow enough that a reservation orphaned by a hard crash
+ * (nothing left alive to release it) self-heals well within the same day
+ * instead of squatting on the cap until midnight. See 0009_ai_usage_reservation.sql. */
+const RESERVATION_FRESH_SQL =
+  "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
+
 /**
  * The internal AI-spend ledger (`personal.ai_usage`), read and written by the
  * budget guard in front of the four `/api/agent/*` routes. Not tenant data —
@@ -1004,6 +1015,115 @@ export type AiUsage = {
  */
 export function createAiUsageRepository(db: Database) {
   return {
+    /** Atomically checks BOTH caps against worst case and, if there is room,
+     *  inserts a placeholder row at that worst-case price — the check and the
+     *  charge are one statement's transaction, so two callers racing each
+     *  other can never both read "under cap" before either has written
+     *  anything, which is the whole bug this closes (see budget.ts's own
+     *  former comment on checkBudget()/recordUsage() not being atomic).
+     *
+     *  `pg_advisory_xact_lock` serializes every reservation attempt for the
+     *  same month behind one lock (day is a subset of month, so this also
+     *  covers the day cap), auto-released on COMMIT or ROLLBACK — a crashed
+     *  client can never leave it held. Locking on month rather than day means
+     *  a request landing right at midnight still serializes against the
+     *  request just before it. */
+    async reserve(params: {
+      day: string;
+      month: string;
+      route: AiUsage["route"];
+      worstCaseCents: number;
+      dayCapCents: number;
+      monthCapCents: number;
+    }): Promise<AiBudgetReservation> {
+      const client = await db.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          `ai_budget:${params.month}`,
+        ]);
+        const dayResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE day = $1 AND ${RESERVATION_FRESH_SQL}`,
+          [params.day],
+        );
+        const dayCents = Number(dayResult.rows[0]?.total ?? 0);
+        if (dayCents + params.worstCaseCents >= params.dayCapCents) {
+          await client.query("ROLLBACK");
+          return { ok: false, scope: "day" };
+        }
+        const monthResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE to_char(day, 'YYYY-MM') = $1 AND ${RESERVATION_FRESH_SQL}`,
+          [params.month],
+        );
+        const monthCents = Number(monthResult.rows[0]?.total ?? 0);
+        if (monthCents + params.worstCaseCents >= params.monthCapCents) {
+          await client.query("ROLLBACK");
+          return { ok: false, scope: "month" };
+        }
+        const inserted = await client.query<QueryResultRow>(
+          `INSERT INTO personal.ai_usage (day, route, model, cost_cents, reserved_at)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING id`,
+          [params.day, params.route, "pending", params.worstCaseCents],
+        );
+        await client.query("COMMIT");
+        return { ok: true, id: Number(inserted.rows[0]!.id) };
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw e;
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Turns a reservation into the real, final record — same row, so the
+     *  cap's accounting for this call goes from "worst case" to "actual" in
+     *  place rather than adding a second row on top of the first. A no-op
+     *  once the row is already reconciled (or already released out from
+     *  under it), which is what makes calling this safe even from a path
+     *  that cannot know whether a release already ran. */
+    async reconcile(usage: Omit<AiUsage, "day" | "route"> & { id: number }): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
+               cost_cents = $7, reconciled_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND reconciled_at IS NULL`,
+          [
+            usage.id,
+            usage.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.pages,
+            usage.searches,
+            usage.costCents,
+          ],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
+    /** The call this reservation was holding room for never reached
+     *  `reconcile` — it threw first. Deletes the placeholder row rather than
+     *  reconciling it to 0, so a failed call leaves exactly the same trace it
+     *  left before this reservation step existed: none. Guarded the same way
+     *  as `reconcile`, so whichever of the two runs first on a given row
+     *  wins and the other is a no-op. */
+    async release(id: number): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          "DELETE FROM personal.ai_usage WHERE id = $1 AND reconciled_at IS NULL",
+          [id],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
     async record(usage: AiUsage): Promise<void> {
       const client = await db.connect();
       try {
@@ -1032,11 +1152,13 @@ export function createAiUsageRepository(db: Database) {
       const client = await db.connect();
       try {
         const dayResult = await client.query<QueryResultRow>(
-          "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE day = $1",
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE day = $1 AND ${RESERVATION_FRESH_SQL}`,
           [range.day],
         );
         const monthResult = await client.query<QueryResultRow>(
-          "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE to_char(day, 'YYYY-MM') = $1",
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE to_char(day, 'YYYY-MM') = $1 AND ${RESERVATION_FRESH_SQL}`,
           [range.month],
         );
         return {
