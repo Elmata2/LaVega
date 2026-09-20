@@ -51,6 +51,7 @@ test("DeGiro file import stamps caller entity and broker provenance on positions
       marketValue: 20,
       currency: "EUR",
       asOf: "2026-08-18",
+      brokerCost: { status: "unknown", reason: "not-reported" },
     },
   ]);
 });

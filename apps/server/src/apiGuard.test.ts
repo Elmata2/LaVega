@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { isPublicApiPath } from "./apiGuard.js";
+import type { LayeredFxRate } from "./fx.js";
+import type { FxHistoryResponse } from "./fxHistory.js";
 
 /* The guard asks auth.js whether this request carries a verified session.
  * Mocked so a test can be "logged in" without a Neon database. */
@@ -9,15 +11,45 @@ vi.mock("./auth.js", async () => {
   return { ...actual, verifiedSession: verifiedSessionMock };
 });
 
+// getFxRate and getFxHistory both hit the network (Frankfurter/ECB, open.er-api).
+// These tests only care about the guard's status code, not the fx data itself, so
+// mock the same way index.test.ts does — otherwise every run of this file makes a
+// real external call and is flaky/slow in CI.
+const { getFxRateMock } = vi.hoisted(() => ({
+  getFxRateMock: vi.fn<() => Promise<LayeredFxRate>>(),
+}));
+vi.mock("./fx.js", async () => {
+  const actual = await vi.importActual<typeof import("./fx.js")>("./fx.js");
+  return { ...actual, getFxRate: getFxRateMock };
+});
+
+const { getFxHistoryMock } = vi.hoisted(() => ({
+  getFxHistoryMock: vi.fn<() => Promise<FxHistoryResponse | null>>(),
+}));
+vi.mock("./fxHistory.js", async () => {
+  const actual = await vi.importActual<typeof import("./fxHistory.js")>("./fxHistory.js");
+  return { ...actual, getFxHistory: getFxHistoryMock };
+});
+
 const { app } = await import("./index.js");
 
 beforeEach(() => {
   verifiedSessionMock.mockResolvedValue(null); // nobody is logged in
+  getFxRateMock.mockResolvedValue({
+    base: "EUR",
+    date: "2026-08-21",
+    rates: { USD: 1.1699 },
+    origins: { USD: "ecb" },
+    layers: { ecb: { status: "live", date: "2026-08-21", count: 1 }, aggregator: null },
+  });
+  getFxHistoryMock.mockResolvedValue({ base: "EUR", currency: "HUF", rates: {} });
   delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
 });
 
 afterEach(() => {
   verifiedSessionMock.mockReset();
+  getFxRateMock.mockReset();
+  getFxHistoryMock.mockReset();
   delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
 });
 

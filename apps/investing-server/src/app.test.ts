@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
 import {
+  createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryPriceStore,
   createYahooPriceProvider,
@@ -258,11 +259,20 @@ test("GET /api/config/status reports missing keys without returning key values",
 });
 
 test("market-data routes expose FX and identifier lanes", async () => {
-  const response = await app.request("/api/market-data/fx?from=EUR&to=USD");
+  // The default fxProvider hits the real Frankfurter API; inject a fake HTTP
+  // client so this test stays hermetic instead of depending on the network.
+  const fxProvider = createFrankfurterFxProvider({
+    client: {
+      fetchJson: async () => ({ base: "EUR", date: "2026-08-22", rates: { USD: 1.1699 } }),
+    },
+  });
+  const investingApp = createApp({ fxProvider });
+
+  const response = await investingApp.request("/api/market-data/fx?from=EUR&to=USD");
   expect(response.status).toBe(200);
   expect((await response.json()).source).toBe("frankfurter");
 
-  const invalid = await app.request("/api/market-data/identifier");
+  const invalid = await investingApp.request("/api/market-data/identifier");
   expect(invalid.status).toBe(400);
 });
 

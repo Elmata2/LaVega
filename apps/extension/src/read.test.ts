@@ -676,8 +676,10 @@ describe("productNaam: waar hij vandaan komt, en waarvandaan niet", () => {
 
   it("valt terug op de ProductGroup-naam als er geen og:title is, niet op een willekeurige variant", () => {
     const html = readFileSync(join(FIXTURES, "bol-productgroup.html"), "utf8");
-    const zonderOgTitle = html.replace(/<meta property="og:title"[^>]*>\n?/, "");
-    const doc = new DOMParser().parseFromString(zonderOgTitle, "text/html");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    // Regex-verwijdering van de meta-tag brak stil toen oxfmt hem over meerdere
+    // regels herformatteerde (commit 15c4a85) — de DOM zelf kent geen opmaak.
+    doc.querySelector('meta[property="og:title"]')?.remove();
     const ev = collectEvidence(doc, "www.bol.com");
     expect(ev.productNaam).toBe("JBL Sense Lite - Volledig draadloze open-ear oordopjes");
   });

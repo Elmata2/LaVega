@@ -20,6 +20,7 @@ import { AllocationDonut } from "./components/AllocationDonut";
 import { AuthForm } from "./components/AuthForm";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { NetWorthChart } from "./components/NetWorthChart";
@@ -651,13 +652,17 @@ function AgentView() {
   if (dashboard.status === "error") return <DashboardError message={dashboard.message} />;
   if (catalog.status === "error" || catalog.status === "empty") {
     return (
-      <section className="rounded-card border border-border bg-card p-5 shadow-soft">
-        <h2 className="font-display text-2xl font-semibold">Agents unavailable</h2>
-        <AgentCatalogProblem
-          message={catalog.status === "error" ? catalog.message : "No portfolio agents available."}
-          onRetry={reload}
-        />
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agents unavailable</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AgentCatalogProblem
+            message={catalog.status === "error" ? catalog.message : "No portfolio agents available."}
+            onRetry={reload}
+          />
+        </CardContent>
+      </Card>
     );
   }
   /* Only a resolved catalog can say an id is unknown. */

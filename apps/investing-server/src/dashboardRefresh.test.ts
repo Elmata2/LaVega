@@ -81,7 +81,10 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
   const original = await importOriginal<typeof import("@lavega/adapters")>();
   return {
     ...original,
-    createFrankfurterFxProvider: () => ({ getLatestRate: async () => ({ problems: [] }) }),
+    createFrankfurterFxProvider: () => ({
+      getLatestRate: async () => ({ problems: [] }),
+      getHistoricalRates: async () => ({ rates: [], problems: [] }),
+    }),
   };
 });
 

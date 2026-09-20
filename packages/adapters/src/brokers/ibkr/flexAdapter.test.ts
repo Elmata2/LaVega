@@ -115,6 +115,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
         marketValue: 220,
         currency: "USD",
         asOf: "2026-08-18",
+        brokerCost: { status: "known", amount: 200, currency: "USD" },
       },
     ],
     trades: [

@@ -12,6 +12,15 @@
     "test": {
       "outputs": []
     },
+    // apps/web's test-support/resolveStyle.ts asserts against the BUILT
+    // stylesheet (falling back to hand-written source CSS only for an unbuilt
+    // tree) — Tailwind-utility classes it resolves don't exist as literal
+    // rules until `vite build` generates them, so this test task needs its
+    // own build first. Scoped to this one package; every other test task is
+    // unaffected.
+    "@lavega/web#test": {
+      "dependsOn": ["build"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
