@@ -106,6 +106,21 @@ refused.
   authentication — `pnpm dev`, or a single-user self-host — opens it explicitly
   with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `pnpm dev` already sets it; `pnpm start`
   deliberately does not.
+
+### Investing health
+
+`GET /api/investing/health` is public **liveness only**: it proves that Vercel
+ran the investing service. It does not prove that a broker, Neon, or stored
+positions work.
+
+`GET /api/investing/health/detail` requires a signed-in session and checks the
+caller's actual tenant. It reports only status and counts — never credentials,
+tokens, holdings, or user IDs — for Neon reachability, migration-ledger
+presence, vault/key readability, Trading 212 credential presence, durable sync
+freshness (stale after 26 hours), and stored Trading 212 snapshot position
+count. It returns `200` only when all checks are healthy; `503` when degraded
+or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
+
 - **Sign-up is closed unless `LAVEGA_ALLOW_SIGNUP=1`.** An open registration is a
   way to mint the very credential the guard asks for, which would leave the guard
   decorative. To create the owner's account: set it, register once, remove it,
@@ -156,6 +171,7 @@ refused.
    - `https://lavega.dev/app` → personal vault (Overzicht)
    - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
+   - Signed in: `https://lavega.dev/api/investing/health/detail` → real tenant health
    - `https://lavega.dev/api/rates` → the live savings-rate JSON
    - Landing + app topnav **Investing** → `https://lavega.dev/investing/` (built in)
 

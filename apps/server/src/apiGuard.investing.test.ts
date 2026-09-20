@@ -52,5 +52,6 @@ test("an anonymous caller cannot brute-force the broker vault passphrase", async
 
 test("an anonymous caller cannot read the portfolio or wipe the price cache", async () => {
   expect((await app.request("/api/investing/summary")).status).toBe(401);
+  expect((await app.request("/api/investing/health/detail")).status).toBe(401);
   expect((await app.request("/api/prices/cache", { method: "DELETE" })).status).toBe(401);
 });

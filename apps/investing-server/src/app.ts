@@ -82,6 +82,19 @@ export type BrokerHistoryProgress = Record<
     dividendsComplete: boolean;
   }
 >;
+export type InvestingHealth = {
+  status: "ok" | "degraded" | "down";
+  storage: "neon" | "file";
+  checks: {
+    database: "ok" | "not-configured" | "down";
+    migrationLedger: "ok" | "not-applicable" | "down";
+    vault: "ok" | "empty" | "locked" | "down";
+    trading212Credentials: "configured" | "missing" | "down";
+    trading212Sync: "fresh" | "stale" | "never" | "problem" | "down";
+    snapshot: "loaded" | "empty" | "down";
+  };
+  trading212: { lastSyncedAt: string | null; positions: number };
+};
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type PriceDependencies = {
   store: PriceStore;
@@ -112,6 +125,7 @@ type PriceDependencies = {
   sectorStore: SectorProfileStore;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
+  healthCheck: () => Promise<InvestingHealth>;
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
@@ -205,6 +219,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     c.json({ ok: true, service: "investing-server" });
   investingApp.get("/health", health);
   investingApp.get("/api/investing/health", health);
+  investingApp.get("/api/investing/health/detail", async (c) => {
+    if (!dependencies.healthCheck)
+      return c.json({ problems: ["Detailed health is not available"] }, 503);
+    try {
+      const report = await dependencies.healthCheck();
+      return c.json(report, report.status === "ok" ? 200 : 503);
+    } catch {
+      return c.json({ problems: ["Detailed health check failed"] }, 503);
+    }
+  });
   /* This app never mounts real auth (single local tenant, no session).
    * apps/server signals that with 503 on /api/auth/* when DATABASE_URL /
    * BETTER_AUTH_SECRET are unset; match that here so investing-web's
