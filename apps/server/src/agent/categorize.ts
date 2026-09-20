@@ -3,6 +3,7 @@ import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
 import { MISTRAL_SMALL } from "./models.js";
+import { ValidationError } from "./validationError.js";
 
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
@@ -22,10 +23,12 @@ const MAX_TEXT = 200;
  *  `text` is run through `scrubPersonalValues` again here, server-side, before
  *  it is trusted. Defence in depth, not a replacement for the browser pass. */
 export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[] } {
-  if (!raw || typeof raw !== "object") throw new Error("ongeldige invoer");
+  if (!raw || typeof raw !== "object")
+    throw new ValidationError("categorize-invalid-input", "ongeldige invoer");
   const rawItems = (raw as Record<string, unknown>).items;
-  if (!Array.isArray(rawItems)) throw new Error("geen items");
-  if (rawItems.length > MAX_ITEMS) throw new Error("te veel items");
+  if (!Array.isArray(rawItems)) throw new ValidationError("categorize-no-items", "geen items");
+  if (rawItems.length > MAX_ITEMS)
+    throw new ValidationError("categorize-too-many-items", "te veel items");
   const items: CategorizeItem[] = [];
   for (const r of rawItems) {
     if (!r || typeof r !== "object") continue;
@@ -33,10 +36,12 @@ export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[]
     const id = o.id;
     const text = o.text;
     if (typeof id !== "string" || typeof text !== "string") continue;
-    if (text.length > MAX_TEXT) throw new Error("tekst te lang");
+    if (text.length > MAX_TEXT)
+      throw new ValidationError("categorize-text-too-long", "tekst te lang");
     items.push({ id, text: scrubPersonalValues(text), sign: o.sign === "in" ? "in" : "out" });
   }
-  if (items.length === 0) throw new Error("geen geldige items");
+  if (items.length === 0)
+    throw new ValidationError("categorize-no-valid-items", "geen geldige items");
   return { items };
 }
 

@@ -1,4 +1,5 @@
 import { scrubPersonalValues } from "@lavega/core";
+import { ValidationError } from "./validationError.js";
 
 export const CHAT_TABS = [
   "overview",
@@ -49,7 +50,8 @@ export function sanitizeChatContext(tab: string, raw: unknown): Record<string, u
     const r = raw as Record<string, unknown>;
     for (const k of allow) if (k in r) out[k] = r[k];
   }
-  if (JSON.stringify(out).length > MAX_CONTEXT_CHARS) throw new Error("context te groot");
+  if (JSON.stringify(out).length > MAX_CONTEXT_CHARS)
+    throw new ValidationError("chat-context-too-large", "context te groot");
   return out;
 }
 

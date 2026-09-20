@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { streamChat } from "../api.js";
 import { getChatEnabled, setChatEnabled } from "../settings.js";
+import { apiErrorText } from "../copy/apiErrors.js";
+import { readAppLocale } from "../appLocale.js";
 import Button from "./ui/Button.js";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
@@ -99,8 +101,8 @@ export default function ChatWidget({
       { tab: context.tab, messages: outgoing, context: context.context },
       {
         onChunk: (t) => appendToLast(t),
-        onError: (m) => {
-          setLast(`⚠️ ${m}`);
+        onError: (m, code) => {
+          setLast(`⚠️ ${code ? apiErrorText(readAppLocale(), code, m) : m}`);
           setStreaming(false);
         },
         onDone: () => setStreaming(false),

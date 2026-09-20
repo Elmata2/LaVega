@@ -100,6 +100,7 @@ test("POST /api/agent/extract-invoice returns 503 when no API key is configured"
     const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
     expect(res.status).toBe(503);
     expect(called).toBe(false); // never reaches the extractor
+    expect((await res.json()).code).toBe("extract-not-configured");
   });
 });
 
@@ -159,6 +160,23 @@ test("an oversize pdfBase64 payload is rejected with 400 before the extractor", 
     );
     expect(res.status).toBe(400);
     expect(called).toBe(false);
+    expect((await res.json()).code).toBe("extract-pdf-too-large");
+  });
+});
+
+test("extract-invoice: a malformed JSON body falls through to the bad-input fallback code", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, { extract: async () => FAKE_RESULT });
+    const res = await app.request("/api/agent/extract-invoice", {
+      method: "POST",
+      body: "{not json",
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("bad-input");
+    expect(typeof body.error).toBe("string");
   });
 });
 
@@ -178,6 +196,7 @@ test("POST /api/agent/chat returns 503 when no API key is configured", async () 
     );
     expect(res.status).toBe(503);
     expect(called).toBe(false); // never reaches the chat generator
+    expect((await res.json()).code).toBe("chat-not-configured");
   });
 });
 
@@ -312,6 +331,7 @@ test("chat: a provider rate limit reads as their ceiling, not as 'try again late
   const body = await chatErrorBody(new MistralHttpError(429, "conversation", "rate limited"));
   expect(body).toContain("limiet van het account bereikt");
   expect(body).not.toContain("probeer het later opnieuw");
+  expect(body).toContain("code: ai-upstream-limit");
 });
 
 test("chat: a refused key reads as a refused key, and does not tell him to retry", async () => {
@@ -319,6 +339,7 @@ test("chat: a refused key reads as a refused key, and does not tell him to retry
     const body = await chatErrorBody(new MistralHttpError(status, "conversation", "unauthorized"));
     expect(body, `status ${status}`).toContain("MISTRAL_API_KEY");
     expect(body, `status ${status}`).not.toContain("probeer het later opnieuw");
+    expect(body, `status ${status}`).toContain("code: ai-credentials-refused");
   }
 });
 
@@ -326,6 +347,7 @@ test("chat: anything else is still the generic fault", async () => {
   const body = await chatErrorBody(new MistralHttpError(500, "conversation", "boom"));
   expect(body).toContain("De AI-dienst gaf een fout");
   expect(body).not.toContain("MISTRAL_API_KEY");
+  expect(body).toContain("code: ai-fault");
 });
 
 test("chat: an upstream error's raw body never reaches the client via the SSE error event, only a fixed Dutch message", async () => {
@@ -346,6 +368,7 @@ test("chat: an upstream error's raw body never reaches the client via the SSE er
     const body = await res.text();
     expect(body).not.toContain("SECRET_UPSTREAM_MARKER");
     expect(body).toContain("De AI-dienst gaf een fout");
+    expect(body).toContain("code: ai-fault");
     expect(
       errSpy.mock.calls.some((c) => String(c.join(" ")).includes("SECRET_UPSTREAM_MARKER")),
     ).toBe(true);
@@ -366,6 +389,7 @@ test("POST /api/agent/chat returns 400 when messages is empty", async () => {
     const res = await app.request("/api/agent/chat", jsonPost({ tab: "overview", messages: [] }));
     expect(res.status).toBe(400);
     expect(called).toBe(false);
+    expect((await res.json()).code).toBe("chat-empty-message");
   });
 });
 
@@ -385,6 +409,7 @@ test("POST /api/agent/categorize returns 503 when no API key is configured", asy
     );
     expect(res.status).toBe(503);
     expect(called).toBe(false);
+    expect((await res.json()).code).toBe("categorize-not-configured");
   });
 });
 
@@ -442,6 +467,48 @@ test("an oversize categorize batch is rejected with 400 before the categorizer",
     const res = await app.request("/api/agent/categorize", jsonPost({ items }));
     expect(res.status).toBe(400);
     expect(called).toBe(false);
+    expect((await res.json()).code).toBe("categorize-too-many-items");
+  });
+});
+
+test("extract-invoice/categorize: the AI failure code reflects which of the three causes it was", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cases: Array<[unknown, string]> = [
+      [new MistralHttpError(429, "chat", "rate limited"), "ai-upstream-limit"],
+      [new MistralHttpError(401, "chat", "unauthorized"), "ai-credentials-refused"],
+      [new MistralHttpError(403, "chat", "forbidden"), "ai-credentials-refused"],
+      [new MistralHttpError(500, "chat", "boom"), "ai-fault"],
+      [new Error("plain failure"), "ai-fault"],
+    ];
+    for (const [thrown, code] of cases) {
+      const extractApp = new Hono();
+      registerAgentRoutes(extractApp, {
+        extract: async () => {
+          throw thrown;
+        },
+      });
+      const extractRes = await extractApp.request(
+        "/api/agent/extract-invoice",
+        jsonPost({ text: "factuur" }),
+      );
+      expect(extractRes.status).toBe(502);
+      expect((await extractRes.json()).code, `extract, ${String(thrown)}`).toBe(code);
+
+      const categorizeApp = new Hono();
+      registerAgentRoutes(categorizeApp, {
+        categorize: async () => {
+          throw thrown;
+        },
+      });
+      const categorizeRes = await categorizeApp.request(
+        "/api/agent/categorize",
+        jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }),
+      );
+      expect(categorizeRes.status).toBe(502);
+      expect((await categorizeRes.json()).code, `categorize, ${String(thrown)}`).toBe(code);
+    }
+    errSpy.mockRestore();
   });
 });
 
@@ -569,7 +636,58 @@ test("extract-invoice returns 429 over the daily budget, and never reaches the e
       });
       const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
       expect(res.status).toBe(429);
-      expect(await res.json()).toEqual({ error: "De AI-limiet voor vandaag is bereikt." });
+      expect(await res.json()).toEqual({
+        error: "De AI-limiet voor vandaag is bereikt.",
+        code: "ai-budget-day",
+      });
+      expect(called).toBe(false);
+    });
+  });
+});
+
+/** Sets both caps for the duration of an async body — the monthly-scope test
+ *  needs a day cap with room so only the month gate trips — and resets the
+ *  in-memory spend counter before AND after, matching withDailyBudgetCents. */
+async function withBudgetCents(
+  dayCents: string,
+  monthCents: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const prevDay = process.env.AI_DAILY_BUDGET_CENTS;
+  const prevMonth = process.env.AI_MONTHLY_BUDGET_CENTS;
+  resetBudgetMemory();
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = dayCents;
+    process.env.AI_MONTHLY_BUDGET_CENTS = monthCents;
+    await fn();
+  } finally {
+    if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
+    if (prevMonth === undefined) delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    else process.env.AI_MONTHLY_BUDGET_CENTS = prevMonth;
+    resetBudgetMemory();
+  }
+}
+
+test("extract-invoice returns 429 with code ai-budget-month when only the monthly cap is out of room", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    await withBudgetCents("100000", "68", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0));
+      const app = new Hono();
+      let called = false;
+      registerAgentRoutes(app, {
+        extract: async () => {
+          called = true;
+          return FAKE_RESULT;
+        },
+      });
+      const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({
+        error: "De AI-limiet voor deze maand is bereikt.",
+        code: "ai-budget-month",
+      });
       expect(called).toBe(false);
     });
   });
@@ -614,6 +732,7 @@ test("chat over the daily budget: still HTTP 200, generator never runs, SSE carr
       expect(res.status).toBe(200);
       const body = await res.text();
       expect(body).toContain("De AI-limiet voor vandaag is bereikt.");
+      expect(body).toContain("code: ai-budget-day");
       expect(called).toBe(false);
     });
   });
@@ -642,7 +761,10 @@ test("travel-facts returns 429 over the daily budget, and never starts the backg
         jsonPost({ destination: "US", providers: ["Test Bank"] }),
       );
       expect(res.status).toBe(429);
-      expect(await res.json()).toEqual({ error: "De AI-limiet voor vandaag is bereikt." });
+      expect(await res.json()).toEqual({
+        error: "De AI-limiet voor vandaag is bereikt.",
+        code: "ai-budget-day",
+      });
       // Not just "not awaited yet" — genuinely never scheduled, given the
       // event-loop tick below.
       await new Promise((r) => setTimeout(r, 0));
@@ -669,10 +791,11 @@ test("extract-invoice: een 429 van de aanbieder leest als een plafond, niet als 
     });
     const res = await limited.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
     expect(res.status).toBe(502);
-    const body = await res.text();
-    expect(body).toContain("limiet van het account");
-    expect(body).not.toContain("probeer het later opnieuw");
-    expect(body).not.toContain("Rate limit exceeded");
+    const body = await res.json();
+    expect(body.error).toContain("limiet van het account");
+    expect(body.error).not.toContain("probeer het later opnieuw");
+    expect(body.error).not.toContain("Rate limit exceeded");
+    expect(body.code).toBe("ai-upstream-limit");
 
     const broken = new Hono();
     registerAgentRoutes(broken, {
@@ -681,9 +804,129 @@ test("extract-invoice: een 429 van de aanbieder leest als een plafond, niet als 
       },
     });
     const res2 = await broken.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
-    expect(await res2.text()).toContain("probeer het later opnieuw");
+    const body2 = await res2.json();
+    expect(body2.error).toContain("probeer het later opnieuw");
+    expect(body2.code).toBe("ai-fault");
 
     errSpy.mockRestore();
+  });
+});
+
+test("travel-facts returns 503 when no API key is configured", async () => {
+  await withApiKey(undefined, async () => {
+    const app = new Hono();
+    let called = false;
+    registerAgentRoutes(app, {
+      travelFacts: async () => {
+        called = true;
+        return [];
+      },
+    });
+    const res = await app.request(
+      "/api/agent/travel-facts",
+      jsonPost({ destination: "US", providers: ["Test Bank"] }),
+    );
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: "AI-reisadvies is niet geconfigureerd.",
+      code: "travel-not-configured",
+    });
+    expect(called).toBe(false);
+  });
+});
+
+/* --- Local rate limiting: each route's own code, even where the Dutch text
+ * is byte-identical across routes (extract/categorize/travel all say "Even
+ * wachten — te veel verzoeken."). A distinct x-forwarded-for per test keeps
+ * its bucket from colliding with any other test's calls on the same route. */
+
+function withForwardedFor(body: unknown, ip: string): RequestInit {
+  return { ...jsonPost(body), headers: { ...jsonPost(body).headers, "x-forwarded-for": ip } };
+}
+
+async function exhaustLocalRateLimit(
+  app: Hono,
+  path: string,
+  body: unknown,
+  ip: string,
+): Promise<Response> {
+  for (let i = 0; i < 20; i++) await app.request(path, withForwardedFor(body, ip));
+  return app.request(path, withForwardedFor(body, ip));
+}
+
+test("extract-invoice: the 21st request in a minute from the same caller is rate-limited locally", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, { extract: async () => FAKE_RESULT });
+    const res = await exhaustLocalRateLimit(
+      app,
+      "/api/agent/extract-invoice",
+      { text: "factuur" },
+      "203.0.113.10",
+    );
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Even wachten — te veel AI-verzoeken.",
+      code: "extract-rate-limited-local",
+    });
+  });
+});
+
+test("categorize: the 21st request in a minute from the same caller is rate-limited locally", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, { categorize: async () => [] });
+    const res = await exhaustLocalRateLimit(
+      app,
+      "/api/agent/categorize",
+      { items: [{ id: "t1", text: "x", sign: "out" }] },
+      "203.0.113.11",
+    );
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Even wachten — te veel verzoeken.",
+      code: "categorize-rate-limited-local",
+    });
+  });
+});
+
+test("chat: the 21st request in a minute from the same caller is rate-limited locally", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, {
+      chat: async function* () {
+        yield "hoi";
+      },
+    });
+    const res = await exhaustLocalRateLimit(
+      app,
+      "/api/agent/chat",
+      { tab: "overview", messages: [{ role: "user", content: "hoi" }] },
+      "203.0.113.12",
+    );
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Even wachten — te veel verzoeken.",
+      code: "chat-rate-limited-local",
+    });
+  });
+});
+
+test("travel-facts: the 21st request in a minute from the same caller is rate-limited locally", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, { travelFacts: async () => [] });
+    const res = await exhaustLocalRateLimit(
+      app,
+      "/api/agent/travel-facts",
+      { destination: "US", providers: ["Test Bank"] },
+      "203.0.113.13",
+    );
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Even wachten — te veel verzoeken.",
+      code: "travel-rate-limited-local",
+    });
   });
 });
 

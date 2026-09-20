@@ -3,6 +3,7 @@ import { shellCopy } from "./shell.js";
 import { adminCopy } from "./admin.js";
 import { moneyCopy } from "./money.js";
 import { optimiseCopy } from "./optimise.js";
+import { apiErrorCopy } from "./apiErrors.js";
 
 /* The copy modules are typed `Record<Locale, T>`, so a missing English string
  * is normally a compile error. Normally is not always: a cast, an index
@@ -77,6 +78,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["admin", adminCopy],
   ["money", moneyCopy],
   ["optimise", optimiseCopy],
+  ["apiErrors", apiErrorCopy],
 ];
 
 test.each(MODULES)("%s has the same keys in both languages", (_name, copy) => {

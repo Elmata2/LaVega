@@ -50,7 +50,10 @@ test("extract-invoice returns 503, not a generic 500, when checkBudget() itself 
     registerAgentRoutes(app);
     const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "De AI-dienst is tijdelijk niet beschikbaar." });
+    expect(await res.json()).toEqual({
+      error: "De AI-dienst is tijdelijk niet beschikbaar.",
+      code: "ai-unavailable",
+    });
   });
 });
 
@@ -63,7 +66,10 @@ test("categorize returns 503 when checkBudget() itself throws", async () => {
       jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }),
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "De AI-dienst is tijdelijk niet beschikbaar." });
+    expect(await res.json()).toEqual({
+      error: "De AI-dienst is tijdelijk niet beschikbaar.",
+      code: "ai-unavailable",
+    });
   });
 });
 
@@ -76,7 +82,10 @@ test("travel-facts returns 503 when checkBudget() itself throws, before the requ
       jsonPost({ destination: "US", providers: ["Test Bank"] }),
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "De AI-dienst is tijdelijk niet beschikbaar." });
+    expect(await res.json()).toEqual({
+      error: "De AI-dienst is tijdelijk niet beschikbaar.",
+      code: "ai-unavailable",
+    });
   });
 });
 
@@ -85,7 +94,10 @@ test("GET /api/agent/budget returns 503 when spentCents() itself throws", async 
   registerAgentRoutes(app);
   const res = await app.request("/api/agent/budget");
   expect(res.status).toBe(503);
-  expect(await res.json()).toEqual({ error: "De AI-dienst is tijdelijk niet beschikbaar." });
+  expect(await res.json()).toEqual({
+    error: "De AI-dienst is tijdelijk niet beschikbaar.",
+    code: "ai-unavailable",
+  });
 });
 
 test("chat: checkBudget() throwing surfaces as an SSE error frame under 200, matching every other chat failure — never a top-level 500", async () => {
@@ -105,6 +117,7 @@ test("chat: checkBudget() throwing surfaces as an SSE error frame under 200, mat
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("De AI-dienst is tijdelijk niet beschikbaar.");
+    expect(body).toContain("code: ai-unavailable");
     expect(called).toBe(false);
   });
 });

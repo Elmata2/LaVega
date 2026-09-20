@@ -1,4 +1,6 @@
 import type { Locale } from "./locale.js";
+import { apiErrorText } from "./copy/apiErrors.js";
+import { pick, readAppLocale } from "./appLocale.js";
 
 /* Base URL for the LaVega server API (Enable Banking + rates). In production the
  * web app is served from the same origin as the server, so a relative "" works.
@@ -43,9 +45,10 @@ export async function apiErrorMessageIn(locale: Locale, res: Response): Promise<
   let msg =
     locale === "nl" ? `Verzoek mislukt (${res.status}).` : `Request failed (${res.status}).`;
   try {
-    const parsed = (await res.json()) as { error?: string; problems?: string[] };
+    const parsed = (await res.json()) as { error?: string; code?: string; problems?: string[] };
     if (parsed?.error) msg = parsed.error;
     else if (parsed?.problems?.length) msg = parsed.problems.join(" ");
+    if (parsed?.code) msg = apiErrorText(locale, parsed.code, msg, res.status);
   } catch {
     /* non-JSON error body; keep the status-based message */
   }
@@ -70,7 +73,7 @@ export async function categorizeTxs(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ items }),
   });
-  if (!res.ok) throw new Error(await apiErrorMessage(res));
+  if (!res.ok) throw new Error(await apiErrorMessageIn(readAppLocale(), res));
   return (await res.json()) as { id: string; category: string }[];
 }
 
@@ -106,32 +109,38 @@ export async function travelFacts(input: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error(await apiErrorMessage(res));
+  if (!res.ok) throw new Error(await apiErrorMessageIn(readAppLocale(), res));
   const body = (await res.json()) as { terms?: ProviderTerms[]; pending?: string[] };
   return { terms: body.terms ?? [], pending: body.pending ?? [] };
 }
 
 export type ChatStreamHandlers = {
   onChunk: (text: string) => void;
-  onError?: (msg: string) => void;
+  onError?: (msg: string, code?: string) => void;
   onDone?: () => void;
 };
 
 /** Parse one SSE record (the text between two "\n\n" delimiters) and fire the
  *  matching handler. A record with no `event:` line is a plain text chunk —
  *  one `onChunk` call per `data:` line. `event: error` / `event: done`
- *  records are the terminal signals the server (agent-routes.ts) sends. */
+ *  records are the terminal signals the server (agent-routes.ts) sends. An
+ *  `event: error` record carries its `code:` line alongside `data:`, not as
+ *  a separate event — a record with only a `code:` line and no `data:` line
+ *  is inert (no handler fires at all), which is what keeps this change safe
+ *  for an unrecognized line prefix: it is never misread as a text chunk. */
 export function dispatchSseRecord(record: string, handlers: ChatStreamHandlers): void {
   if (!record.trim()) return;
   let event: string | null = null;
+  let code: string | undefined;
   const dataLines: string[] = [];
   for (const rawLine of record.split("\n")) {
     const line = rawLine.replace(/\r$/, "");
     if (line.startsWith("event:")) event = line.slice("event:".length).trim();
+    else if (line.startsWith("code:")) code = line.slice("code:".length).trim();
     else if (line.startsWith("data:")) dataLines.push(line.slice("data:".length).replace(/^ /, ""));
   }
   if (event === "error") {
-    handlers.onError?.(dataLines.join("\n"));
+    handlers.onError?.(dataLines.join("\n"), code);
     return;
   }
   if (event === "done") {
@@ -163,11 +172,11 @@ export async function streamChat(
     signal,
   });
   if (!res.ok) {
-    handlers.onError?.(await apiErrorMessage(res));
+    handlers.onError?.(await apiErrorMessageIn(readAppLocale(), res));
     return;
   }
   if (!res.body) {
-    handlers.onError?.("Geen antwoord van de server.");
+    handlers.onError?.(pick(readAppLocale(), "Geen antwoord van de server.", "No response from the server."));
     return;
   }
   const reader = res.body.getReader();

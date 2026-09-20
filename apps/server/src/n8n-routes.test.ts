@@ -96,6 +96,7 @@ test("no session: 401, and n8n is never called", async () => {
 
   expect(res.status).toBe(401);
   expect(calls).toHaveLength(0);
+  expect((await res.json()).code).toBe("n8n-queue-unauthenticated");
 });
 
 test("no address on file: 200 with an explicitly-flagged empty queue, and n8n is never called", async () => {
@@ -123,6 +124,26 @@ test("server not configured: 503, and n8n is never called", async () => {
 
   expect(res.status).toBe(503);
   expect(calls).toHaveLength(0);
+  expect((await res.json()).code).toBe("n8n-not-configured");
+});
+
+test("n8n-URL on the server is malformed: 503 with code n8n-misconfigured-url, and n8n is never called", async () => {
+  loadN8nQueueConfigMock.mockReturnValue({
+    configured: true,
+    url: "not-a-valid-url",
+    token: "shh-shared-secret",
+  });
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(503);
+  expect(calls).toHaveLength(0);
+  expect(await res.json()).toEqual({
+    error: "De n8n-URL op de server is ongeldig.",
+    code: "n8n-misconfigured-url",
+  });
 });
 
 test("n8n answering 401 (bad shared token) comes back as this route's 502, not 401", async () => {
@@ -135,6 +156,33 @@ test("n8n answering 401 (bad shared token) comes back as this route's 502, not 4
   const res = await app.request("/api/n8n/queue");
 
   expect(res.status).toBe(502);
+  expect(await res.json()).toEqual({
+    error: "n8n antwoordde met status 401.",
+    code: "n8n-upstream-error",
+  });
+});
+
+test("n8n unreachable (fetch itself throws): 502 with code n8n-unreachable", async () => {
+  const impl = (async () => {
+    throw new Error("network down");
+  }) as typeof fetch;
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(502);
+  expect(await res.json()).toEqual({ error: "Kon n8n niet bereiken.", code: "n8n-unreachable" });
+});
+
+test("n8n responds 200 with an unreadable (non-JSON) body: 502 with code n8n-unreadable", async () => {
+  const impl = (async () =>
+    new Response("not json", { status: 200, headers: { "content-type": "text/plain" } })) as typeof fetch;
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(502);
+  expect(await res.json()).toEqual({ error: "Onleesbaar antwoord van n8n.", code: "n8n-unreadable" });
 });
 
 test("the x-lavega-token header sent to n8n is the server's configured secret, never anything from the request", async () => {
@@ -167,6 +215,7 @@ test("GET /api/n8n/forward-address with no session: 401, and neither store funct
   expect(res.status).toBe(401);
   expect(getLocalPartCalls).toHaveLength(0);
   expect(setLocalPartCalls).toHaveLength(0);
+  expect((await res.json()).code).toBe("n8n-forward-address-read-unauthenticated");
 });
 
 test("GET /api/n8n/forward-address with a recorded local part: 200 with that local part", async () => {
@@ -202,6 +251,7 @@ test("POST /api/n8n/forward-address with no session: 401", async () => {
   });
 
   expect(res.status).toBe(401);
+  expect((await res.json()).code).toBe("n8n-forward-address-write-unauthenticated");
 });
 
 test("POST /api/n8n/forward-address where setLocalPart reports invalid: 400", async () => {
@@ -216,6 +266,10 @@ test("POST /api/n8n/forward-address where setLocalPart reports invalid: 400", as
   });
 
   expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: "Dat is geen geldig lokaal deel van een e-mailadres.",
+    code: "n8n-address-invalid",
+  });
 });
 
 test("POST /api/n8n/forward-address where setLocalPart reports taken: 409, distinguishable from every other failure mode", async () => {
@@ -231,6 +285,10 @@ test("POST /api/n8n/forward-address where setLocalPart reports taken: 409, disti
 
   expect(res.status).toBe(409);
   expect([400, 401, 502, 503]).not.toContain(res.status);
+  expect(await res.json()).toEqual({
+    error: "Dit adres is al bij een ander account in gebruik.",
+    code: "n8n-address-taken",
+  });
 });
 
 test("POST /api/n8n/forward-address success: 200 with the stored local part echoed back", async () => {
