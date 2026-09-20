@@ -5,6 +5,7 @@ import type { LlmProvider } from "./provider.js";
 import { createMistralProvider } from "./mistral.js";
 import { checkBudget, recordUsage } from "./budget.js";
 import { MISTRAL_MEDIUM } from "./models.js";
+import { ValidationError } from "./validationError.js";
 
 export type KnownFact = { subject: string; key: string; value: string };
 export type TravelInput = {
@@ -61,25 +62,29 @@ function asTravelFact(f: KnownFact) {
  *  builds a fresh object from allowlisted, length-capped, shape-checked fields
  *  and never copies the input. The ranking that needs the money happens locally. */
 export function sanitizeTravelInput(raw: unknown): TravelInput {
-  if (!raw || typeof raw !== "object") throw new Error("ongeldige invoer");
+  if (!raw || typeof raw !== "object")
+    throw new ValidationError("travel-invalid-input", "ongeldige invoer");
   const o = raw as Record<string, unknown>;
 
   const destination = countryCode(o.destination);
-  if (!destination) throw new Error("geen geldige bestemming");
+  if (!destination)
+    throw new ValidationError("travel-invalid-destination", "geen geldige bestemming");
   const homeCountry = countryCode(o.homeCountry) || "NL";
   const currency = /^[A-Z]{3}$/.test(String(o.currency ?? "").toUpperCase())
     ? String(o.currency).toUpperCase()
     : "";
 
   const rawProviders = Array.isArray(o.providers) ? o.providers : [];
-  if (rawProviders.length > MAX_PROVIDERS) throw new Error("te veel aanbieders");
+  if (rawProviders.length > MAX_PROVIDERS)
+    throw new ValidationError("travel-too-many-providers", "te veel aanbieders");
   const providers = [
     ...new Set(rawProviders.map(shortField).filter((p) => p && !looksLikeAccountNumber(p))),
   ];
-  if (providers.length === 0) throw new Error("geen aanbieders");
+  if (providers.length === 0) throw new ValidationError("travel-no-providers", "geen aanbieders");
 
   const rawFacts = Array.isArray(o.knownFacts) ? o.knownFacts : [];
-  if (rawFacts.length > MAX_FACTS) throw new Error("te veel bekende feiten");
+  if (rawFacts.length > MAX_FACTS)
+    throw new ValidationError("travel-too-many-facts", "te veel bekende feiten");
   const knownFacts: KnownFact[] = [];
   for (const r of rawFacts) {
     if (!r || typeof r !== "object") continue;

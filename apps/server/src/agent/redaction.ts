@@ -1,3 +1,5 @@
+import { ValidationError } from "./validationError.js";
+
 export type InvoiceExtractInput = {
   pdfBase64?: string;
   text?: string;
@@ -16,24 +18,25 @@ const MAX_TEXT = 200_000;
  *  cannot return a small value for the size check and a huge one for the copy
  *  (a TOCTOU cap bypass). Only the four named keys are ever touched. */
 export function sanitizeExtractInput(raw: unknown): InvoiceExtractInput {
-  if (!raw || typeof raw !== "object") throw new Error("ongeldige invoer");
+  if (!raw || typeof raw !== "object")
+    throw new ValidationError("extract-invalid-input", "ongeldige invoer");
   const r = raw as Record<string, unknown>;
   const out: InvoiceExtractInput = {};
   const pdf = r.pdfBase64;
   if (typeof pdf === "string") {
-    if (pdf.length > MAX_PDF_B64) throw new Error("pdf te groot");
+    if (pdf.length > MAX_PDF_B64) throw new ValidationError("extract-pdf-too-large", "pdf te groot");
     out.pdfBase64 = pdf;
   }
   const text = r.text;
   if (typeof text === "string") {
-    if (text.length > MAX_TEXT) throw new Error("tekst te groot");
+    if (text.length > MAX_TEXT) throw new ValidationError("extract-text-too-large", "tekst te groot");
     out.text = text;
   }
   const filename = r.filename;
   if (typeof filename === "string") out.filename = filename.slice(0, 200);
   const mediaType = r.mediaType;
   if (typeof mediaType === "string") out.mediaType = mediaType.slice(0, 100);
-  if (!out.pdfBase64 && !out.text) throw new Error("geen document");
+  if (!out.pdfBase64 && !out.text) throw new ValidationError("extract-no-document", "geen document");
   return out;
 }
 

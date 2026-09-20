@@ -14,7 +14,9 @@ test("event: error / done route to their handlers, never to onChunk", () => {
   const onError = vi.fn();
   const onDone = vi.fn();
   dispatchSseRecord("event: error\ndata: kapot", { onChunk, onError, onDone });
-  expect(onError).toHaveBeenCalledWith("kapot");
+  // No `code:` line in this record, so the second argument is undefined —
+  // see api.test.ts for the record that carries one.
+  expect(onError).toHaveBeenCalledWith("kapot", undefined);
   dispatchSseRecord("event: done\ndata: ", { onChunk, onError, onDone });
   expect(onDone).toHaveBeenCalledTimes(1);
   expect(onChunk).not.toHaveBeenCalled();

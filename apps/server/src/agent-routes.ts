@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { SSEStreamingApi } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
 import { checkBudget, recordUsage, spentCents } from "./agent/budget.js";
 import type { AiUsage } from "@lavega/database";
@@ -18,6 +19,7 @@ import { getBankNlTable } from "./bankNl.js";
 import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
 import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
+import { ValidationError } from "./agent/validationError.js";
 
 /* Agent proxy routes. The server holds the Mistral key (it never reaches the
  * client) and is the ONLY place that talks to Mistral. `deps.extract`/`deps.chat`
@@ -73,12 +75,31 @@ const AI_UPSTREAM_LIMIT_MESSAGE =
 const AI_CREDENTIALS_MESSAGE =
   "De AI-aanbieder weigert de sleutel van deze server (401/403). Controleer MISTRAL_API_KEY in de omgeving; opnieuw proberen helpt niet.";
 
+type AiFailure = { code: string; message: string };
+
 /** 429 is their ceiling, 401/403 is our key, anything else is a fault. */
-function aiFailureMessage(e: unknown): string {
-  if (!(e instanceof MistralHttpError)) return AI_ERROR_MESSAGE;
-  if (e.status === 429) return AI_UPSTREAM_LIMIT_MESSAGE;
-  if (e.status === 401 || e.status === 403) return AI_CREDENTIALS_MESSAGE;
-  return AI_ERROR_MESSAGE;
+function aiFailure(e: unknown): AiFailure {
+  if (!(e instanceof MistralHttpError)) return { code: "ai-fault", message: AI_ERROR_MESSAGE };
+  if (e.status === 429) return { code: "ai-upstream-limit", message: AI_UPSTREAM_LIMIT_MESSAGE };
+  if (e.status === 401 || e.status === 403)
+    return { code: "ai-credentials-refused", message: AI_CREDENTIALS_MESSAGE };
+  return { code: "ai-fault", message: AI_ERROR_MESSAGE };
+}
+
+/** Same wire shape as `stream.writeSSE({ event: "error", data: message })`,
+ *  plus a `code:` field a browser can read the machine-readable failure from.
+ *  Written as one raw record (not via `writeSSE`, which has no `code` slot)
+ *  so `code` lands in the SAME record as the Dutch `data:` line. An older
+ *  browser's SSE parser only recognizes `event:`/`data:` line prefixes and
+ *  silently skips anything else, so this is backward compatible: an old
+ *  bundle still gets exactly the Dutch message it gets today, on the same
+ *  `event: error`, and simply never sees the extra line. */
+async function writeSseError(stream: SSEStreamingApi, code: string, message: string): Promise<void> {
+  const dataLines = message
+    .split(/\r\n|\r|\n/)
+    .map((line) => `data: ${line}`)
+    .join("\n");
+  await stream.write(`event: error\ncode: ${code}\n${dataLines}\n\n`);
 }
 
 function logAiError(route: string, e: unknown): void {
@@ -100,11 +121,18 @@ function budgetErrorMessage(scope: "day" | "month"): string {
 async function requireBudget(c: Context, route: AiUsage["route"]): Promise<Response | null> {
   try {
     const budget = await checkBudget(route);
-    if (!budget.ok) return c.json({ error: budgetErrorMessage(budget.scope) }, 429);
+    if (!budget.ok)
+      return c.json(
+        {
+          error: budgetErrorMessage(budget.scope),
+          code: budget.scope === "day" ? "ai-budget-day" : "ai-budget-month",
+        },
+        429,
+      );
     return null;
   } catch (e) {
     logAiError("budget", e);
-    return c.json({ error: AI_UNAVAILABLE_MESSAGE }, 503);
+    return c.json({ error: AI_UNAVAILABLE_MESSAGE, code: "ai-unavailable" }, 503);
   }
 }
 
@@ -137,7 +165,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       spent = await spentCents();
     } catch (e) {
       logAiError("budget", e);
-      return c.json({ error: AI_UNAVAILABLE_MESSAGE }, 503);
+      return c.json({ error: AI_UNAVAILABLE_MESSAGE, code: "ai-unavailable" }, 503);
     }
     const caps = loadBudgetConfig();
     return c.json({
@@ -156,9 +184,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.post("/api/agent/extract-invoice", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
-      return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
+      return c.json(
+        { error: "AI-extractie is niet geconfigureerd op de server.", code: "extract-not-configured" },
+        503,
+      );
     if (!limit(bucket(c, "extract")))
-      return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
+      return c.json(
+        { error: "Even wachten — te veel AI-verzoeken.", code: "extract-rate-limited-local" },
+        429,
+      );
     const budgetBlocked = await requireBudget(c, "extract-invoice");
     if (budgetBlocked) return budgetBlocked;
     let input: InvoiceExtractInput;
@@ -170,7 +204,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // invoice FIELD, never per counterparty) — sanitized like every input.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.facturen);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
     }
     try {
       const result = await extract(input, apiKey, facts, (usage) =>
@@ -179,7 +214,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json(result);
     } catch (e) {
       logAiError("extract-invoice", e);
-      return c.json({ error: aiFailureMessage(e) }, 502);
+      const { code, message } = aiFailure(e);
+      return c.json({ error: message, code }, 502);
     }
   });
 
@@ -190,9 +226,12 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.post("/api/agent/chat", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
-      return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
+      return c.json({ error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" }, 503);
     if (!limit(bucket(c, "chat")))
-      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verzoeken.", code: "chat-rate-limited-local" },
+        429,
+      );
     let tab = "";
     let messages;
     let context;
@@ -205,9 +244,11 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // How the owner wants the assistant to answer — the chat agent's own
       // namespace, never anything about his money.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.chat);
-      if (messages.length === 0) return c.json({ error: "Geen bericht." }, 400);
+      if (messages.length === 0)
+        return c.json({ error: "Geen bericht.", code: "chat-empty-message" }, 400);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
     }
     return streamSSE(c, async (stream) => {
       // Budget goes here, not before streamSSE, so it stays right next to the
@@ -222,11 +263,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         budget = await checkBudget("chat");
       } catch (e) {
         logAiError("budget", e);
-        await stream.writeSSE({ event: "error", data: AI_UNAVAILABLE_MESSAGE });
+        await writeSseError(stream, "ai-unavailable", AI_UNAVAILABLE_MESSAGE);
         return;
       }
       if (!budget.ok) {
-        await stream.writeSSE({ event: "error", data: budgetErrorMessage(budget.scope) });
+        await writeSseError(
+          stream,
+          budget.scope === "day" ? "ai-budget-day" : "ai-budget-month",
+          budgetErrorMessage(budget.scope),
+        );
         return;
       }
       try {
@@ -244,13 +289,14 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
         logAiError("chat", e);
-        /* aiFailureMessage(e), not the bare AI_ERROR_MESSAGE this used to send.
-         * The other two AI routes already told a provider ceiling apart from a
+        /* aiFailure(e), not the bare AI_ERROR_MESSAGE this used to send. The
+         * other two AI routes already told a provider ceiling apart from a
          * fault; chat did not, so the one route the owner uses most was the one
          * route that could only ever say "probeer het later opnieuw" — whether
          * the real cause was a 429 he had to fix in his Mistral account or a
          * key the provider was refusing outright. */
-        await stream.writeSSE({ event: "error", data: aiFailureMessage(e) });
+        const { code, message } = aiFailure(e);
+        await writeSseError(stream, code, message);
       }
     });
   });
@@ -262,9 +308,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.post("/api/agent/categorize", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
-      return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
+      return c.json(
+        { error: "AI-categorisatie is niet geconfigureerd.", code: "categorize-not-configured" },
+        503,
+      );
     if (!limit(bucket(c, "categorize")))
-      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verzoeken.", code: "categorize-rate-limited-local" },
+        429,
+      );
     const budgetBlocked = await requireBudget(c, "categorize");
     if (budgetBlocked) return budgetBlocked;
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
@@ -276,7 +328,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // to category, so no merchant can ride along.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.categorize);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
     }
     try {
       const result = await categorize(input, apiKey, facts, (usage) =>
@@ -285,7 +338,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json(result);
     } catch (e) {
       logAiError("categorize", e);
-      return c.json({ error: aiFailureMessage(e) }, 502);
+      const { code, message } = aiFailure(e);
+      return c.json({ error: message, code }, 502);
     }
   });
 
@@ -300,16 +354,23 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.post("/api/agent/travel-facts", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
-      return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
+      return c.json(
+        { error: "AI-reisadvies is niet geconfigureerd.", code: "travel-not-configured" },
+        503,
+      );
     if (!limit(bucket(c, "travel")))
-      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verzoeken.", code: "travel-rate-limited-local" },
+        429,
+      );
     const budgetBlocked = await requireBudget(c, "travel");
     if (budgetBlocked) return budgetBlocked;
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
     }
     // Returns instantly with whatever is cached and starts background lookups
     // for the gaps — card tariffs are PUBLIC data, the same for every user, so

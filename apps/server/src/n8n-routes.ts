@@ -35,10 +35,17 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
   app.get("/api/n8n/queue", async (c) => {
     const cfg = loadN8nQueueConfig();
     if (!cfg.configured || !cfg.url || !cfg.token)
-      return c.json({ error: "De factuur-wachtrij is niet ingesteld op de server." }, 503);
+      return c.json(
+        { error: "De factuur-wachtrij is niet ingesteld op de server.", code: "n8n-not-configured" },
+        503,
+      );
 
     const userId = await tenantId(c.req.raw);
-    if (!userId) return c.json({ error: "Log in om je facturen op te halen." }, 401);
+    if (!userId)
+      return c.json(
+        { error: "Log in om je facturen op te halen.", code: "n8n-queue-unauthenticated" },
+        401,
+      );
 
     const localPart = await getLocalPart(userId);
     // No address on file: an empty, explicitly-flagged queue — never a fetch
@@ -54,7 +61,10 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
     try {
       target = new URL(cfg.url);
     } catch {
-      return c.json({ error: "De n8n-URL op de server is ongeldig." }, 503);
+      return c.json(
+        { error: "De n8n-URL op de server is ongeldig.", code: "n8n-misconfigured-url" },
+        503,
+      );
     }
     target.searchParams.set("key", localPart);
 
@@ -73,42 +83,63 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
         signal: AbortSignal.timeout(N8N_TIMEOUT_MS),
       });
     } catch {
-      return c.json({ error: "Kon n8n niet bereiken." }, 502);
+      return c.json({ error: "Kon n8n niet bereiken.", code: "n8n-unreachable" }, 502);
     }
     // n8n's own answer never becomes THIS route's 401/403: that status is
     // reserved above for "you are signed out of LaVega". An upstream refusal
     // here is a server/operator fault (the shared token, or n8n itself), and
     // reads as one — never as the browser's own session lapsing.
-    if (!res.ok) return c.json({ error: `n8n antwoordde met status ${res.status}.` }, 502);
+    if (!res.ok)
+      return c.json(
+        { error: `n8n antwoordde met status ${res.status}.`, code: "n8n-upstream-error" },
+        502,
+      );
 
     let body: unknown;
     try {
       body = await res.json();
     } catch {
-      return c.json({ error: "Onleesbaar antwoord van n8n." }, 502);
+      return c.json({ error: "Onleesbaar antwoord van n8n.", code: "n8n-unreadable" }, 502);
     }
     return c.json(body as Record<string, unknown>);
   });
 
   app.get("/api/n8n/forward-address", async (c) => {
     const userId = await tenantId(c.req.raw);
-    if (!userId) return c.json({ error: "Log in om je doorstuuradres te zien." }, 401);
+    if (!userId)
+      return c.json(
+        { error: "Log in om je doorstuuradres te zien.", code: "n8n-forward-address-read-unauthenticated" },
+        401,
+      );
     const localPart = await getLocalPart(userId);
     return c.json({ localPart });
   });
 
   app.post("/api/n8n/forward-address", async (c) => {
     const userId = await tenantId(c.req.raw);
-    if (!userId) return c.json({ error: "Log in om een doorstuuradres in te stellen." }, 401);
+    if (!userId)
+      return c.json(
+        {
+          error: "Log in om een doorstuuradres in te stellen.",
+          code: "n8n-forward-address-write-unauthenticated",
+        },
+        401,
+      );
     const body: { localPart?: unknown } = await c.req
       .json<{ localPart?: unknown }>()
       .catch(() => ({}));
     const raw = typeof body.localPart === "string" ? body.localPart : "";
     const outcome = await setLocalPart(userId, raw);
     if (outcome.status === "invalid")
-      return c.json({ error: "Dat is geen geldig lokaal deel van een e-mailadres." }, 400);
+      return c.json(
+        { error: "Dat is geen geldig lokaal deel van een e-mailadres.", code: "n8n-address-invalid" },
+        400,
+      );
     if (outcome.status === "taken")
-      return c.json({ error: "Dit adres is al bij een ander account in gebruik." }, 409);
+      return c.json(
+        { error: "Dit adres is al bij een ander account in gebruik.", code: "n8n-address-taken" },
+        409,
+      );
     return c.json({ localPart: outcome.localPart });
   });
 }

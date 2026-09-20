@@ -11,6 +11,7 @@ import type { View } from "../App";
 import { formatEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type AdminCopy } from "../copy/admin.js";
+import { apiErrorText } from "../copy/apiErrors.js";
 import { API_BASE } from "../api";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -844,8 +845,9 @@ export default function Facturen({
       if (!res.ok) {
         let msg = c.aiExtraction.extractFailedStatus(res.status);
         try {
-          const body = (await res.json()) as { error?: string };
-          if (body?.error) msg = body.error;
+          const body = (await res.json()) as { error?: string; code?: string };
+          if (body?.code) msg = apiErrorText(locale, body.code, body.error ?? msg, res.status);
+          else if (body?.error) msg = body.error;
         } catch {
           /* non-JSON error body; keep the status-based message */
         }
