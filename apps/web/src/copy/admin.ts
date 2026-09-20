@@ -598,54 +598,32 @@ type KoppelingenCopy = {
     generateButton: string;
     /** one line under generateButton: unguessable, but harder to type */
     generateTradeoff: string;
-  };
-  n8nLink: {
-    /** <h2> */
-    heading: string;
-    /** .eyebrow text; a trailing space precedes the explain-eye icon */
-    eyebrow: string;
-    /** the cell-sub paragraph above the form, naming Production URL / Header Auth */
-    intro: readonly CopySpan[];
-    /** the eye-icon aria-label/title is "{explain.prefix} {subject}" */
-    explain: {
-      prefix: string;
-      linkSubject: string;
-      urlSubject: string;
-      tokenSubject: string;
+    /** The card's SERVER-recorded-address sub-section: what /api/n8n/forward-address
+     *  holds, and the explicit confirm-gated action that writes to it. */
+    server: {
+      loading: string;
+      /** shown once the initial read succeeds and a local part IS recorded */
+      active: (address: string) => string;
+      /** shown once the initial read succeeds and NOTHING is recorded yet */
+      none: string;
+      /** the initial GET failed (401/network/non-2xx) */
+      readFailed: string;
+      recordButton: string;
+      /** first-click warning before the second, real click */
+      confirmWarning: (address: string) => string;
+      confirmButton: string;
+      cancelButton: string;
+      recording: string;
+      recorded: (address: string) => string;
+      /** 409: the local part is already recorded against a different account */
+      taken: string;
+      /** 400: defensive — the draft should already be well-formed by the time it's sent */
+      invalid: string;
+      /** 401 on the POST itself (session lapsed between load and click) */
+      unauthorized: string;
+      /** network failure or any other non-OK status on the POST */
+      recordFailed: string;
     };
-    /** the three expandable InfoNote bodies, one per explain-eye */
-    info: {
-      /** array of paragraphs, each an array of spans */
-      link: readonly (readonly CopySpan[])[];
-      url: readonly CopySpan[];
-      token: readonly CopySpan[];
-    };
-    form: {
-      urlLabel: string;
-      urlPlaceholder: string;
-      urlAriaLabel: string;
-      tokenLabel: string;
-      tokenPlaceholder: string;
-      tokenAriaLabel: string;
-      /** visible text next to the "show token" checkbox */
-      showTokenLabel: string;
-      showTokenAriaLabel: string;
-      saveButton: string;
-      clearButton: string;
-    };
-    /** shown when the URL field is non-empty but doesn't start with http(s):// */
-    urlWarning: string;
-  };
-  /** the transient <p className="cell-sub">{note}</p> messages from setNote() */
-  status: {
-    vaultReadFailed: string;
-    notLinkedOnSave: string;
-    saveFailed: string;
-    savedComplete: string;
-    savedIncomplete: string;
-    notLinkedOnClear: string;
-    clearFailed: string;
-    cleared: string;
   };
 };
 
@@ -1211,94 +1189,24 @@ const nlKoppelingen: KoppelingenCopy = {
     suggestedTradeoff: "Makkelijk te onthouden en over te typen — maar wel te raden.",
     generateButton: "Genereer een willekeurig adres",
     generateTradeoff: "Niet te raden — maar lastiger over te typen.",
-  },
-  n8nLink: {
-    heading: "Koppeling met n8n",
-    eyebrow: "voor de facturenwachtrij ",
-    intro: [
-      { text: "Plak hier de " },
-      { text: "Production URL", mark: "em" },
-      { text: " van de webhook-node in jouw n8n en het token dat je daar bij " },
-      { text: "Header Auth", mark: "em" },
-      { text: " hebt gezet. Facturen gebruikt die twee om de wachtrij op te halen." },
-    ],
-    explain: {
-      prefix: "Uitleg bij",
-      linkSubject: "deze koppeling",
-      urlSubject: "de webhook-URL",
-      tokenSubject: "het token",
+    server: {
+      loading: "Even kijken wat de server heeft…",
+      active: (address) => `Nu actief: ${address}`,
+      none: "Nog geen adres ingesteld op de server — Facturen haalt nog niets automatisch op.",
+      readFailed:
+        "Kon niet lezen wat de server heeft ingesteld — probeer dit scherm opnieuw te openen.",
+      recordButton: "Gebruik dit adres",
+      confirmWarning: (address) =>
+        `Dit maakt ${address} het adres waar Facturen zijn wachtrij mee ophaalt. Een eerder ingesteld adres van jou wordt vervangen; een adres dat al bij een ander account hoort, kan niet.`,
+      confirmButton: "Ja, gebruik dit adres",
+      cancelButton: "Annuleren",
+      recording: "Bezig met opslaan…",
+      recorded: (address) => `Opgeslagen. Facturen haalt nu automatisch op via ${address}.`,
+      taken: "Dit adres is al bij een ander account in gebruik — kies een ander adres.",
+      invalid: "Dat is geen bruikbaar adres — kies of typ er een geldig exemplaar.",
+      unauthorized: "Je bent uitgelogd — log opnieuw in en probeer het nogmaals.",
+      recordFailed: "Opslaan is mislukt — probeer het opnieuw.",
     },
-    info: {
-      link: [
-        [
-          {
-            text: "n8n leest de doorgestuurde mail, laat Mistral bepalen of er een factuur in zit, en houdt die vast in een wachtrij. LaVega haalt die rij voor je op: ",
-          },
-          { text: "je mailbox → n8n → de LaVega-server → jouw browser", mark: "strong" },
-          {
-            text: ". De server geeft de rij ongewijzigd door en bewaart hem niet, maar hij ziet de bedragen wel — anders zou je zelf een webhook-adres en een token moeten invullen.",
-          },
-        ],
-        [
-          { text: "Opzetten doe je één keer, in n8n zelf: importeer " },
-          { text: "docs/n8n/lavega-invoices.json", mark: "code" },
-          {
-            text: ", zet een Header Auth-credential op de webhook-node, activeer de workflow, en plak de Production URL en dat token hieronder. Beide staan versleuteld in je kluis, net als een broker-koppeling — dus reizen ze mee in een back-up en zijn ze alleen te lezen terwijl de kluis ontgrendeld is.",
-          },
-        ],
-        [
-          { text: "Er is met opzet geen testknop.", mark: "strong" },
-          {
-            text: " De webhook leegt de wachtrij zodra hij antwoordt: één lezer, één keer — een “test” zou dus echte facturen opgebruiken. Ophalen gebeurt in Facturen, waar je elke regel te zien krijgt en zelf bevestigt.",
-          },
-        ],
-      ],
-      url: [
-        {
-          text: "Het adres waarop jouw n8n luistert. In n8n staat hij op de Webhook-node onder ",
-        },
-        { text: "Production URL", mark: "em" },
-        {
-          text: " — niet de Test URL, die werkt alleen zolang je in n8n op “Listen” hebt geklikt. Hij begint met http:// of https://.",
-        },
-      ],
-      token: [
-        {
-          text: "Een wachtwoord dat je zelf verzint, zodat alleen jouw browser die wachtrij mag leegmaken. Maak er een met ",
-        },
-        { text: "openssl rand -hex 24", mark: "code" },
-        { text: " en zet dezelfde waarde in n8n bij " },
-        { text: "Header Auth", mark: "em" },
-        { text: ", headernaam " },
-        { text: "x-lavega-token", mark: "code" },
-        { text: ". Hij blijft in deze browser en gaat nooit naar de LaVega-server." },
-      ],
-    },
-    form: {
-      urlLabel: "Webhook-URL (n8n, Production URL)",
-      urlPlaceholder: "https://jouw-n8n/webhook/lavega-facturen",
-      urlAriaLabel: "n8n webhook-URL",
-      tokenLabel: "Token (header x-lavega-token)",
-      tokenPlaceholder: "openssl rand -hex 24",
-      tokenAriaLabel: "n8n token",
-      showTokenLabel: "token tonen",
-      showTokenAriaLabel: "Token tonen",
-      saveButton: "Opslaan",
-      clearButton: "Wissen",
-    },
-    urlWarning:
-      "Dit ziet er niet uit als een webhook-URL — hij hoort met http:// of https:// te beginnen.",
-  },
-  status: {
-    vaultReadFailed: "Kon de kluis niet lezen — probeer dit scherm opnieuw te openen.",
-    notLinkedOnSave: "De kluis is nog niet gekoppeld aan dit scherm — er is niets opgeslagen.",
-    saveFailed: "Opslaan in de kluis is mislukt — probeer het opnieuw.",
-    savedComplete:
-      "Opgeslagen in je kluis. Facturen haalt de wachtrij vanzelf op zodra je dat scherm opent.",
-    savedIncomplete: "Opgeslagen — maar zolang URL óf token leeg is, kan LaVega niets ophalen.",
-    notLinkedOnClear: "De kluis is nog niet gekoppeld aan dit scherm — er is niets gewist.",
-    clearFailed: "Wissen in de kluis is mislukt — probeer het opnieuw.",
-    cleared: "Gewist. LaVega haalt nu niets meer op uit n8n.",
   },
 };
 
@@ -1856,92 +1764,23 @@ const enKoppelingen: KoppelingenCopy = {
     suggestedTradeoff: "Easy to remember and type — but guessable.",
     generateButton: "Generate a random address",
     generateTradeoff: "Not guessable — but harder to type.",
-  },
-  n8nLink: {
-    heading: "Connection with n8n",
-    eyebrow: "for the invoice queue ",
-    intro: [
-      { text: "Paste the " },
-      { text: "Production URL", mark: "em" },
-      { text: " of the webhook node in your n8n here, along with the token you set there under " },
-      { text: "Header Auth", mark: "em" },
-      { text: ". Invoices uses those two to fetch the queue." },
-    ],
-    explain: {
-      prefix: "Explanation of",
-      linkSubject: "this connection",
-      urlSubject: "the webhook URL",
-      tokenSubject: "the token",
+    server: {
+      loading: "Checking what the server has…",
+      active: (address) => `Currently active: ${address}`,
+      none: "No address set on the server yet — Facturen isn't fetching anything automatically.",
+      readFailed: "Couldn't read what the server has set — try opening this screen again.",
+      recordButton: "Use this address",
+      confirmWarning: (address) =>
+        `This makes ${address} the address Facturen uses to fetch its queue. Any address you set before is replaced; an address that already belongs to another account can't be.`,
+      confirmButton: "Yes, use this address",
+      cancelButton: "Cancel",
+      recording: "Saving…",
+      recorded: (address) => `Saved. Facturen now fetches automatically via ${address}.`,
+      taken: "This address is already in use by another account — choose a different one.",
+      invalid: "That's not a usable address — pick or type a valid one.",
+      unauthorized: "You're signed out — log back in and try again.",
+      recordFailed: "Saving failed — please try again.",
     },
-    info: {
-      link: [
-        [
-          {
-            text: "n8n reads the forwarded mail, lets Mistral decide whether it contains an invoice, and holds it in a queue. LaVega fetches that queue for you: ",
-          },
-          { text: "your mailbox → n8n → the LaVega server → your browser", mark: "strong" },
-          {
-            text: ". The server passes the queue through unchanged and stores none of it, but it does see the amounts — the alternative is you filling in a webhook address and a token yourself.",
-          },
-        ],
-        [
-          { text: "You set this up once, in n8n itself: import " },
-          { text: "docs/n8n/lavega-invoices.json", mark: "code" },
-          {
-            text: ", put a Header Auth credential on the webhook node, activate the workflow, and paste the Production URL and that token below. Both are stored encrypted in your vault, just like a broker connection — so they travel with a backup and can only be read while the vault is unlocked.",
-          },
-        ],
-        [
-          { text: "There is deliberately no test button.", mark: "strong" },
-          {
-            text: " The webhook empties the queue as soon as it responds: one reader, once — a “test” would use up real invoices. Fetching happens in Facturen, where you see every line and confirm it yourself.",
-          },
-        ],
-      ],
-      url: [
-        { text: "The address your n8n listens on. In n8n it's on the Webhook node under " },
-        { text: "Production URL", mark: "em" },
-        {
-          text: " — not the Test URL, which only works while you've clicked “Listen” in n8n. It starts with http:// or https://.",
-        },
-      ],
-      token: [
-        {
-          text: "A password you make up yourself, so only your browser can empty that queue. Create one with ",
-        },
-        { text: "openssl rand -hex 24", mark: "code" },
-        { text: " and set the same value in n8n under " },
-        { text: "Header Auth", mark: "em" },
-        { text: ", header name " },
-        { text: "x-lavega-token", mark: "code" },
-        { text: ". It stays in this browser and never goes to the LaVega server." },
-      ],
-    },
-    form: {
-      urlLabel: "Webhook URL (n8n, Production URL)",
-      urlPlaceholder: "https://your-n8n/webhook/lavega-facturen",
-      urlAriaLabel: "n8n webhook URL",
-      tokenLabel: "Token (header x-lavega-token)",
-      tokenPlaceholder: "openssl rand -hex 24",
-      tokenAriaLabel: "n8n token",
-      showTokenLabel: "show token",
-      showTokenAriaLabel: "Show token",
-      saveButton: "Save",
-      clearButton: "Clear",
-    },
-    urlWarning: "This doesn't look like a webhook URL — it should start with http:// or https://.",
-  },
-  status: {
-    vaultReadFailed: "Couldn't read the vault — try opening this screen again.",
-    notLinkedOnSave: "The vault isn't linked to this screen yet — nothing was saved.",
-    saveFailed: "Saving to the vault failed — please try again.",
-    savedComplete:
-      "Saved to your vault. Facturen will fetch the queue automatically once you open that screen.",
-    savedIncomplete:
-      "Saved — but as long as the URL or token is empty, LaVega can't fetch anything.",
-    notLinkedOnClear: "The vault isn't linked to this screen yet — nothing was cleared.",
-    clearFailed: "Clearing the vault failed — please try again.",
-    cleared: "Cleared. LaVega will no longer fetch anything from n8n.",
   },
 };
 

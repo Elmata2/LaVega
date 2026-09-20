@@ -35,6 +35,11 @@ function fakeFetchQueue(status: number, body: unknown) {
   return { impl, calls };
 }
 
+type N8nForwardingWrite =
+  | { status: "stored"; localPart: string }
+  | { status: "invalid" }
+  | { status: "taken" };
+
 let signedInAs: string | null = "user-123";
 const localParts = new Map<string, string>();
 const getLocalPartCalls: string[] = [];
@@ -43,11 +48,20 @@ async function getLocalPart(userId: string): Promise<string | null> {
   return localParts.get(userId) ?? null;
 }
 
+let setLocalPartResult: N8nForwardingWrite = { status: "stored", localPart: "ale-7f3a" };
+const setLocalPartCalls: Array<{ userId: string; localPart: string }> = [];
+async function setLocalPart(userId: string, localPart: string): Promise<N8nForwardingWrite> {
+  setLocalPartCalls.push({ userId, localPart });
+  return setLocalPartResult;
+}
+
 beforeEach(() => {
   signedInAs = "user-123";
   localParts.clear();
   localParts.set("user-123", "ale");
   getLocalPartCalls.length = 0;
+  setLocalPartCalls.length = 0;
+  setLocalPartResult = { status: "stored", localPart: "ale-7f3a" };
   loadN8nQueueConfigMock.mockReset();
   loadN8nQueueConfigMock.mockReturnValue({
     configured: true,
@@ -58,7 +72,7 @@ beforeEach(() => {
 
 function buildApp(fetchImpl: typeof fetch) {
   const app = new Hono();
-  registerN8nRoutes(app, { tenantId: async () => signedInAs, getLocalPart, fetchImpl });
+  registerN8nRoutes(app, { tenantId: async () => signedInAs, getLocalPart, setLocalPart, fetchImpl });
   return app;
 }
 
@@ -141,4 +155,109 @@ test("a healthy response relays n8n's JSON body unchanged", async () => {
 
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual(body);
+});
+
+test("GET /api/n8n/forward-address with no session: 401, and neither store function is called", async () => {
+  signedInAs = null;
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address");
+
+  expect(res.status).toBe(401);
+  expect(getLocalPartCalls).toHaveLength(0);
+  expect(setLocalPartCalls).toHaveLength(0);
+});
+
+test("GET /api/n8n/forward-address with a recorded local part: 200 with that local part", async () => {
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address");
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ localPart: "ale" });
+});
+
+test("GET /api/n8n/forward-address with no address on file: 200 with a null local part", async () => {
+  signedInAs = "user-without-address";
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address");
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ localPart: null });
+});
+
+test("POST /api/n8n/forward-address with no session: 401", async () => {
+  signedInAs = null;
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "ale" }),
+  });
+
+  expect(res.status).toBe(401);
+});
+
+test("POST /api/n8n/forward-address where setLocalPart reports invalid: 400", async () => {
+  setLocalPartResult = { status: "invalid" };
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "not valid" }),
+  });
+
+  expect(res.status).toBe(400);
+});
+
+test("POST /api/n8n/forward-address where setLocalPart reports taken: 409, distinguishable from every other failure mode", async () => {
+  setLocalPartResult = { status: "taken" };
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "already-taken" }),
+  });
+
+  expect(res.status).toBe(409);
+  expect([400, 401, 502, 503]).not.toContain(res.status);
+});
+
+test("POST /api/n8n/forward-address success: 200 with the stored local part echoed back", async () => {
+  setLocalPartResult = { status: "stored", localPart: "ale-7f3a" };
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "Ale" }),
+  });
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ localPart: "ale-7f3a" });
+});
+
+test("POST /api/n8n/forward-address passes the body's localPart to setLocalPart unmodified, with no route-side re-validation or re-normalisation", async () => {
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "  Weird-Casing_Input  " }),
+  });
+
+  expect(setLocalPartCalls).toHaveLength(1);
+  expect(setLocalPartCalls[0]).toEqual({ userId: "user-123", localPart: "  Weird-Casing_Input  " });
 });

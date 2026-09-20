@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { loadN8nQueueConfig } from "./config.js";
-import { createN8nForwardingRepository } from "@lavega/database";
+import { createN8nForwardingRepository, type N8nForwardingWrite } from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { investingTenantId } from "./investing-mount.js";
 
@@ -24,11 +24,12 @@ export type N8nRouteDependencies = {
   /** The signed-in user, or null. Never read from the request's own body. */
   tenantId: (request: Request) => Promise<string | null>;
   getLocalPart: (userId: string) => Promise<string | null>;
+  setLocalPart: (userId: string, localPart: string) => Promise<N8nForwardingWrite>;
   fetchImpl?: typeof fetch;
 };
 
 export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies): void {
-  const { tenantId, getLocalPart } = dependencies;
+  const { tenantId, getLocalPart, setLocalPart } = dependencies;
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
   app.get("/api/n8n/queue", async (c) => {
@@ -88,6 +89,28 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
     }
     return c.json(body as Record<string, unknown>);
   });
+
+  app.get("/api/n8n/forward-address", async (c) => {
+    const userId = await tenantId(c.req.raw);
+    if (!userId) return c.json({ error: "Log in om je doorstuuradres te zien." }, 401);
+    const localPart = await getLocalPart(userId);
+    return c.json({ localPart });
+  });
+
+  app.post("/api/n8n/forward-address", async (c) => {
+    const userId = await tenantId(c.req.raw);
+    if (!userId) return c.json({ error: "Log in om een doorstuuradres in te stellen." }, 401);
+    const body: { localPart?: unknown } = await c.req
+      .json<{ localPart?: unknown }>()
+      .catch(() => ({}));
+    const raw = typeof body.localPart === "string" ? body.localPart : "";
+    const outcome = await setLocalPart(userId, raw);
+    if (outcome.status === "invalid")
+      return c.json({ error: "Dat is geen geldig lokaal deel van een e-mailadres." }, 400);
+    if (outcome.status === "taken")
+      return c.json({ error: "Dit adres is al bij een ander account in gebruik." }, 409);
+    return c.json({ localPart: outcome.localPart });
+  });
 }
 
 /** Wiring for the real server: Neon storage, session identity. */
@@ -95,5 +118,9 @@ export function n8nRouteDependencies(): N8nRouteDependencies | null {
   const database = runtimeDatabase();
   if (!database) return null;
   const repository = createN8nForwardingRepository(database);
-  return { tenantId: investingTenantId, getLocalPart: (userId) => repository.getLocalPart(userId) };
+  return {
+    tenantId: investingTenantId,
+    getLocalPart: (userId) => repository.getLocalPart(userId),
+    setLocalPart: (userId, localPart) => repository.setLocalPart(userId, localPart),
+  };
 }

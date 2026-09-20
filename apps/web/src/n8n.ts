@@ -248,6 +248,71 @@ export async function fetchQueue(fetchImpl: typeof fetch = globalThis.fetch): Pr
   return { kind: "ok", rows: parsed.rows, notices: parsed.notices, dropped: parsed.dropped };
 }
 
+export type ForwardAddressReadOutcome =
+  | { kind: "ok"; localPart: string | null }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "http-error"; status: number };
+
+export async function fetchForwardAddress(
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<ForwardAddressReadOutcome> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${API_BASE}/api/n8n/forward-address`, { method: "GET" });
+  } catch {
+    return { kind: "network" };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: "unauthorized" };
+  if (!res.ok) return { kind: "http-error", status: res.status };
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return { kind: "http-error", status: res.status };
+  }
+  const localPart = (body as { localPart?: unknown }).localPart;
+  return { kind: "ok", localPart: typeof localPart === "string" ? localPart : null };
+}
+
+export type ForwardAddressWriteOutcome =
+  | { kind: "stored"; localPart: string }
+  | { kind: "invalid" }
+  | { kind: "taken" }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "http-error"; status: number };
+
+export async function recordForwardAddress(
+  localPart: string,
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<ForwardAddressWriteOutcome> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${API_BASE}/api/n8n/forward-address`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ localPart }),
+    });
+  } catch {
+    return { kind: "network" };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: "unauthorized" };
+  if (res.status === 400) return { kind: "invalid" };
+  if (res.status === 409) return { kind: "taken" };
+  if (!res.ok) return { kind: "http-error", status: res.status };
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return { kind: "http-error", status: res.status };
+  }
+  const stored = (body as { localPart?: unknown }).localPart;
+  return typeof stored === "string"
+    ? { kind: "stored", localPart: stored }
+    : { kind: "http-error", status: res.status };
+}
+
 /** An n8n row while the owner is still reviewing it. Strings, because these are
  *  the exact contents of the inputs he is editing — nothing is parsed into an
  *  Invoice until he presses Bevestigen. */

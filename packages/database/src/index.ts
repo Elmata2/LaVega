@@ -1050,6 +1050,23 @@ export function createAiUsageRepository(db: Database) {
   };
 }
 
+export type N8nForwardingWrite =
+  | { status: "stored"; localPart: string }
+  | { status: "invalid" }
+  | { status: "taken" };
+
+/* `ON CONFLICT (user_id)` in setLocalPart's INSERT covers the primary key,
+ * not local_part's own unique index — a taken local part reaches Postgres as
+ * a unique-violation error instead of triggering the upsert. */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
+  );
+}
+
 /**
  * Where each user's invoice-forwarding local part lives.
  *
@@ -1079,11 +1096,12 @@ export function createN8nForwardingRepository(db: Database) {
       });
     },
 
-    /** Record or replace the caller's own local part. No route calls this
-     *  yet — assigning an address is still an operator action (see the ADR) —
-     *  it exists so a future self-serve flow, and this package's own tests,
-     *  don't have to reach past the repository into raw SQL. */
-    async setLocalPart(userId: string | undefined | null, localPart: string): Promise<void> {
+    /** Record or replace the caller's own local part. The write path for
+     *  `apps/server/src/n8n-routes.ts`'s `POST /api/n8n/forward-address`. */
+    async setLocalPart(
+      userId: string | undefined | null,
+      localPart: string,
+    ): Promise<N8nForwardingWrite> {
       const identity = requireUserId(userId);
       /* SAME CANONICAL FORM THE COLUMN ENFORCES, applied here so an ordinary
        * copy-paste does not become a constraint violation the caller has to
@@ -1094,14 +1112,19 @@ export function createN8nForwardingRepository(db: Database) {
        * the other's invoices. The CHECK stays the backstop for every writer
        * that is not this function. */
       const trimmed = localPart.trim().toLowerCase();
-      if (!/^[a-z0-9._%+-]{1,120}$/.test(trimmed))
-        throw new Error("localPart is not a usable email local part");
-      await withTenant(db, identity, async (client) => {
-        await client.query(
-          "INSERT INTO personal.n8n_forwarding (user_id, local_part) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET local_part = EXCLUDED.local_part, updated_at = CURRENT_TIMESTAMP",
-          [identity, trimmed],
-        );
-      });
+      if (!/^[a-z0-9._%+-]{1,120}$/.test(trimmed)) return { status: "invalid" };
+      try {
+        await withTenant(db, identity, async (client) => {
+          await client.query(
+            "INSERT INTO personal.n8n_forwarding (user_id, local_part) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET local_part = EXCLUDED.local_part, updated_at = CURRENT_TIMESTAMP",
+            [identity, trimmed],
+          );
+        });
+      } catch (err) {
+        if (isUniqueViolation(err)) return { status: "taken" };
+        throw err;
+      }
+      return { status: "stored", localPart: trimmed };
     },
   };
 }

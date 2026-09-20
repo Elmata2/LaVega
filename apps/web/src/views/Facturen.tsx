@@ -25,13 +25,13 @@ import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
   getHandledInvoiceMessageIds,
-  getN8nSettings,
   setAiExtractionEnabled,
 } from "../settings";
 import {
   autoBookDecision,
   type AutoBookHold,
   bookingEntity,
+  fetchForwardAddress,
   fetchQueue,
   forgetAutoBooked,
   getAutoBookedInvoices,
@@ -361,17 +361,10 @@ export default function Facturen({
   fetchLatest.current = handleFetchN8n;
   useEffect(() => {
     if (!storage) return; // see the `storage` prop doc: n8n stays off until wired
-    const vault = storage;
     let cancelled = false;
     async function configured(): Promise<boolean> {
-      try {
-        const settings = await getN8nSettings(vault);
-        return (
-          (settings.invoiceUrl ?? "").trim() !== "" && (settings.invoiceToken ?? "").trim() !== ""
-        );
-      } catch {
-        return false; // a vault read that fails (e.g. locked mid-session) is not "configured"
-      }
+      const outcome = await fetchForwardAddress(fetchImpl);
+      return outcome.kind === "ok" && outcome.localPart !== null;
     }
     void (async () => {
       if (cancelled || !(await configured())) return;

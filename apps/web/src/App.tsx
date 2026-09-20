@@ -75,6 +75,7 @@ import {
   setEnabledModules,
   getFxConversionMode,
   setFxConversionMode,
+  clearLegacyN8nLocalStorage,
   type OwnerName,
   type ConversionMode,
 } from "./settings.js";
@@ -308,6 +309,16 @@ export default function App() {
     const onPop = () => setViewState(viewFromPathname(window.location.pathname) ?? "overview");
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  // Once per app load: a browser that set an n8n webhook URL/token before the
+  // 2026-09-08 vault migration, and never reopened Koppelingen since, still
+  // has that token sitting in plaintext localStorage — the exact XSS exposure
+  // that migration closed. Koppelingen no longer reads or writes those keys
+  // at all (the whole vault-backed webhook feature is gone), so there is
+  // nothing left to migrate; this only finishes deleting them. Safe to run on
+  // every load — once the keys are gone, it is a no-op.
+  useEffect(() => {
+    clearLegacyN8nLocalStorage();
   }, []);
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
@@ -1411,7 +1422,7 @@ export default function App() {
             <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
           )}
 
-          {view === "koppelingen" && <Koppelingen storage={storage} />}
+          {view === "koppelingen" && <Koppelingen />}
 
           {view === "backup" && (
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />

@@ -7,11 +7,13 @@ import type { VaultStorage } from "@lavega/adapters";
 import {
   autoBookDecision,
   bookingEntity,
+  fetchForwardAddress,
   fetchQueue,
   forgetAutoBooked,
   getAutoBookedInvoices,
   parseQueue,
   pendingToInvoice,
+  recordForwardAddress,
   rememberAutoBooked,
   toPending,
   AUTO_BOOK_CEILING_CENTS,
@@ -19,29 +21,20 @@ import {
 } from "./n8n.js";
 import {
   addHandledInvoiceMessageIds,
+  clearLegacyN8nLocalStorage,
   getHandledInvoiceMessageIds,
-  getN8nInvoiceToken,
-  getN8nSettings,
-  getN8nInvoiceUrl,
-  setN8nInvoiceToken,
-  setN8nInvoiceUrl,
 } from "./settings.js";
 
 beforeEach(() => {
   localStorage.clear();
 });
 
-/** An in-memory vault, enough for settings.ts/n8n.ts's n8n-related calls. */
+/** An in-memory vault, enough for n8n.ts's n8n-related calls. */
 function fakeVault(): VaultStorage {
   const state = {
-    settings: {} as Record<string, string | undefined>,
     autoBooked: [] as N8nAutoBooked[],
   };
   return {
-    getN8nSettings: async () => ({ ...state.settings }),
-    putN8nSettings: async (s: Record<string, string | undefined>) => {
-      state.settings = { ...s };
-    },
     getAutoBookedInvoices: async () => [...state.autoBooked],
     putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
       state.autoBooked = [...list];
@@ -183,35 +176,30 @@ test("an empty VAT field stays unknown on the invoice instead of becoming zero",
   expect(out.ok === true && out.invoice.vatAmount).toBeUndefined();
 });
 
-test("URL and token are vault preferences and default to empty; handled ids stay a local preference", async () => {
-  const vault = fakeVault();
-  expect(await getN8nInvoiceUrl(vault)).toBe("");
-  expect(await getN8nInvoiceToken(vault)).toBe("");
+test("handled invoice message ids stay a local preference, deduped", () => {
   expect(getHandledInvoiceMessageIds()).toEqual([]);
-  await setN8nInvoiceUrl(vault, "  https://n8n.example/webhook/x  ");
-  await setN8nInvoiceToken(vault, " tok ");
-  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/x");
-  expect(await getN8nInvoiceToken(vault)).toBe("tok");
   addHandledInvoiceMessageIds(["a", "b"]);
   addHandledInvoiceMessageIds(["b", "c"]);
   expect(getHandledInvoiceMessageIds()).toEqual(["a", "b", "c"]);
-  // Nothing sensitive rides along: only the opaque ids are stored, and the URL
-  // and token never touch localStorage at all.
   expect(localStorage.getItem("lavega.n8nHandledMessageIds")).toBe('["a","b","c"]');
-  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
-  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
 });
 
-test("a legacy plaintext URL/token is imported into the vault on first read, then deleted", async () => {
+test("clearLegacyN8nLocalStorage deletes a pre-vault-migration plaintext webhook URL/token, and any leftover provisioning keys", () => {
+  // Regression: `migrateLegacyN8nSettings` used to be the only code that ever
+  // deleted these — it is gone along with the whole vault-backed webhook
+  // feature, so nothing else in the app still cleans up a plaintext token
+  // left over from before 2026-09-08.
   localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/legacy");
   localStorage.setItem("lavega.n8nInvoiceToken", "legacy-tok");
-  const vault = fakeVault();
-  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/legacy");
-  expect(await getN8nInvoiceToken(vault)).toBe("legacy-tok");
+  localStorage.setItem("lavega.n8nBaseUrl", "https://n8n.example");
+  localStorage.setItem("lavega.n8nApiKey", "n8n-api-key");
+  clearLegacyN8nLocalStorage();
   expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
   expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
-  // Idempotent: a second read finds nothing left to migrate and keeps the value.
-  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/legacy");
+  expect(localStorage.getItem("lavega.n8nBaseUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nApiKey")).toBeNull();
+  // Idempotent: a second call with nothing left to clean up is a no-op, not a throw.
+  expect(() => clearLegacyN8nLocalStorage()).not.toThrow();
 });
 
 test("an unreadable currency stays empty and blocks the row — a USD invoice is never booked as euros", () => {
@@ -288,6 +276,42 @@ test("fetchQueue hands the notices through", async () => {
   const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
   const out = await fetchQueue(impl);
   expect(out.kind === "ok" && out.notices).toHaveLength(1);
+});
+
+/* ── het doorstuuradres: lezen en zetten ───────────────────────────────── */
+
+test("fetchForwardAddress reads a localPart the server already has", async () => {
+  const { impl } = fakeFetch(200, { localPart: "facturen" });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "ok", localPart: "facturen" });
+});
+
+test("fetchForwardAddress reads null when no address is set yet", async () => {
+  const { impl } = fakeFetch(200, { localPart: null });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "ok", localPart: null });
+});
+
+test("fetchForwardAddress maps a network failure to its own outcome", async () => {
+  const { impl } = fakeFetch(200, {}, { throws: true });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "network" });
+});
+
+test("recordForwardAddress: 409 means the local part is already taken", async () => {
+  const { impl } = fakeFetch(409, {});
+  expect(await recordForwardAddress("facturen", impl)).toEqual({ kind: "taken" });
+});
+
+test("recordForwardAddress: 400 means the local part is invalid", async () => {
+  const { impl } = fakeFetch(400, {});
+  expect(await recordForwardAddress("!!!", impl)).toEqual({ kind: "invalid" });
+});
+
+test("recordForwardAddress returns the stored localPart on success", async () => {
+  const { impl, calls } = fakeFetch(200, { localPart: "facturen" });
+  expect(await recordForwardAddress("facturen", impl)).toEqual({
+    kind: "stored",
+    localPart: "facturen",
+  });
+  expect(calls[0].url).toBe(`${API_BASE}/api/n8n/forward-address`);
 });
 
 /* ── Herkomst en de grens van wat zichzelf mag boeken ──────────────────────
@@ -512,19 +536,6 @@ test("de poort gaat niet open van een geldige DKIM alleen", () => {
     { entityChoices: [], defaultEntity: "Prive" },
   );
   expect(d.book).toBe(false);
-});
-
-test("a legacy n8n API key is deleted, not carried into the vault", async () => {
-  localStorage.setItem("lavega.n8nApiKey", "n8n-api-key");
-  localStorage.setItem("lavega.n8nBaseUrl", "https://n8n.example");
-  localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/q");
-  const vault = fakeVault();
-  const settings = await getN8nSettings(vault);
-  expect(settings.invoiceUrl).toBe("https://n8n.example/webhook/q");
-  expect(settings.apiKey).toBeUndefined();
-  expect(settings.baseUrl).toBeUndefined();
-  expect(localStorage.getItem("lavega.n8nApiKey")).toBeNull();
-  expect(localStorage.getItem("lavega.n8nBaseUrl")).toBeNull();
 });
 
 /* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil moet in de ZIN

@@ -5,6 +5,7 @@ import {
   createAiUsageRepository,
   createBrokerRepository,
   createEbFlowRepository,
+  createN8nForwardingRepository,
   createOpaqueVaultRepository,
   createPreferencesRepository,
   createPriceBarRepository,
@@ -384,6 +385,47 @@ test("credentials sealed under an older key fail loudly, naming the key", async 
   await expect(createBrokerRepository(db, "user-123").get("trading212")).rejects.toThrow(
     /LAVEGA_ENCRYPTION_KEY/,
   );
+});
+
+test("an invalid local part is rejected before any query is issued", async () => {
+  const { db, calls } = fakeDatabase();
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", "Alice 7f3a");
+
+  expect(outcome).toEqual({ status: "invalid" });
+  expect(calls).toEqual([]);
+});
+
+test("a local part is trimmed and lowercased before both the write and the returned value", async () => {
+  const { db, calls } = fakeDatabase();
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", " Ale-7f3a ");
+
+  expect(outcome).toEqual({ status: "stored", localPart: "ale-7f3a" });
+  expect(
+    calls.find((call) => call.sql.includes("INSERT INTO personal.n8n_forwarding"))?.values,
+  ).toEqual(["user-123", "ale-7f3a"]);
+});
+
+test("a local part colliding on the unique index is reported, not thrown", async () => {
+  const client = {
+    query: async (sql: string) => {
+      if (sql.includes("INSERT INTO personal.n8n_forwarding")) {
+        const err = new Error("duplicate key value violates unique constraint") as Error & {
+          code: string;
+        };
+        err.code = "23505";
+        throw err;
+      }
+      return { rows: [] };
+    },
+    release: () => undefined,
+  } as never;
+  const db = { connect: async () => client } as never;
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", "ale-7f3a");
+
+  expect(outcome).toEqual({ status: "taken" });
 });
 
 /* Erasure (GDPR art. 17). A fake that reports rowCount, which the shared

@@ -10,24 +10,20 @@ import { getHandledInvoiceMessageIds } from "./settings";
 import { adminCopy } from "./copy/admin.js";
 import { TOONMEER_CLASS } from "./components/ToonMeer";
 
-/** An in-memory vault, enough for Facturen's n8n block: URL/token and the
- *  auto-booked fallback log (privacy/security review 2026-08-28, M4/L6 — both
- *  moved out of localStorage into the vault 2026-09-08). */
-function fakeVault(seed: { invoiceUrl?: string; invoiceToken?: string } = {}): VaultStorage {
+/** An in-memory vault, enough for Facturen's n8n block: the auto-booked
+ *  fallback log and the pending rows/notices (privacy/security review
+ *  2026-08-28, M4/L6 — both moved out of localStorage into the vault
+ *  2026-09-08). Whether n8n is configured is no longer a vault field — the
+ *  server answers that via GET /api/n8n/forward-address, which the fetchImpl
+ *  fixtures below simulate directly (see `localPart` on `serving` and its
+ *  siblings). */
+function fakeVault(): VaultStorage {
   const state = {
-    settings: { invoiceUrl: seed.invoiceUrl, invoiceToken: seed.invoiceToken } as Record<
-      string,
-      string | undefined
-    >,
     autoBooked: [] as N8nAutoBooked[],
     pendingInvoices: [] as unknown[],
     pendingNotices: [] as unknown[],
   };
   return {
-    getN8nSettings: async () => ({ ...state.settings }),
-    putN8nSettings: async (s: Record<string, string | undefined>) => {
-      state.settings = { ...s };
-    },
     getAutoBookedInvoices: async () => [...state.autoBooked],
     putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
       state.autoBooked = [...list];
@@ -73,10 +69,7 @@ beforeEach(() => {
   localStorage.clear();
   document.cookie = "lavega_locale=nl; Path=/";
   saved = [];
-  vault = fakeVault({
-    invoiceUrl: "https://n8n.example/webhook/lavega-facturen",
-    invoiceToken: "sekret",
-  });
+  vault = fakeVault();
 });
 
 afterEach(() => {
@@ -87,11 +80,24 @@ afterEach(() => {
   document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
-/** Serves `bodies[n]` on the n-th call — the real webhook empties its queue, so
- *  a second fetch legitimately returns something different. */
-function serving(bodies: unknown[]) {
+/** Every fetchImpl fixture below is shared between the queue fetch AND the
+ *  auto-poll's forward-address probe (Facturen.tsx's `configured()`), because
+ *  both now go through the same injected `fetchImpl`. Route on the request URL
+ *  so the probe never advances a queue-only call counter or body sequence. */
+function urlOf(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+}
+
+/** Serves `bodies[n]` on the n-th QUEUE call — the real webhook empties its
+ *  queue, so a second fetch legitimately returns something different. Answers
+ *  the forward-address probe separately, with `localPart` (a configured
+ *  address by default), never counting it as a queue call. */
+function serving(bodies: unknown[], localPart: string | null = "ale") {
   let call = 0;
-  return (async () => {
+  return (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     const body = bodies[Math.min(call++, bodies.length - 1)];
     return { ok: true, status: 200, json: async () => body };
   }) as unknown as typeof fetch;
@@ -386,8 +392,14 @@ test("without the server configured nothing is fetched successfully, and it says
   // longer gates it (docs/adr/0006-invoice-queue-server-proxy.md). Whether
   // the queue is configured is the SERVER's answer (503), not a client-side
   // read of now-vestigial vault fields.
+  // `called` must count only the QUEUE request this test is about — the
+  // auto-poll's forward-address probe also fires on mount (same injected
+  // fetchImpl) and is routed away here so it can't inflate this count.
   let called = 0;
-  const notConfigured = (async () => {
+  const notConfigured = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart: null }) };
+    }
     called++;
     return { ok: false, status: 503, json: async () => ({ error: "not configured" }) };
   }) as unknown as typeof fetch;
@@ -447,14 +459,19 @@ test("Gedaan files the notice as handled so the hourly re-scan can't put it back
  * begon vóór een beslissing zou die beslissing kunnen terugdraaien. */
 
 /** A fetch whose response the test decides when to deliver, so a second caller
- *  can arrive while the first is still in flight. */
-function deferredFetch() {
+ *  can arrive while the first is still in flight. `calls` counts QUEUE calls
+ *  only — the forward-address probe is answered immediately and separately,
+ *  from `localPart`, so it can't itself hang on `deliver`. */
+function deferredFetch(localPart: string | null = "ale") {
   let deliver: (body: unknown) => void = () => {};
   const pending = new Promise<unknown>((resolve) => {
     deliver = resolve;
   });
   let calls = 0;
-  const fetchImpl = (async () => {
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     calls++;
     const body = await pending;
     return { ok: true, status: 200, json: async () => body };
@@ -463,14 +480,18 @@ function deferredFetch() {
 }
 
 /** Serves the first body at once and then hands over to a deferred second call —
- *  the shape needed to decide on a row WHILE a later pull is in flight. */
-function servingThenDeferred(first: unknown) {
+ *  the shape needed to decide on a row WHILE a later pull is in flight. Same
+ *  forward-address routing as `deferredFetch`: the probe never counts as call 1. */
+function servingThenDeferred(first: unknown, localPart: string | null = "ale") {
   let deliver: (body: unknown) => void = () => {};
   const later = new Promise<unknown>((resolve) => {
     deliver = resolve;
   });
   let calls = 0;
-  const fetchImpl = (async () => {
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     calls++;
     const body = calls === 1 ? first : await later;
     return { ok: true, status: 200, json: async () => body };
@@ -523,12 +544,12 @@ test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij in
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
 });
 
-test("zonder URL en token wordt er bij het openen niets opgehaald", async () => {
-  const { fetchImpl, calls } = deferredFetch();
+test("zonder een adres bij n8n wordt er bij het openen niets opgehaald", async () => {
+  const { fetchImpl, calls } = deferredFetch(null);
   render(fetchImpl, [], [], ["BV1"], fakeVault());
   await flush();
-  // Geen verzoek, en dus ook geen rode melding op een scherm waar hij hem niet
-  // kan oplossen — de knop "Koppelingen instellen" staat er wel.
+  // Geen wachtrij-verzoek, en dus ook geen rode melding op een scherm waar hij
+  // hem niet kan oplossen — de knop "Koppelingen instellen" staat er wel.
   expect(calls()).toBe(0);
 });
 

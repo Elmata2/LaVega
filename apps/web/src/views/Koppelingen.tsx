@@ -1,131 +1,30 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { VaultStorage } from "@lavega/adapters";
+import { useEffect, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
-import { adminCopy, type CopySpan } from "../copy/admin.js";
+import { adminCopy } from "../copy/admin.js";
 import {
-  getN8nSettings,
-  setN8nSettings,
   getInvoiceForwardAddress,
   ensureInvoiceForwardAddress,
   setInvoiceForwardAddress,
   SUGGESTED_INVOICE_FORWARD_ADDRESS,
-  DEFAULT_N8N_INVOICE_URL,
 } from "../settings";
+import { fetchForwardAddress, recordForwardAddress } from "../n8n.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 
-/* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
+/* Koppelingen — één blok: het doorstuuradres voor facturen.
  *
- * Hier stonden er drie. Weg zijn "Verbind met n8n" (LaVega zette de workflow, het
- * token en de webhook zelf klaar via de n8n-API) en het doorstuuradres. Beide
- * waren OPZETHULP: eenmalig werk dat je in n8n zelf ook kunt doen, met een
- * CORS-uitleg, een API-sleutel en een provisioning-verslag eromheen die het
- * scherm vulden zonder dat er iets aan te zetten viel. Wat overblijft is het
- * paar dat Facturen élke keer nodig heeft — Facturen leest getN8nInvoiceUrl() en
- * getN8nInvoiceToken() en haalt daarmee de wachtrij op. Dat is de reden dat dit
- * blok blijft en de andere twee niet: zonder dit paar werkt de factuurketen niet.
- *
- * Beide waarden staan in de versleutelde kluis (net als een broker-credential),
- * niet in localStorage: alleen bereikbaar terwijl de kluis ontgrendeld is, en
- * nooit naar de LaVega-server. Zolang `storage` (nog) niet is doorgegeven staat
- * dit blok uit — zie de prop hieronder. */
-
-/** The eye. Drawn inline: an icon fetched from anywhere would tell that server
- *  the owner opened his bank-integration screen. */
-function EyeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z" />
-      <circle cx="12" cy="12" r="2.6" />
-    </svg>
-  );
-}
-
-type InfoKey = "koppeling" | "url" | "token";
-
-function renderSpans(spans: readonly CopySpan[], keyPrefix = ""): ReactNode[] {
-  return spans.map((s, i) => {
-    const key = `${keyPrefix}${i}`;
-    if (s.mark === "em") return <em key={key}>{s.text}</em>;
-    if (s.mark === "strong") return <strong key={key}>{s.text}</strong>;
-    if (s.mark === "code") return <code key={key}>{s.text}</code>;
-    return s.text;
-  });
-}
-
-function renderParagraphSpans(paragraphs: readonly (readonly CopySpan[])[]): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  paragraphs.forEach((spans, i) => {
-    if (i > 0) {
-      nodes.push(<br key={`br-a-${i}`} />);
-      nodes.push(<br key={`br-b-${i}`} />);
-    }
-    nodes.push(...renderSpans(spans, `p${i}-`));
-  });
-  return nodes;
-}
-
-/** The eye beside a value. A button only — the panel it opens is rendered where
- *  the layout wants it, so a heading never has to contain a paragraph. */
-function InfoEye({
-  id,
-  prefix,
-  subject,
-  open,
-  onToggle,
-}: {
-  id: InfoKey;
-  prefix: string;
-  subject: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const label = `${prefix} ${subject}`;
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center justify-center w-[24px] h-[24px] p-0 align-middle rounded-[50%] border border-line bg-surface-2 text-muted cursor-pointer hover:text-ink hover:border-accent aria-expanded:text-ink aria-expanded:border-accent"
-      aria-label={label}
-      title={label}
-      aria-expanded={open}
-      aria-controls={`${id}-uitleg`}
-      onClick={onToggle}
-    >
-      <EyeIcon />
-    </button>
-  );
-}
-
-function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
-  return (
-    <p
-      className="mt-3 mb-0 py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem] [&_strong]:text-ink [&_code]:text-ink"
-      id={`${id}-uitleg`}
-    >
-      {children}
-    </p>
-  );
-}
+ * Hier stond ook het n8n-webhook-paar (URL + token). Dat is weg: de server
+ * bewaart nu zelf welk n8n hij aanroept, en dit scherm hoeft dat paar niet
+ * meer te tonen of op te slaan. Wat overblijft is het doorstuuradres — de
+ * LOKALE kant (typen, suggestie, genereren, kopiëren, in localStorage) en de
+ * SERVER-kant eronder: wat `/api/n8n/forward-address` daadwerkelijk heeft
+ * opgeslagen, en de knop die dat expliciet, met een tussenstap, zet. */
 
 type KoppelingenProps = {
-  /** The unlocked vault. URL/token now live there (M4/L6 of the 2026-08-28
-   *  review), so until this is wired the n8n block reads/saves nothing rather
-   *  than falling back to the plaintext localStorage it replaced. */
-  storage?: VaultStorage;
+  fetchImpl?: typeof fetch;
 };
 
-export default function Koppelingen({ storage }: KoppelingenProps) {
+export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].koppelingen;
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
@@ -136,36 +35,32 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
   useEffect(() => () => {
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
   }, []);
-  /* DEFAULT, NIET CONSTANTE: het veld begint gevuld met zijn eigen productie-
-   * webhook (URL only — nooit het token, zie DEFAULT_N8N_INVOICE_URL in
-   * settings.ts) zodat hij niet blanco begint. Zodra de kluis iets anders
-   * teruggeeft wint die waarde, zowel hier als in de effect hieronder. */
-  const [url, setUrl] = useState(DEFAULT_N8N_INVOICE_URL);
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  // One open explanation at a time: two panels at once and the fields are
-  // buried again, which is the thing this screen was supposed to stop doing.
-  const [info, setInfo] = useState<InfoKey | null>(null);
-  const toggle = (key: InfoKey) => () => setInfo((cur) => (cur === key ? null : key));
 
+  const [serverState, setServerState] = useState<"loading" | "ok" | "error">("loading");
+  const [serverLocalPart, setServerLocalPart] = useState<string | null>(null);
+  const [confirmRecord, setConfirmRecord] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordNote, setRecordNote] = useState<string | null>(null);
+
+  /* READ ONLY. Deze effect POST't nooit — het schrijft alleen naar de server
+   * op een expliciete klik door `doRecord`, nooit hierdoor, ongeacht wat
+   * localStorage op dat moment bevat. */
   useEffect(() => {
-    if (!storage) return;
     let cancelled = false;
-    void getN8nSettings(storage).then(
-      (settings) => {
-        if (cancelled) return;
-        setUrl(settings.invoiceUrl || DEFAULT_N8N_INVOICE_URL);
-        setToken(settings.invoiceToken ?? "");
-      },
-      () => {
-        if (!cancelled) setNote(c.status.vaultReadFailed);
-      },
-    );
+    void fetchForwardAddress(fetchImpl).then((outcome) => {
+      if (cancelled) return;
+      if (outcome.kind === "ok") {
+        setServerLocalPart(outcome.localPart);
+        setServerState("ok");
+      } else {
+        setServerState("error");
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [storage, c.status.vaultReadFailed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleUseSuggestedAddress() {
     setInvoiceForwardAddress(SUGGESTED_INVOICE_FORWARD_ADDRESS);
@@ -187,36 +82,37 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
     }
   }
 
-  const urlLooksWrong = url.trim().length > 0 && !/^https?:\/\//i.test(url.trim());
-
-  async function handleSave() {
-    if (!storage) {
-      setNote(c.status.notLinkedOnSave);
-      return;
-    }
-    try {
-      await setN8nSettings(storage, { invoiceUrl: url, invoiceToken: token });
-    } catch {
-      setNote(c.status.saveFailed);
-      return;
-    }
-    setNote(url.trim() && token.trim() ? c.status.savedComplete : c.status.savedIncomplete);
+  /* The server stores only the LOCAL PART (migration 0008) — never a domain.
+   * `INVOICE_FORWARD_DOMAIN` is this app's own assumed default, not a fact
+   * about what any given user actually typed; `settings.ts`'s FORWARD_PATTERN
+   * deliberately accepts any domain Cloudflare might route (see its own
+   * commentary). So a recorded local part is only safe to show as a full
+   * address when it matches the CURRENT local draft — the one place we still
+   * know the real domain the user confirmed. When it doesn't match (a
+   * different browser, or a draft typed after recording), showing a
+   * fabricated "@invoices.lavega.dev" would assert a domain nobody confirmed;
+   * the bare local part is the honest thing to show instead. */
+  function displayAddress(localPart: string): string {
+    const draftLocalPart = forwardAddress.includes("@") ? forwardAddress.split("@")[0] : "";
+    return draftLocalPart === localPart ? forwardAddress : localPart;
   }
 
-  async function handleClear() {
-    setUrl("");
-    setToken("");
-    if (!storage) {
-      setNote(c.status.notLinkedOnClear);
+  async function doRecord() {
+    setRecording(true);
+    setRecordNote(null);
+    const localPart = forwardAddress.split("@")[0];
+    const outcome = await recordForwardAddress(localPart, fetchImpl);
+    setRecording(false);
+    setConfirmRecord(false);
+    if (outcome.kind === "stored") {
+      setServerLocalPart(outcome.localPart);
+      setRecordNote(c.forwardAddress.server.recorded(displayAddress(outcome.localPart)));
       return;
     }
-    try {
-      await setN8nSettings(storage, { invoiceUrl: "", invoiceToken: "" });
-    } catch {
-      setNote(c.status.clearFailed);
-      return;
-    }
-    setNote(c.status.cleared);
+    if (outcome.kind === "taken") return setRecordNote(c.forwardAddress.server.taken);
+    if (outcome.kind === "invalid") return setRecordNote(c.forwardAddress.server.invalid);
+    if (outcome.kind === "unauthorized") return setRecordNote(c.forwardAddress.server.unauthorized);
+    setRecordNote(c.forwardAddress.server.recordFailed);
   }
 
   return (
@@ -324,81 +220,43 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
           </div>
         </div>
       )}
-      <CardHeader>
-        <h2>{c.n8nLink.heading}</h2>
-        <span className="eyebrow">
-          {c.n8nLink.eyebrow}
-          <InfoEye
-            id="koppeling"
-            prefix={c.n8nLink.explain.prefix}
-            subject={c.n8nLink.explain.linkSubject}
-            open={info === "koppeling"}
-            onToggle={toggle("koppeling")}
-          />
-        </span>
-      </CardHeader>
-      <p className="cell-sub">{renderSpans(c.n8nLink.intro)}</p>
 
-      {info === "koppeling" && (
-        <InfoNote id="koppeling">{renderParagraphSpans(c.n8nLink.info.link)}</InfoNote>
+      {/* HET SERVER-ADRES, ERONDER. Dit blok leest wat de server daadwerkelijk
+       * gebruikt om de wachtrij mee op te halen — dat kan afwijken van het
+       * lokale concept hierboven totdat hij expliciet op "Gebruik dit adres"
+       * klikt en dat bevestigt. Zie doRecord: alleen die klik schrijft. */}
+      {serverState === "loading" && <p className="cell-sub">{c.forwardAddress.server.loading}</p>}
+      {serverState === "error" && (
+        <p className="cell-sub text-neg">{c.forwardAddress.server.readFailed}</p>
       )}
-
-      <div className="facturen-form">
-        <label>
-          {c.n8nLink.form.urlLabel}{" "}
-          <input
-            value={url}
-            aria-label={c.n8nLink.form.urlAriaLabel}
-            placeholder={c.n8nLink.form.urlPlaceholder}
-            style={{ minWidth: "22rem" }}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </label>
-        <InfoEye
-          id="url"
-          prefix={c.n8nLink.explain.prefix}
-          subject={c.n8nLink.explain.urlSubject}
-          open={info === "url"}
-          onToggle={toggle("url")}
-        />{" "}
-        <label>
-          {c.n8nLink.form.tokenLabel}{" "}
-          <input
-            value={token}
-            type={showToken ? "text" : "password"}
-            aria-label={c.n8nLink.form.tokenAriaLabel}
-            placeholder={c.n8nLink.form.tokenPlaceholder}
-            style={{ minWidth: "16rem" }}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </label>
-        <InfoEye
-          id="token"
-          prefix={c.n8nLink.explain.prefix}
-          subject={c.n8nLink.explain.tokenSubject}
-          open={info === "token"}
-          onToggle={toggle("token")}
-        />{" "}
-        <label>
-          <input
-            type="checkbox"
-            checked={showToken}
-            aria-label={c.n8nLink.form.showTokenAriaLabel}
-            onChange={(e) => setShowToken(e.target.checked)}
-          />{" "}
-          {c.n8nLink.form.showTokenLabel}
-        </label>{" "}
-        <Button variant="primary" onClick={handleSave}>
-          {c.n8nLink.form.saveButton}
-        </Button>{" "}
-        <Button onClick={handleClear}>{c.n8nLink.form.clearButton}</Button>
-      </div>
-
-      {info === "url" && <InfoNote id="url">{renderSpans(c.n8nLink.info.url)}</InfoNote>}
-      {info === "token" && <InfoNote id="token">{renderSpans(c.n8nLink.info.token)}</InfoNote>}
-
-      {urlLooksWrong && <p className="cell-sub text-neg">{c.n8nLink.urlWarning}</p>}
-      {note && <p className="cell-sub">{note}</p>}
+      {serverState === "ok" && (
+        <p className="cell-sub">
+          {serverLocalPart
+            ? c.forwardAddress.server.active(displayAddress(serverLocalPart))
+            : c.forwardAddress.server.none}
+        </p>
+      )}
+      {forwardAddress && !confirmRecord && (
+        <p>
+          <Button onClick={() => setConfirmRecord(true)}>{c.forwardAddress.server.recordButton}</Button>
+        </p>
+      )}
+      {forwardAddress && confirmRecord && (
+        <>
+          <p role="alert" className="text-warn">
+            {c.forwardAddress.server.confirmWarning(forwardAddress)}
+          </p>
+          <p>
+            <Button variant="primary" disabled={recording} onClick={() => void doRecord()}>
+              {recording ? c.forwardAddress.server.recording : c.forwardAddress.server.confirmButton}
+            </Button>{" "}
+            <Button disabled={recording} onClick={() => setConfirmRecord(false)}>
+              {c.forwardAddress.server.cancelButton}
+            </Button>
+          </p>
+        </>
+      )}
+      {recordNote && <p className="cell-sub">{recordNote}</p>}
     </Card>
   );
 }

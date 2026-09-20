@@ -15,23 +15,17 @@ import type { N8nNotice, PendingInvoice } from "./n8n";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Same shape as facturen-n8n.test.tsx's fakeVault, extended with the
- *  pending-rows fields this file exercises. */
-function fakeVault(seed: { invoiceUrl?: string; invoiceToken?: string } = {}): VaultStorage {
+/** Same shape as facturen-n8n.test.tsx's fakeVault: the auto-booked fallback
+ *  log and the pending rows/notices this file exercises. Whether n8n is
+ *  configured is no longer a vault field — the server answers that via GET
+ *  /api/n8n/forward-address, which `serving` below simulates directly. */
+function fakeVault(): VaultStorage {
   const state = {
-    settings: { invoiceUrl: seed.invoiceUrl, invoiceToken: seed.invoiceToken } as Record<
-      string,
-      string | undefined
-    >,
     autoBooked: [] as N8nAutoBooked[],
     pendingInvoices: [] as unknown[],
     pendingNotices: [] as unknown[],
   };
   return {
-    getN8nSettings: async () => ({ ...state.settings }),
-    putN8nSettings: async (s: Record<string, string | undefined>) => {
-      state.settings = { ...s };
-    },
     getAutoBookedInvoices: async () => [...state.autoBooked],
     putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
       state.autoBooked = [...list];
@@ -77,11 +71,23 @@ const NOTICE_A = {
   mailUrl: "https://mail.google.com/mail/u/0/#all/msg-notice-a",
 };
 
-/** Serves `bodies[n]` on the n-th call, like the real webhook draining its
- *  queue on every response. */
-function serving(bodies: unknown[]) {
+/** Facturen's auto-poll shares this fetchImpl between the queue fetch and its
+ *  forward-address probe (`configured()`). Route on the request URL so the
+ *  probe never advances the queue's call counter or body sequence. */
+function urlOf(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+}
+
+/** Serves `bodies[n]` on the n-th QUEUE call, like the real webhook draining
+ *  its queue on every response. Answers the forward-address probe separately,
+ *  with `localPart` (a configured address by default), never counting it as a
+ *  queue call. */
+function serving(bodies: unknown[], localPart: string | null = "ale") {
   let call = 0;
-  return (async () => {
+  return (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     const body = bodies[Math.min(call++, bodies.length - 1)];
     return { ok: true, status: 200, json: async () => body };
   }) as unknown as typeof fetch;
@@ -228,7 +234,7 @@ async function clickAsync(el: Element) {
 }
 
 test("a fetched row and notice survive the tab closing entirely", async () => {
-  const vault = fakeVault({ invoiceUrl: "https://n8n.example/webhook", invoiceToken: "sekret" });
+  const vault = fakeVault();
 
   mount(<Harness fetchImpl={serving([{ invoices: [ROW_A], notices: [NOTICE_A] }])} storage={vault} invoices={[]} txs={[]} />);
   await clickAsync(byText("button", "Ophalen uit n8n"));
@@ -251,7 +257,7 @@ test("a fetched row and notice survive the tab closing entirely", async () => {
 });
 
 test("a confirmed row does not come back after a fresh mount, and leaves the vault", async () => {
-  const vault = fakeVault({ invoiceUrl: "https://n8n.example/webhook", invoiceToken: "sekret" });
+  const vault = fakeVault();
 
   mount(<Harness fetchImpl={serving([{ invoices: [ROW_A, ROW_B] }])} storage={vault} invoices={[]} txs={[]} />);
   await clickAsync(byText("button", "Ophalen uit n8n"));

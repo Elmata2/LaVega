@@ -22,17 +22,19 @@ Invoice rows now pass through LaVega's server on the way to the browser instead 
 
 `apps/web/src/n8n.ts`'s `fetchQueue` lost its `url`, `token`, and `key` parameters. It takes only an injectable `fetchImpl` and calls `${API_BASE}/api/n8n/queue`, which carries the session cookie same-origin.
 
-## Not in this change
+## The write path
 
-`Koppelingen.tsx` still shows the webhook URL and token fields it used before. Nothing reads them anymore; `fetchQueue` no longer takes them, and the server proxy never sees them. Removing those fields is a follow-up, not part of this change.
+The read path above shipped with no way for a user to set their own `local_part` — `setLocalPart` existed in `packages/database` with zero callers, and `Koppelingen.tsx` still showed the webhook URL and token fields the read path had already made pointless. Both are closed now.
 
-`apps/server/src/n8n-routes.ts` exposes no way to set a user's `local_part`. `createN8nForwardingRepository`'s `setLocalPart` exists in `packages/database`, ready for a self-serve flow, but assigning a forwarding address today stays an operator action outside the app.
+`setLocalPart` returns `N8nForwardingWrite`, a discriminated union (`{ status: "stored"; localPart: string } | { status: "invalid" } | { status: "taken" }`) rather than throwing, so a taken local part — two users landing on the same n8n partition, the exact failure `personal.n8n_forwarding`'s unique index exists to prevent — comes back as a value the caller must handle instead of an opaque Postgres error the route would otherwise have to pattern-match on a SQLSTATE it doesn't own. `apps/server/src/n8n-routes.ts` gained `GET`/`POST /api/n8n/forward-address`, wired to `getLocalPart`/`setLocalPart` off the caller's own session — the file's one rule (never read a `key` off the request) governs the queue route's `queueKey`, not this: a user setting their own local part via their own session is not the thing that rule forbids. A taken address reaches the browser as 409, invalid as 400, distinct from each other and from the queue route's 502/503 failure modes. The route does no re-validation or re-normalisation of its own; that stays `setLocalPart`'s job, so there is exactly one place the canonical local-part shape is enforced.
+
+`Koppelingen.tsx` lost its webhook URL/token card entirely — nothing has read those fields since the read path shipped, and the vault-backed `getN8nSettings`/`setN8nSettings` family in `apps/web/src/settings.ts` is deleted along with it. What replaced it, in the same forwardAddress card as the pre-existing local-draft address (typed, suggested, or generated — unchanged), is a read of `/api/n8n/forward-address` on mount and an explicit two-step confirm before any write: the screen never POSTs a locally-drafted address just because the server's copy came back empty. `packages/adapters/src/storage/encryptedStorage.ts`'s `VaultStorage.getN8nSettings`/`putN8nSettings` and `packages/core/src/n8nSettings.ts`'s `N8nSettings` type are untouched — they stay live as `.lavega` backup-format primitives for vaults exported before this change, even though nothing in `apps/web/src` calls them anymore.
 
 ## Consequences
 
 A user configures nothing to fetch their invoice queue. The server derives their identity from their session, the same session every other authenticated route already trusts.
 
-The n8n credential lives in one place, the server's environment, instead of in every user's browser vault. That benefit is pending, not delivered: existing vaults still hold a working URL and token, because the Koppelingen fields that store them are removed in the next change, not this one.
+The n8n credential lives in one place, the server's environment, instead of in every user's browser vault. Koppelingen no longer shows the fields that wrote a URL/token into the vault (see "The write path"), but a vault that already holds one from before keeps it — nothing erases the old field, it is simply unread.
 
 ## What it costs
 
