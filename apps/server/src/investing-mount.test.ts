@@ -69,12 +69,12 @@ test("rewriteInvestingRequest strips /investing for static and health paths", ()
   expect(new URL(api.url).pathname).toBe("/api/investing/dashboard");
 });
 
-test("forwardInvesting lazy-loads the investing runtime once", async () => {
+test("forwardInvesting builds an investing runtime per request", async () => {
   const first = await forwardInvesting(new Request("https://lavega.dev/investing/health"));
   const second = await forwardInvesting(new Request("https://lavega.dev/api/investing/dashboard"));
   expect(await first.text()).toBe("path:/health");
   expect(await second.text()).toBe("path:/api/investing/dashboard");
-  expect(createRuntimeAppMock).toHaveBeenCalledTimes(1);
+  expect(createRuntimeAppMock).toHaveBeenCalledTimes(2);
   expect(createDockerFetchMock).toHaveBeenCalledWith(expect.any(Function), investingDist());
 });
 
@@ -167,7 +167,7 @@ test("investing cron runs broker sync then a fresh price slice for each configur
   vi.resetModules();
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
-  createDockerFetchMock.mockImplementationOnce(() => async (request: Request) => {
+  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
     seen.push(`${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`);
     return Response.json({ ok: true });
   });

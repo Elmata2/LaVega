@@ -24,6 +24,7 @@ import {
 } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
 import { apiGuard } from "./apiGuard.js";
+import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;
@@ -75,6 +76,11 @@ export function isStaticAssetPath(pathname: string): boolean {
 }
 
 export const app = new Hono();
+
+/** One Neon WebSocket pool belongs to one completed HTTP request. */
+export async function serverFetch(request: Request): Promise<Response> {
+  return withRuntimeDatabase(async () => await app.fetch(request));
+}
 
 /* The committed catalogue, read once as this module loads — before any request
  * can arrive. Every figure it holds is one the travel block answers from a file
@@ -324,7 +330,7 @@ app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
 if (import.meta.url === `file://${process.argv[1]}`) {
   // Bind 0.0.0.0 so a container host (Railway) can reach it for the health check
   // and public traffic — not just loopback.
-  serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
+  serve({ fetch: serverFetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
     // eslint-disable-next-line no-console
     console.log(`LaVega server listening on 0.0.0.0:${info.port}`);
   });

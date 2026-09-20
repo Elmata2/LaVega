@@ -1,5 +1,6 @@
 import { betterAuth, type Auth } from "better-auth";
-import { createDatabase, type Database } from "@lavega/database";
+import { type Database } from "@lavega/database";
+import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 
 const origin = (host: string | undefined) => (host?.trim() ? `https://${host.trim()}` : null);
 
@@ -38,14 +39,11 @@ export function authTrustedOrigins(): string[] {
   return origins.length ? origins : ["http://localhost:8787"];
 }
 
-let database: Database | null = null;
-let instance: Auth<any> | null = null;
-
 export function getAuth(): Auth<any> | null {
   if (!process.env.DATABASE_URL || !process.env.BETTER_AUTH_SECRET) return null;
-  if (instance) return instance;
-  database ??= createDatabase();
-  instance = betterAuth({
+  const database: Database | null = runtimeDatabase();
+  if (!database) return null;
+  return betterAuth({
     database,
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: authBaseUrl(),
@@ -53,7 +51,6 @@ export function getAuth(): Auth<any> | null {
     ...authOptions(),
     session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
   });
-  return instance;
 }
 
 
