@@ -56,6 +56,7 @@ import {
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
+import { useDatabaseSource } from "./systemOneUsage.js";
 import {
   createDevFixtureBrokerData,
   createDevFixtureFxProvider,
@@ -194,6 +195,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     dashboardCache.invalidate();
   };
   const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
+  /* The request path must not import node:async_hooks, so systemOneUsage is
+   * handed its database source here rather than importing it. See its comment. */
+  useDatabaseSource(runtimeDatabase);
   const database = runtimeDatabase();
   const agentRunStore =
     options.agentRunStore ??

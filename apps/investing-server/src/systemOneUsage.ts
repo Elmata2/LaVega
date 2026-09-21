@@ -1,5 +1,22 @@
-import { createAiUsageRepository } from "@lavega/database";
-import { runtimeDatabase } from "./credentialStore.js";
+import { createAiUsageRepository, type Database } from "@lavega/database";
+
+/* THE DATABASE IS HANDED TO US, NOT FETCHED.
+ *
+ * This used to import the per-request database from ./credentialStore.js,
+ * which put node:async_hooks on the investing-server REQUEST path:
+ * app.ts -> portfolioAgent.ts -> systemOne.ts -> here -> credentialStore.ts.
+ * import-boundaries.test.ts caught it, and it is a real constraint rather than
+ * a style rule: that path has to stay free of Node builtins.
+ *
+ * index.ts is the entry point, where those builtins are fine, and wires this
+ * once at startup. Behaviour is unchanged — the same per-request lookup still
+ * happens, through a reference instead of a static import. Left unset, this
+ * falls back to the same in-memory counters used whenever Neon is absent. */
+let databaseSource: () => Database | null = () => null;
+
+export function useDatabaseSource(source: () => Database | null): void {
+  databaseSource = source;
+}
 
 const INPUT_EUR_CENTS_PER_MILLION = 0.042 * 0.92 * 100;
 const WORST_CASE_CENTS = 1;
@@ -20,7 +37,7 @@ function cap(raw: string | undefined, fallback: number): number {
 
 export async function checkSystemOneBudget(): Promise<SystemOneBudget> {
   const { day, month } = parts();
-  const database = runtimeDatabase();
+  const database = databaseSource();
   const spent = database
     ? await createAiUsageRepository(database).spentCents({ day, month })
     : { dayCents: memory.get(`day:${day}`) ?? 0, monthCents: memory.get(`month:${month}`) ?? 0 };
@@ -38,7 +55,7 @@ export async function recordSystemOneUsage(
 ): Promise<void> {
   const { day, month } = parts();
   const costCents = Math.max(1, Math.ceil((inputTokens / 1_000_000) * INPUT_EUR_CENTS_PER_MILLION));
-  const database = runtimeDatabase();
+  const database = databaseSource();
   if (database) {
     await createAiUsageRepository(database).record({
       day,
