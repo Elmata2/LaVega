@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { app } from "../apps/server/src/index.js";
+import { serverFetch } from "../apps/server/src/index.js";
+import { withRuntimeDatabase } from "../apps/investing-server/src/credentialStore.js";
 
 type VercelRequest = IncomingMessage & { body?: unknown };
 type VercelResponse = ServerResponse & {
@@ -14,19 +15,21 @@ function requestUrl(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const response = await app.fetch(
-    new Request(requestUrl(req), {
-      method: req.method,
-      headers: new Headers(
-        Object.entries(req.headers).flatMap(([key, value]) =>
-          value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
+  await withRuntimeDatabase(async () => {
+    const response = await serverFetch(
+      new Request(requestUrl(req), {
+        method: req.method,
+        headers: new Headers(
+          Object.entries(req.headers).flatMap(([key, value]) =>
+            value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
+          ),
         ),
-      ),
-      body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
-    }),
-  );
+        body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
+      }),
+    );
 
-  res.status(response.status);
-  response.headers.forEach((value, key) => res.setHeader(key, value));
-  res.send(Buffer.from(await response.arrayBuffer()));
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.send(Buffer.from(await response.arrayBuffer()));
+  });
 }

@@ -69,6 +69,7 @@ test("an investing API request is forwarded under the tenant the session named",
 
   for (const path of [
     "/api/investing/dashboard",
+    "/api/investing/health/detail",
     "/api/brokers/sync/status",
     "/api/prices/sync/status",
     "/api/market-data/consent",

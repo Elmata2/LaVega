@@ -957,6 +957,7 @@ function AppOpenSync() {
   }, []);
   useEffect(() => {
     let current = true;
+    const verificationMode = new URLSearchParams(window.location.search).has("verify");
     const prepare = async () => {
       try {
         const response = await fetch("/api/market-data/consent");
@@ -968,6 +969,7 @@ function AppOpenSync() {
           return;
         }
         setConsent("accepted");
+        if (verificationMode) return;
         await runSync(() => current);
       } catch (error) {
         if (current)

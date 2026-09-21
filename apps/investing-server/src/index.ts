@@ -4,6 +4,7 @@ import {
   type BrokerCredentialInput,
   type BrokerHistoryProgress,
   type BrokerSyncProgress,
+  type InvestingHealth,
   type InvestingDashboardReader,
 } from "./app.js";
 import {
@@ -66,15 +67,30 @@ import {
   discoverPriceSyncTargets,
 } from "./priceOrchestrator.js";
 import { readPriceBars } from "./priceReader.js";
+import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 
 export { app };
+export { createDashboardCache } from "./dashboardCache.js";
 
 const LOCAL_TENANT_ID = "local";
 const DASHBOARD_CACHE_TTL_MS = 15_000;
+const TRADING212_HEALTH_MAX_AGE_MS = 26 * 60 * 60 * 1_000;
 
 function environment(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value || undefined;
+}
+
+function trading212SyncHealth(
+  lastSyncedAt: string | null,
+  problem: boolean,
+): InvestingHealth["checks"]["trading212Sync"] {
+  if (problem) return "problem";
+  if (!lastSyncedAt) return "never";
+  const syncedAt = Date.parse(lastSyncedAt);
+  if (!Number.isFinite(syncedAt) || Date.now() - syncedAt > TRADING212_HEALTH_MAX_AGE_MS)
+    return "stale";
+  return "fresh";
 }
 
 type RuntimeCredentialStore = RuntimeCredentialStoreType;
@@ -150,6 +166,7 @@ export type RuntimeAppOptions = {
   marketDataConsentStore?: MarketDataConsentStore;
   agentRunStore?: AgentRunStore;
   runAgent?: PortfolioAgentRunner;
+  dashboardCache?: DashboardCache;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
@@ -171,9 +188,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const fxProvider = devFixtureEnabled
     ? createDevFixtureFxProvider()
     : createFrankfurterFxProvider();
+  const dashboardCache = options.dashboardCache ?? createDashboardCache();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
     priceDataVersion += 1;
+    dashboardCache.invalidate();
   };
   const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
   const database = runtimeDatabase();
@@ -398,10 +417,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         throw error;
       }
     };
-    const dashboardCache = new Map<
-      string,
-      { version: number; storedAt: number; data: InvestingDashboardData }
-    >();
     const dashboardReader = async ({ symbol }: { symbol?: string }) => {
       const refreshProblems: string[] = [];
       try {
@@ -426,11 +441,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ? await options.benchmarkSymbols(tenantId)
         : (await benchmarkSelectionStore.get(tenantId)).symbols;
       const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
-      const cached = dashboardCache.get(cacheKey);
-      if (refreshProblems.length > 0 && cached?.version === version)
-        return { ...cached.data, problems: [...cached.data.problems, ...refreshProblems] };
-      if (cached?.version === version && Date.now() - cached.storedAt < DASHBOARD_CACHE_TTL_MS)
-        return cached.data;
+      const cached = dashboardCache.get({ tenantId, key: cacheKey });
+      if (cached) {
+        if (refreshProblems.length > 0)
+          return { ...cached, problems: [...cached.problems, ...refreshProblems] };
+        return cached;
+      }
+      const buildDashboard = async () => {
       const symbols = [
         ...new Set([
           ...positions.map((position) => position.symbol),
@@ -459,7 +476,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           .getHistoricalRates(historyFrom, today)
           .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
       ]);
-      const data = buildInvestingDashboard({
+      return buildInvestingDashboard({
         positions,
         trades,
         dividends,
@@ -485,14 +502,85 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ],
         dataVersion: version,
       });
-      if (refreshProblems.length === 0)
-        dashboardCache.set(cacheKey, { version, storedAt: Date.now(), data });
-      return data;
+      };
+      return refreshProblems.length > 0
+        ? buildDashboard()
+        : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
+    };
+    const healthCheck = async (): Promise<InvestingHealth> => {
+      const checks: InvestingHealth["checks"] = {
+        database: database ? "ok" : "not-configured",
+        migrationLedger: database ? "ok" : "not-applicable",
+        vault: "empty",
+        trading212Credentials: "missing",
+        trading212Sync: "never",
+        snapshot: "empty",
+      };
+      const trading212 = { lastSyncedAt: null as string | null, positions: 0 };
+
+      if (database) {
+        try {
+          const ledger = await database.query<{ ledger: string | null }>(
+            "SELECT to_regclass('public.schema_migrations') AS ledger",
+          );
+          if (!ledger.rows[0]?.ledger) checks.migrationLedger = "down";
+        } catch {
+          return {
+            status: "down",
+            storage: "neon",
+            checks: {
+              ...checks,
+              database: "down",
+              migrationLedger: "down",
+              vault: "down",
+              trading212Credentials: "down",
+              trading212Sync: "down",
+              snapshot: "down",
+            },
+            trading212,
+          };
+        }
+      }
+
+      try {
+        const vaultStatus = await credentials.status();
+        checks.vault = vaultStatus === "unlocked" ? "ok" : vaultStatus;
+        const configured =
+          vaultStatus === "unlocked" &&
+          (await credentials.getCredentials(tenantId, "trading212")) !== null;
+        checks.trading212Credentials = configured ? "configured" : "missing";
+        if (configured) {
+          await restoreBrokerData();
+          const snapshot = brokerData.snapshot().trading212;
+          trading212.positions = snapshot?.positions.length ?? 0;
+          checks.snapshot = snapshot ? "loaded" : "empty";
+          const state = await syncStateStore.get("trading212");
+          const progress = await syncStateStore.progress("trading212");
+          trading212.lastSyncedAt = state.lastSyncedAt;
+          checks.trading212Sync = trading212SyncHealth(
+            state.lastSyncedAt,
+            progress?.status === "problem",
+          );
+        }
+      } catch {
+        checks.vault = "down";
+        checks.trading212Credentials = "down";
+        checks.trading212Sync = "down";
+        checks.snapshot = "down";
+      }
+
+      const status = Object.values(checks).some((value) => value === "down")
+        ? "down"
+        : checks.trading212Credentials === "configured" &&
+            checks.trading212Sync === "fresh" &&
+            checks.snapshot === "loaded" &&
+            checks.migrationLedger !== "down"
+          ? "ok"
+          : "degraded";
+      return { status, storage: database ? "neon" : "file", checks, trading212 };
     };
     const agentInFlight = new Map<string, Promise<AgentRunRecord>>();
-    const runPortfolioAgentOnce = async (
-      model?: string,
-    ): Promise<AgentRunRecord> => {
+    const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> => {
       const runKey = model?.trim() ?? "";
       const inFlight = agentInFlight.get(runKey);
       if (inFlight) return inFlight;
@@ -551,6 +639,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return unlocked;
       },
       dashboardReader,
+      healthCheck,
       priceSyncTargets: async () => {
         const { positions, trades } = brokerData.read();
         const benchmarkSymbols = options.benchmarkSymbols
@@ -586,12 +675,17 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
+    healthCheck: async () => (await currentRuntime()).healthCheck(),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean, deadlineMs?: number) =>
-    (await currentRuntime()).brokerSync(force, deadlineMs);
+  const brokerSync = async (force: boolean, deadlineMs?: number) => {
+    const tenantId = await resolveTenantId();
+    const result = await (await tenantRuntime(tenantId)).brokerSync(force, deadlineMs);
+    dashboardCache.invalidate(tenantId);
+    return result;
+  };
   const dashboardReader: InvestingDashboardReader = async ({ symbol }) =>
     (await currentRuntime()).dashboardReader({ symbol });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
@@ -600,13 +694,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
-        agents: listPortfolioAgents().map(({ instructions: _instructions, criteria: _criteria, ...agent }) => agent),
+        agents: listPortfolioAgents().map(
+          ({ instructions: _instructions, criteria: _criteria, ...agent }) => agent,
+        ),
       }),
     );
     honoApp.post("/api/agents/portfolio/run", async (c) => {
-      const body: { model?: unknown } = await c.req
-        .json<{ model?: unknown }>()
-        .catch(() => ({}));
+      const body: { model?: unknown } = await c.req.json<{ model?: unknown }>().catch(() => ({}));
       const model =
         typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
       try {

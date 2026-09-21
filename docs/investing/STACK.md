@@ -67,6 +67,8 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Current Vercel bridge:** the repository ships a Build Output API deployment that registers `GET /api/cron/investing-sync` daily at `0 4 * * *` UTC. Vercel calls it only on production deployments and sends `Authorization: Bearer $CRON_SECRET`; the route refuses missing or wrong secrets. With Better Auth enabled, the cron route cannot infer a browser session, so `INVESTING_CRON_TENANT_IDS` must list tenant ids explicitly. Each pass runs broker sync and one bounded price slice per tenant; the persisted price row lets later cron or dashboard calls resume.
 
+**Neon request lifecycle:** Neon `Pool` uses WebSockets. On Vercel, create, use, and close each pool inside one request. Do not retain a pool, an auth instance backed by one, or an investing runtime that captures one across requests. A retained socket can become stale after Vercel freezes an invocation; then every Neon-backed route waits until the host's 300-second deadline. One request can use many short tenant transactions on its own pool. This invariant was violated by module-level pool/runtime caches and caused a production defect on 20 September 2026; request-scoped lifecycle now enforces it.
+
 **Hosted tier: Cloudflare Workers.**
 
 - Cron Triggers are native on the free tier, not plan-gated — unlike Vercel, which caps Function duration at 10s on Hobby and needs Pro for anything past that.

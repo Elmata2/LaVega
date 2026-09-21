@@ -14,7 +14,14 @@ import {
   withInvestingTenant,
 } from "./investing-mount.js";
 
-const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } =
+const {
+  createRuntimeAppMock,
+  createDockerFetchMock,
+  createDashboardCacheMock,
+  dashboardCacheMock,
+  getAuthMock,
+  verifiedSessionMock,
+} =
   vi.hoisted(() => ({
     createRuntimeAppMock: vi.fn(async () => ({
       routes: [
@@ -32,11 +39,22 @@ const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessio
       (_fetch: unknown, _root: string) => async (request: Request) =>
         new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
     ),
+    dashboardCacheMock: {
+      get: vi.fn(),
+      set: vi.fn(),
+      load: vi.fn(),
+      invalidate: vi.fn(),
+    },
+    createDashboardCacheMock: vi.fn(),
     getAuthMock: vi.fn(() => null as unknown),
     verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
   }));
 
 vi.mock("@lavega/investing-server/src/index.js", () => ({
+  createDashboardCache: () => {
+    createDashboardCacheMock();
+    return dashboardCacheMock;
+  },
   createRuntimeApp: createRuntimeAppMock,
 }));
 vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
@@ -69,13 +87,21 @@ test("rewriteInvestingRequest strips /investing for static and health paths", ()
   expect(new URL(api.url).pathname).toBe("/api/investing/dashboard");
 });
 
-test("forwardInvesting lazy-loads the investing runtime once", async () => {
+test("forwardInvesting builds an investing runtime per request", async () => {
   const first = await forwardInvesting(new Request("https://lavega.dev/investing/health"));
   const second = await forwardInvesting(new Request("https://lavega.dev/api/investing/dashboard"));
   expect(await first.text()).toBe("path:/health");
   expect(await second.text()).toBe("path:/api/investing/dashboard");
-  expect(createRuntimeAppMock).toHaveBeenCalledTimes(1);
+  expect(createRuntimeAppMock).toHaveBeenCalledTimes(2);
   expect(createDockerFetchMock).toHaveBeenCalledWith(expect.any(Function), investingDist());
+  expect(createRuntimeAppMock).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ dashboardCache: dashboardCacheMock }),
+  );
+  expect(createRuntimeAppMock).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ dashboardCache: dashboardCacheMock }),
+  );
 });
 
 test("shouldMountInvesting is false when dist is missing", () => {
@@ -167,7 +193,7 @@ test("investing cron runs broker sync then a fresh price slice for each configur
   vi.resetModules();
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
-  createDockerFetchMock.mockImplementationOnce(() => async (request: Request) => {
+  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
     seen.push(`${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`);
     return Response.json({ ok: true });
   });

@@ -3,7 +3,10 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LOCAL_TENANT_ID } from "@lavega/core";
-import { createRuntimeApp } from "@lavega/investing-server/src/index.js";
+import {
+  createDashboardCache,
+  createRuntimeApp,
+} from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import {
@@ -27,6 +30,9 @@ import {
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
+/* Runtime dependencies must die with each request. Dashboard data may survive
+ * for its bounded TTL because it is tenant-keyed and contains no connections. */
+const dashboardCache = createDashboardCache();
 
 /** Built investing SPA path. Set in production Docker (`INVESTING_WEB_DIST`). */
 export function investingDist(): string {
@@ -87,19 +93,18 @@ export async function investingTenantId(request: Request): Promise<string | null
   return session?.user?.id ?? null;
 }
 
-let investingFetch: ((request: Request) => Promise<Response>) | null = null;
-let investingApiNamespaces: Set<string> | null = null;
-
 /** The `/api/<namespace>` segments the investing app answers, read from its own
  *  routing table. This server holding a second, hand-written copy is what let
  *  `/api/agents` ship and 404: the copy went stale and nobody noticed. */
 export async function investingOwnsApiPath(path: string): Promise<boolean> {
-  await getInvestingFetch();
-  return investingApiNamespaces?.has(path.split("/")[2] ?? "") ?? false;
+  const { apiNamespaces } = await getInvestingFetch();
+  return apiNamespaces.has(path.split("/")[2] ?? "");
 }
 
-async function getInvestingFetch(): Promise<(request: Request) => Promise<Response>> {
-  if (investingFetch) return investingFetch;
+async function getInvestingFetch(): Promise<{
+  fetch: (request: Request) => Promise<Response>;
+  apiNamespaces: Set<string>;
+}> {
   /* With a database these stores are per user and survive the invocation.
    * Without one they are files, which is what local and self-hosted runs want
    * and what Vercel's /tmp cannot actually keep. */
@@ -115,15 +120,18 @@ async function getInvestingFetch(): Promise<(request: Request) => Promise<Respon
     marketDataConsentStore: database
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    dashboardCache,
   });
-  investingApiNamespaces = new Set(
+  const apiNamespaces = new Set(
     runtimeApp.routes
       .map((route) => route.path.split("/"))
       .filter((segments) => segments[1] === "api" && segments[2])
       .map((segments) => segments[2]!),
   );
-  investingFetch = createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist());
-  return investingFetch;
+  return {
+    apiNamespaces,
+    fetch: createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist()),
+  };
 }
 
 /** Strip the `/investing` prefix before handing static requests to the investing server. */
@@ -138,8 +146,8 @@ export async function forwardInvesting(
   request: Request,
   tenantId = LOCAL_TENANT_ID,
 ): Promise<Response> {
-  const fetch = await getInvestingFetch();
-  return withInvestingTenant(tenantId, () => fetch(rewriteInvestingRequest(request)));
+  const runtime = await getInvestingFetch();
+  return withInvestingTenant(tenantId, () => runtime.fetch(rewriteInvestingRequest(request)));
 }
 
 export async function runInvestingCron(request: Request): Promise<Response> {
