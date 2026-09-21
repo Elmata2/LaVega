@@ -22,7 +22,6 @@ import { createProblemReporter } from "./observability.js";
 import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
-  type InvestingDashboardData,
 } from "@lavega/core";
 import {
   createBrokerDataCache,

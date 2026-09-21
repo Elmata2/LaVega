@@ -32,6 +32,19 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
   const { tenantId, getLocalPart, setLocalPart } = dependencies;
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
+  /* WHETHER THE SERVER HAS ITS CREDENTIAL, AND NOTHING ELSE.
+   *
+   * `/api/n8n/queue` is closed by default, so apiGuard answers 401 to an
+   * unauthenticated caller BEFORE the handler's config check runs. That makes
+   * "the variables are missing" and "you are not signed in" indistinguishable
+   * from outside, and the question came up on three separate deploys — each
+   * time answerable only by signing in and reading an error message.
+   *
+   * A boolean settles it. This returns exactly what `/api/eb/status` and
+   * `/api/agent/status` already return for their own credentials: whether the
+   * server has one. Never the URL, never the token, never whose queue. */
+  app.get("/api/n8n/status", (c) => c.json({ configured: loadN8nQueueConfig().configured }));
+
   app.get("/api/n8n/queue", async (c) => {
     const cfg = loadN8nQueueConfig();
     if (!cfg.configured || !cfg.url || !cfg.token)

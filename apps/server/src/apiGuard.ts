@@ -24,6 +24,7 @@ const PUBLIC_API_PATHS = new Set([
   "/api/fx/history", // ECB historical daily rates, currency + date range only, no personal data
   "/api/eb/status", // { configured: bool } only
   "/api/agent/status", // { configured: bool } only
+  "/api/n8n/status", // { configured: bool } only
   "/api/card-terms/ingest", // machine endpoint; carries its OWN shared secret
   "/api/cron/investing-sync", // machine endpoint; carries its OWN bearer secret
   "/api/investing/health", // { ok, service } only, no personal data

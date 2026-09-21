@@ -76,6 +76,44 @@ function buildApp(fetchImpl: typeof fetch) {
   return app;
 }
 
+/* The question this exists to answer, which was previously unanswerable from
+ * outside: apiGuard 401s an unauthenticated caller before the handler's config
+ * check runs, so a missing credential and a missing session look identical.
+ * That came up on three separate deploys. */
+test("the status route reports whether the server has a credential, never what it is", async () => {
+  const app = buildApp(fakeFetchQueue(200, { invoices: [], notices: [] }).impl);
+
+  loadN8nQueueConfigMock.mockReturnValue({ configured: false, url: null, token: null });
+  expect(await (await app.request("/api/n8n/status")).json()).toEqual({ configured: false });
+
+  loadN8nQueueConfigMock.mockReturnValue({
+    configured: true,
+    url: "https://n8n.example/webhook/q",
+    token: "sekrit-value",
+  });
+  const res = await app.request("/api/n8n/status");
+  const body = await res.text();
+  expect(res.status).toBe(200);
+  expect(JSON.parse(body)).toEqual({ configured: true });
+  /* The whole point: a boolean, never the credential. */
+  expect(body).not.toContain("sekrit-value");
+  expect(body).not.toContain("n8n.example");
+});
+
+/* It must answer without a session, or it cannot answer the question it exists
+ * for — the caller who cannot sign in is exactly who needs to know. */
+test("the status route needs no session", async () => {
+  const app = new Hono();
+  registerN8nRoutes(app, {
+    tenantId: async () => null,
+    getLocalPart,
+    setLocalPart,
+    fetchImpl: fakeFetchQueue(200, { invoices: [], notices: [] }).impl,
+  });
+  loadN8nQueueConfigMock.mockReturnValue({ configured: true, url: "https://x/y", token: "t" });
+  expect(await (await app.request("/api/n8n/status")).json()).toEqual({ configured: true });
+});
+
 test("a request's own ?key= is never sent to n8n — the session's own local part always wins", async () => {
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
