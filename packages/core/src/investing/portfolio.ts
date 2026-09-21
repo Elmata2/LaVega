@@ -21,6 +21,7 @@ export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
  *  caller already reports that as missing-fx rather than a wrong number. */
 export type FxRates = FxRate | FxRate[] | undefined;
 const FX_CARRY_DAYS = 10;
+const sortedFxRates = new WeakMap<FxRate[], FxRate[]>();
 
 function daysSince(observation: string, date: string): number | null {
   const observedAt = Date.parse(`${observation}T00:00:00Z`);
@@ -32,15 +33,24 @@ function daysSince(observation: string, date: string): number | null {
 function rateFor(rates: FxRates, date: string): FxRate {
   const candidates = rates === undefined ? [] : Array.isArray(rates) ? rates : [rates];
   if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
-  const sorted = [...candidates].sort((a, b) => a.date.localeCompare(b.date));
-  const rate = sorted
-    .filter((candidate) => candidate.date <= date)
-    .filter((candidate) => {
-      const age = daysSince(candidate.date, date);
-      return age !== null && age >= 0 && age <= FX_CARRY_DAYS;
-    })
-    .at(-1);
-  if (!rate) throw new Error(`No FX rate available for ${date}`);
+  let sorted: FxRate[];
+  if (Array.isArray(rates)) {
+    sorted = sortedFxRates.get(rates) ?? [...rates].sort((left, right) => left.date.localeCompare(right.date));
+    sortedFxRates.set(rates, sorted);
+  } else {
+    sorted = candidates;
+  }
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (sorted[middle]!.date <= date) low = middle + 1;
+    else high = middle;
+  }
+  const rate = sorted[low - 1];
+  const age = rate ? daysSince(rate.date, date) : null;
+  if (age === null || age < 0 || age > FX_CARRY_DAYS)
+    throw new Error(`No FX rate available for ${date}`);
   return rate;
 }
 
@@ -212,7 +222,13 @@ export function computePortfolioValueSeries(
   const barsBySymbol = new Map(
     symbols.map((symbol) => [
       symbol,
-      priceBars.filter((bar) => bar.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date)),
+      {
+        bars: priceBars
+          .filter((bar) => bar.symbol === symbol)
+          .sort((left, right) => left.date.localeCompare(right.date)),
+        index: 0,
+        latest: null as PriceBar | null,
+      },
     ]),
   );
   const cashFlows = uniqueByIdentity(
@@ -249,9 +265,11 @@ export function computePortfolioValueSeries(
         if (Math.abs(inferredOpening) > 1e-8) holdingsUnknown.add(symbol);
       }
       held += 1;
-      const bars = barsBySymbol.get(symbol) ?? [];
-      const exact = bars.find((bar) => bar.date === date);
-      const latest = exact ?? bars.filter((bar) => bar.date < date).at(-1);
+      const prices = barsBySymbol.get(symbol);
+      while (prices && prices.index < prices.bars.length && prices.bars[prices.index]!.date <= date)
+        prices.latest = prices.bars[prices.index++]!;
+      const latest = prices?.latest;
+      const exact = latest?.date === date ? latest : undefined;
       if (!latest) {
         unpriced.add(symbol);
         continue;
