@@ -3,7 +3,10 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LOCAL_TENANT_ID } from "@lavega/core";
-import { createRuntimeApp } from "@lavega/investing-server/src/index.js";
+import {
+  createDashboardCache,
+  createRuntimeApp,
+} from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import {
@@ -27,6 +30,9 @@ import {
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
+/* Runtime dependencies must die with each request. Dashboard data may survive
+ * for its bounded TTL because it is tenant-keyed and contains no connections. */
+const dashboardCache = createDashboardCache();
 
 /** Built investing SPA path. Set in production Docker (`INVESTING_WEB_DIST`). */
 export function investingDist(): string {
@@ -114,6 +120,7 @@ async function getInvestingFetch(): Promise<{
     marketDataConsentStore: database
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    dashboardCache,
   });
   const apiNamespaces = new Set(
     runtimeApp.routes

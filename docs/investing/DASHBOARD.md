@@ -171,9 +171,10 @@ Maintain an in-memory `dataVersion`. Increment it after broker data is applied a
 The Neon dashboard reads all requested price histories in one tenant-scoped transaction.
 File and in-memory stores retain the bounded per-symbol reader. A failed bulk read returns
 the existing degraded-data warning rather than issuing a second wave of individual queries.
-Dashboard cache entries expire after 15 seconds. On expiry, database-backed runtimes reload
-the persisted broker snapshot so another server instance's sync becomes visible. An active
-local sync prevents snapshot restoration; a version check rejects a read overtaken by a sync.
+Dashboard cache entries expire after 15 seconds. Hosted workers keep only tenant-keyed
+dashboard data across requests. Each request still creates and closes its own Neon pool.
+Broker and price writes invalidate cached data. Concurrent identical dashboard reads share
+one build.
 Frankfurter latest and historical FX calls have a five-second limit. On expiry the dashboard
 uses its cached/fallback FX data and reports the FX problem; it never delays broker positions.
 

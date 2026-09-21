@@ -14,7 +14,14 @@ import {
   withInvestingTenant,
 } from "./investing-mount.js";
 
-const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } =
+const {
+  createRuntimeAppMock,
+  createDockerFetchMock,
+  createDashboardCacheMock,
+  dashboardCacheMock,
+  getAuthMock,
+  verifiedSessionMock,
+} =
   vi.hoisted(() => ({
     createRuntimeAppMock: vi.fn(async () => ({
       routes: [
@@ -32,11 +39,22 @@ const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessio
       (_fetch: unknown, _root: string) => async (request: Request) =>
         new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
     ),
+    dashboardCacheMock: {
+      get: vi.fn(),
+      set: vi.fn(),
+      load: vi.fn(),
+      invalidate: vi.fn(),
+    },
+    createDashboardCacheMock: vi.fn(),
     getAuthMock: vi.fn(() => null as unknown),
     verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
   }));
 
 vi.mock("@lavega/investing-server/src/index.js", () => ({
+  createDashboardCache: () => {
+    createDashboardCacheMock();
+    return dashboardCacheMock;
+  },
   createRuntimeApp: createRuntimeAppMock,
 }));
 vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
@@ -76,6 +94,14 @@ test("forwardInvesting builds an investing runtime per request", async () => {
   expect(await second.text()).toBe("path:/api/investing/dashboard");
   expect(createRuntimeAppMock).toHaveBeenCalledTimes(2);
   expect(createDockerFetchMock).toHaveBeenCalledWith(expect.any(Function), investingDist());
+  expect(createRuntimeAppMock).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ dashboardCache: dashboardCacheMock }),
+  );
+  expect(createRuntimeAppMock).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ dashboardCache: dashboardCacheMock }),
+  );
 });
 
 test("shouldMountInvesting is false when dist is missing", () => {
