@@ -115,12 +115,20 @@ Never invent an account or sign one up.
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
 print what they would send. `prices purge` additionally refuses without `--yes`.
 
-For the visual side — a blank page, a stuck spinner, a chart that does not render — drive a
-real browser against `https://www.lavega.dev/investing` with the `claude-in-chrome` tools
-(`navigate`, `find`, `read_page`, `computer`). The gstack `/browse` skill this used to name
-was uninstalled on 2026-09-05. The CLI covers everything the frontend asks the backend for, so
-reach for the browser when the question is "what does the user see", not "what does the API
-return".
+For the visual side — a blank page, stuck spinner, or chart that does not render — use shared
+gstack Chromium. It works for any agent and does not require Computer Use.
+
+```bash
+node .claude/skills/verify-investing/browser-login.mjs
+```
+
+This imports the already authenticated CLI session into isolated Chromium and opens
+`/investing?verify=1`. Verification mode prevents the app-open effect from starting broker or
+price sync. Normal users keep existing automatic-sync behavior. Capture screenshots, text,
+console and network evidence with `browse`; stop the browser after the run. If `browse` is
+missing, install its pinned Chromium shell once with `bunx playwright@1.58.2 install chromium`.
+
+Use the browser when the question is "what does the user see", not "what does the API return".
 
 ## Evidence
 
