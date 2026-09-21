@@ -158,13 +158,26 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
 }
 
 /** Wiring for the real server: Neon storage, session identity. */
-export function n8nRouteDependencies(): N8nRouteDependencies | null {
-  const database = runtimeDatabase();
-  if (!database) return null;
-  const repository = createN8nForwardingRepository(database);
+/* RESOLVED PER REQUEST, for the same reason as eb-routes.ts — see the longer
+ * note there. `753b48e` made `runtimeDatabase()` request-scoped; this factory
+ * runs at module load, so it returned null and `index.ts` skipped every n8n
+ * route. `/api/n8n/status` is the only one public enough to get past apiGuard,
+ * and in production it answered Hono's own 404: the routes were not merely
+ * unconfigured, they did not exist.
+ *
+ * A call with no database throws rather than answering. `getLocalPart`
+ * returning null would read as "this user has no forwarding address", which is
+ * a real state with real consequences — the queue route treats it as "return
+ * an empty queue" — so a missing database must not be able to impersonate it. */
+export function n8nRouteDependencies(): N8nRouteDependencies {
+  const repository = () => {
+    const database = runtimeDatabase();
+    if (!database) throw new Error("geen database in dit verzoek");
+    return createN8nForwardingRepository(database);
+  };
   return {
     tenantId: investingTenantId,
-    getLocalPart: (userId) => repository.getLocalPart(userId),
-    setLocalPart: (userId, localPart) => repository.setLocalPart(userId, localPart),
+    getLocalPart: (userId) => repository().getLocalPart(userId),
+    setLocalPart: (userId, localPart) => repository().setLocalPart(userId, localPart),
   };
 }

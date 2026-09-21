@@ -252,3 +252,37 @@ test("the redirect response still carries the global secureHeaders", async () =>
   expect(res.headers.get("x-frame-options")).toBe("DENY");
   expect(res.headers.get("x-content-type-options")).toBe("nosniff");
 });
+
+/* THE ROUTES MUST EXIST EVEN WITH NO DATABASE AT MODULE LOAD.
+ *
+ * This is the bug that shipped, and nothing caught it because every other test
+ * injects fakes straight into registerEbRoutes/registerN8nRoutes and never
+ * exercises the real wiring in index.ts.
+ *
+ * `753b48e` made `runtimeDatabase()` read an AsyncLocalStorage scope that
+ * `withRuntimeDatabase` establishes around `app.fetch`. The dependency
+ * factories ran at module load, where there is no scope, so they returned null
+ * and `if (deps) register...` skipped EVERY Enable Banking and n8n route.
+ *
+ * It hid because apiGuard answers 401 before routing: a route that does not
+ * exist is indistinguishable from one you are not signed in for. The single
+ * public route in either family, /api/n8n/status, is what exposed it — in
+ * production it returned Hono's own 404.
+ *
+ * So this asserts existence, not behaviour: a 404 here means the route is gone
+ * again. Anything else — 401, 503, 200 — means it is registered and answering
+ * for its own reasons. */
+test("the eb and n8n routes are registered even though module load has no request scope", async () => {
+  for (const path of ["/api/n8n/status", "/api/n8n/queue", "/api/eb/aspsps", "/api/eb/accounts"]) {
+    const res = await app.request(path);
+    expect(res.status, `${path} is not registered`).not.toBe(404);
+  }
+});
+
+/* The one in that family that can answer without a session, so it is the one
+ * that can prove registration rather than merely not-404. */
+test("the n8n status route answers a boolean without a database", async () => {
+  const res = await app.request("/api/n8n/status");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ configured: expect.any(Boolean) });
+});

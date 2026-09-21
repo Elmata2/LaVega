@@ -238,14 +238,12 @@ app.get("/api/eb/status", (c) => {
 /* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts.
  * Its two intermediate states live in Neon, not in this process — a serverless
  * function does not survive between /auth and the bank's redirect back. */
-const ebDependencies = ebRouteDependencies();
-if (ebDependencies) registerEbRoutes(app, ebDependencies);
+registerEbRoutes(app, ebRouteDependencies());
 
 /* Invoice-queue proxy: /api/n8n/queue. The server holds the n8n webhook
  * credential and derives `queueKey` from the caller's own session — see
  * docs/adr/0006-invoice-queue-server-proxy.md. */
-const n8nDependencies = n8nRouteDependencies();
-if (n8nDependencies) registerN8nRoutes(app, n8nDependencies);
+registerN8nRoutes(app, n8nRouteDependencies());
 
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */

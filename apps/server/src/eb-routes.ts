@@ -256,9 +256,43 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
   });
 }
 
+/* RESOLVED PER REQUEST, NOT AT MODULE LOAD — and this is not a refinement,
+ * it is the fix for routes that had stopped existing.
+ *
+ * `753b48e` ("scope Neon pools to each request") made `runtimeDatabase()` read
+ * an AsyncLocalStorage scope established by `withRuntimeDatabase` around
+ * `app.fetch`. This factory runs at module load, where there is no request and
+ * therefore no scope, so it began returning null — and `index.ts`'s
+ * `if (ebDependencies) registerEbRoutes(...)` quietly skipped EVERY Enable
+ * Banking route. /auth, /callback and /accounts stopped being registered at
+ * all, and because apiGuard answers 401 before routing, a missing route is
+ * indistinguishable from a missing session. It reads as "log in again".
+ *
+ * So the store is a facade that resolves the database on each CALL, inside the
+ * request, and registration is now unconditional. A call with no database
+ * throws rather than returning a plausible empty answer: this store holds the
+ * two intermediate states of a bank authorisation, and inventing "no pending
+ * auth" would silently abandon a consent the user just gave. */
+function requestScopedEbStore(): EbFlowStore {
+  const repository = (): EbFlowStore => {
+    const database = runtimeDatabase();
+    if (!database) throw new Error("geen database in dit verzoek");
+    return createEbFlowRepository(database) as EbFlowStore;
+  };
+  return {
+    startAuth: (state, pending) => repository().startAuth(state, pending),
+    consumeAuth: (state, ttlMs) => repository().consumeAuth(state, ttlMs),
+    sweepAuth: (ttlMs) => repository().sweepAuth(ttlMs),
+    sweepSessions: (userId, ttlMs) => repository().sweepSessions(userId, ttlMs),
+    putSession: (userId, sessionId, payload) =>
+      repository().putSession(userId, sessionId, payload),
+    getSession: (userId, sessionId, ttlMs) =>
+      repository().getSession(userId, sessionId, ttlMs),
+    deleteSession: (userId, sessionId) => repository().deleteSession(userId, sessionId),
+  };
+}
+
 /** Wiring for the real server: Neon storage, session identity. */
-export function ebRouteDependencies(): EbRouteDependencies | null {
-  const database = runtimeDatabase();
-  if (!database) return null;
-  return { store: createEbFlowRepository(database) as EbFlowStore, tenantId: investingTenantId };
+export function ebRouteDependencies(): EbRouteDependencies {
+  return { store: requestScopedEbStore(), tenantId: investingTenantId };
 }
