@@ -8,6 +8,7 @@ import {
   uncategorizedByMonth,
   redactForAi,
   scrubPersonalValues,
+  scrubPersonalValuesDeep,
   aiCategorizeItems,
   foreignCode,
   unknownReason,
@@ -331,4 +332,30 @@ test("unknownBreakdown totals the onbekend rows per reason, with the countries f
   expect(byReason["geen-tekst"]).toBeUndefined();
   // Sorted biggest bucket first so the UI leads with what actually matters.
   expect(b.byReason[0].reason).toBe("buitenland");
+});
+
+test("scrubPersonalValuesDeep reaches a string at any depth and leaves numbers alone", () => {
+  const out = scrubPersonalValuesDeep({
+    summary: {
+      openingCents: 500_000,
+      drivers: [{ label: "NL17INGB0539576085 SPOTIFY AB", sign: -1, perWeekCents: -276 }],
+    },
+  });
+  expect(out.summary.drivers[0].label).toBe("[IBAN] SPOTIFY AB");
+  expect(out.summary.drivers[0].perWeekCents).toBe(-276);
+  expect(out.summary.openingCents).toBe(500_000);
+});
+
+test("scrubPersonalValuesDeep is idempotent, so the browser pass and the server pass compose", () => {
+  const once = scrubPersonalValuesDeep({ a: ["mail a@b.com", { b: "NL91 ABNA 0417 1643 00" }] });
+  expect(scrubPersonalValuesDeep(once)).toEqual(once);
+});
+
+test("scrubPersonalValuesDeep passes null and undefined through untouched", () => {
+  expect(scrubPersonalValuesDeep({ a: null, b: undefined, c: 0, d: false })).toEqual({
+    a: null,
+    b: undefined,
+    c: 0,
+    d: false,
+  });
 });

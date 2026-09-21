@@ -128,3 +128,35 @@ test("sanitizeMessages trims the leading assistant left by the tail slice", () =
   expect(msgs.length).toBeLessThanOrEqual(20);
   expect(msgs[0].role).toBe("user");
 });
+
+test("sanitizeChatContext scrubs values INSIDE an allowed key, not just the key names", () => {
+  // The allowlist is key names only, so `forecast`'s single allowed key waved
+  // through whatever sat under it — and what sits under it is
+  // `drivers[].label`, the raw counterparty of a bank row. The browser builder
+  // scrubs first; this proves the server does not depend on that.
+  const out = sanitizeChatContext("forecast", {
+    summary: {
+      openingCents: 500_000,
+      drivers: [
+        { label: "NL17INGB0539576085 SPOTIFY AB Stockholm", sign: -1, perWeekCents: -276 },
+      ],
+    },
+  });
+  const json = JSON.stringify(out);
+  expect(json).not.toContain("NL17INGB0539576085");
+  expect(json).toContain("[IBAN]");
+  expect(json).toContain("SPOTIFY");
+  // Numbers are left exactly as they are: they are what the tab is for.
+  expect((out.summary as Record<string, unknown>).openingCents).toBe(500_000);
+});
+
+test("sanitizeChatContext scrubs an email or a phone number wherever it is nested", () => {
+  const out = sanitizeChatContext("punten", {
+    balances: [{ program: "Amex MR", points: 240_000, note: "login a@b.com, bel 06 12345678" }],
+  });
+  const json = JSON.stringify(out);
+  expect(json).not.toContain("a@b.com");
+  expect(json).not.toContain("12345678");
+  expect(json).toContain("[EMAIL]");
+  expect(json).toContain("[TEL]");
+});

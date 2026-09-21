@@ -1,4 +1,4 @@
-import { scrubPersonalValues } from "@lavega/core";
+import { scrubPersonalValues, scrubPersonalValuesDeep } from "@lavega/core";
 import { ValidationError } from "./validationError.js";
 
 export const CHAT_TABS = [
@@ -21,7 +21,11 @@ const MAX_MSG_CHARS = 8_000;
 const MAX_MSGS = 20;
 
 /** Per-tab allowlist of top-level context keys the client may send. Nothing
- *  outside this can reach Mistral — the chat redaction boundary. */
+ *  outside this can reach Mistral — the chat redaction boundary.
+ *
+ *  It is a list of KEY NAMES and says nothing about what a key contains, so it
+ *  is only half the boundary; `sanitizeChatContext` also value-scrubs whatever
+ *  survives the list. See the note on that function. */
 const ALLOW: Record<string, readonly string[]> = {
   overview: ["entities", "categories", "alertCount", "shortfall", "bufferCents"],
   rekeningen: ["accounts"],
@@ -43,12 +47,22 @@ const ALLOW: Record<string, readonly string[]> = {
   backup: [],
 };
 
+/** The structured half of the chat boundary: keep only the tab's allowlisted
+ *  top-level keys, then value-scrub everything inside them.
+ *
+ *  The scrub is here because the allowlist alone could not see a leak it was
+ *  waving through. `forecast` allows exactly one key, `summary`, and that key
+ *  carries `drivers[].label`, the raw counterparty of a bank row — which for an
+ *  ABN CSV or a /NAME/-less MT940 is the head of the statement line, IBAN
+ *  first. The browser's builder is the first line of defence, but this server
+ *  is the thing that actually talks to Mistral and it cannot tell whether a
+ *  builder was widened, so the value rule has to hold here too. */
 export function sanitizeChatContext(tab: string, raw: unknown): Record<string, unknown> {
   const allow = ALLOW[tab] ?? [];
   const out: Record<string, unknown> = {};
   if (raw && typeof raw === "object") {
     const r = raw as Record<string, unknown>;
-    for (const k of allow) if (k in r) out[k] = r[k];
+    for (const k of allow) if (k in r) out[k] = scrubPersonalValuesDeep(r[k]);
   }
   if (JSON.stringify(out).length > MAX_CONTEXT_CHARS)
     throw new ValidationError("chat-context-too-large", "context te groot");

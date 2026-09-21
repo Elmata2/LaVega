@@ -270,3 +270,79 @@ test("optimalisatie context carries subscriptions + rates, omits live bestBenchm
 test("backup context is empty", () => {
   expect(buildTabContext("backup", {} as any).context).toEqual({});
 });
+
+/* --- values inside an allowed field, not just the field names -------------
+ *
+ * Each of these was a real leak on 21 Sep: the field is one a reasonable owner
+ * would expect the chat to have, and the VALUE under it carried an IBAN out of
+ * a bank statement or out of his own typing. They fail the moment a builder
+ * stops scrubbing. --------------------------------------------------------- */
+
+/** An ABN CSV row or an MT940 without a /NAME/ tag falls back to the head of
+ *  the statement line, which begins with the other party's IBAN — so this is
+ *  what `counterparty` really looks like, not a tidy "Netflix". */
+const IBAN_COUNTERPARTY = "NL17INGB0539576085 SPOTIFY AB Stockholm";
+const monthlyTxs = ["01-05", "02-05", "03-05", "04-05", "05-05", "06-05"].map((md, i) => ({
+  id: `t${i}`,
+  accountKey: "k1",
+  date: `2026-${md}`,
+  amount: -11.99,
+  counterparty: IBAN_COUNTERPARTY,
+  description: "",
+  currency: "EUR",
+  category: "",
+  manual: false,
+}));
+const oneAccount = [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }];
+
+test("forecast drivers carry the merchant, never the IBAN glued to it", () => {
+  const { context } = buildTabContext("forecast", {
+    accounts: oneAccount,
+    txs: monthlyTxs,
+    asOf: "2026-06-06",
+  } as any);
+  const drivers = (context as any).summary.drivers;
+  expect(drivers.length).toBeGreaterThan(0);
+  expect(JSON.stringify(context)).not.toContain("NL17INGB0539576085");
+  expect(drivers[0].label).toContain("SPOTIFY");
+});
+
+test("optimalisatie subscription names carry the merchant, never the IBAN glued to it", () => {
+  const { context } = buildTabContext("optimalisatie", {
+    accounts: oneAccount,
+    txs: monthlyTxs,
+    asOf: "2026-06-06",
+  } as any);
+  const subs = (context as any).subscriptions;
+  expect(subs.length).toBeGreaterThan(0);
+  expect(JSON.stringify(context)).not.toContain("NL17INGB0539576085");
+  expect(subs[0].name).toContain("SPOTIFY");
+});
+
+test("a rule matching on an IBAN still reaches the chat as a rule, without the IBAN", () => {
+  const { context } = buildTabContext("rules", {
+    rules: [{ id: "r1", match: "NL17INGB0539576085", category: "Boodschappen" }],
+  } as any);
+  expect((context as any).rules[0].category).toBe("Boodschappen");
+  expect((context as any).rules[0].match).not.toContain("NL17INGB0539576085");
+});
+
+test("punten sends no balance note: it is where a card number or a login lives", () => {
+  const { context } = buildTabContext("punten", {
+    rewards: [
+      {
+        id: "amex",
+        program: "Amex MR",
+        points: 240_000,
+        updatedAt: "2026-01-10",
+        note: "login alexander@example.com, IBAN NL91 ABNA 0417 1643 00",
+      },
+    ],
+  } as any);
+  expect((context as any).balances[0]).toEqual({
+    program: "Amex MR",
+    points: 240_000,
+    updatedAt: "2026-01-10",
+  });
+  expect(JSON.stringify(context)).not.toContain("example.com");
+});

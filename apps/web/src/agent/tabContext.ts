@@ -25,6 +25,7 @@ import {
   nextBtwDeadline,
   ownAccounts,
   resolveAccountRate,
+  scrubPersonalValuesDeep,
 } from "@lavega/core";
 
 /** Minimal per-account fields any tab's context builder might read. */
@@ -108,7 +109,25 @@ function entitiesOf(accounts: TabAccount[]): string[] {
   return Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
 }
 
+/** The tab's slice, value-scrubbed before it leaves the device.
+ *
+ *  Picking safe FIELDS is not the same as sending safe VALUES, and three of
+ *  these builders proved it. `drivers[].label` (forecast) and
+ *  `subscriptions[].name` (optimalisatie) are both documented as "raw
+ *  counterparty of the first occurrence", and a raw counterparty out of an ABN
+ *  CSV or a /NAME/-less MT940 is the head of the statement line — which begins
+ *  with the other party's IBAN. A rule's `match` is whatever the owner typed,
+ *  and an IBAN is a sensible thing to match on. So the strings go out through
+ *  the same scrub a message typed in the chat box gets. */
 export function buildTabContext(
+  view: string,
+  state: TabState,
+): { tab: string; context: Record<string, unknown> } {
+  const { tab, context } = buildTabSlice(view, state);
+  return { tab, context: scrubPersonalValuesDeep(context) };
+}
+
+function buildTabSlice(
   view: string,
   state: TabState,
 ): { tab: string; context: Record<string, unknown> } {
@@ -320,11 +339,16 @@ export function buildTabContext(
     case "punten": {
       const rewards = (state.rewards ?? []) as RewardsBalance[];
       const context = {
+        // `note` is deliberately absent. It is the one free-text field the
+        // owner keeps on a balance, which is exactly where a membership
+        // number, a login or a card number ends up, and nothing the chat does
+        // on this tab — what are the points worth, how do I transfer them —
+        // needs it. Answering that needs the programme, the balance and how
+        // old it is, and those are what this sends.
         balances: rewards.slice(0, MAX_ITEMS).map((b) => ({
           program: b.program,
           points: b.points,
           updatedAt: b.updatedAt,
-          note: b.note,
         })),
       };
       return { tab, context };

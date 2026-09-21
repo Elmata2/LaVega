@@ -160,6 +160,34 @@ export function scrubPersonalValues(text: string): string {
     .replace(AMOUNT_MARKER, "[BEDRAG]");
 }
 
+/** `scrubPersonalValues` applied to every string ANYWHERE inside an already-
+ *  shaped value, returning the same shape. Objects come back as plain objects,
+ *  which is all a JSON context ever is.
+ *
+ *  The chat's context allowlist checks top-level KEY NAMES and nothing else, so
+ *  it cannot see what a key CONTAINS. Measured on the real builders: the
+ *  forecast tab allows one key, `summary`, and that key carries
+ *  `drivers[].label` — the raw counterparty of a bank row. For an ABN CSV or an
+ *  MT940 without a /NAME/ tag that string is the head of the statement line,
+ *  IBAN first: "NL17INGB0539576085 Albert Heijn 1234 Rotterdam". One allowed
+ *  key, a whole IBAN on the wire to Mistral.
+ *
+ *  Running this at both chat redaction boundaries makes the value rule
+ *  independent of which fields a builder happens to pick, so widening a builder
+ *  can no longer widen what identifies someone. Idempotent: the tokens it
+ *  writes match none of the patterns, so the browser pass and the server pass
+ *  compose. Pure. */
+export function scrubPersonalValuesDeep<T>(value: T): T {
+  if (typeof value === "string") return scrubPersonalValues(value) as T;
+  if (Array.isArray(value)) return value.map((v) => scrubPersonalValuesDeep(v)) as T;
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubPersonalValuesDeep(v);
+    return out as T;
+  }
+  return value;
+}
+
 /** Best-effort scrub of sensitive numeric content from free text BEFORE it
  *  leaves the browser: IBANs, dates, money amounts and long digit runs
  *  (account/card fragments, payment references). Merchant names are alphabetic,
