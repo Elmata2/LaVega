@@ -1,10 +1,10 @@
-import type { Account, Tx } from "@lavega/core";
+import type { Account, ImportProblem, Tx } from "@lavega/core";
 
 export type BankResult = {
   accounts: Account[];
   txs: Omit<Tx, "id">[];
   source: string;
-  problems: string[];
+  problems: ImportProblem[];
 };
 
 export interface BankAccessAdapter {

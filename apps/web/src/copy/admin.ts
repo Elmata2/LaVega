@@ -254,6 +254,8 @@ type FacturenCopy = {
     introStrong: string;
     introTail: string;
     noSubjectFallback: string;
+    /** n8n stuurde geen reden mee. */
+    noReasonFallback: string;
     openInGmail: string;
     noLinkFallback: string;
     doneButton: string;
@@ -570,6 +572,8 @@ type BackupCopy = {
 };
 
 type KoppelingenCopy = {
+  /** De <section> zelf, voor een schermlezer. */
+  ariaLabel: string;
   forwardAddress: {
     /** <h2> */
     heading: string;
@@ -865,6 +869,7 @@ const nlFacturen: FacturenCopy = {
     introTail:
       "bij: dit is een lijstje om zelf af te werken, geen boeking in wording. Haal de factuur op en sleep hem hierboven naar binnen.",
     noSubjectFallback: "(geen onderwerp)",
+    noReasonFallback: "n8n gaf geen reden mee.",
     openInGmail: "Open in Gmail",
     noLinkFallback: "n8n gaf geen link mee; zoek de mail op het onderwerp.",
     doneButton: "Gedaan",
@@ -1174,6 +1179,7 @@ const nlBackup: BackupCopy = {
 };
 
 const nlKoppelingen: KoppelingenCopy = {
+  ariaLabel: "Koppelingen",
   forwardAddress: {
     heading: "Doorstuuradres voor facturen",
     eyebrow: "stuur een factuur hiernaartoe en hij komt in de wachtrij",
@@ -1437,6 +1443,7 @@ const enFacturen: FacturenCopy = {
     introTail:
       "shown here: this is a to-do list, not a booking in progress. Fetch the invoice yourself and drag it in above.",
     noSubjectFallback: "(no subject)",
+    noReasonFallback: "n8n gave no reason.",
     openInGmail: "Open in Gmail",
     noLinkFallback: "n8n did not include a link; search your mail by the subject.",
     doneButton: "Done",
@@ -1748,6 +1755,7 @@ const enBackup: BackupCopy = {
 };
 
 const enKoppelingen: KoppelingenCopy = {
+  ariaLabel: "Connections",
   forwardAddress: {
     heading: "Forwarding address for invoices",
     eyebrow: "send an invoice here and it lands in the queue",

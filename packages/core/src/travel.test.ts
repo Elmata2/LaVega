@@ -173,7 +173,12 @@ test("planTravel surfaces the best place to keep savings", () => {
     asOf: "2026-08-13",
   });
   expect(plan.store.suggestion?.account.key).toBe("spaar");
-  expect(plan.store.note).toContain("BigBank");
+  // De zin zelf staat in copy/optimise; core levert het feit waar hij op rust.
+  expect(plan.store.note).toEqual({
+    kind: "leaving-interest",
+    account: expect.any(String),
+    best: { bank: "BigBank", ratePct: expect.any(Number) },
+  });
 });
 
 /* --- Real-data regressions: accounts imported without a bank (his stale ING
@@ -271,8 +276,11 @@ test("the savings advice names an account even when it has no bank (display, not
     destination: "US",
     asOf: "2026-08-13",
   });
-  expect(plan.store.note).toContain("A 286-41213"); // no dangling "op  —"
-  expect(plan.store.note).not.toMatch(/op\s+—/);
+  // Een rekening zonder bank draagt nog steeds een leesbare naam, zodat de
+  // zin die de view eromheen bouwt niet op een leeg veld eindigt.
+  expect(plan.store.note.kind).toBe("leaving-interest");
+  if (plan.store.note.kind !== "leaving-interest") throw new Error("onbereikbaar");
+  expect(plan.store.note.account).toBe("A 286-41213");
   // ...and it is still never offered as a provider to look up.
   expect(plan.unknownProviders).toEqual([]);
 });
@@ -299,7 +307,7 @@ test("a spend option carries where its fee came from, so the owner can judge it"
   expect(t212.feeSource).toBe("agent");
   expect(t212.feeUpdatedAt).toBe("2026-08-13");
   expect(ing.feeSource).toBe("user"); // shown as "door jou ingesteld"
-  expect(ing.note).toBe("zelf nagekeken");
+  expect(ing.note).toEqual({ kind: "quoted", text: "zelf nagekeken" });
   // Unknown terms carry no provenance to display.
   expect(ranked.find((o) => o.provider === "American Express creditcard")!.feeSource).toBeNull();
 });
@@ -517,7 +525,13 @@ test("the winning journey carries the provider's caveat, so a capped rate cannot
   const winner = js.find((j) => j.known);
 
   expect(winner?.provider).toBe("Revolut betaalpas");
-  expect(winner?.note).toContain("tot € 1.000 per maand");
+  // Dit voorbehoud is de TEKST VAN DE AANBIEDER uit de catalogus, geen zin van
+  // ons — vandaar `quoted`, en vandaar dat hij onvertaald meereist. De
+  // afgeleide `capNote` hieronder is de andere soort; zie `TravelCaveat`.
+  expect(winner?.note?.kind).toBe("quoted");
+  expect(winner?.note?.kind === "quoted" ? winner.note.text : "").toContain(
+    "tot € 1.000 per maand",
+  );
 });
 
 /* ─────────────────────────────────────────── CASH, not just cards
@@ -853,7 +867,8 @@ test("marketCardOffers ranks the whole catalogue and never includes an uncovered
   expect(offers[0].conditional).toBe(false);
   const platinum = offers.find((o) => o.productId === "ing-platinumcard");
   expect(platinum?.conditional).toBe(true);
-  expect(platinum?.capNote).toContain("€ 1.000");
+  expect(platinum?.capNote?.kind).toBe("capped");
+  expect(platinum?.capNote?.kind === "capped" ? platinum.capNote.cap : "").toContain("€ 1.000");
 });
 
 test("a card he already holds is marked as held, so it is never offered as a switch", () => {

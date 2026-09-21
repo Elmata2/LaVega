@@ -462,6 +462,7 @@ function buildGrensCopySamples(
 ): Record<keyof typeof optimiseCopy.nl.grens, () => string[]> {
   return {
     header: () => [grensCopy.header.title],
+    sideFallback: () => [grensCopy.sideFallback.personal, grensCopy.sideFallback.business],
     emptyStates: () => [
       ...grensCopy.emptyStates.geenZakelijkeEntiteit({ unclassified: ["BV1", "Holding"], personal: ["Privé"] }),
       ...grensCopy.emptyStates.geenZakelijkeEntiteit({ unclassified: [], personal: ["Privé"] }),

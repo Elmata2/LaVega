@@ -94,7 +94,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
     setEraseError("");
     setEraseMessage("");
     try {
-      const report = await eraseServerData();
+      const report = await eraseServerData(locale);
       const touched = report.filter((entry) => entry.rows > 0);
       const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
       setEraseMessage(c.server.erase.success(rows, touched.length));

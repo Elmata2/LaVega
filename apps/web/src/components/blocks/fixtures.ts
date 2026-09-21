@@ -1,6 +1,5 @@
 import type {
   Account,
-  Alert,
   EntityForecast,
   OwnAccounts,
   Rule,
@@ -200,21 +199,6 @@ export const scheduledFlows: ScheduledFlow[] = [
     dueDate: "2026-05-31",
     source: "vat",
     status: "paid",
-  },
-];
-
-export const alerts: Alert[] = [
-  {
-    id: "al1",
-    severity: "critical",
-    title: "Tekort verwacht in week 6",
-    detail: "Verwacht saldo € 1.200 onder je buffer.",
-  },
-  {
-    id: "al2",
-    severity: "info",
-    title: "1 rekening zonder saldo",
-    detail: "Vul het saldo in bij Rekeningen.",
   },
 ];
 

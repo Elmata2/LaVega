@@ -152,7 +152,7 @@ export type SpendOption = {
   feeSource: FactSource | null;
   feeUpdatedAt: string | null;
   /** The provider's own caveat (weekend surcharge, monthly free limit, …). */
-  note: string | null;
+  note: TravelCaveat | null;
 };
 
 /** DE "eur"-VARIANT deelt ÉÉN copy-string met `PayHeadline`'s "eur" en
@@ -160,6 +160,26 @@ export type SpendOption = {
  *  "move-funds" met `method: null` is het bestaande "geen methode bekend" pad;
  *  met `method` erbij is het de gratis-via-iDEAL zin — zelfde onderscheid als
  *  het `method ? … : …` sjabloon hiervoor. */
+/** Waar het geld het best staat, als feit. Was één Nederlandse zin die core
+ *  opbouwde en het reisblok letterlijk afdrukte; `best` is null als er geen
+ *  betere rente bekend is, en dat is iets anders dan nul. */
+export type StoreNote =
+  | { kind: "leaving-interest"; account: string; best: { bank: string; ratePct: number } | null }
+  | { kind: "already-best" };
+
+/** Waarom een tarief niet zomaar geldt.
+ *
+ *  Drie varianten omdat dit veld twee verschillende dingen droeg en dat niet
+ *  liet zien: `capped`/`limited` zijn ONZE zin (stonden als Nederlandse string
+ *  in core en haalden zo het Engelse scherm), `quoted` is de tekst van de
+ *  aanbieder zelf uit de catalogus. Alleen de eerste twee worden vertaald; een
+ *  citaat vertalen zou het geen citaat meer maken. `cap` draagt om dezelfde
+ *  reden de grens zoals de catalogus hem spelt. */
+export type TravelCaveat =
+  | { kind: "capped"; cap: string }
+  | { kind: "limited" }
+  | { kind: "quoted"; text: string };
+
 export type ConvertStepNote =
   | { kind: "eur" }
   | { kind: "no-terms" }
@@ -177,7 +197,11 @@ export type TravelPlan = {
   destination: string;
   currency: string | null;
   /** Where the money is best kept — reuses the interest analysis. */
-  store: { suggestion: InterestSuggestion | null; best: RateBenchmark | null; note: string };
+  store: {
+    suggestion: InterestSuggestion | null;
+    best: RateBenchmark | null;
+    note: StoreNote;
+  };
   convert: ConvertStep;
   /** Every way of paying abroad, priced end to end and cheapest first. This is
    *  the comparison; `convert` and `spend` are the legs it is built from. */
@@ -257,7 +281,7 @@ export type PayAdvice = {
    *  periode is het nettobedrag niet te controleren. */
   tripMonths: number;
   /** The recommendation's own caveat (a cap, a monthly free limit). */
-  note: string | null;
+  note: TravelCaveat | null;
   /** Where a catalogue recommendation was read, and when. Null for his own card,
    *  whose date the `spend` list already carries. */
   sourceUrl: string | null;
@@ -605,7 +629,7 @@ export function rankSpendOptions(
       why: known ? { kind: "known", fxFeePct, cashbackPct, pointsPerEuro } : { kind: "unknown" },
       feeSource: entry?.source ?? null,
       feeUpdatedAt: entry?.updatedAt ?? null,
-      note: entry?.note ?? null,
+      note: entry?.note ? { kind: "quoted", text: entry.note } : null,
     };
   });
   return options.sort((a, b) => {
@@ -665,13 +689,6 @@ function planConversion(
   };
 }
 
-/** Euros the Dutch way — "€ 5,00", matching what the UI's own formatter prints
- *  next to it. Done by hand rather than with Intl so core stays deterministic
- *  across environments. */
-function euro(n: number): string {
-  return `€ ${n.toFixed(2).replace(".", ",")}`;
-}
-
 /** Why a journey's cost is what it is (or isn't known), as facts. Mirrors
  *  `SpendWhy` for the direct leg — a journey that pays directly IS that spend
  *  option, worded with "direct betalen" in front — and adds the via-route's
@@ -719,7 +736,7 @@ export type Journey = {
    *  monthly limit, after which it is 1%. LaVega ranked it first on an
    *  unconditional 0% and said "dat kost je niets" — a conditional rate stated
    *  as absolute, which is the most damaging way to be wrong. */
-  note: string | null;
+  note: TravelCaveat | null;
 };
 
 /** Rank every way of paying abroad, cheapest first, in hard cash only.
@@ -904,8 +921,12 @@ export function planTravel(input: {
     suggestion: topSuggestion,
     best: interest.best,
     note: topSuggestion
-      ? `Je laat rente liggen op ${accountLabel(topSuggestion.account)}${interest.best ? ` — ${interest.best.bank} geeft ${interest.best.ratePct}%` : ""}.`
-      : "Je spaargeld staat al op de beste plek die we kennen.",
+      ? {
+          kind: "leaving-interest" as const,
+          account: accountLabel(topSuggestion.account),
+          best: interest.best ? { bank: interest.best.bank, ratePct: interest.best.ratePct } : null,
+        }
+      : { kind: "already-best" as const },
   };
 
   const spend = rankSpendOptions(accounts, facts);
@@ -1260,44 +1281,6 @@ export function withdrawalEffectivePct(fee: WithdrawalFee, amount: number): numb
   return Math.round((cost / amount) * 10_000) / 100;
 }
 
-/** DELIBERATELY NOT CONVERTED: `describeWithdrawalFee`'s only production call
- *  site (`TravelBlock.tsx`'s cash eyebrow) is guarded by `o.fee.known`, so this
- *  Dutch fallback never renders in the app — it exists for callers (tests)
- *  that pass an unknown fee directly. Out of this pass's scope; the KNOWN
- *  branch below (component pricing, e.g. "1,7% over het opgenomen bedrag") is
- *  the one still-Dutch string that DOES reach the screen, tracked separately.
- *  This mirrors `.why`'s literal Dutch one-for-one so the function's existing
- *  behaviour does not move. */
-function describeWithdrawalFeeUnknownReasonNl(reason: WithdrawalFeeUnknownReason): string {
-  switch (reason.kind) {
-    case "silent":
-      return "De bron zegt niets over geld opnemen.";
-    case "cross-reference":
-      return "De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.";
-    case "conditional":
-      return "Het opnametarief hangt aan een vrijstelling, staffel of voorwaarde die de bron niet in één bedrag uitdrukt.";
-    case "mentioned-no-rate":
-      return "De bron noemt opnemen wel, maar zonder tarief.";
-    case "ambiguous-catalogue-match":
-      return `De catalogus kent meer dan één ${reason.provider} (${nameSome(reason.candidates as string[])}) en die rekenen niet hetzelfde. Zeg welke je hebt, of vul de wisselkosten in — dan weten we het.`;
-    case "not-in-catalogue":
-      return "Dit product staat nog niet in de catalogus, dus we weten niet wat opnemen kost.";
-  }
-}
-
-/** The price in words, in Dutch, as the document states it. */
-export function describeWithdrawalFee(fee: WithdrawalFee): string {
-  if (!fee.known) return fee.why ? describeWithdrawalFeeUnknownReasonNl(fee.why) : "onbekend";
-  return fee.components
-    .map((c) =>
-      c.kind === "fixed"
-        ? `${euro(c.eur)} per opname`
-        : c.minEur === null
-          ? `${pctNL(c.pct)} over het opgenomen bedrag`
-          : `${pctNL(c.pct)} over het opgenomen bedrag, minimaal ${euro(c.minEur)}`,
-    )
-    .join(" + ");
-}
 
 /* ---------- matching a card he holds to the product in the catalogue ---------- */
 
@@ -1475,7 +1458,7 @@ export type CardOffer = {
    *  conditional rate presented as absolute. */
   conditional: boolean;
   /** That condition in one Dutch line, from the source's own words. */
-  capNote: string | null;
+  capNote: TravelCaveat | null;
   conditions: string | null;
   sourceUrl: string;
   asOf: string;
@@ -1688,15 +1671,13 @@ const FX_CONDITIONAL =
   /tot\s*€|boven\s*€|daarna|per maand|per kalender|maandelijk|vrije ruimte|fair.?us|limiet|limit|cap|above|allowance|monthly|per calendar/i;
 
 /** The condition in one line, so a capped rate can never be shown bare. */
-export function fxCaveat(conditions: string | null | undefined): string | null {
+export function fxCaveat(conditions: string | null | undefined): TravelCaveat | null {
   const c = String(conditions ?? "");
   if (!c || !FX_CONDITIONAL.test(c)) return null;
   const cap = c.match(
     /tot\s*€\s*[\d.,]+[^.;]*|above the monthly[^.;]*|buiten de maandelijkse[^.;]*/i,
   );
-  return cap
-    ? `Dit tarief geldt maar tot een grens: ${cap[0].trim()}.`
-    : "Dit tarief geldt maar binnen een limiet of pakket — lees de voorwaarden voordat je overstapt.";
+  return cap ? { kind: "capped", cap: cap[0].trim() } : { kind: "limited" };
 }
 
 /** What a switch would actually save on the reference spend, or null when there
@@ -2046,12 +2027,6 @@ export function withdrawalHeadline(
     small,
     missingCashNote: missingCashNote(options),
   };
-}
-
-/** A percentage the Dutch way, with the comma and without a trailing zero it
- *  did not earn. */
-function pctNL(n: number): string {
-  return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
 }
 
 /** One row per issuer, the cheapest it offers.

@@ -10,7 +10,8 @@ import type {
   Tx,
 } from "@lavega/core";
 import { ownAccounts } from "@lavega/core";
-import Optimalisatie from "./views/Optimalisatie";
+import Optimalisatie, { cadenceName, promoBadgeLabel } from "./views/Optimalisatie";
+import { optimiseCopy } from "./copy/optimise.js";
 
 /* Optimalisatie after the rebalance (UI review, 2026-08-16):
  *   - the interest reasoning is spelled out and ends in a number;
@@ -556,4 +557,85 @@ test("heet de rekening ING Student, dan staat de eis náást de nul en niet erac
   // Geen tweede lijst met gratis pakketten: de kosten zijn bekend, dus er valt
   // niets meer te kiezen.
   expect(html).not.toContain('data-testid="gratis-bij-B1"');
+});
+
+/* THE CADENCE WORDS WERE DUTCH IN BOTH LANGUAGES. `CADENCE_LABEL_NL` lived in
+ * packages/core and the view read it straight, so an English reader saw
+ * "maandelijks" on the statement column and "per kwartaal, jaarlijks" in the
+ * sentence about what a short import cannot show. Core holds no prose now; the
+ * names come from `copy/optimise` like every other sentence on this screen. */
+test("the cadence words follow the reader's language", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = render([
+    tx("n1", "2026-05-08", -15.99, "Netflix"),
+    tx("n2", "2026-06-08", -15.99, "Netflix"),
+    tx("n3", "2026-07-08", -17.99, "Netflix"),
+    tx("n4", "2026-08-08", -17.99, "Netflix"),
+  ]);
+  expect(html).toContain("On your statement");
+  expect(html).toContain("monthly");
+  expect(html).not.toContain("maandelijks");
+});
+
+test("the rhythms a short import cannot see are named in English too", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = render([
+    tx("a1", "2026-06-14", -12.5, "Albert Heijn"),
+    tx("a2", "2026-07-14", -12.5, "Albert Heijn"),
+  ]);
+  expect(html).toContain("quarterly");
+  expect(html).toContain("annually");
+  expect(html).not.toContain("per kwartaal");
+  expect(html).not.toContain("jaarlijks");
+});
+
+/* DE DODE TAK, TOCH GETEST. `increaseSentence` valt op het ritme terug zodra
+ * een abonnement niet om te rekenen is, en dat gebeurt vandaag nooit: elke
+ * `cadenceDays` is door `CADENCE_BANDS` op één van vijf waarden gezet, dus
+ * `CADENCE_MONTHS` kent hem altijd. De zin stond er daardoor jarenlang stuk in
+ * — "per maandelijks afgeschreven", en in het Engels "charged every every 45
+ * days" zodra er ooit een zesde ritme bijkomt. Eén band erbij mag geen kapotte
+ * zin opleveren, dus de tak wordt hier los nagelopen. */
+test("the fallback sentence reads as a sentence for every cadence name", () => {
+  for (const locale of ["nl", "en"] as const) {
+    const c = optimiseCopy[locale].optimalisatie.subscriptions;
+    for (const days of [30, 61, 91, 182, 365, 45]) {
+      const sentence = c.increaseSentence({
+        name: "Spotify",
+        fromAmount: "9,99",
+        toAmount: "11,99",
+        changePct: 20,
+        unit: locale === "nl" ? "per maand" : "per month",
+        cadence: cadenceName(days, locale),
+      });
+      expect(sentence, `${locale} ${days}`).not.toMatch(/\b(\w+) \1\b/);
+      expect(sentence, `${locale} ${days}`).not.toMatch(/per (maandelijks|tweemaandelijks|halfjaarlijks|jaarlijks)/);
+    }
+  }
+});
+
+/* DE ACTIERENTE-BADGE CITEERDE DE NEDERLANDSE VOORWAARDEN, in beide talen. De
+ * hoofdzin hierboven deed dat al niet — die bouwt het feit voor een Engelse
+ * lezer op uit `standardRatePct` — maar de badge in de benchmarktabel ontsnapte
+ * daaraan. Nu volgen ze dezelfde regel. */
+test("the promo badge quotes the Dutch terms only to a Dutch reader", () => {
+  const promo = {
+    bank: "Bigbank",
+    product: "Flexibel Sparen",
+    ratePct: 3.1,
+    standardRatePct: 2.1,
+    promo: true,
+    promoNote: "Actierente 6 mnd, daarna 2,10%",
+    freeWithdrawal: true,
+  } as RateBenchmark;
+  const plain = { bank: "Klarna", product: "Sparen", ratePct: 1.95, freeWithdrawal: true } as RateBenchmark;
+
+  expect(promoBadgeLabel("nl", promo)).toBe("Actierente 6 mnd, daarna 2,10%");
+  // Engels: het feit, niet het citaat — en het post-actietarief staat erin.
+  const en = promoBadgeLabel("en", promo);
+  expect(en).not.toContain("Actierente");
+  expect(en).toContain("2.1");
+  // Geen actie is geen badge, in beide talen.
+  expect(promoBadgeLabel("nl", plain)).toBeNull();
+  expect(promoBadgeLabel("en", plain)).toBeNull();
 });

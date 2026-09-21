@@ -279,7 +279,7 @@ export default function SaldoBlock({
 
   return (
     <Module
-      title={c.title(unknownCount > 0)}
+      title={c.title(unknownCount)}
       span={span}
       height="tall"
       menu={

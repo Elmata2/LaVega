@@ -1321,7 +1321,7 @@ export default function Facturen({
                   {n.subject ?? c.notices.noSubjectFallback}
                   {n.from ? ` · ${n.from}` : ""}
                 </p>
-                <p className="cell-sub">{n.reason}</p>
+                <p className="cell-sub">{n.reason ?? c.notices.noReasonFallback}</p>
                 <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
                   {n.mailUrl ? (
                     <a

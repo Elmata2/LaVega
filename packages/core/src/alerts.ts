@@ -8,7 +8,20 @@ import type { TrackedStatus } from "./tracking.js";
  * with the user's buffer so `shortfall` reflects it. */
 
 export type AlertSeverity = "critical" | "warning" | "info";
-export type Alert = { id: string; severity: AlertSeverity; title: string; detail: string };
+
+/** The FACTS a rendered alert sentence needs, carrying no prose and no
+ *  locale. A view renders `title`/`detail` from a `body` via a `copy/`
+ *  module typed `Record<Locale, T>` — see AandachtBlock.tsx and
+ *  apps/web/src/copy/money.ts. One variant per alert site below. */
+export type AlertBody =
+  | { kind: "shortfall"; date: string; balanceCents: number; bufferCents: number }
+  | { kind: "missed-stream"; sign: 1 | -1; counterparty: string; amountCents: number; expectedDate: string }
+  | { kind: "vat-due"; label: string; dueDate: string; amountCents: number; days: number }
+  | { kind: "tax-prepayment-due"; label: string; dueDate: string; amountCents: number; days: number }
+  | { kind: "tracking-stale"; label: string; updatedAt: string; ageDays: number; question: string }
+  | { kind: "no-balance"; count: number };
+
+export type Alert = { id: string; severity: AlertSeverity; body: AlertBody };
 
 /** Whole days from ISO `a` to ISO `b` (b - a), via Date.UTC (locale/TZ-safe). */
 function daysBetween(a: string, b: string): number {
@@ -20,12 +33,6 @@ function addDays(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const t = new Date(Date.UTC(y, m - 1, d + n));
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
-}
-function eur(cents: number): string {
-  return (
-    "€ " +
-    (cents / 100).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
 }
 
 export type ComputeAlertsInput = {
@@ -61,8 +68,12 @@ export function computeAlerts({
     alerts.push({
       id: "shortfall",
       severity: "critical",
-      title: "Verwacht tekort",
-      detail: `Rond ${forecast.shortfall.date} zakt je saldo naar ${eur(forecast.shortfall.balanceCents)} — onder je buffer van ${eur(bufferCents)}.`,
+      body: {
+        kind: "shortfall",
+        date: forecast.shortfall.date,
+        balanceCents: forecast.shortfall.balanceCents,
+        bufferCents,
+      },
     });
   }
 
@@ -71,13 +82,16 @@ export function computeAlerts({
     const overdueDays = daysBetween(expectedNext, asOf);
     const grace = Math.max(3, Math.round(s.cadenceDays * 0.2));
     if (overdueDays > grace && overdueDays <= s.cadenceDays * 2) {
-      const kind = s.sign === 1 ? "inkomst" : "betaling";
-      const prep = s.sign === 1 ? "van" : "aan";
       alerts.push({
         id: `missed:${s.key}`,
         severity: "warning",
-        title: `Verwachte ${kind} niet gezien`,
-        detail: `${kind[0].toUpperCase() + kind.slice(1)} ${prep} ${s.counterparty} (~${eur(s.amountCents)}) werd rond ${expectedNext} verwacht, maar is nog niet binnen.`,
+        body: {
+          kind: "missed-stream",
+          sign: s.sign,
+          counterparty: s.counterparty,
+          amountCents: s.amountCents,
+          expectedDate: expectedNext,
+        },
       });
     }
   }
@@ -92,10 +106,15 @@ export function computeAlerts({
     alerts.push({
       id: `${isVat ? "vat" : "tax"}:${f.id}`,
       severity,
-      title: `${f.label} — betaal vóór ${f.dueDate}`,
-      detail: isVat
-        ? `Zet ${eur(f.amountCents)} klaar; de BTW-aangifte + betaling moet uiterlijk ${f.dueDate} (over ${days} dagen).`
-        : `Zet ${eur(f.amountCents)} klaar; deze vooruitbetaling winstbelasting moet uiterlijk ${f.dueDate} betaald zijn (over ${days} dagen).`,
+      body: isVat
+        ? { kind: "vat-due", label: f.label, dueDate: f.dueDate, amountCents: f.amountCents, days }
+        : {
+            kind: "tax-prepayment-due",
+            label: f.label,
+            dueDate: f.dueDate,
+            amountCents: f.amountCents,
+            days,
+          },
     });
   }
 
@@ -107,8 +126,13 @@ export function computeAlerts({
     alerts.push({
       id: `tracking:${t.source}:${t.id}`,
       severity: t.state === "overdue" ? "warning" : "info",
-      title: `${t.label} — saldo bijwerken`,
-      detail: `Laatst bijgewerkt op ${t.updatedAt} (${t.ageDays} dagen geleden). ${t.question}`,
+      body: {
+        kind: "tracking-stale",
+        label: t.label,
+        updatedAt: t.updatedAt,
+        ageDays: t.ageDays,
+        question: t.question,
+      },
     });
   }
 
@@ -117,8 +141,7 @@ export function computeAlerts({
     alerts.push({
       id: "no-balance",
       severity: "info",
-      title: "Onbekend saldo",
-      detail: `${noBalance} rekening${noBalance > 1 ? "en" : ""} zonder saldo — vul in bij Rekeningen voor een compleet beeld.`,
+      body: { kind: "no-balance", count: noBalance },
     });
   }
 

@@ -1,6 +1,9 @@
 import type { Locale } from "../locale.js";
 import type { View } from "../App.js";
 import type { ModuleId, WidgetId } from "../components/moduleRegistry.js";
+import type { SignInFailure } from "../authClient.js";
+import type { ImportProblem } from "@lavega/core";
+import type { ShellNotice } from "../shellNotice.js";
 
 /**
  * Every word the vault app's chrome shows, in both languages: TopBar, NavBar,
@@ -29,6 +32,10 @@ export type ShellCopy = {
    *  TopBar's switch and Profiel's per-entity classifier, the two places that
    *  render the same two words. */
   scope: { personal: string; business: string };
+  /** De uitleg onder een leeg scherm: de helft waar je in staat heeft geen
+   *  rekeningen. Opgeknipt omdat de schakelaarnaam vet staat en er een link
+   *  achteraan komt. */
+  emptyScope: { before: string; after: string; linkLabel: string };
   topBar: {
     viewTitles: Record<View, string>;
     scopeGroupLabel: string;
@@ -89,6 +96,11 @@ export type ShellCopy = {
         backupNow: string;
         later: string;
       };
+      /** De kluis liet zich niet teruglezen; de plaintext is bewaard. */
+      verifyFailed: string;
+      /** Iets anders ging mis. `detail` is de onvertaalde tekst van de
+       *  uitzondering — die verzinnen we hier niet opnieuw. */
+      failed: (detail: string) => string;
     };
   };
   overzicht: { gridLabel: string };
@@ -97,7 +109,13 @@ export type ShellCopy = {
     heading: string;
     entityLabel: string;
     fileInputAriaLabel: string;
+    /** Wat er mis was met het bestand, uit core's `ImportProblem`. Een
+     *  exhaustive switch en geen Record, omdat twee kinds een eigen feit
+     *  dragen dat in de zin hoort. */
+    problem: (p: ImportProblem) => string;
   };
+  /** De meldingsbalk bovenin, uit `shellNotice.ts`. */
+  notice: (n: ShellNotice) => string;
   profiel: {
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
     account: {
@@ -109,6 +127,8 @@ export type ShellCopy = {
       passwordLabel: string;
       signIn: string;
       signOut: string;
+      /** Waarom het inloggen niet doorging, per kind uit `authClient`. */
+      signInError: Record<SignInFailure, string>;
     };
     head: {
       ariaLabel: string;
@@ -202,6 +222,11 @@ export type ShellCopy = {
 
 const nl: ShellCopy = {
   scope: { personal: "Persoonlijk", business: "Zakelijk" },
+  emptyScope: {
+    before: "Geen rekeningen staan als ",
+    after: " ingesteld — daarom is dit scherm leeg. Zet dat per rekening bij ",
+    linkLabel: "Rekeningen",
+  },
   topBar: {
     viewTitles: {
       overview: "Overzicht",
@@ -325,6 +350,9 @@ const nl: ShellCopy = {
         backupNow: "Maak nu een back-up",
         later: "Later, naar de app",
       },
+      verifyFailed:
+        "De kluis liet zich niet teruglezen, dus je onversleutelde data is bewaard gebleven. Er is niets verwijderd — probeer het opnieuw.",
+      failed: (detail) => `Versleutelen mislukt: ${detail}`,
     },
   },
   overzicht: { gridLabel: "Overzicht" },
@@ -333,6 +361,32 @@ const nl: ShellCopy = {
     heading: "Importeren",
     entityLabel: "Entiteit",
     fileInputAriaLabel: "Kies een bankbestand om te importeren",
+    problem: (p) => {
+      switch (p.kind) {
+        case "camt-not-supported":
+          return "CAMT.053 wordt nog niet ondersteund.";
+        case "spreadsheet-not-supported":
+          return `Dit is een Excel-bestand (.${p.format}). LaVega leest CSV, MT940 en .STA — sla het in Excel op via Bestand → Opslaan als → CSV, of download het afschrift bij je bank als CSV.`;
+        case "recognised-but-empty":
+          return `Formaat herkend (${p.source}), maar er stonden geen transacties in.`;
+        case "unrecognised":
+          return "Onbekend of leeg bestand — geen transacties herkend.";
+      }
+    },
+  },
+  notice: (n) => {
+    switch (n.kind) {
+      case "import-problem":
+        return nl.import.problem(n.problem);
+      case "bank-link-failed":
+        return `Bankkoppeling mislukt: ${n.detail}`;
+      case "bank-linked":
+        return `Bank gekoppeld: ${n.accounts} rekening${n.accounts === 1 ? "" : "en"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transactie${n.txs === 1 ? "" : "s"}.`;
+      case "import-failed":
+        return `Importeren mislukt: ${n.detail}`;
+      case "terms-lookup-failed":
+        return `Voorwaarden opzoeken mislukt: ${n.detail}`;
+    }
   },
   profiel: {
     languageSwitch: {
@@ -351,6 +405,10 @@ const nl: ShellCopy = {
       passwordLabel: "Wachtwoord",
       signIn: "Inloggen",
       signOut: "Uitloggen",
+      signInError: {
+        "wrong-credentials": "Onjuist e-mailadres of wachtwoord.",
+        unreachable: "Inloggen lukte niet. Probeer het later opnieuw.",
+      },
     },
     head: {
       ariaLabel: "Profiel",
@@ -458,6 +516,11 @@ const nl: ShellCopy = {
 
 const en: ShellCopy = {
   scope: { personal: "Personal", business: "Business" },
+  emptyScope: {
+    before: "No accounts are set as ",
+    after: " — that's why this screen is empty. Set it per account under ",
+    linkLabel: "Accounts",
+  },
   topBar: {
     viewTitles: {
       overview: "Overview",
@@ -581,6 +644,9 @@ const en: ShellCopy = {
         backupNow: "Make a backup now",
         later: "Later, go to the app",
       },
+      verifyFailed:
+        "The vault would not read back, so your unencrypted data has been kept. Nothing was deleted — please try again.",
+      failed: (detail) => `Encrypting failed: ${detail}`,
     },
   },
   overzicht: { gridLabel: "Overview" },
@@ -589,6 +655,32 @@ const en: ShellCopy = {
     heading: "Import",
     entityLabel: "Entity",
     fileInputAriaLabel: "Choose a bank file to import",
+    problem: (p) => {
+      switch (p.kind) {
+        case "camt-not-supported":
+          return "CAMT.053 isn't supported yet.";
+        case "spreadsheet-not-supported":
+          return `This is an Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA — save it from Excel with File → Save As → CSV, or download the statement from your bank as CSV.`;
+        case "recognised-but-empty":
+          return `Format recognised (${p.source}), but it held no transactions.`;
+        case "unrecognised":
+          return "Unrecognised or empty file — no transactions found.";
+      }
+    },
+  },
+  notice: (n) => {
+    switch (n.kind) {
+      case "import-problem":
+        return en.import.problem(n.problem);
+      case "bank-link-failed":
+        return `Bank connection failed: ${n.detail}`;
+      case "bank-linked":
+        return `Bank connected: ${n.accounts} account${n.accounts === 1 ? "" : "s"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transaction${n.txs === 1 ? "" : "s"}.`;
+      case "import-failed":
+        return `Import failed: ${n.detail}`;
+      case "terms-lookup-failed":
+        return `Looking up the terms failed: ${n.detail}`;
+    }
   },
   profiel: {
     languageSwitch: {
@@ -607,6 +699,10 @@ const en: ShellCopy = {
       passwordLabel: "Password",
       signIn: "Sign in",
       signOut: "Sign out",
+      signInError: {
+        "wrong-credentials": "Wrong email address or password.",
+        unreachable: "Signing in didn't work. Please try again later.",
+      },
     },
     head: {
       ariaLabel: "Profile",

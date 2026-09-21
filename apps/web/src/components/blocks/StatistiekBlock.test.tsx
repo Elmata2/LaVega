@@ -246,3 +246,15 @@ test("StatistiekBlock: separate mode reproduces exactly today's wording even whe
   expect(html).not.toContain("nog geen koers");
   expect(html).not.toContain("Vreemde valuta omgerekend via ECB-koers van de dag.");
 });
+
+/* TWEE LEGENDA'S, ÉÉN KLIKBAAR. Zijn woorden, bij de UI-ronde van 21 september.
+ * `.stat-chart .lv-chart-legend { display: none }` stond in blocks.css, maar dat
+ * bestand zit in `@layer components` en CategoryBars zette er een `flex`-utility
+ * op: utilities komen later in de cascade, dus display:flex won en de legenda
+ * kwam terug naast de klikbare lijst. Nu rendert hij niet meer; deze test valt
+ * om zodra iemand hem weer aanzet. */
+test("the category chart prints one legend, and it is the clickable one", () => {
+  const html = render();
+  expect(html).toContain("stat-legend-button");
+  expect(html).not.toContain("lv-chart-legend");
+});

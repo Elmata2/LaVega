@@ -49,9 +49,9 @@ test("SaldoBlock renders the summed known balances and what the number covers", 
       {...SEPARATE}
     />,
   );
-  // A3 has no saldo, so the title is flagged "(deels)" and the figure is the
+  // A3 has no saldo, so the title names how many accounts are left out and the figure is the
   // sum of the two known balances.
-  expect(html).toContain("Totale positie (deels)");
+  expect(html).toContain("Totale positie — 1 rekening niet meegeteld");
   expect(html).toContain(formatEuro(KNOWN_SUM));
   expect(html).toContain("1 rekening nog zonder saldo");
   expect(html).toContain("Rekeningen");

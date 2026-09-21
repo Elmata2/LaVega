@@ -59,7 +59,7 @@ test("parseBankFile: CAMT/XML input is reported as unsupported, not thrown", () 
     `<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"></Document>`,
   );
   expect(r.source).toBe("CAMT.053");
-  expect(r.problems).toContain("CAMT.053 nog niet ondersteund");
+  expect(r.problems).toEqual([{ kind: "camt-not-supported" }]);
   expect(r.txs).toHaveLength(0);
 });
 
@@ -118,4 +118,28 @@ test("parseBankFile: a malformed MT940 (routed by :20:/:61: but no :25: account)
   expect(r.txs).toHaveLength(0); // ...but nothing parsed (no :25:)
   expect(r.accounts).toHaveLength(0);
   expect(r.problems.length).toBeGreaterThan(0); // so a problem is surfaced, not silent
+});
+
+/* EEN WERKBOEK IS GEEN AFSCHRIFT, en als tekst gelezen is het mojibake dat
+ * precies zo eindigt als een kapot bestand: "onbekend of leeg". De Duitse
+ * ontwerp-partner krijgt van zijn bank een .xlsx, dus dat doodlopende pad is
+ * het eerste wat hij zou raken. Het antwoord is nu een instructie. */
+test("an Excel workbook is named as one, not reported as an unknown file", () => {
+  // Een echte .xlsx is een ZIP; die handtekening overleeft een UTF-8-decode.
+  const zip = parseBankFile("Umsaetze.xlsx", "PK\u0003\u0004 binaire rommel");
+  expect(zip.problems).toEqual([{ kind: "spreadsheet-not-supported", format: "xlsx" }]);
+  expect(zip.txs).toHaveLength(0);
+
+  // Ook zonder handtekening: de extensie alleen is genoeg om niet te doen
+  // alsof we het geprobeerd hebben.
+  expect(parseBankFile("Umsaetze.XLSX", "wat dan ook").problems).toEqual([
+    { kind: "spreadsheet-not-supported", format: "xlsx" },
+  ]);
+  expect(parseBankFile("oud.xls", "wat dan ook").problems).toEqual([
+    { kind: "spreadsheet-not-supported", format: "xls" },
+  ]);
+
+  // En een gewone CSV blijft een gewone CSV — de sniffer mag niets opeisen.
+  const csv = parseBankFile("ing.csv", "Datum,Naam,Bedrag\n2026-01-02,Albert Heijn,-12,50\n");
+  expect(csv.problems.some((p) => p.kind === "spreadsheet-not-supported")).toBe(false);
 });

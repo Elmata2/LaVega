@@ -32,10 +32,11 @@ import { moneyCopy } from "../../copy/money.js";
  *
  * What it still cannot do: show the money at stake as a figure, sort within a
  * tier by urgency, or turn "vul in bij Rekeningen" into a link. `Alert` is
- * `{ id, severity, title, detail }` and every euro and date is baked into the
- * detail STRING, so nothing here can rank, format or act on them. Parsing them
- * back out of Dutch prose would be invented depth, so it is not done — see
- * docs/BACKLOG.md B1 for what core would have to carry instead. */
+ * `{ id, severity, body }`, with `body` a discriminated `AlertBody` carrying
+ * the facts (dates, cents, counterparty) core computed — the title/detail
+ * SENTENCE is rendered here via `copy/money.ts`'s `aandacht.alert`, per
+ * locale. Ranking within a tier or acting on the money is possible now that
+ * the facts are structured; it just isn't built yet. */
 
 type AandachtBlockProps = {
   alerts: Alert[];
@@ -174,8 +175,10 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
                         data-testid="alert-row"
                         key={a.id}
                       >
-                        <div className="flex items-center gap-2 font-semibold">{a.title}</div>
-                        <div className="cell-sub">{a.detail}</div>
+                        <div className="flex items-center gap-2 font-semibold">
+                          {c.alert.title(a.body)}
+                        </div>
+                        <div className="cell-sub">{c.alert.detail(a.body)}</div>
                       </div>
                     ))}
                   </div>

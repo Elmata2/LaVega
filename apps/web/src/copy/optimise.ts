@@ -1,6 +1,14 @@
 import type { Locale } from "../locale.js";
 import type { HeldCashbackDescription } from "@lavega/core";
-import type { CrossScopeEvidence, CrossScopeKind, NoAssumptionReason } from "@lavega/core";
+import type {
+  CrossScopeEvidence,
+  CrossScopeKind,
+  EntityScope,
+  NoAssumptionReason,
+  StoreNote,
+  TravelCaveat,
+  WithdrawalComponent,
+} from "@lavega/core";
 import { formatEuroIn, localeTag } from "../format.js";
 
 /**
@@ -150,6 +158,17 @@ export type OptimalisatieCopy = {
     tableHeaders: (periodLabel: string) => [string, string, string, string, string, string];
     unrekenbaarCell: string;
 
+    /** Het ritme in woorden. `elkeNDagen` is de terugval die een onbekend ritme
+     *  noemt in plaats van het te verzwijgen. */
+    cadence: {
+      maandelijks: string;
+      tweemaandelijks: string;
+      perKwartaal: string;
+      halfjaarlijks: string;
+      jaarlijks: string;
+      elkeNDagen: (days: number) => string;
+    };
+
     convertedPanel: {
       summary: (converted: number, total: number) => string;
       explanation: (unit: string) => string;
@@ -217,6 +236,12 @@ export type OptimalisatieCopy = {
       unknownKept: string;
       sameAsHeadline: string;
       noPromo: string;
+      /** Het actietarief in de badge. De Nederlandse tak citeert de zin uit de
+       *  voorwaarden van de bank; de Engelse bouwt hem op uit de structuur,
+       *  precies zoals de hoofdzin dat al deed — een geciteerde Nederlandse
+       *  bijzin midden in een Engels scherm is geen citaat meer maar ruis. */
+      promoThen: (standardPct: string) => string;
+      promoPlain: string;
       explanation: (p: { sourceLabel: string; asOf: string }) => string;
       refreshButton: string;
       refreshingButton: string;
@@ -268,7 +293,6 @@ export type OptimalisatieCopy = {
       bestCardMeta: (product: string, asOf: string) => string;
       perMonthSuffix: string;
       assumedNote: (p: {
-        description: string;
         bankOrProduct: string;
         checkedNote: string;
         dueForReview: boolean;
@@ -535,7 +559,7 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       `${name} ging van ${fromAmount} naar ${toAmount} (+${changePct}%) ` +
       (extra
         ? `— dat is ${extra.amount} ${unit} extra${extra.sum ? ` (${extra.sum})` : ""}.`
-        : `— per ${cadence} afgeschreven, dus wat dat ${unit} scheelt valt hier niet uit te rekenen.`),
+        : `— ${cadence} afgeschreven, dus wat dat ${unit} scheelt valt hier niet uit te rekenen.`),
 
     overlapSentence: ({ count, functionName, names, total, unit, cancelAmount }) =>
       `${count} × ${functionName}: ${names} — samen ${total} ${unit}.` +
@@ -543,6 +567,15 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
 
     tableHeaders: (periodLabel) => ["Dienst", "Functie", periodLabel, "Op je afschrift", "Verandering", "Laatst"],
     unrekenbaarCell: "niet om te rekenen",
+
+    cadence: {
+      maandelijks: "maandelijks",
+      tweemaandelijks: "tweemaandelijks",
+      perKwartaal: "per kwartaal",
+      halfjaarlijks: "halfjaarlijks",
+      jaarlijks: "jaarlijks",
+      elkeNDagen: (days) => `elke ${days} dagen`,
+    },
 
     convertedPanel: {
       summary: (converted, total) => `${converted} van de ${total} bedragen ${converted === 1 ? "is" : "zijn"} omgerekend uit een ander ritme`,
@@ -626,6 +659,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       unknownKept: "onbekend",
       sameAsHeadline: "—",
       noPromo: "—",
+      promoThen: (standardPct) => `Actietarief, daarna ${standardPct}`,
+      promoPlain: "Actietarief",
       explanation: ({ sourceLabel, asOf }) =>
         `"Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "wat je houdt" is het tarief ná de actie — daarop wordt vergeleken. Staat daar "onbekend", dan zegt de bron niet wat er na de actie overblijft en doet die rekening niet mee in de vergelijking; het actietarief zie je wel. Bron: ${sourceLabel} via geld.nl (peildatum ${asOf}).`,
       refreshButton: "ververs rentes",
@@ -676,8 +711,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       bestCardLabel: "Op de beste kaart die we kunnen aantonen",
       bestCardMeta: (product, asOf) => `(${product}, peildatum ${asOf})`,
       perMonthSuffix: " per maand",
-      assumedNote: ({ description, bankOrProduct, checkedNote, dueForReview }) =>
-        `${description}. Een gewone Nederlandse betaalpas of grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document van ${bankOrProduct}. ${checkedNote}${dueForReview ? " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik." : ""} Klopt het niet? Zet het juiste percentage bij Profiel → Cashback corrigeren; wat jij invult gaat vóór alles wat LaVega zelf vindt.`,
+      assumedNote: ({ bankOrProduct, checkedNote, dueForReview }) =>
+        `Aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product. Een gewone Nederlandse betaalpas of grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document van ${bankOrProduct}. ${checkedNote}${dueForReview ? " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik." : ""} Klopt het niet? Zet het juiste percentage bij Profiel → Cashback corrigeren; wat jij invult gaat vóór alles wat LaVega zelf vindt.`,
       assumedCheckedNote: (issuerFamily, date) => `De voorwaarden van ${issuerFamily} zijn voor het laatst gelezen op ${date}.`,
       assumedNeverCheckedNote: (issuerFamily) => `Van ${issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`,
       diffLabel: "Verschil",
@@ -946,7 +981,7 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       `${name} went from ${fromAmount} to ${toAmount} (+${changePct}%) ` +
       (extra
         ? `— that's ${extra.amount} ${unit} extra${extra.sum ? ` (${extra.sum})` : ""}.`
-        : `— charged every ${cadence}, so what that costs ${unit} can't be worked out here.`),
+        : `— charged ${cadence}, so what that costs ${unit} can't be worked out here.`),
 
     overlapSentence: ({ count, functionName, names, total, unit, cancelAmount }) =>
       `${count} × ${functionName}: ${names} — ${total} ${unit} combined.` +
@@ -954,6 +989,15 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
 
     tableHeaders: (periodLabel) => ["Service", "Category", periodLabel, "On your statement", "Change", "Last"],
     unrekenbaarCell: "can't be converted",
+
+    cadence: {
+      maandelijks: "monthly",
+      tweemaandelijks: "every two months",
+      perKwartaal: "quarterly",
+      halfjaarlijks: "every six months",
+      jaarlijks: "annually",
+      elkeNDagen: (days) => `every ${days} days`,
+    },
 
     convertedPanel: {
       summary: (converted, total) => `${converted} of ${total} amounts ${converted === 1 ? "is" : "are"} converted from a different cadence`,
@@ -1036,6 +1080,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       unknownKept: "unknown",
       sameAsHeadline: "—",
       noPromo: "—",
+      promoThen: (standardPct) => `Promo rate, then ${standardPct}`,
+      promoPlain: "Promo rate",
       explanation: ({ sourceLabel, asOf }) =>
         `"Rate now" includes promo rates (often for new customers only); "what you keep" is the rate after the promo ends — that's what the comparison uses. Where it says "unknown", the source doesn't say what remains after the promo, so that account isn't included in the comparison; you still see the promo rate. Source: ${sourceLabel} via geld.nl (as of ${asOf}).`,
       refreshButton: "refresh rates",
@@ -1086,8 +1132,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       bestCardLabel: "On the best card we can prove",
       bestCardMeta: (product, asOf) => `(${product}, as of ${asOf})`,
       perMonthSuffix: " per month",
-      assumedNote: ({ description, bankOrProduct, checkedNote, dueForReview }) =>
-        `${description}. An ordinary Dutch debit card or big-bank credit card pays no cashback, so LaVega fills in zero here rather than leaving you with "unknown" — but it stays an assumption of ours, not a line from a document from ${bankOrProduct}. ${checkedNote}${dueForReview ? " That was a year or more ago, so this assumption is due another look." : ""} Not right? Set the correct percentage under Profile → Correct cashback; whatever you enter overrides anything LaVega finds itself.`,
+      assumedNote: ({ bankOrProduct, checkedNote, dueForReview }) =>
+        `Assumed: no cashback — not found in this product's terms. An ordinary Dutch debit card or big-bank credit card pays no cashback, so LaVega fills in zero here rather than leaving you with "unknown" — but it stays an assumption of ours, not a line from a document from ${bankOrProduct}. ${checkedNote}${dueForReview ? " That was a year or more ago, so this assumption is due another look." : ""} Not right? Set the correct percentage under Profile → Correct cashback; whatever you enter overrides anything LaVega finds itself.`,
       assumedCheckedNote: (issuerFamily, date) => `The terms for ${issuerFamily} were last read on ${date}.`,
       assumedNeverCheckedNote: (issuerFamily) => `LaVega has no dated document on file for ${issuerFamily} at all.`,
       diffLabel: "Difference",
@@ -2276,6 +2322,13 @@ export type GrensCopy = {
   header: {
     title: string;
   };
+  /** Hoe een kant van de grens heet als er geen ondernemingsnaam bij hoort.
+   *  Stond als `ENTITY_SCOPE_LABELS` in core (Privé/Zakelijk) en kwam daarmee
+   *  in het Nederlands op een Engels scherm. Let op het register: dit scherm
+   *  zegt "Privé", de schakelaar bovenin zegt "Persoonlijk"; die twee mogen
+   *  binnen één scherm niet door elkaar lopen, dus dit is een eigen entry en
+   *  geen verwijzing naar `shellCopy.scope`. */
+  sideFallback: Record<EntityScope, string>;
   emptyStates: {
     geenZakelijkeEntiteit: (a: {
       unclassified: readonly string[];
@@ -2398,6 +2451,7 @@ export type GrensCopy = {
 
 const grensCopy_nl: GrensCopy = {
   header: { title: "Privé en zakelijk" },
+  sideFallback: { personal: "Privé", business: "Zakelijk" },
 
   emptyStates: {
     geenZakelijkeEntiteit(a) {
@@ -2622,6 +2676,7 @@ const grensCopy_nl: GrensCopy = {
 
 const grensCopy_en: GrensCopy = {
   header: { title: "Personal and business" },
+  sideFallback: { personal: "Private", business: "Business" },
 
   emptyStates: {
     geenZakelijkeEntiteit(a) {
@@ -3285,6 +3340,16 @@ export type TravelCopy = {
   };
   /** Destination options for the country <select>; identical across locales. */
   countries: typeof TRAVEL_COUNTRIES;
+  /** De opnameprijs in woorden. Stond als `describeWithdrawalFee` in core en
+   *  was daarmee altijd Nederlands op een scherm dat ook Engels kan zijn — de
+   *  kop van die functie noemde zichzelf al "de ene nog-Nederlandse string die
+   *  WEL het scherm haalt". Core levert nu alleen nog de componenten. */
+  withdrawalFee: (components: readonly WithdrawalComponent[]) => string;
+  /** Het voorbehoud bij een tarief. `quoted` is de tekst van de aanbieder en
+   *  gaat er ongewijzigd doorheen; de andere twee zijn onze eigen zin. */
+  caveat: (c: TravelCaveat) => string;
+  /** Waar het geld het best staat. */
+  storeNote: (n: StoreNote) => string;
 };
 
 const travelCopy_nl: TravelCopy = {
@@ -3569,6 +3634,30 @@ const travelCopy_nl: TravelCopy = {
     userSetFee: "door jou ingesteld",
   },
   countries: TRAVEL_COUNTRIES,
+  caveat: (c) => {
+    switch (c.kind) {
+      case "capped":
+        return `Dit tarief geldt maar tot een grens: ${c.cap}.`;
+      case "limited":
+        return "Dit tarief geldt maar binnen een limiet of pakket — lees de voorwaarden voordat je overstapt.";
+      case "quoted":
+        return c.text;
+    }
+  },
+  storeNote: (n) =>
+    n.kind === "already-best"
+      ? "Je spaargeld staat al op de beste plek die we kennen."
+      : `Je laat rente liggen op ${n.account}${n.best ? ` — ${n.best.bank} geeft ${formatPercentIn("nl", n.best.ratePct / 100)}` : ""}.`,
+  withdrawalFee: (components) =>
+    components
+      .map((c) =>
+        c.kind === "fixed"
+          ? `${formatEuroIn("nl", c.eur)} per opname`
+          : c.minEur === null
+            ? `${formatPercentIn("nl", c.pct / 100)} over het opgenomen bedrag`
+            : `${formatPercentIn("nl", c.pct / 100)} over het opgenomen bedrag, minimaal ${formatEuroIn("nl", c.minEur)}`,
+      )
+      .join(" + "),
 };
 
 const travelCopy_en: TravelCopy = {
@@ -3850,6 +3939,30 @@ const travelCopy_en: TravelCopy = {
     userSetFee: "set by you",
   },
   countries: TRAVEL_COUNTRIES,
+  caveat: (c) => {
+    switch (c.kind) {
+      case "capped":
+        return `This rate only holds up to a limit: ${c.cap}.`;
+      case "limited":
+        return "This rate only holds within a limit or a package — read the terms before you switch.";
+      case "quoted":
+        return c.text;
+    }
+  },
+  storeNote: (n) =>
+    n.kind === "already-best"
+      ? "Your savings are already in the best place we know of."
+      : `You're leaving interest on the table at ${n.account}${n.best ? ` — ${n.best.bank} pays ${formatPercentIn("en", n.best.ratePct / 100)}` : ""}.`,
+  withdrawalFee: (components) =>
+    components
+      .map((c) =>
+        c.kind === "fixed"
+          ? `${formatEuroIn("en", c.eur)} per withdrawal`
+          : c.minEur === null
+            ? `${formatPercentIn("en", c.pct / 100)} of the amount withdrawn`
+            : `${formatPercentIn("en", c.pct / 100)} of the amount withdrawn, minimum ${formatEuroIn("en", c.minEur)}`,
+      )
+      .join(" + "),
 };
 
 export type OptimiseCopy = {

@@ -45,9 +45,9 @@
 import { norm } from "./hash.js";
 import type { FactSource } from "./facts.js";
 
-/** Hoe hard het cijfer is. Dit woord staat ook LETTERLIJK op het scherm — zie
- *  `describeCashback` — want een lezer die "aangenomen" ziet staan kan de vraag
- *  stellen; een lezer die alleen "0%" ziet kan dat niet. */
+/** Hoe hard het cijfer is. Dit woord staat ook LETTERLIJK op het scherm, in de
+ *  taal van de lezer, want wie "aangenomen" ziet staan kan de vraag stellen en
+ *  wie alleen "0%" ziet kan dat niet. */
 export type CashbackTier = "gemeten" | "aangenomen" | "onbekend";
 
 /** Waarom er niets mag worden aangenomen. De reden hoort erbij: "dit is een
@@ -280,38 +280,6 @@ export function assumptionDueForReview(lastCheckedAt: string | null, asOf: strin
 
 /* ─────────────────────────────────────────────────────────────── de woorden */
 
-/** Waarom er niets is aangenomen, in één Nederlandse zin. Staat in core en niet
- *  in een view, om dezelfde reden als `describeNetBenefit`: er zijn twee schermen
- *  die over hetzelfde gat praten (Optimalisatie en het reisblok) en die mogen
- *  niet op een dag iets anders beweren. */
-export const NO_ASSUMPTION_NL: Record<NoAssumptionReason, string> = {
-  verkoopargument:
-    "Bij prepaid- en cryptokaarten is cashback juist het verkoopargument, dus daar mag LaVega geen nul aannemen.",
-  beloningsuitgever:
-    "Deze uitgever verkoopt zijn kaarten op wat je ermee verdient, dus wat je terugkrijgt verschilt per kaart en staat hier niet vast.",
-  "geen-betaalproduct":
-    "Bij dit soort rekening hoort geen kaart, dus er valt geen cashback op te geven.",
-  "uitgever-buiten-de-aanname":
-    "Deze aanbieder verkoopt betaalde niveaus met extraatjes, dus nul aannemen zou een gok zijn.",
-  "soort-onbekend":
-    "LaVega weet niet wat voor product dit is, en zonder dat is er niets om op te steunen.",
-};
-
-/** Het cijfer in woorden, met de hardheid ervoor. De aangenomen tak zegt
- *  LETTERLIJK "aangenomen" — dat is het hele punt van deze module: een lezer moet
- *  aan de zin kunnen zien dat er niemand is die dit heeft opgeschreven. */
-export function describeCashback(k: CashbackKnowledge): string {
-  if (k.tier === "gemeten") {
-    const p = k.pct.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
-    return k.pct === 0
-      ? `gemeten: geen cashback — de voorwaarden van dit product noemen het uitdrukkelijk (peildatum ${k.asOf})`
-      : `gemeten: ${p}% (peildatum ${k.asOf})`;
-  }
-  if (k.tier === "aangenomen") {
-    return "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product";
-  }
-  return `onbekend — ${NO_ASSUMPTION_NL[k.reason]}`;
-}
 
 /* ─────────────────────────── wat we van een EIGEN kaart weten, en hoe hard ──
  *
@@ -386,10 +354,9 @@ export function cashbackPctOf(k: HeldCashback): number | null {
  *  de copy-module die bij dat scherm hoort en rendert via een exhaustive
  *  switch op `kind`.
  *
- *  Naast `describeCashback` en niet erin: die gaat over een catalogusrij met een
- *  URL en een peildatum, deze over een kaart met een feit en een bron. Ze in één
- *  functie proppen zou betekenen dat beide vormen overal optioneel worden, en dan
- *  is het type niet langer wat het onderscheid bewaakt. */
+ *  Eén kind per vorm en niet één type met overal optionele velden: een
+ *  catalogusrij draagt een URL en een peildatum, een kaart een feit en een bron.
+ *  Samengevoegd bewaakt het type het onderscheid niet meer. */
 export type HeldCashbackDescription =
   | { kind: "measured"; pct: number; source: FactSource; updatedAt: string }
   | { kind: "assumption-off" }

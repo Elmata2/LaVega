@@ -40,7 +40,7 @@ const fc = (over: Partial<EntityForecast>): EntityForecast => ({
 
 const ASOF = "2026-08-01";
 
-test("shortfall -> one critical alert mentioning date and buffer", () => {
+test("shortfall -> one critical alert carrying the date, balance and buffer", () => {
   const alerts = computeAlerts({
     accounts: [acc("A", 100)],
     asOf: ASOF,
@@ -48,8 +48,12 @@ test("shortfall -> one critical alert mentioning date and buffer", () => {
     forecast: fc({ shortfall: { date: "2026-09-10", balanceCents: -1500 } }),
   });
   expect(alerts[0].severity).toBe("critical");
-  expect(alerts[0].detail).toContain("2026-09-10");
-  expect(alerts[0].detail).toContain("2.500,00"); // buffer shown
+  expect(alerts[0].body).toEqual({
+    kind: "shortfall",
+    date: "2026-09-10",
+    balanceCents: -1500,
+    bufferCents: 250000,
+  });
 });
 
 test("recurring stream overdue within window -> warning; recent or long-gone -> none", () => {
@@ -70,7 +74,13 @@ test("recurring stream overdue within window -> warning; recent or long-gone -> 
   });
   const warnings = alerts.filter((a) => a.severity === "warning");
   expect(warnings).toHaveLength(1);
-  expect(warnings[0].detail).toContain("Verhuurder");
+  expect(warnings[0].body).toEqual({
+    kind: "missed-stream",
+    sign: -1,
+    counterparty: "Verhuurder",
+    amountCents: 5000,
+    expectedDate: "2026-07-22",
+  });
 });
 
 test("accounts without saldo -> one info alert with the count", () => {
@@ -82,7 +92,7 @@ test("accounts without saldo -> one info alert with the count", () => {
   });
   const info = alerts.filter((a) => a.severity === "info");
   expect(info).toHaveLength(1);
-  expect(info[0].detail).toContain("2 rekeningen");
+  expect(info[0].body).toEqual({ kind: "no-balance", count: 2 });
 });
 
 test("alerts are ranked critical -> warning -> info", () => {
@@ -124,7 +134,13 @@ test("computeAlerts: BTW deadline within 14 days -> warning with the amount", ()
   const w = alerts.filter((a) => a.id.startsWith("vat:"));
   expect(w).toHaveLength(1);
   expect(w[0].severity).toBe("warning");
-  expect(w[0].detail).toContain("1.680,00");
+  expect(w[0].body).toEqual({
+    kind: "vat-due",
+    label: "BTW Q2 2026",
+    dueDate: "2026-08-10",
+    amountCents: 168000,
+    days: 9,
+  });
 });
 test("computeAlerts: BTW deadline > 30 days out -> no alert", () => {
   const vat = makeScheduledFlow({
@@ -167,9 +183,13 @@ test("a prepayment deadline gets the same ladder as a BTW deadline, in its own w
   const a = alerts.filter((x) => x.id.startsWith("tax:"));
   expect(a).toHaveLength(1);
   expect(a[0].severity).toBe("warning"); // 9 days out
-  expect(a[0].title).toContain("Vorauszahlung 3/4 2026");
-  expect(a[0].detail).toContain("vooruitbetaling winstbelasting");
-  expect(a[0].detail).toContain("25.000,00");
+  expect(a[0].body).toEqual({
+    kind: "tax-prepayment-due",
+    label: "Vorauszahlung 3/4 2026",
+    dueDate: "2026-08-10",
+    amountCents: 2_500_000,
+    days: 9,
+  });
 });
 
 test("a stale hand-kept balance becomes an alert whose detail IS the question (item 7, low-trust)", () => {
@@ -189,10 +209,12 @@ test("a stale hand-kept balance becomes an alert whose detail IS the question (i
   expect(t).toHaveLength(1);
   expect(t[0].id).toBe(`tracking:rewards:${amex.id}`);
   expect(t[0].severity).toBe("warning"); // 203 days old -> overdue
-  expect(t[0].title).toBe("American Express Membership Rewards — saldo bijwerken");
-  expect(t[0].detail).toContain("2026-01-10");
-  expect(t[0].detail).toContain("Stuur alleen het getal");
-  expect(t[0].detail).not.toContain("240"); // the balance itself never appears in the ask
+  const body = t[0].body;
+  if (body.kind !== "tracking-stale") throw new Error("expected tracking-stale");
+  expect(body.label).toBe("American Express Membership Rewards");
+  expect(body.updatedAt).toBe("2026-01-10");
+  expect(body.question).toContain("Stuur alleen het getal");
+  expect(body.question).not.toContain("240"); // the balance itself never appears in the ask
 });
 
 test("a merely-due balance is info, a fresh one is nothing, and a money problem still outranks both", () => {

@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
+import { shellCopy } from "./copy/shell.js";
 import { expect, test } from "vitest";
 import type { Account, EntityProfile, ScheduledFlow, Tx } from "@lavega/core";
 import { accountsInScope } from "@lavega/core";
 import {
-  SCOPE_LABELS,
   SCOPE_ORDER,
   entityOptionsFor,
   flowsForScope,
@@ -48,8 +48,13 @@ const accounts = [account("prive", "Privé"), account("bv1", "BV1"), account("bv
 // Only BV1 is classified; BV2 and Privé fall to core's personal default.
 const profiles: EntityProfile[] = [{ entity: "BV1", scope: "business" }];
 
-test("the switch reads Persoonlijk | Zakelijk, in that order", () => {
-  expect(SCOPE_ORDER.map((s) => SCOPE_LABELS[s])).toEqual(["Persoonlijk", "Zakelijk"]);
+/* De labels stonden hier als `SCOPE_LABELS` in scope.ts — één vaste
+ * Nederlandse Record, ongeacht de taal van de lezer. Ze komen nu uit
+ * `shellCopy`, dus de volgorde wordt hier bewaakt en de woorden daar. */
+test("the switch reads personal then business, in that order, in both languages", () => {
+  expect(SCOPE_ORDER).toEqual(["personal", "business"]);
+  expect(SCOPE_ORDER.map((s) => shellCopy.nl.scope[s])).toEqual(["Persoonlijk", "Zakelijk"]);
+  expect(SCOPE_ORDER.map((s) => shellCopy.en.scope[s])).toEqual(["Personal", "Business"]);
 });
 
 test("switching to zakelijk shows the classified entity's accounts and nothing else", () => {

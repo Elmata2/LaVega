@@ -1468,3 +1468,38 @@ test("een zoekopdracht die vastliep wijst naar dezelfde bestaande plek", () => {
   expect(foldText(c)).toContain("Er kwam niets meer binnen");
   keurDeUitweg(c);
 });
+
+/* DRIE ZINNEN DIE CORE ZELF SCHREEF. `describeWithdrawalFee`, `fxCaveat` en de
+ * spaarregel bouwden hun eigen Nederlandse tekst in packages/core, en de kop
+ * van de eerste noemde zichzelf al "de ene nog-Nederlandse string die WEL het
+ * scherm haalt". Core levert nu de componenten en de kinds; deze test bewaakt
+ * dat de zin de taal van de lezer volgt. Het CITAAT van een aanbieder blijft
+ * met opzet onvertaald — dat is de `quoted`-tak van `TravelCaveat`. */
+test("the travel caveats and the savings line follow the reader's language", () => {
+  for (const locale of ["nl", "en"] as const) {
+    const c = optimiseCopy[locale].travel;
+    expect(c.withdrawalFee([{ kind: "fixed", eur: 5 }])).toMatch(
+      locale === "nl" ? /per opname/ : /per withdrawal/,
+    );
+    expect(c.withdrawalFee([{ kind: "pct", pct: 1.7, minEur: null }])).toMatch(
+      locale === "nl" ? /over het opgenomen bedrag/ : /of the amount withdrawn/,
+    );
+    expect(c.caveat({ kind: "limited" })).toMatch(locale === "nl" ? /voorwaarden/ : /terms/);
+    expect(c.caveat({ kind: "capped", cap: "tot € 1.000 per maand" })).toContain(
+      "tot € 1.000 per maand",
+    );
+    // Een citaat gaat er ongewijzigd doorheen, in beide talen.
+    expect(c.caveat({ kind: "quoted", text: "fair usage applies" })).toBe("fair usage applies");
+    expect(c.storeNote({ kind: "already-best" })).toMatch(
+      locale === "nl" ? /beste plek/ : /best place/,
+    );
+    expect(
+      c.storeNote({ kind: "leaving-interest", account: "Spaar", best: { bank: "BigBank", ratePct: 3.1 } }),
+    ).toContain("BigBank");
+  }
+  // En geen Nederlands op het Engelse scherm.
+  const en = optimiseCopy.en.travel;
+  expect(en.storeNote({ kind: "already-best" })).not.toMatch(/spaargeld|plek/);
+  expect(en.caveat({ kind: "limited" })).not.toMatch(/tarief|voorwaarden/);
+  expect(en.withdrawalFee([{ kind: "fixed", eur: 5 }])).not.toMatch(/opname/);
+});

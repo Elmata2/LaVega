@@ -37,7 +37,6 @@ import {
   payHeadline,
   TRAVEL_AGENT,
   TRAVEL_REFERENCE_SPEND,
-  describeWithdrawalFee,
   TRAVEL_REFERENCE_WITHDRAWAL,
   TRAVEL_SMALL_WITHDRAWAL,
   nameSome,
@@ -1319,7 +1318,7 @@ export function CashSection({
             >
               <span className="min-w-0">
                 {productLabel(o.bank, o.productKind, c)}
-                {o.fee.known && <span className="eyebrow"> · {describeWithdrawalFee(o.fee)}</span>}
+                {o.fee.known && <span className="eyebrow"> · {c.withdrawalFee(o.fee.components)}</span>}
                 {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
               </span>
               <span className="flex-none tabular-nums whitespace-nowrap">
@@ -1441,7 +1440,7 @@ export function OffersSection({
             </p>
             {o.capNote && (
               <p className="cell-sub travel-note">
-                <strong>{c.common.caveatLabel}</strong> {o.capNote}
+                <strong>{c.common.caveatLabel}</strong> {c.caveat(o.capNote)}
               </p>
             )}
             {o.cashbackNote && (
@@ -1699,7 +1698,7 @@ export default function TravelBlock({
                 niet: die twee zijn niet dezelfde soort zin. */}
             {plan.pay && !plan.pay.held && plan.pay.note && (
               <p className="cell-sub travel-winner-caveat">
-                <strong>{c.common.caveatLabel}</strong> {plan.pay.note}
+                <strong>{c.common.caveatLabel}</strong> {c.caveat(plan.pay.note)}
               </p>
             )}
             {/* WAT ER ONTBREEKT, in één zin. De hele melding met de knop staat in
@@ -1766,7 +1765,7 @@ export default function TravelBlock({
                   loopt daarom langs `plan.pay.note` en staat wél vooraan. */}
               {bestJourney?.note && (
                 <p className="cell-sub travel-winner-caveat">
-                  <strong>{c.common.caveatLabel}</strong> {bestJourney.note}
+                  <strong>{c.common.caveatLabel}</strong> {c.caveat(bestJourney.note)}
                 </p>
               )}
               {/* Waar de aanbevolen kaart vandaan komt en hoe oud dat tarief is.
@@ -1931,7 +1930,7 @@ export default function TravelBlock({
               <div className="travel-plan">
                 <div className="travel-step">
                   <h3 className="travel-step-title">{c.steps.store}</h3>
-                  <p className="travel-step-line">{plan.store.note}</p>
+                  <p className="travel-step-line">{c.storeNote(plan.store.note)}</p>
                   {plan.store.suggestion && (
                     <p className="cell-sub">
                       {fill(c.steps.storeSavings, {

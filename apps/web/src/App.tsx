@@ -85,7 +85,6 @@ import {
   flowsForScope,
   entityOptionsFor,
   screenOnSwitch,
-  SCOPE_LABELS,
   type ParkedScreens,
   type ScopeScreen,
 } from "./scope.js";
@@ -113,6 +112,9 @@ import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
+import { useAppLocale } from "./appLocale.js";
+import { shellCopy } from "./copy/shell.js";
+import { importNotices, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
 
@@ -174,7 +176,9 @@ export default function App() {
   // before importing, and change it per account in Rekeningen afterwards.
   const [entity, setEntity] = useState("Persoonlijk");
   const [busy, setBusy] = useState(false);
-  const [problems, setProblems] = useState<string[]>([]);
+  const [locale] = useAppLocale();
+  const shell = shellCopy[locale];
+  const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
@@ -520,7 +524,7 @@ export default function App() {
     const { session: ebSession, error: ebError } = pending;
     setView("overview");
     if (ebError) {
-      setProblems([`Bankkoppeling mislukt: ${ebError}`]);
+      setProblems([{ kind: "bank-link-failed", detail: String(ebError) }]);
       return;
     }
     (async () => {
@@ -531,7 +535,7 @@ export default function App() {
         );
         const data = await res.json();
         if (!res.ok || data.error) {
-          setProblems([`Bankkoppeling mislukt: ${data.error ?? res.status}`]);
+          setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
           return;
         }
         const aspsp: string = data.aspsp ?? "";
@@ -580,10 +584,10 @@ export default function App() {
         if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
           await saveInvoices(reconciled);
         setProblems([
-          `Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`,
+          { kind: "bank-linked", accounts: newAccounts.length, aspsp: aspsp ?? "", txs: rawTxs.length },
         ]);
       } catch (e) {
-        setProblems([`Bankkoppeling mislukt: ${e instanceof Error ? e.message : String(e)}`]);
+        setProblems([{ kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) }]);
       } finally {
         setBusy(false);
       }
@@ -832,7 +836,7 @@ export default function App() {
     try {
       const text = await file.text();
       const result = await createFileImport().load({ filename: file.name, text, entity });
-      setProblems(result.problems);
+      setProblems(importNotices(result.problems));
 
       const mergedTxs = ingest(txs, result.txs);
       // Re-importing a statement for an account you already have must not wipe
@@ -865,7 +869,7 @@ export default function App() {
       if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
         await saveInvoices(reconciled);
     } catch (err) {
-      setProblems([`Importeren mislukt: ${err instanceof Error ? err.message : String(err)}`]);
+      setProblems([{ kind: "import-failed", detail: err instanceof Error ? err.message : String(err) }]);
     } finally {
       setBusy(false);
     }
@@ -1169,7 +1173,7 @@ export default function App() {
       if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
     } catch (err) {
       setProblems([
-        `Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`,
+        { kind: "terms-lookup-failed", detail: err instanceof Error ? err.message : String(err) },
       ]);
     } finally {
       setBusy(false);
@@ -1217,7 +1221,7 @@ export default function App() {
               this banner shows them anywhere else. */}
           {problems.length > 0 && view !== "profiel" && (
             <p role="alert" className="text-warn shell-problems">
-              {problems.join(", ")}
+              {problems.map((n) => shell.notice(n)).join(" ")}
             </p>
           )}
 
@@ -1227,9 +1231,10 @@ export default function App() {
               one — say which it is, and where to fix it. */}
           {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
             <p className="text-muted shell-problems">
-              Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is
-              dit scherm leeg. Zet dat per rekening bij{" "}
-              <CardLink onClick={() => setView("accounts")}>Rekeningen</CardLink>
+              {shell.emptyScope.before}
+              <strong>{shell.scope[scope]}</strong>
+              {shell.emptyScope.after}
+              <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>
               .
             </p>
           )}

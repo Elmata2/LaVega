@@ -4,7 +4,6 @@ import { consolidate } from "./ingest.js";
 import {
   DEFAULT_ENTITY_SCOPE,
   ENTITY_SCOPES,
-  ENTITY_SCOPE_LABELS,
   accountScope,
   accountsInScope,
   clearEntityScope,
@@ -45,8 +44,6 @@ test("the default is personal: an unclassified entity, and an empty profile list
   expect(entityScope("BV1", [])).toBe("personal");
   expect(accountScope(acc("A", "Holding B.V."))).toBe("personal");
   expect(ENTITY_SCOPES).toEqual(["personal", "business"]);
-  expect(ENTITY_SCOPE_LABELS.personal).toBe("Privé");
-  expect(ENTITY_SCOPE_LABELS.business).toBe("Zakelijk");
 });
 
 test("an explicit classification wins, and it is matched case/space-insensitively", () => {

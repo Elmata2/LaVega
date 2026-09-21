@@ -1,5 +1,6 @@
 import type { Locale } from "../locale.js";
-import { monthShort } from "../format.js";
+import { monthShort, formatEuroIn } from "../format.js";
+import type { AlertBody } from "@lavega/core";
 
 /**
  * Every string the money screens (Rekeningen, Transacties, Forecast, and the
@@ -272,7 +273,10 @@ type ForecastCopy = {
 };
 
 type SaldoCopy = {
-  title: (deels: boolean) => string;
+  /** De kop draagt het voorbehoud zelf: "deels" alleen zegt niet WAAROM, en
+   *  dat was precies de vraag die het opriep. Het aantal niet-meegetelde
+   *  rekeningen staat erbij, met de reden eronder in de kaart. */
+  title: (excluded: number) => string;
   rekeningenArrow: string;
   rekeningenEntiteiten: (rekeningen: number, entiteiten: number) => string;
   beschikbaarNaBtw: (amount: string) => string;
@@ -419,6 +423,12 @@ type AandachtCopy = {
   letOp: string;
   terInfo: string;
   toonNTerInfo: (n: number) => string;
+  /** The alert-centre sentence, built from the KIND `computeAlerts` (core)
+   *  returns rather than from prose it carries — core owns no locale, so the
+   *  view renders the sentence here. Exhaustive `switch (b.kind)`, no
+   *  `default`: a new `AlertBody` variant is a compile error in both
+   *  languages, not a silent blank on screen. */
+  alert: { title: (b: AlertBody) => string; detail: (b: AlertBody) => string };
 };
 
 type KaartenCopy = {
@@ -823,7 +833,8 @@ const nl: MoneyCopy = {
     },
   },
   saldo: {
-    title: (deels) => `Totale positie${deels ? " (deels)" : ""}`,
+    title: (excluded) =>
+      `Totale positie${excluded > 0 ? ` — ${excluded} rekening${excluded === 1 ? "" : "en"} niet meegeteld` : ""}`,
     rekeningenArrow: "Rekeningen →",
     rekeningenEntiteiten: (rekeningen, entiteiten) =>
       `${rekeningen} rekening${rekeningen === 1 ? "" : "en"} · ${entiteiten} entiteit${entiteiten === 1 ? "" : "en"}`,
@@ -1013,6 +1024,43 @@ const nl: MoneyCopy = {
     letOp: "Let op",
     terInfo: "Ter info",
     toonNTerInfo: (n) => `Toon ${n} ter info`,
+    alert: {
+      title: (b) => {
+        switch (b.kind) {
+          case "shortfall":
+            return "Verwacht tekort";
+          case "missed-stream":
+            return `Verwachte ${b.sign === 1 ? "inkomst" : "betaling"} niet gezien`;
+          case "vat-due":
+            return `${b.label} — betaal vóór ${b.dueDate}`;
+          case "tax-prepayment-due":
+            return `${b.label} — betaal vóór ${b.dueDate}`;
+          case "tracking-stale":
+            return `${b.label} — saldo bijwerken`;
+          case "no-balance":
+            return "Onbekend saldo";
+        }
+      },
+      detail: (b) => {
+        switch (b.kind) {
+          case "shortfall":
+            return `Rond ${b.date} zakt je saldo naar ${formatEuroIn("nl", b.balanceCents / 100)} — onder je buffer van ${formatEuroIn("nl", b.bufferCents / 100)}.`;
+          case "missed-stream": {
+            const noun = b.sign === 1 ? "inkomst" : "betaling";
+            const prep = b.sign === 1 ? "van" : "aan";
+            return `${noun[0].toUpperCase() + noun.slice(1)} ${prep} ${b.counterparty} (~${formatEuroIn("nl", b.amountCents / 100)}) werd rond ${b.expectedDate} verwacht, maar is nog niet binnen.`;
+          }
+          case "vat-due":
+            return `Zet ${formatEuroIn("nl", b.amountCents / 100)} klaar; de BTW-aangifte + betaling moet uiterlijk ${b.dueDate} (over ${b.days} dagen).`;
+          case "tax-prepayment-due":
+            return `Zet ${formatEuroIn("nl", b.amountCents / 100)} klaar; deze vooruitbetaling winstbelasting moet uiterlijk ${b.dueDate} betaald zijn (over ${b.days} dagen).`;
+          case "tracking-stale":
+            return `Laatst bijgewerkt op ${b.updatedAt} (${b.ageDays} dagen geleden). ${b.question}`;
+          case "no-balance":
+            return `${b.count} rekening${b.count > 1 ? "en" : ""} zonder saldo — vul in bij Rekeningen voor een compleet beeld.`;
+        }
+      },
+    },
   },
   kaarten: {
     title: "Kaarten",
@@ -1411,7 +1459,8 @@ const en: MoneyCopy = {
     },
   },
   saldo: {
-    title: (deels) => `Total position${deels ? " (partial)" : ""}`,
+    title: (excluded) =>
+      `Total position${excluded > 0 ? ` — ${excluded} account${excluded === 1 ? "" : "s"} not counted` : ""}`,
     rekeningenArrow: "Accounts →",
     rekeningenEntiteiten: (rekeningen, entiteiten) =>
       `${rekeningen} account${rekeningen === 1 ? "" : "s"} · ${entiteiten} entit${entiteiten === 1 ? "y" : "ies"}`,
@@ -1599,6 +1648,43 @@ const en: MoneyCopy = {
     letOp: "Attention",
     terInfo: "Info",
     toonNTerInfo: (n) => `Show ${n} for info`,
+    alert: {
+      title: (b) => {
+        switch (b.kind) {
+          case "shortfall":
+            return "Expected shortfall";
+          case "missed-stream":
+            return `Expected ${b.sign === 1 ? "income" : "payment"} not seen`;
+          case "vat-due":
+            return `${b.label} — pay before ${b.dueDate}`;
+          case "tax-prepayment-due":
+            return `${b.label} — pay before ${b.dueDate}`;
+          case "tracking-stale":
+            return `${b.label} — update balance`;
+          case "no-balance":
+            return "Unknown balance";
+        }
+      },
+      detail: (b) => {
+        switch (b.kind) {
+          case "shortfall":
+            return `Around ${b.date} your balance drops to ${formatEuroIn("en", b.balanceCents / 100)} — below your buffer of ${formatEuroIn("en", b.bufferCents / 100)}.`;
+          case "missed-stream": {
+            const noun = b.sign === 1 ? "Income" : "Payment";
+            const prep = b.sign === 1 ? "from" : "to";
+            return `${noun} ${prep} ${b.counterparty} (~${formatEuroIn("en", b.amountCents / 100)}) was expected around ${b.expectedDate}, but hasn't arrived yet.`;
+          }
+          case "vat-due":
+            return `Set aside ${formatEuroIn("en", b.amountCents / 100)}; the VAT return and payment are due by ${b.dueDate} (in ${b.days} day${b.days === 1 ? "" : "s"}).`;
+          case "tax-prepayment-due":
+            return `Set aside ${formatEuroIn("en", b.amountCents / 100)}; this corporate tax prepayment must be paid by ${b.dueDate} (in ${b.days} day${b.days === 1 ? "" : "s"}).`;
+          case "tracking-stale":
+            return `Last updated on ${b.updatedAt} (${b.ageDays} day${b.ageDays === 1 ? "" : "s"} ago). ${b.question}`;
+          case "no-balance":
+            return `${b.count} account${b.count > 1 ? "s" : ""} without a balance — fill it in under Accounts for a complete picture.`;
+        }
+      },
+    },
   },
   kaarten: {
     title: "Cards",

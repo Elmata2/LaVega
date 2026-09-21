@@ -21,7 +21,6 @@ import {
   assumptionDueForReview,
   cashbackPctOf,
   CATALOGUE_KINDS_FOR,
-  describeCashback,
   describeHeldCashback,
   factEntry,
   hasCostsToShow,
@@ -41,7 +40,6 @@ import {
   MARGIN_PCT,
   matchBankBenchmark,
   accountType,
-  CADENCE_LABEL_NL,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
   cashbackSwitchGain,
@@ -147,6 +145,23 @@ const keptLabel = (locale: Locale, r: RateBenchmark) => {
     : pct(locale, kept);
 };
 
+/** The promo badge in the benchmark table.
+ *
+ *  `promoNote` is a clause QUOTED from the bank's own Dutch terms, so it is
+ *  shown only to a Dutch reader — the same rule the headline sentence already
+ *  applies a few hundred lines up, and for the same reason. An English reader
+ *  gets the fact rebuilt from the structured rate, which is what the quote was
+ *  evidence for in the first place. `null` means there is no promo at all. */
+export const promoBadgeLabel = (locale: Locale, r: RateBenchmark): string | null => {
+  const bd = optimiseCopy[locale].optimalisatie.interest.benchmarkDetails;
+  const quoted = r.promoNote?.trim();
+  if (locale === "nl") return quoted ? quoted : r.promo ? bd.promoPlain : null;
+  if (!quoted && !r.promo) return null;
+  return r.standardRatePct === undefined
+    ? bd.promoPlain
+    : bd.promoThen(pct(locale, r.standardRatePct));
+};
+
 /** A worked example of the subscriptions table. Explicitly NOT his data: it is
  *  rendered behind a disclosure, labelled, and never saved anywhere. Seeding
  *  rows into the vault to make the block look full would put numbers he cannot
@@ -216,8 +231,19 @@ export const CADENCE_MONTHS: Readonly<Record<number, number>> = {
 
 /** Het ritme in woorden, met een terugval die het ritme noemt in plaats van het
  *  te verzwijgen. Op moduleniveau zodat de tabel, de zinnen en de tests hem
- *  delen. */
-export const cadenceName = (days: number) => CADENCE_LABEL_NL[days] ?? `elke ${days} dagen`;
+ *  delen.
+ *
+ *  De namen komen uit `copy/optimise` en niet uit core: een ritme is een getal
+ *  in dagen, hoe het heet is een zin en die hoort aan deze kant van de grens. */
+export const cadenceName = (days: number, locale: Locale): string => {
+  const c = optimiseCopy[locale].optimalisatie.subscriptions.cadence;
+  if (days === 30) return c.maandelijks;
+  if (days === 61) return c.tweemaandelijks;
+  if (days === 91) return c.perKwartaal;
+  if (days === 182) return c.halfjaarlijks;
+  if (days === 365) return c.jaarlijks;
+  return c.elkeNDagen(days);
+};
 
 /** Een bedrag in de gevraagde eenheid — of de mededeling dat het niet kan.
  *
@@ -1216,7 +1242,7 @@ export default function Optimalisatie({
                     first: coverage.firstDate,
                     last: coverage.lastDate,
                     cadences:
-                      coverage.visibleCadences.map(cadenceName).join(", ") ||
+                      coverage.visibleCadences.map((d) => cadenceName(d, locale)).join(", ") ||
                       c.subscriptions.coverage.cadencesFallback,
                   }),
                 )}
@@ -1225,7 +1251,7 @@ export default function Optimalisatie({
                     coverage.hiddenCadences
                       .map((h) =>
                         c.subscriptions.coverage.hiddenCadenceItem(
-                          cadenceName(h.cadenceDays),
+                          cadenceName(h.cadenceDays, locale),
                           h.needsDays,
                         ),
                       )
@@ -1429,7 +1455,7 @@ export default function Optimalisatie({
                                 toAmount: euro(locale, p.toCents),
                                 changePct: Math.round(p.changePct * 100),
                                 unit: c.common.perUnit(subTotal.unit),
-                                cadence: cadenceName(p.sub.cadenceDays),
+                                cadence: cadenceName(p.sub.cadenceDays, locale),
                               },
                         )}
                       </p>
@@ -1517,7 +1543,7 @@ export default function Optimalisatie({
                           </Td>
                           <Td numeric data-label={subTableAfschriftH}>
                             {euro(locale, s.lastAmountCents)}
-                            <div className="cell-sub">{cadenceName(s.cadenceDays)}</div>
+                            <div className="cell-sub">{cadenceName(s.cadenceDays, locale)}</div>
                           </Td>
                           <Td
                             numeric
@@ -1558,7 +1584,7 @@ export default function Optimalisatie({
                           {c.subscriptions.convertedPanel.item({
                             name: s.name,
                             lastAmount: euro(locale, s.lastAmountCents),
-                            cadence: cadenceName(s.cadenceDays),
+                            cadence: cadenceName(s.cadenceDays, locale),
                             sum: bedrag.sum ?? "",
                             result: euro(locale, bedrag.cents),
                             unit: c.common.perUnit(omgerekendUnit),
@@ -1870,8 +1896,8 @@ export default function Optimalisatie({
                             : keptLabel(locale, r)}
                       </Td>
                       <Td data-label={c.interest.benchmarkDetails.tableHeaders[3]}>
-                        {r.promoNote ? (
-                          <Badge>🎁 {r.promoNote}</Badge>
+                        {promoBadgeLabel(locale, r) !== null ? (
+                          <Badge>🎁 {promoBadgeLabel(locale, r)}</Badge>
                         ) : (
                           <span className="cell-sub">{c.interest.benchmarkDetails.noPromo}</span>
                         )}
@@ -2149,7 +2175,6 @@ export default function Optimalisatie({
                   {bestHeld?.k.tier === "aangenomen" && (
                     <p className="cell-sub" data-testid="cashback-aanname">
                       {c.cashback.onderbouwing.assumedNote({
-                        description: describeCashback(bestHeld.k),
                         bankOrProduct: bestHeld.account.bank || bestHeld.product,
                         checkedNote: bestHeld.k.lastCheckedAt
                           ? c.cashback.onderbouwing.assumedCheckedNote(

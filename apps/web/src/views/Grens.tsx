@@ -14,7 +14,6 @@ import type {
 } from "@lavega/core";
 import {
   CROSS_SCOPE_PAIR_WINDOW_DAYS,
-  ENTITY_SCOPE_LABELS,
   businessCostsPaidPrivately,
   crossScopeTransfers,
 } from "@lavega/core";
@@ -67,12 +66,12 @@ import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
  *  gebeurt bij precies één bewijssoort: als zijn eigen NAAM op de rij staat,
  *  weet LaVega wel dat het naar hem ging maar niet naar welke van zijn
  *  privérekeningen. Dan is "Privé" het eerlijke antwoord en niet een gegokte
- *  naam. Labels komen uit core (`ENTITY_SCOPE_LABELS`, Privé/Zakelijk) en
- *  nadrukkelijk niet uit de chrome (Persoonlijk/Zakelijk) — zie de opmerking
- *  bij `SCOPE_LABELS` in apps/web/src/scope.ts: die twee mogen binnen één scherm
- *  niet door elkaar lopen. */
-function sideLabel(entity: string | null, scope: EntityScope): string {
-  return entity ?? ENTITY_SCOPE_LABELS[scope];
+ *  naam. Het label komt uit `GrensCopy.sideFallback` en dus in de taal van de
+ *  lezer; het stond in core en was daarmee altijd Nederlands. Het register van
+ *  dít scherm ("Privé") is nadrukkelijk niet dat van de chrome
+ *  ("Persoonlijk") — die twee mogen binnen één scherm niet door elkaar lopen. */
+function sideLabel(entity: string | null, scope: EntityScope, copy: GrensCopy): string {
+  return entity ?? copy.sideFallback[scope];
 }
 
 /** Hoeveel losse overboekingen per stroom op het scherm komen. Wat er niet bij
@@ -295,8 +294,8 @@ export default function Grens({
               {entityStreams.map((s) => {
                 const rows = crossingsByStream.get(s.key) ?? [];
                 const shown = rows.slice(0, MAX_ROWS_PER_STREAM);
-                const fromLabel = sideLabel(s.fromEntity, s.fromScope);
-                const toLabel = sideLabel(s.toEntity, s.toScope);
+                const fromLabel = sideLabel(s.fromEntity, s.fromScope, copy);
+                const toLabel = sideLabel(s.toEntity, s.toScope, copy);
                 return (
                   <div className="mt-3 first:mt-0" key={s.key}>
                     {paragraphs(
@@ -443,7 +442,7 @@ export default function Grens({
                   </thead>
                   <tbody>
                     {unanswered.map((s) => {
-                      const label = `${sideLabel(s.fromEntity, s.fromScope)} → ${sideLabel(s.toEntity, s.toScope)}`;
+                      const label = `${sideLabel(s.fromEntity, s.fromScope, copy)} → ${sideLabel(s.toEntity, s.toScope, copy)}`;
                       return (
                         <tr key={s.key}>
                           <Td data-label={kolomStroom}>{label}</Td>
@@ -520,8 +519,8 @@ export default function Grens({
  *  locale-copy mee in plaats van zelf `useAppLocale` aan te roepen: dit is
  *  geen component en mag geen hook aanroepen. */
 function crossingLines(c: CrossScopeCrossing, copy: GrensCopy): string[] {
-  const fromLabel = sideLabel(c.fromEntity, c.fromScope);
-  const toLabel = sideLabel(c.toEntity, c.toScope);
+  const fromLabel = sideLabel(c.fromEntity, c.fromScope, copy);
+  const toLabel = sideLabel(c.toEntity, c.toScope, copy);
   if (c.matched && c.legs.length === 2) {
     const uit: CrossScopeLeg = c.legs[0].signedCents < 0 ? c.legs[0] : c.legs[1];
     const bij: CrossScopeLeg = uit === c.legs[0] ? c.legs[1] : c.legs[0];

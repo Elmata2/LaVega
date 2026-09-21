@@ -56,6 +56,16 @@ export type CategoryBarsProps = {
   height?: number;
   /** Print value ticks down the left edge. */
   showAxis?: boolean;
+  /** Print the series legend above the plot.
+   *
+   *  A PROP AND NOT A CSS RULE. This used to be `.stat-chart .lv-chart-legend
+   *  { display: none }` in blocks.css, and it stopped working the moment this
+   *  element gained a `flex` utility: blocks.css lives in `@layer components`
+   *  and utilities come after it, so `display: flex` won and the legend came
+   *  back — beside the clickable one, the same list twice. Nothing failed;
+   *  `resolveStyle` cannot see a descendant combinator. Not rendering it is
+   *  the one answer no cascade can undo. */
+  legend?: boolean;
 };
 
 export default function CategoryBars({
@@ -65,6 +75,7 @@ export default function CategoryBars({
   ariaLabel,
   height = 176,
   showAxis = false,
+  legend = true,
 }: CategoryBarsProps) {
   // Which bar was TAPPED. Hover and focus are handled in CSS; this exists for
   // the phones that do not focus a button on tap, where nothing else would ever
@@ -81,6 +92,7 @@ export default function CategoryBars({
 
   return (
     <div className={`lv-bars${showAxis ? " lv-chart-withaxis" : ""}`}>
+      {legend && (
       <div className="lv-chart-legend flex flex-wrap gap-[var(--sp-4)] mb-[var(--sp-3)]">
         {series.map((s) => (
           <span
@@ -96,6 +108,7 @@ export default function CategoryBars({
           </span>
         ))}
       </div>
+      )}
 
       {/* role="group", not role="img": an image's contents are presentational,
           which would have hidden every bar button from a screen reader again —

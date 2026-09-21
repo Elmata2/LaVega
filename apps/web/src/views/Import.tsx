@@ -4,12 +4,13 @@ import { shellCopy } from "../copy/shell.js";
 import { buttonVariants } from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { cn } from "../components/ui/utils.js";
+import type { ShellNotice } from "../shellNotice.js";
 
 type ImportProps = {
   entity: string;
   onEntityChange: (entity: string) => void;
   busy: boolean;
-  problems: string[];
+  problems: ShellNotice[];
   onImport: (file: File) => void;
 };
 
@@ -44,7 +45,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
       </div>
       {problems.length > 0 && (
         <p role="alert" className="text-warn">
-          {problems.join(", ")}
+          {problems.map((n) => c.notice(n)).join(" ")}
         </p>
       )}
       <BankLink busy={busy} />

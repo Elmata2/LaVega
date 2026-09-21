@@ -4,7 +4,6 @@ import {
   cashbackKnowledgeOfEntry,
   cashbackSwitchGain,
   cashbackTierCounts,
-  describeCashback,
   fxSwitchGain,
   issuerConsensus,
   marketCashbackOptions,
@@ -569,8 +568,6 @@ describe("cashbackKnowledgeOfEntry", () => {
       }),
     );
     expect(k.tier).toBe("gemeten");
-    expect(describeCashback(k)).toContain("gemeten: geen cashback");
-    expect(describeCashback(k)).toContain("2026-06-15");
   });
 
   test("een gewone ING-betaalpas zonder cijfer is AANGENOMEN nul", () => {
@@ -579,10 +576,6 @@ describe("cashbackKnowledgeOfEntry", () => {
     if (k.tier !== "aangenomen") throw new Error("onbereikbaar");
     expect(k.pct).toBe(0);
     expect(k.issuerFamily).toBe("ING");
-    // En het staat er letterlijk zo op het scherm, met het woord erbij.
-    expect(describeCashback(k)).toBe(
-      "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product",
-    );
   });
 
   test("een cijfer waarvan de voorwaarden niet vaststaan valt terug op de aanname, niet op het cijfer", () => {

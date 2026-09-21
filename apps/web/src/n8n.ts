@@ -82,7 +82,9 @@ export type N8nNotice = {
   from?: string;
   receivedAt?: string;
   kind: "notification" | "reminder" | "no-amount" | "unreadable";
-  reason: string;
+  /** Waarom deze mail geen boekbare factuur was. `undefined` als n8n zelf
+   *  geen reden meestuurde — de zin daarvoor staat in `copy/admin`, niet hier. */
+  reason?: string;
   /** Empty when the workflow had no messageId to build one from. Never guessed. */
   mailUrl: string;
 };
@@ -159,7 +161,7 @@ function parseNotices(body: unknown): N8nNotice[] {
       from: str(r.from) ?? undefined,
       receivedAt: str(r.receivedAt) ?? undefined,
       kind,
-      reason: str(r.reason) ?? "n8n gaf geen reden mee.",
+      reason: str(r.reason) ?? undefined,
       mailUrl: str(r.mailUrl)?.startsWith("https://mail.google.com/") ? str(r.mailUrl)! : "",
     });
   }

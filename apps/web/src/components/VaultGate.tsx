@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
-import { migrateToVault } from "../migrate.js";
+import { migrateToVault, VaultVerificationFailed } from "../migrate.js";
 import { parseBackup } from "../backup.js";
 import { vaultPasswordProblem, MIN_VAULT_PASSWORD, type VaultPasswordProblem } from "../vaultPassword.js";
 import { useAppLocale } from "../appLocale.js";
@@ -121,7 +121,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
       await storage.setup(pass1);
       onReady();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(c.vaultGate.migrate.failed(err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
@@ -297,7 +297,11 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
       await migrateToVault(storage, pass1);
       setMigrated(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(
+        err instanceof VaultVerificationFailed
+          ? c.vaultGate.migrate.verifyFailed
+          : c.vaultGate.migrate.failed(err instanceof Error ? err.message : String(err)),
+      );
     } finally {
       setBusy(false);
     }

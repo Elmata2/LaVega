@@ -12,8 +12,20 @@ export type AuthState =
   | { kind: "signed-out" }
   | { kind: "signed-in"; email: string };
 
-const WRONG_CREDENTIALS = "Onjuist e-mailadres of wachtwoord.";
-const SERVER_UNREACHABLE = "Inloggen lukte niet. Probeer het later opnieuw.";
+/** Why a sign-in did not happen — a KIND and not a sentence.
+ *
+ *  These two used to be Dutch string constants thrown as `Error`s, and the
+ *  sign-in form printed `err.message` verbatim. That put Dutch on the very
+ *  first screen an English reader ever sees, on the one screen where being
+ *  understood matters most. The sentence belongs to `copy/shell`; what this
+ *  module knows is which of the two things went wrong.
+ *
+ *  Deliberately NOT the server's own text: better-auth answers 401 with
+ *  "invalid credentials", and echoing an upstream error string into the UI is
+ *  how an implementation detail becomes user-facing copy. */
+export type SignInFailure = "wrong-credentials" | "unreachable";
+
+export type SignInResult = { ok: true; state: AuthState } | { ok: false; kind: SignInFailure };
 
 export async function getSession(): Promise<AuthState> {
   try {
@@ -29,7 +41,7 @@ export async function getSession(): Promise<AuthState> {
   }
 }
 
-export async function signIn(email: string, password: string): Promise<AuthState> {
+export async function signIn(email: string, password: string): Promise<SignInResult> {
   let response: Response;
   try {
     response = await fetch("/api/auth/sign-in/email", {
@@ -39,12 +51,12 @@ export async function signIn(email: string, password: string): Promise<AuthState
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    throw new Error(SERVER_UNREACHABLE);
+    return { ok: false, kind: "unreachable" };
   }
   if (!response.ok)
-    throw new Error(response.status === 401 ? WRONG_CREDENTIALS : SERVER_UNREACHABLE);
+    return { ok: false, kind: response.status === 401 ? "wrong-credentials" : "unreachable" };
   const body = (await response.json().catch(() => null)) as { user?: { email: string } } | null;
-  return { kind: "signed-in", email: body?.user?.email ?? email };
+  return { ok: true, state: { kind: "signed-in", email: body?.user?.email ?? email } };
 }
 
 export async function signOut(): Promise<void> {

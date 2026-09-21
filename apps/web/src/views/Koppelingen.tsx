@@ -116,7 +116,7 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
   }
 
   return (
-    <Card as="section" aria-label="Koppelingen">
+    <Card as="section" aria-label={c.ariaLabel}>
       {/* HET DOORSTUURADRES, TERUG ALS ÉÉN REGEL.
        *
        * Hij vroeg deze kaart weg en dat is gebeurd — de opzethulp, de uitleg en de

@@ -732,11 +732,12 @@ export default function StatistiekBlock({
                     </button>
                   ))}
                 </div>
-                {/* The wrapper hides CategoryBars' own legend (blocks.css):
-                    the clickable one above says the same thing and also jumps
-                    into Transacties, so printing both was the same list twice. */}
+                {/* `legend={false}`: the clickable list above says the same
+                    thing and also jumps into Transacties, so printing both was
+                    the same list twice. */}
                 <div className="stat-chart">
                   <CategoryBars
+                    legend={false}
                     groups={drawn.map(({ b, i }) => ({
                       label: b.label,
                       title: b.title,

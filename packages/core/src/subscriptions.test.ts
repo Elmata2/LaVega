@@ -9,7 +9,6 @@ import {
   subscriptionCoverage,
   minHistoryDaysFor,
   merchantKey,
-  CADENCE_LABEL_NL,
   detectScheduleStreams,
   fitMerchantStreams,
   explainMerchant,
@@ -177,9 +176,6 @@ test("subscriptionCoverage ignores inflows and reports zero history when there a
   });
 });
 
-test("CADENCE_LABEL_NL names every cadence the detector can return", () => {
-  for (const days of [30, 61, 91, 182, 365]) expect(CADENCE_LABEL_NL[days]).toBeTruthy();
-});
 
 /* ── Precision round (app review, 2026-08-20) ─────────────────────────────
  *

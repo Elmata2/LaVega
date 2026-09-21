@@ -5,15 +5,28 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Alert } from "@lavega/core";
 import AandachtBlock from "./AandachtBlock";
-import { alerts } from "./fixtures";
+
+/* Alert bodies for these render tests are constructed locally (the shared
+ * `fixtures.ts` used to export a `title`/`detail` pair here, but `Alert` now
+ * carries a structured `body` — see packages/core/src/alerts.ts's
+ * `AlertBody`). Kept local because this file is the only consumer. */
+const testAlerts: Alert[] = [
+  {
+    id: "al1",
+    severity: "critical",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
+  },
+  { id: "al2", severity: "info", body: { kind: "no-balance", count: 1 } },
+];
 
 test("AandachtBlock renders every alert from props, grouped under its severity", () => {
   const html = renderToStaticMarkup(
-    <AandachtBlock alerts={alerts} bufferCents={250_000} onBufferChange={() => {}} />,
+    <AandachtBlock alerts={testAlerts} bufferCents={250_000} onBufferChange={() => {}} />,
   );
   expect(html).toContain("Aandacht");
-  expect(html).toContain("Tekort verwacht in week 6");
-  expect(html).toContain("Verwacht saldo € 1.200 onder je buffer.");
+  expect(html).toContain("Verwacht tekort");
+  expect(html).toContain("2026-09-14");
+  expect(html).toContain("2.500,00"); // buffer shown
   expect(html).toContain("1 rekening zonder saldo");
   // The buffer arrives in cents and is shown in euro.
   expect(html).toContain('value="2500"');
@@ -25,6 +38,25 @@ test("AandachtBlock renders every alert from props, grouped under its severity",
   expect(html).toContain("Ter info");
   // Hardest tier first, matching core's own sort.
   expect(html.indexOf("Kritiek")).toBeLessThan(html.indexOf("Ter info"));
+});
+
+/* Regression for the alert-centre showing Dutch prose on the English home
+ * screen: `computeAlerts` (core) used to bake the sentence into `title`/
+ * `detail` with a hardcoded `toLocaleString("nl-NL")`, so an English reader
+ * on Overzicht saw Dutch regardless of locale. Core now returns structured
+ * `AlertBody` facts and this block renders the sentence from
+ * `copy/money.ts`'s `aandacht.alert`, per locale. */
+test("the alert centre renders English when the locale cookie is en, never Dutch", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={testAlerts} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  expect(html).toContain("Expected shortfall");
+  expect(html).toContain("account without a balance");
+  expect(html).toContain("Critical");
+  expect(html).not.toContain("Verwacht tekort");
+  expect(html).not.toContain("rekening zonder saldo");
+  expect(html).not.toContain("Kritiek");
 });
 
 /* --- The empty state. The old copy asserted a fact about the data ("je
@@ -92,16 +124,20 @@ const info = (n: number): Alert[] =>
   Array.from({ length: n }, (_, i) => ({
     id: `t${i}`,
     severity: "info" as const,
-    title: `Punten ${i} — saldo bijwerken`,
-    detail: `Laatst bijgewerkt op 2026-05-0${i + 1}.`,
+    body: {
+      kind: "tracking-stale" as const,
+      label: `Punten ${i}`,
+      updatedAt: `2026-05-0${i + 1}`,
+      ageDays: 100,
+      question: "",
+    },
   }));
 
 test("the info tier folds away behind a count when something real outranks it", () => {
   const critical: Alert = {
     id: "shortfall",
     severity: "critical",
-    title: "Verwacht tekort",
-    detail: "Rond 2026-09-14 zakt je saldo naar € 800,00 — onder je buffer van € 2.500,00.",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
   };
   const c = render(
     <AandachtBlock
@@ -135,7 +171,11 @@ test("info alerts stay open when they are the only thing there — folding them 
 });
 
 test("one or two info alerts are never folded — the toggle would cost the space it saves", () => {
-  const critical: Alert = { id: "s", severity: "critical", title: "Verwacht tekort", detail: "…" };
+  const critical: Alert = {
+    id: "s",
+    severity: "critical",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
+  };
   const c = render(
     <AandachtBlock
       alerts={[critical, ...info(2)]}

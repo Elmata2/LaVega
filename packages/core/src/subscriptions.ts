@@ -1299,15 +1299,6 @@ export function explainMerchant(
   return null;
 }
 
-/** Dutch name of each cadence, for the UI. */
-export const CADENCE_LABEL_NL: Readonly<Record<number, string>> = {
-  30: "maandelijks",
-  61: "tweemaandelijks",
-  91: "per kwartaal",
-  182: "halfjaarlijks",
-  365: "jaarlijks",
-};
-
 /** Shortest history in which a charge on this cadence could be seen at all:
  *  the gaps between the minimum number of occurrences. A quarterly charge needs
  *  one full gap (~91 days) before there is anything to recognise — which is why

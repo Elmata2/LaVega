@@ -22,14 +22,6 @@ import type { View } from "./App";
 /** Left to right, as the switch reads. */
 export const SCOPE_ORDER: readonly EntityScope[] = ["personal", "business"] as const;
 
-/** The switch's own wording (Alexander's: "Persoonlijk | Zakelijk"). Core's
- *  ENTITY_SCOPE_LABELS says "Privé" for the same value; this is the chrome's
- *  label, and the two must never be mixed inside one screen. */
-export const SCOPE_LABELS: Record<EntityScope, string> = {
-  personal: "Persoonlijk",
-  business: "Zakelijk",
-};
-
 /** The transactions of the given accounts. Called with the already-scoped
  *  accounts, so a transaction follows its account's classification instead of
  *  being classified again on its own. */

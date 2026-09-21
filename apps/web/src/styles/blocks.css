@@ -259,12 +259,6 @@
   border-color: var(--line);
   background: var(--surface-2);
 }
-/* CategoryBars prints its own legend; here the clickable one above already
- * carries the same swatches, so the built-in one would be the list twice. */
-.stat-chart .lv-chart-legend {
-  display: none;
-}
-
 /* ---------- WeekdayBars ---------- */
 
 /* One bar per day, so it may be wider than the twelve-month case CategoryBars
@@ -586,14 +580,6 @@
 }
 
 /* ---------- PositieBlock ---------- */
-
-/* At one column per row the sparkline is the first thing worth dropping —
- * the name and the balance are the information. */
-@media (max-width: 520px) {
-  .position-row .sparkline {
-    display: none;
-  }
-}
 
 /* .travel-searching and .spinner are gone (docs/adr/0005): both were owned
  * only by this rule, so they moved to Tailwind utilities directly on

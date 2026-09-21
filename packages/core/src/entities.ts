@@ -32,12 +32,6 @@ export type EntityScope = (typeof ENTITY_SCOPES)[number];
 /** An unclassified entity is personal. Item 4 asks for this explicitly. */
 export const DEFAULT_ENTITY_SCOPE: EntityScope = "personal";
 
-/** Dutch UI labels (Dutch in the UI, English in code identifiers). */
-export const ENTITY_SCOPE_LABELS: Record<EntityScope, string> = {
-  personal: "Privé",
-  business: "Zakelijk",
-};
-
 /** The owner's classification of one entity. Stored per vault, keyed on the
  *  entity name as the owner spells it; matching is case/space-insensitive so
  *  "BV1" and "bv1 " are the same profile. */

@@ -87,7 +87,7 @@ test("erasure confirms with the server-required body and reports what was delete
     new Response(JSON.stringify({ erased: [{ table: "personal.vaults", rows: 1 }] })),
   );
 
-  expect(await eraseServerData()).toEqual([{ table: "personal.vaults", rows: 1 }]);
+  expect(await eraseServerData("nl")).toEqual([{ table: "personal.vaults", rows: 1 }]);
   const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
   expect(url).toBe("/api/account/data");
   expect(init.method).toBe("DELETE");
@@ -98,11 +98,19 @@ test("erasure confirms with the server-required body and reports what was delete
 test("erasure while signed out reports the shared signed-out message", async () => {
   stub(new Response(null, { status: 401 }));
 
-  await expect(eraseServerData()).rejects.toThrow(SIGNED_OUT_MESSAGE);
+  await expect(eraseServerData("nl")).rejects.toThrow(SIGNED_OUT_MESSAGE);
 });
 
 test("a server-side erasure failure surfaces its own message", async () => {
   stub(new Response(JSON.stringify({ error: "Wissen mislukt." }), { status: 500 }));
 
-  await expect(eraseServerData()).rejects.toThrow("Wissen mislukt.");
+  await expect(eraseServerData("nl")).rejects.toThrow("Wissen mislukt.");
+});
+
+/* DE LAATSTE AANROEPER VAN DE TAALLOZE `apiErrorMessage`. Wissen is de ene knop
+ * waar misverstaan worden het minst kan, en een Engelse lezer kreeg er
+ * "Je bent uitgelogd, log opnieuw in." Nu volgt de melding de lezer. */
+test("erasure while signed out reports it in the reader's language", async () => {
+  stub(new Response(null, { status: 401 }));
+  await expect(eraseServerData("en")).rejects.toThrow("You're signed out, log back in.");
 });

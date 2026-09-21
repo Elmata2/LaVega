@@ -30,7 +30,8 @@ import {
   type OwnerName,
 } from "../settings.js";
 import { SCOPE_ORDER } from "../scope.js";
-import { signIn, signOut, useAuthState } from "../authClient.js";
+import { signIn, signOut, useAuthState, type SignInFailure } from "../authClient.js";
+import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
@@ -83,7 +84,7 @@ type ProfielProps = {
   entity: string;
   onEntityChange: (entity: string) => void;
   busy: boolean;
-  problems: string[];
+  problems: ShellNotice[];
   onImport: (file: File) => void;
   /** Regels (unchanged component). */
   rules: Rule[];
@@ -111,21 +112,20 @@ function AccountBlock() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState<SignInFailure | null>(null);
 
   async function handleSignIn(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError("");
-    try {
-      await signIn(email, password);
-      setPassword("");
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
+    setFailure(null);
+    const result = await signIn(email, password);
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(result.kind);
+      return;
     }
+    setPassword("");
+    refresh();
   }
 
   async function handleSignOut() {
@@ -167,9 +167,9 @@ function AccountBlock() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </Field>
-            {error !== "" && (
+            {failure !== null && (
               <p role="alert" className="text-warn">
-                {error}
+                {c.profiel.account.signInError[failure]}
               </p>
             )}
             <Button type="submit" variant="primary" disabled={busy || !email || !password}>
