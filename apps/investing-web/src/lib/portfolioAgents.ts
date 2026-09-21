@@ -18,6 +18,15 @@ export type PortfolioAgentInsight = {
   model: string;
   snapshotHash: string;
 };
+export type PortfolioConversationTurn = { role: "user" | "assistant"; content: string };
+export type PortfolioConversationReply = {
+  agentId: string;
+  displayName: string;
+  text: string;
+  model: string;
+  snapshotHash: string;
+  judgment: { signal: "bullish" | "bearish" | "neutral" | "no_view"; confidence: number };
+};
 
 /* The catalog has four outcomes and the UI must be able to tell them apart:
  * an empty catalog is a resolved answer, not a load that never finished. */
@@ -119,6 +128,24 @@ export async function runPortfolioAgent(
   const insight = judgmentInsight(payload.result, agentId);
   if (!insight) throw new Error("Agent gave an invalid answer.");
   return insight;
+}
+
+export async function sendPortfolioAgentMessage(
+  agentId: string,
+  prompt: string,
+  history: readonly PortfolioConversationTurn[],
+): Promise<PortfolioConversationReply> {
+  const response = await fetch("/api/agents/portfolio/conversation", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ agentId, prompt, history }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { result?: unknown; problems?: string[] };
+  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent reply failed.");
+  const result = payload.result as Partial<PortfolioConversationReply> | undefined;
+  if (!result || typeof result.text !== "string" || typeof result.agentId !== "string")
+    throw new Error("Agent gave an invalid reply.");
+  return result as PortfolioConversationReply;
 }
 
 export function useAgentCatalog(): { catalog: AgentCatalog; reload: () => void } {

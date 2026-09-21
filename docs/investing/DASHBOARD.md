@@ -431,9 +431,13 @@ Status changes must not depend on animation. Pressable controls respond immediat
 
 The overview agent panel links each investor persona to `/agents/:agentId`. The route keeps a
 conversation on the left and shows the current account positions on the right. Each user message
-calls `POST /api/agents/portfolio/run` with `agentId` and `prompt`; the server rebuilds the
-tenant-scoped dashboard snapshot before asking the selected persona for an answer. Messages stay
-in browser memory until streaming and durable conversation history are added.
+calls `POST /api/agents/portfolio/conversation` with selected `agentId`, `prompt`, and recent
+browser-memory history. Server rebuilds tenant-scoped dashboard snapshot, runs TypeSafe System One
+judgment for all six personas, and passes selected typed judgment with full compact position list to
+OpenRouter text model. Response returns written answer with source snapshot hash and model metadata.
+Messages remain in browser memory.
+
+Typed System One `no_view` means no judgment signal. It never replaces written chat answer.
 
 Map-wide future work:
 

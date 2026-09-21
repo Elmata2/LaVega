@@ -30,6 +30,7 @@ import { longDate } from "./lib/dates.js";
 import { useDashboard } from "./lib/dashboardResource";
 import {
   runPortfolioAgent,
+  sendPortfolioAgentMessage,
   useAgentCatalog,
   useAgentRequests,
   type PortfolioAgentDefinition,
@@ -633,13 +634,16 @@ function AgentView() {
     }));
     start(personaId);
     try {
-      const insight = await runPortfolioAgent(personaId, question);
-      const response = [insight.summary, ...insight.insights].filter(Boolean).join("\n\n");
+      const reply = await sendPortfolioAgentMessage(
+        personaId,
+        question,
+        currentConversation(conversations[personaId] ?? [opening]),
+      );
       setConversations((current) => ({
         ...current,
         [personaId]: [
           ...(current[personaId] ?? [opening]),
-          { role: "assistant", content: response },
+          { role: "assistant", content: reply.text },
         ],
       }));
       settle(personaId, null);
@@ -786,6 +790,10 @@ function AgentView() {
       </aside>
     </div>
   );
+}
+
+function currentConversation(messages: readonly AgentMessage[]) {
+  return messages.filter((message) => !message.content.startsWith("I am ")).slice(-12);
 }
 
 type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";

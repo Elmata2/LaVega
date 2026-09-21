@@ -1,4 +1,5 @@
-import { jsonSchema, tool, type ToolSet } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateText, jsonSchema, tool, type ToolSet } from "ai";
 import type {
   ChoiceQuestion,
   ChoiceResponse,
@@ -24,6 +25,7 @@ import {
 } from "./systemOne.js";
 
 const TENANT_ID = "local";
+export const DEFAULT_PORTFOLIO_CONVERSATION_MODEL = "inclusionai/ling-3.0-flash-fin:free";
 
 export type PortfolioAgentBrokerData = {
   positions: Position[];
@@ -151,6 +153,18 @@ export type PortfolioJudgmentRun = {
   model: string;
   snapshotHash: string;
 };
+export type PortfolioConversationTurn = { role: "user" | "assistant"; content: string };
+export type PortfolioConversationReply = {
+  agentId: PortfolioAgentId;
+  displayName: string;
+  text: string;
+  model: string;
+  snapshotHash: string;
+  judgment: { signal: PortfolioJudgmentChoice; confidence: number };
+};
+export type PortfolioConversationProvider = {
+  reply(input: { model: string; system: string; prompt: string }): Promise<string>;
+};
 export type PortfolioJudgmentComposition = {
   signal: PortfolioJudgmentChoice;
   confidence: number;
@@ -234,6 +248,86 @@ export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinit
   const normalized = id?.trim() as PortfolioAgentId | undefined;
   if (normalized && PORTFOLIO_AGENT_IDS.includes(normalized)) return PERSONAS[normalized];
   return PERSONAS.warren_buffett;
+}
+
+export function resolvePortfolioConversationConfig() {
+  const apiKey = process.env.LAVEGA_AGENT_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) throw new Error("LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set");
+  return {
+    apiKey,
+    baseURL: process.env.LAVEGA_AGENT_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
+    model: process.env.LAVEGA_AGENT_MODEL?.trim() || DEFAULT_PORTFOLIO_CONVERSATION_MODEL,
+  };
+}
+
+function createPortfolioConversationProvider(config: ReturnType<typeof resolvePortfolioConversationConfig>): PortfolioConversationProvider {
+  const provider = createOpenAICompatible({ name: "lavega-agent", baseURL: config.baseURL, apiKey: config.apiKey });
+  return {
+    async reply(input) {
+      const { text } = await generateText({
+        model: provider.chatModel(input.model),
+        system: input.system,
+        prompt: input.prompt,
+        abortSignal: AbortSignal.timeout(60_000),
+      });
+      return text;
+    },
+  };
+}
+
+export async function runPortfolioConversation({
+  agentId,
+  prompt,
+  history,
+  dashboard,
+  sectors,
+  judgment,
+  provider,
+}: {
+  agentId: PortfolioAgentId;
+  prompt: string;
+  history: readonly PortfolioConversationTurn[];
+  dashboard: InvestingDashboardData;
+  sectors?: readonly SectorExposure[];
+  judgment: PortfolioJudgmentRun;
+  provider?: PortfolioConversationProvider;
+}): Promise<PortfolioConversationReply> {
+  const agent = getPortfolioAgent(agentId);
+  const selected = judgment.judgments.find((item) => item.agentId === agentId);
+  const signal = selected?.signal?.choice;
+  const choice: PortfolioJudgmentChoice =
+    signal === "bullish" || signal === "bearish" || signal === "neutral" || signal === "no_view"
+      ? signal
+      : "no_view";
+  const probability = selected?.signal?.probabilities?.[choice];
+  const confidence = typeof probability === "number" && Number.isFinite(probability)
+    ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
+    : 0;
+  let model: string;
+  let conversationProvider: PortfolioConversationProvider;
+  if (provider) {
+    model = "injected";
+    conversationProvider = provider;
+  } else {
+    const config = resolvePortfolioConversationConfig();
+    model = config.model;
+    conversationProvider = createPortfolioConversationProvider(config);
+  }
+  const text = await conversationProvider.reply({
+    model,
+    system: `${agent.instructions}\n${agent.criteria}\nEducational analysis only. Do not give trade instructions. Use only provided portfolio facts.`,
+    prompt: [
+      "Typed Jev judgment for this lens:",
+      JSON.stringify({ signal: choice, confidence }),
+      "Portfolio snapshot:",
+      renderPortfolioConversationSnapshot(dashboard, sectors),
+      "Conversation so far:",
+      history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
+      "User question:",
+      prompt,
+    ].join("\n\n"),
+  });
+  return { agentId, displayName: agent.displayName, text, model, snapshotHash: judgment.snapshotHash, judgment: { signal: choice, confidence } };
 }
 
 export async function runPortfolioAgent({
@@ -395,6 +489,27 @@ export function renderPortfolioSnapshot(
     null,
     2,
   );
+}
+
+export function renderPortfolioConversationSnapshot(
+  dashboard: InvestingDashboardData,
+  sectors?: readonly SectorExposure[],
+): string {
+  return JSON.stringify({
+    ...JSON.parse(renderPortfolioSnapshot(dashboard, sectors)),
+    positions: dashboard.positions.map((position) => ({
+      symbol: position.symbol,
+      entity: position.entity,
+      description: position.description ?? null,
+      quantity: round(position.quantity, 6),
+      marketValue: round(position.marketValue, 2),
+      weight: round(position.portfolioWeight, 4),
+      priceStatus: position.priceStatus,
+      returnStatus: position.returns.status,
+      totalReturn: round(position.returns.totalReturn, 2),
+      totalReturnPercentage: round(position.returns.totalReturnPercentage, 4),
+    })),
+  });
 }
 
 export async function portfolioSnapshotHash(

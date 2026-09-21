@@ -13,8 +13,12 @@ import {
   type AgentRunStore,
 } from "./fileAgentRunStore.js";
 import {
+  isPortfolioAgentId,
   listPortfolioAgents,
+  runPortfolioConversation,
   runPortfolioAgent,
+  type PortfolioConversationReply,
+  type PortfolioConversationTurn,
   type PortfolioJudgmentRun,
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
@@ -22,6 +26,7 @@ import { createProblemReporter } from "./observability.js";
 import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
+  type InvestingDashboardData,
 } from "@lavega/core";
 import {
   createBrokerDataCache,
@@ -158,6 +163,13 @@ export function createRuntimeBrokerSync(
 export type PortfolioAgentRunner = (
   options: RunPortfolioAgentOptions,
 ) => Promise<PortfolioJudgmentRun>;
+export type PortfolioConversationRunner = (input: {
+  agentId: import("./portfolioAgent.js").PortfolioAgentId;
+  prompt: string;
+  history: readonly PortfolioConversationTurn[];
+  dashboard: InvestingDashboardData;
+  judgment: PortfolioJudgmentRun;
+}) => Promise<PortfolioConversationReply>;
 export type RuntimeAppOptions = {
   priceStore: PriceStore;
   resolveTenantId?: () => string | Promise<string>;
@@ -166,11 +178,17 @@ export type RuntimeAppOptions = {
   marketDataConsentStore?: MarketDataConsentStore;
   agentRunStore?: AgentRunStore;
   runAgent?: PortfolioAgentRunner;
+  runConversation?: PortfolioConversationRunner;
   dashboardCache?: DashboardCache;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
   runPortfolioAgentOnce: (model?: string) => Promise<AgentRunRecord>;
+  answerPortfolioConversation: (
+    agentId: import("./portfolioAgent.js").PortfolioAgentId,
+    prompt: string,
+    history: readonly PortfolioConversationTurn[],
+  ) => Promise<PortfolioConversationReply>;
 };
 
 /* The merge rules and the snapshot shape live with the sync that produces
@@ -631,6 +649,25 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         if (agentInFlight.get(runKey) === run) agentInFlight.delete(runKey);
       }
     };
+    const answerPortfolioConversation = async (
+      agentId: import("./portfolioAgent.js").PortfolioAgentId,
+      prompt: string,
+      history: readonly PortfolioConversationTurn[],
+    ): Promise<PortfolioConversationReply> => {
+      const judgmentRecord = await runPortfolioAgentOnce();
+      const judgment = judgmentRecord.result;
+      if (
+        !judgment || typeof judgment !== "object" ||
+        !Array.isArray((judgment as { judgments?: unknown }).judgments) ||
+        typeof (judgment as { model?: unknown }).model !== "string" ||
+        typeof (judgment as { snapshotHash?: unknown }).snapshotHash !== "string"
+      ) throw new Error("Portfolio judgment did not return a result");
+      const dashboard = await dashboardReader({});
+      const input = { agentId, prompt, history, dashboard, judgment: judgment as PortfolioJudgmentRun };
+      return options.runConversation
+        ? options.runConversation(input)
+        : runPortfolioConversation(input);
+    };
     return {
       brokerSync,
       brokerSyncStatus: async () => ({ ...syncProgress, history: await readHistoryProgress() }),
@@ -651,6 +688,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
       },
       runPortfolioAgentOnce,
+      answerPortfolioConversation,
     };
   };
 
@@ -693,6 +731,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await currentRuntime()).dashboardReader({ symbol });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
+  const answerPortfolioConversation = async (
+    agentId: import("./portfolioAgent.js").PortfolioAgentId,
+    prompt: string,
+    history: readonly PortfolioConversationTurn[],
+  ) => (await currentRuntime()).answerPortfolioConversation(agentId, prompt, history);
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
     honoApp.get("/api/agents/portfolio", (c) =>
@@ -716,7 +759,25 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         );
       }
     });
-    return Object.assign(honoApp, { runPortfolioAgentOnce });
+    honoApp.post("/api/agents/portfolio/conversation", async (c) => {
+      const body: { agentId?: unknown; prompt?: unknown; history?: unknown } = await c.req.json().catch(() => ({}));
+      if (!isPortfolioAgentId(body.agentId)) return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      if (typeof body.prompt !== "string" || !body.prompt.trim())
+        return c.json({ problems: ["Conversation prompt is required"] }, 400);
+      const history = Array.isArray(body.history)
+        ? body.history.slice(-12).filter((item): item is PortfolioConversationTurn =>
+          !!item && typeof item === "object" &&
+          ((item as { role?: unknown }).role === "user" || (item as { role?: unknown }).role === "assistant") &&
+          typeof (item as { content?: unknown }).content === "string",
+        )
+        : [];
+      try {
+        return c.json({ result: await answerPortfolioConversation(body.agentId, body.prompt.trim(), history) });
+      } catch (error) {
+        return c.json({ problems: [error instanceof Error ? error.message : "Portfolio conversation failed"] }, 502);
+      }
+    });
+    return Object.assign(honoApp, { runPortfolioAgentOnce, answerPortfolioConversation });
   };
   const sectorDependencies = {
     sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()),

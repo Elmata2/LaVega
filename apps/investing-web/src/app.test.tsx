@@ -153,6 +153,14 @@ const agentInsight = {
   model: "test-model",
   snapshotHash: "hash",
 };
+const agentConversation = {
+  agentId: "bill_ackman",
+  displayName: "Bill Ackman",
+  text: "ASML is concentrated but priced with clear conviction.",
+  model: "openrouter-test",
+  snapshotHash: "snapshot",
+  judgment: { signal: "bullish", confidence: 80 },
+};
 
 /* Every existing test here predates sign-up and runs against a backend
  * with no DATABASE_URL / BETTER_AUTH_SECRET, exactly like local dev — so
@@ -177,6 +185,8 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
       return new Response(JSON.stringify({ agents: portfolioAgents }));
     if (url === "/api/agents/portfolio/run" && init?.method === "POST")
       return new Response(JSON.stringify({ result: agentInsight }));
+    if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
+      return new Response(JSON.stringify({ result: agentConversation }));
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
@@ -194,6 +204,8 @@ function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
       return new Response(JSON.stringify({ agents: portfolioAgents }));
     if (url === "/api/agents/portfolio/run" && init?.method === "POST")
       return new Response(JSON.stringify({ result: agentInsight }));
+    if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
+      return new Response(JSON.stringify({ result: agentConversation }));
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard"))
@@ -298,6 +310,8 @@ test("overview shows priced positions total when history is still unavailable", 
             return new Response(JSON.stringify({ agents: portfolioAgents }));
           if (url === "/api/agents/portfolio/run" && init?.method === "POST")
             return new Response(JSON.stringify({ result: agentInsight }));
+          if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
+            return new Response(JSON.stringify({ result: agentConversation }));
           if (url === "/api/brokers/sync" && init?.method === "POST")
             return new Response(
               JSON.stringify({ problems: ["ibkr: credentials are not configured"] }),
@@ -759,9 +773,9 @@ test("agent route opens focused chat with the account positions", async () => {
     await Promise.resolve();
   });
 
-  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/run");
+  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/conversation");
   expect(runRequest?.init?.body).toBe(
-    JSON.stringify({ agentId: "bill_ackman", prompt: "Waarom is ASML mijn grootste risico?" }),
+    JSON.stringify({ agentId: "bill_ackman", prompt: "Waarom is ASML mijn grootste risico?", history: [] }),
   );
   expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
   root.unmount();
@@ -1970,7 +1984,7 @@ test("agent route keeps a reply with the persona that asked for it", async () =>
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/agents/portfolio/run" && init?.method === "POST")
+      if (String(input) === "/api/agents/portfolio/conversation" && init?.method === "POST")
         return new Promise<Response>((resolve) => {
           releaseRun = resolve;
         });
@@ -2012,7 +2026,7 @@ test("agent route keeps a reply with the persona that asked for it", async () =>
   expect(container.textContent).not.toContain("is reading positions…");
 
   await act(async () => {
-    releaseRun?.(new Response(JSON.stringify({ result: agentInsight })));
+    releaseRun?.(new Response(JSON.stringify({ result: agentConversation })));
     await Promise.resolve();
     await Promise.resolve();
   });

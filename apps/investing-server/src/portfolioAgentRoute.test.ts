@@ -31,3 +31,42 @@ test("provider error returns 502", async () => {
   expect(response.status).toBe(502);
   expect(await response.json()).toEqual({ problems: ["provider unavailable"] });
 });
+
+test("conversation sends selected persona, question and Jev judgment to text model", async () => {
+  const runAgent = vi.fn(async () => run);
+  const runConversation = vi.fn(async () => ({
+    agentId: "warren_buffett" as const,
+    displayName: "Warren Buffett",
+    text: "ASML is your largest position.",
+    model: "openrouter-test",
+    snapshotHash: "snapshot",
+    judgment: { signal: "bullish" as const, confidence: 80 },
+  }));
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    runAgent,
+    runConversation,
+  });
+
+  const response = await app.request("http://localhost/api/agents/portfolio/conversation", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      agentId: "warren_buffett",
+      prompt: "Why is ASML my largest risk?",
+      history: [{ role: "assistant", content: "Ask me about your positions." }],
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ result: await runConversation.mock.results[0]?.value });
+  expect(runAgent).toHaveBeenCalledOnce();
+  expect(runConversation).toHaveBeenCalledWith(
+    expect.objectContaining({
+      agentId: "warren_buffett",
+      prompt: "Why is ASML my largest risk?",
+      history: [{ role: "assistant", content: "Ask me about your positions." }],
+      judgment: run,
+    }),
+  );
+});
