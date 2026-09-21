@@ -193,7 +193,22 @@ const PROFILES: Profile[] = [
 
 /* --- fallback column-name guesses when no profile's header signature matches
  * (best-effort "generic" CSV support), ported from parseGenericCSV's inline
- * `m` object (557-569). --- */
+ * `m` object (557-569).
+ *
+ * GERMAN HEADERS ARE IN HERE, and they are the difference between an import
+ * and an empty screen. No German bank has its own profile, so a Sparkasse,
+ * DKB, Commerzbank or Deutsche Bank export lands on this map — and with only
+ * Dutch and English guesses it found neither a date nor an amount column, so
+ * every row was skipped and the file reported "geen transacties gevonden".
+ * N26 survived only because it exports English headers.
+ *
+ * Dates already worked: parseDate accepts [-/.] so 31.08.2026 parses, and DMY
+ * is the default, which is right for Germany. It was the column NAMES that
+ * were missing, not the formats.
+ *
+ * "Umsatz" is deliberately absent from `amount`: it means turnover generally
+ * and some exports use it as a row label rather than the signed figure. Better
+ * to miss a column than to read the wrong one as money. --- */
 const GENERIC_MAP: ColumnMap = {
   date: [
     "datum",
@@ -205,8 +220,26 @@ const GENERIC_MAP: ColumnMap = {
     "started date",
     "time",
     "datum boeking",
+    // German: Sparkasse/DKB post "Buchungstag", value date is "Wertstellung".
+    "buchungstag",
+    "wertstellung",
+    "wertstellungsdatum",
+    "valutadatum (wertstellung)",
+    "buchungsdatum",
   ],
-  amount: ["bedrag", "amount", "bedrag (eur)", "transactiebedrag", "total", "value", "mutatie"],
+  amount: [
+    "bedrag",
+    "amount",
+    "bedrag (eur)",
+    "transactiebedrag",
+    "total",
+    "value",
+    "mutatie",
+    // German: signed in most exports, so `dc` below is a fallback not a need.
+    "betrag",
+    "betrag (eur)",
+    "betrag in eur",
+  ],
   cp: [
     "naam",
     "naam / beschrijving",
@@ -218,6 +251,17 @@ const GENERIC_MAP: ColumnMap = {
     "omschrijving",
     "beschrijving",
     "counterparty",
+    // German: Sparkasse names the other party "Beguenstigter/Zahlungspflichtiger".
+    "beguenstigter/zahlungspflichtiger",
+    "begünstigter/zahlungspflichtiger",
+    "auftraggeber/empfaenger",
+    "auftraggeber/empfänger",
+    "empfaenger",
+    "empfänger",
+    "auftraggeber",
+    "zahlungsempfaenger",
+    "zahlungsempfänger",
+    "name zahlungsbeteiligter",
   ],
   desc: [
     "mededelingen",
@@ -228,11 +272,39 @@ const GENERIC_MAP: ColumnMap = {
     "details",
     "extended details",
     "toelichting",
+    // German: the free-text reference line every SEPA transfer carries.
+    "verwendungszweck",
+    "buchungstext",
+    "vwz",
   ],
-  acc: ["rekening", "rekeningnummer", "iban/bban", "iban", "account", "tegenrekening", "product"],
-  cur: ["munt", "currency", "valuta", "valutacode"],
-  dc: ["af bij", "af/bij", "creditdebet", "debet/credit", "bij/af", "cdtdbtind", "type mutatie"],
-  dcNeg: ["af", "d", "debet", "debit", "db"],
+  acc: [
+    "rekening",
+    "rekeningnummer",
+    "iban/bban",
+    "iban",
+    "account",
+    "tegenrekening",
+    "product",
+    "kontonummer",
+    "auftragskonto",
+    "iban auftragskonto",
+  ],
+  cur: ["munt", "currency", "valuta", "valutacode", "waehrung", "währung"],
+  dc: [
+    "af bij",
+    "af/bij",
+    "creditdebet",
+    "debet/credit",
+    "bij/af",
+    "cdtdbtind",
+    "type mutatie",
+    "soll/haben",
+    "soll/haben-kennzeichen",
+  ],
+  // "s" for Soll is NOT listed: it would also match a stray single letter in a
+  // Dutch column. "soll" spelled out is unambiguous, and German exports that
+  // use the short form sign the Betrag anyway.
+  dcNeg: ["af", "d", "debet", "debit", "db", "soll"],
 };
 
 function pick(idx: Record<string, number>, names: string[]): number {
