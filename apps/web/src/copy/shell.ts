@@ -103,6 +103,23 @@ export type ShellCopy = {
       failed: (detail: string) => string;
     };
   };
+  /** De eenmalige instelstap na een verse kluis. */
+  onboarding: {
+    ariaLabel: string;
+    title: string;
+    intro: string;
+    languageLabel: string;
+    firstNameLabel: string;
+    lastNameLabel: string;
+    nameNote: string;
+    countryLabel: string;
+    countryHint: string;
+    regionPlaceholder: string;
+    scopeLabel: string;
+    scopeHint: string;
+    submit: string;
+    skip: string;
+  };
   overzicht: { gridLabel: string };
   import: {
     ariaLabel: string;
@@ -354,6 +371,26 @@ const nl: ShellCopy = {
         "De kluis liet zich niet teruglezen, dus je onversleutelde data is bewaard gebleven. Er is niets verwijderd — probeer het opnieuw.",
       failed: (detail) => `Versleutelen mislukt: ${detail}`,
     },
+  },
+  onboarding: {
+    ariaLabel: "Eerste instellingen",
+    title: "Even instellen",
+    intro:
+      "Vier vragen, en LaVega rekent meteen met de juiste regels. Je kunt alles later wijzigen bij Profiel.",
+    languageLabel: "Taal",
+    firstNameLabel: "Voornaam",
+    lastNameLabel: "Achternaam",
+    nameNote:
+      "Je naam blijft in deze browser — niet in de kluis, niet in een back-up, en hij wordt nooit naar een model gestuurd.",
+    countryLabel: "Land",
+    countryHint:
+      "Bepaalt welke belastingregels LaVega gebruikt. Voor een land zonder regels rekent LaVega geen belasting uit en zegt dat erbij.",
+    regionPlaceholder: "optioneel",
+    scopeLabel: "Waar open je op?",
+    scopeHint:
+      "De schakelaar bovenin toont één helft van je geld. Dit is de helft waar de app op start; je kunt altijd wisselen.",
+    submit: "Klaar",
+    skip: "Overslaan",
   },
   overzicht: { gridLabel: "Overzicht" },
   import: {
@@ -648,6 +685,26 @@ const en: ShellCopy = {
         "The vault would not read back, so your unencrypted data has been kept. Nothing was deleted — please try again.",
       failed: (detail) => `Encrypting failed: ${detail}`,
     },
+  },
+  onboarding: {
+    ariaLabel: "First settings",
+    title: "Let's set up",
+    intro:
+      "Four questions, and LaVega works with the right rules straight away. You can change all of it later under Profile.",
+    languageLabel: "Language",
+    firstNameLabel: "First name",
+    lastNameLabel: "Last name",
+    nameNote:
+      "Your name stays in this browser — never in the vault, never in a backup, and never sent to a model.",
+    countryLabel: "Country",
+    countryHint:
+      "Decides which tax rules LaVega uses. For a country it has no rules for, LaVega works out no tax and says so.",
+    regionPlaceholder: "optional",
+    scopeLabel: "Which half do you open on?",
+    scopeHint:
+      "The switch at the top shows one half of your money. This is the half the app starts on; you can always flip it.",
+    submit: "Done",
+    skip: "Skip",
   },
   overzicht: { gridLabel: "Overview" },
   import: {

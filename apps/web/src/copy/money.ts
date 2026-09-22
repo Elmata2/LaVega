@@ -287,6 +287,11 @@ type SaldoCopy = {
   vreemdeValutaConvert: (n: number, names: string) => string;
   vreemdeValutaSeparate: (n: number, names: string) => string;
   omgerekendViaEcb: string;
+  /** Wat een rekening nog niet heeft verteld, en wat dat kost. Eén regel per
+   *  soort gat, met de namen erbij — een telling zonder namen laat hem raden
+   *  welke rekening hij moet openen. */
+  ibanOntbreekt: (n: number, names: string) => string;
+  typeOntbreekt: (n: number, names: string) => string;
   positiePerDagAria: string;
   positieOpReadout: string;
   geenTransactiesOpRekeningenMetSaldo: string;
@@ -849,6 +854,10 @@ const nl: MoneyCopy = {
     vreemdeValutaSeparate: (n, names) =>
       `${n} rekening${n > 1 ? "en" : ""} in vreemde valuta${names ? ` (${names})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`,
     omgerekendViaEcb: "Omgerekend via ECB.",
+    ibanOntbreekt: (n, names) =>
+      `${n} rekening${n > 1 ? "en" : ""} zonder IBAN (${names}) — zonder IBAN kan LaVega een factuur niet aan deze rekening koppelen. Vul aan bij Rekeningen.`,
+    typeOntbreekt: (n, names) =>
+      `${n} rekening${n > 1 ? "en" : ""} zonder soort (${names}) — betaal- of spaarrekening? Zonder dat blijven kosten en rente hier buiten beschouwing. Vul aan bij Rekeningen.`,
     positiePerDagAria: "Totale positie per dag",
     positieOpReadout: "Positie op",
     geenTransactiesOpRekeningenMetSaldo:
@@ -1480,6 +1489,10 @@ const en: MoneyCopy = {
     vreemdeValutaSeparate: (n, names) =>
       `${n} account${n > 1 ? "s" : ""} in a foreign currency${names ? ` (${names})` : ""} not counted — LaVega does not yet convert to euros.`,
     omgerekendViaEcb: "Converted via the ECB.",
+    ibanOntbreekt: (n, names) =>
+      `${n} account${n > 1 ? "s" : ""} without an IBAN (${names}) — without one LaVega can't match an invoice to this account. Add it under Accounts.`,
+    typeOntbreekt: (n, names) =>
+      `${n} account${n > 1 ? "s" : ""} without a kind (${names}) — a payment or a savings account? Without it, costs and interest are left out here. Add it under Accounts.`,
     positiePerDagAria: "Total position per day",
     positieOpReadout: "Position on",
     geenTransactiesOpRekeningenMetSaldo:

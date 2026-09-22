@@ -37,7 +37,6 @@ import {
   accountsInScope,
   entitySummaries,
   setEntityScope as classifyEntity,
-  DEFAULT_ENTITY_SCOPE,
   TRAVEL_AGENT,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
@@ -65,6 +64,7 @@ import {
   getBufferCents,
   setBufferCents,
   getHomeCountry,
+  getDefaultScope,
   setHomeCountry,
   getHomeRegion,
   setHomeRegion,
@@ -91,6 +91,8 @@ import {
 import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
+import Onboarding from "./components/Onboarding";
+import { isFreshVault, onboardingSeen, showOnboarding } from "./onboarding.js";
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
@@ -101,6 +103,7 @@ import {
 } from "./components/moduleRegistry";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
+import Regels from "./views/Regels";
 import Rekeningen from "./views/Rekeningen";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
@@ -327,7 +330,13 @@ export default function App() {
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
   // everything it has rather than an empty page.
-  const [scope, setScope] = useState<EntityScope>(DEFAULT_ENTITY_SCOPE);
+  const [scope, setScope] = useState<EntityScope>(getDefaultScope);
+  /* Of dit een VERSE kluis is, gezet op het moment dat de instelstap nog te
+   * beslissen valt. Niet afgeleid uit "heeft hij al rekeningen": iemand kan een
+   * lege kluis hebben en toch een bestaande gebruiker zijn, en die mag deze stap
+   * niet opnieuw krijgen. */
+  const [freshVault, setFreshVault] = useState(false);
+  const [onboarded, setOnboarded] = useState(onboardingSeen);
   // The per-COMPANY scope inside that half ("" = every company in this scope).
   // The chrome no longer sets it (per-company splitting is not a priority), but
   // the plumbing is intact and every view still receives it — Transacties and
@@ -1195,10 +1204,28 @@ export default function App() {
       <VaultGate
         gate={gate}
         storage={storage}
-        onReady={() => setGate("ready")}
+        onReady={() => {
+          if (isFreshVault(gate)) setFreshVault(true);
+          setGate("ready");
+        }}
         onBackup={() => {
           setGate("ready");
           setView("backup");
+        }}
+      />
+    );
+  }
+
+  /* Na een verse kluis en vóór de app: de eenmalige instelstap. Hier en niet in
+   * `VaultGate`, omdat hij niets met de kluis te maken heeft — hij zet
+   * voorkeuren van dit apparaat, en die horen achter het wachtwoordscherm en
+   * niet erin. */
+  if (showOnboarding(freshVault, onboarded)) {
+    return (
+      <Onboarding
+        onDone={() => {
+          setOnboarded(true);
+          setScope(getDefaultScope());
         }}
       />
     );
@@ -1323,6 +1350,24 @@ export default function App() {
               onFCategoryChange={setFCategory}
               configured={llmConfigured}
               onApplyCategories={handleApplyCategories}
+            />
+          )}
+
+          {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
+              Zijn verzoek, en de reden staat in het scherm zelf: een regel is
+              een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+              hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
+              twee klikken verderop, losgekoppeld van het ding waar hij over
+              gaat. */}
+          {view === "transactions" && (
+            <Regels
+              rules={rules}
+              busy={busy}
+              ruleMatch={ruleMatch}
+              onRuleMatchChange={setRuleMatch}
+              ruleCategory={ruleCategory}
+              onRuleCategoryChange={setRuleCategory}
+              onSaveRules={saveRules}
             />
           )}
 
@@ -1461,12 +1506,6 @@ export default function App() {
               busy={busy}
               problems={problems}
               onImport={handleImport}
-              rules={rules}
-              ruleMatch={ruleMatch}
-              onRuleMatchChange={setRuleMatch}
-              ruleCategory={ruleCategory}
-              onRuleCategoryChange={setRuleCategory}
-              onSaveRules={saveRules}
               storage={storage}
               asOf={asOf}
               onRestored={handleRestored}

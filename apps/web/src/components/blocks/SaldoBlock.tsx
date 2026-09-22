@@ -11,6 +11,7 @@ import { daysBetween, shiftDate } from "./dates.js";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, dayLabelIn } from "../../copy/money.js";
+import { accountGaps } from "@lavega/core";
 
 /* Totale positie — the most important number on the homescreen, and now the
  * line behind it.
@@ -261,6 +262,16 @@ export default function SaldoBlock({
     accounts.some(
       (a) => a.balance !== null && !isEurCurrency(a.currency) && !excludedKeys.has(a.key),
     );
+  /* WAT DE REKENINGEN NOG NIET HEBBEN VERTELD. Zijn vraag bij de UI-ronde:
+   * vraag het in plaats van stilzwijgend minder te kunnen. Hier en niet in een
+   * eigen kaart, omdat dit dezelfde vraag is als de saldoregel hierboven —
+   * "deze kaart weet nog niet alles, en dit is wat eraan ontbreekt". De
+   * saldo-gaten zitten er met opzet niet in: die staan al in de regel erboven. */
+  const gaps = useMemo(() => accountGaps(accounts), [accounts]);
+  const missingIban = gaps.filter((g) => g.gaps.includes("iban"));
+  const missingType = gaps.filter((g) => g.gaps.includes("type"));
+  const nameList = (rows: typeof gaps) => rows.map((g) => g.name).join(", ");
+
   // Money already earmarked for unpaid BTW. Only worth a line when there is
   // some — otherwise "beschikbaar" would just repeat the number above it.
   const reserved = reservedCents(scheduledFlows, asOf);
@@ -324,6 +335,16 @@ export default function SaldoBlock({
         </p>
       )}
       {anyConverted && <p className="module-figure-label">{c.omgerekendViaEcb}</p>}
+      {missingIban.length > 0 && (
+        <p className="module-figure-label">
+          {c.ibanOntbreekt(missingIban.length, nameList(missingIban))}
+        </p>
+      )}
+      {missingType.length > 0 && (
+        <p className="module-figure-label">
+          {c.typeOntbreekt(missingType.length, nameList(missingType))}
+        </p>
+      )}
 
       {hasGraph ? (
         <div className="position-graph">

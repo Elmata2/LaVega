@@ -3,7 +3,7 @@
  * localStorage — outside the encrypted vault, and available before unlock.
  * Guarded so it no-ops where localStorage is absent (SSR/tests). */
 
-import type { ConversionMode } from "@lavega/core";
+import type { ConversionMode, EntityScope } from "@lavega/core";
 
 const BUFFER_KEY = "lavega.bufferCents";
 
@@ -409,6 +409,22 @@ export function getHomeCountry(): string {
   }
 }
 
+/** The country AS STORED, or "" when he has never said.
+ *
+ *  `getHomeCountry()` answers "which rules do we apply" and falls back to NL,
+ *  which is the right answer for a computation and the WRONG one for a form:
+ *  seeding a picker with the fallback shows NL as chosen when nothing was, and
+ *  then submitting writes a country he never picked. Two questions, two
+ *  readers. */
+export function storedHomeCountry(): string {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_COUNTRY_KEY);
+    return raw && /^[A-Z]{2}$/.test(raw) ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
 export function setHomeCountry(code: string): void {
   try {
     const c = String(code ?? "")
@@ -515,4 +531,31 @@ export function ownerDisplayName(name: OwnerName): string {
     .map((s) => s.trim())
     .filter(Boolean)
     .join(" ");
+}
+
+const DEFAULT_SCOPE_KEY = "lavega.defaultScope";
+
+/** Welke helft de app opent: persoonlijk of zakelijk.
+ *
+ *  Gezet in de eenmalige instelstap en daarna alleen nog in Profiel. De
+ *  terugval is `personal` en niet "wat hij het laatst aanstond": de schakelaar
+ *  bovenin is een filter binnen een sessie, en een filter dat zichzelf
+ *  onthoudt laat iemand een lege app openen zonder te weten waarom. Core's
+ *  eigen default voor een niet-ingedeelde entiteit is ook personal, dus deze
+ *  twee wijzen dezelfde kant op. */
+export function getDefaultScope(): EntityScope {
+  try {
+    if (typeof localStorage === "undefined") return "personal";
+    return localStorage.getItem(DEFAULT_SCOPE_KEY) === "business" ? "business" : "personal";
+  } catch {
+    return "personal";
+  }
+}
+
+export function setDefaultScope(scope: EntityScope): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(DEFAULT_SCOPE_KEY, scope);
+  } catch {
+    /* non-fatal for a preference */
+  }
 }

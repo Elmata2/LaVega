@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Rule, Tx } from "@lavega/core";
 import { categorize } from "@lavega/core";
@@ -215,4 +216,25 @@ test("in English, a rule's category renders translated while the stored value st
   act(() => row.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(onSaveRules).toHaveBeenCalledWith([]);
   expect(stored[0].category).toBe("Boodschappen");
+});
+
+/* DE UITLEG DIE BIJ DE REGELS HOORT. Stond in Profiel.test.tsx en verhuisde
+ * mee toen de regels naar de transactiestap gingen — hij hoort bij dit
+ * onderdeel en niet bij het scherm waar het toevallig op stond. */
+test("the rules explain how a match is decided, and still let you add one", () => {
+  const html = renderToStaticMarkup(
+    <Regels
+      rules={[{ id: "r1", match: "albert heijn", category: "Boodschappen" }]}
+      busy={false}
+      ruleMatch=""
+      onRuleMatchChange={() => {}}
+      ruleCategory=""
+      onRuleCategoryChange={() => {}}
+      onSaveRules={() => {}}
+    />,
+  );
+  expect(html).toContain("Je eigen regels hieronder gaan vóór die automatische categorieën");
+  expect(html).toContain("eerste");
+  expect(html).toContain("albert heijn");
+  expect(html).toContain("<input");
 });

@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
 import { canonicalAccountId, findDuplicateAccounts, mergeAccounts } from "./accounts.js";
 import { assignTxIds } from "./hash.js";
+import { accountGaps } from "./accounts.js";
 
 function acc(over: Partial<Account>): Account {
   return {
@@ -220,4 +221,57 @@ test("a merged filename-keyed pair keeps every distinct tx and double-counts non
   expect(merged.txs).toHaveLength(2); // Uber collapsed, Airbnb carried over
   expect(merged.txs.filter((t) => t.counterparty === "UBER TRIP")).toHaveLength(1);
   expect(merged.txs.every((t) => t.accountKey === "activity")).toBe(true);
+});
+
+/* WAT EEN REKENING NOG NIET HEEFT VERTELD. Zijn vraag bij de UI-ronde van
+ * 21 september: vraag het de gebruiker als er onbekenden zijn, in plaats van
+ * stilletijgend minder te kunnen. Saldo staat er met opzet NIET bij — de
+ * totaalkaart noemt dat al, want het is de reden dat zijn totaal deels is. */
+test("accountGaps names what is missing, worst first, and stays silent when nothing is", () => {
+  const a = (over: Partial<Account>): Account =>
+    ({
+      key: "k",
+      iban: "",
+      name: "n",
+      bank: "",
+      entity: "Privé",
+      currency: "EUR",
+      balance: null,
+      ...over,
+    }) as Account;
+
+  const compleet = a({ key: "vol", iban: "NL02ABNA0123456789", type: "Betaalrekening", bank: "ABN" });
+  const geenType = a({ key: "b", iban: "NL02ABNA0123456789", bank: "ING" });
+  const geenIban = a({ key: "a", type: "Spaarrekening", bank: "Knab" });
+  const niets = a({ key: "c", bank: "Revolut" });
+
+  expect(accountGaps([compleet])).toEqual([]);
+  // Een saldo dat ontbreekt is géén gat hier: dat zegt de totaalkaart al.
+  expect(accountGaps([{ ...compleet, balance: null }])).toEqual([]);
+
+  const gaps = accountGaps([compleet, geenType, geenIban, niets]);
+  // Twee gaten voor de rest, en bij gelijk aantal op sleutel.
+  expect(gaps.map((g) => g.key)).toEqual(["c", "a", "b"]);
+  expect(gaps[0].gaps).toEqual(["iban", "type"]);
+  expect(gaps.find((g) => g.key === "a")?.gaps).toEqual(["iban"]);
+  expect(gaps.find((g) => g.key === "b")?.gaps).toEqual(["type"]);
+  // De naam die de vraag draagt is er een die hij herkent, niet de sleutel.
+  expect(gaps.find((g) => g.key === "a")?.name).toBe("Knab");
+});
+
+/* Een half ingevulde IBAN is geen IBAN. `findIban` beslist dat, niet een
+ * lengtecheck hier — anders zou deze functie een tweede mening krijgen over
+ * wat een IBAN is en die twee lopen uit elkaar. */
+test("a scrap of text in the IBAN field still counts as missing", () => {
+  const acc = {
+    key: "k",
+    iban: "NL02",
+    name: "n",
+    bank: "ING",
+    entity: "Privé",
+    currency: "EUR",
+    balance: 1,
+    type: "Betaalrekening",
+  } as Account;
+  expect(accountGaps([acc])[0].gaps).toEqual(["iban"]);
 });

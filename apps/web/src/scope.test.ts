@@ -156,3 +156,20 @@ test("the import files new accounts under Persoonlijk, not under a BV nobody ask
   expect(app).toContain('useState("Persoonlijk")');
   expect(app).not.toContain('useState("BV1")');
 });
+
+/* DE REGELS STAAN BIJ DE TRANSACTIES. Zijn verzoek bij de UI-ronde van
+ * 21 september: niet in de instellingenkaart, maar bij de stap waar je een
+ * verkeerd ingedeelde transactie ziet. Een bronlezing en geen render, in de
+ * geest van de andere App.tsx-controles in dit bestand: wat hier misgaat is
+ * dat iemand hem terugverhuist, en dat is aan de montageplek te zien. */
+test("the rules are mounted with the transactions view, not with the profile", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  const profiel = readFileSync(new URL("./views/Profiel.tsx", import.meta.url), "utf8");
+  // Waar hij NIET meer staat is het deel dat kan terugglijden, en dat is een
+  // gewone aanwezigheidsvraag in plaats van een positievergelijking.
+  expect(profiel).not.toContain("<Regels");
+  expect(app).toContain("<Regels");
+  // En waar hij wel staat: achter de transactie-guard. De regex eist de guard
+  // en de montage in één blok, zodat herindenteren hem niet omgooit.
+  expect(app).toMatch(/view === "transactions" &&[\s\S]{0,400}?<Regels/);
+});

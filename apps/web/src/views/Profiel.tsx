@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { Account, EntityScope, EntitySummary, LearnedFact, Rule } from "@lavega/core";
+import type { Account, EntityScope, EntitySummary, LearnedFact } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
 import {
   accountType,
@@ -36,7 +36,6 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
 import Import from "./Import";
-import Regels from "./Regels";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
@@ -86,13 +85,6 @@ type ProfielProps = {
   busy: boolean;
   problems: ShellNotice[];
   onImport: (file: File) => void;
-  /** Regels (unchanged component). */
-  rules: Rule[];
-  ruleMatch: string;
-  onRuleMatchChange: (match: string) => void;
-  ruleCategory: string;
-  onRuleCategoryChange: (category: string) => void;
-  onSaveRules: (next: Rule[]) => void;
   /** Back-up (unchanged component). */
   storage: VaultStorage;
   asOf: string;
@@ -495,12 +487,6 @@ export default function Profiel({
   busy,
   problems,
   onImport,
-  rules,
-  ruleMatch,
-  onRuleMatchChange,
-  ruleCategory,
-  onRuleCategoryChange,
-  onSaveRules,
   storage,
   asOf,
   onRestored,
@@ -766,16 +752,6 @@ export default function Profiel({
       />
 
       <Koppelingen />
-
-      <Regels
-        rules={rules}
-        busy={busy}
-        ruleMatch={ruleMatch}
-        onRuleMatchChange={onRuleMatchChange}
-        ruleCategory={ruleCategory}
-        onRuleCategoryChange={onRuleCategoryChange}
-        onSaveRules={onSaveRules}
-      />
 
       <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
 

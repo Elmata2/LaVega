@@ -84,12 +84,6 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     busy: false,
     problems: [],
     onImport: () => {},
-    rules: [{ id: "r1", match: "albert heijn", category: "Boodschappen" }],
-    ruleMatch: "",
-    onRuleMatchChange: () => {},
-    ruleCategory: "",
-    onRuleCategoryChange: () => {},
-    onSaveRules: () => {},
     storage,
     asOf: "2026-08-16",
     onRestored: () => {},
@@ -255,12 +249,21 @@ test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het fo
   expect(section("Account").querySelector('input[type="email"]')).not.toBeNull();
 });
 
-test("Regels, Koppelingen, Back-up and Import all render inside the profile", async () => {
+test("Koppelingen, Back-up and Import render inside the profile", async () => {
   await render();
-  expect(section("Regels").textContent).toContain("albert heijn");
   expect(container!.querySelector('[aria-label="Koppelingen"]')).not.toBeNull();
   expect(section("Importeren").querySelector('input[type="file"]')).not.toBeNull();
   expect(container!.textContent).toContain("Back-up");
+});
+
+/* REGELS STAAT HIER NIET MEER. Zijn verzoek bij de UI-ronde van 21 september:
+ * regels horen bij de transactiestap en niet in de instellingenkaart — een
+ * regel is een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+ * hoort waar je dat ziet gebeuren. App.tsx rendert hem nu naast Transacties. */
+test("the rules are no longer buried in the settings card", async () => {
+  await render();
+  expect(container!.querySelector('[aria-label="Regels"]')).toBeNull();
+  expect(container!.textContent).not.toContain("albert heijn");
 });
 
 test("the module picker is on the profile, with Overzicht locked on", async () => {
@@ -516,15 +519,7 @@ test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", asyn
   if (agenda) expect(agenda.getAttribute("aria-checked")).not.toBe("false");
 });
 
-test("the manual rules keep their explanation of how a match is decided", async () => {
-  await render();
-  const regels = section("Regels");
-  expect(regels.textContent).toContain(
-    "Je eigen regels hieronder gaan vóór die automatische categorieën",
-  );
-  expect(regels.textContent).toContain("eerste");
-  expect(regels.querySelector("input")).not.toBeNull(); // and you can still add one
-});
+
 
 /* ══════ CASHBACK CORRIGEREN — de feedbackmodule ═════════════════════════════
  *

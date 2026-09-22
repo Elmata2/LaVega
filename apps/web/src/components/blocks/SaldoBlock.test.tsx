@@ -479,3 +479,48 @@ test("positionSeries: convert mode, no rate for a transaction's date — the lin
   expect(at("2026-07-20")).toBe(750);
   expect(at("2026-07-21")).toBe(750);
 });
+
+/* VRAAG HET, IN PLAATS VAN STILZWIJGEND MINDER TE KUNNEN. Zijn vraag bij de
+ * UI-ronde van 21 september: als er onbekenden zijn bij een rekening, vraag de
+ * gebruiker erom — de IBAN en de soort — zodat het beeld zo compleet mogelijk
+ * wordt. Elke regel noemt de naam van de rekening én wat het ontbreken kost;
+ * een telling zonder naam laat hem raden welke hij moet openen. */
+const gapRender = (accs: Account[]) =>
+  renderToStaticMarkup(
+    <SaldoBlock
+      accounts={accs}
+      txs={[] as Tx[]}
+      scheduledFlows={[]}
+      asOf={ASOF}
+      onNavigate={() => {}}
+      {...SEPARATE}
+    />,
+  );
+
+const BASE: Account = {
+  key: "G1",
+  iban: "NL02ABNA0123456789",
+  name: "Betaalrekening",
+  bank: "ABN AMRO",
+  entity: "Prive",
+  currency: "EUR",
+  balance: 1_000,
+  type: "Betaalrekening",
+};
+
+test("the card asks for a missing IBAN and a missing kind, by name and with the cost", () => {
+  const html = gapRender([
+    { ...BASE, key: "g1", iban: "", bank: "Knab" },
+    { ...BASE, key: "g2", type: undefined, bank: "ING" },
+  ]);
+  expect(html).toMatch(/zonder IBAN \(Knab\)|without an IBAN \(Knab\)/);
+  expect(html).toContain("factuur"); // waarom een IBAN uitmaakt
+  expect(html).toMatch(/zonder soort \(ING\)/);
+  expect(html).toContain("betaal- of spaarrekening?"); // waarom de soort uitmaakt
+});
+
+test("a complete set of accounts is asked nothing at all", () => {
+  const html = gapRender([BASE]);
+  expect(html).not.toContain("zonder IBAN");
+  expect(html).not.toContain("zonder soort");
+});

@@ -157,3 +157,34 @@ export function mergeAccounts(
     .map((a) => (a.key === survivorKey ? mergedSurvivor : a));
   return { accounts: nextAccounts, txs: nextTxs };
 }
+
+/** What an account still has not told us, and that a screen may ask for.
+ *
+ *  `iban` and `type` only. A missing BALANCE is already reported by the totals
+ *  card, which has to mention it anyway — it is the reason the total is
+ *  partial — and saying it twice on one screen is nagging, not helping.
+ *
+ *  Both gaps cost something concrete, which is why they are worth asking about
+ *  at all and why the view can say why:
+ *    · no IBAN — an invoice cannot be matched to the account that paid it, so
+ *      LaVega cannot tell a sales invoice from a purchase invoice for it;
+ *    · no type — a payment account and a savings account are not compared on
+ *      the same things, so costs and interest are left out rather than guessed.
+ */
+export type AccountGap = "iban" | "type";
+
+export type AccountGaps = { key: string; name: string; gaps: AccountGap[] };
+
+/** One entry per account that is missing something, worst first. Accounts that
+ *  have told us everything are simply absent — an empty array is the honest
+ *  representation of "nothing to ask". */
+export function accountGaps(accounts: readonly Account[]): AccountGaps[] {
+  const out: AccountGaps[] = [];
+  for (const a of accounts) {
+    const gaps: AccountGap[] = [];
+    if (!findIban(a.iban)) gaps.push("iban");
+    if (!a.type || a.type.length === 0) gaps.push("type");
+    if (gaps.length > 0) out.push({ key: a.key, name: a.bank || a.name || a.key, gaps });
+  }
+  return out.sort((x, y) => y.gaps.length - x.gaps.length || x.key.localeCompare(y.key));
+}
