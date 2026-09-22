@@ -5,3 +5,4 @@ Branch: `batch/r3-r7-20260922` (worktree `/private/tmp/lavega-r3-r7-20260922`). 
 | Ticket | Outcome | Commit / branch | Findings fixed | Findings carried |
 | --- | --- | --- | --- | --- |
 | #116 R3 | done | `4523fa5` | Durable read propagation; memory/PGlite lease contract; slow-provider heartbeat test | Duplicate lease-renewal logic; full suite web `localStorage` environment failure |
+| #117 R4 | done | `69365db` | None after first review | Duplicate vault commit flow; full suite import-boundary timeouts under load (isolated suite passes) |
