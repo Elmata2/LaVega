@@ -31,8 +31,8 @@ export type PriceSyncProgress = {
  */
 export type PriceSyncProgressStore = {
   get(tenantId: string): Promise<PriceSyncProgress | null>;
-  put(tenantId: string, progress: PriceSyncProgress, leaseId?: string): Promise<boolean | void>;
-  claim?(
+  put(tenantId: string, progress: PriceSyncProgress, leaseId: string): Promise<boolean>;
+  claim(
     tenantId: string,
     progress: PriceSyncProgress,
     staleBefore: string,
@@ -45,7 +45,8 @@ export function createInMemoryPriceSyncProgressStore(): PriceSyncProgressStore {
     async get(tenantId) {
       return rows.get(tenantId) ?? null;
     },
-    async put(tenantId, progress) {
+    async put(tenantId, progress, leaseId) {
+      if (!leaseId || rows.get(tenantId)?.leaseId !== leaseId) return false;
       rows.set(tenantId, progress);
       return true;
     },
@@ -185,6 +186,8 @@ export function createPriceOrchestrator(input: {
   /** How long a `running` row from another instance is believed before this
    *  one takes the work over. */
   takeoverAfterMs?: number;
+  /** Maximum time between durable heartbeats while provider work is in flight. */
+  heartbeatEveryMs?: number;
   now?: () => Date;
   wait?: (milliseconds: number) => Promise<void>;
 }) {
@@ -194,6 +197,7 @@ export function createPriceOrchestrator(input: {
   const paceMs = input.paceMs ?? 300;
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
+  const heartbeatEveryMs = Math.min(input.heartbeatEveryMs ?? 10_000, takeoverAfterMs / 3);
   const persistEverySymbols = 5;
   const now = input.now ?? (() => new Date());
   const wait =
@@ -203,28 +207,30 @@ export function createPriceOrchestrator(input: {
     status !== "running" && status !== "waiting";
 
   const sinceLastPersist = new Map<string, number>();
+  const lastPersistAt = new Map<string, number>();
   const update = async (
     tenantId: string,
     next: Omit<PriceSyncProgress, "updatedAt">,
-    leaseId?: string,
+    leaseId: string,
   ): Promise<PriceSyncProgress> => {
     const value = { ...next, updatedAt: now().toISOString() };
-    local.set(tenantId, value);
-    /* Every symbol would mean a row write per Yahoo call. A wall-clock timer
-     * cannot bound that on its own: a Neon round trip costs about as much as
-     * the cache-hit symbol it reports on, so by the time one write finishes
-     * the timer has already elapsed and the next symbol writes too. Counting
-     * symbols instead keeps the write count bounded regardless of how slow
-     * the store is, and the first call for a tenant always persists so a
-     * lost lease is caught before another provider request. */
+    /* Count symbols to avoid a write for every cheap cache hit. Also renew
+     * after elapsed time so the lease does not expire during a long slice. */
     const elapsed = sinceLastPersist.get(tenantId);
-    if (terminal(value.status) || elapsed === undefined || elapsed >= persistEverySymbols) {
-      sinceLastPersist.set(tenantId, 0);
-      const stored = await store.put(tenantId, value, leaseId).catch(() => undefined);
+    if (
+      terminal(value.status) ||
+      elapsed === undefined ||
+      elapsed >= persistEverySymbols ||
+      now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs
+    ) {
+      const stored = await store.put(tenantId, value, leaseId);
       if (stored === false) throw new PriceSyncLeaseLost();
+      sinceLastPersist.set(tenantId, 0);
+      lastPersistAt.set(tenantId, now().getTime());
     } else {
       sinceLastPersist.set(tenantId, elapsed + 1);
     }
+    local.set(tenantId, value);
     return value;
   };
 
@@ -233,7 +239,7 @@ export function createPriceOrchestrator(input: {
     if (active) return active;
     const leaseId = newLeaseId();
     const execute = async (): Promise<PriceSyncProgress> => {
-      const stored = await store.get(tenantId).catch(() => null);
+      const stored = await store.get(tenantId);
       /* Another instance is already working this tenant. Starting a second run
        * would double the provider traffic and let two writers fight over one
        * progress row; a stale row means that instance died, so we take over. */
@@ -244,21 +250,41 @@ export function createPriceOrchestrator(input: {
       )
         return stored;
 
+      const claimed = {
+        ...idleProgress(),
+        status: "running" as const,
+        updatedAt: now().toISOString(),
+        message: "Discovering price symbols",
+        leaseId,
+      };
+      const busy = await store.claim(
+        tenantId,
+        claimed,
+        new Date(now().getTime() - takeoverAfterMs).toISOString(),
+      );
+      if (busy) return busy;
+      local.set(tenantId, claimed);
+      lastPersistAt.set(tenantId, now().getTime());
+
       let targets: PriceSyncTarget[];
       try {
         targets = await input.discover(tenantId);
       } catch (error) {
         const problem = error instanceof Error ? error.message : "Price target discovery failed";
-        return update(tenantId, {
-          status: "problem",
-          total: 0,
-          completed: 0,
-          remainingSymbols: [],
-          currentSymbol: null,
-          waitUntil: null,
-          message: "Price synchronization could not start",
-          problems: [problem],
-        });
+        return update(
+          tenantId,
+          {
+            status: "problem",
+            total: 0,
+            completed: 0,
+            remainingSymbols: [],
+            currentSymbol: null,
+            waitUntil: null,
+            message: "Price synchronization could not start",
+            problems: [problem],
+          },
+          leaseId,
+        );
       }
 
       /* A paused run names the symbols it never reached. Resuming from that
@@ -273,16 +299,20 @@ export function createPriceOrchestrator(input: {
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
 
       if (queue.length === 0)
-        return update(tenantId, {
-          status: "completed",
-          total,
-          completed: total,
-          remainingSymbols: [],
-          currentSymbol: null,
-          waitUntil: null,
-          message: total ? "Price synchronization completed" : "No price symbols to synchronize",
-          problems,
-        });
+        return update(
+          tenantId,
+          {
+            status: "completed",
+            total,
+            completed: total,
+            remainingSymbols: [],
+            currentSymbol: null,
+            waitUntil: null,
+            message: total ? "Price synchronization completed" : "No price symbols to synchronize",
+            problems,
+          },
+          leaseId,
+        );
       const remainingFrom = (index: number) => queue.slice(index).map((target) => target.symbol);
       const pause = (index: number) =>
         update(
@@ -300,41 +330,22 @@ export function createPriceOrchestrator(input: {
           leaseId,
         );
 
-      const started = {
-        status: "running" as const,
-        total,
-        completed: done,
-        remainingSymbols: remainingFrom(0),
-        currentSymbol: null,
-        waitUntil: null,
-        updatedAt: now().toISOString(),
-        message: "Price synchronization started",
-        problems: [...problems],
-        leaseId,
-      };
-      local.set(tenantId, started);
-      const busy = await store.claim?.(
+      sinceLastPersist.delete(tenantId);
+      await update(
         tenantId,
-        started,
-        new Date(now().getTime() - takeoverAfterMs).toISOString(),
-      );
-      if (busy) return busy;
-      if (!store.claim)
-        await update(
-          tenantId,
-          {
-            status: "running",
-            total,
-            completed: done,
-            remainingSymbols: remainingFrom(0),
-            currentSymbol: null,
-            waitUntil: null,
-            message: "Price synchronization started",
-            problems: [...problems],
-            leaseId,
-          },
+        {
+          status: "running",
+          total,
+          completed: done,
+          remainingSymbols: remainingFrom(0),
+          currentSymbol: null,
+          waitUntil: null,
+          message: "Price synchronization started",
+          problems: [...problems],
           leaseId,
-        );
+        },
+        leaseId,
+      );
       for (let index = 0; index < queue.length; index += 1) {
         if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
           return pause(index);
@@ -355,6 +366,24 @@ export function createPriceOrchestrator(input: {
           leaseId,
         );
         let fetched = true;
+        let heartbeatError: unknown;
+        let heartbeat = Promise.resolve();
+        const renew = () => {
+          heartbeat = heartbeat.then(async () => {
+            if (heartbeatError) return;
+            const current = local.get(tenantId);
+            if (!current) return;
+            const value = { ...current, updatedAt: now().toISOString() };
+            try {
+              if (!(await store.put(tenantId, value, leaseId))) throw new PriceSyncLeaseLost();
+              local.set(tenantId, value);
+              lastPersistAt.set(tenantId, now().getTime());
+            } catch (error) {
+              heartbeatError = error;
+            }
+          });
+        };
+        const timer = setInterval(renew, heartbeatEveryMs);
         try {
           const result = await input.sync(target, tenantId);
           fetched = result.fetched;
@@ -363,6 +392,16 @@ export function createPriceOrchestrator(input: {
           problems.push(
             `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
           );
+        } finally {
+          clearInterval(timer);
+          await heartbeat;
+        }
+        if (heartbeatError) throw heartbeatError;
+        if (now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs) {
+          const current = local.get(tenantId)!;
+          if (!(await store.put(tenantId, { ...current, updatedAt: now().toISOString() }, leaseId)))
+            throw new PriceSyncLeaseLost();
+          lastPersistAt.set(tenantId, now().getTime());
         }
         /* Cache hit made no provider request, so there is nothing to pace
          * for. An error stays paced: we can't tell whether it reached the

@@ -42,6 +42,8 @@ Depth/locality/leverage: merge and commit invariants currently cross scheduler, 
 
 ## R3 — P1/P2: Price progress must honor durable lease and commit failures
 
+Implementation note: price progress writes require the claimed lease in both memory and Neon stores. Claim precedes discovery, including empty and failed discovery. Initial durable read and start, checkpoint, heartbeat, and final write failures reject the run. A periodic heartbeat renews the lease during provider work; elapsed time also forces a write before further symbols. The shared lease contract runs against memory and Neon repository with real SQL migrations in PGlite, including wrong-owner rejection and stale takeover. If ownership changes while a provider request is already running, that request can still finish and upsert idempotent price bars through the price adapter. Its old worker cannot publish progress or start another provider request after lease rejection.
+
 Evidence: `priceOrchestrator.ts:195-197` takeover 30s with checkpoints counted by symbols; `:221-224` suppresses every store.put exception and proceeds, including terminal writes at :392-407. A slow provider call (`:359`) can outlive lease without heartbeat. Error/no-target branches `:251-285` write without a lease, and database `index.ts:374-379` allows those unconditional writes. Shared in-memory adapter `priceOrchestrator.ts:48-50` ignores lease argument entirely.
 
 Failure: storage outage during final write returns completed while DB still running. Another request can take lease during long active fetch. A discovery-failure/no-target caller can overwrite progress held by another worker because those branches precede claim. Five-count checkpoint does not bound elapsed time.

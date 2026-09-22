@@ -630,7 +630,7 @@ export function createBrokerSyncOperationRepository(
 
 export type PriceSyncStateRepository = {
   get(): Promise<unknown | null>;
-  put(progress: unknown, status: string, leaseId?: string): Promise<boolean>;
+  put(progress: unknown, status: string, leaseId: string): Promise<boolean>;
   claim(progress: unknown, status: string, staleBefore: string): Promise<unknown | null>;
 };
 
@@ -667,13 +667,7 @@ export function createPriceSyncStateRepository(
     },
     async put(progress, status, leaseId) {
       return withTenant(db, tenantId, async (client) => {
-        if (!leaseId) {
-          await client.query(
-            "INSERT INTO investing.sync_state (user_id, broker, status, state) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb) ON CONFLICT (user_id, broker) DO UPDATE SET status = EXCLUDED.status, state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP",
-            [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress)],
-          );
-          return true;
-        }
+        if (!leaseId) throw new Error("Price progress write requires a lease");
         const result = await client.query<QueryResultRow>(
           "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->>'leaseId' = $4 RETURNING state",
           [

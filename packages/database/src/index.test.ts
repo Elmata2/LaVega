@@ -241,6 +241,11 @@ test("price sync writes require the lease that claimed the row", async () => {
   const { db, calls } = fakeDatabase();
   const repository = createPriceSyncStateRepository(db, "user-123");
 
+  await expect(repository.put({ status: "completed" }, "completed", "")).rejects.toThrow(
+    "requires a lease",
+  );
+  expect(executed(calls)).toHaveLength(0);
+
   await expect(
     repository.put({ status: "paused", leaseId: "mine", problems: [] }, "paused", "mine"),
   ).resolves.toBe(false);

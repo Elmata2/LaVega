@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { Position, Trade } from "@lavega/core";
+import { priceSyncLeaseContract } from "../../../packages/database/src/priceSyncLease.contract.js";
 import {
   createInMemoryPriceSyncProgressStore,
   createPriceOrchestrator,
@@ -31,6 +32,8 @@ const trade = (symbol: string, date: string): Trade => ({
   commission: 0,
 });
 const result = (problems: string[] = [], fetched = true) => ({ bars: [], fetched, problems });
+
+priceSyncLeaseContract("memory price progress", createInMemoryPriceSyncProgressStore);
 
 async function waitForAssertion(assertion: () => void) {
   let lastError: unknown;
@@ -241,6 +244,46 @@ test("throttles progress writes by symbol count so store latency cannot gate cac
   expect(put).toHaveBeenCalledTimes(3);
 });
 
+test("elapsed time forces progress renewal before symbol count threshold", async () => {
+  let clock = 0;
+  const backing = createInMemoryPriceSyncProgressStore();
+  const put = vi.fn(backing.put);
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync: async () => {
+      clock += 11_000;
+      return result([], false);
+    },
+    progressStore: { ...backing, put },
+    now: () => new Date(clock),
+    paceMs: 0,
+  });
+  await expect(orchestrator.run("tenant")).resolves.toMatchObject({ status: "completed" });
+  expect(put.mock.calls.length).toBeGreaterThan(2);
+});
+
+test("memory progress store rejects writes from old or absent lease", async () => {
+  const store = createInMemoryPriceSyncProgressStore();
+  const first = {
+    status: "running" as const,
+    total: 0,
+    completed: 0,
+    remainingSymbols: [] as string[],
+    currentSymbol: null,
+    waitUntil: null,
+    updatedAt: new Date(0).toISOString(),
+    message: null,
+    problems: [] as string[],
+    leaseId: "first",
+  };
+  await store.claim("tenant", first, new Date(-1).toISOString());
+  const next = { ...first, status: "completed" as const };
+  await expect(store.put("tenant", next, "")).resolves.toBe(false);
+  await expect(store.put("tenant", next, "stale")).resolves.toBe(false);
+  await expect(store.get("tenant")).resolves.toEqual(first);
+  await expect(store.put("tenant", next, "first")).resolves.toBe(true);
+});
+
 test("run stops on the host budget and names what is left instead of continuing past it", async () => {
   const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
   let clock = 0;
@@ -314,17 +357,22 @@ test("progress survives the process that produced it", async () => {
 
 test("a fresh run by another instance is left alone rather than doubled", async () => {
   const progressStore = createInMemoryPriceSyncProgressStore();
-  await progressStore.put("local", {
-    status: "running",
-    total: 2,
-    completed: 1,
-    remainingSymbols: ["TWO"],
-    currentSymbol: "TWO",
-    waitUntil: null,
-    updatedAt: new Date().toISOString(),
-    message: null,
-    problems: [],
-  });
+  await progressStore.claim(
+    "local",
+    {
+      status: "running",
+      total: 2,
+      completed: 1,
+      remainingSymbols: ["TWO"],
+      currentSymbol: "TWO",
+      waitUntil: null,
+      updatedAt: new Date().toISOString(),
+      message: null,
+      problems: [],
+      leaseId: "other",
+    },
+    new Date(Date.now() - 30_000).toISOString(),
+  );
   const sync = vi.fn(async () => result());
   const orchestrator = createPriceOrchestrator({
     discover: () => [symbolTarget("TWO")],
@@ -342,17 +390,22 @@ test("a fresh run by another instance is left alone rather than doubled", async 
 
 test("a stale run is taken over so a dead instance cannot strand the work", async () => {
   const progressStore = createInMemoryPriceSyncProgressStore();
-  await progressStore.put("local", {
-    status: "running",
-    total: 1,
-    completed: 0,
-    remainingSymbols: ["TWO"],
-    currentSymbol: "TWO",
-    waitUntil: null,
-    updatedAt: new Date(Date.now() - 120_000).toISOString(),
-    message: null,
-    problems: [],
-  });
+  await progressStore.claim(
+    "local",
+    {
+      status: "running",
+      total: 1,
+      completed: 0,
+      remainingSymbols: ["TWO"],
+      currentSymbol: "TWO",
+      waitUntil: null,
+      updatedAt: new Date(Date.now() - 120_000).toISOString(),
+      message: null,
+      problems: [],
+      leaseId: "stale",
+    },
+    new Date(Date.now() - 150_000).toISOString(),
+  );
   const sync = vi.fn(async () => result());
   const orchestrator = createPriceOrchestrator({
     discover: () => [symbolTarget("TWO")],
@@ -397,6 +450,161 @@ test("a worker that loses its durable lease stops before another provider reques
   });
   expect(sync).not.toHaveBeenCalled();
   expect(progressStore.put).toHaveBeenCalled();
+});
+
+test.each(["start", "final"])(
+  "durable %s write failure rejects instead of reporting completion",
+  async (point) => {
+    const backing = createInMemoryPriceSyncProgressStore();
+    let writes = 0;
+    const progressStore = {
+      ...backing,
+      put: async (...args: Parameters<typeof backing.put>) => {
+        writes += 1;
+        if ((point === "start" && writes === 1) || (point === "final" && writes === 2))
+          throw new Error("storage unavailable");
+        return backing.put(...args);
+      },
+    };
+    const sync = vi.fn(async () => result());
+    const orchestrator = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync,
+      progressStore,
+      paceMs: 0,
+    });
+    await expect(orchestrator.run("local")).rejects.toThrow("storage unavailable");
+    await expect(backing.get("local")).resolves.not.toMatchObject({ status: "completed" });
+    if (point === "start") expect(sync).not.toHaveBeenCalled();
+  },
+);
+
+test("failed progress read rejects before claim or provider work", async () => {
+  const readError = new Error("storage unavailable");
+  const store = {
+    get: vi.fn(async () => {
+      throw readError;
+    }),
+    claim: vi.fn(async () => null),
+    put: vi.fn(async () => true),
+  };
+  const discover = vi.fn(async () => [symbolTarget("ONE")]);
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({ discover, sync, progressStore: store });
+
+  await expect(orchestrator.run("tenant")).rejects.toBe(readError);
+  expect(store.claim).not.toHaveBeenCalled();
+  expect(store.put).not.toHaveBeenCalled();
+  expect(discover).not.toHaveBeenCalled();
+  expect(sync).not.toHaveBeenCalled();
+});
+
+test.each(["empty", "error"])("%s discovery cannot overwrite an active lease", async (kind) => {
+  const store = createInMemoryPriceSyncProgressStore();
+  const active = {
+    status: "running" as const,
+    total: 1,
+    completed: 0,
+    remainingSymbols: ["ONE"],
+    currentSymbol: "ONE",
+    waitUntil: null,
+    updatedAt: new Date(0).toISOString(),
+    message: null,
+    problems: [] as string[],
+    leaseId: "owner",
+  };
+  await store.claim("tenant", active, new Date(-1).toISOString());
+  const discover = vi.fn(() => {
+    if (kind === "error") throw new Error("discovery failed");
+    return [];
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover,
+    sync: async () => result(),
+    progressStore: store,
+    now: () => new Date(1_000),
+  });
+  await expect(orchestrator.run("tenant")).resolves.toMatchObject({ leaseId: "owner" });
+  await expect(store.get("tenant")).resolves.toEqual(active);
+  expect(discover).not.toHaveBeenCalled();
+});
+
+test("slow provider cannot publish stale progress after another worker claims expired lease", async () => {
+  const store = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sync = vi.fn(async () => {
+    await pending;
+    return result();
+  });
+  const first = createPriceOrchestrator({
+    discover: () => [symbolTarget("ONE"), symbolTarget("TWO")],
+    sync,
+    progressStore: store,
+    now: () => new Date(clock),
+    takeoverAfterMs: 30_000,
+    paceMs: 0,
+  });
+  const running = first.run("tenant");
+  await waitForAssertion(() => expect(sync).toHaveBeenCalledTimes(1));
+  clock = 31_000;
+  const second = createPriceOrchestrator({
+    discover: () => [],
+    sync: async () => result(),
+    progressStore: store,
+    now: () => new Date(clock),
+    takeoverAfterMs: 30_000,
+  });
+  const winner = await second.run("tenant");
+  release();
+  await expect(running).resolves.toEqual(winner);
+  await expect(store.get("tenant")).resolves.toEqual(winner);
+});
+
+test("heartbeat keeps slow provider lease fresh past takeover threshold", async () => {
+  vi.useFakeTimers();
+  try {
+    const store = createInMemoryPriceSyncProgressStore();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sync = vi.fn(async () => {
+      await pending;
+      return result();
+    });
+    const clock = () => new Date(Date.now());
+    const first = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync,
+      progressStore: store,
+      now: clock,
+      takeoverAfterMs: 30_000,
+      heartbeatEveryMs: 5_000,
+      paceMs: 0,
+    });
+    const running = first.run("tenant");
+    await vi.waitFor(() => expect(sync).toHaveBeenCalledOnce());
+    const owner = (await store.get("tenant"))?.leaseId;
+    await vi.advanceTimersByTimeAsync(35_000);
+    const secondSync = vi.fn(async () => result());
+    const second = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync: secondSync,
+      progressStore: store,
+      now: clock,
+      takeoverAfterMs: 30_000,
+    });
+    await expect(second.run("tenant")).resolves.toMatchObject({ leaseId: owner });
+    expect(secondSync).not.toHaveBeenCalled();
+    release();
+    await expect(running).resolves.toMatchObject({ status: "completed" });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("the budget is the broker sync budget unless prices are given their own", () => {

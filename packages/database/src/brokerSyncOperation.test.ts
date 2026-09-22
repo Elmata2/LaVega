@@ -6,10 +6,12 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import {
   createBrokerRepository,
   createBrokerSyncOperationRepository,
+  createPriceSyncStateRepository,
   type Database,
   type SyncProgressRow,
   type SyncStateRow,
 } from "./index.js";
+import { priceSyncLeaseContract, type Progress } from "./priceSyncLease.contract.js";
 
 /* These tests run the real migrations against a real Postgres. The lease and
  * the credential generation are enforced by WHERE clauses and by RLS, and a
@@ -19,6 +21,19 @@ import {
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let pglite: PGlite;
 let db: Database;
+
+priceSyncLeaseContract("Neon price progress SQL", () => ({
+  get: async (tenantId) =>
+    (await createPriceSyncStateRepository(db, tenantId).get()) as Progress | null,
+  claim: async (tenantId, progress, staleBefore) =>
+    (await createPriceSyncStateRepository(db, tenantId).claim(
+      progress,
+      progress.status,
+      staleBefore,
+    )) as Progress | null,
+  put: (tenantId, progress, leaseId) =>
+    createPriceSyncStateRepository(db, tenantId).put(progress, progress.status, leaseId),
+}));
 
 /** PGlite is one connection, so a transaction has to finish before the next begins. */
 function pgliteDatabase(instance: PGlite): Database {
