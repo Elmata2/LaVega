@@ -90,7 +90,7 @@ test("resumed broker history survives final pages, file reload, and a later full
     const syncOnce = async (rejectCommit = false) => {
       const restored = createFileCredentialStore(file);
       expect(await restored.unlock("test-passphrase")).toBe(true);
-      const cache = createRuntimeBrokerDataCache(await restored.getBrokerData());
+      const cache = createRuntimeBrokerDataCache((await restored.getBrokerData()) ?? undefined);
       const sync = createRuntimeBrokerSync(
         async (result) => {
           cache.apply(result);

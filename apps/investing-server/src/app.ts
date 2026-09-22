@@ -43,9 +43,11 @@ import {
   type SectorProfileStore,
 } from "./inMemorySectorProfileStore.js";
 import { resolvePortfolioSectors } from "./sectorResolution.js";
+import { createServerTiming, type ServerTiming } from "./serverTiming.js";
 
 export type InvestingDashboardReader = (input: {
   symbol?: string;
+  timing?: ServerTiming;
 }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = {
   broker: "ibkr" | "trading212";
@@ -286,11 +288,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
+    const timing = createServerTiming();
     try {
-      return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));
+      const symbol = c.req.query("symbol")?.trim() || undefined;
+      const data = await timing.measure("total", () => dashboardReader({ symbol, timing }));
+      c.header("Server-Timing", timing.header());
+      return c.json(data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dashboard data could not be loaded";
       problemReporter({ source: "dashboard-read", problems: [message] });
+      c.header("Server-Timing", timing.header());
       return c.json({
         ...emptyInvestingDashboard(),
         problems: ["Dashboard data could not be loaded"],

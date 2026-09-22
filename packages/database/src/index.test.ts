@@ -15,8 +15,10 @@ import {
   encryptBlob,
   requireUserId,
   withTenant,
+  withTenantStatement,
 } from "./index.js";
 import type { QueryResultRow } from "@neondatabase/serverless";
+import { databaseOver } from "./testing.js";
 
 afterEach(() => {
   delete process.env.LAVEGA_ENCRYPTION_KEY;
@@ -49,7 +51,7 @@ test("withTenant sets transaction-local identity and rolls back on failure", asy
     },
     release: () => calls.push("release"),
   } as never;
-  const db = { connect: async () => client } as never;
+  const db = databaseOver(async () => client);
   await expect(
     withTenant(db, "user-1", async () => {
       throw new Error("fail");
@@ -72,7 +74,7 @@ function fakeDatabase(rows: QueryResultRow[] = []) {
     },
     release: () => undefined,
   } as never;
-  return { db: { connect: async () => client } as never, calls };
+  return { db: databaseOver(async () => client), calls };
 }
 
 const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
@@ -372,6 +374,14 @@ test("a snapshot sealed under an older key reads as absent instead of crashing t
   });
 });
 
+test("broker snapshots tell an empty vault from a broker with no data yet", async () => {
+  const empty = fakeDatabase([]);
+  expect(await createBrokerRepository(empty.db, "user-123").snapshots()).toBeNull();
+
+  const connected = fakeDatabase([{ broker: "trading212", snapshot_blob: null }]);
+  expect(await createBrokerRepository(connected.db, "user-123").snapshots()).toEqual({});
+});
+
 test("credential reads leave the snapshot blob in the table", async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
   const credentials = encryptBlob({ broker: "trading212", token: "t" });
@@ -436,7 +446,7 @@ test("a local part colliding on the unique index is reported, not thrown", async
     },
     release: () => undefined,
   } as never;
-  const db = { connect: async () => client } as never;
+  const db = databaseOver(async () => client);
 
   const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", "ale-7f3a");
 
@@ -457,7 +467,7 @@ function erasureDatabase(rowCount = 1, failOn?: string) {
     },
     release: () => undefined,
   } as never;
-  return { db: { connect: async () => client } as never, calls, paramCalls };
+  return { db: databaseOver(async () => client), calls, paramCalls };
 }
 
 test("erasure clears every table that holds personal data, in one transaction", async () => {
@@ -637,4 +647,20 @@ test("listSessions refuses without an authenticated identity", async () => {
     "Authenticated user identity is required",
   );
   expect(calls).toEqual([]); // not even a connection was opened
+});
+
+test("a tenant statement sends set_config and the statement in one transaction, and only one", async () => {
+  const { db, calls } = fakeDatabase([{ ok: 1 }]);
+
+  await withTenantStatement(db, "user-1", async (client) => {
+    await client.query("SELECT 1");
+    await expect(client.query("SELECT 2")).rejects.toThrow("one statement");
+  });
+
+  expect(calls.map((call) => call.sql)).toEqual([
+    "BEGIN",
+    "SELECT set_config('app.user_id', $1, true)",
+    "SELECT 1",
+    "COMMIT",
+  ]);
 });

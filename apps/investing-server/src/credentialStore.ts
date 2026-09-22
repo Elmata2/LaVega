@@ -10,7 +10,8 @@ export type RuntimeCredentialStore = CredentialStore & {
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
   lock(): void;
-  getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
+  /** Null when the vault holds nothing it can read: empty, or still locked. */
+  getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
 };
 

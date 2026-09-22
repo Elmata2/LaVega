@@ -11,6 +11,7 @@ import {
   eraseUserData,
   type Database,
 } from "./index.js";
+import { databaseOver } from "./testing.js";
 
 /* Staleness is decided by triggers, so these run the real migrations on real
  * Postgres. A mock could only assert the SQL text, not that a write in another
@@ -22,19 +23,17 @@ let db: Database;
 
 function pgliteDatabase(instance: PGlite): Database {
   let inUse: Promise<unknown> = Promise.resolve();
-  return {
-    async connect() {
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => (release = resolve));
-      const ahead = inUse;
-      inUse = inUse.then(() => held);
-      await ahead;
-      return {
-        query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
-        release,
-      };
-    },
-  } as unknown as Database;
+  return databaseOver(async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const ahead = inUse;
+    inUse = inUse.then(() => held);
+    await ahead;
+    return {
+      query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
+      release,
+    };
+  });
 }
 
 beforeAll(async () => {

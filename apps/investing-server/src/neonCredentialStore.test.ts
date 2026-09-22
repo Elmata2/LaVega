@@ -15,6 +15,7 @@ function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, Row> 
         : null;
     },
     async snapshots() {
+      if (rows.size === 0) return null;
       return Object.fromEntries(
         [...rows]
           .filter(([, row]) => row.snapshot !== null)
@@ -97,11 +98,19 @@ test("a snapshot for a broker with no credentials is dropped rather than inventi
   await store.putBrokerData({ ibkr: { positions: [], trades: [], dividends: [] } });
 
   expect(repository.rows.size).toBe(0);
-  expect(await store.getBrokerData()).toEqual({});
+  expect(await store.getBrokerData()).toBeNull();
 });
 
-test("an empty vault reports no broker data instead of failing", async () => {
+test("an empty vault reads as no vault, so the runtime needs no separate status read", async () => {
   const store = createNeonCredentialStore(fakeRepository(), "user-123");
+
+  expect(await store.getBrokerData()).toBeNull();
+});
+
+test("a connected broker without synced data reads as an open vault with no data", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+  await repository.put("trading212", { broker: "trading212" });
 
   expect(await store.getBrokerData()).toEqual({});
 });

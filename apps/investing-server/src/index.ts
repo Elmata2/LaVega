@@ -73,7 +73,9 @@ import {
 } from "./priceOrchestrator.js";
 import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
-import { createDashboardSnapshotRepository } from "@lavega/database";
+import { createDashboardSnapshotRepository, createFxRateRepository } from "@lavega/database";
+import { createStoredFxProvider } from "./storedFxProvider.js";
+import { untimed } from "./serverTiming.js";
 
 export { app };
 export { createDashboardCache } from "./dashboardCache.js";
@@ -204,9 +206,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
+  const database = runtimeDatabase();
   const fxProvider = devFixtureEnabled
     ? createDevFixtureFxProvider()
-    : createFrankfurterFxProvider();
+    : database
+      ? createStoredFxProvider(createFxRateRepository(database), createFrankfurterFxProvider())
+      : createFrankfurterFxProvider();
   const dashboardCache = options.dashboardCache ?? createDashboardCache();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
@@ -217,7 +222,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   /* The request path must not import node:async_hooks, so systemOneUsage is
    * handed its database source here rather than importing it. See its comment. */
   useDatabaseSource(runtimeDatabase);
-  const database = runtimeDatabase();
   const agentRunStore =
     options.agentRunStore ??
     (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
@@ -269,14 +273,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
      * use rather than here. */
     let brokerDataLoad: Promise<void> | null = devFixtureEnabled ? Promise.resolve() : null;
     const restoreBrokerData = async () => {
-      brokerData.restore(await credentials.getBrokerData());
+      const snapshot = await credentials.getBrokerData();
+      if (snapshot) brokerData.restore(snapshot);
       brokerDataReadAt = Date.now();
       brokerDataLoad = Promise.resolve();
     };
     const loadBrokerData = () =>
-      (brokerDataLoad ??= (async () => {
-        if ((await credentials.status()) === "unlocked") await restoreBrokerData();
-      })().catch((error: unknown) => {
+      (brokerDataLoad ??= restoreBrokerData().catch((error: unknown) => {
         brokerDataLoad = null;
         throw error;
       }));
@@ -290,6 +293,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const refresh = (async () => {
         const snapshot = await credentials.getBrokerData();
         if (
+          snapshot &&
           brokerData.read().dataVersion === version &&
           syncProgress.status !== "running" &&
           syncProgress.status !== "waiting"
@@ -359,7 +363,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const syncStateStore = database
       ? createNeonBrokerSyncStateStore(database, tenantId)
       : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId), {
-          read: () => credentials.getBrokerData(),
+          read: async () => {
+            const snapshot = await credentials.getBrokerData();
+            if (!snapshot) throw new Error("credential vault is locked");
+            return snapshot;
+          },
           write: (snapshot) => credentials.putBrokerData(snapshot),
         });
     const readHistoryProgress = async (): Promise<BrokerHistoryProgress> => {
@@ -453,13 +461,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         throw error;
       }
     };
-    const dashboardReader = async ({ symbol }: { symbol?: string }) => {
+    const dashboardReader: InvestingDashboardReader = async ({ symbol, timing = untimed }) => {
       const storedKey = symbol?.trim().toUpperCase() ?? "";
-      const stored = await dashboardSnapshots?.get(storedKey).catch(() => null);
+      const stored = await timing.measure("stored", () =>
+        dashboardSnapshots?.get(storedKey).catch(() => null),
+      );
       if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
       const refreshProblems: string[] = [];
       try {
-        await refreshBrokerData();
+        await timing.measure("broker", refreshBrokerData);
       } catch (error) {
         const snapshot = brokerData.read();
         if (
@@ -493,8 +503,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             ...trades.map((trade) => trade.symbol),
           ]),
         ];
-        const prices = await readPriceBars(priceStore, tenantId, symbols);
-        const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
+        const [prices, benches] = await timing.measure("prices", async () => [
+          await readPriceBars(priceStore, tenantId, symbols),
+          await readPriceBars(priceStore, tenantId, selectedBenchmarks),
+        ]);
         const priceProblems =
           prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
         const today = new Date().toISOString().slice(0, 10);
@@ -507,40 +519,44 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           ...prices.bars.map((bar) => bar.date),
         ].filter((date) => date <= today);
         const historyFrom = historyDates.sort()[0] ?? today;
-        const [latestFx, historicalFx] = await Promise.all([
-          fxProvider
-            .getLatestRate()
-            .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
-          fxProvider
-            .getHistoricalRates(historyFrom, today)
-            .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
-        ]);
-        const dashboard = buildInvestingDashboard({
-          positions,
-          trades,
-          dividends,
-          cashBalances,
-          cashFlows,
-          priceBars: prices.bars,
-          benchmarkBars: benches.bars,
-          benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
-            symbol: benchmark,
-            name: benchmark,
-            exchange: "Yahoo Finance",
-            currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
-          })),
-          presentationCurrency: "EUR",
-          fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
-          selectedSymbol: symbol,
-          problems: [
-            ...problems,
-            ...refreshProblems,
-            ...priceProblems,
-            ...latestFx.problems,
-            ...historicalFx.problems,
-          ],
-          dataVersion: version,
-        });
+        const [latestFx, historicalFx] = await timing.measure("fx", () =>
+          Promise.all([
+            fxProvider
+              .getLatestRate()
+              .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
+            fxProvider
+              .getHistoricalRates(historyFrom, today)
+              .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
+          ]),
+        );
+        const dashboard = await timing.measure("build", () =>
+          buildInvestingDashboard({
+            positions,
+            trades,
+            dividends,
+            cashBalances,
+            cashFlows,
+            priceBars: prices.bars,
+            benchmarkBars: benches.bars,
+            benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
+              symbol: benchmark,
+              name: benchmark,
+              exchange: "Yahoo Finance",
+              currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
+            })),
+            presentationCurrency: "EUR",
+            fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
+            selectedSymbol: symbol,
+            problems: [
+              ...problems,
+              ...refreshProblems,
+              ...priceProblems,
+              ...latestFx.problems,
+              ...historicalFx.problems,
+            ],
+            dataVersion: version,
+          }),
+        );
         /* A failed price or FX read is a problem of this moment, not of the
          * data; storing it would show it until the next sync. */
         const transientProblems =
@@ -549,9 +565,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           latestFx.problems.length +
           historicalFx.problems.length;
         if (stored && transientProblems === 0)
-          await dashboardSnapshots
-            ?.put(storedKey, stored.version, dashboard)
-            .catch(() => undefined);
+          await timing.measure("store", () =>
+            dashboardSnapshots?.put(storedKey, stored.version, dashboard).catch(() => undefined),
+          );
         return dashboard;
       };
       return refreshProblems.length > 0
@@ -771,8 +787,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     dashboardCache.invalidate(tenantId);
     return result;
   };
-  const dashboardReader: InvestingDashboardReader = async ({ symbol }) =>
-    (await currentRuntime()).dashboardReader({ symbol });
+  const dashboardReader: InvestingDashboardReader = async ({ symbol, timing = untimed }) =>
+    (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
   const answerPortfolioConversation = async (
