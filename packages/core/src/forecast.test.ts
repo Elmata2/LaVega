@@ -938,3 +938,68 @@ test("a one-off HUF transaction converts into the incidental baseline at its own
   // HUF tx excluded -> sum = -10000c, per day = round(-10000/60) = -167
   expect(separate.points[12].projectedClosingCents).toBe(484803);
 });
+
+/* COVERAGE IS NOT RELIABILITY.
+ *
+ * Zijn vraag bij de UI-ronde: is dit model iets waard op zijn eigen ING-reeks,
+ * die "very irregular, high variance and high volatility" is? Gemeten met een
+ * probe: een vol jaar geschiedenis over één rekening met omzet die per maand
+ * een factor honderd verschilt scoorde `high`, naast een band van ±59% van het
+ * geprojecteerde bedrag. `gradeConfidence` keek alleen naar hoeveel we hadden
+ * GEZIEN — dagen geschiedenis, rekeningen die meededen — en nooit naar hoe
+ * voorspelbaar dat was. De band was altijd al eerlijk; het woord ernaast niet.
+ *
+ * Spreiding VERLAAGT nu de score en verhoogt hem nooit. */
+
+const LUMPY_ACC: Account = {
+  key: "A1",
+  iban: "NL02ABNA0123456789",
+  name: "Betaal",
+  bank: "ING",
+  entity: "Prive",
+  currency: "EUR",
+  balance: 10_000,
+};
+
+function lumpyYear(perMonth: readonly number[]): Tx[] {
+  const out: Tx[] = [];
+  perMonth.forEach((amount, m) => {
+    const mm = String(m + 1).padStart(2, "0");
+    out.push(tx(`rent${m}`, `2026-${mm}-01`, -1_200, "Verhuurder"));
+    out.push(tx(`sale${m}`, `2026-${mm}-12`, amount, "Klant"));
+  });
+  return out;
+}
+
+test("a full year of wildly irregular income does not score high, however complete it is", () => {
+  const txs = lumpyYear([200, 9_000, 150, 12_000, 300, 80, 15_000, 120, 7_000, 90, 11_000, 250]);
+  const { consolidated } = forecastCashflow(txs, [LUMPY_ACC], {
+    asOf: "2026-12-20",
+    bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
+  });
+  const b = consolidated.basis!;
+  // De dekking is onberispelijk: een vol jaar, één rekening, die meedeed.
+  expect(b.historyDays).toBeGreaterThan(300);
+  expect(b.accountsWithHistory).toBe(b.accountsTotal);
+  // En tóch niet "high", want de band is breed tegen de positie.
+  expect(b.confidence).not.toBe("high");
+  const last = consolidated.points[consolidated.points.length - 1];
+  const spread = (last.upperCents! - last.lowerCents!) / 2;
+  expect(spread).toBeGreaterThan(Math.abs(last.projectedClosingCents!) * 0.2);
+});
+
+test("the same history, but steady, still scores high — dispersion only ever caps", () => {
+  // Zelfde vorm, zelfde dekking, zelfde aantal transacties: alleen het BEDRAG
+  // is elke maand vrijwel gelijk. Als deze ook zou zakken, strafte de regel
+  // geschiedenis in plaats van spreiding.
+  const txs = lumpyYear([5_000, 5_050, 4_980, 5_020, 5_000, 4_990, 5_010, 5_000, 5_030, 4_970, 5_000, 5_010]);
+  const { consolidated } = forecastCashflow(txs, [LUMPY_ACC], {
+    asOf: "2026-12-20",
+    bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
+  });
+  expect(consolidated.basis!.confidence).toBe("high");
+});

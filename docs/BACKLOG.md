@@ -1,6 +1,6 @@
 # LaVega — backlog
 
-Bijgewerkt **25 augustus 2026**. Basis: de drie app-reviews van 20 augustus
+Bijgewerkt **22 september 2026** (§0c). De rest dateert van **25 augustus 2026**. Basis: de drie app-reviews van 20 augustus
 (`docs/reviews/2026-08-20-app-review.md`, `-2.md`, `-3.md`), plus §0b hieronder voor wat er op
 24–25 augustus bij is gekomen en gesloten.
 
@@ -83,48 +83,57 @@ achter de werkelijkheid aan en zijn hieronder bijgewerkt.
 
 ---
 
+## 0c. Afgesloten op 21–22 september
+
+Uit zijn UI-ronde van 21 september, plus de backlog-doorloop van 22 september. Alles hieronder is
+gebouwd, getest en gedeployed.
+
+| Uit      | Wat                                                                                                                                                                                      | Waar                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| UI-ronde | Optimalisatie toonde Nederlandse ritmewoorden op een Engels scherm, en "maandelijks" in de afschriftkolom                                                                                 | `9ab1eec`            |
+| UI-ronde | "Totale positie (deels)" zei niet wát er deels was; de kop noemt nu het aantal niet-meegetelde rekeningen                                                                                 | `9ab1eec`            |
+| UI-ronde | Statistieken tekende twee legenda's — de CSS-regel die er één verborg verloor van een Tailwind-utility (`@layer components` verliest van `utilities`). Nu een `legend={false}`-prop      | `9ab1eec`            |
+| UI-ronde | Een `.xlsx` stierf als "onbekend of leeg bestand"; wordt nu herkend en beantwoord met "sla op als CSV"                                                                                    | `9ab1eec`            |
+| i18n     | De laatste gebruikerszinnen uit `packages/core`: alerts, travel, cashback, cadans, scope-labels, inlogfouten, de meldingsbalk, de kluismigratie                                           | `9ab1eec`, deze ronde |
+| UI-ronde | **Eerste-startstap**: taal, voor- en achternaam, land, regio, persoonlijk/zakelijk. Lost het NL-standaardland op — de reden dat een Duitse tester op Nederlandse btw-termijnen opende     | `cde8fce`            |
+| UI-ronde | Rekeningen met een ontbrekende IBAN of soort worden erom gevraagd op de totaalkaart, bij naam en met wat het gat kost                                                                     | `cde8fce`            |
+| UI-ronde | Regels verhuisd naar de transactiestap, uit de instellingenkaart                                                                                                                         | `cde8fce`            |
+| §1.1     | **Enable Banking ververst.** Zie §1.1 hieronder                                                                                                                                          | deze ronde           |
+| M6       | De forecast-`confidence` woog alleen dekking en nooit spreiding                                                                                                                          | deze ronde           |
+| M2       | De interactieve wereldkaart in Valuta                                                                                                                                                    | `Globe.tsx`          |
+| M3       | Gemiddelde inkomsten en uitgaven per periode                                                                                                                                             | `statistics.ts`      |
+| M4       | Periodeschakelaar op Abonnementen                                                                                                                                                        | `Optimalisatie.tsx`  |
+| M8       | Rekeningen gegroepeerd per bank                                                                                                                                                          | `Rekeningen.tsx`     |
+| M10      | "Niets van deze ronde staat op lavega.dev" — alles staat er nu op                                                                                                                       | doorlopend           |
+
+---
+
 ## 1. Blokkeert de data die binnenkomt
 
-### 1.1 Enable Banking ververst niet. Zijn saldo is van het moment dat hij koppelde.
+### 1.1 Enable Banking ververst — AFGESLOTEN 22 september
 
-**Dit is een gat, geen instelling.** Er is niets uitgezet dat aangezet kan worden.
+De analyse die hier stond klopte, en is in zijn geheel afgehandeld. Wat het was:
+`/api/eb/accounts` verwijderde de sessie zodra de data was uitgeleverd ("one-shot: data
+delivered"), en de rij leefde sowieso maar een uur terwijl de toestemming 89 dagen geldt. Er viel
+dus niets te verversen MET — het saldo op het scherm was dat van het moment van koppelen.
 
-`apps/server/src/eb-routes.ts` registreert vier routes en niet meer:
+Wat er nu staat: de sessie blijft zolang de toestemming loopt, `POST /api/eb/refresh` leest elke
+levende koppeling opnieuw, en een verlopen toestemming wordt bij naam gemeld én opgeruimd in plaats
+van stil te blijven falen. De knop staat bij Importeren.
 
-| Route                  | Wat hij doet                                                                |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `GET /api/eb/aspsps`   | de bankenlijst voor de kiezer                                               |
-| `POST /api/eb/auth`    | start de autorisatie, geeft de bank-URL terug                               |
-| `GET /api/eb/callback` | wisselt de code in voor een sessie en stuurt door naar `/?eb=<sessionId>`   |
-| `GET /api/eb/accounts` | haalt saldi en transacties op, geeft de rauwe bank-JSON door aan de browser |
+Uit de securityreview die erop volgde, allemaal gerepareerd vóór het landde: één levende rij per
+bank (elke herkoppeling maakte er een nieuwe bij, en verversen belde de bank dan N keer voor
+hetzelfde antwoord), `user_id = $1` náást RLS op de nieuwe lijstquery plus een `LIMIT`, een
+toestemming zonder `validUntil` verloopt op de leeftijd van de rij in plaats van nooit, een 401/403
+van de bank leest als "verlopen" en niet als "kapot", de tekst van de bank en het pad naar onze
+privésleutel bereiken de browser niet meer, en de knop heeft een limiet omdat hij quotum kost. De
+cookie-`sameSite` staat expliciet vast in plaats van overgenomen van een framework-default.
 
-Er is **geen refresh-route** en er is **geen interval** — niet in de server, niet in `App.tsx`. Data
-komt alleen binnen op de terugweg van een autorisatie. Drie dingen maken dat harder dan het klinkt:
+**Wat openblijft, en het tweede is nu het ergere:**
 
-1. **`/accounts` is eenmalig.** Direct na het uitleveren staat er `sessions.delete(sessionId)`.
-   Dezelfde sessie een tweede keer bevragen geeft _"Sessie onbekend of verlopen — koppel de bank
-   opnieuw."_
-2. **De sessies staan in het geheugen**, met een TTL van 60 minuten, en zijn weg na elke deploy of
-   herstart van de Railway-service.
-3. **De toestemming die hij gaf loopt 89 dagen** (`access: { valid_until: validUntil(89) }`). Het
-   recht om nog eens op te halen bestaat dus wél; wat ontbreekt is de route en de aanleiding die het
-   zou gebruiken.
-
-**Wat de gebruiker hiervan merkt, en waarom dat het ergste deel is.** Het saldo op zijn scherm is het
-saldo van het moment dat hij koppelde, en er staat nergens een datum bij: in `Rekeningen.tsx` is geen
-"bijgewerkt op". Een getal zonder datum leest als een getal van nu. De catalogus wordt élke maandag
-om 05:00 UTC ververst (`.github/workflows/catalog-sweep.yml`); zijn eigen saldi nooit.
-
-Wat het oplost, in volgorde van eerlijkheid:
-
-- **Eerst de datum.** Zet bij elke gekoppelde rekening wanneer die stand is opgehaald. Dat kan
-  vandaag, kost niets, en haalt de stilzwijgende bewering weg.
-- **Dan de knop.** Eén "opnieuw ophalen" die de autorisatie overdoet, met in de tekst de echte
-  oorzaak: er is geen achtergrondverversing, dus de bank vraagt opnieuw om toestemming.
-- **Dan pas het schema.** Een echte verversing binnen die 89 dagen vraagt om het bewaren van de
-  Enable Banking-sessie buiten het procesgeheugen, en dat botst met de opzet dat de server niets van
-  de gebruiker bewaart (`docs/CONTEXT.md`). Dat is een ontwerpbeslissing, geen bugfix, en hij hoort
-  hem te nemen — niet wij, en niet stilzwijgend.
+1. Verversen is een KNOP, geen interval. Er is geen cron die het uit zichzelf doet.
+2. `Rekeningen.tsx` heeft nog steeds geen "bijgewerkt op" per rekening. Een getal zonder datum leest
+   als een getal van nu — precies de klacht waar deze sectie mee begon, en die helft staat er nog.
 
 ### 1.2 Puntensaldi komen alleen met de hand binnen
 
@@ -228,15 +237,10 @@ nog tussen zit, met per punt de reden dat het er nog is.
 | #       | Wat                                                                                                                                     | Waarom het open staat                                                                                                                                                                                                                                                               |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **M1**  | **Echte kaartafbeeldingen** (R1-17). De logo's zijn gebundeld en het kaartvlak heeft de huisstijlkleur; de kaart zelf is nog geen kaart | Merkenrecht. Een banklogo mag doorgaans gebruikt worden om dát product te identificeren, mits met disclaimer (`apps/web/src/assets/TRADEMARKS.md`); een kaartafbeelding is een ontwerp. Ophalen tijdens de sweep is de goedgekeurde route, de vraag is of het mág — niet of het kan |
-| **M2**  | **De interactieve wereldkaart in Valuta** (R1-16)                                                                                       | Onderweg in deze ronde: `WorldMap.tsx`, `world-map.generated.ts` en `scripts/bundle-world-map.ts` staan in de werkboom en zijn nog niet gecommit. Gebundelde geodata mag, tiles ophalen niet — dat zou verraden naar welke landen hij kijkt                                         |
-| **M3**  | **Gemiddelde inkomsten en gemiddelde uitgaven** per periode (R1-13, laatste deel)                                                       | Niet gebouwd. Het weekdaggemiddelde bestaat, dit niet                                                                                                                                                                                                                               |
-| **M4**  | **Periodeschakelaar op Abonnementen** (R1-14)                                                                                           | Niet gebouwd. In `Optimalisatie.tsx` staat overal "per maand" als vaste eenheid                                                                                                                                                                                                     |
 | **M5**  | **Een beter kostenoverzicht**, _"like an earlier version we worked with"_, waar categorieën als transport vanzelf goed stonden (R1-15)  | Onduidelijk welke eerdere versie hij bedoelt. Dat moet hij aanwijzen; ernaar raden levert een tweede overzicht op in plaats van een beter                                                                                                                                           |
-| **M6**  | **De forecast zelf** (oude B2)                                                                                                          | Het cashflowblok vindt hij goed, de voorspelling erachter is niet af. Nooit herzien sinds ronde 1                                                                                                                                                                                   |
+| **M6**  | **De forecast zelf** (oude B2) | De `confidence` is eerlijk gemaakt (§0c): hij woog alleen DEKKING en nooit spreiding, dus een vol jaar grillige omzet scoorde "high" naast een band van ±59%. Spreiding verlaagt hem nu en verhoogt hem nooit. Wat openblijft is of de MIDDELLIJN iets waard is op zijn eigen reeks — dat is een backtest tegen zijn eigen kluis, geen codewijziging |
 | **M7**  | **De Punten-UI mooier** (oude B5)                                                                                                       | Cosmetisch, en de inhoud van die tab verandert nog (§1.2, §5.1)                                                                                                                                                                                                                     |
-| **M8**  | **Rekeningen groeperen per bank**, met het logo en de kaarten achter een klik (oude B4)                                                 | Zijn eigen woorden: _"maybe just test this out, I'm not sure yet."_ Het logo bestaat nu wel, dus het is goedkoper geworden om te proberen                                                                                                                                           |
 | **M9**  | **De vindbaarheid van "Ververs voorwaarden"** in het reisblok (oude B3)                                                                 | Niet opnieuw gemeld in ronde 2 of 3. Niet gemeten of het nog speelt — dus ook niet afgevinkt                                                                                                                                                                                        |
-| **M10** | **Niets van deze ronde staat op lavega.dev**                                                                                            | Wacht op zijn go                                                                                                                                                                                                                                                                    |
 
 ---
 

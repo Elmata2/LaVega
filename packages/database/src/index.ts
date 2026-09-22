@@ -976,7 +976,52 @@ export function createEbFlowRepository(db: Database) {
       });
     },
 
-    /** One-shot: the data has been delivered, so the copy here goes. */
+    /** Every live connection this user has, newest first.
+     *
+     *  Exists so the browser never has to hold a session id to refresh: it asks
+     *  the server what it is connected to, and the server answers from rows
+     *  that RLS already scopes to the caller. */
+    async listSessions<T>(
+      userId: string,
+      ttlMs: number,
+      limit = 25,
+    ): Promise<Array<{ sessionId: string; payload: T; createdAt: string }>> {
+      const identity = requireUserId(userId);
+      return withTenant(db, identity, async (client) => {
+        /* `user_id = $1` AS WELL AS RLS, and deliberately belt-and-braces —
+         * the same call this file's `eraseUserData` makes, for the same
+         * reason: RLS is a second belt, not the only one. It matters more here
+         * than on `getSession`, which at least needs an unguessable id to say
+         * anything: this query returns EVERY row it is allowed to see, so a
+         * misconfigured DATABASE_URL naming an owner-class role (which
+         * bypasses even FORCE'd RLS) would hand one caller every tenant's bank
+         * list in a single request.
+         *
+         * LIMIT because nothing else bounds this. Every reconnect mints a new
+         * session_id and `putSession` upserts on that id alone, so a user who
+         * reconnects repeatedly accumulates rows, and the refresh path calls
+         * the bank once per account per row. */
+        const result = await client.query<QueryResultRow>(
+          "SELECT session_id, payload_blob, created_at FROM personal.eb_sessions WHERE user_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') ORDER BY created_at DESC LIMIT $3",
+          [identity, String(ttlMs), limit],
+        );
+        const out: Array<{ sessionId: string; payload: T; createdAt: string }> = [];
+        for (const row of result.rows) {
+          const payload = tryDecryptBlob<T>(row.payload_blob as Buffer);
+          // An unreadable blob is skipped, not thrown: one row written under a
+          // key we no longer hold must not take the whole list down with it.
+          if (payload.readable)
+            out.push({
+              sessionId: String(row.session_id),
+              payload: payload.value,
+              createdAt: new Date(row.created_at as string).toISOString(),
+            });
+        }
+        return out;
+      });
+    },
+
+    /** Drop one connection — the owner disconnecting, or a dead consent. */
     async deleteSession(userId: string, sessionId: string): Promise<void> {
       await withTenant(db, userId, async (client) => {
         await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [sessionId]);

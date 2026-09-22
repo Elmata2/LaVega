@@ -46,6 +46,7 @@ import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import "../styles/views.css";
+import { moneyCopy } from "../copy/money.js";
 
 /* Belasting — one module per tax that is ACTUALLY relevant (UI review,
  * 2026-08-16).
@@ -735,7 +736,7 @@ export default function Belasting({
                       {flows.map((f) => (
                         <div className="flex justify-between gap-3" key={f.id}>
                           <span>
-                            {f.label} · {f.dueDate}{" "}
+                            {moneyCopy[locale].betaalschema.flowLabel(f)} · {f.dueDate}{" "}
                             {f.status === "expected" && <Badge>{c.profitTax.estimateBadge}</Badge>}
                           </span>
                           <span className="text-neg">

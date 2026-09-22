@@ -20,6 +20,7 @@ import Card from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import "../styles/views.css";
+import { moneyCopy } from "../copy/money.js";
 
 /* Punten — the hand-kept side of the money picture.
  *
@@ -621,7 +622,7 @@ export default function Punten({
                       className="block text-[0.85rem] text-ink mb-2"
                       htmlFor={`punt-ask-${slug(b.id)}`}
                     >
-                      {status.question}
+                      {moneyCopy[locale].betaalschema.trackingQuestion(status)}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <SaldoInput

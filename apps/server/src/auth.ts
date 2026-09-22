@@ -50,6 +50,14 @@ export function getAuth(): Auth<any> | null {
     trustedOrigins: authTrustedOrigins(),
     ...authOptions(),
     session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
+    /* PINNED, NOT INHERITED. Every state-changing route here is a cookie-
+     * authenticated POST with no CSRF token, so what actually stops a third
+     * party site from triggering one is the cookie's SameSite. That was
+     * Better Auth's default rather than our decision, and a default is a thing
+     * that changes in a minor release without anyone reading the note. */
+    advanced: {
+      defaultCookieAttributes: { sameSite: "lax", secure: true, httpOnly: true },
+    },
   });
 }
 

@@ -213,8 +213,11 @@ test("a stale hand-kept balance becomes an alert whose detail IS the question (i
   if (body.kind !== "tracking-stale") throw new Error("expected tracking-stale");
   expect(body.label).toBe("American Express Membership Rewards");
   expect(body.updatedAt).toBe("2026-01-10");
-  expect(body.question).toContain("Stuur alleen het getal");
-  expect(body.question).not.toContain("240"); // the balance itself never appears in the ask
+  expect(body.unit).toBe("points");
+  // HET SALDO ZELF MAG NOOIT MEE. Dat is waarom deze vraag veilig aan een
+  // melding of aan de assistent gegeven mag worden; de zin wordt in
+  // copy/money gebouwd en `money-trackingQuestion.test` bewaakt hem daar.
+  expect(JSON.stringify(body)).not.toContain("240");
 });
 
 test("a merely-due balance is info, a fresh one is nothing, and a money problem still outranks both", () => {

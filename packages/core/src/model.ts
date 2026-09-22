@@ -106,10 +106,30 @@ export type Rule = { id: string; match: string; category: string };
 /** A signed, dated future cash movement the forecast can see BEFORE the bank
  *  transaction lands (a VAT set-aside, an expected invoice, a manual plan).
  *  amountCents is a POSITIVE magnitude; `sign` gives direction (1 in / -1 out). */
+/** A flow's name as FACTS, for the screen to say in the reader's language.
+ *
+ *  Only the one shape LaVega writes itself. A VAT flow's name is `BTW Q2 2026`
+ *  / `USt Q2 2026` and a prepayment's is `Vorauszahlung 1/4 2026`: those come
+ *  from the country's tax pack and are the legal names of the things, so they
+ *  read the same to a Dutch and an English reader and are deliberately absent
+ *  here. `Factuur Acme` is not a name, it is a sentence we wrote. */
+export type FlowLabel = { kind: "invoice"; counterparty: string; invoiceNumber?: string };
+
 export type ScheduledFlow = {
   id: string;
   entity: string;
+  /** The flow's identity string, and the display fallback.
+   *
+   *  IT IS PART OF THE ID (`makeScheduledFlow` hashes it), so it must never be
+   *  translated in place: a flow whose label changed would hash to a new id,
+   *  and one the owner had marked paid would come back as a fresh expected
+   *  one. Hence `labelParts` beside it rather than a locale in here. */
   label: string;
+  /** Preferred over `label` for DISPLAY when present. Absent on every flow
+   *  stored before this existed, and on the tax flows whose label is a legal
+   *  name — both fall back to `label`, which is why this can be optional
+   *  without a migration. */
+  labelParts?: FlowLabel;
   sign: 1 | -1;
   amountCents: number;
   dueDate: string; // ISO YYYY-MM-DD

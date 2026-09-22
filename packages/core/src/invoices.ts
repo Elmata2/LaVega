@@ -25,7 +25,14 @@ export function scheduledInvoiceFlows(invoices: Invoice[]): ScheduledFlow[] {
     .map((i) =>
       makeScheduledFlow({
         entity: i.entity,
+        // De string blijft woordelijk wat hij was: hij zit in de id-hash, dus
+        // hem vertalen zou elke openstaande factuurregel een nieuwe id geven.
         label: `Factuur ${i.counterparty}${i.invoiceNumber ? " " + i.invoiceNumber : ""}`,
+        labelParts: {
+          kind: "invoice",
+          counterparty: i.counterparty,
+          ...(i.invoiceNumber ? { invoiceNumber: i.invoiceNumber } : {}),
+        },
         sign: i.direction === "in" ? 1 : -1,
         amountCents: Math.round(Math.abs(i.amount) * 100),
         dueDate: i.dueDate,

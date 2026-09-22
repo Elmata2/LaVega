@@ -423,6 +423,10 @@ const nl: ShellCopy = {
         return `Importeren mislukt: ${n.detail}`;
       case "terms-lookup-failed":
         return `Voorwaarden opzoeken mislukt: ${n.detail}`;
+      case "bank-consent-expired":
+        return `De toestemming voor ${n.aspsp} is verlopen — koppel de bank opnieuw om weer bij te werken.`;
+      case "bank-nothing-to-refresh":
+        return "Er is nog geen bankkoppeling om te verversen.";
     }
   },
   profiel: {
@@ -737,6 +741,10 @@ const en: ShellCopy = {
         return `Import failed: ${n.detail}`;
       case "terms-lookup-failed":
         return `Looking up the terms failed: ${n.detail}`;
+      case "bank-consent-expired":
+        return `Your consent for ${n.aspsp} has expired — reconnect the bank to keep it up to date.`;
+      case "bank-nothing-to-refresh":
+        return "There's no bank connection to refresh yet.";
     }
   },
   profiel: {

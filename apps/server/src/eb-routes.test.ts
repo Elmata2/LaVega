@@ -20,7 +20,9 @@ vi.mock("./eb-client.js", async () => {
   return { ...actual, eb: ebMock };
 });
 
-const { registerEbRoutes, PENDING_TTL_MS, SESSION_TTL_MS } = await import("./eb-routes.js");
+const { registerEbRoutes, PENDING_TTL_MS, SESSION_TTL_MS, CONSENT_DAYS, EB_REFRESH_PER_MINUTE } =
+  await import("./eb-routes.js");
+import { createRateLimiter } from "./agent/rateLimit.js";
 import type { EbFlowStore, EbSession, PendingAuth } from "./eb-routes.js";
 
 /* A store that behaves like the Neon one: shared across "instances", one-shot
@@ -28,7 +30,7 @@ import type { EbFlowStore, EbSession, PendingAuth } from "./eb-routes.js";
  * session, so a test can change who is calling. */
 function fakeStore() {
   const pending = new Map<string, PendingAuth>();
-  const sessions = new Map<string, { userId: string; payload: EbSession }>();
+  const sessions = new Map<string, { userId: string; payload: EbSession; createdAt: string }>();
   const sweepSessionCalls: Array<{ userId: string; ttlMs: number }> = [];
   const store: EbFlowStore = {
     async startAuth(state, entry) {
@@ -46,7 +48,20 @@ function fakeStore() {
       return 0;
     },
     async putSession(userId, sessionId, payload) {
-      sessions.set(sessionId, { userId, payload });
+      sessions.set(sessionId, {
+        userId,
+        payload,
+        createdAt: sessions.get(sessionId)?.createdAt ?? new Date().toISOString(),
+      });
+    },
+    async listSessions(userId) {
+      /* Gefilterd op userId in JS. DAT BEWIJST DE ECHTE AFSCHERMING NIET — die
+       * zit in `user_id = $1` plus RLS op de tabel, en wordt getest in
+       * packages/database tegen een echte Postgres. Deze nep-store bestaat om
+       * het GEDRAG van de routes te testen, niet de query. */
+      return [...sessions.entries()]
+        .filter(([, v]) => v.userId === userId)
+        .map(([sessionId, v]) => ({ sessionId, payload: v.payload, createdAt: v.createdAt }));
     },
     async getSession(userId, sessionId) {
       const row = sessions.get(sessionId);
@@ -63,7 +78,14 @@ function fakeStore() {
 let signedInAs: string | null = "user-123";
 const { store, pending, sessions, sweepSessionCalls } = fakeStore();
 const app = new Hono();
-registerEbRoutes(app, { store, tenantId: async () => signedInAs });
+/* Een ruime limiet voor de suite, zodat de VOLGORDE van de tests niet bepaalt
+ * of de laatste er nog in past; de limiet zelf heeft zijn eigen test met zijn
+ * eigen app hieronder. */
+registerEbRoutes(app, {
+  store,
+  tenantId: async () => signedInAs,
+  refreshLimit: createRateLimiter(1000, 60_000),
+});
 
 beforeEach(() => {
   signedInAs = "user-123";
@@ -263,4 +285,180 @@ test("auth with psuType personal in the body overrides the configured default", 
   });
   const sent = ebMock.mock.calls[0]![3] as { psu_type: string };
   expect(sent.psu_type).toBe("personal");
+});
+
+/* ══════ VERVERSEN ════════════════════════════════════════════════════════════
+ *
+ * "Enable Banking ververst niet — mijn saldo is van het moment dat ik koppelde."
+ * Twee oorzaken, allebei hier: de sessie werd WEGGEGOOID zodra de eerste fetch
+ * slaagde ("one-shot: data delivered"), en de rij leefde sowieso maar een uur
+ * terwijl de toestemming 89 dagen geldt. Er viel dus niets te verversen MET. */
+
+/** Connect a bank and leave the session standing, as the callback does. */
+async function connect(sessionId: string, aspsp: string, validUntil?: string) {
+  const state = await issueState();
+  ebMock.mockResolvedValueOnce({
+    session_id: sessionId,
+    accounts: [{ uid: `${sessionId}-acc` }],
+    aspsp: { name: aspsp },
+  });
+  await app.request(`/api/eb/callback?code=real-code&state=${state}`);
+  if (validUntil) {
+    const row = sessions.get(sessionId)!;
+    sessions.set(sessionId, { ...row, payload: { ...row.payload, validUntil } });
+  }
+  ebMock.mockReset();
+}
+
+/** Balances + transactions for one account, as the bank answers them. */
+function mockOneAccountFetch(balance: string) {
+  ebMock.mockResolvedValueOnce({ balances: [{ amount: balance }] });
+  ebMock.mockResolvedValueOnce({ transactions: [] });
+}
+
+test("a session survives being read, so the same bank can be read again", async () => {
+  await connect("sess-1", "ING");
+  mockOneAccountFetch("100");
+  const first = await app.request("/api/eb/accounts?session_id=sess-1");
+  expect(first.status).toBe(200);
+  // DIT is de regressietest: vroeger was de rij hier weg en gaf de tweede
+  // lezing 404 "koppel de bank opnieuw".
+  expect(sessions.has("sess-1")).toBe(true);
+  mockOneAccountFetch("250");
+  const second = await app.request("/api/eb/accounts?session_id=sess-1");
+  expect(second.status).toBe(200);
+  const body = (await second.json()) as { items: Array<{ balances: Array<{ amount: string }> }> };
+  expect(body.items[0].balances[0].amount).toBe("250");
+});
+
+test("the consent window, not an hour, is what bounds a connection", () => {
+  // 89 dagen toestemming; de rij mag daar niet vóór verdwijnen.
+  expect(SESSION_TTL_MS).toBeGreaterThan(CONSENT_DAYS * 24 * 60 * 60 * 1000);
+});
+
+test("refresh re-reads every live connection the caller has", async () => {
+  await connect("sess-1", "ING");
+  await connect("sess-2", "bunq");
+  mockOneAccountFetch("100");
+  mockOneAccountFetch("200");
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { refreshed: Array<{ aspsp: string }>; expired: string[] };
+  expect(body.refreshed.map((r) => r.aspsp).sort()).toEqual(["ING", "bunq"]);
+  expect(body.expired).toEqual([]);
+});
+
+test("an expired consent is NAMED, and never hides the bank that still works", async () => {
+  await connect("sess-1", "ING", "2020-01-01T00:00:00.000Z"); // long dead
+  await connect("sess-2", "bunq");
+  mockOneAccountFetch("200");
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as {
+    refreshed: Array<{ aspsp: string }>;
+    expired: string[];
+  };
+  expect(body.expired).toEqual(["ING"]);
+  expect(body.refreshed.map((r) => r.aspsp)).toEqual(["bunq"]);
+});
+
+test("one bank failing does not take the other down with it", async () => {
+  await connect("sess-1", "ING");
+  await connect("sess-2", "bunq");
+  ebMock.mockRejectedValueOnce(new Error("bank is down"));
+  mockOneAccountFetch("200");
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as {
+    refreshed: Array<{ aspsp: string }>;
+    failed: Array<{ aspsp: string }>;
+  };
+  expect(body.failed.map((f) => f.aspsp)).toEqual(["ING"]);
+  expect(body.refreshed.map((r) => r.aspsp)).toEqual(["bunq"]);
+});
+
+test("refresh is scoped to the caller, and never touches another user's bank", async () => {
+  await connect("sess-1", "ING");
+  signedInAs = "someone-else";
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  expect(await res.json()).toEqual({ refreshed: [], expired: [], failed: [] });
+  // Niet alleen een leeg antwoord: de bank is ook niet gebeld.
+  expect(ebMock).not.toHaveBeenCalled();
+  expect(sessions.has("sess-1")).toBe(true); // en niets van hem is opgeruimd
+});
+
+
+
+/* ── Wat de securityreview van 22 september blootlegde ───────────────────── */
+
+test("reconnecting the same bank supersedes the old consent instead of stacking", async () => {
+  await connect("sess-1", "ING");
+  await connect("sess-2", "ING");
+  // Eén levende rij per bank: zonder dit belt verversen de bank twee keer voor
+  // hetzelfde antwoord, en drie keer na de derde herkoppeling.
+  expect([...sessions.keys()]).toEqual(["sess-2"]);
+});
+
+test("a second bank is not superseded by the first — only the same bank is", async () => {
+  await connect("sess-1", "ING");
+  await connect("sess-2", "bunq");
+  expect([...sessions.keys()].sort()).toEqual(["sess-1", "sess-2"]);
+});
+
+test("a session stored before validUntil existed expires on its own age, not never", async () => {
+  await connect("sess-1", "ING");
+  const row = sessions.get("sess-1")!;
+  // Zoals elke rij van vóór deze wijziging: geen validUntil, en oud.
+  const { validUntil: _dropped, ...withoutExpiry } = row.payload;
+  sessions.set("sess-1", {
+    ...row,
+    payload: withoutExpiry,
+    createdAt: new Date(Date.now() - (CONSENT_DAYS + 1) * 86_400_000).toISOString(),
+  });
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as { expired: string[] };
+  expect(body.expired).toEqual(["ING"]);
+  expect(ebMock).not.toHaveBeenCalled(); // en de bank is niet lastiggevallen
+});
+
+test("a bank that rejects our credentials is reported as expired, not as a failure", async () => {
+  await connect("sess-1", "ING");
+  const refused = Object.assign(new Error("Enable Banking 401: consent revoked"), { status: 401 });
+  ebMock.mockRejectedValueOnce(refused);
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as { expired: string[]; failed: unknown[] };
+  expect(body.expired).toEqual(["ING"]);
+  expect(body.failed).toEqual([]);
+});
+
+test("a dead consent is pruned, so it is not retried on every refresh", async () => {
+  await connect("sess-1", "ING", "2020-01-01T00:00:00.000Z");
+  await app.request("/api/eb/refresh", { method: "POST" });
+  expect(sessions.has("sess-1")).toBe(false);
+});
+
+test("the bank's own words never reach the browser", async () => {
+  await connect("sess-1", "ING");
+  // Twee echte gevallen: 400 bytes van de bank, en het pad naar onze sleutel.
+  ebMock.mockRejectedValueOnce(new Error("Enable Banking 502: <html>upstream said a lot</html>"));
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const text = await res.text();
+  expect(text).not.toMatch(/upstream said a lot|<html>/);
+  expect(text).not.toMatch(/\/Users\/|\.pem|BEGIN/);
+  expect(JSON.parse(text).failed).toEqual([{ aspsp: "ING", error: "unreachable" }]);
+});
+
+test("refresh is rate limited, because it spends the bank's quota on every press", async () => {
+  const strict = new Hono();
+  const own = fakeStore();
+  registerEbRoutes(strict, {
+    store: own.store,
+    tenantId: async () => "user-123",
+    refreshLimit: createRateLimiter(2, 60_000),
+  });
+  expect((await strict.request("/api/eb/refresh", { method: "POST" })).status).toBe(200);
+  expect((await strict.request("/api/eb/refresh", { method: "POST" })).status).toBe(200);
+  const third = await strict.request("/api/eb/refresh", { method: "POST" });
+  expect(third.status).toBe(429);
+  expect((await third.json()).code).toBe("eb-rate-limited");
+  // En de standaardlimiet is een getal dat een mens niet raakt.
+  expect(EB_REFRESH_PER_MINUTE).toBeGreaterThanOrEqual(3);
 });

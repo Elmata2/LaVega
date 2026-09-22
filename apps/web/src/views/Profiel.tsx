@@ -85,6 +85,7 @@ type ProfielProps = {
   busy: boolean;
   problems: ShellNotice[];
   onImport: (file: File) => void;
+  onRefreshBank: () => void;
   /** Back-up (unchanged component). */
   storage: VaultStorage;
   asOf: string;
@@ -487,6 +488,7 @@ export default function Profiel({
   busy,
   problems,
   onImport,
+  onRefreshBank,
   storage,
   asOf,
   onRestored,
@@ -749,6 +751,7 @@ export default function Profiel({
         busy={busy}
         problems={problems}
         onImport={onImport}
+        onRefreshBank={onRefreshBank}
       />
 
       <Koppelingen />

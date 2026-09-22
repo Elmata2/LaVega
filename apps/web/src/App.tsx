@@ -46,6 +46,9 @@ import {
   createFileImport,
   createEncryptedStorage,
   mapEbAccount,
+  type EbAccount,
+  type EbBalance,
+  type EbTransaction,
   pickEbBalance,
   pickEbBalanceDate,
   mapEbTransaction,
@@ -520,6 +523,126 @@ export default function App() {
 
   // After returning from an Enable Banking authorisation, the browser lands on
   // the SPA with ?eb=<session> (or ?eb_error=). normalizeAppLocation (Root.tsx,
+  /* WAT ER MET EEN BANKANTWOORD GEBEURT — één keer opgeschreven.
+   *
+   * De koppeling en het verversen lezen dezelfde rekeningen op dezelfde manier
+   * in. Toen dit inline in het koppel-effect stond, was de enige manier om
+   * verversen toe te voegen een tweede kopie hiervan, en de interessante bug
+   * zou daarna het verschil tussen die twee zijn geweest. Geeft terug wat er
+   * binnenkwam, zodat de aanroeper de melding kan opbouwen. */
+  async function ingestEbItems(
+    aspsp: string,
+    items: Array<{ account: EbAccount; balances: EbBalance[]; transactions: EbTransaction[] }>,
+  ): Promise<{ accounts: number; txs: number }> {
+        const newAccounts: Account[] = [];
+    const rawTxs: Array<Omit<Tx, "id">> = [];
+    for (const item of items) {
+      /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
+       * rekening "stand van <dag>", en zonder deze derde parameter stond daar
+       * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
+       * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
+       * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
+       * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
+       * laten lezen. */
+      const acc = mapEbAccount(
+        { ...item.account, aspsp },
+        pickEbBalance(item.balances),
+        pickEbBalanceDate(item.balances) ?? undefined,
+      );
+      acc.entity = entity;
+      newAccounts.push(acc);
+      const key = ebAccountKey(item.account);
+      for (const t of item.transactions ?? [])
+        rawTxs.push(mapEbTransaction(t, key, acc.currency));
+    }
+    const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+    /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
+     * waarop de rekening binnenkomt, dus dit is de enige plek waar het
+     * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
+     * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
+     * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
+     * was) — zie `withLinkedAt`. */
+    const mergedAccounts = withLinkedAt(
+      curAccounts,
+      mergeImportedAccounts(curAccounts, newAccounts),
+      asOf,
+    );
+    const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
+    /* WAT ER NIEUW IS, niet wat de bank stuurde. Bij een koppeling is dat
+     * hetzelfde getal, maar bij een verversing stuurt de bank elke keer een vol
+     * jaar terug: melden dat er 812 transacties zijn binnengekomen terwijl er
+     * drie nieuw waren, is een onwaarheid op de plek die net om vertrouwen
+     * vraagt. `ingest` dedupliceert op een inhoud-afgeleide id, dus het
+     * verschil in lengte IS het aantal nieuwe rijen. */
+    const addedTxs = mergedTxs.length - curTxs.length;
+    const addedAccounts = mergedAccounts.length - curAccounts.length;
+    await storage.putAccounts(mergedAccounts);
+    await storage.putTxs(mergedTxs);
+    const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+    setAccounts(fa);
+    setTxs(ft);
+    // Reconcile invoices against the freshly linked bank txs (same as file import).
+    const curInvoices = await storage.getInvoices();
+    const reconciled = reconcileInvoices(curInvoices, ft);
+    if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+      await saveInvoices(reconciled);
+    return { accounts: addedAccounts, txs: addedTxs };
+  }
+
+  /* VERVERSEN — het antwoord op "mijn saldo is van de dag dat ik koppelde".
+   *
+   * Binnen de toestemmingstermijn is dit gewoon dezelfde lezing nog een keer,
+   * dus het loopt door `ingestEbItems` en niet langs een tweede pad. De server
+   * houdt de sessies vast; de browser hoeft geen sessie-id te bewaren en vraagt
+   * alleen "ververs wat van mij is".
+   *
+   * Een verlopen toestemming wordt GENOEMD. Stil overslaan zou de gebruiker
+   * laten kijken naar een saldo dat niet meer bijwerkt zonder te zeggen welke
+   * bank opnieuw gekoppeld moet worden. */
+  async function handleRefreshBank() {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/eb/refresh`, { method: "POST" });
+      const data = (await res.json()) as {
+        error?: string;
+        refreshed?: Array<{ aspsp: string; items: [] }>;
+        expired?: string[];
+        failed?: Array<{ aspsp: string; error: string }>;
+      };
+      if (!res.ok || data.error) {
+        setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
+        return;
+      }
+      const notices: ShellNotice[] = [];
+      let accounts = 0;
+      let txs = 0;
+      for (const conn of data.refreshed ?? []) {
+        const got = await ingestEbItems(conn.aspsp, conn.items);
+        accounts += got.accounts;
+        txs += got.txs;
+      }
+      if ((data.refreshed ?? []).length > 0)
+        notices.push({
+          kind: "bank-linked",
+          accounts,
+          aspsp: (data.refreshed ?? []).map((r) => r.aspsp).join(", "),
+          txs,
+        });
+      for (const name of data.expired ?? [])
+        notices.push({ kind: "bank-consent-expired", aspsp: name });
+      for (const f of data.failed ?? [])
+        notices.push({ kind: "bank-link-failed", detail: `${f.aspsp}: ${f.error}` });
+      if (notices.length === 0) notices.push({ kind: "bank-nothing-to-refresh" });
+      setProblems(notices);
+    } catch (e) {
+      setProblems([
+        { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // via appRoutes.ts) already stripped that off the URL on load, so the id
   // never sits in browser history — it's picked up here, once, from the
   // in-memory handoff. Once the vault is unlocked, pull the accounts+
@@ -546,59 +669,8 @@ export default function App() {
           setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
           return;
         }
-        const aspsp: string = data.aspsp ?? "";
-        const newAccounts: Account[] = [];
-        const rawTxs: Array<Omit<Tx, "id">> = [];
-        for (const item of data.items ?? []) {
-          /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
-           * rekening "stand van <dag>", en zonder deze derde parameter stond daar
-           * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
-           * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
-           * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
-           * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
-           * laten lezen. */
-          const acc = mapEbAccount(
-            { ...item.account, aspsp },
-            pickEbBalance(item.balances),
-            pickEbBalanceDate(item.balances) ?? undefined,
-          );
-          acc.entity = entity;
-          newAccounts.push(acc);
-          const key = ebAccountKey(item.account);
-          for (const t of item.transactions ?? [])
-            rawTxs.push(mapEbTransaction(t, key, acc.currency));
-        }
-        const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
-         * waarop de rekening binnenkomt, dus dit is de enige plek waar het
-         * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
-         * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
-         * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
-         * was) — zie `withLinkedAt`. */
-        const mergedAccounts = withLinkedAt(
-          curAccounts,
-          mergeImportedAccounts(curAccounts, newAccounts),
-          asOf,
-        );
-        const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
-        await storage.putAccounts(mergedAccounts);
-        await storage.putTxs(mergedTxs);
-        const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        setAccounts(fa);
-        setTxs(ft);
-        // Reconcile invoices against the freshly linked bank txs (same as file import).
-        const curInvoices = await storage.getInvoices();
-        const reconciled = reconcileInvoices(curInvoices, ft);
-        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
-          await saveInvoices(reconciled);
-        setProblems([
-          {
-            kind: "bank-linked",
-            accounts: newAccounts.length,
-            aspsp: aspsp ?? "",
-            txs: rawTxs.length,
-          },
-        ]);
+        const { accounts: n, txs: m } = await ingestEbItems(data.aspsp ?? "", data.items ?? []);
+        setProblems([{ kind: "bank-linked", accounts: n, aspsp: data.aspsp ?? "", txs: m }]);
       } catch (e) {
         setProblems([
           { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
@@ -1506,6 +1578,7 @@ export default function App() {
               busy={busy}
               problems={problems}
               onImport={handleImport}
+              onRefreshBank={() => void handleRefreshBank()}
               storage={storage}
               asOf={asOf}
               onRestored={handleRestored}

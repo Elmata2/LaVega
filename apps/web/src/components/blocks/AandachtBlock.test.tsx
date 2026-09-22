@@ -129,7 +129,7 @@ const info = (n: number): Alert[] =>
       label: `Punten ${i}`,
       updatedAt: `2026-05-0${i + 1}`,
       ageDays: 100,
-      question: "",
+      unit: "points",
     },
   }));
 

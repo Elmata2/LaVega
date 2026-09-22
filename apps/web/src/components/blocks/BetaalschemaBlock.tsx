@@ -91,7 +91,7 @@ export function agendaRows(
     .map((f) => ({
       id: `flow:${f.id}`,
       date: f.dueDate,
-      label: f.label,
+      label: c.flowLabel(f),
       amount: (f.sign * f.amountCents) / 100,
       note: `${f.entity ? `${f.entity} · ` : ""}${c.status[f.status]}`,
       predicted: false,

@@ -592,6 +592,9 @@ function buildForecast(
   const points: ForecastPoint[] = [];
   let bal = openingCents ?? 0;
   let streamVariance = 0;
+  /** The band's half-width at the LAST week — how uncertain the end of the
+   *  horizon is, which is what `gradeConfidence` weighs. */
+  let finalSpread: number | null = null;
   for (let d = 1; d <= horizonDays; d++) {
     const day = addDays(asOf, d);
     bal += incidentalPerDayCents;
@@ -601,6 +604,7 @@ function buildForecast(
       const week = d / 7;
       const variance = streamVariance + incidentalWeeklyStd * incidentalWeeklyStd * week;
       const spread = bandBasis === "none" ? null : Math.round(Math.sqrt(variance));
+      finalSpread = spread;
       points.push({
         date: day,
         projectedClosingCents: openingCents === null ? null : bal,
@@ -654,6 +658,7 @@ function buildForecast(
       accountsTotal: scopeAccounts.length,
       accountsWithHistory: spanByAccount.size,
       shortestAccountDays,
+      bandRatio: bandRatio(openingCents, bal, finalSpread),
     }),
   };
 
@@ -684,18 +689,62 @@ function buildForecast(
  *  - "medium" enough history to project, less than {@link SOLID_HISTORY_DAYS}.
  *  - "high"   at least SOLID_HISTORY_DAYS, on accounts that all reach back.
  */
+/** How wide the band is against the money at stake, 0..1 — or null when there
+ *  is no band to judge.
+ *
+ *  Denominator is the LARGEST of the opening, the projected closing and the
+ *  spread itself, for two reasons. It cannot vanish, so someone whose balance
+ *  hovers near zero does not divide by it. And including the spread caps the
+ *  ratio at 1, so "the band dwarfs the money" and "the band is merely huge"
+ *  both land in the same worst bucket instead of producing a number that grows
+ *  without meaning. */
+function bandRatio(
+  openingCents: number | null,
+  closingCents: number,
+  spreadCents: number | null,
+): number | null {
+  if (openingCents === null || spreadCents === null || spreadCents <= 0) return null;
+  const scale = Math.max(Math.abs(openingCents), Math.abs(closingCents), spreadCents);
+  return scale === 0 ? null : spreadCents / scale;
+}
+
+/** A band this wide relative to the position means the line is a shape, not a
+ *  figure — no amount of history makes it a number you can act on. */
+const BAND_RATIO_LOW = 0.5;
+/** Wide enough that the exact figure should not be leaned on, while the
+ *  direction still carries. */
+const BAND_RATIO_MEDIUM = 0.2;
+
 function gradeConfidence(o: {
   hasEvidence: boolean;
   historyDays: number;
   accountsTotal: number;
   accountsWithHistory: number;
   shortestAccountDays: number | null;
+  /** The measured spread against the position. See `bandRatio`. */
+  bandRatio: number | null;
 }): ForecastConfidence {
   if (!o.hasEvidence) return "none";
   if (o.historyDays < MIN_HISTORY_DAYS) return "low";
   if (o.accountsWithHistory < o.accountsTotal) return "low";
   if (o.accountsWithHistory > 1 && (o.shortestAccountDays ?? 0) < MIN_HISTORY_DAYS) return "low";
+
+  /* COVERAGE IS NOT RELIABILITY, and grading only the first was the bug.
+   *
+   * Everything above asks how much we have SEEN — days of history, accounts
+   * contributing. Nothing asked how PREDICTABLE what we saw is, so twelve
+   * months of complete history over wildly irregular income scored "high"
+   * beside a band of ±59% of the projected figure. The band was already
+   * honest; the word next to it was not.
+   *
+   * So dispersion CAPS the grade, and never raises it: a narrow band cannot
+   * buy confidence that thin history has not earned. Coarse on purpose, like
+   * the rest of this function — a percentage here would imply a precision
+   * this model has no basis for. */
+  const ratio = o.bandRatio;
+  if (ratio !== null && ratio >= BAND_RATIO_LOW) return "low";
   if (o.historyDays < SOLID_HISTORY_DAYS) return "medium";
+  if (ratio !== null && ratio >= BAND_RATIO_MEDIUM) return "medium";
   return "high";
 }
 

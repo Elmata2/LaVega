@@ -586,3 +586,38 @@ test("AiUsage.spentCents reads back day and month totals", async () => {
     values: ["2026-09"],
   });
 });
+
+/* listSessions returns EVERY row it is allowed to see, which is what makes it
+ * different from `getSession` — that one at least needs an unguessable id
+ * before it says anything. So the tenant predicate is written into the SQL as
+ * well as enforced by RLS, the same belt-and-braces `eraseUserData` uses, and
+ * it is asserted HERE rather than only against the route's fake store: a test
+ * that proves a JavaScript `.filter()` filters proves nothing about the query.
+ *
+ * The LIMIT is part of the same contract. Nothing else bounds this table —
+ * every reconnect mints a new session_id and putSession upserts on that id
+ * alone — and the refresh path calls the bank once per account per row. */
+test("listSessions scopes by user_id in the SQL, not only by RLS, and is bounded", async () => {
+  process.env.LAVEGA_ENCRYPTION_KEY = "00".repeat(32);
+  const { db, calls, paramCalls } = erasureDatabase(0);
+  await createEbFlowRepository(db).listSessions("user-123", 90 * 86_400_000);
+
+  expect(calls[0]).toBe("BEGIN");
+  expect(paramCalls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-123"],
+  });
+  const select = paramCalls.find((call) => call.sql.startsWith("SELECT session_id"));
+  expect(select?.sql).toContain("WHERE user_id = $1");
+  expect(select?.sql).toContain("LIMIT $3");
+  expect(select?.values?.[0]).toBe("user-123");
+  expect(calls.at(-1)).toBe("COMMIT");
+});
+
+test("listSessions refuses without an authenticated identity", async () => {
+  const { db, calls } = erasureDatabase(0);
+  await expect(createEbFlowRepository(db).listSessions(" ", 1000)).rejects.toThrow(
+    "Authenticated user identity is required",
+  );
+  expect(calls).toEqual([]); // not even a connection was opened
+});

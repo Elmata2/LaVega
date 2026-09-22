@@ -13,7 +13,14 @@ type PsuType = "business" | "personal";
 
 const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
 
-export default function BankLink({ busy }: { busy: boolean }) {
+export default function BankLink({
+  busy,
+  onRefresh,
+}: {
+  busy: boolean;
+  /** Re-read every connected bank. See App's `handleRefreshBank`. */
+  onRefresh: () => void;
+}) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale];
   const psuTypeLabels: Record<PsuType, string> = {
@@ -95,6 +102,16 @@ export default function BankLink({ busy }: { busy: boolean }) {
       }}
     >
       <h3 style={{ marginTop: 0 }}>{c.bankLink.ofKoppelJeBankDirect}</h3>
+      {/* VERVERSEN STAAT BOVEN HET KOPPELEN, want voor wie al gekoppeld is, is
+          dit de knop die hij zoekt. Altijd zichtbaar en niet pas na een
+          statuscheck: het antwoord "er is nog geen koppeling" komt van de
+          server en is een zin die hij kan lezen, geen knop die er niet is. */}
+      <div className="flex flex-wrap gap-2 mb-[var(--sp-3)]">
+        <Button disabled={busy} onClick={onRefresh}>
+          {c.bankLink.ververs}
+        </Button>
+        <span className="cell-sub">{c.bankLink.ververshHint}</span>
+      </div>
       <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
         {PSU_TYPE_ORDER.map((t, i) => (
           <Fragment key={t}>

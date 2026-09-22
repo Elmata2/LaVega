@@ -30,7 +30,13 @@ export type AlertBody =
       amountCents: number;
       days: number;
     }
-  | { kind: "tracking-stale"; label: string; updatedAt: string; ageDays: number; question: string }
+  | {
+      kind: "tracking-stale";
+      label: string;
+      unit: string;
+      updatedAt: string;
+      ageDays: number;
+    }
   | { kind: "no-balance"; count: number };
 
 export type Alert = { id: string; severity: AlertSeverity; body: AlertBody };
@@ -141,9 +147,9 @@ export function computeAlerts({
       body: {
         kind: "tracking-stale",
         label: t.label,
+        unit: t.unit,
         updatedAt: t.updatedAt,
         ageDays: t.ageDays,
-        question: t.question,
       },
     });
   }

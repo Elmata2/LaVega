@@ -11,10 +11,18 @@ type ImportProps = {
   onEntityChange: (entity: string) => void;
   busy: boolean;
   problems: ShellNotice[];
+  onRefreshBank: () => void;
   onImport: (file: File) => void;
 };
 
-export default function Import({ entity, onEntityChange, busy, problems, onImport }: ImportProps) {
+export default function Import({
+  entity,
+  onEntityChange,
+  busy,
+  problems,
+  onImport,
+  onRefreshBank,
+}: ImportProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   return (
@@ -48,7 +56,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
           {problems.map((n) => c.notice(n)).join(" ")}
         </p>
       )}
-      <BankLink busy={busy} />
+      <BankLink busy={busy} onRefresh={onRefreshBank} />
     </Card>
   );
 }

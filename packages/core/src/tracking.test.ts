@@ -9,7 +9,6 @@ import {
   parseBalanceReply,
   rewardsTracked,
   snoozeTracker,
-  trackingQuestion,
   trackingStatus,
   type TrackedBalance,
 } from "./tracking.js";
@@ -69,15 +68,23 @@ test("a snooze silences a due number until its date, and never invents freshness
   expect(trackingStatus(t, "2026-05-31").snoozedUntil).toBe("2026-06-01");
 });
 
-test("the question names the programme, says 'alleen het getal', and never contains a balance", () => {
-  const q = trackingQuestion({ label: "American Express Membership Rewards", unit: "punten" });
-  expect(q).toBe(
-    "Hoeveel punten staan er nu bij American Express Membership Rewards? Stuur alleen het getal.",
-  );
-  expect(q).not.toMatch(/\d/); // no number of any kind can leak into the ask
-  expect(trackingQuestion({ label: "bunq cashback", unit: "€" })).toBe(
-    "Wat is het huidige saldo van bunq cashback (€)? Stuur alleen het getal.",
-  );
+/* DE VRAAG IS HIER WEG. Hij was Nederlands en werd letterlijk afgedrukt, dus een
+ * Engelse lezer kreeg "Hoeveel punten staan er nu bij ...". Core draagt nu
+ * alleen `label` en `unit`; de zin staat in `copy/money` en wordt daar ook
+ * bewaakt op de eigenschap die hem veilig maakt — er mag geen getal in. Wat
+ * hier overblijft is dat de status die twee feiten draagt en niets meer. */
+test("the status carries what the question needs, and no balance", () => {
+  const t: TrackedBalance = {
+    id: "amex",
+    source: "rewards",
+    label: "American Express Membership Rewards",
+    unit: "points",
+    updatedAt: "2026-01-10",
+  };
+  const st = trackingStatus(t, "2026-08-12");
+  expect(st.label).toBe("American Express Membership Rewards");
+  expect(st.unit).toBe("points");
+  expect(JSON.stringify(st)).not.toMatch(/240|saldo|balance/i);
 });
 
 test("dueTrackers returns only what to ask now, most overdue first", () => {
@@ -99,12 +106,14 @@ test("rewards are the first source: the Punten balances map straight onto the de
     id: amex.id,
     source: "rewards",
     label: "American Express Membership Rewards",
-    unit: "punten",
+    unit: "points",
     updatedAt: "2026-01-10",
   });
   const due = dueRewards([amex, flyingBlue], "2026-08-12");
   expect(due.map((d) => d.label)).toEqual(["American Express Membership Rewards"]);
-  expect(due[0].question).toContain("Stuur alleen het getal");
+  // De vraag zelf staat in copy/money; core draagt alleen wat hij nodig heeft.
+  expect(due[0].unit).toBe("points");
+  expect(due[0].label).toBe("American Express Membership Rewards");
 });
 
 test("parseBalanceReply reads what a person actually types", () => {

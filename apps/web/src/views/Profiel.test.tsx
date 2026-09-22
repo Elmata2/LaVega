@@ -84,6 +84,7 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     busy: false,
     problems: [],
     onImport: () => {},
+    onRefreshBank: () => {},
     storage,
     asOf: "2026-08-16",
     onRestored: () => {},

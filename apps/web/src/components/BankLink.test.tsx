@@ -51,7 +51,7 @@ async function render() {
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<BankLink busy={false} />);
+    root!.render(<BankLink busy={false} onRefresh={() => {}} />);
   });
   await flush();
   return container;

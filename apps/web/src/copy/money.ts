@@ -1,4 +1,5 @@
 import type { Locale } from "../locale.js";
+import type { FlowLabel } from "@lavega/core";
 import { monthShort, formatEuroIn } from "../format.js";
 import type { AlertBody } from "@lavega/core";
 
@@ -496,6 +497,8 @@ type BankLinkCopy = {
   particulier: string;
   typeRekeningAria: string;
   ofKoppelJeBankDirect: string;
+  ververs: string;
+  ververshHint: string;
   laden: string;
   koppelBankEnableBanking: string;
   geenBankenBeschikbaar: string;
@@ -520,6 +523,16 @@ type BetaalschemaCopy = {
     elkeNDagen: (days: number) => string;
   };
   xGezien: (n: number) => string;
+  /** De naam van een ingeplande post, in de taal van de lezer. Valt terug op
+   *  `label` — dat is de opgeslagen identiteitsstring, en bij een btw- of
+   *  aanslagregel is dat een eigennaam die niet vertaald hoort te worden. */
+  /** De vraag om een met de hand bijgehouden saldo bij te werken.
+   *
+   *  ER MAG GEEN GETAL IN. Dat is de eigenschap die hem veilig maakt om in een
+   *  melding te zetten of aan de assistent te geven: hij noemt het programma en
+   *  verder niets. `unit` is een token uit core ("points"), geen woord. */
+  trackingQuestion: (t: { label: string; unit: string }) => string;
+  flowLabel: (f: { label: string; labelParts?: FlowLabel }) => string;
   datumAlVerstreken: (n: number) => string;
   regelVoorspeld: (n: number) => string;
   alleRegelsIngepland: string;
@@ -1064,7 +1077,7 @@ const nl: MoneyCopy = {
           case "tax-prepayment-due":
             return `Zet ${formatEuroIn("nl", b.amountCents / 100)} klaar; deze vooruitbetaling winstbelasting moet uiterlijk ${b.dueDate} betaald zijn (over ${b.days} dagen).`;
           case "tracking-stale":
-            return `Laatst bijgewerkt op ${b.updatedAt} (${b.ageDays} dagen geleden). ${b.question}`;
+            return `Laatst bijgewerkt op ${b.updatedAt} (${b.ageDays} dagen geleden). ${nl.betaalschema.trackingQuestion(b)}`;
           case "no-balance":
             return `${b.count} rekening${b.count > 1 ? "en" : ""} zonder saldo — vul in bij Rekeningen voor een compleet beeld.`;
         }
@@ -1152,6 +1165,8 @@ const nl: MoneyCopy = {
     particulier: "Particulier",
     typeRekeningAria: "Type rekening",
     ofKoppelJeBankDirect: "Of koppel je bank direct",
+    ververs: "Ververs bankgegevens",
+    ververshHint: "Haalt saldo en transacties opnieuw op bij elke gekoppelde bank.",
     laden: "Laden…",
     koppelBankEnableBanking: "Koppel bank (Enable Banking)",
     geenBankenBeschikbaar: "Geen banken beschikbaar.",
@@ -1181,6 +1196,14 @@ const nl: MoneyCopy = {
       elkeNDagen: (days) => `elke ${days} dagen`,
     },
     xGezien: (n) => `${n}× gezien`,
+    trackingQuestion: ({ label, unit }) =>
+      unit === "points"
+        ? `Hoeveel punten staan er nu bij ${label}? Stuur alleen het getal.`
+        : `Wat is het huidige saldo van ${label} (${unit})? Stuur alleen het getal.`,
+    flowLabel: ({ label, labelParts }) =>
+      labelParts
+        ? `Factuur ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
+        : label,
     datumAlVerstreken: (n) => `${n} datum${n === 1 ? "" : "s"} al verstreken. `,
     regelVoorspeld: (n) =>
       `${n} regel${n === 1 ? "" : "s"} voorspeld uit je eigen geschiedenis, niet bevestigd.`,
@@ -1697,7 +1720,7 @@ const en: MoneyCopy = {
           case "tax-prepayment-due":
             return `Set aside ${formatEuroIn("en", b.amountCents / 100)}; this corporate tax prepayment must be paid by ${b.dueDate} (in ${b.days} day${b.days === 1 ? "" : "s"}).`;
           case "tracking-stale":
-            return `Last updated on ${b.updatedAt} (${b.ageDays} day${b.ageDays === 1 ? "" : "s"} ago). ${b.question}`;
+            return `Last updated on ${b.updatedAt} (${b.ageDays} day${b.ageDays === 1 ? "" : "s"} ago). ${en.betaalschema.trackingQuestion(b)}`;
           case "no-balance":
             return `${b.count} account${b.count > 1 ? "s" : ""} without a balance — fill it in under Accounts for a complete picture.`;
         }
@@ -1779,6 +1802,8 @@ const en: MoneyCopy = {
     particulier: "Personal",
     typeRekeningAria: "Account type",
     ofKoppelJeBankDirect: "Or link your bank directly",
+    ververs: "Refresh bank data",
+    ververshHint: "Fetches balances and transactions again from every connected bank.",
     laden: "Loading…",
     koppelBankEnableBanking: "Link bank (Enable Banking)",
     geenBankenBeschikbaar: "No banks available.",
@@ -1803,6 +1828,14 @@ const en: MoneyCopy = {
       elkeNDagen: (days) => `every ${days} days`,
     },
     xGezien: (n) => `${n}× seen`,
+    trackingQuestion: ({ label, unit }) =>
+      unit === "points"
+        ? `How many points are at ${label} now? Send just the number.`
+        : `What is the current balance of ${label} (${unit})? Send just the number.`,
+    flowLabel: ({ label, labelParts }) =>
+      labelParts
+        ? `Invoice ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
+        : label,
     datumAlVerstreken: (n) => `${n} date${n === 1 ? "" : "s"} already passed. `,
     regelVoorspeld: (n) =>
       `${n} row${n === 1 ? "" : "s"} predicted from your own history, not confirmed.`,
