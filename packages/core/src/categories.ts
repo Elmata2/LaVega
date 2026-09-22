@@ -446,7 +446,15 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "intersport", category: "Kleding & winkelen" },
   { match: "perry sport", category: "Kleding & winkelen" },
   { match: "uniqlo", category: "Kleding & winkelen" },
-  { match: "nike", category: "Kleding & winkelen" },
+  /* "nike" ALS LOSSE NAALD IS TE KORT, en dat is precies wat punt 2 in de kop
+   * van dit bestand verbiedt. Hij zit in "Techniker" — de Duitse
+   * ontwerp-partner betaalt de Techniker Krankenkasse, en die regel kwam terug
+   * als "Kleding & winkelen". De echte rijen die we willen vangen schrijven het
+   * merk voluit, dus die staan hier en de kale vier letters niet meer. */
+  { match: "nike com", category: "Kleding & winkelen" },
+  { match: "nike store", category: "Kleding & winkelen" },
+  { match: "nike retail", category: "Kleding & winkelen" },
+  { match: "nike factory", category: "Kleding & winkelen" },
   { match: "adidas", category: "Kleding & winkelen" },
   { match: "douglas", category: "Kleding & winkelen" },
   { match: "rituals", category: "Kleding & winkelen" },
@@ -718,12 +726,124 @@ export function foreignCodeIn(text: string): string | null {
 /* Pre-normalized once at module load so categorize() does a plain substring test
  * per entry (no per-transaction matchNorm of the match strings). `sign` is
  * carried through so categorize() can skip a direction-specific entry. */
+
+/* ── German merchant defaults ────────────────────────────────────────────────
+ *
+ * A SEPARATE LIST, not more entries in the Dutch one. The list above is called
+ * `NL_CATEGORY_RULES` and says in its own header that it is for "the average
+ * Dutch household"; quietly filling it with Finanzamt and Bäckerei would make
+ * that header a lie and would hide which country a bad match came from.
+ *
+ * Appended AFTER the Dutch rules, so nothing a Dutch statement already matched
+ * can change meaning. The two vocabularies barely overlap — no Dutch export
+ * says "Stadtwerke" — and where a brand is in both (Lidl, Aldi, Zalando,
+ * Flixbus) it is already above and wins there.
+ *
+ * Same three constraints as the Dutch list: order matters, no short or
+ * ambiguous needles, and an ambiguous word carries a `sign`. Two deliberate
+ * omissions for exactly that reason: bare "otto" (a common first name — a
+ * person called Otto would be booked as online shopping) and bare "o2" and
+ * "rwe" (too short to be safe as substrings). */
+export const DE_CATEGORY_RULES: readonly CategoryRule[] = [
+  // Boodschappen
+  { match: "rewe", category: "Boodschappen" },
+  { match: "edeka", category: "Boodschappen" },
+  { match: "kaufland", category: "Boodschappen" },
+  { match: "netto marken", category: "Boodschappen" },
+  { match: "penny", category: "Boodschappen" },
+  { match: "drogeriemarkt", category: "Boodschappen" },
+  { match: "rossmann", category: "Boodschappen" },
+  { match: "tegut", category: "Boodschappen" },
+  { match: "wochenmarkt", category: "Boodschappen" },
+
+  // Eten & drinken
+  { match: "lieferando", category: "Eten & drinken" },
+  { match: "baeckerei", category: "Eten & drinken" },
+  { match: "backerei", category: "Eten & drinken" },
+  { match: "konditorei", category: "Eten & drinken" },
+  { match: "metzgerei", category: "Eten & drinken" },
+  { match: "imbiss", category: "Eten & drinken" },
+  { match: "gaststatte", category: "Eten & drinken" },
+  { match: "brauhaus", category: "Eten & drinken" },
+
+  // Transport
+  { match: "deutsche bahn", category: "Transport" },
+  { match: "db vertrieb", category: "Transport" },
+  { match: "db fernverkehr", category: "Transport" },
+  { match: "deutschlandticket", category: "Transport" },
+  { match: "verkehrsbetriebe", category: "Transport" },
+  { match: "verkehrsverbund", category: "Transport" },
+  { match: "bvg", category: "Transport" },
+  { match: "aral", category: "Transport" },
+  { match: "tankstelle", category: "Transport" },
+  { match: "autobahn gmbh", category: "Transport" },
+
+  // Wonen & energie
+  { match: "stadtwerke", category: "Wonen & energie" },
+  { match: "eon energie", category: "Wonen & energie" },
+  { match: "e on energie", category: "Wonen & energie" },
+  { match: "enbw", category: "Wonen & energie" },
+  { match: "lichtblick", category: "Wonen & energie" },
+  { match: "hausverwaltung", category: "Wonen & energie" },
+  { match: "nebenkosten", category: "Wonen & energie" },
+  { match: "kaltmiete", category: "Wonen & energie" },
+  { match: "warmmiete", category: "Wonen & energie" },
+
+  // Abonnementen (telecom)
+  { match: "telekom", category: "Abonnementen" },
+  { match: "congstar", category: "Abonnementen" },
+  { match: "mobilcom", category: "Abonnementen" },
+  { match: "1&1", category: "Abonnementen" },
+  { match: "1und1", category: "Abonnementen" },
+
+  // Verzekeringen
+  { match: "huk coburg", category: "Verzekeringen" },
+  { match: "debeka", category: "Verzekeringen" },
+  { match: "signal iduna", category: "Verzekeringen" },
+  { match: "barmenia", category: "Verzekeringen" },
+  { match: "gothaer", category: "Verzekeringen" },
+  { match: "provinzial", category: "Verzekeringen" },
+  { match: "versicherung", category: "Verzekeringen" },
+
+  // Gezondheid
+  { match: "apotheke", category: "Gezondheid" },
+  { match: "krankenkasse", category: "Gezondheid" },
+  { match: "techniker kranken", category: "Gezondheid" },
+  { match: "barmer", category: "Gezondheid" },
+  { match: "aok", category: "Gezondheid" },
+  { match: "zahnarzt", category: "Gezondheid" },
+  { match: "klinikum", category: "Gezondheid" },
+
+  // Belastingen & overheid
+  { match: "finanzamt", category: "Belastingen & overheid" },
+  { match: "bundeskasse", category: "Belastingen & overheid" },
+  { match: "stadtkasse", category: "Belastingen & overheid" },
+  { match: "rundfunkbeitrag", category: "Belastingen & overheid" },
+  { match: "beitragsservice", category: "Belastingen & overheid" },
+  { match: "kfz steuer", category: "Belastingen & overheid" },
+
+  // Bankkosten
+  { match: "kontofuehrungs", category: "Bankkosten" },
+  { match: "kontofuhrungs", category: "Bankkosten" },
+  { match: "entgeltabrechnung", category: "Bankkosten" },
+
+  // Geldopname
+  { match: "bargeldauszahlung", category: "Geldopname" },
+  { match: "geldautomat", category: "Geldopname" },
+
+  // Inkomen — richting-gevoelig, net als "salaris" hierboven.
+  { match: "lohn gehalt", category: "Inkomen", sign: "in" },
+  { match: "gehaltsabrechnung", category: "Inkomen", sign: "in" },
+  { match: "lohnabrechnung", category: "Inkomen", sign: "in" },
+  { match: "gehalt", category: "Inkomen", sign: "in" },
+];
+
 export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{
   m: string;
   category: string;
   sign?: "in" | "out";
   weak?: true;
-}> = NL_CATEGORY_RULES.map((r) => ({
+}> = [...NL_CATEGORY_RULES, ...DE_CATEGORY_RULES].map((r) => ({
   m: matchNorm(r.match),
   category: r.category,
   ...(r.sign ? { sign: r.sign } : {}),
@@ -873,6 +993,29 @@ const COMPANY_WORDS: ReadonlySet<string> = new Set([
   "kft",
   "zoo",
   "ev",
+  /* German legal forms. The note above says two-letter forms are deliberately
+   * absent because "AS Terjesen" is a person and they are rare in a DUTCH
+   * export. Both halves of that reasoning stop holding the moment a German
+   * statement is imported: "AG", "SE" and "KG" are on half the merchant rows,
+   * and the cost of missing them is a company booked as a person. */
+  "ag",
+  "se",
+  "kg",
+  "kgaa",
+  "ohg",
+  "gbr",
+  "mbh",
+  // German institutions, written as one word the way German writes them.
+  "stadtwerke",
+  "finanzamt",
+  "bundeskasse",
+  "krankenkasse",
+  "hausverwaltung",
+  "verkehrsbetriebe",
+  "sparkasse",
+  "volksbank",
+  "raiffeisenbank",
+  "apotheke",
   // organisation shapes
   "stichting",
   "stg",
@@ -1086,6 +1229,19 @@ const COMPANY_SUFFIXES: readonly string[] = [
   "groep",
   "verhuur",
   "beheer",
+  /* German compounds put the institution at the END of one long word, which is
+   * exactly what a suffix test is for: Stadt|werke, Finanz|amt, Kranken|kasse,
+   * Haus|verwaltung, Verkehrs|betriebe. */
+  "werke",
+  "amt",
+  "kasse",
+  "verwaltung",
+  "betriebe",
+  "versicherung",
+  "versicherungen",
+  "apotheke",
+  "baeckerei",
+  "backerei",
 ];
 
 /* What a bank writes IN FRONT of a name, in either language: Revolut's "To A
@@ -1122,6 +1278,12 @@ const isCompanyWord = (token: string): boolean => {
   const w = deaccent(token).toLowerCase().replace(/[.,]/g, "");
   if (!w) return false;
   if (COMPANY_WORDS.has(w)) return true;
+  /* German exports glue the legal form on with a hyphen — "Allianz
+   * Versicherungs-AG", "Sparda-Bank" — and `tokensOf` splits on whitespace
+   * only, so the form would never be seen on its own. Each hyphenated piece is
+   * tested as a word in its own right; the whole token is still tested first,
+   * so nothing that already matched stops matching. */
+  if (w.includes("-") && w.split("-").some((piece) => piece && COMPANY_WORDS.has(piece))) return true;
   return COMPANY_SUFFIXES.some((s) => w.length > s.length && w.endsWith(s));
 };
 
@@ -1243,15 +1405,66 @@ export function isPersonName(counterparty: string): boolean {
   // A country token means a card descriptor ("MERCADONA ... VALENCIA ESP"), and
   // NLD counts here even though it is never a "foreign" signal elsewhere.
   if (foreignCodeIn(raw) || /\bNLD\b/.test(raw)) return false;
-  return splitNameParts(raw).some(partIsPerson);
+  const parts = splitNameParts(raw);
+  /* A COMPANY WORD IN THE COUNTERPARTY SETTLES THE WHOLE NAME.
+   *
+   * `splitNameParts` splits on `&`, so "OTTO GMBH & CO KG" became "OTTO GMBH"
+   * and "CO KG". The first is plainly a company and the second read as a
+   * person, and `some` needed only one person-shaped part to call the row a
+   * person. A name carrying a legal form is a company whichever side of the
+   * ampersand the form sits on.
+   *
+   * BUT ONLY UP TO "via", and the Dutch tests are what caught that: in
+   * "T.J. van Wijngaarden via Rabo Betaalverzoek" the tail after `via` is
+   * SUPPOSED to be a company — it is the rail the money ran over, not who was
+   * paid. Vetoing on it called every betaalverzoek from a friend a company. The
+   * counterparty is what is in front of `via`; the rest is mechanism. */
+  const payee = raw.split(/\s+via\s+/i)[0];
+  if (splitNameParts(payee).some((part) => tokensOf(part).some(isCompanyWord))) return false;
+  return parts.some(partIsPerson);
 }
 
 /** True when the row was paid at a physical terminal or cash machine. Reads the
  *  whole row, not just the name. */
 export function isCardPayment(text: string): boolean {
-  return /kaartnr|kaartnummer|pasvolgnr|\bterm\b|\bterm:|betaalautomaat|geldautomaat|\bbea\b|\bgea\b|apple\s*pay|google\s*pay|contactloos/i.test(
-    text,
+  return (
+    /kaartnr|kaartnummer|pasvolgnr|\bterm\b|\bterm:|betaalautomaat|geldautomaat|\bbea\b|\bgea\b|apple\s*pay|google\s*pay|contactloos/i.test(
+      text,
+    ) || isGermanMechanismRow(text)
   );
+}
+
+/* THE SAME EVIDENCE, IN GERMAN — and its absence was not a missing nicety, it
+ * was the single worst thing a German statement met.
+ *
+ * `isMerchantRow` is what stops a shop being read as a person, and every signal
+ * it had was Dutch: `betaalautomaat`, `geldautomaat`, `pasvolgnr`, `bea`. A
+ * German export says none of those, so on that statement the veto never fired
+ * once — and `isPersonName` happily read REWE, EDEKA, Kaufland, Stadtwerke and
+ * the Finanzamt as people, because two capitalised words with no digits is
+ * exactly what a name looks like.
+ *
+ * That was worse than leaving them unknown. Unknown is honest and correctable;
+ * "between people" is a confident wrong answer, and it lands in the one
+ * category the spending views treat as not-really-spending.
+ *
+ * `Lastschrift` counts here for the same reason the card words do: a direct
+ * debit runs on a SEPA mandate, and a private person cannot collect on one — so
+ * whatever the counterparty is called, that row is a booking with an
+ * institution.
+ *
+ * `Dauerauftrag` and `Überweisung` are deliberately NOT here, and the probe is
+ * what caught it: a standing order and a transfer are exactly how one person
+ * pays another. Counting them as merchant evidence vetoed the person reading on
+ * precisely the rows it exists for — "Thomas Weber / Dauerauftrag Miete" is the
+ * clearest person-to-person row on a German statement, and it came back
+ * unknown. A mechanism only proves a merchant when a person could not have used
+ * it. */
+const DE_MECHANISM =
+  /kartenzahlung|girocard|\bgiro\s*card\b|bargeldauszahlung|geldautomat|kartennummer|kontaktlos|lastschrift|entgeltabrechnung|kontofuehrungs|kontoführungs/i;
+
+export function isGermanMechanismRow(text: string): boolean {
+  return DE_MECHANISM.test(text);
 }
 
 /** True when the ROW carries the marks of a card payment at a MERCHANT: a card
@@ -1286,7 +1499,7 @@ export type DirectDebit = {
 const MACHTIGING_RE = /machtiging(?:s?kenmerk)?(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
 const INCASSANT_RE = /incassant(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
 const SEPA_INCASSO_RE =
-  /\b(?:doorlopend|doorlopende|eenmalig|eenmalige)\s+(?:sepa\s+)?incasso\b|\bsepa\s+incasso\b|\bsepa\s+direct\s*debit\b/i;
+  /\b(?:doorlopend|doorlopende|eenmalig|eenmalige)\s+(?:sepa\s+)?incasso\b|\bsepa\s+incasso\b|\bsepa\s+direct\s*debit\b|\bsepa[- ]?(?:basis|firmen)?lastschrift\b|\bfolgelastschrift\b/i;
 
 /** The mandate and creditor identifiers of a SEPA direct debit, or null when
  *  this row is not one. Evidence, not a guess: every branch is a code or a
