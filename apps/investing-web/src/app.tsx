@@ -93,7 +93,17 @@ function DashboardProblems({ problems }: { problems: string[] }) {
       <p className="font-semibold">Reading problems</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {visibleProblems.map((problem, index) => (
-          <li key={`${problem}-${index}`}>{problem}</li>
+          <li key={`${problem}-${index}`}>
+            {problem}{" "}
+            {/credentials cannot be read/i.test(problem) && (
+              <Link
+                to="/brokers/connect"
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Reconnect broker
+              </Link>
+            )}
+          </li>
         ))}
       </ul>
     </div>
@@ -1409,7 +1419,7 @@ function BrokerVaultUnlock() {
   );
 }
 
-function BrokerCredentialForm() {
+function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "trading212") => void }) {
   const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
   const [token, setToken] = useState("");
   const [queryId, setQueryId] = useState("");
@@ -1447,6 +1457,7 @@ function BrokerCredentialForm() {
       const saveResult = (await saveResponse.json().catch(() => ({}))) as { problems?: string[] };
       if (!saveResponse.ok)
         throw new Error(saveResult.problems?.[0] ?? "Failed to save credentials.");
+      onSaved?.(broker);
       const syncResult = await startBrokerSync(true);
       if (!syncResult) {
         setStatus("success");
@@ -1580,6 +1591,34 @@ function BrokerCredentialForm() {
 }
 
 function BrokerConnect() {
+  const [unreadableBrokers, setUnreadableBrokers] = useState<Array<"ibkr" | "trading212">>([]);
+  const [storageProblem, setStorageProblem] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch("/api/brokers/credentials/status")
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("Broker credential storage is unavailable. Try again later.");
+        return (await response.json()) as {
+          brokers?: Record<"ibkr" | "trading212", string>;
+        };
+      })
+      .then(({ brokers }) => {
+        const unreadable = (["ibkr", "trading212"] as const).filter(
+          (broker) => brokers?.[broker] === "unreadable",
+        );
+        setUnreadableBrokers(unreadable);
+      })
+      .catch((error: unknown) =>
+        setStorageProblem(
+          error instanceof Error ? error.message : "Broker credential storage is unavailable.",
+        ),
+      );
+  }, []);
+  const credentialProblem =
+    storageProblem ??
+    (unreadableBrokers.length
+      ? `${unreadableBrokers.map((broker) => (broker === "ibkr" ? "IBKR" : "Trading 212")).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
+      : null);
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="max-w-2xl">
@@ -1596,6 +1635,14 @@ function BrokerConnect() {
         </p>
       </div>
       <BrokerVaultUnlock />
+      {credentialProblem && (
+        <p
+          role="alert"
+          className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-foreground"
+        >
+          {credentialProblem}
+        </p>
+      )}
       <BrokerSyncProgressCard />
       <div className="grid gap-5 lg:grid-cols-2">
         <BrokerSetupCard
@@ -1630,7 +1677,11 @@ function BrokerConnect() {
           warning="Those five are one per endpoint LaVega reads. A missing one does not fail at setup: it surfaces later as HTTP 403 on the first sync."
         />
       </div>
-      <BrokerCredentialForm />
+      <BrokerCredentialForm
+        onSaved={(broker) =>
+          setUnreadableBrokers((current) => current.filter((item) => item !== broker))
+        }
+      />
       <BrokerSyncAction />
       <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">
         Credentials stay on your machine. Never share Flex tokens, API keys or API secrets in chat,
@@ -1807,26 +1858,26 @@ function HistoryLoading({ brokers }: { brokers: string[] }) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3 text-sm leading-6 text-muted-foreground">
-        <p>
-          {names} {brokers.length > 1 ? "are" : "is"} still sending transactions. LaVega fetches
-          them a page at a time and picks up where it left off, so this survives a timeout — it may
-          take a few runs on a large account.
-        </p>
-        <p>
-          Your figures stay hidden until it finishes. Returns and cost basis are worked out from the
-          full transaction history, so a half-loaded one would not be a smaller answer — it would be
-          a wrong one.
-        </p>
-        {broker && (
-          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs tabular-nums">
-            <dt>pages</dt>
-            <dd className="m-0">{broker.pages}</dd>
-            <dt>orders</dt>
-            <dd className="m-0">{broker.ordersRead}</dd>
-            <dt>positions</dt>
-            <dd className="m-0">{broker.positionsRead}</dd>
-          </dl>
-        )}
+          <p>
+            {names} {brokers.length > 1 ? "are" : "is"} still sending transactions. LaVega fetches
+            them a page at a time and picks up where it left off, so this survives a timeout — it
+            may take a few runs on a large account.
+          </p>
+          <p>
+            Your figures stay hidden until it finishes. Returns and cost basis are worked out from
+            the full transaction history, so a half-loaded one would not be a smaller answer — it
+            would be a wrong one.
+          </p>
+          {broker && (
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs tabular-nums">
+              <dt>pages</dt>
+              <dd className="m-0">{broker.pages}</dd>
+              <dt>orders</dt>
+              <dd className="m-0">{broker.ordersRead}</dd>
+              <dt>positions</dt>
+              <dd className="m-0">{broker.positionsRead}</dd>
+            </dl>
+          )}
         </div>
       </CardContent>
     </Card>

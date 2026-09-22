@@ -84,6 +84,27 @@ test("dashboard route reports read-model failures without inventing values", asy
   });
 });
 
+test("dashboard keeps available data when broker status storage fails", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.problems.push("Price data could not be fully loaded");
+  const investingApp = createApp({
+    dashboardReader: async () => dashboard,
+    brokerReadability: async () => {
+      throw new Error("database unavailable");
+    },
+  });
+
+  const response = await investingApp.request("/api/investing/dashboard");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    ...dashboard,
+    problems: [
+      "Price data could not be fully loaded",
+      "Broker connection status could not be checked. Showing available data.",
+    ],
+  });
+});
+
 test("benchmark API persists ordered replace-whole selection and rejects invalid caps", async () => {
   const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
   const investingApp = createApp({

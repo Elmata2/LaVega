@@ -1,11 +1,12 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
-import type { EncryptedBrokerRepository } from "@lavega/database";
+import { UnreadableBrokerCredentialsError, type EncryptedBrokerRepository } from "@lavega/database";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 import type { ServerVaultStatus } from "./fileCredentialStore.js";
 
 const BROKERS: readonly CredentialBroker[] = ["ibkr", "trading212"];
 
 type BrokerSnapshot = NonNullable<RuntimeBrokerDataSnapshot[CredentialBroker]>;
+export type BrokerReadability = Record<CredentialBroker, "empty" | "readable" | "unreadable">;
 
 /**
  * Broker credentials in Neon, encrypted with the server's own key.
@@ -32,6 +33,7 @@ export function createNeonCredentialStore(
   lock(): void;
   getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  brokerReadability(): Promise<BrokerReadability>;
 } {
   /* The repository is already bound to one user and RLS enforces that boundary
    * in Neon. This second check is here to fail loudly if a caller ever passes
@@ -39,18 +41,25 @@ export function createNeonCredentialStore(
   const sameTenant = (candidate: string) => {
     if (candidate !== tenantId) throw new Error("Credential vault belongs to another tenant");
   };
+  const brokerReadability = async (): Promise<BrokerReadability> => {
+    const brokers = {} as BrokerReadability;
+    for (const broker of BROKERS) {
+      try {
+        brokers[broker] = (await repository.get(broker)) ? "readable" : "empty";
+      } catch (error) {
+        if (!(error instanceof UnreadableBrokerCredentialsError)) throw error;
+        brokers[broker] = "unreadable";
+      }
+    }
+    return brokers;
+  };
 
   return {
     async status() {
-      for (const broker of BROKERS) {
-        try {
-          if (await repository.get(broker)) return "unlocked";
-        } catch {
-          return "empty";
-        }
-      }
-      return "empty";
+      const brokers = await brokerReadability();
+      return Object.values(brokers).some((state) => state !== "empty") ? "unlocked" : "empty";
     },
+    brokerReadability,
     async setup() {
       // The server key needs no ceremony; the first putCredentials creates the row.
     },

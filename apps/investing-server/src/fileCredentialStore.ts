@@ -141,6 +141,8 @@ export function createFileCredentialStore(
       return queue(async () => {
         if (!key || !salt || !data) throw new Error("credential vault is locked");
         const generation = lockGeneration;
+        const brokerData = structuredClone(data.brokerData ?? {});
+        delete brokerData[credentialValue.broker];
         const next: VaultData = {
           ...data,
           credentials: [
@@ -151,6 +153,7 @@ export function createFileCredentialStore(
             ),
             credentialValue,
           ],
+          brokerData,
         };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
         if (generation === lockGeneration) data = next;

@@ -124,6 +124,35 @@ test("encrypted vault restores broker data after process restart", async () => {
   }
 });
 
+test("reconnecting one local broker clears only its old account snapshot", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-broker-reset-"));
+  const filePath = join(directory, "credentials.json");
+  try {
+    const vault = createFileCredentialStore(filePath);
+    await vault.setup("passphrase");
+    await vault.putBrokerData({
+      ibkr: { positions: [], trades: [], dividends: [] },
+      trading212: { positions: [], trades: [], dividends: [] },
+    });
+    await vault.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "new",
+      secret: "new",
+    });
+    expect(await vault.getBrokerData()).toEqual({
+      ibkr: { positions: [], trades: [], dividends: [] },
+    });
+    const reopened = createFileCredentialStore(filePath);
+    await reopened.unlock("passphrase");
+    expect(await reopened.getBrokerData()).toEqual({
+      ibkr: { positions: [], trades: [], dividends: [] },
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("failed vault setup and mutations leave committed state unchanged", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-vault-failure-"));
   const path = join(directory, "credentials.json");

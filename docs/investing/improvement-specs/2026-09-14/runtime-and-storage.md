@@ -84,6 +84,8 @@ Implementation note: `apps/investing-server/src/brokerSnapshotReader.ts` owns te
 
 ## R6 — P2: Reconnect must survive one unreadable broker row
 
+Status: implemented by Issue #119. Hosted reads distinguish unreadable ciphertext from database failures. Runtime snapshot loading keeps readable brokers available; status API and reconnect view identify unreadable brokers. Credential writes precede restore. Replacing credentials clears that broker's snapshot and durable sync cursor, with generation increment guarding in-flight writes. Runtime route tests cover one or both unreadable rows and storage failure; Postgres test covers reconnect reset.
+
 Evidence: `neonCredentialStore.ts:46-55` status catches any row decryption error and returns empty, but `getBrokerData` (:75-80) does not isolate per-broker errors. `index.ts:110` invokes restore callback before writing new credentials in createRuntimeBrokerCredentialSetup; callback calls getBrokerData. When one credential row is unreadable, saving fresh credentials calls setup (no-op) then restore, which throws before replacement. If IBKR is valid and Trading 212 unreadable, initial status returns unlocked then runtime construction reads all rows and fails.
 
 Failure: encryption-key change or malformed old row can prevent dashboard/reconnect from loading, contradicting explicit CONNECTORS.md requirement that unreadable hosted rows remain reconnectable.

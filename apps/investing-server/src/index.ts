@@ -104,7 +104,7 @@ type RuntimeCredentialStore = RuntimeCredentialStoreType;
 
 export function createRuntimeBrokerCredentialSetup(
   credentials: RuntimeCredentialStore,
-  onUnlocked?: () => void | Promise<void>,
+  onStored?: (broker: BrokerCredentialInput["broker"]) => void | Promise<void>,
   tenantId: string = LOCAL_TENANT_ID,
 ) {
   return async (input: BrokerCredentialInput): Promise<void> => {
@@ -112,7 +112,6 @@ export function createRuntimeBrokerCredentialSetup(
     if (status === "empty") await credentials.setup(input.passphrase ?? "");
     else if (!(await credentials.unlock(input.passphrase ?? "")))
       throw new Error("Vault passphrase is incorrect");
-    await onUnlocked?.();
     if (input.broker === "ibkr") {
       await credentials.putCredentials({
         broker: "ibkr",
@@ -128,6 +127,7 @@ export function createRuntimeBrokerCredentialSetup(
         secret: input.secret!,
       });
     }
+    await onStored?.(input.broker);
   };
 }
 
@@ -695,8 +695,19 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return {
       brokerSync,
       brokerSyncStatus: async () => ({ ...syncProgress, history: await readHistoryProgress() }),
-      configureBroker: createRuntimeBrokerCredentialSetup(credentials, restoreBrokerData, tenantId),
+      configureBroker: createRuntimeBrokerCredentialSetup(
+        credentials,
+        async (broker) => {
+          if (!database)
+            await (syncStateStore as ReturnType<typeof createFileBrokerSyncStateStore>).reset(
+              broker,
+            );
+          await restoreBrokerData();
+        },
+        tenantId,
+      ),
       credentialStatus: () => credentials.status(),
+      brokerReadability: () => credentials.brokerReadability?.(),
       unlockCredentials: async (passphrase: string) => {
         const unlocked = await credentials.unlock(passphrase);
         if (unlocked) await restoreBrokerData();
@@ -738,6 +749,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     configureBroker: async (input: BrokerCredentialInput) =>
       (await currentRuntime()).configureBroker(input),
     credentialStatus: async () => (await currentRuntime()).credentialStatus(),
+    brokerReadability: async () => (await currentRuntime()).brokerReadability(),
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),

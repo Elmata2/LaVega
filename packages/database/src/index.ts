@@ -108,6 +108,13 @@ export type EncryptedBrokerRepository = {
   putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number): Promise<boolean>;
 };
 
+export class UnreadableBrokerCredentialsError extends Error {
+  constructor() {
+    super("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    this.name = "UnreadableBrokerCredentialsError";
+  }
+}
+
 export function createBrokerRepository(
   db: Database,
   userId: string | undefined | null,
@@ -125,10 +132,7 @@ export function createBrokerRepository(
         /* Credentials are the only copy there is. Reporting them as missing
          * would send the user to re-enter their broker tokens, and that write
          * would replace ciphertext a restored key could still have opened. */
-        if (!credentials.readable)
-          throw new Error(
-            "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
-          );
+        if (!credentials.readable) throw new UnreadableBrokerCredentialsError();
         return {
           credentials: credentials.value,
           credentialGeneration: Number(row.credential_generation ?? 1),
@@ -155,9 +159,11 @@ export function createBrokerRepository(
       const snapshotBlob = snapshot === undefined ? null : encryptBlob(snapshot);
       await withTenant(db, userId, async (client) => {
         await client.query(
-          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = EXCLUDED.snapshot_blob, credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
           [broker, credentialsBlob, snapshotBlob],
         );
+        // A new connection must never resume another account's history or lease.
+        await client.query("DELETE FROM investing.sync_state WHERE broker = $1", [broker]);
       });
     },
     async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {

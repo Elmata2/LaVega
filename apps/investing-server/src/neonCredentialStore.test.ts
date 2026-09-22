@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
 import type { EncryptedBrokerRepository } from "@lavega/database";
+import { UnreadableBrokerCredentialsError } from "@lavega/database";
 
 type Row = { credentials: unknown; snapshot: unknown | null; credentialGeneration: number };
 
@@ -109,11 +110,41 @@ test("an empty vault reports no broker data instead of failing", async () => {
 test("an unreadable hosted broker row does not block reconnecting", async () => {
   const repository = fakeRepository();
   repository.get = vi.fn(async () => {
-    throw new Error(
-      "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
-    );
+    throw new UnreadableBrokerCredentialsError();
   });
   const store = createNeonCredentialStore(repository, "user-123");
 
-  expect(await store.status()).toBe("empty");
+  expect(await store.status()).toBe("unlocked");
+  expect(await store.brokerReadability()).toEqual({ ibkr: "unreadable", trading212: "unreadable" });
+  expect(await store.getBrokerData()).toEqual({});
+});
+
+test("one unreadable row leaves the other broker snapshot available", async () => {
+  const repository = fakeRepository();
+  await repository.put("ibkr", { broker: "ibkr", tenantId: "user-123", token: "t", queryId: "q" });
+  await repository.putSnapshot("ibkr", { positions: [], trades: [], dividends: [] }, 1);
+  const get = repository.get.bind(repository);
+  repository.get = vi.fn(async (broker) => {
+    if (broker === "trading212") throw new UnreadableBrokerCredentialsError();
+    return get(broker);
+  }) as typeof repository.get;
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  expect(await store.brokerReadability()).toEqual({ ibkr: "readable", trading212: "unreadable" });
+  expect(await store.getBrokerData()).toHaveProperty("ibkr");
+  expect(await store.getBrokerData()).not.toHaveProperty("trading212");
+});
+
+test("database errors remain availability errors", async () => {
+  const repository = fakeRepository();
+  repository.get = vi.fn(async () => {
+    throw new Error("database unavailable");
+  });
+  repository.snapshots = vi.fn(async () => {
+    throw new Error("database unavailable");
+  });
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  await expect(store.status()).rejects.toThrow("database unavailable");
+  await expect(store.getBrokerData()).rejects.toThrow("database unavailable");
 });

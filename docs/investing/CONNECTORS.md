@@ -64,6 +64,8 @@ Hosted credential storage is tenant-bound. The same signed-in user id must reach
 
 If a hosted credential row cannot be decrypted with the configured server key, the dashboard and reconnect form must still load. Sync can report the unreadable row as a broker problem, but status reads treat it as reconnectable state so a user can save fresh broker credentials.
 
+The credential status API reports `brokers.ibkr` and `brokers.trading212` as `empty`, `readable`, or `unreadable`. Dashboard responses also name unreadable brokers in `problems`; overview shows a reconnect link while retaining data from readable brokers. If the status check fails after dashboard data loads, overview reports the check failure and keeps available data. Database failures remain status API errors. Saving new credentials clears that broker's snapshot and sync cursor, and increments its credential generation; old account data cannot carry into the new connection.
+
 **Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
 
 | Broker              | Persisted?   | Why                                                                                                                                                                                                                      |
