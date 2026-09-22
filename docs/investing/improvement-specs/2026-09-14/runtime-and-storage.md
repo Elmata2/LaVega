@@ -80,6 +80,8 @@ Acceptance: two runtimes over shared storage: A warms, B commits new instrument,
 
 Depth/locality/leverage: one read interface owns freshness for both real consumers; remove consumer-specific refresh placement. Deletion test: extracting map getters alone adds no depth; move freshness and version policy together.
 
+Implementation note: `apps/investing-server/src/brokerSnapshotReader.ts` owns tenant-local snapshot freshness and version checks. Dashboard reads allow a labeled cached fallback after storage failure; price target discovery requires a successful refresh and reports failure through price sync progress.
+
 ## R6 — P2: Reconnect must survive one unreadable broker row
 
 Evidence: `neonCredentialStore.ts:46-55` status catches any row decryption error and returns empty, but `getBrokerData` (:75-80) does not isolate per-broker errors. `index.ts:110` invokes restore callback before writing new credentials in createRuntimeBrokerCredentialSetup; callback calls getBrokerData. When one credential row is unreadable, saving fresh credentials calls setup (no-op) then restore, which throws before replacement. If IBKR is valid and Trading 212 unreadable, initial status returns unlocked then runtime construction reads all rows and fails.

@@ -74,6 +74,7 @@ import {
 import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import { createDashboardSnapshotRepository } from "@lavega/database";
+import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 
 export { app };
 export { createDashboardCache } from "./dashboardCache.js";
@@ -262,15 +263,19 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       await priceStore.upsert(tenantId, createDevFixturePriceBars());
       onPriceDataChanged();
     }
-    let brokerDataReadAt = Date.now();
-    let brokerDataRefresh: Promise<void> | null = null;
+    const brokerSnapshot = createBrokerSnapshotReader({
+      cache: brokerData,
+      load: () => credentials.getBrokerData(),
+      hosted: Boolean(database) && !devFixtureEnabled,
+      isSyncing: () => syncProgress.status === "running" || syncProgress.status === "waiting",
+      ttlMs: DASHBOARD_CACHE_TTL_MS,
+    });
     /* The runtime is built per request (docs/investing/STACK.md), and most
      * requests never read positions, so the vault's snapshots are read on first
      * use rather than here. */
     let brokerDataLoad: Promise<void> | null = devFixtureEnabled ? Promise.resolve() : null;
     const restoreBrokerData = async () => {
-      brokerData.restore(await credentials.getBrokerData());
-      brokerDataReadAt = Date.now();
+      brokerSnapshot.restore(await credentials.getBrokerData());
       brokerDataLoad = Promise.resolve();
     };
     const loadBrokerData = () =>
@@ -280,31 +285,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         brokerDataLoad = null;
         throw error;
       }));
-    const refreshBrokerData = async () => {
-      await loadBrokerData();
-      if (!database || devFixtureEnabled || Date.now() - brokerDataReadAt < DASHBOARD_CACHE_TTL_MS)
-        return;
-      if (syncProgress.status === "running" || syncProgress.status === "waiting") return;
-      if (brokerDataRefresh) return brokerDataRefresh;
-      const version = brokerData.read().dataVersion;
-      const refresh = (async () => {
-        const snapshot = await credentials.getBrokerData();
-        if (
-          brokerData.read().dataVersion === version &&
-          syncProgress.status !== "running" &&
-          syncProgress.status !== "waiting"
-        ) {
-          brokerData.restore(snapshot);
-          brokerDataReadAt = Date.now();
-        }
-      })();
-      brokerDataRefresh = refresh;
-      try {
-        await refresh;
-      } finally {
-        if (brokerDataRefresh === refresh) brokerDataRefresh = null;
-      }
-    };
     const updateProgress = (event: Trading212DiagnosticEvent) => {
       const updatedAt = new Date().toISOString();
       if (event.type === "history-page") {
@@ -394,7 +374,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         if (Object.keys(result.committed).length === 0) return;
         await loadBrokerData().catch(() => undefined);
         brokerData.restore({ ...brokerData.snapshot(), ...result.committed });
-        brokerDataReadAt = Date.now();
+        brokerSnapshot.markCurrent();
       },
       credentials,
       syncStateStore,
@@ -459,7 +439,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
       const refreshProblems: string[] = [];
       try {
-        await refreshBrokerData();
+        await loadBrokerData();
+        await brokerSnapshot.read("cached");
       } catch (error) {
         const snapshot = brokerData.read();
         if (
@@ -725,7 +706,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       healthCheck,
       priceSyncTargets: async () => {
         await loadBrokerData();
-        const { positions, trades } = brokerData.read();
+        const { positions, trades } = await brokerSnapshot.read("fresh");
         const benchmarkSymbols = options.benchmarkSymbols
           ? await options.benchmarkSymbols(tenantId)
           : (await benchmarkSelectionStore.get(tenantId)).symbols;

@@ -10,6 +10,8 @@ const persistence = vi.hoisted(() => ({
   snapshots: new Map<string, RuntimeBrokerDataSnapshot>(),
   reads: vi.fn(),
   credentials: vi.fn(async () => null),
+  loadFailure: null as Error | null,
+  priceGet: vi.fn(async (_request: { symbol: string }) => ({ bars: [], problems: [] })),
   connected: false,
   resume: null as BrokerSyncResume | null,
   /* Stored dashboards, standing in for investing.dashboard_snapshots. Null is
@@ -48,6 +50,7 @@ vi.mock("./credentialStore.js", () => ({
     putCredentials: async () => undefined,
     getBrokerData: async () => {
       persistence.reads(tenantId);
+      if (persistence.loadFailure) throw persistence.loadFailure;
       return structuredClone(persistence.snapshots.get(tenantId) ?? {});
     },
     putBrokerData: async (snapshot) => {
@@ -62,8 +65,10 @@ vi.mock("./credentialStore.js", () => ({
 vi.mock("./neonStores.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("./neonStores.js")>();
   const { createMemoryBrokerSyncStateStore } = await import("@lavega/adapters");
+  const { createInMemoryPriceSyncProgressStore } = await import("./priceOrchestrator.js");
   return {
     ...original,
+    createNeonPriceSyncProgressStore: () => createInMemoryPriceSyncProgressStore(),
     createNeonBrokerSyncStateStore: (_database: unknown, tenantId: string) => {
       const leases = createMemoryBrokerSyncStateStore();
       const state = (broker: string) => ({
@@ -104,6 +109,11 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       getLatestRate: async () => ({ problems: [] }),
       getHistoricalRates: async () => ({ rates: [], problems: [] }),
     }),
+    createYahooPriceProvider: () => ({
+      sourceKey: "yahoo",
+      priority: 10,
+      get: persistence.priceGet,
+    }),
   };
 });
 
@@ -117,7 +127,19 @@ afterEach(() => {
   persistence.resume = null;
   persistence.dashboards = null;
   persistence.sourceVersion = 0;
+  persistence.loadFailure = null;
+  persistence.priceGet.mockClear();
 });
+
+const acceptedConsent = {
+  get: async (tenantId: string) => ({
+    tenantId,
+    accepted: true,
+    decidedAt: "2026-09-01T00:00:00Z",
+    disclosureVersion: "yahoo-finance-v1",
+  }),
+  set: async () => undefined,
+};
 
 function snapshot(quantity: number): RuntimeBrokerDataSnapshot {
   return {
@@ -139,6 +161,54 @@ function snapshot(quantity: number): RuntimeBrokerDataSnapshot {
     },
   };
 }
+
+test("price discovery refreshes committed symbols without a dashboard read", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const priceStore = createInMemoryPriceStore();
+  const first = await createRuntimeApp({
+    priceStore,
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  const second = await createRuntimeApp({
+    priceStore,
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  await first.request("/api/investing/dashboard");
+  await second.request("/api/investing/dashboard");
+  const updated = snapshot(1);
+  updated.trading212!.positions.push({ ...updated.trading212!.positions[0]!, symbol: "ASML" });
+  persistence.snapshots.set("tenant", updated);
+  now += 15_000;
+  const response = await first.request("/api/prices/sync", { method: "POST" });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ total: 2 });
+  expect(persistence.priceGet.mock.calls.map(([request]) => request.symbol)).toContain("ASML");
+  expect(persistence.reads).toHaveBeenCalledTimes(3);
+});
+
+test("price discovery reports a failed hosted refresh instead of completing from old symbols", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  await app.request("/api/investing/dashboard");
+  now += 15_000;
+  persistence.loadFailure = new Error("snapshot database unavailable");
+  const response = await app.request("/api/prices/sync", { method: "POST" });
+  expect(await response.json()).toMatchObject({
+    status: "problem",
+    problems: ["snapshot database unavailable"],
+  });
+  expect(persistence.priceGet).not.toHaveBeenCalled();
+});
 
 test("warm dashboard instances reload shared broker and price data after fifteen seconds", async () => {
   let now = Date.now();
