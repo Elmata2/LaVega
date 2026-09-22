@@ -43,6 +43,7 @@ import {
   useSyncSession,
   type BrokerProgress,
 } from "./lib/syncSession";
+import { PERSONAL_URL } from "./lib/personal";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
@@ -1722,6 +1723,33 @@ function Layout() {
               Positions
             </NavLink>
           </nav>
+          {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
+              gewone cross-document link, want de persoonlijke app is een eigen
+              deploy en geen route hierbinnen. Zonder dit was de oversteek
+              eenrichtingsverkeer — je kwam hier vanuit de kluis en moest daarna
+              terug via de browserknop of een getypte URL. */}
+          {PERSONAL_URL && (
+            <a
+              href={PERSONAL_URL}
+              className="ml-auto flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+              <span>Personal</span>
+            </a>
+          )}
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
           {!connect && (

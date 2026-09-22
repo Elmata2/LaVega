@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
+import { PERSONAL_URL } from "./lib/personal";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -2050,4 +2051,40 @@ test("agent route keeps a reply with the persona that asked for it", async () =>
   expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
   root.unmount();
   window.history.pushState({}, "", "/");
+});
+
+/* DE OVERSTEEK IS TWEERICHTINGSVERKEER. Zijn verzoek van 22 september: de
+ * persoonlijke kant heeft een knop hierheen, hierheen had er geen terug. Je
+ * kwam dus vanuit de kluis en moest via de browserknop of een getypte URL weer
+ * weg — en op een eigen deploy is dat geen route maar een doodlopende weg.
+ *
+ * Een echte link en geen router-navigatie: de persoonlijke app is een aparte
+ * deploy, dus dit moet een cross-document <a> zijn. Een <NavLink> hierheen zou
+ * binnen deze SPA blijven zoeken en niets vinden. */
+test("the header offers a way back to the personal app", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+  });
+  /* Tegen de resolver en niet tegen een vast pad: onder vitest staat `DEV` aan,
+     dus `PERSONAL_URL` is daar de dev-poort en in productie `/app`. Een test die
+     "/app" hardcodeert zou hier om de verkeerde reden falen. */
+  expect(PERSONAL_URL).toBeTruthy();
+  const back = container.querySelector(
+    `a[href="${PERSONAL_URL}"]`,
+  ) as HTMLAnchorElement | null;
+  expect(back).not.toBeNull();
+  expect(back!.textContent).toContain("Personal");
+  root.unmount();
 });
