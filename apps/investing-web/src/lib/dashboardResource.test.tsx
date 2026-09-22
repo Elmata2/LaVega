@@ -3,7 +3,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
-import { useDashboard, type DashboardState } from "./dashboardResource";
+import {
+  forgetDashboards,
+  setDashboardOwner,
+  useDashboard,
+  type DashboardState,
+} from "./dashboardResource";
 import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -11,6 +16,7 @@ import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  forgetDashboards();
 });
 
 function dashboardWithVersion(dataVersion: number): InvestingDashboardData {
@@ -75,6 +81,74 @@ test("resolving refresh requests in reverse order keeps the newest data displaye
   expect(finalState.status).toBe("ready");
   expect(finalState.status === "ready" && finalState.data.dataVersion).toBe(2);
   root.unmount();
+});
+
+async function showOnce(symbol: string | undefined, data: InvestingDashboardData) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(data))),
+  );
+  const states: DashboardState[] = [];
+  const { root, Probe } = mount(symbol, states);
+  await act(async () => {
+    root.render(<Probe querySymbol={symbol} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  root.unmount();
+  return states;
+}
+
+test("a page opened again shows its last dashboard at once while it refreshes", async () => {
+  setDashboardOwner("user-a");
+  await showOnce(undefined, dashboardWithVersion(1));
+
+  const pending = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => pending.promise),
+  );
+  const states: DashboardState[] = [];
+  const { root, Probe } = mount(undefined, states);
+  await act(async () => {
+    root.render(<Probe querySymbol={undefined} />);
+    await Promise.resolve();
+  });
+  expect(states.every((state) => state.status === "ready")).toBe(true);
+  expect(states[0]?.status === "ready" && states[0].data.dataVersion).toBe(1);
+  await act(async () => {
+    pending.resolve(new Response(JSON.stringify(dashboardWithVersion(2))));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const finalState = states.at(-1)!;
+  expect(finalState.status === "ready" && finalState.data.dataVersion).toBe(2);
+  root.unmount();
+});
+
+test("a reload restores only the signed-in user's own overview", async () => {
+  setDashboardOwner("user-a");
+  await showOnce(undefined, dashboardWithVersion(7));
+
+  setDashboardOwner("user-b");
+  const otherUser = await showOnce(undefined, dashboardWithVersion(1));
+  expect(otherUser[0]?.status).toBe("loading");
+
+  setDashboardOwner("user-a");
+  const sameUser = await showOnce(undefined, dashboardWithVersion(8));
+  expect(sameUser[0]?.status === "ready" && sameUser[0].data.dataVersion).toBe(7);
+});
+
+test("signing out leaves no portfolio data in storage", async () => {
+  setDashboardOwner("user-a");
+  await showOnce(undefined, dashboardWithVersion(1));
+  expect(Object.keys(localStorage)).not.toHaveLength(0);
+
+  forgetDashboards();
+
+  expect(Object.keys(localStorage)).toHaveLength(0);
+  setDashboardOwner("user-a");
+  expect((await showOnce(undefined, dashboardWithVersion(2)))[0]?.status).toBe("loading");
 });
 
 test("switching query identity shows loading, not stale data under a mismatched symbol", async () => {

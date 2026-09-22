@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getSession, type SessionState } from "../lib/auth-client";
+import { setDashboardOwner } from "../lib/dashboardResource";
 
 /* Gates the routes nested under it behind a signed-in session.
  *
@@ -16,7 +17,15 @@ export function RequireAuth() {
   useEffect(() => {
     let current = true;
     void getSession().then((next) => {
-      if (current) setState(next);
+      if (!current) return;
+      setDashboardOwner(
+        next.status === "authenticated"
+          ? next.user.id
+          : next.status === "unconfigured"
+            ? "local"
+            : null,
+      );
+      setState(next);
     });
     return () => {
       current = false;

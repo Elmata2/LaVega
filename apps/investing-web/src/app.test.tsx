@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
+import { forgetDashboards } from "./lib/dashboardResource";
 import { PERSONAL_URL } from "./lib/personal";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 
@@ -13,6 +14,7 @@ import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/co
 afterEach(() => {
   vi.restoreAllMocks();
   globalThis.localStorage?.clear();
+  forgetDashboards();
 });
 
 const dashboard: InvestingDashboardData = {
@@ -2081,9 +2083,7 @@ test("the header offers a way back to the personal app", async () => {
      dus `PERSONAL_URL` is daar de dev-poort en in productie `/app`. Een test die
      "/app" hardcodeert zou hier om de verkeerde reden falen. */
   expect(PERSONAL_URL).toBeTruthy();
-  const back = container.querySelector(
-    `a[href="${PERSONAL_URL}"]`,
-  ) as HTMLAnchorElement | null;
+  const back = container.querySelector(`a[href="${PERSONAL_URL}"]`) as HTMLAnchorElement | null;
   expect(back).not.toBeNull();
   expect(back!.textContent).toContain("Personal");
   root.unmount();

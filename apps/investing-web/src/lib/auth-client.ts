@@ -3,6 +3,8 @@
  * dependency: this app already talks to its backend with raw fetch
  * everywhere else, and the surface it needs here is three endpoints. */
 
+import { forgetDashboards } from "./dashboardResource";
+
 export type AuthUser = { id: string; email: string; name?: string | null };
 
 export type SessionState =
@@ -52,5 +54,7 @@ export async function signIn(input: { email: string; password: string }): Promis
 }
 
 export async function signOut(): Promise<void> {
+  // Portfolio data kept for a fast reload must not outlive the session on a shared device.
+  forgetDashboards();
   await fetch("/api/auth/sign-out", { method: "POST" });
 }

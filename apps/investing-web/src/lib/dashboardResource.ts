@@ -91,6 +91,55 @@ async function fetchDashboard(
   return normalizeDashboardData(payload);
 }
 
+const STORAGE_PREFIX = "lavega.investing.dashboard.";
+
+/* The last dashboard each query showed, so a page opened again renders it at
+ * once while its request refreshes it. It belongs to one signed-in user: a new
+ * owner starts empty, and only that owner's overview is kept across reloads. */
+const lastShown = new Map<string, InvestingDashboardData>();
+let owner: string | null = null;
+
+const queryKey = (symbol: string | undefined) => symbol ?? "";
+
+function shownOrLoading(symbol: string | undefined): DashboardState {
+  const data = lastShown.get(queryKey(symbol));
+  return data ? { status: "ready", data } : { status: "loading" };
+}
+
+export function setDashboardOwner(userId: string | null): void {
+  if (userId === owner) return;
+  owner = userId;
+  lastShown.clear();
+  if (!userId) return;
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_PREFIX + userId) ?? "null");
+    if (isDashboardData(stored)) lastShown.set("", normalizeDashboardData(stored));
+  } catch {
+    // Unreadable storage only costs the head start; the request still loads the page.
+  }
+}
+
+export function forgetDashboards(): void {
+  owner = null;
+  lastShown.clear();
+  try {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key);
+  } catch {
+    // Storage that cannot be listed cannot hold a dashboard either.
+  }
+}
+
+function remember(symbol: string | undefined, data: InvestingDashboardData) {
+  lastShown.set(queryKey(symbol), data);
+  if (!owner || symbol) return;
+  try {
+    localStorage.setItem(STORAGE_PREFIX + owner, JSON.stringify(data));
+  } catch {
+    // Full or disabled storage: the in-memory copy still serves navigation.
+  }
+}
+
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === "AbortError";
 }
@@ -100,7 +149,7 @@ function isAbortError(reason: unknown): boolean {
  * state: switching identity or firing a refresh aborts the request in
  * flight, so a slower, older response can never overwrite a newer one. */
 export function useDashboard(symbol?: string): DashboardState {
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
+  const [state, setState] = useState<DashboardState>(() => shownOrLoading(symbol));
   const queryRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const queryChanged = queryRef.current !== symbol;
@@ -113,12 +162,13 @@ export function useDashboard(symbol?: string): DashboardState {
       const controller = new AbortController();
       activeController = controller;
       setState((previous) =>
-        !queryChangedForNextLoad && previous.status === "ready" ? previous : { status: "loading" },
+        !queryChangedForNextLoad && previous.status === "ready" ? previous : shownOrLoading(symbol),
       );
       queryChangedForNextLoad = false;
       void fetchDashboard(symbol, controller.signal)
         .then((data) => {
           if (cancelled || controller.signal.aborted) return;
+          remember(symbol, data);
           setState({ status: "ready", data });
         })
         .catch((reason: unknown) => {
