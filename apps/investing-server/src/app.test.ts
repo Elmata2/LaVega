@@ -821,19 +821,17 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
   expect(body.sectors).toBeDefined();
 });
 
-/* TRADING 212 HEEFT GEEN SECRET, en deze route eiste er een.
+/* TRADING 212 GEBRUIKT EEN SLEUTELPAAR — sleutel als gebruikersnaam, geheim als
+ * wachtwoord, samen Basic-gecodeerd. Hun eigen documentatie zegt het met zoveel
+ * woorden, en dit is hier één ronde lang verkeerd gelezen: de eis is toen
+ * weggehaald op de aanname dat er één credential was.
  *
- * Hun API geeft één credential uit: één sleutel met permissies eraan. De route
- * antwoordde 400 "secret is required for trading212", dus de enige manier om
- * een koppeling op te slaan was iets verzinnen — en dat verzonnen iets reisde
- * mee als de tweede helft van `Basic base64(token:secret)`. Het formulier was
- * alleen te verzenden op een manier die gegarandeerd niet werkte.
- *
- * Het veld blijft bestaan en wordt doorgegeven als het er is: of Basic hier het
- * juiste schema is, is nog niet bewezen, en dat is een aparte vraag van deze. */
-test("a Trading 212 connection saves without a secret, because there is none to give", async () => {
-  const configureBroker = vi.fn(async () => undefined);
-  const investingApp = createApp({ configureBroker });
+ * Die aanname maakte het erger dan de wrijving die hij moest wegnemen. Opslaan
+ * met een leeg geheim levert `base64("key:")` op, en dat authenticeert per
+ * definitie nooit — een 401 waar het formulier zelf de oorzaak van was, en niet
+ * te onderscheiden van een verkeerde sleutel. */
+test("a Trading 212 connection needs both halves of the key pair", async () => {
+  const investingApp = createApp({ configureBroker: vi.fn(async () => undefined) });
   const response = await investingApp.request("/api/brokers/credentials", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -843,11 +841,8 @@ test("a Trading 212 connection saves without a secret, because there is none to 
       passphrase: "vault-passphrase",
     }),
   });
-
-  expect(response.status).toBe(204);
-  expect(configureBroker).toHaveBeenCalledWith(
-    expect.objectContaining({ broker: "trading212", token: "t212-api-key" }),
-  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["secret is required for trading212"] });
 });
 
 /* De sleutel zelf blijft wél verplicht — zonder die is er niets om mee te

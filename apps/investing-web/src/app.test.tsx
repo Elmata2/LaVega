@@ -2143,10 +2143,14 @@ test("the Trading 212 connect form names the exact permissions to enable", async
   root.unmount();
 });
 
-/* HET GEHEIM DAT NIET BESTAAT. Trading 212 geeft één credential uit; dit veld
- * stond op `required`, dus het formulier was alleen te verzenden door iets te
- * verzinnen — en dat ging daarna mee de Authorization-header in. */
-test("Trading 212 does not demand an API secret", async () => {
+/* HET GEHEIM BESTAAT WEL, en dat is hier één ronde lang verkeerd gelezen.
+ *
+ * Trading 212's documentatie: "You must provide your API Key as the username
+ * and your API Secret as the password, formatted as an HTTP Basic
+ * Authentication header." Het veld stond terecht op verplicht; het is toen
+ * optioneel gemaakt op een aanname, en een leeg geheim levert `base64("key:")`
+ * op — dat kan nooit authenticeren. Deze test houdt beide helften verplicht. */
+test("Trading 212 requires both halves of the key pair", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
@@ -2170,10 +2174,13 @@ test("Trading 212 does not demand an API secret", async () => {
 
   const secret = container.querySelector('input[name="secret"]') as HTMLInputElement | null;
   expect(secret).not.toBeNull();
-  expect(secret!.required).toBe(false);
-  // De sleutel zelf blijft wél verplicht.
+  expect(secret!.required).toBe(true);
   const token = container.querySelector('input[name="token"]') as HTMLInputElement;
   expect(token.required).toBe(true);
+
+  // En het scherm zegt dat het er twee zijn, want dat is waar dit op stukliep.
+  expect(container.textContent).toContain("both");
+  expect(container.textContent).toContain("shown once");
 
   root.unmount();
 });

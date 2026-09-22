@@ -80,12 +80,19 @@ function BrokerSetup({ broker }: { broker: "ibkr" | "trading212" }) {
             with the same 401 a wrong password gives.
           </>,
           <>
-            Leave <strong>API secret</strong> empty. Trading 212 issues one credential, not a pair.
+            Copy <strong>both</strong> the API key and the API secret. Trading 212 authenticates
+            with a key <em>pair</em> — the key is the username and the secret is the password — and
+            the secret is shown once, when the key is created. Without it nothing authenticates.
+          </>,
+          <>
+            The API only works on <strong>Invest</strong> and <strong>Stocks ISA</strong> accounts.
+            On any other account type every request fails however good the credentials are.
           </>,
           <>
             If you restrict the key to an IP, use the address the requests actually leave from —
             this machine when you run LaVega locally, the server when it runs hosted. They are not
-            the same address.
+            the same address. (Rate limits are per account and ignore the IP, so the restriction
+            buys you containment, not headroom.)
           </>,
         ]
       : [
@@ -1600,12 +1607,9 @@ function BrokerCredentialForm() {
           </label>
         ) : (
           <label className="text-sm font-semibold">
-            API secret <span className="font-normal text-muted-foreground">(usually empty)</span>
-            {/* NIET `required`. Trading 212 geeft één credential uit, geen paar —
-                dit veld stond op verplicht, dus je kón het formulier alleen
-                verzenden door iets te verzinnen, en dat iets ging daarna mee de
-                Authorization-header in. */}
+            API secret
             <input
+              required
               name="secret"
               type="password"
               autoComplete="off"

@@ -383,18 +383,19 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["passphrase is required"] }, 400);
     if (broker === "ibkr" && !body.queryId?.trim())
       return c.json({ problems: ["queryId is required for ibkr"] }, 400);
-    /* TRADING 212 HEEFT GEEN SECRET, en dit stond erop dat je er een gaf.
+    /* TRADING 212 GEBRUIKT EEN SLEUTELPAAR, en dat is hier eerder verkeerd
+     * gelezen. Hun documentatie is er eenduidig over: "You must provide your
+     * API Key as the username and your API Secret as the password, formatted
+     * as an HTTP Basic Authentication header."
      *
-     * Hun API geeft één credential uit — één sleutel, met permissies eraan. Wie
-     * hier iets invulde, vulde dus iets VERZONNENS in, en dat reisde mee als de
-     * tweede helft van `Basic base64(token:secret)`. De enige manier om het
-     * formulier te verzenden was gegarandeerd fout.
-     *
-     * Leeg is bovendien betekenisvol en geen gat: `base64("token:")` is precies
-     * hoe Basic een gebruikersnaam zonder wachtwoord uitdrukt, wat de vorm is
-     * die een token-als-gebruikersnaam hoort te hebben. Of Basic hier überhaupt
-     * het juiste schema is, staat nog open — zie de adapter. Dit haalt alleen
-     * de verplichting weg om er iets onwaars bij te verzinnen. */
+     * Deze eis stond er dus terecht. Hij is één ronde lang weggehaald op de
+     * aanname dat Trading 212 één credential uitgeeft — die aanname was fout,
+     * en het gevolg was erger dan de oorspronkelijke wrijving: je kon opslaan
+     * met een leeg geheim, wat `base64("key:")` oplevert, en dat kan per
+     * definitie nooit authenticeren. Een 401 waar het formulier zelf de oorzaak
+     * van was. */
+    if (broker === "trading212" && !body.secret?.trim())
+      return c.json({ problems: ["secret is required for trading212"] }, 400);
     try {
       await configureBroker({
         broker,
