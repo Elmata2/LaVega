@@ -47,6 +47,77 @@ import { PERSONAL_URL } from "./lib/personal";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
+/* WAT JE BIJ DE BROKER MOET DOEN VOORDAT DIT FORMULIER IETS KAN.
+ *
+ * Er stond hier niets, en dat kostte een middag. Trading 212 laat je per sleutel
+ * losse permissies aanzetten, en welke dat moeten zijn is nergens af te leiden:
+ * je kunt drie vakjes aanvinken die allemaal redelijk klinken en er precies één
+ * raken die wij gebruiken. De vijf hieronder zijn de scopes van de vijf
+ * endpoints die de adapter echt aanroept, en verder niets.
+ *
+ * De volgorde staat erbij omdat ze uitmaakt: permissies wijzigen geeft de
+ * sleutel opnieuw uit, dus een sleutel die je ervóór hebt gekopieerd is daarna
+ * dood — met een 401 die er precies uitziet als een verkeerd gekozen schema. */
+function BrokerSetup({ broker }: { broker: "ibkr" | "trading212" }) {
+  const steps =
+    broker === "trading212"
+      ? [
+          <>
+            In Trading 212: <strong>Settings → API (Beta)</strong>. Turn on exactly these five
+            permissions — <strong>Account data</strong>, <strong>History – Dividends</strong>,{" "}
+            <strong>History – Orders</strong>, <strong>History – Transactions</strong> and{" "}
+            <strong>Portfolio</strong>. They are the five endpoints LaVega reads, and nothing else
+            is used.
+          </>,
+          <>
+            Leave <strong>Orders – Execute</strong> and <strong>Pies – Write</strong> off. LaVega
+            has no code that writes to a broker and never will — it cannot place, change or cancel
+            an order, and a key that cannot either is one less thing to worry about.
+          </>,
+          <>
+            Set the permissions <em>first</em>, then generate the key and copy it. Changing
+            permissions reissues the key, so one copied beforehand stops working — and it fails
+            with the same 401 a wrong password gives.
+          </>,
+          <>
+            Leave <strong>API secret</strong> empty. Trading 212 issues one credential, not a pair.
+          </>,
+          <>
+            If you restrict the key to an IP, use the address the requests actually leave from —
+            this machine when you run LaVega locally, the server when it runs hosted. They are not
+            the same address.
+          </>,
+        ]
+      : [
+          <>
+            In Interactive Brokers: <strong>Performance &amp; Reports → Flex Queries</strong>.
+            Create an <strong>Activity Flex Query</strong> and note its <strong>Query ID</strong>.
+          </>,
+          <>
+            Then under <strong>Flex Web Service</strong>, generate a token. That token and the
+            query ID are the two fields below.
+          </>,
+        ];
+
+  return (
+    <div className="mt-6 rounded-2xl border border-border bg-secondary/40 p-4">
+      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+        Before you fill this in
+      </p>
+      <ol className="mt-3 flex list-none flex-col gap-2.5 p-0 text-sm leading-6 text-muted-foreground">
+        {steps.map((step, i) => (
+          <li key={i} className="grid grid-cols-[1.25rem_1fr] gap-2">
+            <span className="font-mono text-xs text-primary" aria-hidden="true">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
   const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
   return other.test(problem) && /credentials are not configured/i.test(problem);
@@ -1501,6 +1572,7 @@ function BrokerCredentialForm() {
           </select>
         </label>
       </div>
+      <BrokerSetup broker={broker} />
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-semibold">
           {broker === "ibkr" ? "Flex-token" : "API key"}
@@ -1528,9 +1600,12 @@ function BrokerCredentialForm() {
           </label>
         ) : (
           <label className="text-sm font-semibold">
-            API secret
+            API secret <span className="font-normal text-muted-foreground">(usually empty)</span>
+            {/* NIET `required`. Trading 212 geeft één credential uit, geen paar —
+                dit veld stond op verplicht, dus je kón het formulier alleen
+                verzenden door iets te verzinnen, en dat iets ging daarna mee de
+                Authorization-header in. */}
             <input
-              required
               name="secret"
               type="password"
               autoComplete="off"

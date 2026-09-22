@@ -2088,3 +2088,92 @@ test("the header offers a way back to the personal app", async () => {
   expect(back!.textContent).toContain("Personal");
   root.unmount();
 });
+
+/* WAT JE BIJ DE BROKER MOET DOEN, op het scherm waar je het nodig hebt.
+ *
+ * Er stond niets, en het kostte een middag: drie permissies aangevinkt die
+ * redelijk klonken, waarvan er precies één raakte wat de adapter gebruikt. De
+ * vijf scopes hieronder zijn die van de vijf endpoints die hij echt aanroept. */
+test("the Trading 212 connect form names the exact permissions to enable", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/brokers/connect"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+  });
+
+  const picker = container.querySelector('select[aria-label="Broker"]') as HTMLSelectElement | null;
+  expect(picker).not.toBeNull();
+  await act(async () => {
+    picker!.value = "trading212";
+    picker!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const text = container.textContent ?? "";
+  for (const scope of [
+    "Account data",
+    "History – Dividends",
+    "History – Orders",
+    "History – Transactions",
+    "Portfolio",
+  ]) {
+    expect(text, scope).toContain(scope);
+  }
+
+  /* De volgorde is geen nettigheid: permissies wijzigen geeft de sleutel
+     opnieuw uit, en een sleutel van ervóór faalt met dezelfde 401 als een
+     verkeerd wachtwoord. */
+  expect(text).toContain("Changing");
+  expect(text).toContain("reissues the key");
+
+  /* En de read-only houding hoort op het scherm te staan, niet alleen in een
+     architectuurdocument. */
+  expect(text).toContain("Orders – Execute");
+  expect(text).toContain("Pies – Write");
+
+  root.unmount();
+});
+
+/* HET GEHEIM DAT NIET BESTAAT. Trading 212 geeft één credential uit; dit veld
+ * stond op `required`, dus het formulier was alleen te verzenden door iets te
+ * verzinnen — en dat ging daarna mee de Authorization-header in. */
+test("Trading 212 does not demand an API secret", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/brokers/connect"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+  });
+  const picker = container.querySelector('select[aria-label="Broker"]') as HTMLSelectElement;
+  await act(async () => {
+    picker.value = "trading212";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const secret = container.querySelector('input[name="secret"]') as HTMLInputElement | null;
+  expect(secret).not.toBeNull();
+  expect(secret!.required).toBe(false);
+  // De sleutel zelf blijft wél verplicht.
+  const token = container.querySelector('input[name="token"]') as HTMLInputElement;
+  expect(token.required).toBe(true);
+
+  root.unmount();
+});
