@@ -123,7 +123,8 @@ export function createRuntimeBrokerCredentialSetup(
         broker: "trading212",
         tenantId,
         token: input.token,
-        secret: input.secret!,
+        // Leeg is toegestaan: Trading 212 kent geen secret. Zie app.ts.
+        secret: input.secret ?? "",
       });
     }
   };

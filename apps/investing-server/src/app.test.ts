@@ -820,3 +820,45 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
   expect(body.topPositions).toEqual([{ symbol: "AAPL", weight: 1 }]);
   expect(body.sectors).toBeDefined();
 });
+
+/* TRADING 212 HEEFT GEEN SECRET, en deze route eiste er een.
+ *
+ * Hun API geeft één credential uit: één sleutel met permissies eraan. De route
+ * antwoordde 400 "secret is required for trading212", dus de enige manier om
+ * een koppeling op te slaan was iets verzinnen — en dat verzonnen iets reisde
+ * mee als de tweede helft van `Basic base64(token:secret)`. Het formulier was
+ * alleen te verzenden op een manier die gegarandeerd niet werkte.
+ *
+ * Het veld blijft bestaan en wordt doorgegeven als het er is: of Basic hier het
+ * juiste schema is, is nog niet bewezen, en dat is een aparte vraag van deze. */
+test("a Trading 212 connection saves without a secret, because there is none to give", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker });
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      broker: "trading212",
+      token: "t212-api-key",
+      passphrase: "vault-passphrase",
+    }),
+  });
+
+  expect(response.status).toBe(204);
+  expect(configureBroker).toHaveBeenCalledWith(
+    expect.objectContaining({ broker: "trading212", token: "t212-api-key" }),
+  );
+});
+
+/* De sleutel zelf blijft wél verplicht — zonder die is er niets om mee te
+ * verbinden, en dat is een echte fout in plaats van een verzonnen eis. */
+test("a Trading 212 connection still demands the key itself", async () => {
+  const investingApp = createApp({ configureBroker: vi.fn(async () => undefined) });
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", secret: "", passphrase: "vault-passphrase" }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["token is required"] });
+});
