@@ -777,10 +777,10 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
         };
       });
     },
-    async put(record: AgentRunRow): Promise<void> {
-      await withTenant(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP",
+    async start(record: AgentRunRow): Promise<boolean> {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query(
+          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP WHERE investing.agent_runs.started_at < EXCLUDED.started_at RETURNING run_id",
           [
             record.id,
             AGENT_STATUS_TO_COLUMN[record.status],
@@ -794,6 +794,26 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
             record.finishedAt,
           ],
         );
+        return result.rows.length > 0;
+      });
+    },
+    async finish(record: AgentRunRow): Promise<boolean> {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query(
+          "UPDATE investing.agent_runs SET status = $2, run_result = $3::jsonb, finished_at = $4, updated_at = CURRENT_TIMESTAMP WHERE run_id = $1 AND status = 'running' RETURNING run_id",
+          [
+            record.id,
+            AGENT_STATUS_TO_COLUMN[record.status],
+            JSON.stringify({
+              agentId: record.agentId,
+              summary: record.summary,
+              error: record.error,
+              result: record.result,
+            }),
+            record.finishedAt,
+          ],
+        );
+        return result.rows.length > 0;
       });
     },
   };

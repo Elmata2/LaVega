@@ -4,6 +4,8 @@ Static review; findings below are code-confirmed failure paths, not claims of pr
 
 ## R7 — P2: Persist agent run transitions in order
 
+Status: implemented by Issue #120. Agent-run controller awaits a durable start before model work and conditionally finishes only its current run. Latest means latest-started. Neon binds tenant when constructing its adapter and guards start by `started_at` and finish by `run_id` plus running status. Shared injected stores are single-tenant only; multi-tenant injection uses a tenant factory. Local run records share the encrypted credential vault and its durable write queue; vault unlock is required before a run. No run history or background queue was added.
+
 Evidence: `index.ts:658-717` deduplicates identical prompt/persona/model only within process; `:673` discards promise from initial agentRunStore.put(record). Final put is awaited. Default hosted store is Neon (not memory), `neonStores.ts:119-132`, and database `index.ts:484-488` unconditionally upserts latest user row. Default local store is plain JSON `fileAgentRunStore.ts:41-63`.
 
 Failure: slow initial running write can finish after done write and replace completed row with running; rejected detached write is unhandled. Two distinct agent runs overlap and older run finishing last replaces newer run. Shared injected store has no tenant in interface, but production Neon resolves trusted AsyncLocalStorage context; do not claim observed production tenant leak from shared object alone.

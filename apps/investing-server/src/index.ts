@@ -9,6 +9,8 @@ import {
 } from "./app.js";
 import {
   createFileAgentRunStore,
+  discardPlaintextAgentRun,
+  migratePlaintextAgentRun,
   type AgentRunRecord,
   type AgentRunStore,
 } from "./fileAgentRunStore.js";
@@ -75,6 +77,7 @@ import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import { createDashboardSnapshotRepository } from "@lavega/database";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
+import { createAgentRunController } from "./agentRun.js";
 
 export { app };
 export { createDashboardCache } from "./dashboardCache.js";
@@ -136,7 +139,7 @@ export function createRuntimeBrokerCredentialSetup(
  * did. */
 export function createRuntimeBrokerSync(
   onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>,
-  credentials = createFileCredentialStore(),
+  credentials: RuntimeCredentialStore = createFileCredentialStore(),
   operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
@@ -178,7 +181,9 @@ export type RuntimeAppOptions = {
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
+  /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
+  agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
   runAgent?: PortfolioAgentRunner;
   runConversation?: PortfolioConversationRunner;
   dashboardCache?: DashboardCache;
@@ -219,9 +224,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
    * handed its database source here rather than importing it. See its comment. */
   useDatabaseSource(runtimeDatabase);
   const database = runtimeDatabase();
-  const agentRunStore =
-    options.agentRunStore ??
-    (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
   /* Progress belongs next to the data on a hosted deployment, where the status
    * poll and the run that answers it are different instances. A local process
    * is both, so memory is the whole truth there. */
@@ -252,9 +254,25 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       history: null,
     };
     const credentials = createRuntimeCredentialStore(tenantId);
+    if (options.agentRunStore && tenantId !== LOCAL_TENANT_ID)
+      throw new Error(
+        "Shared agent run store is single-tenant only; supply agentRunStoreForTenant",
+      );
+    const agentRunStore =
+      options.agentRunStoreForTenant?.(tenantId) ??
+      options.agentRunStore ??
+      (database
+        ? createNeonAgentRunStore(database, tenantId)
+        : createFileAgentRunStore(credentials as ReturnType<typeof createFileCredentialStore>));
+    const agentRuns = createAgentRunController(agentRunStore);
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
+    if (!database && !options.agentRunStore && !options.agentRunStoreForTenant) {
+      if ((await credentials.status()) === "unlocked")
+        await migratePlaintextAgentRun(agentRunStore);
+      else await discardPlaintextAgentRun();
+    }
     const brokerData = createBrokerDataCache({});
     const dashboardSnapshots =
       database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
@@ -617,53 +635,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           : "degraded";
       return { status, storage: database ? "neon" : "file", checks, trading212 };
     };
-    const agentInFlight = new Map<string, Promise<AgentRunRecord>>();
     const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> => {
-      const runKey = model?.trim() ?? "";
-      const inFlight = agentInFlight.get(runKey);
-      if (inFlight) return inFlight;
-      const record: AgentRunRecord = {
-        id: crypto.randomUUID(),
-        agentId: "portfolio-judgments",
-        startedAt: new Date().toISOString(),
-        finishedAt: null,
-        status: "running",
-        summary: null,
-        error: null,
-      };
-      void agentRunStore.put(record);
-      const run = (async () => {
-        try {
-          const dashboard = await dashboardReader({});
-          const result = options.runAgent
-            ? await options.runAgent({ dashboard, model })
-            : await runPortfolioAgent({ dashboard, model });
-          const done: AgentRunRecord = {
-            ...record,
-            finishedAt: new Date().toISOString(),
-            status: "done",
-            summary: null,
-            result,
-          };
-          await agentRunStore.put(done);
-          return done;
-        } catch (error) {
-          const failed: AgentRunRecord = {
-            ...record,
-            finishedAt: new Date().toISOString(),
-            status: "error",
-            error: error instanceof Error ? error.message : "Portfolio agent run failed",
-          };
-          await agentRunStore.put(failed);
-          throw error;
-        }
-      })();
-      agentInFlight.set(runKey, run);
-      try {
-        return await run;
-      } finally {
-        if (agentInFlight.get(runKey) === run) agentInFlight.delete(runKey);
-      }
+      return agentRuns.run(model, async () => {
+        if ((await credentials.status()) === "unlocked") await restoreBrokerData();
+        const dashboard = await dashboardReader({});
+        return options.runAgent
+          ? await options.runAgent({ dashboard, model })
+          : await runPortfolioAgent({ dashboard, model });
+      });
     };
     const answerPortfolioConversation = async (
       agentId: import("./portfolioAgent.js").PortfolioAgentId,
@@ -698,6 +677,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       configureBroker: createRuntimeBrokerCredentialSetup(
         credentials,
         async (broker) => {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
           if (!database)
             await (syncStateStore as ReturnType<typeof createFileBrokerSyncStateStore>).reset(
               broker,
@@ -710,7 +691,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       brokerReadability: () => credentials.brokerReadability?.(),
       unlockCredentials: async (passphrase: string) => {
         const unlocked = await credentials.unlock(passphrase);
-        if (unlocked) await restoreBrokerData();
+        if (unlocked) {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
+          await restoreBrokerData();
+        }
         return unlocked;
       },
       dashboardReader,

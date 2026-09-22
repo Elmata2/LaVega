@@ -11,6 +11,7 @@ import {
   type CipherBlob,
 } from "@lavega/adapters";
 import { runtimeDataFile } from "./jsonFileStore.js";
+import type { AgentRunRecord } from "./fileAgentRunStore.js";
 
 export type ServerVaultStatus = "empty" | "locked" | "unlocked";
 
@@ -19,7 +20,11 @@ export type ServerVaultStatus = "empty" | "locked" | "unlocked";
 // this file's fs imports. See that file for why.
 export type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
-type VaultData = { credentials: BrokerCredentials[]; brokerData?: RuntimeBrokerDataSnapshot };
+type VaultData = {
+  credentials: BrokerCredentials[];
+  brokerData?: RuntimeBrokerDataSnapshot;
+  agentRun?: AgentRunRecord;
+};
 
 export function runtimeCredentialFile(): string {
   return runtimeDataFile("LAVEGA_VAULT_FILE", "credentials.json");
@@ -44,6 +49,9 @@ export function createFileCredentialStore(
   lock(): void;
   getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  getAgentRun(): Promise<AgentRunRecord | null>;
+  startAgentRun(record: AgentRunRecord): Promise<boolean>;
+  finishAgentRun(record: AgentRunRecord): Promise<boolean>;
 } {
   let key: CryptoKey | null = null;
   let data: VaultData | null = null;
@@ -170,6 +178,34 @@ export function createFileCredentialStore(
         const next = { ...data, brokerData: structuredClone(snapshot) };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
         if (generation === lockGeneration) data = next;
+      });
+    },
+    async getAgentRun() {
+      if (!data) throw new Error("credential vault is locked");
+      return structuredClone(data.agentRun ?? null);
+    },
+    startAgentRun(record) {
+      return queue(async () => {
+        if (!key || !salt || !data) throw new Error("credential vault is locked");
+        const current = data.agentRun;
+        if (current && current.startedAt > record.startedAt) return false;
+        if (current && current.id === record.id && current.status !== "running") return false;
+        const generation = lockGeneration;
+        const next = { ...data, agentRun: structuredClone(record) };
+        await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
+        if (generation === lockGeneration) data = next;
+        return true;
+      });
+    },
+    finishAgentRun(record) {
+      return queue(async () => {
+        if (!key || !salt || !data) throw new Error("credential vault is locked");
+        if (data.agentRun?.id !== record.id || data.agentRun.status !== "running") return false;
+        const generation = lockGeneration;
+        const next = { ...data, agentRun: structuredClone(record) };
+        await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
+        if (generation === lockGeneration) data = next;
+        return true;
       });
     },
   };
