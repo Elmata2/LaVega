@@ -56,6 +56,8 @@ Depth/locality/leverage: progress interface should expose safe transitions and o
 
 ## R4 — P2: Publish local storage state only after successful durable write
 
+Status: implemented by Issue #117. JSON state mutations use isolated copies and publish cache only after rename. Encrypted vault setup and mutations publish memory only after rename; setup and unlock join the write queue. Lock invalidates any pending in-memory publication. Filesystem fault tests cover rejected writes and renames, reopen behavior, retries, and queued updates.
+
 Evidence: `jsonFileStore.ts:78-82` assigns cache before writeValue; `fileCredentialStore.ts:114-124` and `:134-135` assign data before encryption/write/rename succeeds.
 
 Failure: disk full, permission error or failed rename makes caller receive rejection, but next read returns uncommitted credentials/prices/snapshot. Later successful update can accidentally persist previously rejected mutation; restart returns different state. Runtime snapshot callback assumes failed persistence leaves last-good state intact, but backing file adapter violates that assumption.
