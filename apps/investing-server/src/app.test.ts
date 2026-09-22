@@ -733,6 +733,7 @@ test("detailed health exposes durable broker state without exposing broker data"
       checks: {
         database: "ok",
         migrationLedger: "ok",
+        tenantIsolation: "enforced",
         vault: "ok",
         trading212Credentials: "configured",
         trading212Sync: "fresh",
@@ -751,6 +752,7 @@ test("detailed health exposes durable broker state without exposing broker data"
     checks: {
       database: "ok",
       migrationLedger: "ok",
+      tenantIsolation: "enforced",
       vault: "ok",
       trading212Credentials: "configured",
       trading212Sync: "fresh",
@@ -768,6 +770,7 @@ test("detailed health fails when Trading 212 data is stale", async () => {
       checks: {
         database: "ok",
         migrationLedger: "ok",
+        tenantIsolation: "enforced",
         vault: "ok",
         trading212Credentials: "configured",
         trading212Sync: "stale",

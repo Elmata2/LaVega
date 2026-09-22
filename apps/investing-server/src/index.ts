@@ -562,6 +562,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",
         migrationLedger: database ? "ok" : "not-applicable",
+        tenantIsolation: database ? "enforced" : "not-applicable",
         vault: "empty",
         trading212Credentials: "missing",
         trading212Sync: "never",
@@ -575,6 +576,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             "SELECT to_regclass('public.schema_migrations') AS ledger",
           );
           if (!ledger.rows[0]?.ledger) checks.migrationLedger = "down";
+          const role = await database.query<{ bypasses: boolean }>(
+            "SELECT rolsuper OR rolbypassrls AS bypasses FROM pg_roles WHERE rolname = current_user",
+          );
+          if (role.rows[0]?.bypasses !== false) checks.tenantIsolation = "down";
         } catch {
           return {
             status: "down",
@@ -583,6 +588,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
               ...checks,
               database: "down",
               migrationLedger: "down",
+              tenantIsolation: "down",
               vault: "down",
               trading212Credentials: "down",
               trading212Sync: "down",

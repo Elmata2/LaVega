@@ -88,6 +88,9 @@ export type InvestingHealth = {
   checks: {
     database: "ok" | "not-configured" | "down";
     migrationLedger: "ok" | "not-applicable" | "down";
+    /** Whether Postgres itself keeps tenants apart: a role that bypasses RLS
+     *  leaves only application code between one user's rows and another's. */
+    tenantIsolation: "enforced" | "not-applicable" | "down";
     vault: "ok" | "empty" | "locked" | "down";
     trading212Credentials: "configured" | "missing" | "down";
     trading212Sync: "fresh" | "stale" | "never" | "problem" | "down";
