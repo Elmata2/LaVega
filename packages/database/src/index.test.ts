@@ -357,20 +357,35 @@ test("an empty vault blob is refused before it reaches the table's own check", a
 
 test("a snapshot sealed under an older key reads as absent instead of crashing the runtime", async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
-  const staleSnapshot = encryptBlob({ trading212: { positions: [] } });
+  const staleSnapshot = encryptBlob({ positions: [] });
+  process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
+  const freshSnapshot = encryptBlob({ positions: [{ symbol: "AAPL" }] });
+  const { db } = fakeDatabase([
+    { broker: "ibkr", snapshot_blob: staleSnapshot },
+    { broker: "trading212", snapshot_blob: freshSnapshot },
+  ]);
+
+  // The snapshot is a cache of broker data; a sync rebuilds it. Losing one must
+  // not take the other broker's data down with it.
+  expect(await createBrokerRepository(db, "user-123").snapshots()).toEqual({
+    trading212: { positions: [{ symbol: "AAPL" }] },
+  });
+});
+
+test("credential reads leave the snapshot blob in the table", async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
   const credentials = encryptBlob({ broker: "trading212", token: "t" });
-  const { db } = fakeDatabase([{ credentials_blob: credentials, snapshot_blob: staleSnapshot }]);
+  const { db, calls } = fakeDatabase([{ credentials_blob: credentials }]);
 
-  const row = await createBrokerRepository(db, "user-123").get("trading212");
-
-  // The snapshot is a cache of broker data; a sync rebuilds it. Losing it must
-  // not take the credentials — and the whole account — down with it.
-  expect(row).toEqual({
+  expect(await createBrokerRepository(db, "user-123").get("trading212")).toEqual({
     credentials: { broker: "trading212", token: "t" },
-    snapshot: null,
     credentialGeneration: 1,
   });
+  expect(
+    executed(calls)
+      .map((call) => call.sql)
+      .join(),
+  ).not.toMatch(/snapshot_blob/);
 });
 
 test("credentials sealed under an older key fail loudly, naming the key", async () => {

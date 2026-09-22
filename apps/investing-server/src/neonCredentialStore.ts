@@ -70,11 +70,10 @@ export function createNeonCredentialStore(
       await repository.put(credentials.broker, credentials);
     },
     async getBrokerData() {
+      const stored = await repository.snapshots();
       const snapshot: RuntimeBrokerDataSnapshot = {};
-      for (const broker of BROKERS) {
-        const row = await repository.get(broker);
-        if (row?.snapshot) snapshot[broker] = row.snapshot as BrokerSnapshot;
-      }
+      for (const broker of BROKERS)
+        if (stored[broker]) snapshot[broker] = stored[broker] as BrokerSnapshot;
       return snapshot;
     },
     async putBrokerData(snapshot: RuntimeBrokerDataSnapshot) {

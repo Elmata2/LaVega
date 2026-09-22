@@ -253,9 +253,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
-    const brokerData = createBrokerDataCache(
-      (await credentials.status()) === "unlocked" ? await credentials.getBrokerData() : {},
-    );
+    const brokerData = createBrokerDataCache({});
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
       await priceStore.upsert(tenantId, createDevFixturePriceBars());
@@ -263,11 +261,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     }
     let brokerDataReadAt = Date.now();
     let brokerDataRefresh: Promise<void> | null = null;
+    /* The runtime is built per request (docs/investing/STACK.md), and most
+     * requests never read positions, so the vault's snapshots are read on first
+     * use rather than here. */
+    let brokerDataLoad: Promise<void> | null = devFixtureEnabled ? Promise.resolve() : null;
     const restoreBrokerData = async () => {
       brokerData.restore(await credentials.getBrokerData());
       brokerDataReadAt = Date.now();
+      brokerDataLoad = Promise.resolve();
     };
+    const loadBrokerData = () =>
+      (brokerDataLoad ??= (async () => {
+        if ((await credentials.status()) === "unlocked") await restoreBrokerData();
+      })().catch((error: unknown) => {
+        brokerDataLoad = null;
+        throw error;
+      }));
     const refreshBrokerData = async () => {
+      await loadBrokerData();
       if (!database || devFixtureEnabled || Date.now() - brokerDataReadAt < DASHBOARD_CACHE_TTL_MS)
         return;
       if (syncProgress.status === "running" || syncProgress.status === "waiting") return;
@@ -378,6 +389,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       async (result) => {
         brokerData.apply({ outcomes: [], problems: result.problems });
         if (Object.keys(result.committed).length === 0) return;
+        await loadBrokerData().catch(() => undefined);
         brokerData.restore({ ...brokerData.snapshot(), ...result.committed });
         brokerDataReadAt = Date.now();
       },
@@ -689,6 +701,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       dashboardReader,
       healthCheck,
       priceSyncTargets: async () => {
+        await loadBrokerData();
         const { positions, trades } = brokerData.read();
         const benchmarkSymbols = options.benchmarkSymbols
           ? await options.benchmarkSymbols(tenantId)

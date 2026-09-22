@@ -95,9 +95,10 @@ export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
 }
 
 export type EncryptedBrokerRepository = {
-  get<T>(
-    broker: string,
-  ): Promise<{ credentials: T; snapshot: unknown | null; credentialGeneration: number } | null>;
+  get<T>(broker: string): Promise<{ credentials: T; credentialGeneration: number } | null>;
+  /** Every broker's snapshot in one read. Snapshots are the large part of a
+   *  vault row, so `get` leaves them out and only this reads them. */
+  snapshots(): Promise<Record<string, unknown>>;
   /** Writing credentials starts a new generation: whatever a running sync is
    *  reading belongs to the connection this call replaces. */
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
@@ -115,7 +116,7 @@ export function createBrokerRepository(
     async get<T>(broker: string) {
       return withTenant(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          "SELECT credentials_blob, snapshot_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
+          "SELECT credentials_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
           [broker],
         );
         const row = result.rows[0];
@@ -128,14 +129,25 @@ export function createBrokerRepository(
           throw new Error(
             "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
           );
-        // The snapshot is a cache of broker data. A sync rebuilds it, so an
-        // unreadable one is dropped rather than taking the account down.
-        const snapshot = row.snapshot_blob ? tryDecryptBlob(row.snapshot_blob as Buffer) : null;
         return {
           credentials: credentials.value,
-          snapshot: snapshot?.readable ? snapshot.value : null,
           credentialGeneration: Number(row.credential_generation ?? 1),
         };
+      });
+    },
+    async snapshots() {
+      return withTenant(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT broker, snapshot_blob FROM investing.broker_vaults WHERE snapshot_blob IS NOT NULL",
+        );
+        const snapshots: Record<string, unknown> = {};
+        for (const row of result.rows) {
+          // The snapshot is a cache of broker data. A sync rebuilds it, so an
+          // unreadable one is dropped rather than taking the account down.
+          const snapshot = tryDecryptBlob(row.snapshot_blob as Buffer);
+          if (snapshot.readable) snapshots[row.broker as string] = snapshot.value;
+        }
+        return snapshots;
       });
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {

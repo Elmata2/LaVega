@@ -10,7 +10,16 @@ function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, Row> 
     rows,
     async get<T>(broker: string) {
       const row = rows.get(broker);
-      return row ? { ...row, credentials: row.credentials as T } : null;
+      return row
+        ? { credentials: row.credentials as T, credentialGeneration: row.credentialGeneration }
+        : null;
+    },
+    async snapshots() {
+      return Object.fromEntries(
+        [...rows]
+          .filter(([, row]) => row.snapshot !== null)
+          .map(([broker, row]) => [broker, row.snapshot]),
+      );
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const existing = rows.get(broker);

@@ -147,6 +147,22 @@ test("warm dashboard instances reload shared broker and price data after fifteen
   expect(priceReads.mock.calls.length).toBeGreaterThan(initialPriceReads);
 });
 
+test("requests that never show positions do not read the broker snapshots", async () => {
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    resolveTenantId: () => "tenant",
+  });
+
+  expect((await app.request("/api/brokers/sync/status")).status).toBe(200);
+  expect((await app.request("/api/brokers/credentials/status")).status).toBe(200);
+  expect(persistence.reads).not.toHaveBeenCalled();
+
+  const dashboard = await app.request("/api/investing/dashboard");
+  expect(((await dashboard.json()) as InvestingDashboardData).positions[0]?.quantity).toBe(1);
+  expect(persistence.reads).toHaveBeenCalledTimes(1);
+});
+
 test("dashboard refresh does not replace broker data during a local sync", async () => {
   let now = Date.now();
   vi.spyOn(Date, "now").mockImplementation(() => now);

@@ -69,6 +69,8 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Neon request lifecycle:** Neon `Pool` uses WebSockets. On Vercel, create, use, and close each pool inside one request. Do not retain a pool, an auth instance backed by one, or an investing runtime that captures one across requests. A retained socket can become stale after Vercel freezes an invocation; then every Neon-backed route waits until the host's 300-second deadline. One request can use many short tenant transactions on its own pool. This invariant was violated by module-level pool/runtime caches and caused a production defect on 20 September 2026; request-scoped lifecycle now enforces it.
 
+**Request cost:** because the runtime is built per request, anything it reads at build time is paid on every request. Broker snapshots (about 1 MB per Trading 212 account) are therefore read on first use, in one query for all brokers, and credential reads leave the snapshot blob in the table. Functions run in `fra1`, next to Neon in `eu-central-1`; before 22 September 2026 they ran in `iad1`, and every tenant transaction (five sequential round trips) crossed the Atlantic.
+
 **Hosted tier: Cloudflare Workers.**
 
 - Cron Triggers are native on the free tier, not plan-gated — unlike Vercel, which caps Function duration at 10s on Hobby and needs Pro for anything past that.

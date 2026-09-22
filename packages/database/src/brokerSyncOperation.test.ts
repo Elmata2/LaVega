@@ -156,7 +156,7 @@ test("an expired lease is taken over, and the evicted run changes neither snapsh
     snapshot: { value: { positions: ["stale"] }, credentialGeneration: generation },
   });
   expect(committed).toBe(false);
-  expect((await createBrokerRepository(db, "tenant-a").get("trading212"))?.snapshot).toEqual({
+  expect((await createBrokerRepository(db, "tenant-a").snapshots()).trading212).toEqual({
     positions: ["first"],
   });
   const still = await repository.claim("trading212", {
@@ -188,9 +188,11 @@ test("a reconnect during a run stops that run from restoring the old account", a
     },
   });
   expect(committed).toBe(false);
-  const vault = await createBrokerRepository(db, "tenant-a").get<{ token: string }>("trading212");
-  expect(vault?.credentials.token).toBe("reconnected-token");
-  expect(vault?.snapshot).toBeNull();
+  const vault = createBrokerRepository(db, "tenant-a");
+  expect((await vault.get<{ token: string }>("trading212"))?.credentials.token).toBe(
+    "reconnected-token",
+  );
+  expect((await vault.snapshots()).trading212).toBeUndefined();
 });
 
 test("a failed snapshot write leaves the cursor untouched", async () => {
