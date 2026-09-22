@@ -24,276 +24,275 @@
  * and `px-[10px]` already rely on. */
 
 @layer components {
-
-/* The landing lets the whole window scroll (Landing.tsx sets html/body sizing
+  /* The landing lets the whole window scroll (Landing.tsx sets html/body sizing
  * imperatively so GSAP ScrollTrigger tracks the default scroller). */
-body.lp-scroll #root {
-  height: auto;
-  min-height: 100%;
-}
+  body.lp-scroll #root {
+    height: auto;
+    min-height: 100%;
+  }
 
-.lp {
-  --lp-cream: #f4f1ec;
-  --lp-ink: #2b2117;
-  --lp-ink2: #6a5f4e;
-  --lp-tan: #cf9f5e;
-  --lp-tan-deep: #b07f33;
-  --lp-pos: #5c7d4f;
-  --lp-card: #fbfaf7;
-  --lp-line: #e7e0d4;
-  --lp-espresso: #241b12;
+  .lp {
+    --lp-cream: #f4f1ec;
+    --lp-ink: #2b2117;
+    --lp-ink2: #6a5f4e;
+    --lp-tan: #cf9f5e;
+    --lp-tan-deep: #b07f33;
+    --lp-pos: #5c7d4f;
+    --lp-card: #fbfaf7;
+    --lp-line: #e7e0d4;
+    --lp-espresso: #241b12;
 
-  min-height: 100vh;
-  background: var(--lp-cream);
-  color: var(--lp-ink);
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.55;
-  overflow-x: hidden;
-}
-.lp * {
-  box-sizing: border-box;
-}
+    min-height: 100vh;
+    background: var(--lp-cream);
+    color: var(--lp-ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  .lp * {
+    box-sizing: border-box;
+  }
 
-/* ---- Nav ---- */
-/* .lp-nav, .lp-brand, .lp-nav-links (+ its links), .lp-lang, .lp-btn and
+  /* ---- Nav ---- */
+  /* .lp-nav, .lp-brand, .lp-nav-links (+ its links), .lp-lang, .lp-btn and
  * .lp-btn-dark are now Tailwind utilities on Landing.tsx's header markup
  * (docs/adr/0005). `.lp-lang` stays as a bare hook: Landing.click.test.tsx
  * finds the locale-switch link with `querySelector(".lp-lang")`. */
 
-/* ---- Buttons ---- */
+  /* ---- Buttons ---- */
 
-/* ---- Sections ---- */
-/* `.lp-section`, `.lp-h2`, `.lp-eyebrow` and `.lp-sub` still back the
+  /* ---- Sections ---- */
+  /* `.lp-section`, `.lp-h2`, `.lp-eyebrow` and `.lp-sub` still back the
  * strengths, agents, privacy and how-it-works sections. FAQ/waitlist/footer
  * now carry the equivalent Tailwind utilities directly instead. */
-.lp-section {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 72px 28px;
-}
-.lp-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lp-tan-deep);
-  text-align: center;
-  margin: 0 0 10px;
-}
-.lp-h2 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: clamp(1.9rem, 3.4vw, 2.8rem);
-  letter-spacing: -0.02em;
-  text-align: center;
-  margin: 0 0 36px;
-  color: var(--lp-ink);
-}
-.lp-sub {
-  max-width: 640px;
-  margin: 0 auto 28px;
-  color: var(--lp-ink2);
-  font-size: 1.1rem;
-}
-.lp-card-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.25rem;
-  margin: 0 0 6px;
-  color: var(--lp-ink);
-}
-.lp-card-text {
-  margin: 0;
-  color: var(--lp-ink2);
-  font-size: 0.95rem;
-}
-
-/* ---- Privacy band (dark for contrast) ---- */
-.lp-privacy {
-  padding: 0 28px;
-}
-.lp-privacy-inner {
-  max-width: 1100px;
-  margin: 24px auto;
-  background: var(--lp-espresso);
-  color: var(--lp-cream);
-  border-radius: 28px;
-  padding: 56px 48px;
-  text-align: center;
-}
-.lp-privacy-inner .lp-h2 {
-  color: var(--lp-cream);
-}
-.lp-privacy-inner .lp-sub {
-  color: rgba(244, 241, 236, 0.8);
-}
-.lp-ticks {
-  list-style: none;
-  padding: 0;
-  margin: 24px auto 0;
-  max-width: 560px;
-  display: grid;
-  gap: 10px;
-  text-align: left;
-}
-.lp-ticks li {
-  padding-left: 30px;
-  position: relative;
-  color: rgba(244, 241, 236, 0.92);
-}
-.lp-ticks li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: var(--lp-tan);
-  font-weight: 700;
-}
-
-/* ---- Steps ---- */
-.lp-steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-.lp-step {
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 20px;
-  padding: 28px 24px;
-}
-.lp-step-n {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--lp-ink);
-  color: var(--lp-cream);
-  font-weight: 700;
-  margin-bottom: 14px;
-}
-
-/* ---- Kern-tegels (waarom LaVega) ---- */
-.lp-strengths-head {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 40px;
-  align-items: start;
-  margin-bottom: 40px;
-}
-.lp-strengths-title {
-  text-align: left;
-  margin: 0;
-}
-.lp-strengths-sub {
-  text-align: left;
-  margin: 0 0 20px;
-}
-.lp-tiles {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
-}
-.lp-tile {
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 20px;
-  padding: 24px 20px 16px;
-  text-align: center;
-  box-shadow: 0 22px 48px -34px rgba(43, 33, 23, 0.28);
-}
-.lp-tile-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.15rem;
-  margin: 0 0 6px;
-  color: var(--lp-ink);
-}
-.lp-ill {
-  position: relative;
-  height: 150px;
-  display: grid;
-  place-items: center;
-}
-/* fast — overlapping circles (individual translate/scale props avoid clashes) */
-.lp-ill-fast .c {
-  position: absolute;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 1.5px solid var(--lp-line);
-}
-.lp-ill-fast .c1 {
-  translate: -48px 16px;
-}
-.lp-ill-fast .c2 {
-  translate: -24px 6px;
-}
-.lp-ill-fast .c3 {
-  translate: 0 -4px;
-}
-.lp-ill-fast .c4 {
-  translate: 30px -14px;
-  background: var(--lp-tan);
-  border-color: var(--lp-tan-deep);
-  box-shadow: 0 8px 20px -8px rgba(176, 127, 51, 0.6);
-  animation: lp-breathe 3.2s ease-in-out infinite;
-}
-@keyframes lp-breathe {
-  0%,
-  100% {
-    scale: 1;
+  .lp-section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 72px 28px;
   }
-  50% {
-    scale: 1.09;
+  .lp-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lp-tan-deep);
+    text-align: center;
+    margin: 0 0 10px;
   }
-}
-/* toggles — connect all accounts */
-.lp-ill-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.lp-ill-toggles .tg {
-  width: 116px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1.5px dashed var(--lp-line);
-  position: relative;
-}
-.lp-ill-toggles .tg::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--lp-ink2);
-}
-.lp-ill-toggles .tg.on {
-  border: 1.5px solid var(--lp-tan-deep);
-  background: rgba(207, 159, 94, 0.18);
-}
-.lp-ill-toggles .tg.on::after {
-  background: var(--lp-tan-deep);
-  animation: lp-toggle 2.8s ease-in-out infinite;
-}
-@keyframes lp-toggle {
-  0%,
-  28% {
-    left: calc(100% - 23px);
+  .lp-h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 3.4vw, 2.8rem);
+    letter-spacing: -0.02em;
+    text-align: center;
+    margin: 0 0 36px;
+    color: var(--lp-ink);
   }
-  58%,
-  70% {
+  .lp-sub {
+    max-width: 640px;
+    margin: 0 auto 28px;
+    color: var(--lp-ink2);
+    font-size: 1.1rem;
+  }
+  .lp-card-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin: 0 0 6px;
+    color: var(--lp-ink);
+  }
+  .lp-card-text {
+    margin: 0;
+    color: var(--lp-ink2);
+    font-size: 0.95rem;
+  }
+
+  /* ---- Privacy band (dark for contrast) ---- */
+  .lp-privacy {
+    padding: 0 28px;
+  }
+  .lp-privacy-inner {
+    max-width: 1100px;
+    margin: 24px auto;
+    background: var(--lp-espresso);
+    color: var(--lp-cream);
+    border-radius: 28px;
+    padding: 56px 48px;
+    text-align: center;
+  }
+  .lp-privacy-inner .lp-h2 {
+    color: var(--lp-cream);
+  }
+  .lp-privacy-inner .lp-sub {
+    color: rgba(244, 241, 236, 0.8);
+  }
+  .lp-ticks {
+    list-style: none;
+    padding: 0;
+    margin: 24px auto 0;
+    max-width: 560px;
+    display: grid;
+    gap: 10px;
+    text-align: left;
+  }
+  .lp-ticks li {
+    padding-left: 30px;
+    position: relative;
+    color: rgba(244, 241, 236, 0.92);
+  }
+  .lp-ticks li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: var(--lp-tan);
+    font-weight: 700;
+  }
+
+  /* ---- Steps ---- */
+  .lp-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .lp-step {
+    background: var(--lp-card);
+    border: 1px solid var(--lp-line);
+    border-radius: 20px;
+    padding: 28px 24px;
+  }
+  .lp-step-n {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--lp-ink);
+    color: var(--lp-cream);
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  /* ---- Kern-tegels (waarom LaVega) ---- */
+  .lp-strengths-head {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 40px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+  .lp-strengths-title {
+    text-align: left;
+    margin: 0;
+  }
+  .lp-strengths-sub {
+    text-align: left;
+    margin: 0 0 20px;
+  }
+  .lp-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+  }
+  .lp-tile {
+    background: var(--lp-card);
+    border: 1px solid var(--lp-line);
+    border-radius: 20px;
+    padding: 24px 20px 16px;
+    text-align: center;
+    box-shadow: 0 22px 48px -34px rgba(43, 33, 23, 0.28);
+  }
+  .lp-tile-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.15rem;
+    margin: 0 0 6px;
+    color: var(--lp-ink);
+  }
+  .lp-ill {
+    position: relative;
+    height: 150px;
+    display: grid;
+    place-items: center;
+  }
+  /* fast — overlapping circles (individual translate/scale props avoid clashes) */
+  .lp-ill-fast .c {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1.5px solid var(--lp-line);
+  }
+  .lp-ill-fast .c1 {
+    translate: -48px 16px;
+  }
+  .lp-ill-fast .c2 {
+    translate: -24px 6px;
+  }
+  .lp-ill-fast .c3 {
+    translate: 0 -4px;
+  }
+  .lp-ill-fast .c4 {
+    translate: 30px -14px;
+    background: var(--lp-tan);
+    border-color: var(--lp-tan-deep);
+    box-shadow: 0 8px 20px -8px rgba(176, 127, 51, 0.6);
+    animation: lp-breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes lp-breathe {
+    0%,
+    100% {
+      scale: 1;
+    }
+    50% {
+      scale: 1.09;
+    }
+  }
+  /* toggles — connect all accounts */
+  .lp-ill-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .lp-ill-toggles .tg {
+    width: 116px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1.5px dashed var(--lp-line);
+    position: relative;
+  }
+  .lp-ill-toggles .tg::after {
+    content: "";
+    position: absolute;
+    top: 3px;
     left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--lp-ink2);
   }
-  100% {
-    left: calc(100% - 23px);
+  .lp-ill-toggles .tg.on {
+    border: 1.5px solid var(--lp-tan-deep);
+    background: rgba(207, 159, 94, 0.18);
   }
-}
-/* rings — encryption.
+  .lp-ill-toggles .tg.on::after {
+    background: var(--lp-tan-deep);
+    animation: lp-toggle 2.8s ease-in-out infinite;
+  }
+  @keyframes lp-toggle {
+    0%,
+    28% {
+      left: calc(100% - 23px);
+    }
+    58%,
+    70% {
+      left: 3px;
+    }
+    100% {
+      left: calc(100% - 23px);
+    }
+  }
+  /* rings — encryption.
  *
  * `.lp-ring`, not `.ring`: `ring` is a real Tailwind utility, so the moment any
  * file in the scanned tree writes it as a class token Tailwind GENERATES
@@ -301,377 +300,376 @@ body.lp-scroll #root {
  * @layer utilities. That layer beats @layer components regardless of
  * specificity, so these rings were being drawn with an extra 1px currentColor
  * ring that no stylesheet asks for. See trap 10 in docs/adr/0005. */
-.lp-ill-rings .lp-ring,
-.lp-ill-rings .core,
-.lp-ill-rings .orbit {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-}
-.lp-ill-rings .lp-ring {
-  border-radius: 50%;
-  border: 1.5px solid var(--lp-line);
-}
-.lp-ill-rings .r1 {
-  width: 120px;
-  height: 120px;
-}
-.lp-ill-rings .r2 {
-  width: 80px;
-  height: 80px;
-}
-.lp-ill-rings .core {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--lp-tan);
-}
-.lp-ill-rings .orbit {
-  width: 120px;
-  height: 120px;
-  animation: lp-spin 7s linear infinite;
-}
-.lp-ill-rings .odot {
-  position: absolute;
-  top: -6px;
-  left: calc(50% - 6px);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--lp-ink);
-}
-@keyframes lp-spin {
-  to {
-    rotate: 360deg;
+  .lp-ill-rings .lp-ring,
+  .lp-ill-rings .core,
+  .lp-ill-rings .orbit {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
   }
-}
-/* tree — overview */
-.lp-ill-tree svg {
-  overflow: visible;
-}
-.lp-ill-tree .tree-node {
-  fill: rgba(207, 159, 94, 0.18);
-  stroke: var(--lp-tan-deep);
-  stroke-width: 1.5;
-}
-.lp-ill-tree .tree-core {
-  fill: var(--lp-ink);
-}
-.lp-ill-tree .tree-branch {
-  fill: none;
-  stroke: var(--lp-ink2);
-  stroke-width: 1.5;
-  stroke-dasharray: 3 4;
-}
-.lp-ill-tree .tree-leaf {
-  fill: var(--lp-tan-deep);
-  animation: lp-pulse 2.4s ease-in-out infinite;
-}
-.lp-ill-tree .tree-leaf:nth-of-type(2) {
-  animation-delay: 0.4s;
-}
-.lp-ill-tree .tree-leaf:nth-of-type(3) {
-  animation-delay: 0.8s;
-}
-@keyframes lp-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
+  .lp-ill-rings .lp-ring {
+    border-radius: 50%;
+    border: 1.5px solid var(--lp-line);
   }
-  50% {
-    opacity: 1;
+  .lp-ill-rings .r1 {
+    width: 120px;
+    height: 120px;
   }
-}
+  .lp-ill-rings .r2 {
+    width: 80px;
+    height: 80px;
+  }
+  .lp-ill-rings .core {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--lp-tan);
+  }
+  .lp-ill-rings .orbit {
+    width: 120px;
+    height: 120px;
+    animation: lp-spin 7s linear infinite;
+  }
+  .lp-ill-rings .odot {
+    position: absolute;
+    top: -6px;
+    left: calc(50% - 6px);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--lp-ink);
+  }
+  @keyframes lp-spin {
+    to {
+      rotate: 360deg;
+    }
+  }
+  /* tree — overview */
+  .lp-ill-tree svg {
+    overflow: visible;
+  }
+  .lp-ill-tree .tree-node {
+    fill: rgba(207, 159, 94, 0.18);
+    stroke: var(--lp-tan-deep);
+    stroke-width: 1.5;
+  }
+  .lp-ill-tree .tree-core {
+    fill: var(--lp-ink);
+  }
+  .lp-ill-tree .tree-branch {
+    fill: none;
+    stroke: var(--lp-ink2);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 4;
+  }
+  .lp-ill-tree .tree-leaf {
+    fill: var(--lp-tan-deep);
+    animation: lp-pulse 2.4s ease-in-out infinite;
+  }
+  .lp-ill-tree .tree-leaf:nth-of-type(2) {
+    animation-delay: 0.4s;
+  }
+  .lp-ill-tree .tree-leaf:nth-of-type(3) {
+    animation-delay: 0.8s;
+  }
+  @keyframes lp-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 
-/* ---- Agents feature carousel ---- */
-.lp-eyebrow-left {
-  text-align: left;
-}
-.lp-carousel-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 30px;
-}
-.lp-carousel-nav {
-  display: flex;
-  gap: 10px;
-  flex: none;
-}
-.lp-carousel-nav button {
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  border: 1px solid var(--lp-line);
-  background: var(--lp-card);
-  font-size: 1.2rem;
-  color: var(--lp-ink);
-  cursor: pointer;
-  transition:
-    transform 0.12s ease,
-    background 0.12s ease;
-}
-.lp-carousel-nav button:hover {
-  transform: translateY(-1px);
-}
-.lp-carousel-nav button.accent {
-  background: var(--lp-tan);
-  border-color: var(--lp-tan-deep);
-  color: var(--lp-espresso);
-}
-.lp-carousel {
-  display: flex;
-  gap: 20px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  padding: 4px 4px 16px;
-  scrollbar-width: none;
-}
-.lp-carousel::-webkit-scrollbar {
-  display: none;
-}
-.lp-feature-card {
-  flex: 0 0 min(380px, 82vw);
-  scroll-snap-align: start;
-  background: var(--lp-card);
-  border: 1px solid var(--lp-line);
-  border-radius: 24px;
-  padding: 34px 30px;
-  box-shadow: 0 30px 60px -40px rgba(43, 33, 23, 0.35);
-}
-.lp-feature-medallion {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  display: grid;
-  place-items: center;
-  color: var(--lp-tan-deep);
-  background: rgba(207, 159, 94, 0.16);
-  border: 1px solid var(--lp-line);
-  margin-bottom: 18px;
-}
-.lp-feature-medallion svg {
-  width: 30px;
-  height: 30px;
-}
-.lp-feature-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.5rem;
-  margin: 0 0 10px;
-  color: var(--lp-ink);
-}
-.lp-feature-text {
-  margin: 0;
-  color: var(--lp-ink2);
-  font-size: 1rem;
-}
+  /* ---- Agents feature carousel ---- */
+  .lp-eyebrow-left {
+    text-align: left;
+  }
+  .lp-carousel-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 30px;
+  }
+  .lp-carousel-nav {
+    display: flex;
+    gap: 10px;
+    flex: none;
+  }
+  .lp-carousel-nav button {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    border: 1px solid var(--lp-line);
+    background: var(--lp-card);
+    font-size: 1.2rem;
+    color: var(--lp-ink);
+    cursor: pointer;
+    transition:
+      transform 0.12s ease,
+      background 0.12s ease;
+  }
+  .lp-carousel-nav button:hover {
+    transform: translateY(-1px);
+  }
+  .lp-carousel-nav button.accent {
+    background: var(--lp-tan);
+    border-color: var(--lp-tan-deep);
+    color: var(--lp-espresso);
+  }
+  .lp-carousel {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    padding: 4px 4px 16px;
+    scrollbar-width: none;
+  }
+  .lp-carousel::-webkit-scrollbar {
+    display: none;
+  }
+  .lp-feature-card {
+    flex: 0 0 min(380px, 82vw);
+    scroll-snap-align: start;
+    background: var(--lp-card);
+    border: 1px solid var(--lp-line);
+    border-radius: 24px;
+    padding: 34px 30px;
+    box-shadow: 0 30px 60px -40px rgba(43, 33, 23, 0.35);
+  }
+  .lp-feature-medallion {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    display: grid;
+    place-items: center;
+    color: var(--lp-tan-deep);
+    background: rgba(207, 159, 94, 0.16);
+    border: 1px solid var(--lp-line);
+    margin-bottom: 18px;
+  }
+  .lp-feature-medallion svg {
+    width: 30px;
+    height: 30px;
+  }
+  .lp-feature-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.5rem;
+    margin: 0 0 10px;
+    color: var(--lp-ink);
+  }
+  .lp-feature-text {
+    margin: 0;
+    color: var(--lp-ink2);
+    font-size: 1rem;
+  }
 
-/* ---- FAQ ---- */
-/* `.lp-faq-item` stays as a bare hook: `[open]` and `::-webkit-details-marker`
+  /* ---- FAQ ---- */
+  /* `.lp-faq-item` stays as a bare hook: `[open]` and `::-webkit-details-marker`
  * below need the class in the DOM, even though its own box-model now comes
  * from Tailwind utilities on the element (see Landing.tsx). The plus/minus
  * icon is two pseudo-elements toggled by an attribute selector — left as
  * hand-written CSS rather than reconstructed with `before:`/`after:` and
  * `group-open:` for a decorative icon with no other reader. */
-.lp-faq-item summary::-webkit-details-marker {
-  display: none;
-}
-.lp-faq-mark {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-.lp-faq-mark::before,
-.lp-faq-mark::after {
-  content: "";
-  position: absolute;
-  background: var(--lp-tan-deep);
-  border-radius: 2px;
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-}
-.lp-faq-mark::before {
-  top: 7px;
-  left: 0;
-  width: 16px;
-  height: 2px;
-}
-.lp-faq-mark::after {
-  left: 7px;
-  top: 0;
-  width: 2px;
-  height: 16px;
-}
-.lp-faq-item[open] .lp-faq-mark::after {
-  transform: rotate(90deg);
-  opacity: 0;
-}
+  .lp-faq-item summary::-webkit-details-marker {
+    display: none;
+  }
+  .lp-faq-mark {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .lp-faq-mark::before,
+  .lp-faq-mark::after {
+    content: "";
+    position: absolute;
+    background: var(--lp-tan-deep);
+    border-radius: 2px;
+    transition:
+      transform 0.2s ease,
+      opacity 0.2s ease;
+  }
+  .lp-faq-mark::before {
+    top: 7px;
+    left: 0;
+    width: 16px;
+    height: 2px;
+  }
+  .lp-faq-mark::after {
+    left: 7px;
+    top: 0;
+    width: 2px;
+    height: 16px;
+  }
+  .lp-faq-item[open] .lp-faq-mark::after {
+    transform: rotate(90deg);
+    opacity: 0;
+  }
 
-/* ---- Signature scroll section (GSAP card spiral) ---- */
-.lp-spiral {
-  position: relative;
-}
-.lp-spiral-stage {
-  position: relative;
-  height: 100vh;
-  overflow: hidden;
-  background: var(--lp-cream);
-  display: grid;
-  place-items: center;
-}
-.lp-spiral-word {
-  position: absolute;
-  z-index: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: clamp(4rem, 17vw, 15rem);
-  letter-spacing: -0.03em;
-  color: var(--lp-ink);
-  white-space: nowrap;
-  user-select: none;
-  pointer-events: none;
-}
-.lp-spiral-tag {
-  position: absolute;
-  z-index: 3;
-  top: 22%;
-  margin: 0;
-  padding: 0 24px;
-  text-align: center;
-  font-size: clamp(1rem, 2vw, 1.4rem);
-  color: var(--lp-ink2);
-}
-.lp-spiral-cards {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  perspective: 1400px;
-  transform-style: preserve-3d;
-  pointer-events: none;
-}
-.lp-card3d {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: clamp(120px, 13vw, 176px);
-  height: clamp(168px, 18vw, 244px);
-  border-radius: 16px;
-  padding: 14px;
-  display: flex;
-  align-items: flex-end;
-  box-shadow: 0 34px 60px -24px rgba(26, 20, 12, 0.5);
-  will-change: transform;
-  backface-visibility: hidden;
-  /* Resting fan — used pre-JS and on reduced-motion; GSAP writes inline
+  /* ---- Signature scroll section (GSAP card spiral) ---- */
+  .lp-spiral {
+    position: relative;
+  }
+  .lp-spiral-stage {
+    position: relative;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--lp-cream);
+    display: grid;
+    place-items: center;
+  }
+  .lp-spiral-word {
+    position: absolute;
+    z-index: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(4rem, 17vw, 15rem);
+    letter-spacing: -0.03em;
+    color: var(--lp-ink);
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: none;
+  }
+  .lp-spiral-tag {
+    position: absolute;
+    z-index: 3;
+    top: 22%;
+    margin: 0;
+    padding: 0 24px;
+    text-align: center;
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    color: var(--lp-ink2);
+  }
+  .lp-spiral-cards {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    perspective: 1400px;
+    transform-style: preserve-3d;
+    pointer-events: none;
+  }
+  .lp-card3d {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: clamp(120px, 13vw, 176px);
+    height: clamp(168px, 18vw, 244px);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    align-items: flex-end;
+    box-shadow: 0 34px 60px -24px rgba(26, 20, 12, 0.5);
+    will-change: transform;
+    backface-visibility: hidden;
+    /* Resting fan — used pre-JS and on reduced-motion; GSAP writes inline
      transforms that override this once the animation is live. */
-  transform: translate(-50%, -50%) translateX(calc((var(--i) - 6.5) * 40px))
-    translateY(calc((var(--i) - 6.5) * 7px)) rotate(calc((var(--i) - 6.5) * 6deg));
-}
-.lp-card3d-a {
-  background: linear-gradient(160deg, #33281b, #17110b);
-  color: #e8dcc8;
-}
-.lp-card3d-b {
-  background: linear-gradient(160deg, #e2bd7d, #c6963c);
-  color: #3a2c14;
-}
-.lp-card3d-c {
-  background: linear-gradient(160deg, #f3ede1, #ddd2bd);
-  color: #3a2c14;
-}
-.lp-card3d-chip {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 30px;
-  height: 22px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.38);
-}
-.lp-card3d-num {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  opacity: 0.92;
-}
+    transform: translate(-50%, -50%) translateX(calc((var(--i) - 6.5) * 40px))
+      translateY(calc((var(--i) - 6.5) * 7px)) rotate(calc((var(--i) - 6.5) * 6deg));
+  }
+  .lp-card3d-a {
+    background: linear-gradient(160deg, #33281b, #17110b);
+    color: #e8dcc8;
+  }
+  .lp-card3d-b {
+    background: linear-gradient(160deg, #e2bd7d, #c6963c);
+    color: #3a2c14;
+  }
+  .lp-card3d-c {
+    background: linear-gradient(160deg, #f3ede1, #ddd2bd);
+    color: #3a2c14;
+  }
+  .lp-card3d-chip {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 30px;
+    height: 22px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.38);
+  }
+  .lp-card3d-num {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    opacity: 0.92;
+  }
 
-/* ---- Animations ---- */
-/* `.lp-reveal`/`.lp-in` back every section's scroll-reveal, including the four
+  /* ---- Animations ---- */
+  /* `.lp-reveal`/`.lp-in` back every section's scroll-reveal, including the four
  * outside this pass — Landing.tsx's IntersectionObserver targets the class by
  * name, so it stays on every element that has it, converted or not. */
-.lp-reveal {
-  opacity: 0;
-  transform: translateY(18px);
-  transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
-}
-.lp-reveal.lp-in {
-  opacity: 1;
-  transform: none;
-}
-.lp-hero > .lp-reveal:nth-child(2) {
-  transition-delay: 0.08s;
-}
-.lp-hero > .lp-reveal:nth-child(3) {
-  transition-delay: 0.16s;
-}
-.lp-hero > .lp-reveal:nth-child(4) {
-  transition-delay: 0.24s;
-}
-@keyframes lp-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-/* ---- Responsive ---- */
-@media (max-width: 860px) {
-  .lp-tiles {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .lp-strengths-head {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  .lp-steps {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 560px) {
-  .lp-tiles {
-    grid-template-columns: 1fr;
-  }
-  .lp-privacy-inner {
-    padding: 40px 24px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
   .lp-reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 0.6s ease,
+      transform 0.6s ease;
+  }
+  .lp-reveal.lp-in {
     opacity: 1;
     transform: none;
-    transition: none;
   }
-  .lp-ill-fast .c4,
-  .lp-ill-toggles .tg.on::after,
-  .lp-ill-rings .orbit,
-  .lp-ill-tree .tree-leaf {
-    animation: none;
+  .lp-hero > .lp-reveal:nth-child(2) {
+    transition-delay: 0.08s;
   }
-  /* .lp-btn:hover's transform:none is now LP_BTN's own
+  .lp-hero > .lp-reveal:nth-child(3) {
+    transition-delay: 0.16s;
+  }
+  .lp-hero > .lp-reveal:nth-child(4) {
+    transition-delay: 0.24s;
+  }
+  @keyframes lp-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 860px) {
+    .lp-tiles {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .lp-strengths-head {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    .lp-steps {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 560px) {
+    .lp-tiles {
+      grid-template-columns: 1fr;
+    }
+    .lp-privacy-inner {
+      padding: 40px 24px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lp-reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .lp-ill-fast .c4,
+    .lp-ill-toggles .tg.on::after,
+    .lp-ill-rings .orbit,
+    .lp-ill-tree .tree-leaf {
+      animation: none;
+    }
+    /* .lp-btn:hover's transform:none is now LP_BTN's own
    * `motion-safe:hover:-translate-y-px` in Landing.tsx: the hover lift only
    * applies when motion is safe, so there is nothing left to cancel here. */
-}
-
+  }
 } /* @layer components */

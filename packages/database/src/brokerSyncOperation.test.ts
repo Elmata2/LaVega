@@ -59,7 +59,9 @@ beforeAll(async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
   pglite = new PGlite();
   await pglite.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
-  for (const file of readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort())
+  for (const file of readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort())
     await pglite.exec(readFileSync(join(migrationsDir, file), "utf8"));
   /* The runtime connects as lavega_runtime, and only a non-superuser is subject
    * to row-level security. Reading these rows as the owner would pass every
@@ -97,7 +99,11 @@ test("two instances starting at once produce one run, and the loser reads the wi
   const staleBefore = iso(-60_000);
 
   const [first, second] = await Promise.all([
-    cron.claim("trading212", { leaseId: "cron", staleBefore, progress: progress("running", "cron") }),
+    cron.claim("trading212", {
+      leaseId: "cron",
+      staleBefore,
+      progress: progress("running", "cron"),
+    }),
     browser.claim("trading212", {
       leaseId: "browser",
       staleBefore,
@@ -107,7 +113,10 @@ test("two instances starting at once produce one run, and the loser reads the wi
 
   expect([first.claimed, second.claimed].filter(Boolean)).toHaveLength(1);
   const winner = first.claimed ? "cron" : "browser";
-  expect(await browser.progress("trading212")).toMatchObject({ status: "running", leaseId: winner });
+  expect(await browser.progress("trading212")).toMatchObject({
+    status: "running",
+    leaseId: winner,
+  });
 });
 
 test("an expired lease is taken over, and the evicted run changes neither snapshot nor cursor", async () => {
@@ -173,7 +182,10 @@ test("a reconnect during a run stops that run from restoring the old account", a
     leaseId: "run",
     state: { lastSyncedAt: "2026-06-06T00:00:00.000Z" },
     progress: progress("completed", "run"),
-    snapshot: { value: { positions: ["old-account"] }, credentialGeneration: claim.credentialGeneration },
+    snapshot: {
+      value: { positions: ["old-account"] },
+      credentialGeneration: claim.credentialGeneration,
+    },
   });
   expect(committed).toBe(false);
   const vault = await createBrokerRepository(db, "tenant-a").get<{ token: string }>("trading212");

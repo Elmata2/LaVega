@@ -134,9 +134,10 @@ function resolveTaxCountry(): { code: CountryCode; unsupportedHome: string | nul
  * The column mapping is the guess from the header (Dutch/German/English
  * synonyms); `problems` is what it could not find, and the screen shows that
  * rather than hiding it. */
-export function readBookkeepingSheet(
-  text: string,
-): { rows: TaxSheetRow[]; problems: TaxSheetProblem[] } {
+export function readBookkeepingSheet(text: string): {
+  rows: TaxSheetRow[];
+  problems: TaxSheetProblem[];
+} {
   const table = readSheetCsv(text);
   return readTaxSheet(table, suggestTaxSheetMapping(table.header));
 }
@@ -214,7 +215,8 @@ export default function Belasting({
   /* "BTW" to a Dutch reader, "VAT" to an English one. pack.vat.label is the
    * authority's own term and stays as core data. */
   const vatLabel = c.vat.taxLabel[country];
-  const caveats = pack.country === "DE" ? c.header.caveatsByCountry.DE : c.header.caveatsByCountry.NL;
+  const caveats =
+    pack.country === "DE" ? c.header.caveatsByCountry.DE : c.header.caveatsByCountry.NL;
 
   const savedByEntity = useMemo(() => {
     const m = new Map<string, VatSettings>();
@@ -723,7 +725,9 @@ export default function Belasting({
                   {flows.length === 0 ? (
                     <p className="cell-sub">
                       {c.profitTax.nothingToReserve(
-                        pack.country === "DE" ? c.profitTax.authorityDE : c.profitTax.authorityOther,
+                        pack.country === "DE"
+                          ? c.profitTax.authorityDE
+                          : c.profitTax.authorityOther,
                       )}
                     </p>
                   ) : (
@@ -732,9 +736,7 @@ export default function Belasting({
                         <div className="flex justify-between gap-3" key={f.id}>
                           <span>
                             {f.label} · {f.dueDate}{" "}
-                            {f.status === "expected" && (
-                              <Badge>{c.profitTax.estimateBadge}</Badge>
-                            )}
+                            {f.status === "expected" && <Badge>{c.profitTax.estimateBadge}</Badge>}
                           </span>
                           <span className="text-neg">
                             {formatEuroIn(locale, f.amountCents / 100)}

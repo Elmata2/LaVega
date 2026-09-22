@@ -166,7 +166,13 @@ test("a blank payee IBAN is dropped, a printed one is kept verbatim", async () =
     [" NL91 ABNA 0417 1643 00 ", "NL91 ABNA 0417 1643 00"],
   ] as const) {
     completeMock.mockResolvedValue({
-      text: JSON.stringify({ seller: "X", buyer: "Y", amount: 1, issueDate: "2026-01-02", payeeIban: given }),
+      text: JSON.stringify({
+        seller: "X",
+        buyer: "Y",
+        amount: 1,
+        issueDate: "2026-01-02",
+        payeeIban: given,
+      }),
       usage: { input: 0, output: 0 },
     });
     const { fields } = await extractInvoiceFields({ text: "t" }, "k");

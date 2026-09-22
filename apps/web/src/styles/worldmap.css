@@ -15,7 +15,7 @@
  * Relative order between these stylesheets is unchanged — they are all in the
  * same layer, so main.tsx's import order still decides. */
 @layer components {
-/* De draaibare wereldbol in de Valuta-tab (components/Globe.tsx).
+  /* De draaibare wereldbol in de Valuta-tab (components/Globe.tsx).
  *
  * De bestandsnaam is worldmap.css gebleven terwijl de platte kaart eruit is. Dat
  * is geen vergeetachtigheid: main.tsx importeert de stijlbladen op naam, en een
@@ -73,25 +73,25 @@
  * eigen laag. Slepen is geen animatie — daar beweegt de vinger — maar een bol die
  * ergens naartoe zweeft of een land dat invloeit, is dat wel. */
 
-/* Opstelling (display/flex-direction/gap/min-width) staat als Tailwind-utilities
+  /* Opstelling (display/flex-direction/gap/min-width) staat als Tailwind-utilities
  * op dit element in Globe.tsx: `flex flex-col gap-4 min-w-0`. Deze regel houdt
  * alleen de kleurtokens vast — Globe.test.tsx leest de --lv-globe-*-regels
  * hieronder met een regex, dus die blijven woordelijk staan. */
-.lv-globe {
-  --lv-globe-sea: var(--surface-2);
-  --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
-  --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
+  .lv-globe {
+    --lv-globe-sea: var(--surface-2);
+    --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
+    --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
 
-  /* WAT LAVEGA KAN BEANTWOORDEN: teal, in twee stappen. Dezelfde hue voor euro en
+    /* WAT LAVEGA KAN BEANTWOORDEN: teal, in twee stappen. Dezelfde hue voor euro en
    * "wij hebben een koers", want dat zijn allebei antwoorden; het verschil tussen
    * de twee staat in het paneel eronder en niet in een kleur. */
-  --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 34%, var(--surface));
-  --lv-globe-rate: var(--chart-teal);
+    --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 34%, var(--surface));
+    --lv-globe-rate: var(--chart-teal);
 
-  /* WAT LAVEGA MIST OF WAT ER NIET IS: neutraal grijs, ook in twee stappen. Geen
+    /* WAT LAVEGA MIST OF WAT ER NIET IS: neutraal grijs, ook in twee stappen. Geen
    * teal erin, want dan zou een leemte eruitzien als een half antwoord. */
-  --lv-globe-norate: color-mix(in srgb, var(--muted) 60%, var(--surface));
-  /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
+    --lv-globe-norate: color-mix(in srgb, var(--muted) 60%, var(--surface));
+    /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
    * dezelfde als "geen koers" zou beweren dat het aan ONS ligt dat daar niets te
    * wisselen valt, en dat is precies het onderscheid waar deze tab over gaat.
    *
@@ -111,9 +111,9 @@
    * een land dat niet meedoet.
    * Komt er ooit een tweede land met deze tint bij, dan is dit de eerste regel die
    * opnieuw gemeten moet worden. */
-  --lv-globe-notender: var(--muted);
+    --lv-globe-notender: var(--muted);
 
-  /* DE BEDIENING: niet teal en niet grijs, zodat aanwijzen en kiezen nooit voor
+    /* DE BEDIENING: niet teal en niet grijs, zodat aanwijzen en kiezen nooit voor
    * een antwoord kunnen doorgaan. Aangewezen is bijna-zwart, en dat is met opzet
    * het zwaarste dat er los van de selectie op het doek verschijnt: tegen de vier
    * vullingen haalt --ink-soft 8,51 / 3,29 / 5,21 / 2,34, en die laagste bepaalt
@@ -127,14 +127,14 @@
    * overgebleven kleur zakt tegen minstens één vulling naar 1,0 à 1,1
    * (--chart-blue 1,04, --chart-purple 1,12, --pos 1,09, --neg 1,03, --warn 1,03).
    * Vandaar deze twee, en niet iets vrolijkers. */
-  --lv-globe-hover: var(--ink-soft);
-  --lv-globe-selected: var(--accent);
-  --lv-globe-pin: var(--ink);
-}
+    --lv-globe-hover: var(--ink-soft);
+    --lv-globe-selected: var(--accent);
+    --lv-globe-pin: var(--ink);
+  }
 
-/* ---------- De opstelling: één kolom ---------- */
+  /* ---------- De opstelling: één kolom ---------- */
 
-/* De lijst stond NAAST de bol, in een tweede kolom van minstens 240 px. Dat kan
+  /* De lijst stond NAAST de bol, in een tweede kolom van minstens 240 px. Dat kan
  * niet meer: de bol staat sinds 21 augustus zelf in de rechterkolom naast de
  * rekenmachine, en twee kolommen in één kolom is twee keer te smal. De volgorde
  * is nu bol, legenda, antwoord, zoekveld met de lijst — zie punt 6 in Globe.tsx.
@@ -153,9 +153,9 @@
  * niet omhoog springt zodra de muis erover gaat — is daar `min-h-[1.5rem]` op
  * .lv-globe-readout.) */
 
-/* ---------- Het doek ---------- */
+  /* ---------- Het doek ---------- */
 
-/* `touch-action: none` is het verschil tussen een bol die draait en een pagina
+  /* `touch-action: none` is het verschil tussen een bol die draait en een pagina
  * die scrollt. Zonder deze regel neemt de browser op een telefoon elke
  * verticale veeg zelf en draait de bol alleen zijwaarts — en dat leek op een bug
  * in de sleepwiskunde, niet op een ontbrekende CSS-regel.
@@ -170,47 +170,47 @@
  * en `focus-visible:outline-2 focus-visible:outline-[var(--ink)]
  * focus-visible:outline-offset-[3px]`.) */
 
-/* De kleuren van het doek, leesbaar gemaakt voor de component. Zie de kop. Geen
+  /* De kleuren van het doek, leesbaar gemaakt voor de component. Zie de kop. Geen
  * display:none maar nul bij nul: zo staat buiten kijf dat de stijl echt berekend
  * wordt. */
-.lv-globe-inks {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-}
-.lv-globe-inks [data-ink="sea"] {
-  color: var(--lv-globe-sea);
-}
-.lv-globe-inks [data-ink="grid"] {
-  color: var(--lv-globe-grid);
-}
-.lv-globe-inks [data-ink="rim"] {
-  color: var(--lv-globe-rim);
-}
-.lv-globe-inks [data-ink="euro"] {
-  color: var(--lv-globe-euro);
-}
-.lv-globe-inks [data-ink="rate"] {
-  color: var(--lv-globe-rate);
-}
-.lv-globe-inks [data-ink="norate"] {
-  color: var(--lv-globe-norate);
-}
-.lv-globe-inks [data-ink="notender"] {
-  color: var(--lv-globe-notender);
-}
-.lv-globe-inks [data-ink="hover"] {
-  color: var(--lv-globe-hover);
-}
-.lv-globe-inks [data-ink="selected"] {
-  color: var(--lv-globe-selected);
-}
-.lv-globe-inks [data-ink="pin"] {
-  color: var(--lv-globe-pin);
-}
+  .lv-globe-inks {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+  .lv-globe-inks [data-ink="sea"] {
+    color: var(--lv-globe-sea);
+  }
+  .lv-globe-inks [data-ink="grid"] {
+    color: var(--lv-globe-grid);
+  }
+  .lv-globe-inks [data-ink="rim"] {
+    color: var(--lv-globe-rim);
+  }
+  .lv-globe-inks [data-ink="euro"] {
+    color: var(--lv-globe-euro);
+  }
+  .lv-globe-inks [data-ink="rate"] {
+    color: var(--lv-globe-rate);
+  }
+  .lv-globe-inks [data-ink="norate"] {
+    color: var(--lv-globe-norate);
+  }
+  .lv-globe-inks [data-ink="notender"] {
+    color: var(--lv-globe-notender);
+  }
+  .lv-globe-inks [data-ink="hover"] {
+    color: var(--lv-globe-hover);
+  }
+  .lv-globe-inks [data-ink="selected"] {
+    color: var(--lv-globe-selected);
+  }
+  .lv-globe-inks [data-ink="pin"] {
+    color: var(--lv-globe-pin);
+  }
 
-/* ---------- Legenda ----------
+  /* ---------- Legenda ----------
  *
  * Als Tailwind-utilities in Globe.tsx: .lv-globe-legend is
  * `flex flex-wrap gap-y-2 gap-x-4 m-0 p-0 list-none text-[0.78rem] text-muted`;
@@ -219,13 +219,13 @@
  * element als `bg-[var(--lv-globe-<tone>)]` — dezelfde tokens als hierboven,
  * gelezen via overerving en niet via een attribuutselector. */
 
-/* ---------- Zoeken en de landenlijst ---------- */
+  /* ---------- Zoeken en de landenlijst ---------- */
 
-/* Als Tailwind-utilities in Globe.tsx: `flex flex-col gap-2 min-w-0` op
+  /* Als Tailwind-utilities in Globe.tsx: `flex flex-col gap-2 min-w-0` op
  * .lv-globe-search, en op het <label> erin `text-[0.78rem] tracking-[0.06em]
  * uppercase text-muted`. */
 
-/* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
+  /* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
  * altijd — ook met een leeg zoekveld, en dan staan alle 250 landen erin. Een
  * lijst die pas iets laat zien als je het juiste woord al weet, helpt precies
  * degene niet die de bol niet kan zien. Vandaar de vaste hoogte met eigen
@@ -235,7 +235,7 @@
  * naast een bol van 420 px mocht hij die hoogte vullen, eronder telt hij op bij
  * alles erboven. Acht regels plus de scrollbalk is genoeg om te zien dat het een
  * lijst is en dat hij verder loopt. */
-/* Als Tailwind-utilities in Globe.tsx: .lv-globe-results is
+  /* Als Tailwind-utilities in Globe.tsx: .lv-globe-results is
  * `flex flex-col gap-1 m-0 p-1 list-none max-h-[18rem] overflow-y-auto border
  * border-line rounded-sm bg-surface`; elke <li role="option"> erin is
  * `flex items-baseline justify-between gap-3 py-2 px-3 border border-transparent
@@ -247,20 +247,20 @@
  * whitespace-nowrap` erbij. .lv-globe-results-empty is
  * `py-2 px-3 text-muted text-[0.88rem]`. */
 
-/* ---------- Het antwoord ---------- */
+  /* ---------- Het antwoord ---------- */
 
-/* Als Tailwind-utilities in Globe.tsx: .lv-globe-answer is
+  /* Als Tailwind-utilities in Globe.tsx: .lv-globe-answer is
  * `py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm
  * bg-surface-2 text-[0.9rem] leading-[1.5]`, en .lv-globe-answer-lead is
  * `font-display text-[1.1rem] text-ink`. */
-.lv-globe-answer p {
-  margin: 0 0 var(--sp-2);
-}
-.lv-globe-answer p:last-child {
-  margin-bottom: 0;
-}
+  .lv-globe-answer p {
+    margin: 0 0 var(--sp-2);
+  }
+  .lv-globe-answer p:last-child {
+    margin-bottom: 0;
+  }
 
-/* Een klik die geen land raakte. Niet rood: er is niets fout gegaan, er is alleen
+  /* Een klik die geen land raakte. Niet rood: er is niets fout gegaan, er is alleen
  * niets te kiezen op die plek.
  *
  * (Als Tailwind-utility in Globe.tsx: `text-muted` op .lv-globe-miss.
@@ -271,7 +271,6 @@
  * `.btn` al vervangen door cva-utilities, dus deze regel raakte al niets meer
  * — dode CSS van vóór die conversie, geen gedrag om over te zetten.) */
 
-/* Als Tailwind-utilities in Globe.tsx: `m-0 text-muted text-[0.75rem]
+  /* Als Tailwind-utilities in Globe.tsx: `m-0 text-muted text-[0.75rem]
  * leading-[1.45]` op .lv-globe-source. */
-
 }

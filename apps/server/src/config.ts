@@ -176,7 +176,11 @@ export function loadIngestConfig(): { configured: boolean; token: string | null 
  *  (see docs/adr/0006-invoice-queue-server-proxy.md). `configured` is false
  *  until both the URL and the token are set, same shape as loadIngestConfig
  *  so the route answers a clean 503 rather than proxying to an empty URL. */
-export function loadN8nQueueConfig(): { configured: boolean; url: string | null; token: string | null } {
+export function loadN8nQueueConfig(): {
+  configured: boolean;
+  url: string | null;
+  token: string | null;
+} {
   const url = process.env.N8N_QUEUE_URL?.trim() || null;
   const token = process.env.N8N_QUEUE_TOKEN?.trim() || null;
   return { configured: Boolean(url) && Boolean(token), url, token };

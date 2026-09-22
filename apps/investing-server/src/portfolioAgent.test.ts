@@ -11,12 +11,31 @@ function dashboard(): InvestingDashboardData {
     dataVersion: 3,
     presentationCurrency: "EUR",
     portfolio: {
-      "1M": [], "6M": [], "1Y": [], YTD: [],
-      All: [{ date: "2026-09-18", positionsValue: 100, cashValue: 0, value: 100, unpriced: [], forwardFilled: [], cashUnknown: [] }],
+      "1M": [],
+      "6M": [],
+      "1Y": [],
+      YTD: [],
+      All: [
+        {
+          date: "2026-09-18",
+          positionsValue: 100,
+          cashValue: 0,
+          value: 100,
+          unpriced: [],
+          forwardFilled: [],
+          cashUnknown: [],
+        },
+      ],
     },
-    benchmarks: [], externalCashFlows: [],
-    allocation: { instrument: { buckets: [], unpriced: [] }, entity: { buckets: [], unpriced: [] } },
-    positions: [], position: null, problems: [],
+    benchmarks: [],
+    externalCashFlows: [],
+    allocation: {
+      instrument: { buckets: [], unpriced: [] },
+      entity: { buckets: [], unpriced: [] },
+    },
+    positions: [],
+    position: null,
+    problems: [],
   };
 }
 
@@ -44,7 +63,12 @@ test("typed provider returns all personas from one request", async () => {
         return {
           model: "jev-test",
           usage: { inputTokens: 1, outputTokens: 1 },
-          answers: Object.fromEntries(Object.keys(questions).map((key) => [key, key.endsWith("signal") ? choice("bullish") : score()])),
+          answers: Object.fromEntries(
+            Object.keys(questions).map((key) => [
+              key,
+              key.endsWith("signal") ? choice("bullish") : score(),
+            ]),
+          ),
         };
       },
     },
@@ -62,7 +86,13 @@ test("no view remains distinct from neutral and one missing answer leaves other 
       judge: async () => ({
         model: "jev-test",
         usage: { inputTokens: 1, outputTokens: 1 },
-        answers: Object.fromEntries(Object.keys(questions).flatMap((key) => key.startsWith("charlie_munger") ? [] : [[key, key.endsWith("signal") ? choice("no_view") : score()]])),
+        answers: Object.fromEntries(
+          Object.keys(questions).flatMap((key) =>
+            key.startsWith("charlie_munger")
+              ? []
+              : [[key, key.endsWith("signal") ? choice("no_view") : score()]],
+          ),
+        ),
       }),
     },
   });
@@ -72,8 +102,18 @@ test("no view remains distinct from neutral and one missing answer leaves other 
 
 test("composition reweights typed judgments without provider call", () => {
   const judgments = [
-    { agentId: "warren_buffett" as const, displayName: "Warren Buffett", signal: choice("bullish"), conviction: score() },
-    { agentId: "charlie_munger" as const, displayName: "Charlie Munger", signal: choice("bearish"), conviction: score() },
+    {
+      agentId: "warren_buffett" as const,
+      displayName: "Warren Buffett",
+      signal: choice("bullish"),
+      conviction: score(),
+    },
+    {
+      agentId: "charlie_munger" as const,
+      displayName: "Charlie Munger",
+      signal: choice("bearish"),
+      conviction: score(),
+    },
   ];
   expect(composePortfolioJudgments(judgments).signal).toBe("neutral");
   expect(composePortfolioJudgments(judgments, { charlie_munger: 2 }).signal).toBe("bearish");

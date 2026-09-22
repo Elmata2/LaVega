@@ -46,7 +46,9 @@ const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(function CardHead
   { className, ...props },
   ref,
 ) {
-  return <div ref={ref} className={cn(CARD_HEADER_BASE, className as string | undefined)} {...props} />;
+  return (
+    <div ref={ref} className={cn(CARD_HEADER_BASE, className as string | undefined)} {...props} />
+  );
 });
 
 export { Card, CardHeader };

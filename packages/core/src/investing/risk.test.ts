@@ -32,10 +32,7 @@ function pointsFromReturns(returns: readonly number[]): PortfolioValuePoint[] {
   });
 }
 
-function benchmarkFromReturns(
-  returns: readonly number[],
-  currency = "EUR",
-): BenchmarkSeries {
+function benchmarkFromReturns(returns: readonly number[], currency = "EUR"): BenchmarkSeries {
   return {
     symbol: "BENCH",
     name: "Benchmark",
@@ -68,9 +65,8 @@ function dashboard(
 }
 
 test("calculates beta and alpha from matching flow-adjusted daily intervals", () => {
-  const benchmarkReturns = Array.from(
-    { length: RISK_MINIMUM_OBSERVATIONS },
-    (_, index) => (index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002),
+  const benchmarkReturns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
+    index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002,
   );
   const portfolioReturns = benchmarkReturns.map((value) => 1.5 * value + 0.0007);
   const report = buildHistoricalRisk(
@@ -118,27 +114,32 @@ const incompleteQualityCases: Array<[string, Partial<PortfolioValuePoint>]> = [
   ["carried-forward price", { forwardFilled: ["AAPL"] }],
 ];
 
-test.each(incompleteQualityCases)("returns no risk metrics for %s in strict window", (_label, quality) => {
-  const points = pointsFromReturns(Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, () => 0.001));
-  points[30] = { ...points[30]!, ...quality };
-  const report = buildHistoricalRisk(dashboard(points));
+test.each(incompleteQualityCases)(
+  "returns no risk metrics for %s in strict window",
+  (_label, quality) => {
+    const points = pointsFromReturns(
+      Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, () => 0.001),
+    );
+    points[30] = { ...points[30]!, ...quality };
+    const report = buildHistoricalRisk(dashboard(points));
 
-  expect(report.risk.status).toBe("unavailable");
-  expect(report.metrics).toMatchObject({
-    dailyVolatility: null,
-    annualizedVolatility: null,
-    beta: null,
-    alpha: null,
-    maxDrawdown: null,
-  });
-  expect(report.risk.reasons).toContain(
-    "A complete return history is required; partial values are excluded.",
-  );
-});
+    expect(report.risk.status).toBe("unavailable");
+    expect(report.metrics).toMatchObject({
+      dailyVolatility: null,
+      annualizedVolatility: null,
+      beta: null,
+      alpha: null,
+      maxDrawdown: null,
+    });
+    expect(report.risk.reasons).toContain(
+      "A complete return history is required; partial values are excluded.",
+    );
+  },
+);
 
 test("keeps beta and alpha null when no benchmark is selected", () => {
   const points = pointsFromReturns(
-    Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) => index % 2 ? 0.01 : -0.005),
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) => (index % 2 ? 0.01 : -0.005)),
   );
   const report = buildHistoricalRisk(dashboard(points));
 
@@ -152,9 +153,8 @@ test("keeps beta and alpha null when no benchmark is selected", () => {
 });
 
 test("rejects benchmark quoted outside presentation currency", () => {
-  const returns = Array.from(
-    { length: RISK_MINIMUM_OBSERVATIONS },
-    (_, index) => index % 2 ? 0.01 : -0.005,
+  const returns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
+    index % 2 ? 0.01 : -0.005,
   );
   const report = buildHistoricalRisk(
     dashboard(pointsFromReturns(returns), {
@@ -176,7 +176,7 @@ test("requires 60 valid daily return observations", () => {
     dashboard(pointsFromReturns(Array.from({ length: 59 }, () => 0.001))),
   );
   const enough = buildHistoricalRisk(
-    dashboard(pointsFromReturns(Array.from({ length: 60 }, (_, index) => index % 2 ? 0.002 : 0))),
+    dashboard(pointsFromReturns(Array.from({ length: 60 }, (_, index) => (index % 2 ? 0.002 : 0)))),
   );
 
   expect(short.risk.status).toBe("unavailable");

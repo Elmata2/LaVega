@@ -121,8 +121,7 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
       className="module-hug module-head-wrap"
       menu={
         <label className="buffer-field eyebrow">
-          {c.waarschuwOnderBuffer}
-          {" "}
+          {c.waarschuwOnderBuffer}{" "}
           <SaldoInput
             inputMode="decimal"
             placeholder="0"
@@ -133,9 +132,7 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
           />
         </label>
       }
-      footer={
-        zeroBuffer ? <span className="cell-sub">{c.bufferZeroNote}</span> : undefined
-      }
+      footer={zeroBuffer ? <span className="cell-sub">{c.bufferZeroNote}</span> : undefined}
     >
       {alerts.length === 0 ? (
         /* Not "alles is in orde" — that is a claim about the data, and an empty
@@ -166,7 +163,9 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
                   </span>
                 </h3>
                 {folded ? (
-                  <CardLink onClick={() => setShowInfo(true)}>{c.toonNTerInfo(rows.length)}</CardLink>
+                  <CardLink onClick={() => setShowInfo(true)}>
+                    {c.toonNTerInfo(rows.length)}
+                  </CardLink>
                 ) : (
                   <div className="flex flex-col">
                     {rows.map((a) => (

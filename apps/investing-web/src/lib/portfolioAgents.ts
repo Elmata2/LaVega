@@ -73,11 +73,22 @@ function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight
 function judgmentInsight(value: unknown, agentId: string): PortfolioAgentInsight | null {
   if (!value || typeof value !== "object") return null;
   const run = value as { model?: unknown; snapshotHash?: unknown; judgments?: unknown };
-  if (!Array.isArray(run.judgments) || typeof run.model !== "string" || typeof run.snapshotHash !== "string")
+  if (
+    !Array.isArray(run.judgments) ||
+    typeof run.model !== "string" ||
+    typeof run.snapshotHash !== "string"
+  )
     return null;
   const judgment = run.judgments.find(
-    (item): item is { agentId: string; displayName: string; signal: { choice?: unknown; probabilities?: Record<string, unknown> } | null } =>
-      !!item && typeof item === "object" &&
+    (
+      item,
+    ): item is {
+      agentId: string;
+      displayName: string;
+      signal: { choice?: unknown; probabilities?: Record<string, unknown> } | null;
+    } =>
+      !!item &&
+      typeof item === "object" &&
       (item as { agentId?: unknown }).agentId === agentId &&
       typeof (item as { displayName?: unknown }).displayName === "string",
   );
@@ -86,15 +97,19 @@ function judgmentInsight(value: unknown, agentId: string): PortfolioAgentInsight
   if (signal !== "bullish" && signal !== "bearish" && signal !== "neutral" && signal !== "no_view")
     return null;
   const probability = judgment.signal?.probabilities?.[signal];
-  const confidence = typeof probability === "number" && Number.isFinite(probability)
-    ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
-    : 0;
+  const confidence =
+    typeof probability === "number" && Number.isFinite(probability)
+      ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
+      : 0;
   return {
     agentId,
     displayName: judgment.displayName,
     signal,
     confidence,
-    summary: signal === "no_view" ? "No view from this lens. Portfolio data is insufficient." : "Typed portfolio judgment.",
+    summary:
+      signal === "no_view"
+        ? "No view from this lens. Portfolio data is insufficient."
+        : "Typed portfolio judgment.",
     reasoning: "Educational analysis only. Expand this agent for written explanation.",
     insights: [],
     model: run.model,
@@ -140,7 +155,10 @@ export async function sendPortfolioAgentMessage(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ agentId, prompt, history }),
   });
-  const payload = (await response.json().catch(() => ({}))) as { result?: unknown; problems?: string[] };
+  const payload = (await response.json().catch(() => ({}))) as {
+    result?: unknown;
+    problems?: string[];
+  };
   if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent reply failed.");
   const result = payload.result as Partial<PortfolioConversationReply> | undefined;
   if (!result || typeof result.text !== "string" || typeof result.agentId !== "string")

@@ -93,21 +93,21 @@ export default function CategoryBars({
   return (
     <div className={`lv-bars${showAxis ? " lv-chart-withaxis" : ""}`}>
       {legend && (
-      <div className="lv-chart-legend flex flex-wrap gap-[var(--sp-4)] mb-[var(--sp-3)]">
-        {series.map((s) => (
-          <span
-            className="lv-chart-legend-item inline-flex items-center gap-[6px] font-mono text-[0.72rem] tracking-[0.04em] uppercase text-muted"
-            key={s.label}
-          >
+        <div className="lv-chart-legend flex flex-wrap gap-[var(--sp-4)] mb-[var(--sp-3)]">
+          {series.map((s) => (
             <span
-              className="lv-chart-swatch w-[10px] h-[10px] rounded-[3px] flex-none"
-              style={{ background: s.color }}
-              aria-hidden="true"
-            />
-            {s.label}
-          </span>
-        ))}
-      </div>
+              className="lv-chart-legend-item inline-flex items-center gap-[6px] font-mono text-[0.72rem] tracking-[0.04em] uppercase text-muted"
+              key={s.label}
+            >
+              <span
+                className="lv-chart-swatch w-[10px] h-[10px] rounded-[3px] flex-none"
+                style={{ background: s.color }}
+                aria-hidden="true"
+              />
+              {s.label}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* role="group", not role="img": an image's contents are presentational,

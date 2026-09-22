@@ -7,4 +7,4 @@ packages:
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - '@shadcn/lint@0.1.0'
+  - "@shadcn/lint@0.1.0"

@@ -28,8 +28,13 @@ type DeltaPillProps = {
 export default function DeltaPill({ pct, upIsGood }: DeltaPillProps) {
   if (pct === null) return null;
   const rounded = Math.round(pct);
-  if (rounded === 0) return (
-      <span data-testid="delta-pill" data-delta="flat" className={`${BASE} bg-surface-2 text-muted`}>
+  if (rounded === 0)
+    return (
+      <span
+        data-testid="delta-pill"
+        data-delta="flat"
+        className={`${BASE} bg-surface-2 text-muted`}
+      >
         0%
       </span>
     );

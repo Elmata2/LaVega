@@ -42,8 +42,7 @@ export async function migrateToVault(vault: VaultStorage, passphrase: string): P
   const ok = await vault.unlock(passphrase);
   if (!ok) throw new VaultVerificationFailed();
   const back = await vault.getAccounts();
-  if (back.length !== accounts.length)
-    throw new VaultVerificationFailed();
+  if (back.length !== accounts.length) throw new VaultVerificationFailed();
   // Only now is it safe to delete the plaintext DB.
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase(LEGACY_DB);

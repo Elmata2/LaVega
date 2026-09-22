@@ -185,9 +185,7 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
       title="Facturen"
       span={span}
       height="short"
-      menu={
-        <CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>}
       footer={
         s.zonderEuroBedrag > 0 ? <>{c.vanNFacturenBedragOnbekend(s.zonderEuroBedrag)}</> : undefined
       }

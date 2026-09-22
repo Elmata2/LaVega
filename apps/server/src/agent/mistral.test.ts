@@ -357,7 +357,7 @@ test("chatWithSearch() throws an Error with status and body text on a non-2xx re
       system: "s",
       messages: [{ role: "user", content: "u" }],
       onDelta: vi.fn(),
-    maxTokens: 1024,
+      maxTokens: 1024,
     }),
   ).rejects.toThrow("mistral conversation 400: bad request");
 });

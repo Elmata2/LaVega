@@ -371,7 +371,12 @@ export function rankByNetBenefit<T>(items: readonly T[], of: (item: T) => NetBen
  *  enige stuk classificatie dat de renderer nodig heeft en zelf niet kan
  *  herleiden: of "extra kosten" dan wel "kosten voor het product" moet staan. */
 export type NetBenefitDescription =
-  | { kind: "gross-cost-unknown"; grossCents: number; benefit: Benefit; reason: HoldingCostUnknownReason }
+  | {
+      kind: "gross-cost-unknown";
+      grossCents: number;
+      benefit: Benefit;
+      reason: HoldingCostUnknownReason;
+    }
   | {
       kind: "net";
       grossCents: number;

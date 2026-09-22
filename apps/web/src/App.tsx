@@ -484,7 +484,6 @@ export default function App() {
     [accounts],
   );
 
-
   useEffect(() => {
     if (gate !== "ready" || fxNeed === "") return;
     void syncFxHistory(storage, accounts, txs)
@@ -584,10 +583,17 @@ export default function App() {
         if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
           await saveInvoices(reconciled);
         setProblems([
-          { kind: "bank-linked", accounts: newAccounts.length, aspsp: aspsp ?? "", txs: rawTxs.length },
+          {
+            kind: "bank-linked",
+            accounts: newAccounts.length,
+            aspsp: aspsp ?? "",
+            txs: rawTxs.length,
+          },
         ]);
       } catch (e) {
-        setProblems([{ kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) }]);
+        setProblems([
+          { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
+        ]);
       } finally {
         setBusy(false);
       }
@@ -869,7 +875,9 @@ export default function App() {
       if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
         await saveInvoices(reconciled);
     } catch (err) {
-      setProblems([{ kind: "import-failed", detail: err instanceof Error ? err.message : String(err) }]);
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -1234,8 +1242,7 @@ export default function App() {
               {shell.emptyScope.before}
               <strong>{shell.scope[scope]}</strong>
               {shell.emptyScope.after}
-              <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>
-              .
+              <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>.
             </p>
           )}
 

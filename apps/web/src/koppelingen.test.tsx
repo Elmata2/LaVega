@@ -59,7 +59,9 @@ function fakeFetch(opts: {
       const localPart = opts.get ? opts.get().localPart : null;
       return { ok: true, status: 200, json: async () => ({ localPart }) } as unknown as Response;
     }
-    const parsed = init?.body ? (JSON.parse(init.body as string) as { localPart: string }) : { localPart: "" };
+    const parsed = init?.body
+      ? (JSON.parse(init.body as string) as { localPart: string })
+      : { localPart: "" };
     calls.push({ method, localPart: parsed.localPart });
     if (!opts.post) throw new Error("unexpected POST in this test");
     const { status, body } = opts.post(parsed.localPart);

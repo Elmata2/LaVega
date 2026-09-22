@@ -113,7 +113,10 @@ test("every class a mounted module can carry is styled, at the width it applies"
     const atWidth = Number.isFinite(width) ? width : undefined;
     // "display" is a probe, not the property under test: resolved() throws
     // only when no rule matches the class at all, whatever property is asked for.
-    expect(() => resolved([cls], "display", atWidth), `.${cls} has no rule in modules.css`).not.toThrow();
+    expect(
+      () => resolved([cls], "display", atWidth),
+      `.${cls} has no rule in modules.css`,
+    ).not.toThrow();
   }
 });
 

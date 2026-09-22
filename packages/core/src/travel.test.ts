@@ -468,7 +468,11 @@ test("journeyHeadline states the winner and what it saves, in euros", () => {
     kind: "route",
     head: { kind: "via", fundedFrom: "ING", via: "Revolut betaalpas", method: "iDEAL" },
     costOnReference: 0,
-    versus: { kind: "cheaper", savingEuros: 5, alt: { kind: "direct", provider: "Revolut betaalpas" } },
+    versus: {
+      kind: "cheaper",
+      savingEuros: 5,
+      alt: { kind: "direct", provider: "Revolut betaalpas" },
+    },
   });
 });
 
@@ -1213,7 +1217,11 @@ test("a card he does not hold never wins a tie — opening an account for nothin
       kind: "route",
       head: { kind: "direct", provider: "Revolut betaalpas" },
       costOnReference: 0,
-      versus: { kind: "cheaper", savingEuros: 14, alt: { kind: "direct", provider: "ING betaalpas" } },
+      versus: {
+        kind: "cheaper",
+        savingEuros: 14,
+        alt: { kind: "direct", provider: "ING betaalpas" },
+      },
     },
   });
 });
@@ -1312,7 +1320,12 @@ test("the cash advice is the proven cheapest, and it names the cards whose price
     product: "N26 Go betaalpas",
     costOnReference: 0,
     effectivePct: 0,
-    own: { kind: "known", ownProduct: "ING betaalpas", ownCostOnReference: 6.3, extraCostVsWinner: null },
+    own: {
+      kind: "known",
+      ownProduct: "ING betaalpas",
+      ownCostOnReference: 6.3,
+      extraCostVsWinner: null,
+    },
     holdingCost: { kind: "gross-cost-unknown", product: "N26 Go betaalpas", reason: "no-source" },
     small: { kind: "penalised", provider: "ING betaalpas", smallEffectivePct: 8.4 },
     missingCashNote: { kind: "some", missing: ["Revolut betaalpas"] },

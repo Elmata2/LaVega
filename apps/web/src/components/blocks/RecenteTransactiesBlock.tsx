@@ -93,9 +93,7 @@ export default function RecenteTransactiesBlock({
           onChange={(e) => setQuery(e.target.value)}
         />
       }
-      menu={
-        <CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>}
     >
       {all.length === 0 ? (
         <p className="block-empty">{c.nogGeenTransacties}</p>

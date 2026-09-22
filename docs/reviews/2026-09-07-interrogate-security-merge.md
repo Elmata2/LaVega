@@ -60,8 +60,8 @@ categorising. Nothing below has been applied yet.
 
 5. **The new CSP blocks Google Fonts on the investing dashboard.** (C.) **Verified live:**
    prod's `content-security-policy` has `style-src 'self' 'unsafe-inline'; font-src 'self'
-   data:`, and the built investing CSS starts with `@import
-   url("https://fonts.googleapis.com/…")`. The dashboard is rendering in system fonts. Fix:
+data:`, and the built investing CSS starts with `@import
+url("https://fonts.googleapis.com/…")`. The dashboard is rendering in system fonts. Fix:
    add `https://fonts.googleapis.com` to `styleSrc` and `https://fonts.gstatic.com` to
    `fontSrc`, or self-host the two families. The personal app is unaffected (no remote
    fonts).

@@ -7,7 +7,8 @@ import { spawnSync } from "node:child_process";
 const stateRoot = "/tmp/lavega-verify-investing";
 const cookieFile = `${stateRoot}/run/cookies.txt`;
 const browserCookieFile = `${stateRoot}/run/browser-cookies.json`;
-const browse = process.env.LAVEGA_BROWSE_BIN || `${process.env.HOME}/.codex/skills/gstack/browse/dist/browse`;
+const browse =
+  process.env.LAVEGA_BROWSE_BIN || `${process.env.HOME}/.codex/skills/gstack/browse/dist/browse`;
 const base = process.env.LAVEGA_VERIFY_BASE || "https://www.lavega.dev";
 
 function fail(message) {

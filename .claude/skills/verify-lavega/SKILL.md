@@ -14,9 +14,9 @@ proxy to Mistral), and an opaque encrypted vault backup in Neon.
 
 So there are two kinds of proof here, and they use different tools:
 
-| Question                                                      | Tool                                   |
-| ------------------------------------------------------------- | -------------------------------------- |
-| Does the server answer, refuse, or serve what it should?      | `control-lavega.mjs` (this skill's CLI) |
+| Question                                                             | Tool                                     |
+| -------------------------------------------------------------------- | ---------------------------------------- |
+| Does the server answer, refuse, or serve what it should?             | `control-lavega.mjs` (this skill's CLI)  |
 | What does the user see and can they do it? (vault, import, forecast) | a real browser: `claude-in-chrome` tools |
 
 Two targets, one API surface:
@@ -30,12 +30,12 @@ Two targets, one API surface:
 
 What differs between the two, and is not a bug:
 
-| Route                        | local (no DB)                    | prod                    |
-| ---------------------------- | -------------------------------- | ----------------------- |
-| `/api/vault/backup`          | route not registered → SPA HTML  | 401 without session     |
-| `DELETE /api/account/data`   | 404 (needs Neon)                 | 401 without session     |
-| `POST /api/agent/*`          | 503 "niet geconfigureerd"        | 401; 503 once signed in |
-| `/api/investing/*`           | off (`INVESTING_MOUNT=0`)        | 401 without session     |
+| Route                      | local (no DB)                   | prod                    |
+| -------------------------- | ------------------------------- | ----------------------- |
+| `/api/vault/backup`        | route not registered → SPA HTML | 401 without session     |
+| `DELETE /api/account/data` | 404 (needs Neon)                | 401 without session     |
+| `POST /api/agent/*`        | 503 "niet geconfigureerd"       | 401; 503 once signed in |
+| `/api/investing/*`         | off (`INVESTING_MOUNT=0`)       | 401 without session     |
 
 ## Launch
 

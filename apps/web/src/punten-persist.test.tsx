@@ -81,7 +81,8 @@ const saveButton = () =>
   container!.querySelector<HTMLButtonElement>(
     '[data-testid="stack-form-actions"] [data-testid="btn-primary"]',
   )!;
-const formNote = () => container!.querySelector('[data-testid="punt-overwrite"]')?.textContent ?? "";
+const formNote = () =>
+  container!.querySelector('[data-testid="punt-overwrite"]')?.textContent ?? "";
 const cardFor = (program: string): HTMLElement =>
   [...container!.querySelectorAll<HTMLElement>('[data-testid="punt-card"]')].find((n) =>
     (n.textContent ?? "").includes(program),
@@ -182,8 +183,8 @@ test("a removed balance can be put back — one click never destroys a hand-type
     makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" }),
     makeRewardsBalance({ program: FLYING_BLUE, points: 60_000, updatedAt: "2026-05-12" }),
   ]);
-  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>('[data-variant="danger"]')].find((n) =>
-    (n.textContent ?? "").includes("Verwijder"),
+  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>('[data-variant="danger"]')].find(
+    (n) => (n.textContent ?? "").includes("Verwijder"),
   )!;
   click(del);
   expect(container!.querySelectorAll('[data-testid="punt-card"]')).toHaveLength(1);

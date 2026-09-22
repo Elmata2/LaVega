@@ -469,60 +469,60 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return cached;
       }
       const buildDashboard = async () => {
-      const symbols = [
-        ...new Set([
-          ...positions.map((position) => position.symbol),
-          ...trades.map((trade) => trade.symbol),
-        ]),
-      ];
-      const prices = await readPriceBars(priceStore, tenantId, symbols);
-      const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
-      const priceProblems =
-        prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
-      const today = new Date().toISOString().slice(0, 10);
-      const historyDates = [
-        ...positions.map((position) => position.asOf),
-        ...trades.map((trade) => trade.date),
-        ...dividends.map((dividend) => dividend.date),
-        ...cashBalances.map((balance) => balance.asOf),
-        ...cashFlows.map((flow) => flow.date),
-        ...prices.bars.map((bar) => bar.date),
-      ].filter((date) => date <= today);
-      const historyFrom = historyDates.sort()[0] ?? today;
-      const [latestFx, historicalFx] = await Promise.all([
-        fxProvider
-          .getLatestRate()
-          .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
-        fxProvider
-          .getHistoricalRates(historyFrom, today)
-          .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
-      ]);
-      return buildInvestingDashboard({
-        positions,
-        trades,
-        dividends,
-        cashBalances,
-        cashFlows,
-        priceBars: prices.bars,
-        benchmarkBars: benches.bars,
-        benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
-          symbol: benchmark,
-          name: benchmark,
-          exchange: "Yahoo Finance",
-          currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
-        })),
-        presentationCurrency: "EUR",
-        fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
-        selectedSymbol: symbol,
-        problems: [
-          ...problems,
-          ...refreshProblems,
-          ...priceProblems,
-          ...latestFx.problems,
-          ...historicalFx.problems,
-        ],
-        dataVersion: version,
-      });
+        const symbols = [
+          ...new Set([
+            ...positions.map((position) => position.symbol),
+            ...trades.map((trade) => trade.symbol),
+          ]),
+        ];
+        const prices = await readPriceBars(priceStore, tenantId, symbols);
+        const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
+        const priceProblems =
+          prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
+        const today = new Date().toISOString().slice(0, 10);
+        const historyDates = [
+          ...positions.map((position) => position.asOf),
+          ...trades.map((trade) => trade.date),
+          ...dividends.map((dividend) => dividend.date),
+          ...cashBalances.map((balance) => balance.asOf),
+          ...cashFlows.map((flow) => flow.date),
+          ...prices.bars.map((bar) => bar.date),
+        ].filter((date) => date <= today);
+        const historyFrom = historyDates.sort()[0] ?? today;
+        const [latestFx, historicalFx] = await Promise.all([
+          fxProvider
+            .getLatestRate()
+            .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
+          fxProvider
+            .getHistoricalRates(historyFrom, today)
+            .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
+        ]);
+        return buildInvestingDashboard({
+          positions,
+          trades,
+          dividends,
+          cashBalances,
+          cashFlows,
+          priceBars: prices.bars,
+          benchmarkBars: benches.bars,
+          benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
+            symbol: benchmark,
+            name: benchmark,
+            exchange: "Yahoo Finance",
+            currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
+          })),
+          presentationCurrency: "EUR",
+          fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
+          selectedSymbol: symbol,
+          problems: [
+            ...problems,
+            ...refreshProblems,
+            ...priceProblems,
+            ...latestFx.problems,
+            ...historicalFx.problems,
+          ],
+          dataVersion: version,
+        });
       };
       return refreshProblems.length > 0
         ? buildDashboard()
@@ -657,13 +657,21 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const judgmentRecord = await runPortfolioAgentOnce();
       const judgment = judgmentRecord.result;
       if (
-        !judgment || typeof judgment !== "object" ||
+        !judgment ||
+        typeof judgment !== "object" ||
         !Array.isArray((judgment as { judgments?: unknown }).judgments) ||
         typeof (judgment as { model?: unknown }).model !== "string" ||
         typeof (judgment as { snapshotHash?: unknown }).snapshotHash !== "string"
-      ) throw new Error("Portfolio judgment did not return a result");
+      )
+        throw new Error("Portfolio judgment did not return a result");
       const dashboard = await dashboardReader({});
-      const input = { agentId, prompt, history, dashboard, judgment: judgment as PortfolioJudgmentRun };
+      const input = {
+        agentId,
+        prompt,
+        history,
+        dashboard,
+        judgment: judgment as PortfolioJudgmentRun,
+      };
       return options.runConversation
         ? options.runConversation(input)
         : runPortfolioConversation(input);
@@ -760,21 +768,34 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }
     });
     honoApp.post("/api/agents/portfolio/conversation", async (c) => {
-      const body: { agentId?: unknown; prompt?: unknown; history?: unknown } = await c.req.json().catch(() => ({}));
-      if (!isPortfolioAgentId(body.agentId)) return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      const body: { agentId?: unknown; prompt?: unknown; history?: unknown } = await c.req
+        .json()
+        .catch(() => ({}));
+      if (!isPortfolioAgentId(body.agentId))
+        return c.json({ problems: ["Unknown portfolio agent"] }, 400);
       if (typeof body.prompt !== "string" || !body.prompt.trim())
         return c.json({ problems: ["Conversation prompt is required"] }, 400);
       const history = Array.isArray(body.history)
-        ? body.history.slice(-12).filter((item): item is PortfolioConversationTurn =>
-          !!item && typeof item === "object" &&
-          ((item as { role?: unknown }).role === "user" || (item as { role?: unknown }).role === "assistant") &&
-          typeof (item as { content?: unknown }).content === "string",
-        )
+        ? body.history
+            .slice(-12)
+            .filter(
+              (item): item is PortfolioConversationTurn =>
+                !!item &&
+                typeof item === "object" &&
+                ((item as { role?: unknown }).role === "user" ||
+                  (item as { role?: unknown }).role === "assistant") &&
+                typeof (item as { content?: unknown }).content === "string",
+            )
         : [];
       try {
-        return c.json({ result: await answerPortfolioConversation(body.agentId, body.prompt.trim(), history) });
+        return c.json({
+          result: await answerPortfolioConversation(body.agentId, body.prompt.trim(), history),
+        });
       } catch (error) {
-        return c.json({ problems: [error instanceof Error ? error.message : "Portfolio conversation failed"] }, 502);
+        return c.json(
+          { problems: [error instanceof Error ? error.message : "Portfolio conversation failed"] },
+          502,
+        );
       }
     });
     return Object.assign(honoApp, { runPortfolioAgentOnce, answerPortfolioConversation });

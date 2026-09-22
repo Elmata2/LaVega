@@ -3,10 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LOCAL_TENANT_ID } from "@lavega/core";
-import {
-  createDashboardCache,
-  createRuntimeApp,
-} from "@lavega/investing-server/src/index.js";
+import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import {

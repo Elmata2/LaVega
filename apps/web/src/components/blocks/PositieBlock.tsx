@@ -122,9 +122,7 @@ export default function PositieBlock({
     <Module
       title="Positie"
       height="short"
-      menu={
-        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
       footer={
         rows.length > 0 ? (
           <>

@@ -15,1370 +15,1369 @@
  * Relative order between these stylesheets is unchanged — they are all in the
  * same layer, so main.tsx's import order still decides. */
 @layer components {
-/* Reset + element defaults + component classes for the LaVega dark shell.
+  /* Reset + element defaults + component classes for the LaVega dark shell.
  * This is the foundation only (Task 1 of the UI overhaul) — per-view content
  * (KPI tiles, position/cashflow cards, forecast chart, ...) is restyled in
  * later tasks. Element defaults below exist so native inputs/tables/buttons
  * read correctly on the dark background without a bespoke component yet. */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-html,
-body,
-#root {
-  height: 100%;
-}
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-body {
-  margin: 0;
-  /* Soft gutter the floating app frame sits on; the app itself scrolls
+  body {
+    margin: 0;
+    /* Soft gutter the floating app frame sits on; the app itself scrolls
    * internally so the page (gutter) never scrolls. */
-  background: var(--gutter);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
+    background: var(--gutter);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-h1,
-h2,
-h3 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0 0 var(--sp-3);
-  color: var(--ink);
-}
-h1 {
-  font-size: 1.75rem;
-}
-h2 {
-  font-size: 1.25rem;
-}
-h3 {
-  font-size: 1rem;
-  margin-top: var(--sp-4);
-  color: var(--muted);
-}
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 var(--sp-3);
+    color: var(--ink);
+  }
+  h1 {
+    font-size: 1.75rem;
+  }
+  h2 {
+    font-size: 1.25rem;
+  }
+  h3 {
+    font-size: 1rem;
+    margin-top: var(--sp-4);
+    color: var(--muted);
+  }
 
-p {
-  margin: 0 0 var(--sp-3);
-}
+  p {
+    margin: 0 0 var(--sp-3);
+  }
 
-a {
-  color: var(--accent);
-}
+  a {
+    color: var(--accent);
+  }
 
-strong {
-  font-variant-numeric: tabular-nums;
-}
+  strong {
+    font-variant-numeric: tabular-nums;
+  }
 
-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
 
-input,
-select,
-button,
-textarea {
-  font-family: inherit;
-  font-size: 0.9rem;
-  color: var(--ink);
-}
+  input,
+  select,
+  button,
+  textarea {
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
 
-input,
-select {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 6px 10px;
-}
-input::placeholder {
-  color: var(--muted);
-}
-input:focus,
-select:focus,
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-/* .saldo-input extracted to components/ui/SaldoInput.tsx (docs/adr/0005). */
-input:disabled,
-select:disabled,
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+  input,
+  select {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 6px 10px;
+  }
+  input::placeholder {
+    color: var(--muted);
+  }
+  input:focus,
+  select:focus,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  /* .saldo-input extracted to components/ui/SaldoInput.tsx (docs/adr/0005). */
+  input:disabled,
+  select:disabled,
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-button {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 6px 14px;
-  color: var(--ink);
-  cursor: pointer;
-}
-button:hover:not(:disabled) {
-  border-color: var(--accent);
-}
+  button {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
 
-/* .btn/.btn-primary extracted to components/ui/Button.tsx (docs/adr/0005). */
+  /* .btn/.btn-primary extracted to components/ui/Button.tsx (docs/adr/0005). */
 
-/* Tables */
-/* `table { border-collapse; width:100% }` stays — a bare-tag default with no
+  /* Tables */
+  /* `table { border-collapse; width:100% }` stays — a bare-tag default with no
  * class to attach a utility to (docs/adr/0005). `.table`/`.table-wrap`/
  * `.table-cards` and their th/td/thead/tbody tr:hover descendants moved to
  * components/ui/Table.tsx (Table, TableWrap, Th, Td). */
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-.cell-sub {
-  margin-top: 2px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-}
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .cell-sub {
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
 
-/* .card/.card-header extracted to components/ui/Card.tsx (docs/adr/0005). The
+  /* .card/.card-header extracted to components/ui/Card.tsx (docs/adr/0005). The
  * shared header language (padding-bottom/margin-bottom/border-bottom under a
  * section title) lives on there now; .module-head in modules.css still carries
  * the same three declarations independently for the (excluded) module grid. */
 
-/* KPI tile */
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-5);
-}
-.kpi {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: var(--sp-4) var(--sp-5);
-}
-.kpi.highlight {
-  background: var(--accent-soft);
-  border-color: rgba(31, 78, 107, 0.28);
-}
-.kpi-label {
-  color: var(--muted);
-  font-size: 0.8rem;
-  margin-bottom: var(--sp-2);
-}
-.kpi-value {
-  font-family: var(--font-body);
-  font-size: 2.3rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-.kpi .eyebrow {
-  margin-top: var(--sp-2);
-}
+  /* KPI tile */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-5);
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: var(--sp-4) var(--sp-5);
+  }
+  .kpi.highlight {
+    background: var(--accent-soft);
+    border-color: rgba(31, 78, 107, 0.28);
+  }
+  .kpi-label {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-bottom: var(--sp-2);
+  }
+  .kpi-value {
+    font-family: var(--font-body);
+    font-size: 2.3rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .kpi .eyebrow {
+    margin-top: var(--sp-2);
+  }
 
-/* Semantic text color (money only) */
-.text-pos {
-  color: var(--pos);
-}
-.text-neg {
-  color: var(--neg);
-}
-.text-warn {
-  color: var(--warn);
-}
-.text-muted {
-  color: var(--muted);
-}
+  /* Semantic text color (money only) */
+  .text-pos {
+    color: var(--pos);
+  }
+  .text-neg {
+    color: var(--neg);
+  }
+  .text-warn {
+    color: var(--warn);
+  }
+  .text-muted {
+    color: var(--muted);
+  }
 
-/* Card grid (Overzicht + other multi-card views) */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--sp-5);
-  align-items: start;
-}
-.card-grid .span-2 {
-  grid-column: 1 / -1;
-}
-/* .card-link/.card-link:hover extracted to components/ui/CardLink.tsx
+  /* Card grid (Overzicht + other multi-card views) */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-5);
+    align-items: start;
+  }
+  .card-grid .span-2 {
+    grid-column: 1 / -1;
+  }
+  /* .card-link/.card-link:hover extracted to components/ui/CardLink.tsx
  * (docs/adr/0005). */
 
-/* Positie over je bedrijven */
-.position-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-4);
-}
-.position-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.position-row-info {
-  flex: 1;
-  min-width: 0;
-}
-.position-row-name {
-  font-weight: 600;
-}
-.position-row-balance {
-  flex: none;
-  min-width: 100px;
-  text-align: right;
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.proportion-bar {
-  display: flex;
-  height: 6px;
-  border-radius: var(--pill);
-  overflow: hidden;
-  background: var(--surface-2);
-}
-.proportion-bar span {
-  height: 100%;
-}
+  /* Positie over je bedrijven */
+  .position-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+  .position-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .position-row-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .position-row-name {
+    font-weight: 600;
+  }
+  .position-row-balance {
+    flex: none;
+    min-width: 100px;
+    text-align: right;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .proportion-bar {
+    display: flex;
+    height: 6px;
+    border-radius: var(--pill);
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+  .proportion-bar span {
+    height: 100%;
+  }
 
-/* Recente transacties */
-.tx-list {
-  display: flex;
-  flex-direction: column;
-}
-.tx-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--line);
-}
-.tx-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.tx-row-info {
-  min-width: 0;
-}
-.tx-desc {
-  font-weight: 600;
-}
-.tx-amount {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
+  /* Recente transacties */
+  .tx-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .tx-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .tx-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  .tx-row-info {
+    min-width: 0;
+  }
+  .tx-desc {
+    font-weight: 600;
+  }
+  .tx-amount {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
 
-/* .pill/.pill-active extracted to components/ui/Pill.tsx (docs/adr/0005). */
+  /* .pill/.pill-active extracted to components/ui/Pill.tsx (docs/adr/0005). */
 
-/* .badge extracted to components/ui/Badge.tsx (docs/adr/0005). */
+  /* .badge extracted to components/ui/Badge.tsx (docs/adr/0005). */
 
-/* Eyebrow (muted mono label) */
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-}
+  /* Eyebrow (muted mono label) */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
 
-/* Per-categorie comparison (share bars + Δ vs last month) */
-.cat-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.cat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cat-row-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.cat-fig {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.cat-share {
-  font-weight: 600;
-}
-.cat-amt {
-  color: var(--muted);
-}
-.cat-bar {
-  height: 7px;
-  border-radius: var(--pill);
-  background: var(--surface-2);
-  overflow: hidden;
-}
-.cat-bar-fill {
-  height: 100%;
-  border-radius: var(--pill);
-  background: var(--accent);
-}
-.cat-delta {
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-.cat-delta.up {
-  color: var(--neg);
-}
-.cat-delta.down {
-  color: var(--pos);
-}
-.cat-delta.flat {
-  color: var(--muted);
-}
-.cat-compare {
-  background: none;
-  border: none;
-  padding: 0;
-  margin-left: 2px;
-  font-size: 0.72rem;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.cat-compare:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
+  /* Per-categorie comparison (share bars + Δ vs last month) */
+  .cat-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .cat-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .cat-row-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+  .cat-fig {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .cat-share {
+    font-weight: 600;
+  }
+  .cat-amt {
+    color: var(--muted);
+  }
+  .cat-bar {
+    height: 7px;
+    border-radius: var(--pill);
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .cat-bar-fill {
+    height: 100%;
+    border-radius: var(--pill);
+    background: var(--accent);
+  }
+  .cat-delta {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .cat-delta.up {
+    color: var(--neg);
+  }
+  .cat-delta.down {
+    color: var(--pos);
+  }
+  .cat-delta.flat {
+    color: var(--muted);
+  }
+  .cat-compare {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-left: 2px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .cat-compare:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
 
-/* Status dots */
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-  flex: none;
-}
-.dot-pos {
-  background: var(--pos);
-}
-.dot-neg {
-  background: var(--neg);
-}
-.dot-warn {
-  background: var(--warn);
-}
+  /* Status dots */
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+  }
+  .dot-pos {
+    background: var(--pos);
+  }
+  .dot-neg {
+    background: var(--neg);
+  }
+  .dot-warn {
+    background: var(--warn);
+  }
 
-/* App-bar nav item — a plain text tab with a rule under the active one, the
+  /* App-bar nav item — a plain text tab with a rule under the active one, the
  * desktop reference's treatment. It replaced the round-edged dark tile once the
  * rail stopped showing the whole catalogue: with only the modules the owner
  * switched on, the nav needs no decoration to stay readable. */
-.nav-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  padding: 8px 2px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.95rem;
-  font-weight: 500;
-  text-align: left;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    border-color 0.12s ease;
-}
-.nav-item:hover:not(:disabled) {
-  color: var(--ink);
-}
-/* Active = the reference's rule under the label, in ink. */
-.nav-item.active,
-.nav-item.active:hover {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
-  font-weight: 600;
-}
-.nav-item:disabled {
-  opacity: 1;
-  cursor: pointer;
-}
-.nav-icon {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  flex: none;
-}
+  .nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 8px 2px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .nav-item:hover:not(:disabled) {
+    color: var(--ink);
+  }
+  /* Active = the reference's rule under the label, in ink. */
+  .nav-item.active,
+  .nav-item.active:hover {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+    font-weight: 600;
+  }
+  .nav-item:disabled {
+    opacity: 1;
+    cursor: pointer;
+  }
+  .nav-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
 
-/* App shell layout — one floating, rounded frame on the gutter, stacked:
+  /* App shell layout — one floating, rounded frame on the gutter, stacked:
  * app bar (brand + pill nav + lock) · greeting row · scrolling content. The
  * frame owns the viewport height and only .content scrolls, so the nav and the
  * greeting stay put like the desktop reference. Navigation moved from a left
  * column to the top rail so the module grid gets the full width. */
-.shell {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 2 * var(--frame-gap));
-  max-width: 1680px;
-  margin: var(--frame-gap) auto;
-  background: var(--bg);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-float);
-  overflow: hidden;
-}
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 2 * var(--frame-gap));
+    max-width: 1680px;
+    margin: var(--frame-gap) auto;
+    background: var(--bg);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+  }
 
-.appbar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex: none;
-  min-width: 0;
-  padding: var(--sp-4);
-  border-bottom: 1px solid var(--line);
-}
+  .appbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex: none;
+    min-width: 0;
+    padding: var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex: none;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--ink);
-}
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--ink);
+  }
 
-/* The tab set: the owner's chosen modules as a row of text tabs. It still
+  /* The tab set: the owner's chosen modules as a row of text tabs. It still
  * scrolls rather than wraps, because a selection can still be long. */
-.navrail {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  flex: 1;
-  min-width: 0;
-  padding: 0 var(--sp-2);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.navrail::-webkit-scrollbar {
-  display: none;
-}
+  .navrail {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-5);
+    flex: 1;
+    min-width: 0;
+    padding: 0 var(--sp-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .navrail::-webkit-scrollbar {
+    display: none;
+  }
 
-.appbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex: none;
-}
+  .appbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex: none;
+  }
 
-/* Profile entry — the reference's avatar position, top right. It holds the
+  /* Profile entry — the reference's avatar position, top right. It holds the
  * module picker and everything that is a setting rather than a workspace. */
-.appbar-profile {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 5px 14px 5px 5px;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.appbar-profile:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
+  .appbar-profile {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 5px 14px 5px 5px;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .appbar-profile:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
 
-/* Link out to the investing app — a separate deploy, not a route, so it gets
+  /* Link out to the investing app — a separate deploy, not a route, so it gets
  * the same pill treatment as the profile entry beside it but never an
  * "active" state: leaving this app is never "where you are". */
-.appbar-investing {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 5px 14px;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 500;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.appbar-investing:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
+  .appbar-investing {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 5px 14px;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .appbar-investing:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
 
-.appbar-profile.active {
-  color: var(--on-ink);
-  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
-  border-color: var(--ink);
-}
-.profile-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: var(--pill);
-  background: var(--surface-2);
-  color: var(--ink);
-}
-.appbar-profile.active .profile-avatar {
-  background: var(--on-ink);
-}
+  .appbar-profile.active {
+    color: var(--on-ink);
+    background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+    border-color: var(--ink);
+  }
+  .profile-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border-radius: var(--pill);
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .appbar-profile.active .profile-avatar {
+    background: var(--on-ink);
+  }
 
-.shell-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
+  .shell-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
 
-/* Greeting / title row — the page's own header, in the same language as every
+  /* Greeting / title row — the page's own header, in the same language as every
  * section below it: the title, and a rule under it. */
-.topbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  /* No side padding: the margin insets it to the content column, so the rule
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    /* No side padding: the margin insets it to the content column, so the rule
    * starts and ends exactly where the content does. */
-  padding: var(--sp-5) 0 var(--sp-3);
-  margin: 0 var(--sp-6) var(--sp-4);
-  border-bottom: 1px solid var(--ink);
-  background: transparent;
-  flex-wrap: wrap;
-  flex: none;
-}
-.topbar-title {
-  margin: var(--sp-1) 0 0;
-  font-size: 2.6rem;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-}
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  padding-bottom: 6px;
-}
-/* ---------- Persoonlijk | Zakelijk ----------
+    padding: var(--sp-5) 0 var(--sp-3);
+    margin: 0 var(--sp-6) var(--sp-4);
+    border-bottom: 1px solid var(--ink);
+    background: transparent;
+    flex-wrap: wrap;
+    flex: none;
+  }
+  .topbar-title {
+    margin: var(--sp-1) 0 0;
+    font-size: 2.6rem;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    padding-bottom: 6px;
+  }
+  /* ---------- Persoonlijk | Zakelijk ----------
  *
  * Two words separated by a vertical rule — the same idea as the nav's tabs
  * (text, and a rule marking the active one), not another pill group. It sits in
  * the header and in the profile's per-entity list, so both read as one control. */
-.scope-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex: none;
-}
-.scope-rule {
-  width: 1px;
-  height: 1.1em;
-  background: var(--line);
-}
-.scope-option {
-  padding: 4px 2px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.scope-option:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: transparent;
-}
-.scope-option.scope-on,
-.scope-option.scope-on:hover {
-  color: var(--ink);
-  font-weight: 600;
-  border-bottom-color: var(--ink);
-}
+  .scope-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex: none;
+  }
+  .scope-rule {
+    width: 1px;
+    height: 1.1em;
+    background: var(--line);
+  }
+  .scope-option {
+    padding: 4px 2px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .scope-option:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: transparent;
+  }
+  .scope-option.scope-on,
+  .scope-option.scope-on:hover {
+    color: var(--ink);
+    font-weight: 600;
+    border-bottom-color: var(--ink);
+  }
 
-/* The profile's per-entity classification list. */
-.scope-list {
-  list-style: none;
-  margin: var(--sp-4) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--sp-2);
-}
-.scope-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--line);
-}
-.scope-item:last-child {
-  border-bottom: none;
-}
-.scope-item-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.scope-item-name {
-  font-weight: 600;
-  color: var(--ink);
-}
-/* "Widget toevoegen" — the reference's Add widget, opening the same module
+  /* The profile's per-entity classification list. */
+  .scope-list {
+    list-style: none;
+    margin: var(--sp-4) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-2);
+  }
+  .scope-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .scope-item:last-child {
+    border-bottom: none;
+  }
+  .scope-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .scope-item-name {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  /* "Widget toevoegen" — the reference's Add widget, opening the same module
  * picker the profile holds. */
-.topbar-add {
-  border-style: dashed;
-  color: var(--ink);
-}
-.topbar-add:hover {
-  border-color: var(--accent);
-}
+  .topbar-add {
+    border-style: dashed;
+    color: var(--ink);
+  }
+  .topbar-add:hover {
+    border-color: var(--accent);
+  }
 
-/* Import / bank-link outcome shown outside the profile (where the Import block
+  /* Import / bank-link outcome shown outside the profile (where the Import block
  * itself lives). Same role="alert" text, one line above the content. */
-.shell-problems {
-  margin: 0 0 var(--sp-4);
-}
+  .shell-problems {
+    margin: 0 0 var(--sp-4);
+  }
 
-/* ---------- Module picker (profile + "Widget toevoegen") ----------
+  /* ---------- Module picker (profile + "Widget toevoegen") ----------
  *
  * One row per module in the registry: a thumbnail drawn from these same
  * tokens, the Dutch label, one line of what it does, and the switch that puts
  * it in the nav or takes it out. */
-.module-picker {
-  list-style: none;
-  margin: var(--sp-4) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--sp-3);
-}
-.mp-item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-}
-.mp-preview {
-  flex: none;
-  width: 96px;
-  line-height: 0;
-}
-.mp-thumb {
-  width: 96px;
-  height: 60px;
-  border-radius: 8px;
-}
-.mp-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-.mp-label {
-  font-weight: 600;
-  color: var(--ink);
-}
-.mp-what {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.mp-note {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-}
-/* The switch. Off = a hairline track; on = the ink pill the nav's active tab
+  .module-picker {
+    list-style: none;
+    margin: var(--sp-4) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-3);
+  }
+  .mp-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+  }
+  .mp-preview {
+    flex: none;
+    width: 96px;
+    line-height: 0;
+  }
+  .mp-thumb {
+    width: 96px;
+    height: 60px;
+    border-radius: 8px;
+  }
+  .mp-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .mp-label {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .mp-what {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .mp-note {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  /* The switch. Off = a hairline track; on = the ink pill the nav's active tab
  * uses, so "on" reads the same everywhere. */
-.mp-toggle {
-  flex: none;
-  width: 46px;
-  height: 26px;
-  padding: 3px;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
-}
-.mp-toggle .mp-knob {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--pill);
-  background: var(--muted);
-  transition:
-    transform 0.12s ease,
-    background 0.12s ease;
-}
-.mp-toggle.on {
-  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
-  border-color: var(--ink);
-}
-.mp-toggle.on .mp-knob {
-  background: var(--on-ink);
-  transform: translateX(20px);
-}
-.mp-toggle:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
+  .mp-toggle {
+    flex: none;
+    width: 46px;
+    height: 26px;
+    padding: 3px;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    cursor: pointer;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .mp-toggle .mp-knob {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--pill);
+    background: var(--muted);
+    transition:
+      transform 0.12s ease,
+      background 0.12s ease;
+  }
+  .mp-toggle.on {
+    background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+    border-color: var(--ink);
+  }
+  .mp-toggle.on .mp-knob {
+    background: var(--on-ink);
+    transform: translateX(20px);
+  }
+  .mp-toggle:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
 
-.content {
-  padding: var(--sp-3) var(--sp-6) var(--sp-6);
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
+  .content {
+    padding: var(--sp-3) var(--sp-6) var(--sp-6);
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
 
-/* Filter row (Transacties). A wrapping flex row of label+control pairs: the
+  /* Filter row (Transacties). A wrapping flex row of label+control pairs: the
  * controls used to sit inline separated by spaces, which ran together and
  * pushed the page sideways once the viewport was narrower than the six of
  * them. Each field keeps its own minimum and wraps to the next line instead. */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3);
-  margin: var(--sp-4) 0;
-}
-.filter-bar label {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-.filter-bar select,
-.filter-bar input {
-  max-width: 100%;
-}
-/* The search field takes the leftover width rather than a fixed one. */
-.filter-grow {
-  flex: 1 1 12rem;
-}
-.filter-grow input {
-  width: 100%;
-}
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--sp-3);
+    margin: var(--sp-4) 0;
+  }
+  .filter-bar label {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    min-width: 0;
+  }
+  .filter-bar select,
+  .filter-bar input {
+    max-width: 100%;
+  }
+  /* The search field takes the leftover width rather than a fixed one. */
+  .filter-grow {
+    flex: 1 1 12rem;
+  }
+  .filter-grow input {
+    width: 100%;
+  }
 
-/* Importeren — the file input reports its own intrinsic width and ignored the
+  /* Importeren — the file input reports its own intrinsic width and ignored the
  * card, overflowing the page by a few pixels at 390px. */
-.import-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3);
-  min-width: 0;
-}
-.import-controls label {
-  min-width: 0;
-}
-.import-file {
-  min-width: 0;
-  max-width: 100%;
-}
+  .import-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    min-width: 0;
+  }
+  .import-controls label {
+    min-width: 0;
+  }
+  .import-file {
+    min-width: 0;
+    max-width: 100%;
+  }
 
-/* Rekeningen — destructive actions + duplicate-account banner */
-.card-link-danger {
-  color: var(--neg);
-}
-.confirm-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.confirm-q {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.dup-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  padding: var(--sp-3) var(--sp-4);
-  margin-bottom: var(--sp-4);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--warn);
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-.dup-banner-title {
-  margin: 0;
-  font-weight: 600;
-}
-.dup-banner-sub {
-  margin: var(--sp-2) 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.dup-banner-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
+  /* Rekeningen — destructive actions + duplicate-account banner */
+  .card-link-danger {
+    color: var(--neg);
+  }
+  .confirm-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .confirm-q {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .dup-banner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    padding: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-4);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--warn);
+    border-radius: var(--r);
+    background: var(--surface-2);
+  }
+  .dup-banner-title {
+    margin: 0;
+    font-weight: 600;
+  }
+  .dup-banner-sub {
+    margin: var(--sp-2) 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .dup-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
 
-/* Forecast view */
-.forecast-banner {
-  display: flex;
-  border-left: 4px solid var(--line);
-}
-.forecast-banner-none {
-  border-left-color: var(--pos);
-}
-.forecast-banner-shortfall {
-  border-left-color: var(--neg);
-}
-.forecast-banner-unknown {
-  border-left-color: var(--muted);
-}
-.forecast-banner-title {
-  margin: 0;
-  font-weight: 600;
-}
-.forecast-banner-sub,
-.forecast-banner-note {
-  margin: var(--sp-2) 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
+  /* Forecast view */
+  .forecast-banner {
+    display: flex;
+    border-left: 4px solid var(--line);
+  }
+  .forecast-banner-none {
+    border-left-color: var(--pos);
+  }
+  .forecast-banner-shortfall {
+    border-left-color: var(--neg);
+  }
+  .forecast-banner-unknown {
+    border-left-color: var(--muted);
+  }
+  .forecast-banner-title {
+    margin: 0;
+    font-weight: 600;
+  }
+  .forecast-banner-sub,
+  .forecast-banner-note {
+    margin: var(--sp-2) 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
 
-.forecast-grid {
-  grid-template-columns: 2fr 1fr;
-}
+  .forecast-grid {
+    grid-template-columns: 2fr 1fr;
+  }
 
-.forecast-chart-empty {
-  color: var(--muted);
-  margin: 0;
-}
-.forecast-chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  margin-top: var(--sp-4);
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.forecast-chart-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.forecast-chart-legend-swatch {
-  display: inline-block;
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
-}
-/* The uncertainty band's swatch. Was a hardcoded rgba(78,122,58,.35) — the one
+  .forecast-chart-empty {
+    color: var(--muted);
+    margin: 0;
+  }
+  .forecast-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+    margin-top: var(--sp-4);
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .forecast-chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .forecast-chart-legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  /* The uncertainty band's swatch. Was a hardcoded rgba(78,122,58,.35) — the one
  * colour in the charts that wasn't a token. It is the band's own colour now,
  * which follows the line (green, or terracotta once a shortfall is forecast). */
-.forecast-chart-legend-band {
-  height: 8px;
-  border-radius: 3px;
-  opacity: 0.28;
-}
+  .forecast-chart-legend-band {
+    height: 8px;
+    border-radius: 3px;
+    opacity: 0.28;
+  }
 
-.drivers-heading {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  font-weight: 500;
-  margin: var(--sp-4) 0 var(--sp-3);
-}
-.drivers-heading:first-child {
-  margin-top: 0;
-}
-.drivers-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-2);
-}
-.driver-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.driver-label {
-  min-width: 0;
-}
-.driver-amount {
-  flex: none;
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.drivers-empty {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+  .drivers-heading {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 500;
+    margin: var(--sp-4) 0 var(--sp-3);
+  }
+  .drivers-heading:first-child {
+    margin-top: 0;
+  }
+  .drivers-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-2);
+  }
+  .driver-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+  .driver-label {
+    min-width: 0;
+  }
+  .driver-amount {
+    flex: none;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .drivers-empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
 
-.forecast-footnote {
-  display: flex;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+  .forecast-footnote {
+    display: flex;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
 
-/* Vault gate (setup / unlock / migrate screens) */
-.vault-gate {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-6);
-  background: var(--bg);
-}
-.vault-gate-card {
-  width: 100%;
-  max-width: 420px;
-}
-/* .vault-field/.vault-checkbox-field extracted to components/ui/Field.tsx
+  /* Vault gate (setup / unlock / migrate screens) */
+  .vault-gate {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-6);
+    background: var(--bg);
+  }
+  .vault-gate-card {
+    width: 100%;
+    max-width: 420px;
+  }
+  /* .vault-field/.vault-checkbox-field extracted to components/ui/Field.tsx
  * (docs/adr/0005). */
 
-@media (max-width: 900px) {
-  /* Phone: the frame goes full-bleed, the page scrolls normally, and the shell
+  @media (max-width: 900px) {
+    /* Phone: the frame goes full-bleed, the page scrolls normally, and the shell
    * is one column of stacked cards. The app bar wraps to two rows so the nav
    * rail keeps its full width and the lock control stays visible (the old
    * sidebar hid it on phones). */
-  body {
-    overflow: auto;
-  }
-  .shell {
-    height: auto;
-    min-height: 100vh;
-    max-width: none;
-    margin: 0;
-    border-radius: 0;
-    box-shadow: none;
-    overflow: visible;
-  }
-  .appbar {
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    /* Tight: this bar is pinned, so every pixel it takes is a pixel the page
+    body {
+      overflow: auto;
+    }
+    .shell {
+      height: auto;
+      min-height: 100vh;
+      max-width: none;
+      margin: 0;
+      border-radius: 0;
+      box-shadow: none;
+      overflow: visible;
+    }
+    .appbar {
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+      /* Tight: this bar is pinned, so every pixel it takes is a pixel the page
      * never gets back. Measured 115px before, ~90px after. */
-    padding: var(--sp-2) var(--sp-3);
-    /* The rail is the only navigation on a phone, and the homescreen is about
+      padding: var(--sp-2) var(--sp-3);
+      /* The rail is the only navigation on a phone, and the homescreen is about
      * 4500px tall — without this, switching tabs means scrolling all the way
      * back to the top. */
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    background: var(--bg);
-  }
-  .appbar-profile {
-    padding: 4px 12px 4px 4px;
-  }
-  .appbar-investing {
-    padding: 4px 12px;
-  }
-  .profile-avatar {
-    width: 24px;
-    height: 24px;
-  }
-  .nav-item {
-    padding: 7px 0;
-  }
-  .navrail {
-    gap: var(--sp-4);
-  }
-  /* A 96px thumbnail plus a switch leaves too little for the sentence on a
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--bg);
+    }
+    .appbar-profile {
+      padding: 4px 12px 4px 4px;
+    }
+    .appbar-investing {
+      padding: 4px 12px;
+    }
+    .profile-avatar {
+      width: 24px;
+      height: 24px;
+    }
+    .nav-item {
+      padding: 7px 0;
+    }
+    .navrail {
+      gap: var(--sp-4);
+    }
+    /* A 96px thumbnail plus a switch leaves too little for the sentence on a
    * phone; the preview shrinks rather than the text wrapping to four lines. */
-  .mp-preview,
-  .mp-thumb {
-    width: 64px;
-  }
-  .mp-thumb {
-    height: 40px;
-  }
-  .mp-item {
-    gap: var(--sp-3);
-  }
-  /* Anything scrolled into view (a module, a chat answer) clears the pinned
+    .mp-preview,
+    .mp-thumb {
+      width: 64px;
+    }
+    .mp-thumb {
+      height: 40px;
+    }
+    .mp-item {
+      gap: var(--sp-3);
+    }
+    /* Anything scrolled into view (a module, a chat answer) clears the pinned
    * bar instead of starting underneath it. */
-  .module,
-  .card {
-    scroll-margin-top: 7rem;
-  }
-  .navrail {
-    order: 3;
-    flex-basis: 100%;
-  }
-  .appbar-right {
-    margin-left: auto;
-  }
-  /* minmax(0,…) + min-width:0, or a tile whose min-content is wider than its
+    .module,
+    .card {
+      scroll-margin-top: 7rem;
+    }
+    .navrail {
+      order: 3;
+      flex-basis: 100%;
+    }
+    .appbar-right {
+      margin-left: auto;
+    }
+    /* minmax(0,…) + min-width:0, or a tile whose min-content is wider than its
    * track (a long euro amount at 2.3rem) pushes the whole page sideways —
    * measured 414px of document in a 390px viewport on Optimalisatie. */
-  .kpi-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .kpi {
-    min-width: 0;
-    padding: var(--sp-4);
-  }
-  .kpi-value {
-    font-size: 1.8rem;
-  }
-  .card-grid {
-    grid-template-columns: 1fr;
-  }
-  .content {
-    padding: var(--sp-4);
-    overflow: visible;
-  }
-  .card {
-    padding: var(--sp-4);
-  }
-  .topbar {
-    align-items: flex-start;
-    padding: var(--sp-4) 0 var(--sp-3);
-    margin: 0 var(--sp-4) var(--sp-3);
-  }
-  /* The mobile reference leads with very large type, one column under it. */
-  .topbar-title {
-    font-size: 2.5rem;
-  }
-  .topbar-right {
-    padding-bottom: 0;
-  }
+    .kpi-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .kpi {
+      min-width: 0;
+      padding: var(--sp-4);
+    }
+    .kpi-value {
+      font-size: 1.8rem;
+    }
+    .card-grid {
+      grid-template-columns: 1fr;
+    }
+    .content {
+      padding: var(--sp-4);
+      overflow: visible;
+    }
+    .card {
+      padding: var(--sp-4);
+    }
+    .topbar {
+      align-items: flex-start;
+      padding: var(--sp-4) 0 var(--sp-3);
+      margin: 0 var(--sp-4) var(--sp-3);
+    }
+    /* The mobile reference leads with very large type, one column under it. */
+    .topbar-title {
+      font-size: 2.5rem;
+    }
+    .topbar-right {
+      padding-bottom: 0;
+    }
 
-  /* Native controls are the usual source of a sideways-scrolling phone page:
+    /* Native controls are the usual source of a sideways-scrolling phone page:
    * a file input reports its own intrinsic width and ignores the column. */
-  input,
-  select,
-  textarea {
-    max-width: 100%;
+    input,
+    select,
+    textarea {
+      max-width: 100%;
+    }
+    input[type="file"] {
+      width: 100%;
+    }
   }
-  input[type="file"] {
-    width: 100%;
-  }
-}
 
-/* Tables becoming stacked cards on a phone (`<Table cards>`) moved to
+  /* Tables becoming stacked cards on a phone (`<Table cards>`) moved to
  * components/ui/Table.tsx (docs/adr/0005) — the `.rename-cell` override that
  * lived in this block moved to its one call site, Rekeningen.tsx. */
-@media (max-width: 620px) {
-  /* Two KPI tiles side by side on a phone leave ~170px each, which a euro
+  @media (max-width: 620px) {
+    /* Two KPI tiles side by side on a phone leave ~170px each, which a euro
    * amount does not fit. One per row. */
-  .kpi-row {
-    grid-template-columns: minmax(0, 1fr);
+    .kpi-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
-}
 
-/* Floating LaVega chat widget (bottom-right, over every tab). The fixed
+  /* Floating LaVega chat widget (bottom-right, over every tab). The fixed
  * container itself is click-through (pointer-events: none) so it never blocks
  * the page; only the launcher + panel capture clicks. */
-.chat-widget {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--sp-3);
-  pointer-events: none;
-}
-.chat-widget > * {
-  pointer-events: auto;
-}
+  .chat-widget {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--sp-3);
+    pointer-events: none;
+  }
+  .chat-widget > * {
+    pointer-events: auto;
+  }
 
-.chat-launcher {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  border-radius: var(--pill);
-  padding: 10px 18px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-.chat-launcher:hover {
-  filter: brightness(1.08);
-}
+  .chat-launcher {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border-radius: var(--pill);
+    padding: 10px 18px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+  }
+  .chat-launcher:hover {
+    filter: brightness(1.08);
+  }
 
-.chat-panel {
-  display: flex;
-  flex-direction: column;
-  width: min(360px, calc(100vw - 2rem));
-  height: min(480px, calc(100vh - 6rem));
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
+  .chat-panel {
+    display: flex;
+    flex-direction: column;
+    width: min(360px, calc(100vw - 2rem));
+    height: min(480px, calc(100vh - 6rem));
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
 
-.chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--line);
-}
-.chat-header-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-}
-.chat-close {
-  background: none;
-  border: none;
-  padding: 2px 6px;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.chat-close:hover {
-  color: var(--ink);
-  border-color: transparent;
-}
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .chat-header-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .chat-close {
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .chat-close:hover {
+    color: var(--ink);
+    border-color: transparent;
+  }
 
-.chat-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--sp-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
+  .chat-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
 
-.chat-notice {
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.55;
-}
-.chat-notice p {
-  margin: 0 0 var(--sp-4);
-}
+  .chat-notice {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+  .chat-notice p {
+    margin: 0 0 var(--sp-4);
+  }
 
-.chat-empty {
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: auto 0;
-  text-align: center;
-}
+  .chat-empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: auto 0;
+    text-align: center;
+  }
 
-.chat-msg {
-  max-width: 85%;
-  padding: var(--sp-3);
-  border-radius: var(--r-sm);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.chat-msg-user {
-  align-self: flex-end;
-  background: var(--accent-soft);
-  border: 1px solid rgba(31, 78, 107, 0.28);
-  color: var(--ink);
-}
-.chat-msg-assistant {
-  align-self: flex-start;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  color: var(--ink);
-}
+  .chat-msg {
+    max-width: 85%;
+    padding: var(--sp-3);
+    border-radius: var(--r-sm);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .chat-msg-user {
+    align-self: flex-end;
+    background: var(--accent-soft);
+    border: 1px solid rgba(31, 78, 107, 0.28);
+    color: var(--ink);
+  }
+  .chat-msg-assistant {
+    align-self: flex-start;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
 
-.chat-typing {
-  align-self: flex-start;
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-style: italic;
-}
+  .chat-typing {
+    align-self: flex-start;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
 
-.chat-input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
-  border-top: 1px solid var(--line);
-}
-.chat-input {
-  flex: 1;
-  min-width: 0;
-  resize: none;
-  max-height: 96px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  padding: 8px 10px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-.chat-send {
-  flex: none;
-  padding: 8px 14px;
-}
+  .chat-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border-top: 1px solid var(--line);
+  }
+  .chat-input {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    max-height: 96px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+  .chat-send {
+    flex: none;
+    padding: 8px 14px;
+  }
 
-/* Facturen manual-entry form: wrap fields into rows with consistent spacing. */
-.facturen-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-}
-.facturen-form label {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-}
+  /* Facturen manual-entry form: wrap fields into rows with consistent spacing. */
+  .facturen-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  .facturen-form label {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+  }
 
-/* Facturen — the n8n review queue. Each row is a bordered card because it is a
+  /* Facturen — the n8n review queue. Each row is a bordered card because it is a
    decision, not a table row: it stays until it is confirmed or rejected. */
-.n8n-block {
-  margin-bottom: var(--sp-4);
-}
-.n8n-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  align-items: center;
-  margin-bottom: var(--sp-2);
-}
-.n8n-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin-top: var(--sp-3);
-}
-.n8n-row {
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-  padding: var(--sp-3) var(--sp-4);
-}
-.n8n-row .facturen-form {
-  margin-bottom: 0;
-}
-.n8n-row-source {
-  margin: 0 0 var(--sp-2);
-}
+  .n8n-block {
+    margin-bottom: var(--sp-4);
+  }
+  .n8n-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    align-items: center;
+    margin-bottom: var(--sp-2);
+  }
+  .n8n-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+  }
+  .n8n-row {
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface-2);
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .n8n-row .facturen-form {
+    margin-bottom: 0;
+  }
+  .n8n-row-source {
+    margin: 0 0 var(--sp-2);
+  }
 
-/* Op reis — the travel block (first modular block) */
-.travel-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-4);
-}
-.travel-controls label {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-.travel-plan {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--sp-4);
-}
-.travel-step {
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-.travel-step-title {
-  margin: 0 0 var(--sp-2);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-family: inherit;
-}
-.travel-step-line {
-  margin: 0;
-  font-weight: 500;
-}
-/* Rekeningen — inline rename (bank + naam) */
-.rename-cell {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  align-items: flex-start;
-}
+  /* Op reis — the travel block (first modular block) */
+  .travel-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-4);
+  }
+  .travel-controls label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
+  .travel-plan {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--sp-4);
+  }
+  .travel-step {
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface-2);
+  }
+  .travel-step-title {
+    margin: 0 0 var(--sp-2);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: inherit;
+  }
+  .travel-step-line {
+    margin: 0;
+    font-weight: 500;
+  }
+  /* Rekeningen — inline rename (bank + naam) */
+  .rename-cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    align-items: flex-start;
+  }
 
-/* Op reis — decisive answer first, reasoning on click */
-.travel-winner {
-  padding: var(--sp-3) var(--sp-4);
-  margin-bottom: var(--sp-3);
-  border-radius: var(--r);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--pos);
-}
-.travel-winner-name {
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-.travel-note {
-  line-height: 1.5;
-}
-
+  /* Op reis — decisive answer first, reasoning on click */
+  .travel-winner {
+    padding: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-3);
+    border-radius: var(--r);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--pos);
+  }
+  .travel-winner-name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .travel-note {
+    line-height: 1.5;
+  }
 }

@@ -407,9 +407,14 @@ const CA_PROVINCES: readonly string[] = [
 
 /** Countries whose region level LaVega can offer as a list, with what that
  *  level is CALLED there — a Canadian picks a province, not a state. */
-const KNOWN_REGIONS: Readonly<Record<string, { label: Record<Locale, string>; options: readonly string[] }>> = {
+const KNOWN_REGIONS: Readonly<
+  Record<string, { label: Record<Locale, string>; options: readonly string[] }>
+> = {
   US: { label: { nl: "Staat", en: "State" }, options: US_STATES },
-  CA: { label: { nl: "Provincie of territorium", en: "Province or territory" }, options: CA_PROVINCES },
+  CA: {
+    label: { nl: "Provincie of territorium", en: "Province or territory" },
+    options: CA_PROVINCES,
+  },
 };
 
 /** The region options for a country, or [] when we have no verified list — in

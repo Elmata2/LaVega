@@ -53,7 +53,6 @@ export function getAuth(): Auth<any> | null {
   });
 }
 
-
 /**
  * The options that decide who may create an account.
  *

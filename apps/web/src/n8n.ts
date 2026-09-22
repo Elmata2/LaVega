@@ -226,7 +226,9 @@ export function parseQueue(
  * network; production uses the browser's own `fetch`, which sends the
  * session cookie same-origin.
  */
-export async function fetchQueue(fetchImpl: typeof fetch = globalThis.fetch): Promise<FetchOutcome> {
+export async function fetchQueue(
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<FetchOutcome> {
   let res: Response;
   try {
     res = await fetchImpl(`${API_BASE}/api/n8n/queue`, { method: "GET" });
@@ -363,13 +365,7 @@ export function toPending(row: N8nInvoiceRow, defaultEntity: string): PendingInv
 /** What a reviewed row is missing, as a fact. These used to be Dutch sentences
  *  returned from validation, which put prose in the model layer and rendered
  *  Dutch on the English screen. */
-export type InvoiceGap =
-  | "counterparty"
-  | "issue-date"
-  | "due-date"
-  | "amount"
-  | "currency"
-  | "vat";
+export type InvoiceGap = "counterparty" | "issue-date" | "due-date" | "amount" | "currency" | "vat";
 
 /** Turn a reviewed row into a real Invoice, or say exactly what is missing.
  *  `sourceType: "llm"` because a model read this out of an e-mail — it must

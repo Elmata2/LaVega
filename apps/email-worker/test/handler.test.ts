@@ -11,7 +11,13 @@ import {
 } from "../src/handler.js";
 import { parseMail } from "../src/parseMail.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
-import { RAW_FORWARDED_INVOICE, RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
+import {
+  RAW_FORWARDED_INVOICE,
+  RAW_IMAGE_ONLY,
+  RAW_PDF_INVOICE,
+  RAW_PLAIN_TEXT,
+  RAW_SPOOFED,
+} from "./rawMail.js";
 
 const ENV = {
   N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",

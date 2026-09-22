@@ -236,7 +236,14 @@ async function clickAsync(el: Element) {
 test("a fetched row and notice survive the tab closing entirely", async () => {
   const vault = fakeVault();
 
-  mount(<Harness fetchImpl={serving([{ invoices: [ROW_A], notices: [NOTICE_A] }])} storage={vault} invoices={[]} txs={[]} />);
+  mount(
+    <Harness
+      fetchImpl={serving([{ invoices: [ROW_A], notices: [NOTICE_A] }])}
+      storage={vault}
+      invoices={[]}
+      txs={[]}
+    />,
+  );
   await clickAsync(byText("button", "Ophalen uit n8n"));
   expect(container!.querySelectorAll(".n8n-row[data-messageid]")).toHaveLength(1);
   expect(container!.querySelector('[data-noticeid="msg-notice-a"]')).not.toBeNull();
@@ -246,7 +253,9 @@ test("a fetched row and notice survive the tab closing entirely", async () => {
   root = null;
   container = null;
 
-  const c2 = mount(<HydratingHarness fetchImpl={neverFetch} storage={vault} invoices={[]} txs={[]} />);
+  const c2 = mount(
+    <HydratingHarness fetchImpl={neverFetch} storage={vault} invoices={[]} txs={[]} />,
+  );
   await flush();
 
   const row = c2.querySelector('.n8n-row[data-messageid="msg-a"]');
@@ -259,7 +268,14 @@ test("a fetched row and notice survive the tab closing entirely", async () => {
 test("a confirmed row does not come back after a fresh mount, and leaves the vault", async () => {
   const vault = fakeVault();
 
-  mount(<Harness fetchImpl={serving([{ invoices: [ROW_A, ROW_B] }])} storage={vault} invoices={[]} txs={[]} />);
+  mount(
+    <Harness
+      fetchImpl={serving([{ invoices: [ROW_A, ROW_B] }])}
+      storage={vault}
+      invoices={[]}
+      txs={[]}
+    />,
+  );
   await clickAsync(byText("button", "Ophalen uit n8n"));
   expect(container!.querySelectorAll(".n8n-row[data-messageid]")).toHaveLength(2);
 
@@ -275,7 +291,9 @@ test("a confirmed row does not come back after a fresh mount, and leaves the vau
   root = null;
   container = null;
 
-  const c2 = mount(<HydratingHarness fetchImpl={neverFetch} storage={vault} invoices={[]} txs={[]} />);
+  const c2 = mount(
+    <HydratingHarness fetchImpl={neverFetch} storage={vault} invoices={[]} txs={[]} />,
+  );
   await flush();
 
   const rows = [...c2.querySelectorAll(".n8n-row[data-messageid]")].map((r) =>

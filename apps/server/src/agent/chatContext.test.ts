@@ -137,9 +137,7 @@ test("sanitizeChatContext scrubs values INSIDE an allowed key, not just the key 
   const out = sanitizeChatContext("forecast", {
     summary: {
       openingCents: 500_000,
-      drivers: [
-        { label: "NL17INGB0539576085 SPOTIFY AB Stockholm", sign: -1, perWeekCents: -276 },
-      ],
+      drivers: [{ label: "NL17INGB0539576085 SPOTIFY AB Stockholm", sign: -1, perWeekCents: -276 }],
     },
   });
   const json = JSON.stringify(out);

@@ -30,10 +30,7 @@ const UNIQUE: Array<[AutoBookHold, Record<Locale, string>]> = [
     { kind: "sender-unchecked" },
     { nl: "geen afzendercontrole gedaan", en: "No sender check was run" },
   ],
-  [
-    { kind: "entity-ambiguous" },
-    { nl: "meer dan één onderneming", en: "more than one company" },
-  ],
+  [{ kind: "entity-ambiguous" }, { nl: "meer dan één onderneming", en: "more than one company" }],
   [
     { kind: "incomplete", gap: "currency" },
     { nl: "gokt geen euro's", en: "does not assume euros" },
@@ -64,7 +61,14 @@ test.each(["counterparty", "issue-date", "due-date", "amount", "currency", "vat"
       const c = adminCopy[locale].facturen;
       const sentence = holdSentence(c, { kind: "incomplete", gap });
       expect(sentence).toContain(c.queue.holds.gaps[gap]);
-      for (const other of ["counterparty", "issue-date", "due-date", "amount", "currency", "vat"] as const) {
+      for (const other of [
+        "counterparty",
+        "issue-date",
+        "due-date",
+        "amount",
+        "currency",
+        "vat",
+      ] as const) {
         if (other === gap) continue;
         expect(sentence).not.toContain(c.queue.holds.gaps[other]);
       }
@@ -80,6 +84,16 @@ test.each(["counterparty", "issue-date", "due-date", "amount", "currency", "vat"
  * raise the unattended exposure tenfold. */
 test("the auto-book ceiling is EUR 10.000 and says so in both languages", () => {
   expect(AUTO_BOOK_CEILING_CENTS).toBe(1_000_000);
-  expect(holdSentence(adminCopy.nl.facturen, { kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS })).toContain("€ 10.000");
-  expect(holdSentence(adminCopy.en.facturen, { kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS })).toContain("€10,000");
+  expect(
+    holdSentence(adminCopy.nl.facturen, {
+      kind: "over-ceiling",
+      ceilingCents: AUTO_BOOK_CEILING_CENTS,
+    }),
+  ).toContain("€ 10.000");
+  expect(
+    holdSentence(adminCopy.en.facturen, {
+      kind: "over-ceiling",
+      ceilingCents: AUTO_BOOK_CEILING_CENTS,
+    }),
+  ).toContain("€10,000");
 });

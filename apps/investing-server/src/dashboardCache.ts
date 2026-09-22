@@ -69,7 +69,8 @@ export function createDashboardCache(input: { now?: () => number } = {}): Dashbo
       tenantGenerations.set(tenantId, (tenantGenerations.get(tenantId) ?? 0) + 1);
       const prefix = `${tenantId}\u0000`;
       for (const cacheId of entries.keys()) if (cacheId.startsWith(prefix)) entries.delete(cacheId);
-      for (const cacheId of inFlight.keys()) if (cacheId.startsWith(prefix)) inFlight.delete(cacheId);
+      for (const cacheId of inFlight.keys())
+        if (cacheId.startsWith(prefix)) inFlight.delete(cacheId);
     },
   };
 }

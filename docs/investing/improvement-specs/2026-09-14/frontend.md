@@ -2,13 +2,13 @@
 
 Baseline: `master` at `7a566c4`. Evidence below is static source inspection. Parent review reports investing-web baseline tests: 85 passing. Tailwind v4, theme-token wiring and lint ratchet already exist on `719773f`; implement on top of that work and do not repeat it. All paths below are relative to repository root.
 
-| ID | Priority | Finding | Status | Recommendation |
-| --- | --- | --- | --- | --- |
-| UI-01 | P1 | Dashboard request ownership and payload validation | Confirmed failure paths | Strong |
-| UI-02 | P1 | Agent selection and catalog failure states | Confirmed defects | Strong |
-| UI-03 | P1/P2 | Sync lifecycle and polling ownership | Confirmed failure paths | Strong |
-| UI-04 | P2 | Chart-window transitions and pointer ownership | Confirmed wheel defect; gesture robustness gaps | Strong |
-| UI-05 | P3 | Risk-summary resource ownership | Architecture opportunity; manual refresh intentional | Worth exploring |
+| ID    | Priority | Finding                                            | Status                                               | Recommendation  |
+| ----- | -------- | -------------------------------------------------- | ---------------------------------------------------- | --------------- |
+| UI-01 | P1       | Dashboard request ownership and payload validation | Confirmed failure paths                              | Strong          |
+| UI-02 | P1       | Agent selection and catalog failure states         | Confirmed defects                                    | Strong          |
+| UI-03 | P1/P2    | Sync lifecycle and polling ownership               | Confirmed failure paths                              | Strong          |
+| UI-04 | P2       | Chart-window transitions and pointer ownership     | Confirmed wheel defect; gesture robustness gaps      | Strong          |
+| UI-05 | P3       | Risk-summary resource ownership                    | Architecture opportunity; manual refresh intentional | Worth exploring |
 
 ## UI-01 — Own dashboard requests behind one resource interface
 
@@ -144,15 +144,15 @@ Dependencies: implement only alongside UI-01 shared transport work, where duplic
 
 ## UI before/after review
 
-| Before | After | Why |
-| --- | --- | --- |
-| Persona button opens a window while Analyse remains on first persona | Selection changes persona; explicit conversation action opens it | Visible selection and request agree |
-| Catalog failure leaves spinner | Error and retry | Failure is actionable |
-| Late refresh can replace newer data | Latest request owns display | Financial display cannot regress through request order |
-| Position/detail refresh failures are invisible | Valid data retained with warning | Staleness is visible |
-| Outward zoom jumps back to 1M at history limit | Clamp to full history | Gesture direction stays consistent |
-| Active sync stops updating after transient read failure | Coalesced polling retries with connection state | Progress recovers without reload |
-| Summary resource rules share rendering file | Resource rules move behind focused interface; manual refresh remains | Better locality without changing intentional behavior |
+| Before                                                               | After                                                                | Why                                                    |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
+| Persona button opens a window while Analyse remains on first persona | Selection changes persona; explicit conversation action opens it     | Visible selection and request agree                    |
+| Catalog failure leaves spinner                                       | Error and retry                                                      | Failure is actionable                                  |
+| Late refresh can replace newer data                                  | Latest request owns display                                          | Financial display cannot regress through request order |
+| Position/detail refresh failures are invisible                       | Valid data retained with warning                                     | Staleness is visible                                   |
+| Outward zoom jumps back to 1M at history limit                       | Clamp to full history                                                | Gesture direction stays consistent                     |
+| Active sync stops updating after transient read failure              | Coalesced polling retries with connection state                      | Progress recovers without reload                       |
+| Summary resource rules share rendering file                          | Resource rules move behind focused interface; manual refresh remains | Better locality without changing intentional behavior  |
 
 ## Delivery sequence
 

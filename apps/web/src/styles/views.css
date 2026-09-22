@@ -15,7 +15,7 @@
  * Relative order between these stylesheets is unchanged — they are all in the
  * same layer, so main.tsx's import order still decides. */
 @layer components {
-/* Layout for the four secondary tabs — Facturen, Valuta, Optimalisatie,
+  /* Layout for the four secondary tabs — Facturen, Valuta, Optimalisatie,
  * Belasting (UI review, 2026-08-16).
  *
  * Rules this file obeys:
@@ -30,7 +30,7 @@
  * money" block (Modules for homescreen example). Never the purple, never a
  * card number. */
 
-/* ---------- Two equal columns, for "roughly equal in weight" ----------
+  /* ---------- Two equal columns, for "roughly equal in weight" ----------
  * Now Tailwind utilities at each of the three call sites (Optimalisatie,
  * Belasting, Valuta): `grid-cols-2 [@media(max-width:900px)]:grid-cols-1`.
  * `grid-2` itself stays as a bare marker class — valuta-ui.test.tsx and
@@ -43,18 +43,17 @@
  * (`[grid-column:span_2]` etc, see moduleClass()), so that selector matched
  * nothing left in the DOM before this change either. */
 
-/* ---------- Explicit reasoning that ends in a number ---------- */
+  /* ---------- Explicit reasoning that ends in a number ---------- */
 
-/* ---------- Informative empty state ---------- */
+  /* ---------- Informative empty state ---------- */
 
-/* A preview that is explicitly NOT his data — dimmed and labelled, never
+  /* A preview that is explicitly NOT his data — dimmed and labelled, never
  * written to the vault. */
 
-/* ---------- De uitleg achter een oog ----------
+  /* ---------- De uitleg achter een oog ----------
  *
  * Explanations that used to sit as rows of text above the fields they described.
  * The eye is deliberately quiet and small: the field is the thing you came for,
  * the explanation is what you ask for when you need it. Same surface and rule as
  * .info-panel so the two read as one idea at two sizes. */
-
 }

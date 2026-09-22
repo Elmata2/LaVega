@@ -189,7 +189,9 @@ export default function SpendPie({
         className="spend-pie-ring flex-none w-[168px] h-[168px] [@media(max-width:560px)]:w-[132px] [@media(max-width:560px)]:h-[132px] rounded-full grid place-items-center cursor-default data-[open=yes]:cursor-pointer"
         style={{ background: `conic-gradient(${stops.join(", ")})` }}
         role="img"
-        aria-label={shown.map((s) => `${label(s.category)} ${Math.round(s.share * 100)}%`).join(", ")}
+        aria-label={shown
+          .map((s) => `${label(s.category)} ${Math.round(s.share * 100)}%`)
+          .join(", ")}
         data-active={active === null ? "none" : String(active)}
         data-open={canOpen ? "yes" : "no"}
         onPointerMove={pickArc}

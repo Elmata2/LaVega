@@ -71,9 +71,7 @@ test("a cache hit costs one store read, not two", async () => {
    * where a re-read of the range just read costs about as much as the symbol
    * it serves, which is what caps warm-cache sync throughput. */
   const store = createInMemoryPriceStore();
-  await store.upsert("local", [
-    { symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR" },
-  ]);
+  await store.upsert("local", [{ symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR" }]);
   const getRange = vi.fn(store.getRange);
   const priceProviders = [
     {

@@ -32,9 +32,12 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
   const [forwardError, setForwardError] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (copiedTimer.current) clearTimeout(copiedTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
   const [serverState, setServerState] = useState<"loading" | "ok" | "error">("loading");
   const [serverLocalPart, setServerLocalPart] = useState<string | null>(null);
@@ -153,10 +156,7 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
       <label htmlFor="forward-address" style={{ display: "block", margin: "0 0 var(--sp-1)" }}>
         {c.forwardAddress.addressLabel}
       </label>
-      <div
-        className="flex gap-2"
-        style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}
-      >
+      <div className="flex gap-2" style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}>
         <input
           id="forward-address"
           className="w-full"
@@ -199,7 +199,10 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
               <Button onClick={handleUseSuggestedAddress}>
                 {c.forwardAddress.suggestedButton(SUGGESTED_INVOICE_FORWARD_ADDRESS)}
               </Button>
-              <p className="cell-sub text-muted text-[0.85rem]" style={{ margin: "var(--sp-1) 0 0" }}>
+              <p
+                className="cell-sub text-muted text-[0.85rem]"
+                style={{ margin: "var(--sp-1) 0 0" }}
+              >
                 {c.forwardAddress.suggestedTradeoff}
               </p>
             </div>
@@ -213,7 +216,10 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
               >
                 {c.forwardAddress.generateButton}
               </Button>
-              <p className="cell-sub text-muted text-[0.85rem]" style={{ margin: "var(--sp-1) 0 0" }}>
+              <p
+                className="cell-sub text-muted text-[0.85rem]"
+                style={{ margin: "var(--sp-1) 0 0" }}
+              >
                 {c.forwardAddress.generateTradeoff}
               </p>
             </div>
@@ -238,7 +244,9 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
       )}
       {forwardAddress && !confirmRecord && (
         <p>
-          <Button onClick={() => setConfirmRecord(true)}>{c.forwardAddress.server.recordButton}</Button>
+          <Button onClick={() => setConfirmRecord(true)}>
+            {c.forwardAddress.server.recordButton}
+          </Button>
         </p>
       )}
       {forwardAddress && confirmRecord && (
@@ -248,7 +256,9 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
           </p>
           <p>
             <Button variant="primary" disabled={recording} onClick={() => void doRecord()}>
-              {recording ? c.forwardAddress.server.recording : c.forwardAddress.server.confirmButton}
+              {recording
+                ? c.forwardAddress.server.recording
+                : c.forwardAddress.server.confirmButton}
             </Button>{" "}
             <Button disabled={recording} onClick={() => setConfirmRecord(false)}>
               {c.forwardAddress.server.cancelButton}

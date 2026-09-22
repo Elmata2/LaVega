@@ -260,8 +260,14 @@ export function resolvePortfolioConversationConfig() {
   };
 }
 
-function createPortfolioConversationProvider(config: ReturnType<typeof resolvePortfolioConversationConfig>): PortfolioConversationProvider {
-  const provider = createOpenAICompatible({ name: "lavega-agent", baseURL: config.baseURL, apiKey: config.apiKey });
+function createPortfolioConversationProvider(
+  config: ReturnType<typeof resolvePortfolioConversationConfig>,
+): PortfolioConversationProvider {
+  const provider = createOpenAICompatible({
+    name: "lavega-agent",
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+  });
   return {
     async reply(input) {
       const { text } = await generateText({
@@ -300,9 +306,10 @@ export async function runPortfolioConversation({
       ? signal
       : "no_view";
   const probability = selected?.signal?.probabilities?.[choice];
-  const confidence = typeof probability === "number" && Number.isFinite(probability)
-    ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
-    : 0;
+  const confidence =
+    typeof probability === "number" && Number.isFinite(probability)
+      ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
+      : 0;
   let model: string;
   let conversationProvider: PortfolioConversationProvider;
   if (provider) {
@@ -327,7 +334,14 @@ export async function runPortfolioConversation({
       prompt,
     ].join("\n\n"),
   });
-  return { agentId, displayName: agent.displayName, text, model, snapshotHash: judgment.snapshotHash, judgment: { signal: choice, confidence } };
+  return {
+    agentId,
+    displayName: agent.displayName,
+    text,
+    model,
+    snapshotHash: judgment.snapshotHash,
+    judgment: { signal: choice, confidence },
+  };
 }
 
 export async function runPortfolioAgent({

@@ -21,34 +21,33 @@ const {
   dashboardCacheMock,
   getAuthMock,
   verifiedSessionMock,
-} =
-  vi.hoisted(() => ({
-    createRuntimeAppMock: vi.fn(async () => ({
-      routes: [
-        { method: "GET", path: "/api/investing/dashboard" },
-        { method: "GET", path: "/api/agents/portfolio" },
-      ],
-      fetch: vi.fn(
-        async () =>
-          new Response(JSON.stringify({ ok: true, service: "investing-server" }), {
-            headers: { "content-type": "application/json" },
-          }),
-      ),
-    })),
-    createDockerFetchMock: vi.fn(
-      (_fetch: unknown, _root: string) => async (request: Request) =>
-        new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
+} = vi.hoisted(() => ({
+  createRuntimeAppMock: vi.fn(async () => ({
+    routes: [
+      { method: "GET", path: "/api/investing/dashboard" },
+      { method: "GET", path: "/api/agents/portfolio" },
+    ],
+    fetch: vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true, service: "investing-server" }), {
+          headers: { "content-type": "application/json" },
+        }),
     ),
-    dashboardCacheMock: {
-      get: vi.fn(),
-      set: vi.fn(),
-      load: vi.fn(),
-      invalidate: vi.fn(),
-    },
-    createDashboardCacheMock: vi.fn(),
-    getAuthMock: vi.fn(() => null as unknown),
-    verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
-  }));
+  })),
+  createDockerFetchMock: vi.fn(
+    (_fetch: unknown, _root: string) => async (request: Request) =>
+      new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
+  ),
+  dashboardCacheMock: {
+    get: vi.fn(),
+    set: vi.fn(),
+    load: vi.fn(),
+    invalidate: vi.fn(),
+  },
+  createDashboardCacheMock: vi.fn(),
+  getAuthMock: vi.fn(() => null as unknown),
+  verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
+}));
 
 vi.mock("@lavega/investing-server/src/index.js", () => ({
   createDashboardCache: () => {

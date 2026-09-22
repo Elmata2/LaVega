@@ -15,12 +15,12 @@ one.
 
 This is the fact that shapes everything below, and it was not obvious:
 
-| | investing-web | apps/web |
-| --- | --- | --- |
-| Tailwind before | yes, v3 | **none** |
-| hand-written CSS | 149 lines | **6,343 lines, 8 files** |
-| components | 15 | 48 |
-| `className` usages | few | **1,182** |
+|                    | investing-web | apps/web                 |
+| ------------------ | ------------- | ------------------------ |
+| Tailwind before    | yes, v3       | **none**                 |
+| hand-written CSS   | 149 lines     | **6,343 lines, 8 files** |
+| components         | 15            | 48                       |
+| `className` usages | few           | **1,182**                |
 
 So "do the same update" is not the same job. For investing-web it was a v3 → v4
 migration. Here it is adopting a styling system from scratch and re-expressing
@@ -65,7 +65,7 @@ Converting `ModuleGrid` second turned up something that changes the order of
 the work. **Eleven test files read the stylesheets directly and assert on the
 rules**, and `module-grid.test.ts` parses every `@media` block into a map keyed
 by breakpoint. `module-grid.ts` says why out loud: the class names are "the
-*only* coupling between the React primitives and styles/modules.css, so both
+_only_ coupling between the React primitives and styles/modules.css, so both
 sides are pinned by tests", and `module-grid.test.ts` adds "this repo has no
 render/DOM test lib".
 
@@ -75,10 +75,10 @@ reads; the test then fails, or passes while asserting nothing.
 
 That splits the stylesheet in two:
 
-| under test contract | free |
-| --- | --- |
+| under test contract                                                   | free                       |
+| --------------------------------------------------------------------- | -------------------------- |
 | `base.css`, `blocks.css`, `charts.css`, `modules.css`, `worldmap.css` | `landing.css`, `views.css` |
-| 12 test files | none |
+| 12 test files                                                         | none                       |
 
 `worldmap.css` was originally listed as free and is not. `Globe.test.tsx` reads
 it through a `blad("worldmap.css")` helper rather than a literal

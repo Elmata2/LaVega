@@ -7,7 +7,13 @@ import { apiErrorText } from "./apiErrors.js";
  * always sent, are both load-bearing. */
 
 test("each AI code renders a distinct English sentence", () => {
-  const codes = ["ai-fault", "ai-upstream-limit", "ai-credentials-refused", "ai-budget-day", "ai-budget-month"] as const;
+  const codes = [
+    "ai-fault",
+    "ai-upstream-limit",
+    "ai-credentials-refused",
+    "ai-budget-day",
+    "ai-budget-month",
+  ] as const;
   const sentences = codes.map((code) => apiErrorText("en", code, "should not be seen"));
   expect(new Set(sentences).size).toBe(codes.length);
 });

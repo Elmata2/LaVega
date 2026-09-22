@@ -80,8 +80,7 @@ function scopes(source: string): { base: string; media: Map<number, string> } {
   while (i < source.length) {
     const mediaAt = source.indexOf("@media", i);
     const framesAt = source.indexOf("@keyframes", i);
-    const at =
-      mediaAt === -1 ? framesAt : framesAt === -1 ? mediaAt : Math.min(mediaAt, framesAt);
+    const at = mediaAt === -1 ? framesAt : framesAt === -1 ? mediaAt : Math.min(mediaAt, framesAt);
     if (at === -1) {
       base += source.slice(i);
       break;
@@ -195,7 +194,11 @@ export function resolved(
      * minified: "repeat(3, minmax(0, 1fr))" and "repeat(3,minmax(0,1fr))" are
      * the same declaration, and an assertion that passes only when dist happens
      * to exist is worse than no assertion. */
-    if (decl) found = decl[1].trim().replace(/\s*([,()])\s*/g, "$1").replace(/\s+/g, " ");
+    if (decl)
+      found = decl[1]
+        .trim()
+        .replace(/\s*([,()])\s*/g, "$1")
+        .replace(/\s+/g, " ");
   }
   if (!matchedAnyRule) {
     throw new Error(

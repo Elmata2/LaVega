@@ -105,7 +105,11 @@ function ForecastBanner({
   const atRisk = f.atRisk ?? null;
 
   return (
-    <Card as="section" className={`forecast-banner ${stateClass}`} aria-label={c.tekortSignaleringAria}>
+    <Card
+      as="section"
+      className={`forecast-banner ${stateClass}`}
+      aria-label={c.tekortSignaleringAria}
+    >
       <div>
         <p className={`forecast-banner-title ${titleClass}`}>
           {state === "shortfall" &&
@@ -124,7 +128,9 @@ function ForecastBanner({
             {c.krapstePuntBanner(
               lowest.weekNumber,
               euroNumber(locale, lowest.closingCents),
-              lowest.lowerCents !== null ? c.lowerSuffix(euroNumber(locale, lowest.lowerCents)) : "",
+              lowest.lowerCents !== null
+                ? c.lowerSuffix(euroNumber(locale, lowest.lowerCents))
+                : "",
               euroNumber(locale, bufferCents),
             )}
           </p>
@@ -209,7 +215,10 @@ function ForecastChart({
         points={points}
         band={band}
         // "buffer" reads the same in Dutch and English — see Worker B's report.
-        reference={{ value: bufferCents / 100, label: `buffer €${euroNumber(locale, bufferCents)}` }}
+        reference={{
+          value: bufferCents / 100,
+          label: `buffer €${euroNumber(locale, bufferCents)}`,
+        }}
         color={f.shortfall ? "var(--neg)" : "var(--pos)"}
         format={(v) => `€${wholeEuroFormat(locale, v)}`}
         ariaLabel={c.verwachteKaspositieAria}

@@ -390,7 +390,11 @@ function CcySelect({
 /** The one place a route's `FxWhy` becomes a sentence. Exhaustive by switch,
  *  so a new kind in `rankFxRoutes` fails the build here instead of rendering
  *  nothing — same pattern as `holdSentence` in Facturen.tsx. */
-function fxWhySentence(why: FxWhy, c: ValutaCopy["view"]["routeRow"]["why"], locale: Locale): string {
+function fxWhySentence(
+  why: FxWhy,
+  c: ValutaCopy["view"]["routeRow"]["why"],
+  locale: Locale,
+): string {
   switch (why.kind) {
     case "terms-unknown-held":
       return c.termsUnknownHeld;
@@ -861,7 +865,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className={xferOutClass(netReceived === null)} data-testid="arrives">
-                  {netReceived === null ? c.transfer.unknown : formatCurrencyIn(locale, netReceived, to)}
+                  {netReceived === null
+                    ? c.transfer.unknown
+                    : formatCurrencyIn(locale, netReceived, to)}
                 </span>
                 <CcySelect
                   label={c.transfer.toCurrencyLabel}
@@ -1035,7 +1041,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     de module die hier stond; die kop is weg, en een knop hoort toch
                     bij de lijst waarin je de andere keuze maakte. */}
                 {pickedBank && auto && pickedBank !== auto.key && (
-                  <Button style={{ marginBottom: "var(--sp-3)" }} onClick={() => setPickedBank(null)}>
+                  <Button
+                    style={{ marginBottom: "var(--sp-3)" }}
+                    onClick={() => setPickedBank(null)}
+                  >
                     {c.bankList.backToBest}
                   </Button>
                 )}
@@ -1054,7 +1063,9 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                 </ul>
                 {hidden > 0 && (
                   <Button style={{ marginTop: "var(--sp-3)" }} onClick={() => setShowAll(true)}>
-                    {hidden === 1 ? c.bankList.showMoreOne(hidden) : c.bankList.showMoreMany(hidden)}
+                    {hidden === 1
+                      ? c.bankList.showMoreOne(hidden)
+                      : c.bankList.showMoreMany(hidden)}
                   </Button>
                 )}
                 {/* Wat de lijst wél en niet beweert. Stond achter een eigen ⓘ in de

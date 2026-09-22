@@ -67,9 +67,7 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
       title="Cashflow"
       span={2}
       height="tall"
-      menu={
-        <CardLink onClick={() => onNavigate("forecast")}>Forecast →</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("forecast")}>Forecast →</CardLink>}
       footer={
         hasChart ? (
           forecast.shortfall && shortfallWeek !== null ? (

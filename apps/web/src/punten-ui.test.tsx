@@ -208,7 +208,9 @@ test("a reply that is a sentence is refused out loud — nothing is guessed into
   );
   click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
-  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain("stuur alleen het saldo");
+  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
+    "stuur alleen het saldo",
+  );
 });
 
 test("'Niet nu' snoozes exactly one month and asks nothing in between", () => {
@@ -242,7 +244,9 @@ test("the add form takes '245k' and refuses text, saying why", () => {
   );
   click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
-  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain("geen getal");
+  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
+    "geen getal",
+  );
 
   type(
     container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
@@ -256,13 +260,13 @@ test("the add form names the unit of the chosen programme", () => {
   render([]);
   expect(container!.querySelector('[data-testid="punt-form"] [aria-label="Punten"]')).toBeTruthy();
   type(
-    container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Programma"]')!,
+    container!.querySelector<HTMLInputElement>(
+      '[data-testid="punt-form"] [aria-label="Programma"]',
+    )!,
     "bunq",
   );
   expect(
-    container!.querySelector(
-      '[data-testid="punt-form"] [aria-label="Cashback in hele euro\'s"]',
-    ),
+    container!.querySelector('[data-testid="punt-form"] [aria-label="Cashback in hele euro\'s"]'),
   ).toBeTruthy();
 });
 

@@ -1155,7 +1155,12 @@ const nl: MoneyCopy = {
   },
   betaalschema: {
     title: "Betaalagenda",
-    status: { expected: "verwacht", confirmed: "bevestigd", paid: "betaald", cancelled: "vervallen" },
+    status: {
+      expected: "verwacht",
+      confirmed: "bevestigd",
+      paid: "betaald",
+      cancelled: "vervallen",
+    },
     cadence: {
       wekelijks: "wekelijks",
       elke2Weken: "elke 2 weken",
@@ -1809,12 +1814,14 @@ const en: MoneyCopy = {
     nogGeenUitgavenDezeMaand: "No spending yet this month.",
     nietVergelijkbaar: (month, prev) =>
       `${month} and ${prev} cannot be compared: no account has data in both months.`,
-    erStaatWelUitgaven: (amount) => ` There is, however, ${amount} of spending in these two months.`,
+    erStaatWelUitgaven: (amount) =>
+      ` There is, however, ${amount} of spending in these two months.`,
     importeerBeideMaanden:
       "Import both months for the same accounts, and the comparison will appear here.",
     maandTOvPrev: (month, prev) => `${month} vs. ${prev}`,
     aandeelEnDeltaTOv: (month, prev) => `${month} · share & Δ vs. ${prev}`,
-    telDagenTotNuToe: (month, observed, inMonth) => `${month} counts ${observed} of ${inMonth} days so far.`,
+    telDagenTotNuToe: (month, observed, inMonth) =>
+      `${month} counts ${observed} of ${inMonth} days so far.`,
     rekeningenBuitenVergelijking: (n, amount) =>
       `${n} account${n === 1 ? "" : "s"} ${n === 1 ? "stays" : "stay"} outside the comparison — ${n === 1 ? "it has" : "they have"} no data in both months (${amount} of spending).`,
     bekijkTransactiesIn: (categorie) => `View transactions in ${categorie}`,

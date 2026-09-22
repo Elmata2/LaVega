@@ -130,10 +130,7 @@ export type TravelBlockProps = {
  *  words only, no interpolation logic — this is that logic, shared by every
  *  call site below instead of a `.replace()` chain repeated at each one. */
 function fill(template: string, vals: Record<string, string | number>): string {
-  return Object.entries(vals).reduce(
-    (s, [k, v]) => s.replaceAll(`{${k}}`, String(v)),
-    template,
-  );
+  return Object.entries(vals).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), template);
 }
 
 /** Splits a filled template at its " — " boundary, for the copy entries that
@@ -226,7 +223,11 @@ function pct(c: TravelCopy, n: number | null): string {
 /** "{bank} betaalpas"/"{bank} creditcard" as the reader's language, not core's
  *  identity string — that string (`Journey.provider`/`.via`) stays Dutch on
  *  purpose, it is what fact lookups and React keys match on. */
-function productLabel(bank: string, productKind: "betaalpas" | "creditcard", c: TravelCopy): string {
+function productLabel(
+  bank: string,
+  productKind: "betaalpas" | "creditcard",
+  c: TravelCopy,
+): string {
   return `${bank} ${c.common.productKindWord[productKind]}`;
 }
 
@@ -288,7 +289,8 @@ function journeyWhySentence(why: JourneyWhy, c: TravelCopy): string {
  *  travel.ts): same shape, different conjunction, so the Dutch string cannot
  *  drift while English still reads naturally. */
 function nameSomeEn(names: readonly string[], limit = 3): string {
-  if (names.length > limit) return `${names.slice(0, limit).join(", ")} and ${names.length - limit} more`;
+  if (names.length > limit)
+    return `${names.slice(0, limit).join(", ")} and ${names.length - limit} more`;
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
@@ -336,7 +338,11 @@ function bareHoldingCostClauseSentence(
 /** The one place a `NetBenefitDescription` (netBenefit.ts) becomes a sentence.
  *  Reuses `floorNote` below for the same lower-bound clause `Kaartkosten`
  *  already renders from the same `NetBasis` shape — one sentence, not two. */
-function netBenefitDescriptionSentence(d: NetBenefitDescription, c: TravelCopy, locale: Locale): string {
+function netBenefitDescriptionSentence(
+  d: NetBenefitDescription,
+  c: TravelCopy,
+  locale: Locale,
+): string {
   switch (d.kind) {
     case "gross-cost-unknown": {
       const why =
@@ -354,16 +360,24 @@ function netBenefitDescriptionSentence(d: NetBenefitDescription, c: TravelCopy, 
       const per = d.basis.kind === "recurring" ? ` ${c.common.periodWord(d.basis.period)}` : "";
       const over =
         d.basis.kind === "one-off"
-          ? c.common.overHorizon(
-              c.common.horizonWords(d.basis.periodsCharged, d.basis.costPeriod),
-            )
+          ? c.common.overHorizon(c.common.horizonWords(d.basis.periodsCharged, d.basis.costPeriod))
           : "";
       const floor = floorNote(d.basis, c);
-      const kosten = d.alreadyHeld ? c.netBenefitDescription.extraCosts : c.netBenefitDescription.costsForProduct;
+      const kosten = d.alreadyHeld
+        ? c.netBenefitDescription.extraCosts
+        : c.netBenefitDescription.costsForProduct;
       const gross = travelEuro(locale, d.grossCents / 100);
       const cost = travelEuro(locale, d.costCents / 100);
       if (d.kind === "net") {
-        return c.netBenefitDescription.net(gross, per, cost, kosten, over, travelEuro(locale, d.netCents / 100), floor);
+        return c.netBenefitDescription.net(
+          gross,
+          per,
+          cost,
+          kosten,
+          over,
+          travelEuro(locale, d.netCents / 100),
+          floor,
+        );
       }
       return d.netCents === 0
         ? c.netBenefitDescription.noRecommendationZero(gross, per, cost, kosten, over, floor)
@@ -384,7 +398,11 @@ function netBenefitDescriptionSentence(d: NetBenefitDescription, c: TravelCopy, 
  *  `payHeadline` and `withdrawHeadline`'s "not-held" both append to their own
  *  sentence. Each branch keeps its own leading space, same convention as the
  *  type it renders (see travel.ts). */
-function holdingCostClauseSentence(clause: HoldingCostClause, c: TravelCopy, locale: Locale): string {
+function holdingCostClauseSentence(
+  clause: HoldingCostClause,
+  c: TravelCopy,
+  locale: Locale,
+): string {
   switch (clause.kind) {
     case "bare":
       return bareHoldingCostClauseSentence(clause.clause, c, locale);
@@ -410,8 +428,18 @@ function holdingCostClauseSentence(clause: HoldingCostClause, c: TravelCopy, loc
             : c.holdingCostClause.periodMonths(clause.periodsCharged);
       const product = displayProduct(clause.product, c);
       return clause.kind === "net-positive"
-        ? c.holdingCostClause.netPositive(product, price, period, travelEuro(locale, clause.netCents / 100))
-        : c.holdingCostClause.netNegative(product, price, period, travelEuro(locale, -clause.netCents / 100));
+        ? c.holdingCostClause.netPositive(
+            product,
+            price,
+            period,
+            travelEuro(locale, clause.netCents / 100),
+          )
+        : c.holdingCostClause.netNegative(
+            product,
+            price,
+            period,
+            travelEuro(locale, -clause.netCents / 100),
+          );
     }
   }
 }
@@ -438,7 +466,11 @@ function journeyHeadlineSentence(h: JourneyHeadline, c: TravelCopy, locale: Loca
       const head =
         h.head.kind === "direct"
           ? c.journeyHeadline.direct(displayProduct(h.head.provider, c))
-          : c.journeyHeadline.via(h.head.fundedFrom ?? "", displayProduct(h.head.via, c), h.head.method);
+          : c.journeyHeadline.via(
+              h.head.fundedFrom ?? "",
+              displayProduct(h.head.via, c),
+              h.head.method,
+            );
       const cost =
         h.costOnReference === null
           ? ""
@@ -468,7 +500,10 @@ export function payHeadlineSentence(h: PayHeadline, c: TravelCopy, locale: Local
             : c.payHeadline.costAmount(travelEuro(locale, h.costOnReference));
       const versus =
         h.savingOnReference !== null && h.ownProduct
-          ? c.payHeadline.versusOwn(travelEuro(locale, h.savingOnReference), displayProduct(h.ownProduct, c))
+          ? c.payHeadline.versusOwn(
+              travelEuro(locale, h.savingOnReference),
+              displayProduct(h.ownProduct, c),
+            )
           : "";
       return c.payHeadline.catalogueCard(
         displayProduct(h.product, c),
@@ -491,7 +526,11 @@ function convertStepNoteSentence(note: ConvertStepNote, c: TravelCopy): string {
       return c.convertStep.payDirectly(displayProduct(note.provider, c));
     case "move-funds":
       return note.method
-        ? c.convertStep.moveFundsFree(note.fromProvider, displayProduct(note.toProvider, c), note.method)
+        ? c.convertStep.moveFundsFree(
+            note.fromProvider,
+            displayProduct(note.toProvider, c),
+            note.method,
+          )
         : c.convertStep.moveFundsPlain(note.fromProvider, displayProduct(note.toProvider, c));
   }
 }
@@ -544,7 +583,11 @@ function withdrawalPctSuffix(locale: Locale, pct: number | null): string {
 
 /** The one place a `SmallWithdrawalPenalty` becomes a sentence — the flat-fee
  *  warning that stays on screen whoever wins the ranking. */
-function smallWithdrawalPenaltySentence(p: SmallWithdrawalPenalty, c: TravelCopy, locale: Locale): string {
+function smallWithdrawalPenaltySentence(
+  p: SmallWithdrawalPenalty,
+  c: TravelCopy,
+  locale: Locale,
+): string {
   if (p.kind === "none") return "";
   return c.withdrawHeadline.smallPenalty(
     displayProduct(p.provider, c),
@@ -554,10 +597,16 @@ function smallWithdrawalPenaltySentence(p: SmallWithdrawalPenalty, c: TravelCopy
 }
 
 /** The one place an `OwnWithdrawalComparison` becomes a sentence. */
-function ownWithdrawalComparisonSentence(own: OwnWithdrawalComparison, c: TravelCopy, locale: Locale): string {
+function ownWithdrawalComparisonSentence(
+  own: OwnWithdrawalComparison,
+  c: TravelCopy,
+  locale: Locale,
+): string {
   if (own.kind === "unknown") return c.withdrawHeadline.ownUnknown;
   const extra =
-    own.extraCostVsWinner === null ? "" : c.withdrawHeadline.ownExtraCost(travelEuro(locale, own.extraCostVsWinner));
+    own.extraCostVsWinner === null
+      ? ""
+      : c.withdrawHeadline.ownExtraCost(travelEuro(locale, own.extraCostVsWinner));
   return c.withdrawHeadline.ownKnown(
     displayProduct(own.ownProduct, c),
     travelEuro(locale, own.ownCostOnReference),
@@ -797,7 +846,11 @@ export function Kaartkosten({
             en dan is het totaal juist het getal dat de aftrek verklaart. */}
         <strong>{calculatedHeading}</strong> — {calculatedRest}
         {benefit.costCents !== cost.amount.cents && (
-          <>{fill(c.cardCost.calculatedTotalSuffix, { total: formatEuroIn(locale, benefit.costCents / 100) })}</>
+          <>
+            {fill(c.cardCost.calculatedTotalSuffix, {
+              total: formatEuroIn(locale, benefit.costCents / 100),
+            })}
+          </>
         )}
         .{floorNote(benefit.basis, c)}
       </p>
@@ -1148,7 +1201,10 @@ export function TermsNotice({
           <p className="cell-sub">
             {fill(c.terms.unpriced, {
               list: state.unpriced
-                .map((u) => `${productLabel(u.bank, u.productKind, c)} — ${journeyWhySentence(u.why, c)}`)
+                .map(
+                  (u) =>
+                    `${productLabel(u.bank, u.productKind, c)} — ${journeyWhySentence(u.why, c)}`,
+                )
                 .join("; "),
             })}
           </p>
@@ -1165,7 +1221,10 @@ export function TermsNotice({
           </p>
         )}
         {aiAvailable
-          ? searchButton(false, gaps > 0 ? fill(c.terms.searchWithCount, { count: gaps }) : c.terms.refresh)
+          ? searchButton(
+              false,
+              gaps > 0 ? fill(c.terms.searchWithCount, { count: gaps }) : c.terms.refresh,
+            )
           : noKeyLine}
       </div>
     );
@@ -1174,7 +1233,9 @@ export function TermsNotice({
   if (state.kind === "no-key") {
     return (
       <div className="travel-terms border-l-4 border-l-warn" role="status">
-        <p className="cell-sub">{fill(c.terms.unknownList, { names: nameList(state.unknown, c) })}</p>
+        <p className="cell-sub">
+          {fill(c.terms.unknownList, { names: nameList(state.unknown, c) })}
+        </p>
         {noKeyLine}
       </div>
     );
@@ -1318,7 +1379,9 @@ export function CashSection({
             >
               <span className="min-w-0">
                 {productLabel(o.bank, o.productKind, c)}
-                {o.fee.known && <span className="eyebrow"> · {c.withdrawalFee(o.fee.components)}</span>}
+                {o.fee.known && (
+                  <span className="eyebrow"> · {c.withdrawalFee(o.fee.components)}</span>
+                )}
                 {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
               </span>
               <span className="flex-none tabular-nums whitespace-nowrap">
@@ -1344,7 +1407,10 @@ export function CashSection({
             {o.fee.caveat && (
               <p className="cell-sub travel-note">
                 <strong>{c.common.caveatLabel}</strong>{" "}
-                {fill(c.cash.caveat, { provider: productLabel(o.bank, o.productKind, c), caveat: o.fee.caveat })}
+                {fill(c.cash.caveat, {
+                  provider: productLabel(o.bank, o.productKind, c),
+                  caveat: o.fee.caveat,
+                })}
               </p>
             )}
           </div>
@@ -1409,16 +1475,16 @@ export function OffersSection({
       </p>
       <ul className="list-none m-0 p-0 flex flex-col gap-3">
         {top.map((o) => (
-          <li
-            key={o.productId}
-            className="py-3 px-4 border border-line rounded bg-surface-2"
-          >
+          <li key={o.productId} className="py-3 px-4 border border-line rounded bg-surface-2">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <span className="font-semibold" data-testid="travel-journey-name">
                 {displayProduct(o.product, c)}
               </span>
               <NotYours />
-              <span className="font-semibold tabular-nums whitespace-nowrap" data-testid="travel-journey-cost">
+              <span
+                className="font-semibold tabular-nums whitespace-nowrap"
+                data-testid="travel-journey-cost"
+              >
                 {fill(c.offers.amountOnReference, {
                   amount: formatEuroIn(locale, costOnReferenceSpend(o.netCostPct) ?? 0),
                   reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
@@ -1602,7 +1668,11 @@ export default function TravelBlock({
       ? ""
       : payHeadlineSentence(
           plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
-            ? payHeadline({ ...plan.pay, holdingCost: null, benefit: null }, plan.journeys, plan.currency)
+            ? payHeadline(
+                { ...plan.pay, holdingCost: null, benefit: null },
+                plan.journeys,
+                plan.currency,
+              )
             : plan.headline,
           c,
           locale,
@@ -1773,7 +1843,8 @@ export default function TravelBlock({
                   wél staat, en dat is onderbouwing (punt 13). */}
               {plan.pay && !plan.pay.held && (
                 <p className="cell-sub travel-winner-switch">
-                  <NotYours /> {fill(c.detail.switchSource, { product: displayProduct(plan.pay.product, c) })}
+                  <NotYours />{" "}
+                  {fill(c.detail.switchSource, { product: displayProduct(plan.pay.product, c) })}
                   {plan.pay.asOf && (
                     <>{fill(c.detail.switchAgeSuffix, { age: figureAge(plan.pay.asOf, asOf) })}</>
                   )}
@@ -1828,7 +1899,9 @@ export default function TravelBlock({
                   lijst, met de zin die zegt dat LaVega zelf niets verplaatst. */}
               {bestJourney && (
                 <div className="cell-sub">
-                  {fill(c.detail.referenceNote, { reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND) })}
+                  {fill(c.detail.referenceNote, {
+                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                  })}
                 </div>
               )}
 
@@ -1884,7 +1957,9 @@ export default function TravelBlock({
                             <span className="min-w-0" data-testid="travel-leg-name">
                               {leg.name} · {leg.detail}
                             </span>
-                            <span className="flex-none tabular-nums whitespace-nowrap">{leg.cost}</span>
+                            <span className="flex-none tabular-nums whitespace-nowrap">
+                              {leg.cost}
+                            </span>
                           </li>
                         ))}
                       </ul>
@@ -1901,7 +1976,10 @@ export default function TravelBlock({
                           productLabel={productLabel(j.bank, j.productKind, c)}
                           factKey="fxFeePct"
                           label={fill(c.factCorrection.fxFeeLabel, {
-                            pct: pct(c, plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null),
+                            pct: pct(
+                              c,
+                              plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null,
+                            ),
                           })}
                           value={
                             plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null
@@ -1914,7 +1992,9 @@ export default function TravelBlock({
                           provider={j.provider}
                           productLabel={productLabel(j.bank, j.productKind, c)}
                           factKey="convertFeePct"
-                          label={fill(c.factCorrection.convertFeeLabel, { pct: pct(c, j.convertPct) })}
+                          label={fill(c.factCorrection.convertFeeLabel, {
+                            pct: pct(c, j.convertPct),
+                          })}
                           value={j.convertPct}
                           busy={busy}
                           onCorrect={onCorrectFact}
@@ -1948,7 +2028,9 @@ export default function TravelBlock({
                       notice that names the real cause instead of repeating an
                       instruction that may be impossible to follow. */}
                   <p className="travel-step-line">
-                    {bestJourney ? convertStepNoteSentence(plan.convert.note, c) : c.steps.exchangeNoCard}
+                    {bestJourney
+                      ? convertStepNoteSentence(plan.convert.note, c)
+                      : c.steps.exchangeNoCard}
                   </p>
                 </div>
 
@@ -1984,7 +2066,9 @@ export default function TravelBlock({
                               )}
                             </span>
                             <span className="flex-none tabular-nums whitespace-nowrap">
-                              {cost === null ? c.common.unknown : legCost(locale, c, option.netCostPct)}
+                              {cost === null
+                                ? c.common.unknown
+                                : legCost(locale, c, option.netCostPct)}
                             </span>
                           </li>
                         );
@@ -2004,7 +2088,9 @@ export default function TravelBlock({
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">
                   {fill(
-                    plan.unidentifiedCount === 1 ? c.detail.unidentifiedOne : c.detail.unidentifiedMany,
+                    plan.unidentifiedCount === 1
+                      ? c.detail.unidentifiedOne
+                      : c.detail.unidentifiedMany,
                     { count: plan.unidentifiedCount },
                   )}
                 </p>

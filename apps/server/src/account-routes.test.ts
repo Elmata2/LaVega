@@ -29,7 +29,11 @@ test("erasure is refused without an explicit confirmation", async () => {
     expect(res.status, JSON.stringify(body)).toBe(400);
   }
   // A body that is not JSON at all must not erase anything either.
-  const malformed = await app.request("/api/account/data", { method: "DELETE", headers: { "content-type": "application/json" }, body: "not-json" });
+  const malformed = await app.request("/api/account/data", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: "not-json",
+  });
   expect(malformed.status).toBe(400);
   expect(erase).not.toHaveBeenCalled();
 });
@@ -47,7 +51,10 @@ test("a confirmed erasure runs for the session's own tenant and reports what wen
 
 test("a caller cannot erase a tenant they name themselves", async () => {
   const { app, erase } = appWith("user-123");
-  await app.request("/api/account/data", erasePost({ confirm: "ERASE", tenantId: "user-999", userId: "user-999" }));
+  await app.request(
+    "/api/account/data",
+    erasePost({ confirm: "ERASE", tenantId: "user-999", userId: "user-999" }),
+  );
   expect(erase).toHaveBeenCalledWith("user-123");
   expect(erase).not.toHaveBeenCalledWith("user-999");
 });

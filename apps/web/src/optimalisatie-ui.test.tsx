@@ -609,7 +609,9 @@ test("the fallback sentence reads as a sentence for every cadence name", () => {
         cadence: cadenceName(days, locale),
       });
       expect(sentence, `${locale} ${days}`).not.toMatch(/\b(\w+) \1\b/);
-      expect(sentence, `${locale} ${days}`).not.toMatch(/per (maandelijks|tweemaandelijks|halfjaarlijks|jaarlijks)/);
+      expect(sentence, `${locale} ${days}`).not.toMatch(
+        /per (maandelijks|tweemaandelijks|halfjaarlijks|jaarlijks)/,
+      );
     }
   }
 });
@@ -628,7 +630,12 @@ test("the promo badge quotes the Dutch terms only to a Dutch reader", () => {
     promoNote: "Actierente 6 mnd, daarna 2,10%",
     freeWithdrawal: true,
   } as RateBenchmark;
-  const plain = { bank: "Klarna", product: "Sparen", ratePct: 1.95, freeWithdrawal: true } as RateBenchmark;
+  const plain = {
+    bank: "Klarna",
+    product: "Sparen",
+    ratePct: 1.95,
+    freeWithdrawal: true,
+  } as RateBenchmark;
 
   expect(promoBadgeLabel("nl", promo)).toBe("Actierente 6 mnd, daarna 2,10%");
   // Engels: het feit, niet het citaat — en het post-actietarief staat erin.

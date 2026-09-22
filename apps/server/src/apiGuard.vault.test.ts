@@ -30,7 +30,10 @@ vi.mock("./vault-routes.js", async () => {
   return {
     ...actual,
     // Always available, always naming a tenant — the worst case, on purpose.
-    vaultRouteDependencies: () => ({ tenantId: async () => "local", repository: () => repositoryMock }),
+    vaultRouteDependencies: () => ({
+      tenantId: async () => "local",
+      repository: () => repositoryMock,
+    }),
   };
 });
 
@@ -42,7 +45,14 @@ beforeEach(() => {
   for (const fn of Object.values(repositoryMock)) fn.mockClear();
 });
 
-const SEALED = { v: 1, kdf: "PBKDF2-SHA256", salt: "c2FsdA", iv: "aXY", ct: "Y3Q", iterations: 600_000 };
+const SEALED = {
+  v: 1,
+  kdf: "PBKDF2-SHA256",
+  salt: "c2FsdA",
+  iv: "aXY",
+  ct: "Y3Q",
+  iterations: 600_000,
+};
 
 test("the vault backup routes are registered, or the rest of this file proves nothing", async () => {
   verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });

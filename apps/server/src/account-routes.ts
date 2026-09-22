@@ -29,7 +29,10 @@ export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDepen
 
     const body: { confirm?: unknown } = await c.req.json<{ confirm?: unknown }>().catch(() => ({}));
     if (body.confirm !== "ERASE") {
-      return c.json({ problems: ["Bevestig met { \"confirm\": \"ERASE\" } — dit is niet terug te draaien"] }, 400);
+      return c.json(
+        { problems: ['Bevestig met { "confirm": "ERASE" } — dit is niet terug te draaien'] },
+        400,
+      );
     }
 
     const report = await dependencies.erase(tenantId);

@@ -48,7 +48,10 @@ export type OptimalisatieCopy = {
   };
 
   kpis: {
-    subscriptions: { label: string; eyebrow: (amount: string, unit: string, unknownCount: number) => string };
+    subscriptions: {
+      label: string;
+      eyebrow: (amount: string, unit: string, unknownCount: number) => string;
+    };
     priceIncreases: { label: string; eyebrow: string };
     overlaps: { label: string; eyebrow: string };
     interest: { label: string; eyebrowNoNet: string; eyebrowWithNet: string };
@@ -96,7 +99,12 @@ export type OptimalisatieCopy = {
 
     coverage: {
       noHistory: string;
-      withHistory: (p: { days: number; first: string; last: string; cadences: string }) => Segment[];
+      withHistory: (p: {
+        days: number;
+        first: string;
+        last: string;
+        cadences: string;
+      }) => Segment[];
       cadencesFallback: string;
       hiddenSuffix: (hiddenList: string) => string;
       hiddenCadenceItem: (cadence: string, days: number) => string;
@@ -172,7 +180,14 @@ export type OptimalisatieCopy = {
     convertedPanel: {
       summary: (converted: number, total: number) => string;
       explanation: (unit: string) => string;
-      item: (p: { name: string; lastAmount: string; cadence: string; sum: string; result: string; unit: string }) => string;
+      item: (p: {
+        name: string;
+        lastAmount: string;
+        cadence: string;
+        sum: string;
+        result: string;
+        unit: string;
+      }) => string;
     };
   };
 
@@ -217,14 +232,25 @@ export type OptimalisatieCopy = {
       extraPerMonth: (amount: string, bank: string) => string;
     };
 
-    tableHeaders: { rekening: string; saldo: string; rentePct: string; bron: string; mogelijkPerJaar: (vsKept?: string) => string };
+    tableHeaders: {
+      rekening: string;
+      saldo: string;
+      rentePct: string;
+      bron: string;
+      mogelijkPerJaar: (vsKept?: string) => string;
+    };
     rateCellAriaLabel: (accountName: string) => string;
     rateCellUnknownPlaceholder: string;
 
     sourceLabels: Record<"manual" | "detected" | "benchmark" | "assumed" | "unknown", string>;
     /** How the public rate benchmark itself was fetched (`RatesResult["source"]`) — distinct from `sourceLabels`, which is per-account. */
     ratesSourceLabels: Record<"live" | "cache" | "bundled", string>;
-    benchmarkSourceNote: (p: { bank: string; product: string; pct: string; asOf: string }) => string;
+    benchmarkSourceNote: (p: {
+      bank: string;
+      product: string;
+      pct: string;
+      asOf: string;
+    }) => string;
     assumedZeroNote: (p: { bank: string; pct: string; product: string; asOf: string }) => string;
     assumedZeroQuestion: string;
 
@@ -258,7 +284,14 @@ export type OptimalisatieCopy = {
      *  whose own cost is unknown, pointing at the Kosten module. */
     unknownTail: string;
 
-    routingSentence: (p: { toBank: string; fromBank: string; toPct: string; fromPct: string; approximate: boolean; amount: string }) => {
+    routingSentence: (p: {
+      toBank: string;
+      fromBank: string;
+      toPct: string;
+      fromPct: string;
+      approximate: boolean;
+      amount: string;
+    }) => {
       main: Segment[];
       tail: string;
     };
@@ -309,7 +342,13 @@ export type OptimalisatieCopy = {
 
     routingBasis: {
       heading: string;
-      sentence: (p: { toBank: string; fromBank: string; upperBound: boolean; amount: string; measuredDays?: number }) => string;
+      sentence: (p: {
+        toBank: string;
+        fromBank: string;
+        upperBound: boolean;
+        amount: string;
+        measuredDays?: number;
+      }) => string;
       approxNote: string;
     };
 
@@ -350,7 +389,12 @@ export type OptimalisatieCopy = {
     footer: string;
 
     totalComplete: (amount: string, accountCount: number) => string;
-    totalIncomplete: (p: { known: number; total: number; amount: string; unknown: number }) => string;
+    totalIncomplete: (p: {
+      known: number;
+      total: number;
+      amount: string;
+      unknown: number;
+    }) => string;
     totalNone: string;
 
     freeAccountWithConditions: (label: string, conditions: string) => string;
@@ -374,7 +418,14 @@ export type OptimalisatieCopy = {
     };
 
     tips: {
-      sentence: (p: { label: string; heldLabel: string; currentFee: string; altProduct: string; altFee: string; saving: string }) => string;
+      sentence: (p: {
+        label: string;
+        heldLabel: string;
+        currentFee: string;
+        altProduct: string;
+        altFee: string;
+        saving: string;
+      }) => string;
       atProviderLabel: string;
       elsewhereLabel: string;
       conditionalNote: (conditions: string) => string;
@@ -418,7 +469,13 @@ export type OptimalisatieCopy = {
     };
     noRecommendation: {
       heading: string;
-      body: (gross: string, per: string, gainWord: string, cost: string, costWord: string) => string;
+      body: (
+        gross: string,
+        per: string,
+        gainWord: string,
+        cost: string,
+        costWord: string,
+      ) => string;
       noGain: string;
       loss: (per: string, loss: string) => string;
       footer: (noun: string) => string;
@@ -533,8 +590,17 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
         "een bedrag dat mag stijgen (dat is juist het signaal) maar niet wild springt;",
         "geen eigen overboeking of kaartafrekening.",
       ],
-      talliesSummary: (count) => `Wat LaVega per ontvanger zag (${count} ontvangers, meest abonnement-achtige eerst)`,
-      talliesTableHeaders: ["Ontvanger", "Keer", "Totaal", "Ritme", "Spreiding", "Meegenomen?", "Waarom niet"],
+      talliesSummary: (count) =>
+        `Wat LaVega per ontvanger zag (${count} ontvangers, meest abonnement-achtige eerst)`,
+      talliesTableHeaders: [
+        "Ontvanger",
+        "Keer",
+        "Totaal",
+        "Ritme",
+        "Spreiding",
+        "Meegenomen?",
+        "Waarom niet",
+      ],
       noNameFallback: "(geen naam)",
       gapDaysSuffix: (days) => `${days} dg`,
       includedYes: "ja",
@@ -545,7 +611,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
         "Een ritme rond 30, 61, 91, 182 of 365 dagen is bruikbaar; een spreiding boven 0,35 betekent dat het bedrag te wild springt. Staat je abonnement hier met een goed ritme en een lage spreiding en tóch niet in de lijst hierboven, dan is dat een fout van ons — stuur die regel door.",
       housingExcludedOne: "Eén terugkerende ontvanger staat hier niet bij",
       housingExcludedMany: (count) => `${count} terugkerende ontvangers staan hier niet bij`,
-      housingExcludedTail: ": die zijn als vaste woonlast gelezen (huur, hypotheek, VvE), en die horen niet op dit scherm.",
+      housingExcludedTail:
+        ": die zijn als vaste woonlast gelezen (huur, hypotheek, VvE), en die horen niet op dit scherm.",
       missingAccountNote:
         "Meestal ontbreekt de rekening waar ze vanaf gaan: importeer je creditcard of privérekening, dan verschijnen ze hier — inclusief prijsstijgingen en dubbele diensten.",
       demoDisclosureSummary: "Bekijk hoe dit eruitziet met gevulde data",
@@ -565,7 +632,14 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       `${count} × ${functionName}: ${names} — samen ${total} ${unit}.` +
       (cancelAmount ? ` Eén opzeggen scheelt tot ${cancelAmount} ${unit}.` : ""),
 
-    tableHeaders: (periodLabel) => ["Dienst", "Functie", periodLabel, "Op je afschrift", "Verandering", "Laatst"],
+    tableHeaders: (periodLabel) => [
+      "Dienst",
+      "Functie",
+      periodLabel,
+      "Op je afschrift",
+      "Verandering",
+      "Laatst",
+    ],
     unrekenbaarCell: "niet om te rekenen",
 
     cadence: {
@@ -578,10 +652,12 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     },
 
     convertedPanel: {
-      summary: (converted, total) => `${converted} van de ${total} bedragen ${converted === 1 ? "is" : "zijn"} omgerekend uit een ander ritme`,
+      summary: (converted, total) =>
+        `${converted} van de ${total} bedragen ${converted === 1 ? "is" : "zijn"} omgerekend uit een ander ritme`,
       explanation: (unit) =>
         `Een abonnement houdt de eenheid van zijn eigen afschrijving; wat je hierboven ziet is die afschrijving ${unit} gerekend. Naar jaar wordt alleen vermenigvuldigd, dus dat bedrag is exact. Naar maand wordt gedeeld, en dan bestaat het bedrag in de kolom op geen enkel afschrift.`,
-      item: ({ name, lastAmount, cadence, sum, result, unit }) => `${name}: ${lastAmount} ${cadence} → ${sum} = ${result} ${unit}`,
+      item: ({ name, lastAmount, cadence, sum, result, unit }) =>
+        `${name}: ${lastAmount} ${cadence} → ${sum} = ${result} ${unit}`,
     },
   },
 
@@ -598,15 +674,25 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       ` per jaar op${showNetSuffix ? ", vóór wat die rekening zelf kost" : ""}.`,
     ],
     toonMeerSummary: "Per rekening, en wat de nieuwe rekening zelf kost",
-    suggestionSentence: ({ balance, accountLabel, ratePct, bestBank, bestKeptLabel, diffPct, extra }) =>
+    suggestionSentence: ({
+      balance,
+      accountLabel,
+      ratePct,
+      bestBank,
+      bestKeptLabel,
+      diffPct,
+      extra,
+    }) =>
       `Je houdt ${balance} aan bij ${accountLabel} tegen ${ratePct}; ${bestBank} betaalt ${bestKeptLabel}, ook als een actie afloopt — dat verschil van ${diffPct} is ${extra} per jaar.`,
 
     empty: {
       heading: "Nog geen rentewinst berekend.",
       explanation:
         "Per rekening heeft LaVega een saldo én een rente % nodig; een van beide onbekend betekent geen bedrag, geen aanname.",
-      noSaldoItem: (count) => `${count} rekening${count > 1 ? "en" : ""} zonder saldo — vul dat in bij Rekeningen.`,
-      noRateItem: (count) => `${count} rekening${count > 1 ? "en" : ""} zonder rente — zet de Rente % hieronder.`,
+      noSaldoItem: (count) =>
+        `${count} rekening${count > 1 ? "en" : ""} zonder saldo — vul dat in bij Rekeningen.`,
+      noRateItem: (count) =>
+        `${count} rekening${count > 1 ? "en" : ""} zonder rente — zet de Rente % hieronder.`,
       bestKnown: ({ keptPct, bank, marginPct }) =>
         `Beste rente die LaVega kan aantonen: ${keptPct} bij ${bank}. Elke rekening hier haalt dat al, of het verschil is kleiner dan ${marginPct} per jaar.`,
       noRatesKnown:
@@ -616,10 +702,12 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     promo: {
       badge: "🎁 nu te krijgen",
       headline: ({ bank, pct }) => `${bank} geeft vandaag ${pct}`,
-      tailUnknownAfter: " Wat je daarna houdt staat niet in de bron, dus daar rekent LaVega niet mee.",
+      tailUnknownAfter:
+        " Wat je daarna houdt staat niet in de bron, dus daar rekent LaVega niet mee.",
       tailKeptAfter: (kept) => ` Daarna houd je ${kept}.`,
       tailNotePrefix: (note) => ` — ${note}`,
-      extraPerMonth: (amount, bank) => ` Zolang de actie loopt is dat ${amount} per maand extra bovenop ${bank}.`,
+      extraPerMonth: (amount, bank) =>
+        ` Zolang de actie loopt is dat ${amount} per maand extra bovenop ${bank}.`,
     },
 
     tableHeaders: {
@@ -644,13 +732,15 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       cache: "uit cache",
       bundled: "offline momentopname",
     },
-    benchmarkSourceNote: ({ bank, product, pct, asOf }) => `${bank} ${product} · ${pct} · peildatum ${asOf}`,
+    benchmarkSourceNote: ({ bank, product, pct, asOf }) =>
+      `${bank} ${product} · ${pct} · peildatum ${asOf}`,
     assumedZeroNote: ({ bank, pct, product, asOf }) =>
       `${bank} betaalt ${pct} op ${product} (peildatum ${asOf}). Is dit die rekening? Zet dan het percentage hiernaast — wat jij invult gaat boven elke schatting.`,
     assumedZeroQuestion: "Is dit die rekening?",
 
     benchmarkDetails: {
-      summary: ({ count, sourceLabel, asOf }) => `Vergelijkingsrentes (${count} banken) · ${sourceLabel} · peildatum ${asOf}`,
+      summary: ({ count, sourceLabel, asOf }) =>
+        `Vergelijkingsrentes (${count} banken) · ${sourceLabel} · peildatum ${asOf}`,
       tableHeaders: ["Bank", "Rente nu", "Wat je houdt", "Actie"],
       capitalAtRiskTooltip:
         "Geen spaarrekening: dit is een geldmarktfonds. Je kunt geld verliezen, het rendement is na kosten en opnemen duurt tot twee werkdagen. Niet gedekt door het depositogarantiestelsel.",
@@ -665,7 +755,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
         `"Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "wat je houdt" is het tarief ná de actie — daarop wordt vergeleken. Staat daar "onbekend", dan zegt de bron niet wat er na de actie overblijft en doet die rekening niet mee in de vergelijking; het actietarief zie je wel. Bron: ${sourceLabel} via geld.nl (peildatum ${asOf}).`,
       refreshButton: "ververs rentes",
       refreshingButton: "verversen…",
-      refreshNote: "Alleen publieke rentes worden opgehaald — je eigen saldi/rentes blijven lokaal.",
+      refreshNote:
+        "Alleen publieke rentes worden opgehaald — je eigen saldi/rentes blijven lokaal.",
       offlineNote: "Voor live tarieven: start de rente-service (pnpm dev:server).",
     },
   },
@@ -676,7 +767,11 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     unknownTail: "Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Kosten”.",
 
     routingSentence: ({ toBank, fromBank, toPct, fromPct, approximate, amount }) => ({
-      main: ["Betaal met ", { bold: toBank }, ` in plaats van ${fromBank} — ${toPct} tegen ${fromPct}.`],
+      main: [
+        "Betaal met ",
+        { bold: toBank },
+        ` in plaats van ${fromBank} — ${toPct} tegen ${fromPct}.`,
+      ],
       tail: `${approximate ? "tot " : ""}${amount} per jaar`,
     }),
 
@@ -692,18 +787,23 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     },
 
     emptyReasons: {
-      noAccounts: "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken.",
+      noAccounts:
+        "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken.",
       cannotAssume:
         "Wat dit jou zou opleveren weet LaVega nog niet: bij deze kaarten mag er geen nul worden aangenomen, en zonder die helft is er geen verschil te berekenen. Onder “Waar deze cijfers vandaan komen” staat het per kaart.",
       tooLittleHistory: (minDays) =>
         `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${minDays} dagen). Zonder die basis is er een percentage, maar geen bedrag.`,
-      noCatalogueCards: "Geen enkele kaart in de catalogus heeft een aantoonbaar cashbackpercentage — er is dus niets om je eigen kaart tegen af te zetten.",
+      noCatalogueCards:
+        "Geen enkele kaart in de catalogus heeft een aantoonbaar cashbackpercentage — er is dus niets om je eigen kaart tegen af te zetten.",
       alreadyBest: "Je beste kaart nu doet het even goed of beter — er is niets te winnen.",
     },
 
     openGapsSentence: (products) =>
       `Cashback onbekend voor ${products}, en aannemen mag hier niet. Twee manieren om dat te sluiten: kies een bestemming in het reisblok op Overzicht en klik Zoek voorwaarden, of vul het percentage zelf in bij Profiel → Cashback corrigeren.`,
-    openGapsCallToAction: { searchLink: "Zoek voorwaarden", profileLink: "Profiel → Cashback corrigeren" },
+    openGapsCallToAction: {
+      searchLink: "Zoek voorwaarden",
+      profileLink: "Profiel → Cashback corrigeren",
+    },
 
     onderbouwing: {
       toonMeerSummary: "Waar deze cijfers vandaan komen, en wat er niet in zit",
@@ -713,8 +813,10 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       perMonthSuffix: " per maand",
       assumedNote: ({ bankOrProduct, checkedNote, dueForReview }) =>
         `Aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product. Een gewone Nederlandse betaalpas of grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document van ${bankOrProduct}. ${checkedNote}${dueForReview ? " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik." : ""} Klopt het niet? Zet het juiste percentage bij Profiel → Cashback corrigeren; wat jij invult gaat vóór alles wat LaVega zelf vindt.`,
-      assumedCheckedNote: (issuerFamily, date) => `De voorwaarden van ${issuerFamily} zijn voor het laatst gelezen op ${date}.`,
-      assumedNeverCheckedNote: (issuerFamily) => `Van ${issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`,
+      assumedCheckedNote: (issuerFamily, date) =>
+        `De voorwaarden van ${issuerFamily} zijn voor het laatst gelezen op ${date}.`,
+      assumedNeverCheckedNote: (issuerFamily) =>
+        `Van ${issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`,
       diffLabel: "Verschil",
       diffSub: " — wat dezelfde uitgaven daar extra opleveren, vóór kaartkosten",
       diffAmount: (perMonth, perYear) => `${perMonth} per maand · ${perYear} per jaar`,
@@ -730,12 +832,14 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       heading: "Waarover die overstap gerekend is",
       sentence: ({ toBank, fromBank, upperBound, amount, measuredDays }) =>
         `${toBank} in plaats van ${fromBank}: gerekend over ${upperBound ? "maximaal " : ""}${amount} aan uitgaven per jaar${measuredDays !== undefined ? `, gemeten over ${measuredDays} dagen afschrift` : ""}.`,
-      approxNote: " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was — huur en incasso's zitten er dus nog in.",
+      approxNote:
+        " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was — huur en incasso's zitten er dus nog in.",
     },
 
     lastMonthCompare: {
       heading: (month) => `Vorige volle maand (${month})`,
-      summaryTail: (spent, diff, bank) => ` — ${spent} uitgegeven, ${diff} meer cashback op ${bank}`,
+      summaryTail: (spent, diff, bank) =>
+        ` — ${spent} uitgegeven, ${diff} meer cashback op ${bank}`,
       spentLabel: "Wat je die maand uitgaf",
       ownCardLabel: (pct) => `Wat je eigen kaart daarop teruggaf — ${pct}`,
       bestCardLabel: (product, pct) => `Wat ${product} had teruggegeven — ${pct}`,
@@ -746,7 +850,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     noOrdinaryCard: (count) =>
       `Geen gewone bankkaart in de catalogus heeft een aantoonbaar cashbackpercentage — alle ${count} die we kunnen onderbouwen zijn prepaid- of cryptokaarten. Dat is wat de bronnen zeggen, niet een keuze van LaVega.`,
 
-    perCardSourceHeading: (count) => `Waar het percentage van elk van je ${count === 1 ? "kaart" : "kaarten"} vandaan komt`,
+    perCardSourceHeading: (count) =>
+      `Waar het percentage van elk van je ${count === 1 ? "kaart" : "kaarten"} vandaan komt`,
 
     otherOffers: {
       headingWithUpgrade: "Andere kaarten die we kunnen aantonen",
@@ -763,7 +868,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       measuredByAgent: (pct, date) => `${pct}, gevonden door de reisagent op ${date}`,
       assumptionOff:
         "onbekend — je hebt de aanname “geen cashback” uitgezet bij Profiel → Cashback corrigeren.",
-      assumedNoCashback: "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product",
+      assumedNoCashback:
+        "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product",
       unknown: (reason) => `onbekend — ${reason}`,
     },
   },
@@ -777,25 +883,30 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       `Je betaalt ${amount} per jaar om deze ${accountCount} ${accountCount === 1 ? "rekening" : "rekeningen"} aan te houden.`,
     totalIncomplete: ({ known, total, amount, unknown }) =>
       `Van ${known} van je ${total} rekeningen staat het tarief vast: samen ${amount} per jaar. De andere ${unknown} ${unknown === 1 ? "rekening telt" : "rekeningen tellen"} niet als nul mee, dus dit bedrag is een ondergrens.`,
-    totalNone: "Van geen van deze rekeningen staat het tarief vast, dus er is geen totaal. Wat de catalogus bij deze banken wél weet, staat in de plooi hieronder.",
+    totalNone:
+      "Van geen van deze rekeningen staat het tarief vast, dus er is geen totaal. Wat de catalogus bij deze banken wél weet, staat in de plooi hieronder.",
 
     freeAccountWithConditions: (label, conditions) => `${label} — Gratis, mits: ${conditions}`,
     freeAccountNoConditions: (label) => `${label} — Gratis. De bron noemt hierbij geen voorwaarde.`,
 
-    unknownAccountLead: (bank, accountName) => `${bank} — ${accountName}: kosten onbekend, en dat is geen nul.`,
+    unknownAccountLead: (bank, accountName) =>
+      `${bank} — ${accountName}: kosten onbekend, en dat is geen nul.`,
     unknownReasons: {
       noBank: "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken.",
       providerUnknown: (bank) => `LaVega kent geen tarief van ${bank}.`,
       noCandidates: (bank) => `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`,
-      unclearProduct: (bank) => `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`,
+      unclearProduct: (bank) =>
+        `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`,
     },
 
     freeAtBank: {
       heading: (bank) => `Gratis bij ${bank}:`,
       item: (product, feeLabel, conditions) => `${product} — ${feeLabel}. ${conditions}`,
       defaultConditionNote: "De bron noemt hierbij geen voorwaarde.",
-      matchHint: "Is dit jouw rekening? Zet die naam bij Rekeningen in het veld Naam, dan rekent LaVega er met € 0,00 voor.",
-      sourceSummary: (count) => `Waar ${count === 1 ? "deze prijs" : "deze prijzen"} vandaan ${count === 1 ? "komt" : "komen"}`,
+      matchHint:
+        "Is dit jouw rekening? Zet die naam bij Rekeningen in het veld Naam, dan rekent LaVega er met € 0,00 voor.",
+      sourceSummary: (count) =>
+        `Waar ${count === 1 ? "deze prijs" : "deze prijzen"} vandaan ${count === 1 ? "komt" : "komen"}`,
       sourceItem: (product, host, asOf) => `${product}: ${host}, peildatum ${asOf}`,
     },
 
@@ -815,8 +926,10 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       notInTotal: "niet in het totaal",
       sameFeeNote: (count) => `${count} producten bij deze bank, alle even duur`,
       conditionLabel: "Voorwaarde:",
-      candidatesHeading: (count, bank) => `${count} ${count === 1 ? "tarief" : "tarieven"} bij ${bank}:`,
-      matchHint: "Weet je welk het is? Zet die naam bij Rekeningen in het veld Naam — dan rekent LaVega met dat tarief.",
+      candidatesHeading: (count, bank) =>
+        `${count} ${count === 1 ? "tarief" : "tarieven"} bij ${bank}:`,
+      matchHint:
+        "Weet je welk het is? Zet die naam bij Rekeningen in het veld Naam — dan rekent LaVega met dat tarief.",
       noSource: "geen bron",
       sourcesHeading: "Waar deze bedragen vandaan komen",
       sourceLine: (bank, url, asOf) => `${bank}: ${url} (peildatum ${asOf})`,
@@ -827,9 +940,11 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
   productCost: {
     unknownCost: {
       heading: (noun) => `Wat deze ${noun} zelf kost, weten we niet.`,
-      reasonNeedsAnotherProduct: (noun) => `De prijs die onze bron noemt geldt bovenop een ander product, dus wat deze ${noun} los kost staat er niet.`,
+      reasonNeedsAnotherProduct: (noun) =>
+        `De prijs die onze bron noemt geldt bovenop een ander product, dus wat deze ${noun} los kost staat er niet.`,
       reasonNoSource: "Geen van onze bronnen noemt een maand- of jaarprijs voor dit product.",
-      footnote: "Dat is geen nul, en het gaat van het bedrag hierboven af — daarom staat er bruto en geen ander woord.",
+      footnote:
+        "Dat is geen nul, en het gaat van het bedrag hierboven af — daarom staat er bruto en geen ander woord.",
     },
     costLine: {
       heading: (noun) => `Wat de ${noun} zelf kost`,
@@ -842,10 +957,12 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     },
     noRecommendation: {
       heading: "Geen aanbeveling.",
-      body: (gross, per, gainWord, cost, costWord) => `${gross} ${per} ${gainWord} tegen ${cost} ${per} ${costWord}:`,
+      body: (gross, per, gainWord, cost, costWord) =>
+        `${gross} ${per} ${gainWord} tegen ${cost} ${per} ${costWord}:`,
       noGain: "dat levert niets op.",
       loss: (per, loss) => `je gaat er ${loss} ${per} op achteruit.`,
-      footer: (noun) => `Overstappen kost werk en levert hier niets op, dus LaVega raadt deze ${noun} niet aan — de cijfers staan er zodat je het kunt nakijken.`,
+      footer: (noun) =>
+        `Overstappen kost werk en levert hier niets op, dus LaVega raadt deze ${noun} niet aan — de cijfers staan er zodat je het kunt nakijken.`,
     },
     spanWords: {
       recurring: (period) => `per ${period}`,
@@ -897,10 +1014,12 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
         "For prepaid and crypto cards cashback is the whole selling point, so LaVega can't assume zero there.",
       beloningsuitgever:
         "This issuer sells its cards on what you earn with them, so what you get back differs per card and isn't fixed here.",
-      "geen-betaalproduct": "This kind of account has no card attached, so there's no cashback to state.",
+      "geen-betaalproduct":
+        "This kind of account has no card attached, so there's no cashback to state.",
       "uitgever-buiten-de-aanname":
         "This provider sells paid tiers with perks, so assuming zero would be a guess.",
-      "soort-onbekend": "LaVega doesn't know what kind of product this is, and without that there's nothing to go on.",
+      "soort-onbekend":
+        "LaVega doesn't know what kind of product this is, and without that there's nothing to go on.",
     },
   },
 
@@ -955,8 +1074,17 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
         "an amount that may rise (that's actually the signal) but doesn't jump around wildly;",
         "not your own transfer or a card settlement.",
       ],
-      talliesSummary: (count) => `What LaVega saw per recipient (${count} recipients, most subscription-like first)`,
-      talliesTableHeaders: ["Recipient", "Times", "Total", "Cadence", "Spread", "Counted?", "Why not"],
+      talliesSummary: (count) =>
+        `What LaVega saw per recipient (${count} recipients, most subscription-like first)`,
+      talliesTableHeaders: [
+        "Recipient",
+        "Times",
+        "Total",
+        "Cadence",
+        "Spread",
+        "Counted?",
+        "Why not",
+      ],
       noNameFallback: "(no name)",
       gapDaysSuffix: (days) => `${days} d`,
       includedYes: "yes",
@@ -967,7 +1095,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
         "A cadence around 30, 61, 91, 182 or 365 days is usable; a spread above 0.35 means the amount jumps around too much. If your subscription is here with a good cadence and a low spread and still isn't in the list above, that's a bug on our end — send us that line.",
       housingExcludedOne: "One recurring recipient isn't shown here",
       housingExcludedMany: (count) => `${count} recurring recipients aren't shown here`,
-      housingExcludedTail: ": those were read as fixed housing costs (rent, mortgage, service charge), and those don't belong on this screen.",
+      housingExcludedTail:
+        ": those were read as fixed housing costs (rent, mortgage, service charge), and those don't belong on this screen.",
       missingAccountNote:
         "Usually the account they're charged from is missing: import your credit card or personal account and they'll show up here — price increases and overlapping services included.",
       demoDisclosureSummary: "See what this looks like with data in it",
@@ -987,7 +1116,14 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       `${count} × ${functionName}: ${names} — ${total} ${unit} combined.` +
       (cancelAmount ? ` Cancelling one saves up to ${cancelAmount} ${unit}.` : ""),
 
-    tableHeaders: (periodLabel) => ["Service", "Category", periodLabel, "On your statement", "Change", "Last"],
+    tableHeaders: (periodLabel) => [
+      "Service",
+      "Category",
+      periodLabel,
+      "On your statement",
+      "Change",
+      "Last",
+    ],
     unrekenbaarCell: "can't be converted",
 
     cadence: {
@@ -1000,10 +1136,12 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     },
 
     convertedPanel: {
-      summary: (converted, total) => `${converted} of ${total} amounts ${converted === 1 ? "is" : "are"} converted from a different cadence`,
+      summary: (converted, total) =>
+        `${converted} of ${total} amounts ${converted === 1 ? "is" : "are"} converted from a different cadence`,
       explanation: (unit) =>
         `A subscription keeps the unit of its own charge; what you see above is that charge converted ${unit}. Converting to a year only multiplies, so that amount is exact. Converting to a month divides, and then the amount in the column doesn't appear on any statement.`,
-      item: ({ name, lastAmount, cadence, sum, result, unit }) => `${name}: ${lastAmount} ${cadence} → ${sum} = ${result} ${unit}`,
+      item: ({ name, lastAmount, cadence, sum, result, unit }) =>
+        `${name}: ${lastAmount} ${cadence} → ${sum} = ${result} ${unit}`,
     },
   },
 
@@ -1020,27 +1158,40 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       ` per year${showNetSuffix ? ", before what that account itself costs" : ""}.`,
     ],
     toonMeerSummary: "Per account, and what the new account itself costs",
-    suggestionSentence: ({ balance, accountLabel, ratePct, bestBank, bestKeptLabel, diffPct, extra }) =>
+    suggestionSentence: ({
+      balance,
+      accountLabel,
+      ratePct,
+      bestBank,
+      bestKeptLabel,
+      diffPct,
+      extra,
+    }) =>
       `You're keeping ${balance} at ${accountLabel} at ${ratePct}; ${bestBank} pays ${bestKeptLabel}, even after a promo ends — that ${diffPct} difference is ${extra} per year.`,
 
     empty: {
       heading: "No interest gain calculated yet.",
       explanation:
         "For each account LaVega needs a balance and an interest rate; either one missing means no amount, no assumption.",
-      noSaldoItem: (count) => `${count} account${count > 1 ? "s" : ""} with no balance — fill that in under Accounts.`,
-      noRateItem: (count) => `${count} account${count > 1 ? "s" : ""} with no interest rate — set the rate below.`,
+      noSaldoItem: (count) =>
+        `${count} account${count > 1 ? "s" : ""} with no balance — fill that in under Accounts.`,
+      noRateItem: (count) =>
+        `${count} account${count > 1 ? "s" : ""} with no interest rate — set the rate below.`,
       bestKnown: ({ keptPct, bank, marginPct }) =>
         `Best rate LaVega can prove: ${keptPct} at ${bank}. Every account here already matches it, or the difference is smaller than ${marginPct} per year.`,
-      noRatesKnown: "LaVega doesn't have a savings rate to compare against yet — without that other side there's no amount, only a percentage.",
+      noRatesKnown:
+        "LaVega doesn't have a savings rate to compare against yet — without that other side there's no amount, only a percentage.",
     },
 
     promo: {
       badge: "🎁 available now",
       headline: ({ bank, pct }) => `${bank} is offering ${pct} today`,
-      tailUnknownAfter: " What you keep afterwards isn't stated by the source, so LaVega doesn't factor it in.",
+      tailUnknownAfter:
+        " What you keep afterwards isn't stated by the source, so LaVega doesn't factor it in.",
       tailKeptAfter: (kept) => ` Afterwards you keep ${kept}.`,
       tailNotePrefix: (note) => ` — ${note}`,
-      extraPerMonth: (amount, bank) => ` While the promo runs, that's ${amount} extra per month on top of ${bank}.`,
+      extraPerMonth: (amount, bank) =>
+        ` While the promo runs, that's ${amount} extra per month on top of ${bank}.`,
     },
 
     tableHeaders: {
@@ -1065,13 +1216,15 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       cache: "from cache",
       bundled: "offline snapshot",
     },
-    benchmarkSourceNote: ({ bank, product, pct, asOf }) => `${bank} ${product} · ${pct} · as of ${asOf}`,
+    benchmarkSourceNote: ({ bank, product, pct, asOf }) =>
+      `${bank} ${product} · ${pct} · as of ${asOf}`,
     assumedZeroNote: ({ bank, pct, product, asOf }) =>
       `${bank} pays ${pct} on ${product} (as of ${asOf}). Is this that account? Then set the percentage next to it — whatever you enter beats every estimate.`,
     assumedZeroQuestion: "Is this that account?",
 
     benchmarkDetails: {
-      summary: ({ count, sourceLabel, asOf }) => `Comparison rates (${count} banks) · ${sourceLabel} · as of ${asOf}`,
+      summary: ({ count, sourceLabel, asOf }) =>
+        `Comparison rates (${count} banks) · ${sourceLabel} · as of ${asOf}`,
       tableHeaders: ["Bank", "Rate now", "What you keep", "Promo"],
       capitalAtRiskTooltip:
         "Not a savings account: this is a money-market fund. You can lose capital, the return is net of fees, and withdrawing takes up to two business days. Not covered by the deposit guarantee scheme.",
@@ -1097,7 +1250,11 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     unknownTail: "For cards the catalogue does price, that amount is listed under “Costs”.",
 
     routingSentence: ({ toBank, fromBank, toPct, fromPct, approximate, amount }) => ({
-      main: ["Pay with ", { bold: toBank }, ` instead of ${fromBank} — ${toPct} versus ${fromPct}.`],
+      main: [
+        "Pay with ",
+        { bold: toBank },
+        ` instead of ${fromBank} — ${toPct} versus ${fromPct}.`,
+      ],
       tail: `${approximate ? "up to " : ""}${amount} per year`,
     }),
 
@@ -1113,18 +1270,23 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     },
 
     emptyReasons: {
-      noAccounts: "No current account or credit card in view yet — so there's nothing to compare against.",
+      noAccounts:
+        "No current account or credit card in view yet — so there's nothing to compare against.",
       cannotAssume:
         "LaVega doesn't yet know what this would earn you: for these cards a zero can't be assumed, and without that half there's no difference to calculate. Under “Where these figures come from” it's listed per card.",
       tooLittleHistory: (minDays) =>
         `LaVega knows the cashback rate of your cards, but doesn't have enough statement history yet to see what you spend on them (at least ${minDays} days). Without that base there's a percentage, but no amount.`,
-      noCatalogueCards: "No card in the catalogue has a provable cashback percentage — so there's nothing to compare your own card against.",
+      noCatalogueCards:
+        "No card in the catalogue has a provable cashback percentage — so there's nothing to compare your own card against.",
       alreadyBest: "Your best card today does just as well or better — there's nothing to gain.",
     },
 
     openGapsSentence: (products) =>
       `Cashback unknown for ${products}, and it can't be assumed here. Two ways to close that: pick a destination in the travel block on Overview and click Look up terms, or enter the percentage yourself under Profile → Correct cashback.`,
-    openGapsCallToAction: { searchLink: "Look up terms", profileLink: "Profile → Correct cashback" },
+    openGapsCallToAction: {
+      searchLink: "Look up terms",
+      profileLink: "Profile → Correct cashback",
+    },
 
     onderbouwing: {
       toonMeerSummary: "Where these figures come from, and what isn't included",
@@ -1134,8 +1296,10 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       perMonthSuffix: " per month",
       assumedNote: ({ bankOrProduct, checkedNote, dueForReview }) =>
         `Assumed: no cashback — not found in this product's terms. An ordinary Dutch debit card or big-bank credit card pays no cashback, so LaVega fills in zero here rather than leaving you with "unknown" — but it stays an assumption of ours, not a line from a document from ${bankOrProduct}. ${checkedNote}${dueForReview ? " That was a year or more ago, so this assumption is due another look." : ""} Not right? Set the correct percentage under Profile → Correct cashback; whatever you enter overrides anything LaVega finds itself.`,
-      assumedCheckedNote: (issuerFamily, date) => `The terms for ${issuerFamily} were last read on ${date}.`,
-      assumedNeverCheckedNote: (issuerFamily) => `LaVega has no dated document on file for ${issuerFamily} at all.`,
+      assumedCheckedNote: (issuerFamily, date) =>
+        `The terms for ${issuerFamily} were last read on ${date}.`,
+      assumedNeverCheckedNote: (issuerFamily) =>
+        `LaVega has no dated document on file for ${issuerFamily} at all.`,
       diffLabel: "Difference",
       diffSub: " — what the same spending would earn extra there, before card costs",
       diffAmount: (perMonth, perYear) => `${perMonth} per month · ${perYear} per year`,
@@ -1151,7 +1315,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       heading: "What that switch is calculated over",
       sentence: ({ toBank, fromBank, upperBound, amount, measuredDays }) =>
         `${toBank} instead of ${fromBank}: calculated over ${upperBound ? "at most " : ""}${amount} of spending per year${measuredDays !== undefined ? `, measured over ${measuredDays} days of statements` : ""}.`,
-      approxNote: " Your bank doesn't say whether a charge was a card payment or a direct debit — so rent and direct debits are still included.",
+      approxNote:
+        " Your bank doesn't say whether a charge was a card payment or a direct debit — so rent and direct debits are still included.",
     },
 
     lastMonthCompare: {
@@ -1167,7 +1332,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     noOrdinaryCard: (count) =>
       `No ordinary bank card in the catalogue has a provable cashback percentage — all ${count} we can back up are prepaid or crypto cards. That's what the sources say, not a choice LaVega made.`,
 
-    perCardSourceHeading: (count) => `Where the percentage for each of your ${count === 1 ? "card" : "cards"} comes from`,
+    perCardSourceHeading: (count) =>
+      `Where the percentage for each of your ${count === 1 ? "card" : "cards"} comes from`,
 
     otherOffers: {
       headingWithUpgrade: "Other cards we can prove",
@@ -1195,25 +1361,31 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       `You pay ${amount} per year to keep ${accountCount} ${accountCount === 1 ? "account" : "accounts"} open.`,
     totalIncomplete: ({ known, total, amount, unknown }) =>
       `${known} of your ${total} accounts have a known fee: ${amount} per year combined. The other ${unknown} ${unknown === 1 ? "account isn't" : "accounts aren't"} counted as zero, so this amount is a floor.`,
-    totalNone: "None of these accounts have a known fee, so there's no total. What the catalogue does know about these banks is in the panel below.",
+    totalNone:
+      "None of these accounts have a known fee, so there's no total. What the catalogue does know about these banks is in the panel below.",
 
     freeAccountWithConditions: (label, conditions) => `${label} — Free, provided: ${conditions}`,
-    freeAccountNoConditions: (label) => `${label} — Free. The source doesn't state a condition here.`,
+    freeAccountNoConditions: (label) =>
+      `${label} — Free. The source doesn't state a condition here.`,
 
-    unknownAccountLead: (bank, accountName) => `${bank} — ${accountName}: fee unknown, and that's not a zero.`,
+    unknownAccountLead: (bank, accountName) =>
+      `${bank} — ${accountName}: fee unknown, and that's not a zero.`,
     unknownReasons: {
       noBank: "This account has no bank name, so there's nothing to look up.",
       providerUnknown: (bank) => `LaVega doesn't know a fee for ${bank}.`,
       noCandidates: (bank) => `LaVega doesn't know a fee for this kind of account at ${bank}.`,
-      unclearProduct: (bank) => `LaVega knows ${bank}'s fees, but not which of these products this is.`,
+      unclearProduct: (bank) =>
+        `LaVega knows ${bank}'s fees, but not which of these products this is.`,
     },
 
     freeAtBank: {
       heading: (bank) => `Free at ${bank}:`,
       item: (product, feeLabel, conditions) => `${product} — ${feeLabel}. ${conditions}`,
       defaultConditionNote: "The source doesn't state a condition here.",
-      matchHint: "Is this your account? Set that name under Accounts in the Name field, and LaVega will use €0.00 for it.",
-      sourceSummary: (count) => `Where ${count === 1 ? "this price" : "these prices"} ${count === 1 ? "comes" : "come"} from`,
+      matchHint:
+        "Is this your account? Set that name under Accounts in the Name field, and LaVega will use €0.00 for it.",
+      sourceSummary: (count) =>
+        `Where ${count === 1 ? "this price" : "these prices"} ${count === 1 ? "comes" : "come"} from`,
       sourceItem: (product, host, asOf) => `${product}: ${host}, as of ${asOf}`,
     },
 
@@ -1234,7 +1406,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       sameFeeNote: (count) => `${count} products at this bank, all the same price`,
       conditionLabel: "Condition:",
       candidatesHeading: (count, bank) => `${count} ${count === 1 ? "fee" : "fees"} at ${bank}:`,
-      matchHint: "Know which one it is? Set that name under Accounts in the Name field — LaVega will use that fee.",
+      matchHint:
+        "Know which one it is? Set that name under Accounts in the Name field — LaVega will use that fee.",
       noSource: "no source",
       sourcesHeading: "Where these amounts come from",
       sourceLine: (bank, url, asOf) => `${bank}: ${url} (as of ${asOf})`,
@@ -1245,9 +1418,11 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
   productCost: {
     unknownCost: {
       heading: (noun) => `We don't know what this ${noun} itself costs.`,
-      reasonNeedsAnotherProduct: (noun) => `The price our source states applies on top of another product, so what this ${noun} costs on its own isn't stated.`,
+      reasonNeedsAnotherProduct: (noun) =>
+        `The price our source states applies on top of another product, so what this ${noun} costs on its own isn't stated.`,
       reasonNoSource: "None of our sources state a monthly or yearly price for this product.",
-      footnote: "That's not a zero, and it comes off the amount above — that's why it says gross and no other word.",
+      footnote:
+        "That's not a zero, and it comes off the amount above — that's why it says gross and no other word.",
     },
     costLine: {
       heading: (noun) => `What the ${noun} itself costs`,
@@ -1260,10 +1435,12 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     },
     noRecommendation: {
       heading: "No recommendation.",
-      body: (gross, per, gainWord, cost, costWord) => `${gross} ${per} ${gainWord} against ${cost} ${per} ${costWord}:`,
+      body: (gross, per, gainWord, cost, costWord) =>
+        `${gross} ${per} ${gainWord} against ${cost} ${per} ${costWord}:`,
       noGain: "that earns nothing.",
       loss: (per, loss) => `you'd be ${loss} ${per} worse off.`,
-      footer: (noun) => `Switching takes effort and earns nothing here, so LaVega doesn't recommend this ${noun} — the figures are there so you can check them yourself.`,
+      footer: (noun) =>
+        `Switching takes effort and earns nothing here, so LaVega doesn't recommend this ${noun} — the figures are there so you can check them yourself.`,
     },
     spanWords: {
       // `period` is the internal FeePeriod code ("maand" | "jaar"), not English
@@ -1330,7 +1507,12 @@ export type ValutaCopy = {
         termsUnknownHeld: string;
         noRate: string;
         mineOnly: (pct: string, product: string) => string;
-        mineCheaperElsewhere: (pct: string, product: string, cheaperProduct: string, cheaperPct: string) => string;
+        mineCheaperElsewhere: (
+          pct: string,
+          product: string,
+          cheaperProduct: string,
+          cheaperPct: string,
+        ) => string;
         uniformHeld: (pct: string, collapsed: number, bank: string) => string;
         uniformNotHeld: (pct: string, collapsed: number, bank: string) => string;
         heldUncertain: (pct: string, product: string) => string;
@@ -1435,7 +1617,12 @@ export type ValutaCopy = {
       layer1Footnote: string;
       layer1Missing: string;
       layer2Heading: string;
-      layer2Body: (count: number, provider: string, date: string, nextUpdate: string | null) => string;
+      layer2Body: (
+        count: number,
+        provider: string,
+        date: string,
+        nextUpdate: string | null,
+      ) => string;
       layer2UnknownProvider: (provider: string) => string;
       layer2Missing: string;
       termsLinkLabel: string;
@@ -1610,7 +1797,8 @@ const valutaCopy_nl: ValutaCopy = {
     noRouteReason: {
       noAccounts: `Er staat nog geen rekening in LaVega, dus er is geen bank om via te wisselen.`,
       noBankOnAccounts: `Geen van je rekeningen hangt aan een bank die LaVega kan opzoeken — vul de bank in bij Rekeningen.`,
-      unknownFee: (banks) => `Van ${banks} kent LaVega de koersopslag niet, en een onbekend tarief is geen 0%.`,
+      unknownFee: (banks) =>
+        `Van ${banks} kent LaVega de koersopslag niet, en een onbekend tarief is geen 0%.`,
     },
     reason: {
       arrivesUnknownLead: `Wat er aankomt is onbekend.`,
@@ -1657,7 +1845,8 @@ const valutaCopy_nl: ValutaCopy = {
       scopeHeading: `De lijst gaat over alle banken die LaVega kan onderbouwen`,
       scopeBody: ` — niet alleen die van jou. Standaard rekent LaVega met de goedkoopste route die je vandaag echt kunt gebruiken; een bank die je niet hebt staat erbij, met het verschil in euro's, maar wordt nooit stilzwijgend gekozen.`,
       oneRowPerBank: `Eén regel per bank: bij overzetten maakt het product niet uit, dus dezelfde bank staat niet driemaal in de lijst. Welk product achter het tarief zit, staat er wel bij — "ING 0%" geldt alleen voor de Platinumcard.`,
-      noRouteYet: (reason) => `${reason} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een onbekend tarief is geen 0%.`,
+      noRouteYet: (reason) =>
+        `${reason} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een onbekend tarief is geen 0%.`,
       switchingBeatsHeading: `Waar overstappen je zou verslaan:`,
       switchingBeatsBody: (pct, amount) =>
         ` je huidige keuze kost ${pct}. Elke bank die minder rekent, houdt op dit bedrag meer dan ${amount} voor je over — aan koersopslag. Wat die rekening kost om te openen gaat daar nog vanaf, en dat is precies waarom de volgorde niet op het percentage gaat.`,
@@ -1668,7 +1857,8 @@ const valutaCopy_nl: ValutaCopy = {
       layer1Heading: `Koers, laag 1:`,
       layer1Bundled: (count, date) =>
         `${count} koersen uit de meegebundelde ECB-momentopname van ${date}, want er kwam geen live ECB-lijst binnen`,
-      layer1Reference: (count, date) => `${count} ECB-referentiekoersen van ${date} via Frankfurter`,
+      layer1Reference: (count, date) =>
+        `${count} ECB-referentiekoersen van ${date} via Frankfurter`,
       layer1MemorySuffix: ` — dat is de laatste lijst die de server binnenkreeg; de poging van zojuist mislukte`,
       layer1Footnote: `. De ECB publiceert die op een vast tijdstip volgens een methode die je kunt nalezen.`,
       layer1Missing: `er staat op dit moment geen ECB-lijst in dit scherm. Alle koersen hieronder komen uit laag 2.`,
@@ -1844,7 +2034,8 @@ const valutaCopy_en: ValutaCopy = {
       ecbLayerWordBundled: `bundled ECB rates`,
       ecbLayerWordReference: `ECB reference rates`,
       ecbPiece: (count, layerWord, date) => `${count} ${layerWord} from ${date}`,
-      aggregatorPiece: (count, provider, date) => `${count} daily rates via ${provider} from ${date}`,
+      aggregatorPiece: (count, provider, date) =>
+        `${count} daily rates via ${provider} from ${date}`,
       joiner: ` and `,
       noLayers: `no rate list in this screen`,
     },
@@ -1858,7 +2049,8 @@ const valutaCopy_en: ValutaCopy = {
     noRouteReason: {
       noAccounts: `There is no account in LaVega yet, so there is no bank to convert through.`,
       noBankOnAccounts: `None of your accounts is linked to a bank LaVega can look up — add the bank under Accounts.`,
-      unknownFee: (banks) => `LaVega does not know the rate markup for ${banks}, and an unknown fee is not 0%.`,
+      unknownFee: (banks) =>
+        `LaVega does not know the rate markup for ${banks}, and an unknown fee is not 0%.`,
     },
     reason: {
       arrivesUnknownLead: `What arrives is unknown.`,
@@ -1905,7 +2097,8 @@ const valutaCopy_en: ValutaCopy = {
       scopeHeading: `This list covers every bank LaVega can back up`,
       scopeBody: ` — not just the ones you hold. By default LaVega calculates with the cheapest route you can actually use today; a bank you do not hold is listed too, with the difference in euros, but is never chosen silently.`,
       oneRowPerBank: `One row per bank: when transferring, the product does not matter, so the same bank does not appear three times in the list. The product behind the rate is still shown — "ING 0%" only applies to the Platinum card.`,
-      noRouteYet: (reason) => `${reason} As long as that is the case, LaVega cannot say what arrives. An unknown fee is not 0%.`,
+      noRouteYet: (reason) =>
+        `${reason} As long as that is the case, LaVega cannot say what arrives. An unknown fee is not 0%.`,
       switchingBeatsHeading: `What switching would save you:`,
       switchingBeatsBody: (pct, amount) =>
         ` your current choice costs ${pct}. Every bank that charges less leaves you more than ${amount} on this amount — in rate markup. What the account costs to open still comes off that, which is exactly why the order is not based on the percentage alone.`,
@@ -2468,7 +2661,9 @@ const grensCopy_nl: GrensCopy = {
           `LaVega ziet nu alleen ondernemingen die als privé zijn gemarkeerd: ${listNl(a.personal)}.`,
         );
       } else {
-        out.push("Er staat nog geen onderneming in je vault; die komen er met je eerste import bij.");
+        out.push(
+          "Er staat nog geen onderneming in je vault; die komen er met je eerste import bij.",
+        );
       }
       return out;
     },
@@ -2522,7 +2717,8 @@ const grensCopy_nl: GrensCopy = {
       const out = [
         `${euro(a.totalCents)} ging van ${a.fromLabel} naar ${a.toLabel}, in ${a.count} overboeking${a.count === 1 ? "" : "en"}.`,
       ];
-      if (a.unmatchedCents === 0) out.push("Van al deze overboekingen staan beide kanten in je vault.");
+      if (a.unmatchedCents === 0)
+        out.push("Van al deze overboekingen staan beide kanten in je vault.");
       else if (a.matchedCents === 0)
         out.push(
           "Van geen van deze overboekingen staat de tegenboeking in je vault; elke rij is aan één kant gemeten.",
@@ -2597,7 +2793,9 @@ const grensCopy_nl: GrensCopy = {
       );
     }
     if (out.length === 0)
-      out.push("Elke transactie in dit venster stond op een rekening die bij een onderneming hoort.");
+      out.push(
+        "Elke transactie in dit venster stond op een rekening die bij een onderneming hoort.",
+      );
     return out;
   },
 
@@ -2745,7 +2943,8 @@ const grensCopy_en: GrensCopy = {
       const out = [
         `${euro(a.totalCents)} moved from ${a.fromLabel} to ${a.toLabel}, across ${a.count} transfer${a.count === 1 ? "" : "s"}.`,
       ];
-      if (a.unmatchedCents === 0) out.push("Both sides of every one of these transfers are in your vault.");
+      if (a.unmatchedCents === 0)
+        out.push("Both sides of every one of these transfers are in your vault.");
       else if (a.matchedCents === 0)
         out.push(
           "None of these transfers has its matching entry in your vault; each row is measured on one side only.",
@@ -2756,7 +2955,8 @@ const grensCopy_en: GrensCopy = {
         );
 
       if (a.unknownCents === 0) out.push("You've told LaVega what these transfers were.");
-      else if (a.knownCents === 0) out.push("LaVega doesn't know what any of these transfers were.");
+      else if (a.knownCents === 0)
+        out.push("LaVega doesn't know what any of these transfers were.");
       else
         out.push(
           `${euro(a.knownCents)} is something you've told LaVega about; LaVega doesn't know what the remaining ${euro(a.unknownCents)} was.`,
@@ -3004,7 +3204,12 @@ export type TravelCopy = {
     versusOwn: (amount: string, ownProduct: string) => string;
     /** "Betaal met {product}:{cost}{versus}. Die heb je nog niet — die moet je
      *  eerst openen.{holdingCostTail}" */
-    catalogueCard: (product: string, cost: string, versus: string, holdingCostTail: string) => string;
+    catalogueCard: (
+      product: string,
+      cost: string,
+      versus: string,
+      holdingCostTail: string,
+    ) => string;
   };
   /** Renders `JourneyHeadline` — the answer's fallback when it is one of his
    *  own routes rather than a catalogue card. */
@@ -3060,9 +3265,24 @@ export type TravelCopy = {
     extraCosts: string;
     costsForProduct: string;
     /** "{gross} voordeel{per} min {cost} {kosten}{over}: {net} netto{per}.{floor}" */
-    net: (gross: string, per: string, cost: string, kosten: string, over: string, net: string, floor: string) => string;
+    net: (
+      gross: string,
+      per: string,
+      cost: string,
+      kosten: string,
+      over: string,
+      net: string,
+      floor: string,
+    ) => string;
     /** "Geen aanbeveling: {gross} voordeel{per} tegen {cost} {kosten}{over} — dat levert niets op.{floor}" */
-    noRecommendationZero: (gross: string, per: string, cost: string, kosten: string, over: string, floor: string) => string;
+    noRecommendationZero: (
+      gross: string,
+      per: string,
+      cost: string,
+      kosten: string,
+      over: string,
+      floor: string,
+    ) => string;
     /** "Geen aanbeveling: {gross} voordeel{per} tegen {cost} {kosten}{over}, dus {worse}{per} achteruit.{floor}" */
     noRecommendationNegative: (
       gross: string,
@@ -3411,7 +3631,8 @@ const travelCopy_nl: TravelCopy = {
       ` Wat ${product} los kost weten we niet: de prijs die onze bron noemt geldt bovenop een ander product — dat is geen nul, en het gaat van dat bedrag af.`,
     unknownNoSource: (product) =>
       ` Wat ${product} zelf kost, staat niet in onze bronnen — dat is geen nul, en het gaat van dat bedrag af.`,
-    freeToHold: (product, amount) => ` ${product} kost zelf niets om aan te houden, dus je houdt ${amount} over.`,
+    freeToHold: (product, amount) =>
+      ` ${product} kost zelf niets om aan te houden, dus je houdt ${amount} over.`,
     periodBilledYearly: "en wordt per jaar afgerekend",
     periodAtLeastOneMonth: "en dat betaal je minstens één maand",
     periodMonths: (n) => `en dat betaal je ${n} maanden`,
@@ -3423,15 +3644,18 @@ const travelCopy_nl: TravelCopy = {
   bareHoldingCostClause: {
     unknownBundled: (product) =>
       ` Wat ${product} los kost weten we niet: de prijs die onze bron noemt geldt bovenop een ander product — dat is geen nul.`,
-    unknownNoSource: (product) => ` Wat ${product} zelf kost, staat niet in onze bronnen — dat is geen nul.`,
+    unknownNoSource: (product) =>
+      ` Wat ${product} zelf kost, staat niet in onze bronnen — dat is geen nul.`,
     free: (product) => ` ${product} kost zelf niets om aan te houden.`,
     priced: (product, amount, period) =>
       ` ${product} kost zelf ${amount} ${period}, en dat loopt door zolang je hem houdt.`,
   },
   netBenefitDescription: {
-    unknownBundled: "de prijs die de bron noemt geldt bovenop een ander product, dus wat dit los kost weten we niet",
+    unknownBundled:
+      "de prijs die de bron noemt geldt bovenop een ander product, dus wat dit los kost weten we niet",
     unknownNoSource: "wat dit product kost, staat niet in onze bronnen",
-    grossOnly: (gross, why) => `${gross} voordeel. Maar ${why} — dat is geen nul, en het gaat hiervan af.`,
+    grossOnly: (gross, why) =>
+      `${gross} voordeel. Maar ${why} — dat is geen nul, en het gaat hiervan af.`,
     extraCosts: "extra kosten",
     costsForProduct: "kosten voor het product",
     net: (gross, per, cost, kosten, over, net, floor) =>
@@ -3454,7 +3678,8 @@ const travelCopy_nl: TravelCopy = {
     noKnownPrice: (missing) =>
       `Van geen enkele kaart weten we wat geld pinnen in het buitenland kost — dat is een aparte prijs, meestal hoger dan betalen.${missing}`,
     priceLine: (amount, reference, pctSuffix) => `${amount} voor ${reference}${pctSuffix}`,
-    held: (product, price, small, missing) => `Het voordeligst pin je met ${product}: ${price}.${small}${missing}`,
+    held: (product, price, small, missing) =>
+      `Het voordeligst pin je met ${product}: ${price}.${small}${missing}`,
     notHeld: (product, price, own, holdingTail, small, missing) =>
       `Het voordeligst pin je met ${product}: ${price}. Die heb je nog niet.${own}${holdingTail}${small}${missing}`,
     ownUnknown: " Van je eigen kaarten kennen we geen opnametarief.",
@@ -3463,18 +3688,22 @@ const travelCopy_nl: TravelCopy = {
     ownExtraCost: (amount) => `, dus ${amount} duurder`,
     smallPenalty: (provider, amount, pct) =>
       ` Er zit bij ${provider} een vast bedrag per opname bij, dus ${amount} pinnen kost je ${pct} — neem in één keer meer op.`,
-    missingCashSingular: (names) => ` Van ${names} zegt onze bron niets over opnemen — dat is geen nul, dat is een gat.`,
-    missingCashPlural: (names) => ` Van ${names} zeggen onze bronnen niets over opnemen — dat is geen nul, dat is een gat.`,
+    missingCashSingular: (names) =>
+      ` Van ${names} zegt onze bron niets over opnemen — dat is geen nul, dat is een gat.`,
+    missingCashPlural: (names) =>
+      ` Van ${names} zeggen onze bronnen niets over opnemen — dat is geen nul, dat is een gat.`,
   },
   withdrawalFeeUnknownReason: {
     silent: "De bron zegt niets over geld opnemen.",
-    crossReference: "De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.",
+    crossReference:
+      "De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.",
     conditional:
       "Het opnametarief hangt aan een vrijstelling, staffel of voorwaarde die de bron niet in één bedrag uitdrukt.",
     mentionedNoRate: "De bron noemt opnemen wel, maar zonder tarief.",
     ambiguous: (provider, candidates) =>
       `De catalogus kent meer dan één ${provider} (${candidates}) en die rekenen niet hetzelfde. Zeg welke je hebt, of vul de wisselkosten in — dan weten we het.`,
-    notInCatalogue: "Dit product staat nog niet in de catalogus, dus we weten niet wat opnemen kost.",
+    notInCatalogue:
+      "Dit product staat nog niet in de catalogus, dus we weten niet wat opnemen kost.",
   },
   factCorrection: {
     adjust: "{label} aanpassen",
@@ -3490,8 +3719,7 @@ const travelCopy_nl: TravelCopy = {
       "de prijs die onze bron noemt geldt bovenop een ander product, dus wat {product} los kost weten we niet",
     unknownReasonNoSource: "wat {product} zelf kost, staat niet in onze bronnen",
     unknownNotZero: "Dat is geen nul.",
-    unknownGrossHint:
-      " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af.",
+    unknownGrossHint: " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af.",
     free: "Kaartkosten: {price} — de bron zegt dat {product} niets kost om aan te houden.",
     priceOnly: "Kaartkosten: {price}.",
     calculated: "Kaartkosten: {price} — gerekend {span}",
@@ -3611,7 +3839,8 @@ const travelCopy_nl: TravelCopy = {
     switchSource: "{product} staat in de catalogus, niet bij je rekeningen",
     switchAgeSuffix: " · tarief {age}",
     todayLabel: "Vandaag:",
-    todayBody: "met wat je nu hebt betaal je het voordeligst met {product} — {cost} op {reference}.",
+    todayBody:
+      "met wat je nu hebt betaal je het voordeligst met {product} — {cost} op {reference}.",
     notRecommendedLabel: "Niet aangeraden:",
     notRecommendedBody:
       "{product} heeft een lagere opslag ({offerPct} tegen {ownPct}), maar kost {fee} om aan te houden: {gross} lagere opslag tegen {cost} kaartkosten {span}, dus {comparison} {ownProduct}.",
@@ -3680,7 +3909,9 @@ const travelCopy_en: TravelCopy = {
     periodWord: (period) => (period === "maand" ? "per month" : "per year"),
     overHorizon: (words) => ` over ${words}`,
     horizonWords: (n, costPeriod) =>
-      costPeriod === "jaar" ? `${n} ${n === 1 ? "year" : "years"}` : `${n} ${n === 1 ? "month" : "months"}`,
+      costPeriod === "jaar"
+        ? `${n} ${n === 1 ? "year" : "years"}`
+        : `${n} ${n === 1 ? "month" : "months"}`,
   },
   spendWhy: {
     known: (fxFeePct, cashbackPct, pointsPerEuro) =>
@@ -3711,7 +3942,8 @@ const travelCopy_en: TravelCopy = {
     noRoute: "No route with known terms yet — refresh the terms first.",
   },
   versusNote: {
-    cheaperDirect: (amount, provider) => ` That's ${amount} cheaper than paying directly with ${provider}.`,
+    cheaperDirect: (amount, provider) =>
+      ` That's ${amount} cheaper than paying directly with ${provider}.`,
     cheaperVia: (amount, via) => ` That's ${amount} cheaper than via ${via}.`,
   },
   holdingCostClause: {
@@ -3719,7 +3951,8 @@ const travelCopy_en: TravelCopy = {
       ` We don't know what ${product} costs on its own: the price our source quotes applies on top of another product — that isn't zero, and it comes off this amount.`,
     unknownNoSource: (product) =>
       ` What ${product} itself costs isn't in our sources — that isn't zero, and it comes off this amount.`,
-    freeToHold: (product, amount) => ` ${product} itself costs nothing to hold, so you keep ${amount}.`,
+    freeToHold: (product, amount) =>
+      ` ${product} itself costs nothing to hold, so you keep ${amount}.`,
     periodBilledYearly: "and it's billed annually",
     periodAtLeastOneMonth: "and you pay that for at least one month",
     periodMonths: (n) => `and you pay that for ${n} months`,
@@ -3731,15 +3964,18 @@ const travelCopy_en: TravelCopy = {
   bareHoldingCostClause: {
     unknownBundled: (product) =>
       ` We don't know what ${product} costs on its own: the price our source quotes applies on top of another product — that isn't zero.`,
-    unknownNoSource: (product) => ` What ${product} itself costs isn't in our sources — that isn't zero.`,
+    unknownNoSource: (product) =>
+      ` What ${product} itself costs isn't in our sources — that isn't zero.`,
     free: (product) => ` ${product} itself costs nothing to hold.`,
     priced: (product, amount, period) =>
       ` ${product} itself costs ${amount} ${period}, and that continues for as long as you hold it.`,
   },
   netBenefitDescription: {
-    unknownBundled: "the price our source quotes applies on top of another product, so we don't know what this costs on its own",
+    unknownBundled:
+      "the price our source quotes applies on top of another product, so we don't know what this costs on its own",
     unknownNoSource: "what this product costs isn't in our sources",
-    grossOnly: (gross, why) => `${gross} benefit. But ${why} — that isn't zero, and it comes off this.`,
+    grossOnly: (gross, why) =>
+      `${gross} benefit. But ${why} — that isn't zero, and it comes off this.`,
     extraCosts: "extra cost",
     costsForProduct: "cost of the product",
     net: (gross, per, cost, kosten, over, net, floor) =>
@@ -3772,18 +4008,22 @@ const travelCopy_en: TravelCopy = {
     ownExtraCost: (amount) => `, so ${amount} more`,
     smallPenalty: (provider, amount, pct) =>
       ` ${provider} charges a flat fee per withdrawal, so taking out ${amount} costs you ${pct} — withdraw more at once.`,
-    missingCashSingular: (names) => ` Our source says nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
-    missingCashPlural: (names) => ` Our sources say nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
+    missingCashSingular: (names) =>
+      ` Our source says nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
+    missingCashPlural: (names) =>
+      ` Our sources say nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
   },
   withdrawalFeeUnknownReason: {
     silent: "Our source says nothing about withdrawing cash.",
-    crossReference: "Our source points to a separate rule or article for withdrawals and doesn't state the rate there.",
+    crossReference:
+      "Our source points to a separate rule or article for withdrawals and doesn't state the rate there.",
     conditional:
       "The withdrawal rate depends on an allowance, tier or condition our source doesn't express as one figure.",
     mentionedNoRate: "Our source mentions withdrawing, but without a rate.",
     ambiguous: (provider, candidates) =>
       `The catalogue has more than one ${provider} (${candidates}), and they don't charge the same. Tell us which one you have, or enter the exchange fee yourself — then we'll know.`,
-    notInCatalogue: "This product isn't in the catalogue yet, so we don't know what withdrawing costs.",
+    notInCatalogue:
+      "This product isn't in the catalogue yet, so we don't know what withdrawing costs.",
   },
   factCorrection: {
     adjust: "Edit {label}",
@@ -3897,7 +4137,8 @@ const travelCopy_en: TravelCopy = {
     withdrawalSuffix: "withdrawing {amount} per {reference}",
     withdrawalUnknown: "withdrawal fee unknown",
     cashbackNoteSuffix: " So we don't count it.",
-    remainingCount: "{count} more cards in the catalogue with a sourced rate, all pricier than this one.",
+    remainingCount:
+      "{count} more cards in the catalogue with a sourced rate, all pricier than this one.",
   },
   figureAge: {
     fallback: "looked up {date}",
@@ -4006,7 +4247,9 @@ export function heldCashbackSentence(d: HeldCashbackDescription, locale: Locale)
   switch (d.kind) {
     case "measured": {
       const pct = formatPercentIn(locale, d.pct);
-      return d.source === "user" ? hc.measuredByUser(pct, d.updatedAt) : hc.measuredByAgent(pct, d.updatedAt);
+      return d.source === "user"
+        ? hc.measuredByUser(pct, d.updatedAt)
+        : hc.measuredByAgent(pct, d.updatedAt);
     }
     case "assumption-off":
       return hc.assumptionOff;

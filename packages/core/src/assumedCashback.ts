@@ -280,7 +280,6 @@ export function assumptionDueForReview(lastCheckedAt: string | null, asOf: strin
 
 /* ─────────────────────────────────────────────────────────────── de woorden */
 
-
 /* ─────────────────────────── wat we van een EIGEN kaart weten, en hoe hard ──
  *
  * Alles hierboven gaat over een CATALOGUSRIJ: een product met een bron-URL en

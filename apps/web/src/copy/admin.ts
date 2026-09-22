@@ -730,8 +730,7 @@ const nlFacturen: FacturenCopy = {
     fetching: "Bezig met ophalen…",
     notConfigured:
       "Nog niet ingesteld: de factuur-wachtrij is niet geconfigureerd op de server. Er is niets opgehaald.",
-    noAddress:
-      "Er is nog geen doorstuuradres aan je account gekoppeld. Er is niets opgehaald.",
+    noAddress: "Er is nog geen doorstuuradres aan je account gekoppeld. Er is niets opgehaald.",
     unauthorized: {
       short: (status) => `Je bent uitgelogd (${status}). Er is niets opgehaald. Log opnieuw in.`,
       detail: "De wachtrij in n8n staat er nog; er is geen verzoek naar n8n geweest.",
@@ -1190,7 +1189,8 @@ const nlKoppelingen: KoppelingenCopy = {
     copyButton: "Kopieer",
     copiedLabel: "Gekopieerd",
     copyButtonAriaLabel: "Doorstuuradres kopiëren",
-    emptyIntro: "Nog geen adres. Typ zelf een adres dat je in Cloudflare hebt aangemaakt, of kies er een:",
+    emptyIntro:
+      "Nog geen adres. Typ zelf een adres dat je in Cloudflare hebt aangemaakt, of kies er een:",
     suggestedButton: (address) => `Gebruik ${address}`,
     suggestedTradeoff: "Makkelijk te onthouden en over te typen — maar wel te raden.",
     generateButton: "Genereer een willekeurig adres",
@@ -1480,7 +1480,8 @@ const enBelasting: BelastingCopy = {
     rulesAsOfPrefix: "rules as of",
     caveatsSummary: "What LaVega does not calculate here",
     taxSystemLabel: "Tax system",
-    taxSystemHint: "Decides which rules this screen applies. Separate from your country in Profile.",
+    taxSystemHint:
+      "Decides which rules this screen applies. Separate from your country in Profile.",
     unsupportedCountry: (country) =>
       `LaVega has no tax rules for ${country} yet. What follows is derived from the Dutch rules, not from ${country}'s — pick a system above, or read this screen as not applying to you.`,
     entitiesEmpty: "No entities yet — import accounts first.",

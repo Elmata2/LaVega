@@ -26,10 +26,19 @@ test("the same page renders in English at the other locale", () => {
 test("no Dutch copy is left behind on the English page", () => {
   const out = html("en");
   for (const dutch of [
-    "Veelgestelde vragen", "Inloggen", "Kom op de wachtlijst", "Hoe het werkt",
-    "Jouw data blijft van jou", "Wees er als eerste bij", "Zet me op de lijst",
-    "Alleen-lezen bankkoppeling", "Facturen-agent", "Belasting-agent",
-    "van student tot ondernemer", "Voorwaarden", "Juridisch",
+    "Veelgestelde vragen",
+    "Inloggen",
+    "Kom op de wachtlijst",
+    "Hoe het werkt",
+    "Jouw data blijft van jou",
+    "Wees er als eerste bij",
+    "Zet me op de lijst",
+    "Alleen-lezen bankkoppeling",
+    "Facturen-agent",
+    "Belasting-agent",
+    "van student tot ondernemer",
+    "Voorwaarden",
+    "Juridisch",
   ]) {
     expect(out, `English page still contains: ${dutch}`).not.toContain(dutch);
   }
@@ -37,7 +46,12 @@ test("no Dutch copy is left behind on the English page", () => {
 
 test("the Dutch page is untouched by the English one existing", () => {
   const out = html("nl");
-  for (const english of ["one clear number.", "Sign in", "Join the waitlist", "Frequently asked questions"]) {
+  for (const english of [
+    "one clear number.",
+    "Sign in",
+    "Join the waitlist",
+    "Frequently asked questions",
+  ]) {
     expect(out, `Dutch page leaked English: ${english}`).not.toContain(english);
   }
 });
@@ -48,8 +62,8 @@ test("each page offers the other, and marks the link with its language", () => {
   expect(html("nl")).toContain('href="/en"');
   expect(html("nl").toLowerCase()).toContain('hreflang="en"');
   expect(html("en").toLowerCase()).toContain('hreflang="nl"');
-  expect(html("en")).toContain('>Nederlands<');
-  expect(html("nl")).toContain('>English<');
+  expect(html("en")).toContain(">Nederlands<");
+  expect(html("nl")).toContain(">English<");
 });
 
 test("the agent cards translate, rather than only their headings", () => {

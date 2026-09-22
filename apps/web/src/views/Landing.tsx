@@ -243,11 +243,7 @@ export default function Landing({
         >
           {c.langSwitch.label}
         </a>
-        <button
-          type="button"
-          className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
-          onClick={onEnter}
-        >
+        <button type="button" className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`} onClick={onEnter}>
           {c.nav.login}
         </button>
       </header>
@@ -277,8 +273,12 @@ export default function Landing({
             <div className="font-mono text-[0.72rem] tracking-[0.04em] uppercase text-[var(--lp-ink2)]">
               {c.device.eyebrow}
             </div>
-            <div className="text-[2.4rem] font-bold tracking-[-0.02em] tabular-nums mt-[2px]">€12.480</div>
-            <div className="text-[var(--lp-pos)] text-[0.9rem] font-semibold mb-2">{c.device.delta}</div>
+            <div className="text-[2.4rem] font-bold tracking-[-0.02em] tabular-nums mt-[2px]">
+              €12.480
+            </div>
+            <div className="text-[var(--lp-pos)] text-[0.9rem] font-semibold mb-2">
+              {c.device.delta}
+            </div>
             <div className="mt-2 mb-[14px]">
               <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
                 <polyline
@@ -310,7 +310,9 @@ export default function Landing({
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
               {c.device.savedLabel}
             </div>
-            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">+€420</div>
+            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">
+              +€420
+            </div>
           </div>
           <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 [@media(max-width:560px)]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
@@ -526,7 +528,10 @@ export default function Landing({
         </h2>
         <div className="lp-reveal max-w-[760px] mx-auto flex flex-col gap-3">
           {c.faq.items.map((f) => (
-            <details className="lp-faq-item bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-[22px]" key={f.q}>
+            <details
+              className="lp-faq-item bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-[22px]"
+              key={f.q}
+            >
               <summary className="flex items-center justify-between gap-4 list-none cursor-pointer py-[18px] font-display font-semibold text-[1.1rem] text-[var(--lp-ink)]">
                 <span>{f.q}</span>
                 <span className="lp-faq-mark" aria-hidden="true" />
@@ -546,9 +551,14 @@ export default function Landing({
           <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[36px]! text-[var(--lp-ink)]!">
             {c.waitlist.title}
           </h2>
-          <p className="max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">{c.waitlist.sub}</p>
+          <p className="max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">
+            {c.waitlist.sub}
+          </p>
           {wlStatus === "done" ? (
-            <p className="mt-[24px]! text-[1.1rem] text-[var(--lp-pos)] font-semibold" data-testid="waitlist-done">
+            <p
+              className="mt-[24px]! text-[1.1rem] text-[var(--lp-pos)] font-semibold"
+              data-testid="waitlist-done"
+            >
               {c.waitlist.done}
             </p>
           ) : (

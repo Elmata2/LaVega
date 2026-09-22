@@ -97,7 +97,9 @@ function parseArgs(argv) {
 function baseUrl(args) {
   if (args.base) return String(args.base).replace(/\/$/, "");
   if (args.target === "prod") return PROD_BASE;
-  const port = existsSync(portFile) ? readFileSync(portFile, "utf8").trim() : String(DEFAULT_LOCAL_PORT);
+  const port = existsSync(portFile)
+    ? readFileSync(portFile, "utf8").trim()
+    : String(DEFAULT_LOCAL_PORT);
   return `http://127.0.0.1:${port}`;
 }
 
@@ -128,7 +130,13 @@ async function req(base, method, path, body, headers = {}) {
     try {
       json = JSON.parse(text);
     } catch {}
-    return { status: res.status, ms: Date.now() - t0, text, json, headers: Object.fromEntries(res.headers) };
+    return {
+      status: res.status,
+      ms: Date.now() - t0,
+      text,
+      json,
+      headers: Object.fromEntries(res.headers),
+    };
   } catch (err) {
     return { status: 0, ms: Date.now() - t0, text: String(err), json: null, headers: {} };
   }
@@ -159,7 +167,9 @@ async function up(args) {
     }
   }
   if (!existsSync(join(webDist, "index.html"))) {
-    console.error(`no ${webDist}/index.html — build the SPA first:\n  pnpm --filter @lavega/web build`);
+    console.error(
+      `no ${webDist}/index.html — build the SPA first:\n  pnpm --filter @lavega/web build`,
+    );
     process.exit(1);
   }
   const port = Number(args.port) || DEFAULT_LOCAL_PORT;
@@ -197,7 +207,12 @@ async function up(args) {
   writeFileSync(portFile, String(port));
 
   const base = `http://127.0.0.1:${port}`;
-  const ready = await waitFor(base, "/health", (r) => r.status === 200 && r.json?.ok === true, 20000);
+  const ready = await waitFor(
+    base,
+    "/health",
+    (r) => r.status === 200 && r.json?.ok === true,
+    20000,
+  );
   if (!ready) {
     console.error(`server did not answer /health within 20s — see ${logFile}`);
     console.error(readFileSync(logFile, "utf8").slice(-1500));
@@ -248,21 +263,52 @@ async function doctor(args) {
   const add = (name, ok, detail) => checks.push({ name, ok, detail });
 
   const health = await req(base, "GET", "/health");
-  add("health answers {ok:true}", health.status === 200 && health.json?.ok === true, `${health.status} ${excerpt(health)}`);
+  add(
+    "health answers {ok:true}",
+    health.status === 200 && health.json?.ok === true,
+    `${health.status} ${excerpt(health)}`,
+  );
 
   const shell = await req(base, "GET", "/app");
-  add("SPA shell served at /app", shell.status === 200 && /id="root"/.test(shell.text), `${shell.status} ${shell.text.length}b`);
+  add(
+    "SPA shell served at /app",
+    shell.status === 200 && /id="root"/.test(shell.text),
+    `${shell.status} ${shell.text.length}b`,
+  );
 
   const agent = await req(base, "GET", "/api/agent/status");
-  add("agent status readable", agent.status === 200 && typeof agent.json?.configured === "boolean", `${agent.status} ${excerpt(agent)}`);
-  if (agent.json) add(`agents ${agent.json.configured ? "CONFIGURED" : "dark (no MISTRAL_API_KEY)"}`, true, "informational");
+  add(
+    "agent status readable",
+    agent.status === 200 && typeof agent.json?.configured === "boolean",
+    `${agent.status} ${excerpt(agent)}`,
+  );
+  if (agent.json)
+    add(
+      `agents ${agent.json.configured ? "CONFIGURED" : "dark (no MISTRAL_API_KEY)"}`,
+      true,
+      "informational",
+    );
 
   const eb = await req(base, "GET", "/api/eb/status");
-  add("enable-banking status readable", eb.status === 200 && typeof eb.json?.configured === "boolean", `${eb.status} ${excerpt(eb)}`);
+  add(
+    "enable-banking status readable",
+    eb.status === 200 && typeof eb.json?.configured === "boolean",
+    `${eb.status} ${excerpt(eb)}`,
+  );
 
   const guarded = await req(base, "GET", "/api/vault/backup");
-  if (prod) add("guard closed: /api/vault/backup → 401 without session", guarded.status === 401, `${guarded.status}`);
-  else add("guard open locally: /api/vault/backup ≠ 401", guarded.status !== 401, `${guarded.status} ${excerpt(guarded)}`);
+  if (prod)
+    add(
+      "guard closed: /api/vault/backup → 401 without session",
+      guarded.status === 401,
+      `${guarded.status}`,
+    );
+  else
+    add(
+      "guard open locally: /api/vault/backup ≠ 401",
+      guarded.status !== 401,
+      `${guarded.status} ${excerpt(guarded)}`,
+    );
 
   const csp = health.headers["content-security-policy"] || shell.headers["content-security-policy"];
   add("security headers present (CSP)", Boolean(csp), csp ? csp.slice(0, 60) + "…" : "missing");
@@ -282,11 +328,16 @@ async function probe(args) {
   for (const path of PROBE_ENDPOINTS) {
     const r = await req(base, "GET", path);
     rows.push({ path, status: r.status, ms: r.ms, body: excerpt(r) });
-    console.log(`${String(r.status).padEnd(4)} ${String(r.ms).padStart(5)}ms  ${path}  ${excerpt(r)}`);
+    console.log(
+      `${String(r.status).padEnd(4)} ${String(r.ms).padStart(5)}ms  ${path}  ${excerpt(r)}`,
+    );
   }
   if (args.out) {
     mkdirSync(dirname(String(args.out)), { recursive: true });
-    writeFileSync(String(args.out), JSON.stringify({ base, at: new Date().toISOString(), rows }, null, 2));
+    writeFileSync(
+      String(args.out),
+      JSON.stringify({ base, at: new Date().toISOString(), rows }, null, 2),
+    );
     console.log(`wrote ${args.out}`);
   }
 }
@@ -300,25 +351,41 @@ async function guard(args) {
   const rows = [];
   let bad = 0;
   for (const [method, path] of GUARDED) {
-    const r = await req(base, method, path, method === "GET" || method === "DELETE" ? undefined : {});
+    const r = await req(
+      base,
+      method,
+      path,
+      method === "GET" || method === "DELETE" ? undefined : {},
+    );
     const ok = closed ? r.status === 401 : r.status !== 401;
     if (!ok) bad++;
     rows.push({ kind: "guarded", method, path, status: r.status, ok });
-    console.log(`${ok ? "ok  " : "FAIL"} ${method.padEnd(6)} ${path.padEnd(28)} ${r.status}  expected ${closed ? "401" : "not 401"}`);
+    console.log(
+      `${ok ? "ok  " : "FAIL"} ${method.padEnd(6)} ${path.padEnd(28)} ${r.status}  expected ${closed ? "401" : "not 401"}`,
+    );
   }
   for (const [method, path] of PUBLIC) {
     const r = await req(base, method, path);
     const ok = r.status === 200;
     if (!ok) bad++;
     rows.push({ kind: "public", method, path, status: r.status, ok });
-    console.log(`${ok ? "ok  " : "FAIL"} ${method.padEnd(6)} ${path.padEnd(28)} ${r.status}  expected 200`);
+    console.log(
+      `${ok ? "ok  " : "FAIL"} ${method.padEnd(6)} ${path.padEnd(28)} ${r.status}  expected 200`,
+    );
   }
   if (args.out) {
     mkdirSync(dirname(String(args.out)), { recursive: true });
-    writeFileSync(String(args.out), JSON.stringify({ base, closed, at: new Date().toISOString(), rows }, null, 2));
+    writeFileSync(
+      String(args.out),
+      JSON.stringify({ base, closed, at: new Date().toISOString(), rows }, null, 2),
+    );
     console.log(`wrote ${args.out}`);
   }
-  console.log(bad ? `\n${bad} mismatch(es) on ${base}` : `\nguard posture as expected on ${base} (${closed ? "closed" : "open"})`);
+  console.log(
+    bad
+      ? `\n${bad} mismatch(es) on ${base}`
+      : `\nguard posture as expected on ${base} (${closed ? "closed" : "open"})`,
+  );
   process.exit(bad ? 1 : 0);
 }
 
@@ -326,14 +393,18 @@ async function assets(args) {
   const base = baseUrl(args);
   const shell = await req(base, "GET", "/app");
   console.log(`${shell.status} /app (${shell.text.length}b)`);
-  const refs = [...shell.text.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css|svg|png|webmanifest|ico))"/g)].map((m) => m[1]);
+  const refs = [
+    ...shell.text.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css|svg|png|webmanifest|ico))"/g),
+  ].map((m) => m[1]);
   let bad = 0;
   for (const ref of new Set(refs)) {
     const r = await req(base, "GET", ref);
     if (r.status !== 200) bad++;
     console.log(`${r.status} ${ref}`);
   }
-  console.log(bad ? `\n${bad} asset(s) failed` : `\nall ${new Set(refs).size} referenced assets served`);
+  console.log(
+    bad ? `\n${bad} asset(s) failed` : `\nall ${new Set(refs).size} referenced assets served`,
+  );
   process.exit(bad ? 1 : 0);
 }
 

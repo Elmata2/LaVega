@@ -282,9 +282,7 @@ export default function SaldoBlock({
       title={c.title(unknownCount)}
       span={span}
       height="tall"
-      menu={
-        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
       footer={
         <>
           {c.rekeningenEntiteiten(accounts.length, entities.length)}
@@ -330,7 +328,10 @@ export default function SaldoBlock({
       {hasGraph ? (
         <div className="position-graph">
           <TrendChart
-            points={series.points.map((p) => ({ label: dayLabelIn(locale, p.date), value: p.value }))}
+            points={series.points.map((p) => ({
+              label: dayLabelIn(locale, p.date),
+              value: p.value,
+            }))}
             color="var(--accent)"
             format={(v) => formatEuroIn(locale, v)}
             ariaLabel={c.positiePerDagAria}

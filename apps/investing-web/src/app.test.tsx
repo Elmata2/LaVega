@@ -773,9 +773,15 @@ test("agent route opens focused chat with the account positions", async () => {
     await Promise.resolve();
   });
 
-  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/conversation");
+  const runRequest = requests.find(
+    (request) => request.url === "/api/agents/portfolio/conversation",
+  );
   expect(runRequest?.init?.body).toBe(
-    JSON.stringify({ agentId: "bill_ackman", prompt: "Waarom is ASML mijn grootste risico?", history: [] }),
+    JSON.stringify({
+      agentId: "bill_ackman",
+      prompt: "Waarom is ASML mijn grootste risico?",
+      history: [],
+    }),
   );
   expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
   root.unmount();

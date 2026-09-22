@@ -278,11 +278,7 @@ function resolve(id: string, canPrice: (c: WorldCurrency) => boolean): Effect {
  *  komt uit `WORLD_LATLON_BOUNDS` en wordt hier dus omgezet en niet overgetypt —
  *  dat overtypen is precies wat er de vorige keer verouderde toen de bundel
  *  veranderde. */
-function latitudeText(
-  lat: number,
-  locale: Locale,
-  lc: ValutaCopy["globe"]["latitude"],
-): string {
+function latitudeText(lat: number, locale: Locale, lc: ValutaCopy["globe"]["latitude"]): string {
   const abs = Math.abs(lat).toFixed(1).replace(/\.0$/, "");
   const n = locale === "nl" ? abs.replace(".", ",") : abs;
   return `${n}° ${lat < 0 ? lc.south : lc.north}`;
@@ -732,7 +728,10 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   const everything = useMemo(
     () =>
       [...allCountries()].sort((a, b) =>
-        (countryLabel(locale, a.id) || a.id).localeCompare(countryLabel(locale, b.id) || b.id, locale),
+        (countryLabel(locale, a.id) || a.id).localeCompare(
+          countryLabel(locale, b.id) || b.id,
+          locale,
+        ),
       ),
     [locale],
   );
@@ -816,7 +815,9 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
               </span>
             </>
           ) : (
-            <span className="lv-globe-readout-empty text-muted text-[0.88rem]">{c.readoutEmpty}</span>
+            <span className="lv-globe-readout-empty text-muted text-[0.88rem]">
+              {c.readoutEmpty}
+            </span>
           )}
         </p>
 

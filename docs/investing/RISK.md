@@ -16,12 +16,12 @@ The card requires a complete selected window and at least 60 valid daily returns
 
 ## Metrics
 
-| Metric | Definition | Limit |
-| --- | --- | --- |
-| Annual volatility | Sample standard deviation of daily adjusted returns × √252 | Historical variation, not maximum potential loss |
-| Beta | Sample covariance with benchmark / benchmark sample variance | At least 60 exact interval pairs; zero benchmark variance is undefined |
-| Regression alpha | 252 × (mean daily portfolio return − beta × mean daily benchmark return) | Assumes 0% cash rate; benchmark price return excludes dividends |
-| Maximum drawdown | Lowest decline from a peak of compounded flow-adjusted returns | Requires continuous valid history; no balance-based drawdown |
+| Metric            | Definition                                                               | Limit                                                                  |
+| ----------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Annual volatility | Sample standard deviation of daily adjusted returns × √252               | Historical variation, not maximum potential loss                       |
+| Beta              | Sample covariance with benchmark / benchmark sample variance             | At least 60 exact interval pairs; zero benchmark variance is undefined |
+| Regression alpha  | 252 × (mean daily portfolio return − beta × mean daily benchmark return) | Assumes 0% cash rate; benchmark price return excludes dividends        |
+| Maximum drawdown  | Lowest decline from a peak of compounded flow-adjusted returns           | Requires continuous valid history; no balance-based drawdown           |
 
 The risk benchmark is named and selected from chart benchmarks. The first configured benchmark is the initial choice. No benchmark means beta and alpha are unavailable. A benchmark quoted in a currency other than the presentation currency is rejected for these two metrics.
 

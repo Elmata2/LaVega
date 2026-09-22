@@ -468,7 +468,14 @@ test("neither the bars nor the growth view counts a savings deposit as spending"
 
 test("a weekday average is not made expensive by a savings deposit landing on it", () => {
   // 6 August 2026 is a Thursday; the € 15.000 to Trading 212 is on it.
-  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" }, SEPARATE, "nl");
+  const w = weekdaySpend(
+    parked,
+    [],
+    own,
+    { start: "2026-08-01", end: "2026-08-28" },
+    SEPARATE,
+    "nl",
+  );
   const thursday = w.rows[3];
   expect(thursday.total).toBe(0);
 });

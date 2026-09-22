@@ -135,7 +135,9 @@ test("every failure mode is its own outcome, and none of them is 'ok'", async ()
   expect(await fetchQueue(fakeFetch(403, {}).impl)).toEqual({ kind: "unauthorized", status: 403 });
   expect(await fetchQueue(fakeFetch(500, {}).impl)).toEqual({ kind: "http-error", status: 500 });
   expect(await fetchQueue(fakeFetch(200, {}, { throws: true }).impl)).toEqual({ kind: "network" });
-  expect(await fetchQueue(fakeFetch(200, {}, { badJson: true }).impl)).toEqual({ kind: "unreadable" });
+  expect(await fetchQueue(fakeFetch(200, {}, { badJson: true }).impl)).toEqual({
+    kind: "unreadable",
+  });
   expect(await fetchQueue(fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
   expect(
     await fetchQueue(fakeFetch(200, { invoices: [], notices: [], noAddress: true }).impl),
@@ -568,7 +570,14 @@ test("het plafond staat in de zin, in de opmaak van de taal", () => {
 /* Elke reden die de validatie kan geven moet in allebei de talen bestaan. Het
  * type dwingt de sleutels af; deze test dwingt af dat er ook iets in staat. */
 test("elke ontbrekende factuurregel heeft een zin in beide talen", () => {
-  for (const gap of ["counterparty", "issue-date", "due-date", "amount", "currency", "vat"] as const) {
+  for (const gap of [
+    "counterparty",
+    "issue-date",
+    "due-date",
+    "amount",
+    "currency",
+    "vat",
+  ] as const) {
     expect(adminCopy.nl.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
     expect(adminCopy.en.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
   }

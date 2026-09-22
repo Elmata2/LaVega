@@ -26,24 +26,27 @@ export default function BankLink({ busy }: { busy: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const loadBanks = useCallback(async (type: PsuType) => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`);
-      if (!res.ok) {
-        setError(await apiErrorMessageIn(locale, res));
-        return;
+  const loadBanks = useCallback(
+    async (type: PsuType) => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`);
+        if (!res.ok) {
+          setError(await apiErrorMessageIn(locale, res));
+          return;
+        }
+        const data = await res.json();
+        setAspsps(data.aspsps || []);
+        if (data.aspsps?.length) setSelected(data.aspsps[0].name);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
       }
-      const data = await res.json();
-      setAspsps(data.aspsps || []);
-      if (data.aspsps?.length) setSelected(data.aspsps[0].name);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [locale]);
+    },
+    [locale],
+  );
 
   function pickPsuType(type: PsuType) {
     setPsuType(type);

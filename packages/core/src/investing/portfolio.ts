@@ -35,7 +35,9 @@ function rateFor(rates: FxRates, date: string): FxRate {
   if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
   let sorted: FxRate[];
   if (Array.isArray(rates)) {
-    sorted = sortedFxRates.get(rates) ?? [...rates].sort((left, right) => left.date.localeCompare(right.date));
+    sorted =
+      sortedFxRates.get(rates) ??
+      [...rates].sort((left, right) => left.date.localeCompare(right.date));
     sortedFxRates.set(rates, sorted);
   } else {
     sorted = candidates;

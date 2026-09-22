@@ -213,9 +213,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
       title={c.title}
       span={3}
       height="short"
-      menu={
-        <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
     >
       {cards.length === 0 ? (
         <p className="block-empty">{c.geenRekeningenGekoppeld}</p>
@@ -303,7 +301,9 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                       {c.saldoLabel}
                     </div>
                     <div className={account.balance === null ? "opacity-70 italic" : ""}>
-                      {account.balance === null ? c.onbekend : formatEuroIn(locale, account.balance)}
+                      {account.balance === null
+                        ? c.onbekend
+                        : formatEuroIn(locale, account.balance)}
                     </div>
                   </div>
                 </footer>

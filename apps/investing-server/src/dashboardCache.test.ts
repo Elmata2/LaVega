@@ -40,9 +40,10 @@ test("dashboard cache shares concurrent loads", async () => {
   const cache = createDashboardCache();
   let resolve!: (value: never) => void;
   const loader = vi.fn(
-    () => new Promise<never>((done) => {
-      resolve = done;
-    }),
+    () =>
+      new Promise<never>((done) => {
+        resolve = done;
+      }),
   );
   const first = cache.load({ tenantId: "user-a", key: "" }, loader);
   const second = cache.load({ tenantId: "user-a", key: "" }, loader);

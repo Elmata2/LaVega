@@ -192,7 +192,6 @@ function isPdf(file: File): boolean {
  *  is short enough that a mail forwarded during a session shows up on its own. */
 export const PULL_INTERVAL_MS = 5 * 60 * 1000;
 
-
 /** The one place a hold kind becomes a sentence. Exhaustive by switch, so a new
  *  kind in n8n.ts fails the build here instead of rendering nothing. */
 export function holdSentence(c: AdminCopy["facturen"], hold: AutoBookHold): string {
@@ -261,9 +260,7 @@ export default function Facturen({
    * that picking a direction can fill the counterparty with the correct half —
    * the seller for a purchase, the buyer for a sale. Null once resolved or
    * discarded. */
-  const [draftParties, setDraftParties] = useState<{ seller: string; buyer: string } | null>(
-    null,
-  );
+  const [draftParties, setDraftParties] = useState<{ seller: string; buyer: string } | null>(null);
   /** Het btw-veld op het formulier, als tekst — leeg is een echte staat en niet 0. */
   const [vatInput, setVatInput] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
@@ -917,10 +914,16 @@ export default function Facturen({
           <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
           <p className="cell-sub">{c.forms.auto.gateNote(entities.length)}</p>
           <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
-            <Button variant="primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
+            <Button
+              variant="primary"
+              disabled={busy || n8nBusy}
+              onClick={() => void handleFetchN8n()}
+            >
               {c.forms.auto.fetchButton}
             </Button>
-            <Button onClick={() => onNavigate("koppelingen")}>{c.forms.auto.connectionsButton}</Button>
+            <Button onClick={() => onNavigate("koppelingen")}>
+              {c.forms.auto.connectionsButton}
+            </Button>
           </div>
           {n8nNote && (
             <>
@@ -955,7 +958,9 @@ export default function Facturen({
               if (file) handleFile(file);
             }}
           >
-            <span className="font-display text-[1.15rem] text-ink">{c.forms.drop.dropzoneTitle}</span>
+            <span className="font-display text-[1.15rem] text-ink">
+              {c.forms.drop.dropzoneTitle}
+            </span>
             <span className="text-[0.8rem] max-w-[34ch]">{c.forms.drop.dropzoneSub}</span>
             {/* No `accept` filter for the non-PDF formats, same rationale as
                 Import.tsx: format is sniffed from content, not extension. */}
@@ -1091,9 +1096,7 @@ export default function Facturen({
             <div className="flex gap-3" data-testid="stack-form-row">
               <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
                 {c.forms.manual.amountLabel}
-                {pendingSource === "llm" && (
-                  <Badge>{c.forms.manual.aiDraftBadge}</Badge>
-                )}
+                {pendingSource === "llm" && <Badge>{c.forms.manual.aiDraftBadge}</Badge>}
                 <SaldoInput
                   className="w-full box-border"
                   type="number"

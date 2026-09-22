@@ -176,7 +176,9 @@ export async function streamChat(
     return;
   }
   if (!res.body) {
-    handlers.onError?.(pick(readAppLocale(), "Geen antwoord van de server.", "No response from the server."));
+    handlers.onError?.(
+      pick(readAppLocale(), "Geen antwoord van de server.", "No response from the server."),
+    );
     return;
   }
   const reader = res.body.getReader();

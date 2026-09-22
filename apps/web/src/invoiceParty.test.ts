@@ -34,10 +34,7 @@ test("an invoice he SENT is money in, and the counterparty is his client", () =>
 });
 
 test("an invoice he RECEIVED is money out, and the counterparty is the supplier", () => {
-  const r = resolveInvoiceParties(
-    { seller: "KPN B.V.", buyer: "Steunenberg Holding B.V." },
-    OWN,
-  );
+  const r = resolveInvoiceParties({ seller: "KPN B.V.", buyer: "Steunenberg Holding B.V." }, OWN);
   expect(r.kind).toBe("purchase");
   expect(r.counterparty).toBe("KPN B.V.");
 });
@@ -75,9 +72,9 @@ test("a legal-form suffix on one side only still matches", () => {
   expect(
     resolveInvoiceParties({ seller: "Steunenberg Holding B.V.", buyer: "Klant" }, OWN).kind,
   ).toBe("sales");
-  expect(
-    resolveInvoiceParties({ seller: "Klant", buyer: "Steunenberg Holding" }, OWN).kind,
-  ).toBe("purchase");
+  expect(resolveInvoiceParties({ seller: "Klant", buyer: "Steunenberg Holding" }, OWN).kind).toBe(
+    "purchase",
+  );
 });
 
 /* THE ANSWER THAT IS ALLOWED TO BE "I DON'T KNOW".
@@ -148,9 +145,7 @@ test("a one-word entity label never matches a stranger by substring", () => {
   ).toBe("unknown");
   /* The label still matches itself exactly, so a real entity called "Holding"
    * is not locked out — it just cannot match by containment. */
-  expect(resolveInvoiceParties({ seller: "Holding B.V.", buyer: "Klant" }, own).kind).toBe(
-    "sales",
-  );
+  expect(resolveInvoiceParties({ seller: "Holding B.V.", buyer: "Klant" }, own).kind).toBe("sales");
 });
 
 /* Two words is the threshold, and this is the case containment was added for:
@@ -167,9 +162,9 @@ test("a two-word label still matches the same name with a legal form attached", 
  * there is no reason to make him do that work. */
 test("diacritics do not prevent a match", () => {
   const own = { ibans: [], entityNames: ["Munchen Advies"] };
-  expect(
-    resolveInvoiceParties({ seller: "München Advies B.V.", buyer: "Klant" }, own).kind,
-  ).toBe("sales");
+  expect(resolveInvoiceParties({ seller: "München Advies B.V.", buyer: "Klant" }, own).kind).toBe(
+    "sales",
+  );
 });
 
 test("an owner with nothing recorded yet always gets unknown, never a guess", () => {

@@ -49,7 +49,10 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
     const cfg = loadN8nQueueConfig();
     if (!cfg.configured || !cfg.url || !cfg.token)
       return c.json(
-        { error: "De factuur-wachtrij is niet ingesteld op de server.", code: "n8n-not-configured" },
+        {
+          error: "De factuur-wachtrij is niet ingesteld op de server.",
+          code: "n8n-not-configured",
+        },
         503,
       );
 
@@ -121,7 +124,10 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
     const userId = await tenantId(c.req.raw);
     if (!userId)
       return c.json(
-        { error: "Log in om je doorstuuradres te zien.", code: "n8n-forward-address-read-unauthenticated" },
+        {
+          error: "Log in om je doorstuuradres te zien.",
+          code: "n8n-forward-address-read-unauthenticated",
+        },
         401,
       );
     const localPart = await getLocalPart(userId);
@@ -145,7 +151,10 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
     const outcome = await setLocalPart(userId, raw);
     if (outcome.status === "invalid")
       return c.json(
-        { error: "Dat is geen geldig lokaal deel van een e-mailadres.", code: "n8n-address-invalid" },
+        {
+          error: "Dat is geen geldig lokaal deel van een e-mailadres.",
+          code: "n8n-address-invalid",
+        },
         400,
       );
     if (outcome.status === "taken")

@@ -149,9 +149,7 @@ test("checkBudget admits exactly one of ten concurrent callers when the cap has 
   process.env.AI_DAILY_BUDGET_CENTS = String(WORST_CASE_CENTS.categorize + 1); // room for exactly one
   process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
 
-  const results = await Promise.all(
-    Array.from({ length: 10 }, () => checkBudget("categorize")),
-  );
+  const results = await Promise.all(Array.from({ length: 10 }, () => checkBudget("categorize")));
 
   expect(results.filter((r) => r.ok)).toHaveLength(1);
   expect(results.filter((r) => !r.ok && r.scope === "day")).toHaveLength(9);

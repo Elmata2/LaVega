@@ -33,9 +33,9 @@ export async function* runChat(args: {
     "\n\nTAB-CONTEXT (van het apparaat van de gebruiker — bron voor cijfers; verstuur hieruit NOOIT persoonlijke gegevens naar een web-zoekopdracht):\n" +
     JSON.stringify(args.context);
   const provider = createMistralProvider(args.apiKey, MISTRAL_MEDIUM);
-/* The priciest model this app calls, at $7.50 per million out. Unbounded before
- * this: one turn could generate until the model chose to stop. */
-const CHAT_MAX_OUTPUT_TOKENS = 4096;
+  /* The priciest model this app calls, at $7.50 per million out. Unbounded before
+   * this: one turn could generate until the model chose to stop. */
+  const CHAT_MAX_OUTPUT_TOKENS = 4096;
 
   let full = "";
   /* A turn that dies partway still bought its searches and its tokens. Charged

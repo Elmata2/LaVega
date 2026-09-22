@@ -254,7 +254,9 @@ test("clicking a bank opens it and its accounts appear as sub-tabs", () => {
   ]);
   expect(tabs[0].getAttribute("aria-selected")).toBe("true");
   // The first account's panel is the one on screen.
-  expect(container!.querySelector("[data-testid=bank-panel]")!.textContent).toContain("2 transacties bekijken");
+  expect(container!.querySelector("[data-testid=bank-panel]")!.textContent).toContain(
+    "2 transacties bekijken",
+  );
 });
 
 test("a second sub-tab swaps the panel to that account", () => {

@@ -805,7 +805,9 @@ test("catalogue cashback is shown with its gate, never subtracted from the price
   expect(offers.textContent).toContain("0,5% cashback");
   expect(offers.textContent).toMatch(/crypto/i);
   // 1,5% minus 0,5% would have put Wirex above Revolut's 1%; it does not.
-  const rows = [...offers.querySelectorAll('[data-testid="travel-journey-name"]')].map((n) => n.textContent ?? "");
+  const rows = [...offers.querySelectorAll('[data-testid="travel-journey-name"]')].map(
+    (n) => n.textContent ?? "",
+  );
   expect(rows.indexOf("212 Card")).toBeLessThan(rows.findIndex((r) => r.includes("Wirex")));
 });
 
@@ -1429,7 +1431,9 @@ function keurDeUitweg(c: HTMLElement) {
   expect(tekst).toContain(`“${optimiseCopy.nl.travel.terms.routesHeading}” hieronder`);
 
   // De kop bestaat, en staat waar de zin zegt dat hij staat.
-  const kop = [...paneel.querySelectorAll("h3")].find((h) => h.textContent === optimiseCopy.nl.travel.terms.routesHeading);
+  const kop = [...paneel.querySelectorAll("h3")].find(
+    (h) => h.textContent === optimiseCopy.nl.travel.terms.routesHeading,
+  );
   expect(kop).toBeDefined();
   expect(melding.compareDocumentPosition(kop!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -1494,7 +1498,11 @@ test("the travel caveats and the savings line follow the reader's language", () 
       locale === "nl" ? /beste plek/ : /best place/,
     );
     expect(
-      c.storeNote({ kind: "leaving-interest", account: "Spaar", best: { bank: "BigBank", ratePct: 3.1 } }),
+      c.storeNote({
+        kind: "leaving-interest",
+        account: "Spaar",
+        best: { bank: "BigBank", ratePct: 3.1 },
+      }),
     ).toContain("BigBank");
   }
   // En geen Nederlands op het Engelse scherm.

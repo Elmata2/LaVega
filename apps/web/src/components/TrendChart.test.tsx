@@ -240,7 +240,9 @@ test("every class TrendChart emits has a rule in charts.css", () => {
 });
 
 test("the readout's layout and register survive the Tailwind conversion", () => {
-  const el = mount(<TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />);
+  const el = mount(
+    <TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />,
+  );
   const readout = classesOf(el.querySelector(".lv-chart-readout")!);
   const value = classesOf(el.querySelector(".lv-chart-readout-value")!);
 

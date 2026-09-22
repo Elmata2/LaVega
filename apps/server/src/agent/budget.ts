@@ -157,7 +157,10 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
   if (monthCents + worstCase >= caps.monthCents) return { ok: false, scope: "month" };
   memory.set(dayKey, dayCents + worstCase);
   memory.set(monthKey, monthCents + worstCase);
-  return { ok: true, reservation: { kind: "memory", day, month, amount: worstCase, settled: false } };
+  return {
+    ok: true,
+    reservation: { kind: "memory", day, month, amount: worstCase, settled: false },
+  };
 }
 
 /** Log and persist one AI call's cost.
@@ -181,7 +184,10 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
  *  separate row on top of the worst-case one. Omitted, this inserts a plain
  *  finalized row directly, exactly as before this reservation step existed —
  *  every existing caller that never reserves keeps working unchanged. */
-export async function recordUsage(input: UsageInput, reservation?: ReservationHandle): Promise<void> {
+export async function recordUsage(
+  input: UsageInput,
+  reservation?: ReservationHandle,
+): Promise<void> {
   const inputTokens = input.inputTokens ?? 0;
   const outputTokens = input.outputTokens ?? 0;
   const pages = input.pages ?? 0;
@@ -222,7 +228,16 @@ export async function recordUsage(input: UsageInput, reservation?: ReservationHa
           costCents,
         });
       } else {
-        await repo.record({ day, route: input.route, model: input.model, inputTokens, outputTokens, pages, searches, costCents });
+        await repo.record({
+          day,
+          route: input.route,
+          model: input.model,
+          inputTokens,
+          outputTokens,
+          pages,
+          searches,
+          costCents,
+        });
       }
       return;
     }
@@ -258,7 +273,9 @@ export async function recordUsage(input: UsageInput, reservation?: ReservationHa
  *  reservation that was already turned into a real charge by `recordUsage` —
  *  a no-op then, not a double-release — see ReservationHandle's own comment
  *  and `reconcile`/`release`'s shared `reconciled_at IS NULL` guard. */
-export async function releaseReservation(reservation: ReservationHandle | undefined): Promise<void> {
+export async function releaseReservation(
+  reservation: ReservationHandle | undefined,
+): Promise<void> {
   if (!reservation) return;
   try {
     if (reservation.kind === "db") {

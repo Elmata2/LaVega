@@ -42,11 +42,12 @@ const TableCardsContext = createContext(false);
 
 /** overflow-x:auto only — extracted from `.table-wrap` for the same reason
  *  as Card: one property, no variants, so a plain `cn()` wrapper is enough. */
-const TableWrap = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  function TableWrap({ className, ...props }, ref) {
-    return <div ref={ref} className={cn("overflow-x-auto", className)} {...props} />;
-  },
-);
+const TableWrap = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function TableWrap(
+  { className, ...props },
+  ref,
+) {
+  return <div ref={ref} className={cn("overflow-x-auto", className)} {...props} />;
+});
 
 /* Below 620px a `cards` table collapses its rows into label/value cards
  * (Transacties, Rekeningen, Optimalisatie's subscription/interest tables,

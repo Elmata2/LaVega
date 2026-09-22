@@ -1,11 +1,4 @@
-import type {
-  Account,
-  EntityForecast,
-  OwnAccounts,
-  Rule,
-  ScheduledFlow,
-  Tx,
-} from "@lavega/core";
+import type { Account, EntityForecast, OwnAccounts, Rule, ScheduledFlow, Tx } from "@lavega/core";
 import { ownAccounts } from "@lavega/core";
 
 /* Shared props for the block render tests.

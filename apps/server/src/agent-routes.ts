@@ -100,7 +100,11 @@ function aiFailure(e: unknown): AiFailure {
  *  silently skips anything else, so this is backward compatible: an old
  *  bundle still gets exactly the Dutch message it gets today, on the same
  *  `event: error`, and simply never sees the extra line. */
-async function writeSseError(stream: SSEStreamingApi, code: string, message: string): Promise<void> {
+async function writeSseError(
+  stream: SSEStreamingApi,
+  code: string,
+  message: string,
+): Promise<void> {
   const dataLines = message
     .split(/\r\n|\r|\n/)
     .map((line) => `data: ${line}`)
@@ -198,11 +202,17 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json(
-        { error: "AI-extractie is niet geconfigureerd op de server.", code: "extract-not-configured" },
+        {
+          error: "AI-extractie is niet geconfigureerd op de server.",
+          code: "extract-not-configured",
+        },
         503,
       );
     if (!limit(bucket(c, "extract")))
-      return c.json({ error: "Even wachten — te veel AI-verzoeken.", code: "extract-rate-limited-local" }, 429);
+      return c.json(
+        { error: "Even wachten — te veel AI-verzoeken.", code: "extract-rate-limited-local" },
+        429,
+      );
     const budget = await requireBudget(c, "extract-invoice");
     if (budget.blocked) return budget.blocked;
     let input: InvoiceExtractInput;
@@ -225,7 +235,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     }
     try {
       const result = await extract(input, apiKey, facts, (usage) =>
-        recordUsage({ route: "extract-invoice", model: MISTRAL_SMALL, ...usage }, budget.reservation),
+        recordUsage(
+          { route: "extract-invoice", model: MISTRAL_SMALL, ...usage },
+          budget.reservation,
+        ),
       );
       return c.json(result);
     } catch (e) {
@@ -243,7 +256,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.post("/api/agent/chat", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
-      return c.json({ error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" }, 503);
+      return c.json(
+        { error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" },
+        503,
+      );
     if (!limit(bucket(c, "chat")))
       return c.json(
         { error: "Even wachten — te veel verzoeken.", code: "chat-rate-limited-local" },
@@ -265,7 +281,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         return c.json({ error: "Geen bericht.", code: "chat-empty-message" }, 400);
     } catch (e) {
       if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     return streamSSE(c, async (stream) => {
       // Budget goes here, not before streamSSE, so it stays right next to the
@@ -299,7 +318,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           facts,
           apiKey,
           onUsage: (usage) =>
-            recordUsage({ route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 }, budget.reservation),
+            recordUsage(
+              { route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 },
+              budget.reservation,
+            ),
         })) {
           await stream.writeSSE({ data: chunk });
         }
@@ -331,7 +353,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         503,
       );
     if (!limit(bucket(c, "categorize")))
-      return c.json({ error: "Even wachten — te veel verzoeken.", code: "categorize-rate-limited-local" }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verzoeken.", code: "categorize-rate-limited-local" },
+        429,
+      );
     const budget = await requireBudget(c, "categorize");
     if (budget.blocked) return budget.blocked;
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
@@ -381,7 +406,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         503,
       );
     if (!limit(bucket(c, "travel")))
-      return c.json({ error: "Even wachten — te veel verzoeken.", code: "travel-rate-limited-local" }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verzoeken.", code: "travel-rate-limited-local" },
+        429,
+      );
     const budget = await requireBudget(c, "travel");
     if (budget.blocked) return budget.blocked;
     // This gate only answers "is there room for one more travel call right
@@ -396,7 +424,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       input = sanitizeTravelInput(await c.req.json());
     } catch (e) {
       if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     // Returns instantly with whatever is cached and starts background lookups
     // for the gaps — card tariffs are PUBLIC data, the same for every user, so

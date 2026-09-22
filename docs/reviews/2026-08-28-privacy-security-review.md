@@ -27,22 +27,21 @@ draaiende host. Dat is op 31 augustus gedaan: `GET /api/brokers/credentials/stat
 antwoordde onbevoegd met `{"status":"empty"}`. Het was dus de C1-tak — een vreemde
 kon de brokerkluis claimen — en niet de H2-terugval.
 
-| # | Status | Waar |
-|---|---|---|
-| **C1** | **Opgelost** — `/api/brokers/*` valt nu onder de sessiebewaking; de aanval uit de review geeft 401 | `apiGuard.ts` |
-| **H1** | **Opgelost** — één `app.use("/api/*", apiGuard())` vóór alle route-registraties, dicht tenzij publiek of ingelogd. Rate limiter nu per beller per route (`rateLimitKey`) i.p.v. globaal | `apiGuard.ts`, `agent/rateLimit.ts` |
-| **H2** | **Opgelost** — `/unlock` zit achter dezelfde bewaking; het orakel is niet meer anoniem bereikbaar | `apiGuard.ts` |
-| **H3** | **Opgelost** — minimaal 12 tekens én tekenvariatie voor een NIEUWE kluis | `web/src/vaultPassword.ts` |
-| **M3** | **Opgelost** — `secureHeaders()` + CSP, HSTS, `frame-ancestors 'none'`, `no-referrer` | `index.ts` |
-| **M8** | **Opgelost** — registratie staat dicht tenzij `LAVEGA_ALLOW_SIGNUP=1` | `auth.ts` |
-| **H4** | **Opgelost** — beleid herschreven naar wat de code doet: alle zeven verwerkers benoemd met wat er heen gaat en wanneer, AI expliciet opt-in, doorgifte buiten de EU benoemd, en de "nooit"-zin vervangen door wat er werkelijk passeert | `legal.ts` |
-| **M1** | **Opgelost** — de callback eist nu een `state` die deze server zelf heeft uitgegeven, en verbruikt hem (replay geweigerd). `eb-routes.ts` heeft eindelijk een testbestand | `eb-routes.ts` |
-| **M6** | **Gedeeltelijk opgelost** — de Worker weigert nu een GEMETEN mislukking zonder geldige DKIM, vóór het parsen, met een bounce die de reden noemt. Niet op `unknown`/`none`/`temperror`, en niet als DKIM klopt (doorsturen) | `email-worker/src/authResults.ts` |
-| M2, M4, M5, M7, L1–L7 | **Nog open** | — |
-| **V1** | **Opgelost** — nieuw, niet uit de review: `/api/vault/backup` kwam ná 28 augustus binnen en had dezelfde vorm als C1 | `apiGuard.vault.test.ts` |
+| #                     | Status                                                                                                                                                                                                                                  | Waar                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **C1**                | **Opgelost** — `/api/brokers/*` valt nu onder de sessiebewaking; de aanval uit de review geeft 401                                                                                                                                      | `apiGuard.ts`                       |
+| **H1**                | **Opgelost** — één `app.use("/api/*", apiGuard())` vóór alle route-registraties, dicht tenzij publiek of ingelogd. Rate limiter nu per beller per route (`rateLimitKey`) i.p.v. globaal                                                 | `apiGuard.ts`, `agent/rateLimit.ts` |
+| **H2**                | **Opgelost** — `/unlock` zit achter dezelfde bewaking; het orakel is niet meer anoniem bereikbaar                                                                                                                                       | `apiGuard.ts`                       |
+| **H3**                | **Opgelost** — minimaal 12 tekens én tekenvariatie voor een NIEUWE kluis                                                                                                                                                                | `web/src/vaultPassword.ts`          |
+| **M3**                | **Opgelost** — `secureHeaders()` + CSP, HSTS, `frame-ancestors 'none'`, `no-referrer`                                                                                                                                                   | `index.ts`                          |
+| **M8**                | **Opgelost** — registratie staat dicht tenzij `LAVEGA_ALLOW_SIGNUP=1`                                                                                                                                                                   | `auth.ts`                           |
+| **H4**                | **Opgelost** — beleid herschreven naar wat de code doet: alle zeven verwerkers benoemd met wat er heen gaat en wanneer, AI expliciet opt-in, doorgifte buiten de EU benoemd, en de "nooit"-zin vervangen door wat er werkelijk passeert | `legal.ts`                          |
+| **M1**                | **Opgelost** — de callback eist nu een `state` die deze server zelf heeft uitgegeven, en verbruikt hem (replay geweigerd). `eb-routes.ts` heeft eindelijk een testbestand                                                               | `eb-routes.ts`                      |
+| **M6**                | **Gedeeltelijk opgelost** — de Worker weigert nu een GEMETEN mislukking zonder geldige DKIM, vóór het parsen, met een bounce die de reden noemt. Niet op `unknown`/`none`/`temperror`, en niet als DKIM klopt (doorsturen)              | `email-worker/src/authResults.ts`   |
+| M2, M4, M5, M7, L1–L7 | **Nog open**                                                                                                                                                                                                                            | —                                   |
+| **V1**                | **Opgelost** — nieuw, niet uit de review: `/api/vault/backup` kwam ná 28 augustus binnen en had dezelfde vorm als C1                                                                                                                    | `apiGuard.vault.test.ts`            |
 
-
-**Afwijking van het advies, bewust.** H3 vroeg om een minimum bij `setup` *én* `restore`.
+**Afwijking van het advies, bewust.** H3 vroeg om een minimum bij `setup` _én_ `restore`.
 Alleen `setup` heeft het gekregen. `restore` en `unlock` controleren een wachtwoord dat
 al bestaat; daar een minimum eisen sluit de eigenaar buiten een back-up die vóór deze
 regel gemaakt is, en het houdt niemand tegen — de aanvaller met het bestand gebruikt
@@ -90,8 +89,8 @@ commits achterop geraakt. Na de rebase:
 - **C1 was intussen ook langs de andere kant gedicht.** Master geeft
   `/api/investing/*` en `/api/brokers/*` een tenant uit de sessie
   (`investingTenantId`). Dat is niet dubbelop: `apiGuard` beantwoordt de eerdere
-  vraag (*is er überhaupt een sessie?*), `investingTenantId` de latere (*van wie
-  is dit?*). De bewaking staat vóór de tenantlaag, en `investing-guard.test.ts`
+  vraag (_is er überhaupt een sessie?_), `investingTenantId` de latere (_van wie
+  is dit?_). De bewaking staat vóór de tenantlaag, en `investing-guard.test.ts`
   gaat nu uit van een geldige sessie omdat het over het tweede gaat, niet het
   eerste.
 - **V1 — de versleutelde kluis-back-up.** `/api/vault/backup` bestond nog niet
@@ -100,7 +99,7 @@ commits achterop geraakt. Na de rebase:
   `DATABASE_URL` maar zonder `BETTER_AUTH_SECRET` registreren de routes zich,
   noemt de terugval een tenant, en leest of overschrijft een vreemde andermans
   verzegelde financiën. `apiGuard` weigert dat. De test geeft de route expres de
-  meest toegeeflijke dependencies die hij ooit kan hebben — er is *altijd* een
+  meest toegeeflijke dependencies die hij ooit kan hebben — er is _altijd_ een
   tenant — zodat alleen de bewaking het nog kan tegenhouden.
 - **`/api/agent/*`, `/api/eb/*` en `/api/vault/*` stonden op dat moment open in
   productie.** Alleen de investing-routes waren gedicht. H1 was dus nog levend
@@ -120,12 +119,12 @@ jouw Anthropic-sleutel uitgeven en, ernstiger, de brokerkluis van de investing-a
 
 Zeven van de vijftien bevindingen verdwijnen als je één authenticatie-middleware voor `/api/*` zet.
 
-| | Aantal |
-|---|---|
-| Kritiek | 1 |
-| Hoog | 4 |
-| Middel | 8 |
-| Laag | 7 |
+|         | Aantal |
+| ------- | ------ |
+| Kritiek | 1      |
+| Hoog    | 4      |
+| Middel  | 8      |
+| Laag    | 7      |
 
 ---
 
@@ -157,7 +156,7 @@ onvoorwaardelijk bedraad in `createRuntimeApp` (`index.ts:231-233`), dus ze best
 samengevoegde Railway-build — `investing-mount.ts` geeft ze niet mee, maar dat maakt niet uit.
 
 **Gevolg.** Een vreemde zet een wachtwoord op jouw kluis. Jouw eigen "Broker koppelen" antwoordt
-daarna *"Vault passphrase is incorrect"* en je komt er niet meer in. Op Railway ligt dat bestand op
+daarna _"Vault passphrase is incorrect"_ en je komt er niet meer in. Op Railway ligt dat bestand op
 een persistent volume, dus het overleeft een herstart. En de credentials die er dan in staan zijn de
 zijne, op jouw host.
 
@@ -180,15 +179,15 @@ naam voorkomt: hij wordt nooit aangeroepen.
 
 Wat daardoor open staat op de publieke host:
 
-| Route | Wat een vreemde ermee kan |
-|---|---|
-| `POST /api/agent/chat` | Jouw Anthropic-sleutel uitgeven (Sonnet 5 mét web search) |
-| `POST /api/agent/extract-invoice` | Idem, met een PDF van 10 MB per verzoek |
-| `POST /api/agent/categorize`, `/travel-facts` | Idem |
-| `POST /api/eb/auth` | Autorisaties starten op jouw Enable Banking-app-credential |
-| `GET /api/investing/summary`, `/dashboard` | De portefeuille lezen |
-| `POST /api/brokers/credentials*` | Zie C1 en H2 |
-| `DELETE /api/prices/cache` | De prijscache wissen |
+| Route                                         | Wat een vreemde ermee kan                                  |
+| --------------------------------------------- | ---------------------------------------------------------- |
+| `POST /api/agent/chat`                        | Jouw Anthropic-sleutel uitgeven (Sonnet 5 mét web search)  |
+| `POST /api/agent/extract-invoice`             | Idem, met een PDF van 10 MB per verzoek                    |
+| `POST /api/agent/categorize`, `/travel-facts` | Idem                                                       |
+| `POST /api/eb/auth`                           | Autorisaties starten op jouw Enable Banking-app-credential |
+| `GET /api/investing/summary`, `/dashboard`    | De portefeuille lezen                                      |
+| `POST /api/brokers/credentials*`              | Zie C1 en H2                                               |
+| `DELETE /api/prices/cache`                    | De prijscache wissen                                       |
 
 De CORS-middleware (`apps/server/src/index.ts:74`) is zorgvuldig doordacht en echoot alleen een
 loopback-origin terug — maar **CORS is geen authenticatie**. Het houdt browsers tegen, niet `curl`.
@@ -203,7 +202,7 @@ rekening doen, en diezelfde 20 sluiten jou buiten je eigen AI-functies.
 
 ```ts
 app.use("/api/*", async (c, next) => {
-  if (PUBLIC_PATHS.has(c.req.path)) return next();      // /api/rates, /api/fx/rate, /api/auth/*
+  if (PUBLIC_PATHS.has(c.req.path)) return next(); // /api/rates, /api/fx/rate, /api/auth/*
   if (!(await verifiedSession(c.req.raw))) return c.json({ error: "unauthorized" }, 401);
   await next();
 });
@@ -242,8 +241,8 @@ hier de zwakke schakel, niet de KDF.
 
 ### H4 — Het privacybeleid klopt niet meer met wat de app doet
 
-`apps/server/src/legal.ts`, `UPDATED = "2026-08-03"`. De header van dat bestand zegt zelf: *"Content
-reflects how LaVega actually works. Keep this truthful."* Dat is sinds 3 augustus niet meer zo.
+`apps/server/src/legal.ts`, `UPDATED = "2026-08-03"`. De header van dat bestand zegt zelf: _"Content
+reflects how LaVega actually works. Keep this truthful."_ Dat is sinds 3 augustus niet meer zo.
 
 Wat er staat:
 
@@ -254,16 +253,16 @@ Wat er staat:
 
 Wat de code doet en het beleid niet noemt:
 
-| Ontvanger | Wat er heen gaat | Waar |
-|---|---|---|
-| **Anthropic** | Hele factuur-PDF's; transactieomschrijvingen mét tegenpartijnaam; chatcontext met saldi, rekeningtypes, abonnementen, facturen, btw-instellingen | `agent-routes.ts`, 5 routes |
-| **Cloudflare** | Elke binnenkomende factuurmail, volledig | `apps/email-worker` |
-| **n8n** | Diezelfde mail plus bijlagen | `handler.ts:257` |
-| **Google (Apps Script)** | E-mailadressen van de wachtlijst | `views/Landing.tsx:9` |
-| **Frankfurter** | Valutaparen (publiek, niet persoonlijk) | `fx.ts` |
-| **Sentry** | Optioneel, foutcontext | `observability.ts:39` |
+| Ontvanger                | Wat er heen gaat                                                                                                                                 | Waar                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| **Anthropic**            | Hele factuur-PDF's; transactieomschrijvingen mét tegenpartijnaam; chatcontext met saldi, rekeningtypes, abonnementen, facturen, btw-instellingen | `agent-routes.ts`, 5 routes |
+| **Cloudflare**           | Elke binnenkomende factuurmail, volledig                                                                                                         | `apps/email-worker`         |
+| **n8n**                  | Diezelfde mail plus bijlagen                                                                                                                     | `handler.ts:257`            |
+| **Google (Apps Script)** | E-mailadressen van de wachtlijst                                                                                                                 | `views/Landing.tsx:9`       |
+| **Frankfurter**          | Valutaparen (publiek, niet persoonlijk)                                                                                                          | `fx.ts`                     |
+| **Sentry**               | Optioneel, foutcontext                                                                                                                           | `observability.ts:39`       |
 
-Ook de zin *"[je financiële gegevens] worden nooit naar servers van LaVega gestuurd"* is niet meer
+Ook de zin _"[je financiële gegevens] worden nooit naar servers van LaVega gestuurd"_ is niet meer
 letterlijk waar: transactieomschrijvingen, factuurdocumenten en chatcontext gaan wél langs je server,
 op weg naar Anthropic. Ze zijn geredigeerd en er is toestemming voor gevraagd — maar dat is een ander
 verhaal dan "nooit".
@@ -297,7 +296,7 @@ reden is dat hij bestaat.
 
 Daarmee is de callback CSRF-gevoelig: een aanvaller kan zijn eigen autorisatie starten, zijn `code`
 bemachtigen en jou naar `/api/eb/callback?code=<zijn code>` sturen. Jouw server wisselt hem in en jouw
-app trekt *zijn* rekeninggegevens je kluis in.
+app trekt _zijn_ rekeninggegevens je kluis in.
 
 `eb-routes.ts` is bovendien het enige route-bestand van de server **zonder testbestand**, wat
 waarschijnlijk verklaart waarom dit niet is opgevallen.
@@ -343,7 +342,7 @@ backupbestand; niet naar de server, want dan staat een workflow-wijzigende sleut
 host. Beide redenen kloppen. Alleen is de gekozen derde optie de zwakste van de drie: platte tekst,
 leesbaar voor elke `document.cookie`-achtige toegang die één XSS oplevert.
 
-Dat er in de hele codebase geen XSS-sink staat (zie *Wat er goed staat*) maakt dit vandaag klein. Het
+Dat er in de hele codebase geen XSS-sink staat (zie _Wat er goed staat_) maakt dit vandaag klein. Het
 maakt het niet nul: de sleutel kan volgens de comment zelf workflows aanmaken en wijzigen.
 
 **Oplossing.** De vierde optie die niet is overwogen: versleutelen onder de kluissleutel en uitsluiten
@@ -357,7 +356,7 @@ van het export-blob. Dan is hij beschermd én reist hij niet mee in een backup.
 for (const k of allow) if (k in r) out[k] = r[k];
 ```
 
-De comment noemt dit *"de chat-redactiegrens"*. Het is een allowlist op **sleutelnamen**; de waarde
+De comment noemt dit _"de chat-redactiegrens"_. Het is een allowlist op **sleutelnamen**; de waarde
 eronder wordt ongewijzigd overgenomen, tot 60 KB JSON. Voor `rekeningen: ["accounts"]` gaat dus door
 wat de client ook maar in `accounts` zet.
 
@@ -421,15 +420,15 @@ eigen adres.
 
 ## Laag
 
-| # | Bevinding | Waar |
-|---|---|---|
-| **L1** | `hono` staat op 4.12.32, de adviezen vragen ≥ 4.12.34 (vier CVE's: ReDoS in CORS, `memo()`-datalek tussen requests, DoS in Language middleware, Proxy-helper headers). **Praktische impact laag** — je gebruikt `hono/cors` niet (CORS is met de hand geschreven) en `memo()` evenmin. Twee patchversies. | `apps/server/package.json` |
-| **L2** | `country` wordt ongevalideerd in een URL geïnterpoleerd: `` `/aspsps?country=${country}&psu_type=…` ``. `.toUpperCase()` weert geen `&` of `#`, dus parameter-injectie richting Enable Banking is mogelijk. | `eb-routes.ts:54` |
-| **L3** | CI-actions op muteerbare tags (`actions/checkout@v4`) terwijl de job `contents: write` heeft. Een gekaapte tag kan naar je repo schrijven. Verder is de workflow netjes: geen secrets, `git add` op precies twee bestanden, concurrency-guard. | `.github/workflows/catalog-sweep.yml` |
-| **L4** | `.dockerignore` sluit `**/.lavega` niet uit, `.vercelignore` wel. Een lokale brokerkluis kan zo in het productie-image belanden (versleuteld, maar hij hoort er niet). | `.dockerignore` |
-| **L5** | Het wachtlijst-endpoint (Google Apps Script) heeft geen captcha of rate limiting — iedereen kan de sheet vollopen. | `views/Landing.tsx:9` |
-| **L6** | `lavega.n8n.autoBooked.v1` bewaart factuuronderwerpen in platte `localStorage`, buiten de kluis. De comment erkent het als workaround. | `n8n.ts:484` |
-| **L7** | `redactForAi` vangt de spatiegegroepeerde IBAN-vorm bewust niet ("NL91 ABNA 0417 1643 00"), gemeten op jouw eigen exports. Correct voor jouw data; het breekt zodra een andere bank of een andere gebruiker die vorm wel print — de comment zegt dat zelf. | `packages/core/src/categorize.ts:118` |
+| #      | Bevinding                                                                                                                                                                                                                                                                                                 | Waar                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **L1** | `hono` staat op 4.12.32, de adviezen vragen ≥ 4.12.34 (vier CVE's: ReDoS in CORS, `memo()`-datalek tussen requests, DoS in Language middleware, Proxy-helper headers). **Praktische impact laag** — je gebruikt `hono/cors` niet (CORS is met de hand geschreven) en `memo()` evenmin. Twee patchversies. | `apps/server/package.json`            |
+| **L2** | `country` wordt ongevalideerd in een URL geïnterpoleerd: `` `/aspsps?country=${country}&psu_type=…` ``. `.toUpperCase()` weert geen `&` of `#`, dus parameter-injectie richting Enable Banking is mogelijk.                                                                                               | `eb-routes.ts:54`                     |
+| **L3** | CI-actions op muteerbare tags (`actions/checkout@v4`) terwijl de job `contents: write` heeft. Een gekaapte tag kan naar je repo schrijven. Verder is de workflow netjes: geen secrets, `git add` op precies twee bestanden, concurrency-guard.                                                            | `.github/workflows/catalog-sweep.yml` |
+| **L4** | `.dockerignore` sluit `**/.lavega` niet uit, `.vercelignore` wel. Een lokale brokerkluis kan zo in het productie-image belanden (versleuteld, maar hij hoort er niet).                                                                                                                                    | `.dockerignore`                       |
+| **L5** | Het wachtlijst-endpoint (Google Apps Script) heeft geen captcha of rate limiting — iedereen kan de sheet vollopen.                                                                                                                                                                                        | `views/Landing.tsx:9`                 |
+| **L6** | `lavega.n8n.autoBooked.v1` bewaart factuuronderwerpen in platte `localStorage`, buiten de kluis. De comment erkent het als workaround.                                                                                                                                                                    | `n8n.ts:484`                          |
+| **L7** | `redactForAi` vangt de spatiegegroepeerde IBAN-vorm bewust niet ("NL91 ABNA 0417 1643 00"), gemeten op jouw eigen exports. Correct voor jouw data; het breekt zodra een andere bank of een andere gebruiker die vorm wel print — de comment zegt dat zelf.                                                | `packages/core/src/categorize.ts:118` |
 
 ---
 

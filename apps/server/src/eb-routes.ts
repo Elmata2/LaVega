@@ -284,10 +284,8 @@ function requestScopedEbStore(): EbFlowStore {
     consumeAuth: (state, ttlMs) => repository().consumeAuth(state, ttlMs),
     sweepAuth: (ttlMs) => repository().sweepAuth(ttlMs),
     sweepSessions: (userId, ttlMs) => repository().sweepSessions(userId, ttlMs),
-    putSession: (userId, sessionId, payload) =>
-      repository().putSession(userId, sessionId, payload),
-    getSession: (userId, sessionId, ttlMs) =>
-      repository().getSession(userId, sessionId, ttlMs),
+    putSession: (userId, sessionId, payload) => repository().putSession(userId, sessionId, payload),
+    getSession: (userId, sessionId, ttlMs) => repository().getSession(userId, sessionId, ttlMs),
     deleteSession: (userId, sessionId) => repository().deleteSession(userId, sessionId),
   };
 }

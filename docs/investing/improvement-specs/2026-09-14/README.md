@@ -33,46 +33,46 @@ Retain the established direction: domain calculations in core; provider/storage 
 
 P1 = incorrect financial results, loss of valid state, credential disclosure path, or broken primary action. P2 = resilience/consistency/verification repair. P3 = optional ownership improvement. These are implementation priorities, not claims of incidents in production.
 
-| ID | Priority | Specification | Evidence / strength |
-| --- | --- | --- | --- |
-| FIN-01 | P1 | [Broker ownership in holdings reconstruction](financial-core.md#fin-01) | Synthetic reproduction; Strong |
-| FIN-02 | P1 | [Partial/failed IBKR snapshot preservation](financial-core.md#fin-02) | Confirmed call path; Strong |
-| FIN-03 | P1 | [Execution quantity and ordering](financial-core.md#fin-03) | Sign reproduced; ordering inspected; Strong |
-| FIN-04 | P1 | [Historical FX coverage](financial-core.md#fin-04) | Confirmed policy/test conflict; Strong |
-| FIN-05 | P1 | [Cost-basis coverage and currency](financial-core.md#fin-05) | Partial basis reproduced; Strong |
-| FIN-06 | P1 | [List/detail quote freshness](financial-core.md#fin-06) | Synthetic reproduction; Strong |
-| FIN-07 | P2 | [Price-cache coverage/provenance](financial-core.md#fin-07) | Confirmed call path; Strong |
-| FIN-08 | P2 | [Cash-history coverage](financial-core.md#fin-08) | Fixture validation required; Worth exploring |
-| R1 | P1 | [Absolute sync deadline propagation](runtime-and-storage.md#r1) | Confirmed call path; Strong |
-| R2 | P1 | [Broker ownership and atomic snapshot commit](runtime-and-storage.md#r2) | Cross-instance race; Strong |
-| R3 | P1 | [Price lease/progress durability](runtime-and-storage.md#r3) | Confirmed failure paths; Strong |
-| R4 | P1 | [Local store commit-before-publish](runtime-and-storage.md#r4) | Confirmed failure paths; Strong |
-| R5 | P2 | [Fresh broker data for price discovery](runtime-and-storage.md#r5) | Confirmed call path; Strong |
-| R6 | P2 | [Unreadable credential recovery](runtime-and-storage.md#r6) | Confirmed call path; Strong |
-| R7 | P2 | [Agent-run ordering and local protection](runtime-and-storage.md#r7) | Race/protection gap; Strong |
-| UI-01 | P1 | [Dashboard resource ownership](frontend.md#ui-01) | Request/decoder failure paths; Strong |
-| UI-02 | P1 | [Persona selection and catalog states](frontend.md#ui-02) | Confirmed defects; Strong |
-| UI-03 | P1/P2 | [Sync polling lifecycle](frontend.md#ui-03) | Confirmed failure paths; Strong |
-| UI-04 | P2 | [Chart-window transitions](frontend.md#ui-04) | Wheel defect/gesture gaps; Strong |
-| UI-05 | P3 | [Risk-summary resource ownership](frontend.md#ui-05) | Conditional extraction; Worth exploring |
-| AG-01 | P1 | [Agent snapshot/output integrity](agents-and-observability.md#ag-01) | Confirmed semantics/validation gaps; Strong |
-| AG-02 | P2 | [Portable snapshot hashing](agents-and-observability.md#ag-02) | Reproduced architecture-test failure; Strong |
-| SEC-01 | P1 | [Complete credential redaction](agents-and-observability.md#sec-01) | Synthetic reproduction; Strong |
+| ID     | Priority | Specification                                                            | Evidence / strength                          |
+| ------ | -------- | ------------------------------------------------------------------------ | -------------------------------------------- |
+| FIN-01 | P1       | [Broker ownership in holdings reconstruction](financial-core.md#fin-01)  | Synthetic reproduction; Strong               |
+| FIN-02 | P1       | [Partial/failed IBKR snapshot preservation](financial-core.md#fin-02)    | Confirmed call path; Strong                  |
+| FIN-03 | P1       | [Execution quantity and ordering](financial-core.md#fin-03)              | Sign reproduced; ordering inspected; Strong  |
+| FIN-04 | P1       | [Historical FX coverage](financial-core.md#fin-04)                       | Confirmed policy/test conflict; Strong       |
+| FIN-05 | P1       | [Cost-basis coverage and currency](financial-core.md#fin-05)             | Partial basis reproduced; Strong             |
+| FIN-06 | P1       | [List/detail quote freshness](financial-core.md#fin-06)                  | Synthetic reproduction; Strong               |
+| FIN-07 | P2       | [Price-cache coverage/provenance](financial-core.md#fin-07)              | Confirmed call path; Strong                  |
+| FIN-08 | P2       | [Cash-history coverage](financial-core.md#fin-08)                        | Fixture validation required; Worth exploring |
+| R1     | P1       | [Absolute sync deadline propagation](runtime-and-storage.md#r1)          | Confirmed call path; Strong                  |
+| R2     | P1       | [Broker ownership and atomic snapshot commit](runtime-and-storage.md#r2) | Cross-instance race; Strong                  |
+| R3     | P1       | [Price lease/progress durability](runtime-and-storage.md#r3)             | Confirmed failure paths; Strong              |
+| R4     | P1       | [Local store commit-before-publish](runtime-and-storage.md#r4)           | Confirmed failure paths; Strong              |
+| R5     | P2       | [Fresh broker data for price discovery](runtime-and-storage.md#r5)       | Confirmed call path; Strong                  |
+| R6     | P2       | [Unreadable credential recovery](runtime-and-storage.md#r6)              | Confirmed call path; Strong                  |
+| R7     | P2       | [Agent-run ordering and local protection](runtime-and-storage.md#r7)     | Race/protection gap; Strong                  |
+| UI-01  | P1       | [Dashboard resource ownership](frontend.md#ui-01)                        | Request/decoder failure paths; Strong        |
+| UI-02  | P1       | [Persona selection and catalog states](frontend.md#ui-02)                | Confirmed defects; Strong                    |
+| UI-03  | P1/P2    | [Sync polling lifecycle](frontend.md#ui-03)                              | Confirmed failure paths; Strong              |
+| UI-04  | P2       | [Chart-window transitions](frontend.md#ui-04)                            | Wheel defect/gesture gaps; Strong            |
+| UI-05  | P3       | [Risk-summary resource ownership](frontend.md#ui-05)                     | Conditional extraction; Worth exploring      |
+| AG-01  | P1       | [Agent snapshot/output integrity](agents-and-observability.md#ag-01)     | Confirmed semantics/validation gaps; Strong  |
+| AG-02  | P2       | [Portable snapshot hashing](agents-and-observability.md#ag-02)           | Reproduced architecture-test failure; Strong |
+| SEC-01 | P1       | [Complete credential redaction](agents-and-observability.md#sec-01)      | Synthetic reproduction; Strong               |
 
 ## Delivery and parallel ownership
 
 Top recommendation: implement **FIN-02 with R2 as consecutive work**. First establish whether each broker section is complete; then make its durable application race-safe. Otherwise a transient IBKR failure can replace useful portfolio state, and concurrent instances can undo correct normalization. AG-02 is a small independent verification unblock; SEC-01 is an independent security repair.
 
-| Work lane | Sequence | Shared-file constraint |
-| --- | --- | --- |
-| Snapshot ingestion/runtime | FIN-02 → R2 → R1 → R5 | `index.ts`, broker result types, scheduled sync; keep one owner during each merge |
-| Financial model | FIN-01 → FIN-03 → FIN-04 → FIN-05 → FIN-06 → FIN-08 gate | `model.ts`, `portfolio.ts`, `positions.ts`; serialize model/schema changes, then split only with agreed interfaces |
-| Price execution | R3 and FIN-07 coordinated | Orchestrator and cache adapter can be separate, but share progress/coverage contract |
-| Local persistence | R4 → R6 → R7 | Credential vault and store helpers overlap; coordinate R2 persistence edits |
-| Browser resources | UI-01 → UI-02 → UI-03; UI-05 only if deletion test passes | All touch `app.tsx`; assign one owner or merge sequentially |
-| Chart interaction | UI-04 | Independent chart module; check financial output shapes after FIN changes |
-| Agent execution | AG-02 → AG-01; coordinate R7 | Same portfolio-agent/runtime files; do not race edits |
-| Problem reporting | SEC-01 | Independent reporter module |
+| Work lane                  | Sequence                                                  | Shared-file constraint                                                                                             |
+| -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Snapshot ingestion/runtime | FIN-02 → R2 → R1 → R5                                     | `index.ts`, broker result types, scheduled sync; keep one owner during each merge                                  |
+| Financial model            | FIN-01 → FIN-03 → FIN-04 → FIN-05 → FIN-06 → FIN-08 gate  | `model.ts`, `portfolio.ts`, `positions.ts`; serialize model/schema changes, then split only with agreed interfaces |
+| Price execution            | R3 and FIN-07 coordinated                                 | Orchestrator and cache adapter can be separate, but share progress/coverage contract                               |
+| Local persistence          | R4 → R6 → R7                                              | Credential vault and store helpers overlap; coordinate R2 persistence edits                                        |
+| Browser resources          | UI-01 → UI-02 → UI-03; UI-05 only if deletion test passes | All touch `app.tsx`; assign one owner or merge sequentially                                                        |
+| Chart interaction          | UI-04                                                     | Independent chart module; check financial output shapes after FIN changes                                          |
+| Agent execution            | AG-02 → AG-01; coordinate R7                              | Same portfolio-agent/runtime files; do not race edits                                                              |
+| Problem reporting          | SEC-01                                                    | Independent reporter module                                                                                        |
 
 FIN-08 requires FIN-01/FIN-02 and representative settlement fixtures before changing cash math. UI-03 depends on agreed runtime terminal outcomes; mocks can be prepared earlier. R2 may require new store compare-and-swap/lease operations and database migration; it does not authorize replacing Neon or changing trusted tenant resolution. Shared files across lanes mean the table is an ownership guide, not permission to launch every lane against one checkout.
 

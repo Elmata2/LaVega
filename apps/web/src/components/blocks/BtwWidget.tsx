@@ -148,7 +148,9 @@ function shortNote(row: BtwRow, locale: Locale = "nl"): string | null {
    * dat het nuttigste dat de kaart kan zeggen. Zonder deze regel las hij een kale
    * 0 en kon hij niet zien of die klopte. */
   if (p.note === null && buiten > 0 && p.coverage.total === 0) {
-    return buiten === 1 ? c.note.geenFactuurEnkele(entity) : c.note.geenFactuurMeerdere(entity, buiten);
+    return buiten === 1
+      ? c.note.geenFactuurEnkele(entity)
+      : c.note.geenFactuurMeerdere(entity, buiten);
   }
 
   switch (p.note) {
@@ -219,9 +221,7 @@ export function BtwBlock({
       title={c.title}
       span={span}
       height="short"
-      menu={
-        <CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>
-      }
+      menu={<CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>}
       footer={
         <>
           {row.amountShown && c.bronPrefix(c.shortBasis[p.basis])}
@@ -235,7 +235,9 @@ export function BtwBlock({
         <span
           className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}
         >
-          {row.amountShown ? formatEuroIn(locale, Math.abs(p.netCents as number) / 100) : c.geenBedrag}
+          {row.amountShown
+            ? formatEuroIn(locale, Math.abs(p.netCents as number) / 100)
+            : c.geenBedrag}
         </span>
         {row.amountShown && (
           <span className="text-muted text-[0.8rem]">{c.direction[p.direction]}</span>

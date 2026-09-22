@@ -291,8 +291,9 @@ test("wat er is omgerekend staat geteld in het label, en de som per rij erin", (
 test("een prijsstijging wordt niet meer blind × 12 gerekend", () => {
   const el = mount();
   const zin = () =>
-    [...el.querySelectorAll('[data-testid="subscription-change"]')].find((p) => p.textContent?.includes("Netflix"))
-      ?.textContent ?? "";
+    [...el.querySelectorAll('[data-testid="subscription-change"]')].find((p) =>
+      p.textContent?.includes("Netflix"),
+    )?.textContent ?? "";
 
   // € 15,99 → € 17,99 op een MAANDafschrijving: € 2,00 per maand.
   expect(zin()).toContain(eu("2,00"));
@@ -316,8 +317,9 @@ test("een stijging op een KWARTAALafschrijving is vier keer per jaar, niet twaal
     tx("q4", "2026-08-06", -55, "Simeo"),
   ]);
   const zin = () =>
-    [...el.querySelectorAll('[data-testid="subscription-change"]')].find((p) => p.textContent?.includes("Simeo"))
-      ?.textContent ?? "";
+    [...el.querySelectorAll('[data-testid="subscription-change"]')].find((p) =>
+      p.textContent?.includes("Simeo"),
+    )?.textContent ?? "";
   schakel(el, "jaar");
   // € 10,00 meer per kwartaal is € 40,00 per jaar. De oude som zei € 120,00.
   expect(zin()).toContain(eu("40,00"));

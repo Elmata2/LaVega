@@ -104,7 +104,10 @@ test("dispatchSseRecord: an error record's code: line reaches onError as the sec
   const onError = vi.fn();
   const handlers: ChatStreamHandlers = { onChunk: vi.fn(), onError };
 
-  dispatchSseRecord("event: error\ndata: De AI-limiet voor vandaag is bereikt.\ncode: ai-budget-day", handlers);
+  dispatchSseRecord(
+    "event: error\ndata: De AI-limiet voor vandaag is bereikt.\ncode: ai-budget-day",
+    handlers,
+  );
 
   expect(onError).toHaveBeenCalledWith("De AI-limiet voor vandaag is bereikt.", "ai-budget-day");
 });

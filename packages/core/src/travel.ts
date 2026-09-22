@@ -404,7 +404,8 @@ export function payHeadline(
   currency: string | null,
 ): PayHeadline {
   if (currency === "EUR") return { kind: "eur" };
-  if (!advice || advice.held) return { kind: "journey", headline: journeyHeadline(journeys, currency) };
+  if (!advice || advice.held)
+    return { kind: "journey", headline: journeyHeadline(journeys, currency) };
 
   return {
     kind: "catalogue-card",
@@ -521,7 +522,10 @@ export type BareHoldingCostClause =
   | { kind: "free"; product: string }
   | { kind: "priced"; product: string; cents: number; period: FeePeriod };
 
-function bareHoldingCostClause(product: string, cost: HoldingCost | null): BareHoldingCostClause | null {
+function bareHoldingCostClause(
+  product: string,
+  cost: HoldingCost | null,
+): BareHoldingCostClause | null {
   if (!cost) return null;
   if (cost.kind === "unknown") return { kind: "unknown", product, reason: cost.reason };
   // Zijn eigen kaart: die prijs loopt toch al door, dus er is niets bij te
@@ -685,7 +689,12 @@ function planConversion(
     fromProvider: providerOf(funding),
     toProvider: best.provider,
     method,
-    note: { kind: "move-funds", fromProvider: providerOf(funding), toProvider: best.provider, method },
+    note: {
+      kind: "move-funds",
+      fromProvider: providerOf(funding),
+      toProvider: best.provider,
+      method,
+    },
   };
 }
 
@@ -842,7 +851,10 @@ function versusNote(saving: number | null, runnerUp: Journey | undefined): Versu
   return {
     kind: "cheaper",
     savingEuros: saving,
-    alt: runnerUp.via === null ? { kind: "direct", provider: runnerUp.provider } : { kind: "via", via: runnerUp.via },
+    alt:
+      runnerUp.via === null
+        ? { kind: "direct", provider: runnerUp.provider }
+        : { kind: "via", via: runnerUp.via },
   };
 }
 
@@ -866,7 +878,10 @@ export type JourneyHeadline =
       versus: VersusNote;
     };
 
-export function journeyHeadline(journeys: readonly Journey[], currency: string | null): JourneyHeadline {
+export function journeyHeadline(
+  journeys: readonly Journey[],
+  currency: string | null,
+): JourneyHeadline {
   if (currency === "EUR") return { kind: "eur" };
   const best = journeys.find((j) => j.known);
   if (!best) return { kind: "no-route" };
@@ -1280,7 +1295,6 @@ export function withdrawalEffectivePct(fee: WithdrawalFee, amount: number): numb
   if (cost === null || amount <= 0) return null;
   return Math.round((cost / amount) * 10_000) / 100;
 }
-
 
 /* ---------- matching a card he holds to the product in the catalogue ---------- */
 
@@ -1931,7 +1945,12 @@ export type SmallWithdrawalPenalty =
  *  suppression rule. */
 export type OwnWithdrawalComparison =
   | { kind: "unknown" }
-  | { kind: "known"; ownProduct: string; ownCostOnReference: number; extraCostVsWinner: number | null };
+  | {
+      kind: "known";
+      ownProduct: string;
+      ownCostOnReference: number;
+      extraCostVsWinner: number | null;
+    };
 
 /** THE ONE SENTENCE ABOUT CASH, classified. Leads with the card and the euros,
  *  and names the small-withdrawal penalty when there is one — that penalty IS
@@ -1986,7 +2005,11 @@ export function withdrawalHeadline(
   const ownBest = options.find((o) => o.fee.known && o.costOnReference !== null) ?? null;
   const small: SmallWithdrawalPenalty =
     ownBest && ownBest.penalisesSmall && ownBest.smallEffectivePct !== null
-      ? { kind: "penalised", provider: ownBest.provider, smallEffectivePct: ownBest.smallEffectivePct }
+      ? {
+          kind: "penalised",
+          provider: ownBest.provider,
+          smallEffectivePct: ownBest.smallEffectivePct,
+        }
       : { kind: "none" };
 
   if (advice.held) {

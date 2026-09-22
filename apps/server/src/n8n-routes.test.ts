@@ -72,7 +72,12 @@ beforeEach(() => {
 
 function buildApp(fetchImpl: typeof fetch) {
   const app = new Hono();
-  registerN8nRoutes(app, { tenantId: async () => signedInAs, getLocalPart, setLocalPart, fetchImpl });
+  registerN8nRoutes(app, {
+    tenantId: async () => signedInAs,
+    getLocalPart,
+    setLocalPart,
+    fetchImpl,
+  });
   return app;
 }
 
@@ -214,13 +219,19 @@ test("n8n unreachable (fetch itself throws): 502 with code n8n-unreachable", asy
 
 test("n8n responds 200 with an unreadable (non-JSON) body: 502 with code n8n-unreadable", async () => {
   const impl = (async () =>
-    new Response("not json", { status: 200, headers: { "content-type": "text/plain" } })) as typeof fetch;
+    new Response("not json", {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+    })) as typeof fetch;
   const app = buildApp(impl);
 
   const res = await app.request("/api/n8n/queue");
 
   expect(res.status).toBe(502);
-  expect(await res.json()).toEqual({ error: "Onleesbaar antwoord van n8n.", code: "n8n-unreadable" });
+  expect(await res.json()).toEqual({
+    error: "Onleesbaar antwoord van n8n.",
+    code: "n8n-unreadable",
+  });
 });
 
 test("the x-lavega-token header sent to n8n is the server's configured secret, never anything from the request", async () => {

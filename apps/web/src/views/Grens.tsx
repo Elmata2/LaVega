@@ -447,8 +447,8 @@ export default function Grens({
                         <tr key={s.key}>
                           <Td data-label={kolomStroom}>{label}</Td>
                           <Td data-label={kolomGemeten}>
-                            {formatEuroIn(locale, s.totalCents / 100)} · {s.count}× ·{" "}
-                            {s.firstDate} {copy.answerForm.dateRangeSeparator} {s.lastDate}
+                            {formatEuroIn(locale, s.totalCents / 100)} · {s.count}× · {s.firstDate}{" "}
+                            {copy.answerForm.dateRangeSeparator} {s.lastDate}
                           </Td>
                           <Td data-label={kolomWatWasDit}>
                             <select

@@ -27,7 +27,8 @@ export function readAppLocale(): Locale {
   }
   try {
     const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
-    for (const l of langs) if (typeof l === "string" && l.toLowerCase().startsWith("nl")) return "nl";
+    for (const l of langs)
+      if (typeof l === "string" && l.toLowerCase().startsWith("nl")) return "nl";
   } catch {
     /* no navigator (SSR, tests) */
   }

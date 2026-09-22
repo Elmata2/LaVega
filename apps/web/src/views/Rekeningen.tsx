@@ -756,7 +756,8 @@ function SaldoAgeNote({ age, locale }: { age: SaldoAge; locale: Locale }) {
       className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
       data-testid="bank-panel-age"
     >
-      <strong className="text-ink">{saldoAgeShort(age, locale)}</strong> — {saldoAgeNote(age, locale)}
+      <strong className="text-ink">{saldoAgeShort(age, locale)}</strong> —{" "}
+      {saldoAgeNote(age, locale)}
     </p>
   );
 }
@@ -823,7 +824,8 @@ function LinkedNote({ moment, locale }: { moment: LinkedMoment; locale: Locale }
       className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
       data-testid="bank-panel-linked"
     >
-      <strong className="text-ink">{linkedShort(moment, locale)}</strong> — {linkedNote(moment, locale)}
+      <strong className="text-ink">{linkedShort(moment, locale)}</strong> —{" "}
+      {linkedNote(moment, locale)}
     </p>
   );
 }
@@ -836,7 +838,10 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
   const c = moneyCopy[locale].rekeningen;
   if (group.total === null) {
     return (
-      <span className="flex items-center gap-2 flex-none font-semibold tabular-nums" data-testid="bank-group-saldo">
+      <span
+        className="flex items-center gap-2 flex-none font-semibold tabular-nums"
+        data-testid="bank-group-saldo"
+      >
         <span className="text-muted font-normal text-[0.85rem]" data-testid="bank-group-unknown">
           {c.saldoOnbekend}
         </span>
@@ -844,7 +849,10 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
     );
   }
   return (
-    <span className="flex items-center gap-2 flex-none font-semibold tabular-nums" data-testid="bank-group-saldo">
+    <span
+      className="flex items-center gap-2 flex-none font-semibold tabular-nums"
+      data-testid="bank-group-saldo"
+    >
       <span className={group.total >= 0 ? "text-pos" : "text-neg"}>
         {formatEuroIn(locale, group.total)}
       </span>
@@ -907,7 +915,11 @@ export default function Rekeningen({
             role="group"
             aria-label={c.weergaveGroepAria}
           >
-            <Pill active={mode === "bank"} aria-pressed={mode === "bank"} onClick={() => setMode("bank")}>
+            <Pill
+              active={mode === "bank"}
+              aria-pressed={mode === "bank"}
+              onClick={() => setMode("bank")}
+            >
               {c.perBank}
             </Pill>
             <Pill
@@ -1034,7 +1046,10 @@ export default function Rekeningen({
                               />
                               {rowLabel(r)}
                               <span className="text-muted text-[0.75rem]">
-                                {typeOptionLabel(moneyCopy[locale].accountTypes, accountTypeKind(r.account))}
+                                {typeOptionLabel(
+                                  moneyCopy[locale].accountTypes,
+                                  accountTypeKind(r.account),
+                                )}
                               </span>
                             </Pill>
                           );
@@ -1093,7 +1108,12 @@ export default function Rekeningen({
                     />
                   </Td>
                   <Td data-label={c.tabelType}>
-                    <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} locale={locale} />
+                    <TypeSelect
+                      account={account}
+                      busy={busy}
+                      onTypeCommit={onTypeCommit}
+                      locale={locale}
+                    />
                   </Td>
                   <Td data-label={c.tabelEntiteit}>
                     <input
@@ -1105,7 +1125,12 @@ export default function Rekeningen({
                     />
                   </Td>
                   <Td numeric data-label={c.tabelSaldo}>
-                    <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} locale={locale} />
+                    <SaldoCell
+                      account={account}
+                      busy={busy}
+                      onCommit={onSaldoCommit}
+                      locale={locale}
+                    />
                     {/* Dezelfde waarschuwing als in het paneel, maar de tabel
                         heeft geen ruimte voor de uitleg: hier alleen de dag (of
                         het woord "onbekend"), de uitleg staat per rekening in

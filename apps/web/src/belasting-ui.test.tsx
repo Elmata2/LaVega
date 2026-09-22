@@ -464,7 +464,10 @@ function buildGrensCopySamples(
     header: () => [grensCopy.header.title],
     sideFallback: () => [grensCopy.sideFallback.personal, grensCopy.sideFallback.business],
     emptyStates: () => [
-      ...grensCopy.emptyStates.geenZakelijkeEntiteit({ unclassified: ["BV1", "Holding"], personal: ["Privé"] }),
+      ...grensCopy.emptyStates.geenZakelijkeEntiteit({
+        unclassified: ["BV1", "Holding"],
+        personal: ["Privé"],
+      }),
       ...grensCopy.emptyStates.geenZakelijkeEntiteit({ unclassified: [], personal: ["Privé"] }),
       ...grensCopy.emptyStates.geenZakelijkeEntiteit({ unclassified: [], personal: [] }),
       ...grensCopy.emptyStates.geenPersoonlijkeEntiteit({ business: ["BV1", "BV2"] }),
@@ -845,7 +848,9 @@ test("the English copy stays on the measuring side of the line too", () => {
   screen("NL · no transactions in the period", "NL", () => render([]));
   screen("NL · mixed rates", "NL", () =>
     render([tx("t1", "2026-07-10", 12_100)], ["BV1"], {
-      vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: true }],
+      vatSettings: [
+        { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: true },
+      ],
     }),
   );
   screen("NL · cash basis", "NL", () =>
@@ -895,7 +900,11 @@ test("the English copy stays on the measuring side of the line too", () => {
 
   for (const land of ["NL", "DE"] as const) {
     for (const cav of adminCopy.en.belasting.header.caveatsByCountry[land])
-      assertNoForbiddenWord(cav, `adminCopy.en.belasting.header.caveatsByCountry.${land}`, EN_FORBIDDEN);
+      assertNoForbiddenWord(
+        cav,
+        `adminCopy.en.belasting.header.caveatsByCountry.${land}`,
+        EN_FORBIDDEN,
+      );
   }
 });
 

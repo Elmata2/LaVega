@@ -15,9 +15,21 @@ export type AlertSeverity = "critical" | "warning" | "info";
  *  apps/web/src/copy/money.ts. One variant per alert site below. */
 export type AlertBody =
   | { kind: "shortfall"; date: string; balanceCents: number; bufferCents: number }
-  | { kind: "missed-stream"; sign: 1 | -1; counterparty: string; amountCents: number; expectedDate: string }
+  | {
+      kind: "missed-stream";
+      sign: 1 | -1;
+      counterparty: string;
+      amountCents: number;
+      expectedDate: string;
+    }
   | { kind: "vat-due"; label: string; dueDate: string; amountCents: number; days: number }
-  | { kind: "tax-prepayment-due"; label: string; dueDate: string; amountCents: number; days: number }
+  | {
+      kind: "tax-prepayment-due";
+      label: string;
+      dueDate: string;
+      amountCents: number;
+      days: number;
+    }
   | { kind: "tracking-stale"; label: string; updatedAt: string; ageDays: number; question: string }
   | { kind: "no-balance"; count: number };
 

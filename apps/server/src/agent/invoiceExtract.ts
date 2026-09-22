@@ -129,7 +129,8 @@ export async function extractInvoiceFields(
   const fields: ExtractedInvoice = {
     seller: String(f.seller ?? ""),
     buyer: String(f.buyer ?? ""),
-    payeeIban: typeof f.payeeIban === "string" && f.payeeIban.trim() ? f.payeeIban.trim() : undefined,
+    payeeIban:
+      typeof f.payeeIban === "string" && f.payeeIban.trim() ? f.payeeIban.trim() : undefined,
     invoiceNumber:
       typeof f.invoiceNumber === "string" && f.invoiceNumber.trim()
         ? f.invoiceNumber.trim()

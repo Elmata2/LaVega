@@ -1,5 +1,11 @@
 import { expect, test, beforeEach } from "vitest";
-import { getCardTerms, resetCardTerms, ingestCardTerms, ingestCatalogue, awaitLookups} from "./cardTerms.js";
+import {
+  getCardTerms,
+  resetCardTerms,
+  ingestCardTerms,
+  ingestCatalogue,
+  awaitLookups,
+} from "./cardTerms.js";
 import type { TravelInput } from "./agent/travel.js";
 import type { BankNlTable } from "@lavega/core";
 

@@ -10,7 +10,11 @@
 
 import { readFileSync } from "node:fs";
 import type { Tx } from "../packages/core/src/model.js";
-import { detectSubscriptions, explainMerchant, merchantTallies } from "../packages/core/src/subscriptions.js";
+import {
+  detectSubscriptions,
+  explainMerchant,
+  merchantTallies,
+} from "../packages/core/src/subscriptions.js";
 
 const path = process.argv[2];
 if (!path) {

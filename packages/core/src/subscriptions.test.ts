@@ -176,7 +176,6 @@ test("subscriptionCoverage ignores inflows and reports zero history when there a
   });
 });
 
-
 /* ── Precision round (app review, 2026-08-20) ─────────────────────────────
  *
  * His words: "I have this Simyo transaction that is every month € 11,89, so

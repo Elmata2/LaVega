@@ -36,7 +36,9 @@ function pgliteDatabase(instance: PGlite): Database {
 beforeAll(async () => {
   pglite = new PGlite();
   await pglite.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
-  for (const file of readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort())
+  for (const file of readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort())
     await pglite.exec(readFileSync(join(migrationsDir, file), "utf8"));
   await pglite.exec("SET ROLE lavega_runtime;");
   db = pgliteDatabase(pglite);
@@ -59,9 +61,10 @@ async function dayTotal(day: string): Promise<number> {
  *  simulates the orphan case: a process that reserved and then crashed
  *  before ever reconciling or releasing. */
 async function expireReservation(id: number): Promise<void> {
-  await pglite.query("UPDATE personal.ai_usage SET reserved_at = CURRENT_TIMESTAMP - INTERVAL '11 minutes' WHERE id = $1", [
-    id,
-  ]);
+  await pglite.query(
+    "UPDATE personal.ai_usage SET reserved_at = CURRENT_TIMESTAMP - INTERVAL '11 minutes' WHERE id = $1",
+    [id],
+  );
 }
 
 test("reserve() admits exactly one caller when the cap has room for exactly one worst-case reservation", async () => {

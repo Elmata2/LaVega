@@ -1,0 +1,168 @@
+ ▐▛███▛█   Claude Code v2.1.276
+▝▜██████▀  Opus 5 · Claude Pro
+  ▝▝ ▝▝    ~/Documents/LaVega
+
+⚠ Your login expires in 2 days · run /login to renew
+
+❯ use /typesafe-ai to see how Jev can be used to replace slow, expensive LLM
+  usage and find possible new features it would enable for users.
+
+⏺ Skill(typesafe-ai)
+  ⎿  Successfully loaded skill
+
+⏺ Two tracks: map LLM usage in LaVega, read TypeSafe docs.
+
+⏺ Mapping LLM call sites in repo.
+
+  Searched for 2 patterns, listed 3 directories, ran 1 shell command (ctrl+o to expand)
+
+⏺ Found the LLM surface: apps/server/src/agent/* (Mistral) plus the portfolio
+  agent. Reading the agent modules now.
+
+  Read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Repo mapped: 4 Mistral routes + portfolio personas. Now reading TypeSafe docs.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Fetching core concept + pricing/model pages, plus the two most relevant
+  cookbooks.
+
+  Searched for 1 pattern, ran 5 shell commands (ctrl+o to expand)
+
+⏺ Read repo LLM surface + TypeSafe docs. Answer below.
+
+  What LaVega pays for LLMs today
+
+  Five call sites, two providers:
+
+  Route: agent/categorize.ts
+  Model: mistral-small
+  Price: $0.15/$0.60 per Mtok
+  What it does: 200 tx per batch → one of 24 Dutch categories
+  ────────────────────────────────────────
+  Route: agent/invoiceExtract.ts
+  Model: mistral-ocr + mistral-small
+  Price: $4/1000 pages + tokens
+  What it does: OCR, then JSON field extraction
+  ────────────────────────────────────────
+  Route: agent/chat.ts
+  Model: mistral-medium + search
+  Price: $1.50/$7.50 + $30/1000 searches
+  What it does: generates prose
+  ────────────────────────────────────────
+  Route: agent/travel.ts
+  Model: mistral-medium + search
+  Price: same
+  What it does: fetches live card/FX fees
+  ────────────────────────────────────────
+  Route: investing-server/portfolioAgent.ts
+  Model: ling-3.0-flash-fin:free
+  Price: free, 60s timeout
+  What it does: 6 personas → JSON signal/confidence/summary
+
+  Jev price: $0.042 per Mtok. 3.5× under mistral-small input, 14× under its
+  output, ~36–180× under mistral-medium. Context 64k total, 32k for state +
+  longest question.
+
+  Replace / keep
+
+  Replace outright — categorize. Textbook Choice over a closed set of 24.
+  classification_using_confidence cookbook is exactly this shape: SEC filings
+  into 75 groups, one Choice each, confidence decides whether to report the
+  narrow label or fall back up the hierarchy. Wins beyond cost:
+  - No JSON.parse, no VALID.has() filter, no truncation headroom math, no
+    maxTokens: 8192. Typed answer is the contract.
+  - Real calibrated confidence per transaction. Today the route returns a bare
+    category with no uncertainty at all, so the UI cannot tell a certain
+    "Boodschappen" from a coin flip.
+  - MAX_ITEMS = 200, MAX_BILLED_INPUT_TOKENS = 40_000,
+    WORST_CASE_CENTS.categorize = 5 all stop being load-bearing.
+
+  Replace the second half — invoiceExtract. OCR stays (Jev is text-only, no
+  images). Swap the completion for the find/pick pattern: regex over-finds
+  candidate amounts/IBANs/dates/invoice numbers in the OCR markdown, Jev picks
+  which candidate is which field, code copies verbatim. This kills the bug class
+  the file's own comment documents — the model cannot invent a value or
+  transpose a digit if it only ever selects among spans found in the document.
+  And it retires the self-reported confidence field, which is a model's opinion
+  of itself and worth nothing, for calibrated per-field confidence.
+
+  Replace the numbers, keep the prose — portfolioAgent. The six personas each
+  return signal + confidence + summary + reasoning. Signal is a Choice
+  (bullish/bearish/neutral), conviction is a Score. Those are Jev's job. Only
+  the prose needs a generator, and only when the user expands a card. Today one
+  dashboard load is six generative calls with a 60-second wall-clock budget
+  each.
+
+  Keep — chat and travel. Jev does not generate text and does not search. No
+  path there.
+
+  Recommendation
+
+  Start with categorize. It is the cleanest Choice in the repo, it has 202 lines
+  of existing tests to hold the contract, and it is the route where the current
+  design is weakest (no confidence at all). Then invoiceExtract's pick step.
+  Leave chat/travel alone.
+
+  One real risk: Jev's docs say English is the primary training language and
+  other languages are "handled but not equally well," with explicit advice to
+  watch confidence when routing. LaVega's transactions, categories, and invoices
+  are Dutch. Measure on the owner's real data before trusting a threshold — do
+  not port the Mistral prompt's assumptions across.
+
+  New features Jev makes affordable
+
+  Cost and latency are what currently block each of these, not capability.
+
+  1. Recategorize everything, not the leftovers. uncategorizedTxs exists because
+     AI passes are expensive, so only "onbekend" gets sent, 200 at a time,
+     oldest first — the comment admits the latest month is what the UI shows and
+     the last thing a capped run reaches. At Jev prices whole-history
+     categorization is a single cheap sweep. The batch cap and the
+     month-ordering workaround both disappear.
+  2. Merchant identity without a hand-kept dictionary. merchantKey collapses
+     "SIMYO B.V. 4839201" / "Simyo B.V." / "SIMYO" via a regex table plus a
+     NAME_NOISE_TOKENS set someone has to keep feeding. The entity_alignment
+     cookbook does this as one Score over a candidate pair, with three levels:
+     merge, leave unlinked, ask the owner. Same for subscriptionFunction's
+     "Overig" fallback — a Choice over the function labels instead of a miss.
+     Per memory, this is the simple fix: remove the class, not the next missing
+     merchant.
+  3. Auto-accept confident invoices. With calibrated per-field confidence,
+     high-confidence extractions book themselves and only genuinely ambiguous
+     documents reach the review queue.
+  4. Enforce the chat redaction rule instead of asking for it. chat.ts ships the
+     tab context with a prompt instruction reading "verstuur hieruit NOOIT
+     persoonlijke gegevens naar een web-zoekopdracht." That is a request, not a
+     boundary. The llm_guardrails cookbook screens each outbound search query
+     with a Noul before it leaves. Cheap enough to run on every turn.
+  5. Semantic transaction search. "What did the Berlin trip cost me" —
+     semantic_find scores lines against a plain-language query. No embedding
+     store, no index to keep fresh.
+  6. Per-position persona views. Once the signal is a cheap typed judgment, run
+     all six personas across every holding rather than once over the portfolio,
+     and let the user re-weight the lenses in the UI without re-running
+     inference — composite-scoring: judgments become reusable data, weights live
+     in code.
+  7. Fewer "AI-limiet bereikt" refusals. The budget gate's worst-case ceilings
+     exist because one categorize or extract call can cost real cents. Move
+     those two routes to Jev and the cap stops being something the user bumps
+     into.
+
+  I have not changed any code — this is analysis only. Say the word and I will
+  open the categorize migration as a ticket under the investing stack parent, or
+  prototype the Choice against the owner's real Dutch transactions first to
+  settle the language question before committing to it.
+
+  result: LaVega has 5 LLM call sites; Jev ($0.042/Mtok) can replace categorize
+  wholesale and invoiceExtract's completion step (OCR + regex find/pick), plus
+  the portfolio personas' signal/confidence — chat and travel must stay on
+  Mistral (generation + web search). Unlocks full-history categorization,
+  dictionary-free merchant identity, auto-accepted invoices, enforced chat
+  redaction, and semantic transaction search; main risk is Jev's weaker
+  non-English accuracy against Dutch data.
+
+✻ Baked for 3m 54s · done 2:19 PM
+
+※ recap: Goal was checking where Jev could replace LaVega's slow, costly LLM calls. Analysis is done: categorize and the invoice extraction step are the clean swaps, chat and travel must stay. Next action is prototyping the categorize Choice against real Dutch transactions. (disable recaps in /config)

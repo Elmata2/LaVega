@@ -295,7 +295,11 @@ function PercentielLijst({
       <p className="cell-sub">
         {through === null
           ? c.nogGeenVergelijkingGeenTx(month)
-          : c.nogGeenVergelijkingTeWeinig(month, c.volledigeMaandenCount(n, month), result.minHistory)}
+          : c.nogGeenVergelijkingTeWeinig(
+              month,
+              c.volledigeMaandenCount(n, month),
+              result.minHistory,
+            )}
       </p>
     );
   }
@@ -319,7 +323,11 @@ function PercentielLijst({
         <p>
           {result.comparedDays === null
             ? c.heleMaandNaast(n)
-            : c.deelmaandNaast(rangeLabelIn(locale, result.current.start, through), result.comparedDays, n)}
+            : c.deelmaandNaast(
+                rangeLabelIn(locale, result.current.start, through),
+                result.comparedDays,
+                n,
+              )}
           {result.shortPeriods > 0 &&
             c.kortePeriodesTellenNiet(result.shortPeriods, result.comparedDays ?? 0)}
         </p>
@@ -805,7 +813,9 @@ export default function StatistiekBlock({
                 slices={share.slices}
                 totalCents={share.totalCents}
                 euro={euro}
-                label={(cat) => (cat === "Overig" ? c.overigCategorieLabel : categoryLabel(locale, cat))}
+                label={(cat) =>
+                  cat === "Overig" ? c.overigCategorieLabel : categoryLabel(locale, cat)
+                }
                 onSelect={onSelectCategory}
               />
             )
@@ -953,7 +963,10 @@ export default function StatistiekBlock({
             <p className="stat-insight-basis">
               {(() => {
                 const perCurrencyList = Object.entries(totals.foreignCurrency.byCurrency)
-                  .map(([currency, amount]) => `${currency} ${new Intl.NumberFormat(localeTag(locale)).format(amount)}`)
+                  .map(
+                    ([currency, amount]) =>
+                      `${currency} ${new Intl.NumberFormat(localeTag(locale)).format(amount)}`,
+                  )
                   .join(", ");
                 return mode === "convert"
                   ? c.buitenDezeCijfersConvert(totals.foreignCurrency.count, perCurrencyList)
@@ -978,7 +991,9 @@ export default function StatistiekBlock({
                 <div className="stat-figure">
                   <div className="eyebrow">{c.inkomstenInDezePeriode}</div>
                   <div className="module-figure">
-                    <span className="module-figure-value">{formatEuroIn(locale, totals.inTotal)}</span>
+                    <span className="module-figure-value">
+                      {formatEuroIn(locale, totals.inTotal)}
+                    </span>
                   </div>
                   {/* Het gemiddelde staat ONDER zijn eigen totaal en niet in een
                       eigen tegel: het is hetzelfde geld, anders gedeeld, en twee
@@ -989,18 +1004,26 @@ export default function StatistiekBlock({
                       maken. */}
                   {gemiddeld && (
                     <p className="module-figure-label">
-                      {c.gemiddeldPer(formatEuroIn(locale, gemiddeld.inAverage), unitWordIn(locale, gemiddeld.unit))}
+                      {c.gemiddeldPer(
+                        formatEuroIn(locale, gemiddeld.inAverage),
+                        unitWordIn(locale, gemiddeld.unit),
+                      )}
                     </p>
                   )}
                 </div>
                 <div className="stat-figure">
                   <div className="eyebrow">{c.uitgavenInDezePeriode}</div>
                   <div className="module-figure">
-                    <span className="module-figure-value">{formatEuroIn(locale, totals.outTotal)}</span>
+                    <span className="module-figure-value">
+                      {formatEuroIn(locale, totals.outTotal)}
+                    </span>
                   </div>
                   {gemiddeld && (
                     <p className="module-figure-label">
-                      {c.gemiddeldPer(formatEuroIn(locale, gemiddeld.outAverage), unitWordIn(locale, gemiddeld.unit))}
+                      {c.gemiddeldPer(
+                        formatEuroIn(locale, gemiddeld.outAverage),
+                        unitWordIn(locale, gemiddeld.unit),
+                      )}
                     </p>
                   )}
                 </div>
@@ -1042,12 +1065,18 @@ export default function StatistiekBlock({
                   </p>
                   {gemiddeld.restDays > 0 && (
                     <p className="cell-sub">
-                      {c.restDagenTellenNiet(gemiddeld.restDays, unitWordIn(locale, gemiddeld.unit))}
+                      {c.restDagenTellenNiet(
+                        gemiddeld.restDays,
+                        unitWordIn(locale, gemiddeld.unit),
+                      )}
                     </p>
                   )}
                   {gemiddeld.unit !== gemiddeld.askedUnit && (
                     <p className="cell-sub">
-                      {c.nietPerAskedUnit(unitWordIn(locale, gemiddeld.askedUnit), MIN_AVERAGE_UNITS)}
+                      {c.nietPerAskedUnit(
+                        unitWordIn(locale, gemiddeld.askedUnit),
+                        MIN_AVERAGE_UNITS,
+                      )}
                     </p>
                   )}
                 </ToonMeer>

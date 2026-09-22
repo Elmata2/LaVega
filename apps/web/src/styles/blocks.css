@@ -15,7 +15,7 @@
  * Relative order between these stylesheets is unchanged — they are all in the
  * same layer, so main.tsx's import order still decides. */
 @layer components {
-/* Homescreen blocks — the styles the individual modules need on top of the
+  /* Homescreen blocks — the styles the individual modules need on top of the
  * module primitive (styles/modules.css).
  *
  * Only what a block actually renders lives here; anything already in base.css
@@ -27,49 +27,49 @@
  * grouped under a heading with the same name and a block can be dropped
  * without leaving orphan CSS behind. */
 
-/* ---------- Shared ---------- */
+  /* ---------- Shared ---------- */
 
-/* Opt out of the grid's min-height. For a full-width block whose content is a
+  /* Opt out of the grid's min-height. For a full-width block whose content is a
  * few lines (Aandacht with nothing to report), the reserved height is dead
  * space rather than a shape the eye needs. */
-.module-hug {
-  min-height: 0;
-}
+  .module-hug {
+    min-height: 0;
+  }
 
-/* Empty state inside a module body: never a blank card, always a sentence. */
-.block-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
+  /* Empty state inside a module body: never a blank card, always a sentence. */
+  .block-empty {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
 
-/* A label/value line under a big figure (e.g. "Rekeningen  4"). */
-.block-stats {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-}
-.block-stat {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.block-stat-label {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.block-stat-value {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
+  /* A label/value line under a big figure (e.g. "Rekeningen  4"). */
+  .block-stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--line);
+  }
+  .block-stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+  .block-stat-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .block-stat-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
 
-/* ---------- AandachtBlock ---------- */
+  /* ---------- AandachtBlock ---------- */
 
-/* .alert-empty, .alert-tiers, .alert-tier(-head/-critical/-warning/-count),
+  /* .alert-empty, .alert-tiers, .alert-tier(-head/-critical/-warning/-count),
  * .alert-rows, .alert-row(-title) are gone: converted to Tailwind utilities on
  * AandachtBlock.tsx's own elements (docs/adr/0005). What is left below —
  * .buffer-field and .module-head-wrap's descendant rules — targets
@@ -77,284 +77,284 @@
  * so it stays hand-written CSS; .module-tabs/.module-tab(-on) belong to
  * StatistiekBlock, out of scope here, and are untouched. */
 
-/* The buffer editor sits in the module's control slot, so it has to read as a
+  /* The buffer editor sits in the module's control slot, so it has to read as a
  * control rather than a form field. */
-.buffer-field {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  white-space: nowrap;
-}
+  .buffer-field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    white-space: nowrap;
+  }
 
-/* Modules.css sizes the control slot for a pill; a whole labelled input is
+  /* Modules.css sizes the control slot for a pill; a whole labelled input is
  * wider than a phone-width card and pushed the page sideways (measured: 31px
  * of horizontal overflow at 390px). Let this module's header wrap instead. */
-.module-head-wrap .module-head {
-  flex-wrap: wrap;
-}
-.module-head-wrap .module-controls {
-  flex: 1 1 auto;
-  min-width: 0;
-  justify-content: flex-end;
-}
-.module-head-wrap .buffer-field {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  white-space: normal;
-}
-.module-head-wrap .buffer-field .saldo-input {
-  width: 5rem;
-}
+  .module-head-wrap .module-head {
+    flex-wrap: wrap;
+  }
+  .module-head-wrap .module-controls {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  .module-head-wrap .buffer-field {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    white-space: normal;
+  }
+  .module-head-wrap .buffer-field .saldo-input {
+    width: 5rem;
+  }
 
-/* A segmented view switch in a module's control slot (Statistieken's
+  /* A segmented view switch in a module's control slot (Statistieken's
  * "Categorieën | Weekdagen"). Built from the same parts as .module-period: the
  * nested surface, a hairline, a pill radius. The active tab is the app's solid
  * dark nav pill, so the homescreen and the nav speak one language. */
-.module-tabs {
-  display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-}
-.module-tab {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: var(--pill);
-  padding: 4px 12px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.module-tab:hover {
-  color: var(--ink);
-}
-.module-tab-on {
-  background: var(--ink);
-  color: var(--on-ink);
-}
-/* ZWART OP ZWART, gemeten in Chromium: `.module-tab:hover` (specificiteit 0,2,0)
+  .module-tabs {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .module-tab {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: var(--pill);
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .module-tab:hover {
+    color: var(--ink);
+  }
+  .module-tab-on {
+    background: var(--ink);
+    color: var(--on-ink);
+  }
+  /* ZWART OP ZWART, gemeten in Chromium: `.module-tab:hover` (specificiteit 0,2,0)
  * staat NA `.module-tab-on` (0,1,0), dus zodra de muis op de actieve tab staat
  * wint hover en wordt de kleur --ink op een achtergrond --ink. Het label was
  * daarmee weg bij elke wisseling van weergave, tot je de muis wegbewoog. Deze
  * regel geeft de actieve tab zijn eigen hover terug in plaats van de volgorde
  * om te gooien - dat laatste zou elke andere tabstijl in dit bestand raken. */
-.module-tab-on:hover {
-  color: var(--on-ink);
-}
+  .module-tab-on:hover {
+    color: var(--on-ink);
+  }
 
-/* ---------- SaldoBlock (Totale positie) ---------- */
+  /* ---------- SaldoBlock (Totale positie) ---------- */
 
-/* .figure-vs, .position-graph-empty, .position-compare(-item/-figure/-value/
+  /* .figure-vs, .position-graph-empty, .position-compare(-item/-figure/-value/
  * -missing), .entity-rows and .entity-row(-name/-balance) are gone: converted
  * to Tailwind utilities on SaldoBlock.tsx/PositieBlock.tsx/FacturenWidget.tsx's
  * own elements (docs/adr/0005). .position-graph stays: TrendChart's own
  * `.lv-chart-readout-value` is a descendant of it and TrendChart.tsx is not
  * owned here. */
-.position-graph {
-  margin-top: var(--sp-4);
-}
-/* TrendChart's readout is the value under the pointer. The headline above the
+  .position-graph {
+    margin-top: var(--sp-4);
+  }
+  /* TrendChart's readout is the value under the pointer. The headline above the
  * graph is already the position TODAY, so at rest the two would print the same
  * figure at the same size; shrink the readout to what it is — a caption that
  * follows the cursor. */
-.position-graph .lv-chart-readout-value {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0;
-}
+  .position-graph .lv-chart-readout-value {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
 
-/* ---------- PositieBlock (small) ---------- */
+  /* ---------- PositieBlock (small) ---------- */
 
-/* ---------- StatistiekBlock ---------- */
+  /* ---------- StatistiekBlock ---------- */
 
-/* The window every figure in the block belongs to, stated once at the top.
+  /* The window every figure in the block belongs to, stated once at the top.
  * This is what makes the block safe to read: "Uitgaven in deze periode" only
  * means something when "deze periode" is on the screen. */
-.stat-window {
-  margin: 0 0 var(--sp-3);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
-  color: var(--muted);
-}
+  .stat-window {
+    margin: 0 0 var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+  }
 
-/* The hand-picked range, beside the period pill. Two real date fields — the
+  /* The hand-picked range, beside the period pill. Two real date fields — the
  * "Aangepast" option is a range, not another preset. */
-.stat-range {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.stat-date {
-  border: 1px solid var(--line);
-  border-radius: var(--pill);
-  background: var(--surface-2);
-  color: var(--ink);
-  padding: 5px 10px;
-  font-size: 0.8rem;
-  font-family: inherit;
-}
-.stat-range-sep {
-  color: var(--muted);
-}
+  .stat-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat-date {
+    border: 1px solid var(--line);
+    border-radius: var(--pill);
+    background: var(--surface-2);
+    color: var(--ink);
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    font-family: inherit;
+  }
+  .stat-range-sep {
+    color: var(--muted);
+  }
 
-.stat-figures {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-6);
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--line);
-}
-.stat-figure {
-  min-width: 0;
-}
-.stat-figure .module-figure-value {
-  font-size: 1.6rem;
-}
+  .stat-figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--line);
+  }
+  .stat-figure {
+    min-width: 0;
+  }
+  .stat-figure .module-figure-value {
+    font-size: 1.6rem;
+  }
 
-/* The sentence the weekday view exists for ("Vrijdag kost je gemiddeld …").
+  /* The sentence the weekday view exists for ("Vrijdag kost je gemiddeld …").
  * Stated, not left to be read off the bars. */
-.stat-insight {
-  margin: 0 0 var(--sp-4);
-  font-size: 1rem;
-  color: var(--ink);
-}
-/* The second half of that sentence: what the average is an average OF. Quieter
+  .stat-insight {
+    margin: 0 0 var(--sp-4);
+    font-size: 1rem;
+    color: var(--ink);
+  }
+  /* The second half of that sentence: what the average is an average OF. Quieter
  * than the claim it qualifies, but part of the same paragraph — it is the
  * definition of the number, not a footnote. */
-.stat-insight-basis {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+  .stat-insight-basis {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
 
-/* The category legend doubles as the jump into Transacties, so each entry is a
+  /* The category legend doubles as the jump into Transacties, so each entry is a
  * button that still reads as a legend item. */
-.stat-legend-jump {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-}
-.stat-legend-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid transparent;
-  border-radius: var(--pill);
-  background: transparent;
-  padding: 3px 10px 3px 6px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  cursor: pointer;
-}
-.stat-legend-button:hover {
-  color: var(--ink);
-  border-color: var(--line);
-  background: var(--surface-2);
-}
-/* ---------- WeekdayBars ---------- */
+  .stat-legend-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  .stat-legend-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: var(--pill);
+    background: transparent;
+    padding: 3px 10px 3px 6px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .stat-legend-button:hover {
+    color: var(--ink);
+    border-color: var(--line);
+    background: var(--surface-2);
+  }
+  /* ---------- WeekdayBars ---------- */
 
-/* One bar per day, so it may be wider than the twelve-month case CategoryBars
+  /* One bar per day, so it may be wider than the twelve-month case CategoryBars
  * is capped for. */
-.weekday-bar {
-  max-width: 42px;
-  background: var(--neg);
-}
-/* The peak day is marked by its value chip, not by a second colour — spending
+  .weekday-bar {
+    max-width: 42px;
+    background: var(--neg);
+  }
+  /* The peak day is marked by its value chip, not by a second colour — spending
  * is terracotta everywhere in the app and a recoloured bar would break that. */
-.weekday-bar-peak {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-/* The reference's floating value label above the highlighted bar. */
-.weekday-peak-chip {
-  position: absolute;
-  transform: translate(-50%, calc(-100% - 10px));
-  background: var(--ink);
-  color: var(--on-ink);
-  border-radius: var(--pill);
-  padding: 3px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.weekday-label-peak {
-  color: var(--ink);
-  font-weight: 700;
-}
-/* "What a normal day costs" — the baseline the block's own sentence compares
+  .weekday-bar-peak {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  /* The reference's floating value label above the highlighted bar. */
+  .weekday-peak-chip {
+    position: absolute;
+    transform: translate(-50%, calc(-100% - 10px));
+    background: var(--ink);
+    color: var(--on-ink);
+    border-radius: var(--pill);
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .weekday-label-peak {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  /* "What a normal day costs" — the baseline the block's own sentence compares
  * the peak against. SOLID, so it is not mistaken for a gridline or for the
  * dashed connector running through the bars; both of those are dashed. */
-.weekday-average {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 0;
-  border-top: 1px solid var(--muted);
-  pointer-events: none;
-}
-.weekday-average-label {
-  position: absolute;
-  right: 0;
-  top: 2px;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  color: var(--muted);
-  white-space: nowrap;
-  background: var(--surface);
-  padding-left: 4px;
-}
+  .weekday-average {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 1px solid var(--muted);
+    pointer-events: none;
+  }
+  .weekday-average-label {
+    position: absolute;
+    right: 0;
+    top: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--muted);
+    white-space: nowrap;
+    background: var(--surface);
+    padding-left: 4px;
+  }
 
-/* ---------- RecenteTransactiesBlock ---------- */
+  /* ---------- RecenteTransactiesBlock ---------- */
 
-/* .tx-chip(-button), .tx-row-right and .tx-search are gone: converted to
+  /* .tx-chip(-button), .tx-row-right and .tx-search are gone: converted to
  * Tailwind utilities on RecenteTransactiesBlock.tsx's own elements, including
  * their max-width:520px overrides below (docs/adr/0005). What stays: .tx-row,
  * .tx-row-info, .tx-desc and .tx-meta are base.css's own classes (reused, not
  * owned here), so the descendant rules augmenting them for this block cannot
  * move to Tailwind without editing base.css. */
-.tx-row .tx-row-info {
-  flex: 1;
-}
-.tx-row .tx-desc,
-.tx-row .tx-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  .tx-row .tx-row-info {
+    flex: 1;
+  }
+  .tx-row .tx-desc,
+  .tx-row .tx-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-/* ---------- KaartenBlock ---------- */
+  /* ---------- KaartenBlock ---------- */
 
-.bank-card {
-  flex: none;
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  width: 260px;
-  min-height: 148px;
-  padding: var(--sp-4);
-  border-radius: var(--r);
-  color: var(--on-ink);
-  box-shadow: var(--shadow-sm);
-  /* Voor de glans: `relative` geeft hem iets om zich aan te hangen, en `hidden`
+  .bank-card {
+    flex: none;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    width: 260px;
+    min-height: 148px;
+    padding: var(--sp-4);
+    border-radius: var(--r);
+    color: var(--on-ink);
+    box-shadow: var(--shadow-sm);
+    /* Voor de glans: `relative` geeft hem iets om zich aan te hangen, en `hidden`
    * houdt hem binnen de afgeronde hoeken - anders steekt er een lichte cirkel
    * buiten de kaart uit zodra de cursor bij de rand komt. */
-  position: relative;
-  overflow: hidden;
-}
+    position: relative;
+    overflow: hidden;
+  }
 
-/* DE HOVER-TOESTAND (review 4, punt 10: "and that I can hover over it").
+  /* DE HOVER-TOESTAND (review 4, punt 10: "and that I can hover over it").
  *
  * Een toestand, geen overgang — regel 12 van deze ronde. Er staat dus geen
  * transition en er is niets te easen: de kaart ziet er onder de muis anders uit
@@ -376,7 +376,7 @@
  * app-frame, dus dat lenen zou de kaart laten zweven als een venster. Wel
  * dezelfde inkt (rgba(26, 26, 23, …)) als beide tokens, want een tweede grijs
  * naast het bestaande grijs valt op als een fout. */
-/* DE GLANS DIE DE CURSOR VOLGT.
+  /* DE GLANS DIE DE CURSOR VOLGT.
  *
  * Een eigen laag en geen CSS-variabele op de kaart zelf: een variabele op de
  * ouder laat de stijl van elk kind hertekenen bij elke muisbeweging, en een
@@ -394,64 +394,64 @@
  * eraan vastgeplakt te zitten. Een transitie en geen keyframes, want de muis
  * verandert voortdurend van richting en een transitie richt zich onderweg
  * gewoon opnieuw. */
-.bank-card-sheen {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 180px;
-  height: 180px;
-  margin: -90px 0 0 -90px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle closest-side,
-    rgba(255, 255, 255, 0.14),
-    rgba(255, 255, 255, 0)
-  );
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform;
-}
-
-/* Aanwijsapparaat met een fijne punt, dus geen aanraakscherm: daar zet een tik
- * de hover aan en blijft de glans hangen op een plek waar geen vinger meer is. */
-@media (hover: hover) and (pointer: fine) {
   .bank-card-sheen {
-    transition:
-      opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-      transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 180px;
+    height: 180px;
+    margin: -90px 0 0 -90px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle closest-side,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0)
+    );
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform;
   }
-  .bank-card:hover .bank-card-sheen {
-    opacity: 1;
-  }
-}
 
-/* Minder beweging: het licht blijft, maar het volgt niets meer. De glans zit dan
+  /* Aanwijsapparaat met een fijne punt, dus geen aanraakscherm: daar zet een tik
+ * de hover aan en blijft de glans hangen op een plek waar geen vinger meer is. */
+  @media (hover: hover) and (pointer: fine) {
+    .bank-card-sheen {
+      transition:
+        opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+        transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .bank-card:hover .bank-card-sheen {
+      opacity: 1;
+    }
+  }
+
+  /* Minder beweging: het licht blijft, maar het volgt niets meer. De glans zit dan
  * stil in de linkerbovenhoek waar de gradient ook vandaan komt, dus de kaart
  * houdt zijn diepte zonder dat er iets meebeweegt. */
-@media (prefers-reduced-motion: reduce) {
-  .bank-card-sheen {
-    transition: opacity 160ms linear;
-    transform: translate3d(30%, 20%, 0) !important;
+  @media (prefers-reduced-motion: reduce) {
+    .bank-card-sheen {
+      transition: opacity 160ms linear;
+      transform: translate3d(30%, 20%, 0) !important;
+    }
   }
-}
 
-.bank-card:hover,
-.bank-card:focus-within {
-  box-shadow:
-    0 2px 4px rgba(26, 26, 23, 0.08),
-    0 22px 44px -26px rgba(26, 26, 23, 0.34),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.32);
-}
-
-@media (max-width: 520px) {
-  .bank-card {
-    width: 232px;
+  .bank-card:hover,
+  .bank-card:focus-within {
+    box-shadow:
+      0 2px 4px rgba(26, 26, 23, 0.08),
+      0 22px 44px -26px rgba(26, 26, 23, 0.34),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.32);
   }
-}
 
-/* ---------- BetaalschemaBlock ---------- */
+  @media (max-width: 520px) {
+    .bank-card {
+      width: 232px;
+    }
+  }
 
-/* .pay-row and .pay-name are the only rules left here (see docs/adr/0005): the
+  /* ---------- BetaalschemaBlock ---------- */
+
+  /* .pay-row and .pay-name are the only rules left here (see docs/adr/0005): the
  * hover/focus/tap reveal below is `.pay-row:hover .pay-name`, a descendant
  * combinator neither Tailwind's utility classes nor test-support/resolveStyle
  * can express on a single element, and BetaalschemaBlock.test.tsx pins it by
@@ -460,7 +460,7 @@
  * .pay-info, .pay-label, .pay-tag, .pay-meta, .pay-amount) is gone: converted
  * to Tailwind utilities on BetaalschemaBlock.tsx's own elements. */
 
-/* DE RIJ IS EEN KNOP (review 4, punt 7). Niet om ergens heen te gaan — de agenda
+  /* DE RIJ IS EEN KNOP (review 4, punt 7). Niet om ergens heen te gaan — de agenda
  * gaat nergens heen — maar omdat de volle naam anders alleen met een muis te
  * bereiken is. Een knop geeft in één keer alle drie de wegen: hover, focus met
  * het toetsenbord, en een tik op een telefoon. Dezelfde oplossing als de
@@ -470,84 +470,84 @@
  * de haarlijn eronder, geen eigen achtergrond, de tekst links. De horizontale
  * padding met een negatieve marge ernaast laat de hover-vulling doorlopen tot in
  * de rand van de kaart, zodat de highlight een rij is en geen zwevend blokje. */
-.pay-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  width: calc(100% + 2 * var(--sp-2));
-  margin: 0 calc(-1 * var(--sp-2));
-  padding: var(--sp-3) var(--sp-2);
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.pay-row:first-child {
-  padding-top: 0;
-}
-.pay-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-/* `:not(:disabled)` staat er voor de SPECIFICITEIT, niet voor de toestand: de
+  .pay-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: calc(100% + 2 * var(--sp-2));
+    margin: 0 calc(-1 * var(--sp-2));
+    padding: var(--sp-3) var(--sp-2);
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .pay-row:first-child {
+    padding-top: 0;
+  }
+  .pay-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  /* `:not(:disabled)` staat er voor de SPECIFICITEIT, niet voor de toestand: de
  * basisregel `button:hover:not(:disabled)` in base.css kleurt elke knoprand
  * accent-blauw, en die zou hier de haarlijn ONDER de rij blauw maken bij hover.
  * Met dezelfde pseudo-klasse erbij wint deze regel en blijft de scheidingslijn
  * een scheidingslijn. */
-.pay-row:hover:not(:disabled),
-.pay-row:focus-visible,
-.pay-row[data-open="on"] {
-  background: var(--surface-2);
-  border-bottom-color: var(--line);
-}
-.pay-row:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
-}
-/* HET AFKAPPEN ZIT ALLEEN OP DE NAAM. Toen het op `.pay-label` zat, deelde de
+  .pay-row:hover:not(:disabled),
+  .pay-row:focus-visible,
+  .pay-row[data-open="on"] {
+    background: var(--surface-2);
+    border-bottom-color: var(--line);
+  }
+  .pay-row:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
+  }
+  /* HET AFKAPPEN ZIT ALLEEN OP DE NAAM. Toen het op `.pay-label` zat, deelde de
  * pil dezelfde regel en viel hij bij een lange naam buiten beeld — dan zag een
  * voorspelde regel eruit als een bevestigde afspraak. */
-.pay-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Wordt de rij gelezen, dan mag de naam alle regels nemen die hij nodig heeft.
+  .pay-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Wordt de rij gelezen, dan mag de naam alle regels nemen die hij nodig heeft.
  * `anywhere` omdat een tegenpartij één woord van veertig tekens kan zijn en een
  * naam die buiten de kaart hangt net zo onleesbaar is als een afgekapte. */
-.pay-row:hover .pay-name,
-.pay-row:focus-visible .pay-name,
-.pay-row[data-open="on"] .pay-name {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
+  .pay-row:hover .pay-name,
+  .pay-row:focus-visible .pay-name,
+  .pay-row[data-open="on"] .pay-name {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 
-/* ---------- TopUitgavenBlock ---------- */
+  /* ---------- TopUitgavenBlock ---------- */
 
-/* The figures line (share · amount · Δ · "vs. gem.") is nowrap in base.css, so
+  /* The figures line (share · amount · Δ · "vs. gem.") is nowrap in base.css, so
  * on a very narrow phone it ran up to 64px past the card (measured at 320px).
  * Let the row and the figures wrap; the category name keeps the first line. */
-@media (max-width: 520px) {
-  .cat-row-top {
-    flex-wrap: wrap;
+  @media (max-width: 520px) {
+    .cat-row-top {
+      flex-wrap: wrap;
+    }
+    .cat-fig {
+      flex-wrap: wrap;
+      white-space: normal;
+      row-gap: 2px;
+    }
   }
-  .cat-fig {
-    flex-wrap: wrap;
-    white-space: normal;
-    row-gap: 2px;
-  }
-}
 
-/* ---------- TravelBlock ---------- */
+  /* ---------- TravelBlock ---------- */
 
-/* The answer card (.travel-winner) and the three step cards (.travel-plan /
+  /* The answer card (.travel-winner) and the three step cards (.travel-plan /
  * .travel-step) are already in base.css and reused as-is. .travel-winner-unpriced,
  * .travel-terms-blocked/-action, .travel-why, .travel-journeys,
  * .travel-journey(-best/-head/-name/-cost/-unknown), .travel-legs and
@@ -559,37 +559,36 @@
  * parent and every child paragraph across many render branches, and
  * consolidating that onto Tailwind utilities would mean re-touching every one
  * of them for no behavioural gain. */
-.travel-terms {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-.travel-terms p {
-  margin: 0;
-  line-height: 1.5;
-}
-.travel-terms code {
-  font-family: var(--font-mono);
-  font-size: 0.8em;
-}
+  .travel-terms {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface-2);
+  }
+  .travel-terms p {
+    margin: 0;
+    line-height: 1.5;
+  }
+  .travel-terms code {
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+  }
 
-/* ---------- PositieBlock ---------- */
+  /* ---------- PositieBlock ---------- */
 
-/* .travel-searching and .spinner are gone (docs/adr/0005): both were owned
+  /* .travel-searching and .spinner are gone (docs/adr/0005): both were owned
  * only by this rule, so they moved to Tailwind utilities directly on
  * TravelBlock.tsx's elements — `motion-reduce:[animation:none]` replaces the
  * prefers-reduced-motion block below. The keyframe stays: Tailwind's arbitrary
  * `[animation:lavega-spin_900ms_linear_infinite]` still names it. */
-@keyframes lavega-spin {
-  to {
-    transform: rotate(360deg);
+  @keyframes lavega-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
-}
-
 }

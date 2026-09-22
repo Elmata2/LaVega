@@ -36,9 +36,10 @@ was made at all.
 computes this: it returns `{ ..., fetched: false }` whenever the cached price
 range already covers today's date, and skips calling any provider in that
 case (`packages/adapters/src/market-data/priceSync.ts:32` — `if (from && from
+
 > today) return { bars: await cached(), problems: [], fetched: false };`).
-The orchestrator receives this `fetched` flag on its `PriceSyncResult` but
-never reads it before deciding whether to pace.
+The orchestrator receives this `fetched`flag on its`PriceSyncResult` but
+> never reads it before deciding whether to pace.
 
 The pace exists to stay polite to Yahoo Finance's servers between real
 requests — it is meaningless when no request was made. On a warm day (which
@@ -51,7 +52,7 @@ whatever the broker sync step already took.
 
 Skipping the pace wait when nothing was fetched removes that dead time with
 no change to the actual Yahoo Finance request rate — the fix only touches
-what happens *between* requests, not the requests themselves.
+what happens _between_ requests, not the requests themselves.
 
 ## Current state
 
@@ -71,35 +72,35 @@ The exact block to change, `apps/investing-server/src/priceOrchestrator.ts`
 editing):
 
 ```ts
-        try {
-          const result = await input.sync(target, tenantId);
-          problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
-        } catch (error) {
-          problems.push(
-            `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
-          );
-        }
-        if (index < queue.length - 1) {
-          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
-            return pause(index + 1);
-          const waitUntil = new Date(now().getTime() + paceMs).toISOString();
-          await update(
-            tenantId,
-            {
-              status: "waiting",
-              total,
-              completed: done + index + 1,
-              remainingSymbols: remainingFrom(index + 1),
-              currentSymbol: null,
-              waitUntil,
-              message: "Waiting before next price request",
-              problems: [...problems],
-              leaseId,
-            },
-            leaseId,
-          );
-          await wait(paceMs);
-        }
+try {
+  const result = await input.sync(target, tenantId);
+  problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
+} catch (error) {
+  problems.push(
+    `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+  );
+}
+if (index < queue.length - 1) {
+  if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
+    return pause(index + 1);
+  const waitUntil = new Date(now().getTime() + paceMs).toISOString();
+  await update(
+    tenantId,
+    {
+      status: "waiting",
+      total,
+      completed: done + index + 1,
+      remainingSymbols: remainingFrom(index + 1),
+      currentSymbol: null,
+      waitUntil,
+      message: "Waiting before next price request",
+      problems: [...problems],
+      leaseId,
+    },
+    leaseId,
+  );
+  await wait(paceMs);
+}
 ```
 
 Notes for the executor:
@@ -111,24 +112,24 @@ Notes for the executor:
   attempted" (i.e. still pace) — we cannot know from an exception whether a
   provider request actually went out, and erring toward pacing on failure is
   the safe default (avoids hammering a provider that's already erroring).
-- The comment style in this file is dense, present-tense, explains *why* not
-  *what* (see the existing block comments above `update`, `start`, etc.).
+- The comment style in this file is dense, present-tense, explains _why_ not
+  _what_ (see the existing block comments above `update`, `start`, etc.).
   Match it for the new comment.
 - The top-of-loop deadline check (a few lines above this block —
   `if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
-  return pause(index);`) already guards host-time-budget overruns on every
+return pause(index);`) already guards host-time-budget overruns on every
   iteration regardless of this change. You do not need to add any additional
   deadline handling for the skipped-pace path — the existing per-iteration
   check covers it on the next loop turn.
 
 ## Commands you will need
 
-| Purpose   | Command                                                                 | Expected on success |
-|-----------|--------------------------------------------------------------------------|---------------------|
-| Install   | `pnpm install`                                                          | exit 0              |
-| Typecheck | `pnpm --filter @lavega/investing-server typecheck`                      | exit 0, no errors   |
-| Tests     | `pnpm --filter @lavega/investing-server test -- priceOrchestrator`      | all pass            |
-| Lint      | `pnpm lint` (repo root; runs `oxlint .`)                                | exit 0              |
+| Purpose   | Command                                                            | Expected on success |
+| --------- | ------------------------------------------------------------------ | ------------------- |
+| Install   | `pnpm install`                                                     | exit 0              |
+| Typecheck | `pnpm --filter @lavega/investing-server typecheck`                 | exit 0, no errors   |
+| Tests     | `pnpm --filter @lavega/investing-server test -- priceOrchestrator` | all pass            |
+| Lint      | `pnpm lint` (repo root; runs `oxlint .`)                           | exit 0              |
 
 Run tests from the repo root — `pnpm --filter <pkg> test` uses turbo/vitest
 as configured in that package's `package.json` (`"test": "vitest run"`).
@@ -136,10 +137,12 @@ as configured in that package's `package.json` (`"test": "vitest run"`).
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `apps/investing-server/src/priceOrchestrator.ts`
 - `apps/investing-server/src/priceOrchestrator.test.ts`
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `packages/adapters/src/market-data/priceSync.ts` — already correct, produces
   the `fetched` flag this plan consumes.
 - `packages/adapters/src/market-data/yahoo/*` — the Yahoo HTTP client and its
@@ -177,41 +180,41 @@ to pace for).
 The resulting block should look like:
 
 ```ts
-        let fetched = true;
-        try {
-          const result = await input.sync(target, tenantId);
-          fetched = result.fetched;
-          problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
-        } catch (error) {
-          problems.push(
-            `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
-          );
-        }
-        /* A cache hit made no provider request, so there is nothing to pace
-         * for — sleeping paceMs anyway just slows a warm-cache run down for
-         * no reason. An error stays paced: we can't tell whether it reached
-         * the provider, and pacing is the safe default when one errored. */
-        if (fetched && index < queue.length - 1) {
-          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
-            return pause(index + 1);
-          const waitUntil = new Date(now().getTime() + paceMs).toISOString();
-          await update(
-            tenantId,
-            {
-              status: "waiting",
-              total,
-              completed: done + index + 1,
-              remainingSymbols: remainingFrom(index + 1),
-              currentSymbol: null,
-              waitUntil,
-              message: "Waiting before next price request",
-              problems: [...problems],
-              leaseId,
-            },
-            leaseId,
-          );
-          await wait(paceMs);
-        }
+let fetched = true;
+try {
+  const result = await input.sync(target, tenantId);
+  fetched = result.fetched;
+  problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
+} catch (error) {
+  problems.push(
+    `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+  );
+}
+/* A cache hit made no provider request, so there is nothing to pace
+ * for — sleeping paceMs anyway just slows a warm-cache run down for
+ * no reason. An error stays paced: we can't tell whether it reached
+ * the provider, and pacing is the safe default when one errored. */
+if (fetched && index < queue.length - 1) {
+  if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
+    return pause(index + 1);
+  const waitUntil = new Date(now().getTime() + paceMs).toISOString();
+  await update(
+    tenantId,
+    {
+      status: "waiting",
+      total,
+      completed: done + index + 1,
+      remainingSymbols: remainingFrom(index + 1),
+      currentSymbol: null,
+      waitUntil,
+      message: "Waiting before next price request",
+      problems: [...problems],
+      leaseId,
+    },
+    leaseId,
+  );
+  await wait(paceMs);
+}
 ```
 
 **Verify**: `pnpm --filter @lavega/investing-server typecheck` → exit 0, no errors.
@@ -237,7 +240,7 @@ file (`kind`, `symbol`, `ticker`, `exchange`, `currency`, `backfillFrom`).
    `paceMs: 10` and `wait: vi.fn(async () => {})`. After the run, assert
    `expect(wait).toHaveBeenCalledTimes(2)` (paced after target 1 and target
    2, not after the last one — matches the existing `index < queue.length -
-   1` behavior).
+1` behavior).
 
 Both tests should also assert the run's final `status` is `"completed"`, same
 as the existing tests in this file, to confirm the change didn't break the
@@ -275,7 +278,7 @@ Stop and report back (do not improvise) if:
 
 ## Maintenance notes
 
-- This plan only removes *dead* pacing time. It does not add concurrency —
+- This plan only removes _dead_ pacing time. It does not add concurrency —
   Yahoo Finance requests still happen one at a time. A follow-up worth
   considering separately: bounded concurrency (e.g. 3–5 symbols in flight)
   for the Yahoo Finance leg of price sync, since (unlike Trading 212's

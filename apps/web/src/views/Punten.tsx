@@ -551,7 +551,10 @@ export default function Punten({
           die zin zou een lege plek als een ontbrekend cijfer lezen. */}
 
       {rows.length === 0 ? (
-        <div className="border border-dashed border-line rounded bg-surface-2 p-4" data-testid="empty-guide">
+        <div
+          className="border border-dashed border-line rounded bg-surface-2 p-4"
+          data-testid="empty-guide"
+        >
           <p className="m-0 mb-3">{c.empty.lead}</p>
           <ul className="m-0 pl-[1.1rem] text-muted text-[0.88rem]">
             {c.empty.steps.map((step) => (
@@ -576,7 +579,9 @@ export default function Punten({
               >
                 <header className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold text-ink [overflow-wrap:anywhere]">{b.program}</div>
+                    <div className="font-semibold text-ink [overflow-wrap:anywhere]">
+                      {b.program}
+                    </div>
                     <div className="text-[0.78rem] text-muted">
                       {category ?? c.card.ownProgramCategory}
                     </div>
@@ -608,8 +613,14 @@ export default function Punten({
                 {facts ? <ProgramFactsBlock facts={facts} /> : null}
 
                 {asking ? (
-                  <div className="mt-3 p-3 border border-line rounded-sm bg-surface" data-testid="punt-ask">
-                    <label className="block text-[0.85rem] text-ink mb-2" htmlFor={`punt-ask-${slug(b.id)}`}>
+                  <div
+                    className="mt-3 p-3 border border-line rounded-sm bg-surface"
+                    data-testid="punt-ask"
+                  >
+                    <label
+                      className="block text-[0.85rem] text-ink mb-2"
+                      htmlFor={`punt-ask-${slug(b.id)}`}
+                    >
                       {status.question}
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -617,7 +628,9 @@ export default function Punten({
                         id={`punt-ask-${slug(b.id)}`}
                         className="flex-[1_1_120px] min-w-0"
                         inputMode="decimal"
-                        placeholder={unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints}
+                        placeholder={
+                          unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints
+                        }
                         value={asking.text}
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
@@ -736,7 +749,11 @@ export default function Punten({
               value={points}
               disabled={busy}
               aria-label={addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
-              placeholder={addUnit === "eur" ? c.addForm.amountPlaceholderEur : c.addForm.amountPlaceholderPoints}
+              placeholder={
+                addUnit === "eur"
+                  ? c.addForm.amountPlaceholderEur
+                  : c.addForm.amountPlaceholderPoints
+              }
               onChange={(e) => setPoints(e.target.value)}
             />
           </label>

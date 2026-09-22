@@ -54,7 +54,12 @@ import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { getCashbackAssumptionEnabled } from "../settings";
 import { formatEuroIn, monthLabel } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
-import { optimiseCopy, formatPercentIn, type Segment, heldCashbackSentence } from "../copy/optimise.js";
+import {
+  optimiseCopy,
+  formatPercentIn,
+  type Segment,
+  heldCashbackSentence,
+} from "../copy/optimise.js";
 import type { Locale } from "../locale.js";
 import Module, { ModulePeriod } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -134,7 +139,9 @@ const euro = (locale: Locale, cents: number) => formatEuroIn(locale, cents / 100
 const pct = (locale: Locale, p: number) => formatPercentIn(locale, p);
 
 const renderSegments = (segments: Segment[]) =>
-  segments.map((s, i) => <Fragment key={i}>{typeof s === "string" ? s : <strong>{s.bold}</strong>}</Fragment>);
+  segments.map((s, i) => (
+    <Fragment key={i}>{typeof s === "string" ? s : <strong>{s.bold}</strong>}</Fragment>
+  ));
 
 /** What a rate is worth to someone who stays. A teaser whose standing rate the
  *  source never gave says "onbekend"/"unknown" — not the teaser, and not 0%. */
@@ -306,7 +313,11 @@ export function amountInPeriod(
  *  bedrag (`lastAmountCents`) en nooit vanaf `monthlyCents` — dat laatste is
  *  zelf al een omrekening, en rekenen met een omrekening is hoe de jaarkolom
  *  € 1,68 kwijtraakte. */
-export function subAmountIn(sub: Subscription, period: SubPeriod, locale: Locale = "nl"): SubAmount {
+export function subAmountIn(
+  sub: Subscription,
+  period: SubPeriod,
+  locale: Locale = "nl",
+): SubAmount {
   return amountInPeriod(sub.lastAmountCents, sub.cadenceDays, period, locale);
 }
 
@@ -569,7 +580,9 @@ function Productkosten({
             <strong>{pc.netLine.heading}</strong> — {pc.netLine.subtitle}
           </span>
           <span className="text-pos">
-            {alsoMonthly ? pc.netLine.alsoMonthlyPrefix(euro(locale, Math.round(net.netCents / 12))) : ""}
+            {alsoMonthly
+              ? pc.netLine.alsoMonthlyPrefix(euro(locale, Math.round(net.netCents / 12)))
+              : ""}
             {euro(locale, net.netCents)} {per}
           </span>
         </div>
@@ -582,7 +595,13 @@ function Productkosten({
           data-testid={`${id}-geen`}
         >
           <strong>{pc.noRecommendation.heading}</strong>{" "}
-          {pc.noRecommendation.body(euro(locale, net.grossCents), per, gainWord, euro(locale, net.costCents), costWord)}{" "}
+          {pc.noRecommendation.body(
+            euro(locale, net.grossCents),
+            per,
+            gainWord,
+            euro(locale, net.costCents),
+            costWord,
+          )}{" "}
           {net.netCents === 0
             ? pc.noRecommendation.noGain
             : pc.noRecommendation.loss(per, euro(locale, -net.netCents))}{" "}
@@ -711,8 +730,14 @@ export default function Optimalisatie({
      td::before`) — daar "Bedrag" neerzetten laat de eenheid op mobiel alsnog
      achter de schakelaar verdwijnen, en dat is precies wat hier niet mag. */
   const subPeriodLabel = c.subscriptions.periods[subPeriod] ?? c.subscriptions.periodLabelFallback;
-  const [subTableDienstH, subTableFunctieH, , subTableAfschriftH, subTableVeranderingH, subTableLaatstH] =
-    c.subscriptions.tableHeaders(subPeriodLabel);
+  const [
+    subTableDienstH,
+    subTableFunctieH,
+    ,
+    subTableAfschriftH,
+    subTableVeranderingH,
+    subTableLaatstH,
+  ] = c.subscriptions.tableHeaders(subPeriodLabel);
   /* Hoeveel rijen er in DEZE stand een rekensom onder zich hebben staan. Dat
      getal hoort in het label van de opgevouwen regel: wie hem dichtlaat moet
      nog steeds weten dat er is omgerekend. */
@@ -1009,7 +1034,8 @@ export default function Optimalisatie({
     () =>
       cashbackOffers.length > 0 &&
       cashbackOffers.every(
-        (o) => altKindLabel(locale, entries.find((e) => e.id === o.productId)?.kind ?? "") !== undefined,
+        (o) =>
+          altKindLabel(locale, entries.find((e) => e.id === o.productId)?.kind ?? "") !== undefined,
       ),
     [cashbackOffers, entries, locale],
   );
@@ -1199,7 +1225,10 @@ export default function Optimalisatie({
             subs.length > 0 ? (
               <ModulePeriod
                 value={subPeriod}
-                options={SUB_PERIODS.map((value) => ({ value, label: c.subscriptions.periods[value] }))}
+                options={SUB_PERIODS.map((value) => ({
+                  value,
+                  label: c.subscriptions.periods[value],
+                }))}
                 onChange={(v) => setSubPeriod(v as SubPeriod)}
                 label={c.subscriptions.periodAriaLabel}
               />
@@ -1265,23 +1294,23 @@ export default function Optimalisatie({
             <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
               <p className="m-0 mb-[var(--sp-3)] last:mb-0">
                 <strong>{c.subscriptions.empty.heading}</strong> {c.subscriptions.empty.intro}
-                {seen.outflows === 0 ? (
-                  c.subscriptions.empty.noOutflows
-                ) : (
-                  renderSegments(
-                    c.subscriptions.empty.withOutflows({
-                      outflows: seen.outflows,
-                      merchants: seen.merchants,
-                      repeated: seen.repeated,
-                      dateRange:
-                        seen.first && seen.last
-                          ? c.subscriptions.empty.dateRange(seen.first, seen.last)
-                          : "",
-                    }),
-                  )
-                )}
+                {seen.outflows === 0
+                  ? c.subscriptions.empty.noOutflows
+                  : renderSegments(
+                      c.subscriptions.empty.withOutflows({
+                        outflows: seen.outflows,
+                        merchants: seen.merchants,
+                        repeated: seen.repeated,
+                        dateRange:
+                          seen.first && seen.last
+                            ? c.subscriptions.empty.dateRange(seen.first, seen.last)
+                            : "",
+                      }),
+                    )}
               </p>
-              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">{c.subscriptions.empty.rulesIntro}</p>
+              <p className="cell-sub m-0 mb-[var(--sp-3)] last:mb-0">
+                {c.subscriptions.empty.rulesIntro}
+              </p>
               <ul className="m-0 mb-[var(--sp-3)] pl-[1.1rem] text-muted text-[0.88rem] last:mb-0">
                 {/* DRIE EN NIET TWEE, en dat is een correctie. Hier stond "minstens
                     twee betalingen" terwijl de maandband minstens DRIE afschrijvingen
@@ -1387,7 +1416,10 @@ export default function Optimalisatie({
                     <tbody>
                       {EXAMPLE_SUBS.map((s, i) => (
                         <tr key={s.name}>
-                          <Td data-label={c.subscriptions.empty.demoTableHeaders[0]} style={{ fontWeight: 600 }}>
+                          <Td
+                            data-label={c.subscriptions.empty.demoTableHeaders[0]}
+                            style={{ fontWeight: 600 }}
+                          >
                             {s.name}
                           </Td>
                           <Td data-label={c.subscriptions.empty.demoTableHeaders[1]}>
@@ -1398,7 +1430,9 @@ export default function Optimalisatie({
                           </Td>
                           <Td
                             numeric
-                            className={s.change > 0 ? "text-neg" : s.change < 0 ? "text-pos" : undefined}
+                            className={
+                              s.change > 0 ? "text-neg" : s.change < 0 ? "text-pos" : undefined
+                            }
                             data-label={c.subscriptions.empty.demoTableHeaders[3]}
                           >
                             {s.change === 0
@@ -1447,7 +1481,10 @@ export default function Optimalisatie({
                                 toAmount: euro(locale, p.toCents),
                                 changePct: Math.round(p.changePct * 100),
                                 unit: c.common.perUnit(subTotal.unit),
-                                extra: { amount: euro(locale, extra.cents), sum: extra.sum ?? undefined },
+                                extra: {
+                                  amount: euro(locale, extra.cents),
+                                  sum: extra.sum ?? undefined,
+                                },
                               }
                             : {
                                 name: p.sub.name,
@@ -1548,7 +1585,13 @@ export default function Optimalisatie({
                           <Td
                             numeric
                             data-label={subTableVeranderingH}
-                            className={s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : undefined}
+                            className={
+                              s.changePct > 0
+                                ? "text-neg"
+                                : s.changePct < 0
+                                  ? "text-pos"
+                                  : undefined
+                            }
                           >
                             {s.changePct === 0
                               ? c.common.dash
@@ -1571,7 +1614,9 @@ export default function Optimalisatie({
                   staat er ook geen regel die iets belooft wat het paneel niet
                   levert. */}
               {omgerekend > 0 && omgerekendUnit !== null && (
-                <ToonMeer summary={c.subscriptions.convertedPanel.summary(omgerekend, subRows.length)}>
+                <ToonMeer
+                  summary={c.subscriptions.convertedPanel.summary(omgerekend, subRows.length)}
+                >
                   <p className="cell-sub">
                     {c.subscriptions.convertedPanel.explanation(c.common.perUnit(omgerekendUnit))}
                   </p>
@@ -1610,7 +1655,10 @@ export default function Optimalisatie({
                   bank: interest.best.bank,
                   keptLabel: keptLabel(locale, interest.best),
                   promo: interest.bestPromo
-                    ? { bank: interest.bestPromo.bank, pct: pct(locale, interest.bestPromo.ratePct) }
+                    ? {
+                        bank: interest.bestPromo.bank,
+                        pct: pct(locale, interest.bestPromo.ratePct),
+                      }
                     : undefined,
                   sourceLabel: c.interest.ratesSourceLabels[rates.source],
                   asOf: rates.asOf,
@@ -1779,7 +1827,9 @@ export default function Optimalisatie({
                         <div className="cell-sub">{ar.account.name}</div>
                       </Td>
                       <Td numeric data-label={c.interest.tableHeaders.saldo}>
-                        {ar.account.balance === null ? c.common.unknownBalance : euro(locale, ar.balanceCents)}
+                        {ar.account.balance === null
+                          ? c.common.unknownBalance
+                          : euro(locale, ar.balanceCents)}
                       </Td>
                       <Td numeric data-label={c.interest.tableHeaders.rentePct}>
                         <RateCell ar={ar} busy={busy} onCommit={onRateCommit} locale={locale} />
@@ -1880,7 +1930,11 @@ export default function Optimalisatie({
                         </div>
                         <div className="cell-sub">{r.product}</div>
                       </Td>
-                      <Td numeric className="text-pos" data-label={c.interest.benchmarkDetails.tableHeaders[1]}>
+                      <Td
+                        numeric
+                        className="text-pos"
+                        data-label={c.interest.benchmarkDetails.tableHeaders[1]}
+                      >
                         {pct(locale, r.ratePct)}
                       </Td>
                       {/* A teaser whose standing rate the source never states is
@@ -1888,7 +1942,11 @@ export default function Optimalisatie({
                           entirely — Trade Republic's own catalogue conditions read
                           "NOT THE STANDING RATE — do not serve 3% bare". An em
                           dash would have read as "nothing changes afterwards". */}
-                      <Td numeric className="cell-sub" data-label={c.interest.benchmarkDetails.tableHeaders[2]}>
+                      <Td
+                        numeric
+                        className="cell-sub"
+                        data-label={c.interest.benchmarkDetails.tableHeaders[2]}
+                      >
                         {keptRate(r) === null
                           ? c.interest.benchmarkDetails.unknownKept
                           : keptRate(r) === r.ratePct
@@ -1964,11 +2022,7 @@ export default function Optimalisatie({
             Al het andere gaat de plooi in: de bron en de peildatum van elk cijfer,
             de uitleg over de catalogus, de opsomming van alle kandidaten en de zin
             over wat er niet is meegerekend. */}
-        <Module
-          span={2}
-          title={c.cashback.title}
-          footer={<span>{c.cashback.footer}</span>}
-        >
+        <Module span={2} title={c.cashback.title} footer={<span>{c.cashback.footer}</span>}>
           {/* First, the cards he ALREADY holds — a switch he can make today
               beats one that needs an application.
 
@@ -2181,7 +2235,9 @@ export default function Optimalisatie({
                               bestHeld.k.issuerFamily,
                               bestHeld.k.lastCheckedAt,
                             )
-                          : c.cashback.onderbouwing.assumedNeverCheckedNote(bestHeld.k.issuerFamily),
+                          : c.cashback.onderbouwing.assumedNeverCheckedNote(
+                              bestHeld.k.issuerFamily,
+                            ),
                         dueForReview: assumptionDueForReview(bestHeld.k.lastCheckedAt, asOf),
                       })}
                     </p>
@@ -2341,7 +2397,9 @@ export default function Optimalisatie({
               {/* DE UITLEG OVER DE CATALOGUS. Dat de winnende kaart geen gewone
                   bankkaart is, staat als merkteken op de antwoordregel vooraan;
                   dit is de zin eromheen — wat de bronnen wél en niet dekken. */}
-              {allOffersAlt && <p className="cell-sub">{c.cashback.noOrdinaryCard(cashbackOffers.length)}</p>}
+              {allOffersAlt && (
+                <p className="cell-sub">{c.cashback.noOrdinaryCard(cashbackOffers.length)}</p>
+              )}
 
               {/* ── WAT WE VAN ELKE EIGEN KAART WETEN, en hoe hard ─────────────
                   Het STAAT er, per kaart, met het woord "aangenomen" voluit — dat
@@ -2358,7 +2416,8 @@ export default function Optimalisatie({
                         {/* Eén zin, uit core. De vier takken stonden hier ooit als
                             vier stukjes JSX, en Profiel zei bijna dezelfde vier
                             dingen net iets anders — zie `describeHeldCashback`. */}
-                        <strong>{h.product}</strong> — {heldCashbackSentence(describeHeldCashback(h.k), locale)}
+                        <strong>{h.product}</strong> —{" "}
+                        {heldCashbackSentence(describeHeldCashback(h.k), locale)}
                       </li>
                     ))}
                   </ul>
@@ -2381,9 +2440,12 @@ export default function Optimalisatie({
                   <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
                     {otherOffers.map((o) => (
                       <li key={o.productId}>
-                        <strong>{pct(locale, o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}
+                        <strong>{pct(locale, o.cashbackPct)}</strong> —{" "}
+                        {o.bank ? `${o.bank} · ` : ""}
                         {o.product}{" "}
-                        <span style={{ opacity: 0.7 }}>{c.cashback.otherOffers.itemMeta(o.asOf)}</span>
+                        <span style={{ opacity: 0.7 }}>
+                          {c.cashback.otherOffers.itemMeta(o.asOf)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -2411,7 +2473,10 @@ export default function Optimalisatie({
                 className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
                 data-testid="kosten-totaal"
               >
-                {c.costs.totalComplete(euro(locale, costs.total.perYearCents), costs.total.accounts)}
+                {c.costs.totalComplete(
+                  euro(locale, costs.total.perYearCents),
+                  costs.total.accounts,
+                )}
               </p>
             )}
             {costs.total.kind === "incomplete" && (
@@ -2459,7 +2524,9 @@ export default function Optimalisatie({
                  gaf "ING ING Student", en een dubbele banknaam leest als twee
                  rekeningen. */
               const label =
-                cost.matchedBy === "product-name" ? cost.fee.product : `${bank} — ${row.account.name}`;
+                cost.matchedBy === "product-name"
+                  ? cost.fee.product
+                  : `${bank} — ${row.account.name}`;
               return (
                 <p
                   className="py-[var(--sp-3)] px-[var(--sp-4)] border border-line rounded-sm bg-surface-2 leading-[1.5]"
@@ -2530,11 +2597,18 @@ export default function Optimalisatie({
                           áls je student bent, en zonder die eis is "gratis" een
                           advies dat in zijn eigen toestand niet hoeft te werken.
                           De herkomst mag een klik verderop; de eis niet. */}
-                      <ToonMeer variant="regel" summary={c.costs.freeAtBank.sourceSummary(free.length)}>
+                      <ToonMeer
+                        variant="regel"
+                        summary={c.costs.freeAtBank.sourceSummary(free.length)}
+                      >
                         <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
                           {free.map((f) => (
                             <li key={`bron-${f.productId}`}>
-                              {c.costs.freeAtBank.sourceItem(f.product, sourceHost(f.sourceUrl), f.asOf)}
+                              {c.costs.freeAtBank.sourceItem(
+                                f.product,
+                                sourceHost(f.sourceUrl),
+                                f.asOf,
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -2562,7 +2636,9 @@ export default function Optimalisatie({
                   const cost = row.cost;
                   if (cost.kind !== "known") return null;
                   const held =
-                    cost.matchedBy === "product-name" ? cost.fee.product : accountLabel(row.account);
+                    cost.matchedBy === "product-name"
+                      ? cost.fee.product
+                      : accountLabel(row.account);
                   const alts = [
                     { label: c.costs.tips.atProviderLabel, alt: row.cheaperAtProvider },
                     { label: c.costs.tips.elsewhereLabel, alt: row.cheaperElsewhere },
@@ -2619,7 +2695,8 @@ export default function Optimalisatie({
                     {costRows.map((row) => {
                       const cost = row.cost;
                       const bank = row.account.bank || row.account.name;
-                      const [rekeningH, kostenH, perJaarH, bronH] = c.costs.detailsToonMeer.tableHeaders;
+                      const [rekeningH, kostenH, perJaarH, bronH] =
+                        c.costs.detailsToonMeer.tableHeaders;
                       return (
                         <tr key={row.account.key}>
                           <Td data-label={rekeningH}>
@@ -2640,7 +2717,9 @@ export default function Optimalisatie({
                               <>
                                 {euro(locale, cost.amount.perYearCents)}
                                 {cost.amount.perYearDerived && (
-                                  <div className="cell-sub">12 × {euro(locale, cost.amount.cents)}</div>
+                                  <div className="cell-sub">
+                                    12 × {euro(locale, cost.amount.cents)}
+                                  </div>
                                 )}
                               </>
                             ) : (
@@ -2682,7 +2761,12 @@ export default function Optimalisatie({
                                     toestand niet kan werken. */}
                                 {row.candidates.length > 0 ? (
                                   <>
-                                    <div>{c.costs.detailsToonMeer.candidatesHeading(row.candidates.length, bank)}</div>
+                                    <div>
+                                      {c.costs.detailsToonMeer.candidatesHeading(
+                                        row.candidates.length,
+                                        bank,
+                                      )}
+                                    </div>
                                     <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
                                       {row.candidates.map((f) => (
                                         <li key={f.productId}>
@@ -2697,7 +2781,9 @@ export default function Optimalisatie({
                                         boven, en het goedkoopste pakket als
                                         voorbeeld noemen is een duwtje richting een
                                         naam die niet klopt. */}
-                                    <div style={{ marginTop: ".35rem" }}>{c.costs.detailsToonMeer.matchHint}</div>
+                                    <div style={{ marginTop: ".35rem" }}>
+                                      {c.costs.detailsToonMeer.matchHint}
+                                    </div>
                                   </>
                                 ) : (
                                   <span>{c.costs.detailsToonMeer.noSource}</span>

@@ -662,7 +662,9 @@ function AgentView() {
         </CardHeader>
         <CardContent>
           <AgentCatalogProblem
-            message={catalog.status === "error" ? catalog.message : "No portfolio agents available."}
+            message={
+              catalog.status === "error" ? catalog.message : "No portfolio agents available."
+            }
             onRetry={reload}
           />
         </CardContent>

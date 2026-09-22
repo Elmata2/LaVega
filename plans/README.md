@@ -9,8 +9,8 @@ conditions, and update your row when done.
 ## Execution order & status
 
 | Plan | Title                                                    | Priority | Effort | Depends on | Status |
-|------|-----------------------------------------------------------|----------|--------|------------|--------|
-| 001  | Skip the inter-symbol pace wait on price-sync cache hits   | P1       | S      | —          | DONE   |
+| ---- | -------------------------------------------------------- | -------- | ------ | ---------- | ------ |
+| 001  | Skip the inter-symbol pace wait on price-sync cache hits | P1       | S      | —          | DONE   |
 
 ## Dependency notes
 

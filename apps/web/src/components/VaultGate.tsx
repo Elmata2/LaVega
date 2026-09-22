@@ -4,7 +4,11 @@ import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
 import { migrateToVault, VaultVerificationFailed } from "../migrate.js";
 import { parseBackup } from "../backup.js";
-import { vaultPasswordProblem, MIN_VAULT_PASSWORD, type VaultPasswordProblem } from "../vaultPassword.js";
+import {
+  vaultPasswordProblem,
+  MIN_VAULT_PASSWORD,
+  type VaultPasswordProblem,
+} from "../vaultPassword.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy, type ShellCopy } from "../copy/shell.js";
 import Button from "./ui/Button.js";

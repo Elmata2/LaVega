@@ -63,8 +63,7 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 
-const euro = (locale: Locale, cents: number): string =>
-  formatWholeEuroIn(locale, cents / 100);
+const euro = (locale: Locale, cents: number): string => formatWholeEuroIn(locale, cents / 100);
 
 /** How many days behind `asOf` the newest transaction may be before the data
  *  itself is worth mentioning. Two weeks: shorter than a payment cycle, long
