@@ -173,6 +173,66 @@ export function createBrokerRepository(
   };
 }
 
+export type DashboardSnapshotRepository = {
+  /** The stored dashboard for a query while it is still current, and the
+   *  source version a dashboard built now has to be stored under. */
+  get(cacheKey: string): Promise<{ version: number; dashboard: unknown | null }>;
+  put(cacheKey: string, version: number, dashboard: unknown): Promise<void>;
+};
+
+/**
+ * Built dashboards, one per query, current while their source version is
+ * (see 0010_dashboard_snapshots.sql). The tenant is also named in each
+ * statement: a connection that bypasses RLS must still see one user's row.
+ */
+export function createDashboardSnapshotRepository(
+  db: Database,
+  userId: string | undefined | null,
+): DashboardSnapshotRepository {
+  return {
+    async get(cacheKey) {
+      return withTenant(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT current.version, stored.blob
+           FROM (
+             SELECT COALESCE(
+               (SELECT version FROM investing.dashboard_sources
+                WHERE user_id = current_setting('app.user_id')),
+               0
+             ) AS version
+           ) AS current
+           LEFT JOIN investing.dashboard_snapshots AS stored
+             ON stored.user_id = current_setting('app.user_id')
+            AND stored.cache_key = $1
+            AND stored.version = current.version
+            AND stored.as_of = CURRENT_DATE`,
+          [cacheKey],
+        );
+        const row = result.rows[0];
+        const stored = row?.blob ? tryDecryptBlob(row.blob as Buffer) : null;
+        return {
+          version: Number(row?.version ?? 0),
+          dashboard: stored?.readable ? stored.value : null,
+        };
+      });
+    },
+    async put(cacheKey, version, dashboard) {
+      const blob = encryptBlob(dashboard);
+      await withTenant(db, userId, async (client) => {
+        await client.query(
+          `INSERT INTO investing.dashboard_snapshots (user_id, cache_key, version, as_of, blob)
+           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3)
+           ON CONFLICT (user_id, cache_key) DO UPDATE
+             SET version = EXCLUDED.version, as_of = EXCLUDED.as_of, blob = EXCLUDED.blob,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE investing.dashboard_snapshots.version <= EXCLUDED.version`,
+          [cacheKey, version, blob],
+        );
+      });
+    },
+  };
+}
+
 export type { PoolClient, QueryResult };
 
 /* Investing tables. Every repository is bound to one user and runs inside
@@ -827,6 +887,9 @@ const USER_DATA_TABLES = [
   "investing.preferences",
   "investing.price_bars",
   "investing.broker_vaults",
+  // After the tables above: deleting their rows raises this user's dashboard version.
+  "investing.dashboard_snapshots",
+  "investing.dashboard_sources",
   "personal.vaults",
 ] as const;
 

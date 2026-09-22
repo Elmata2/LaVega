@@ -71,6 +71,8 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Request cost:** because the runtime is built per request, anything it reads at build time is paid on every request. Broker snapshots (about 1 MB per Trading 212 account) are therefore read on first use, in one query for all brokers, and credential reads leave the snapshot blob in the table. Functions run in `fra1`, next to Neon in `eu-central-1`; before 22 September 2026 they ran in `iad1`, and every tenant transaction (five sequential round trips) crossed the Atlantic.
 
+**Stored dashboard:** the built dashboard is stored encrypted in `investing.dashboard_snapshots` (migration `0010`), so any instance serves it in one read without touching the vault, prices or FX. It counts only while its version equals the user's `investing.dashboard_sources.version`, which a statement trigger raises in the same transaction as every write to `broker_vaults`, `price_bars` or `preferences`, and only on the UTC day it was built. A dashboard built from data a sync replaced mid-build is therefore never served. A dashboard whose price or FX read failed is not stored. The browser also keeps the last dashboard per query in memory, and the signed-in user's overview in `localStorage`; `signOut()` clears both.
+
 **Hosted tier: Cloudflare Workers.**
 
 - Cron Triggers are native on the free tier, not plan-gated — unlike Vercel, which caps Function duration at 10s on Hobby and needs Pro for anything past that.

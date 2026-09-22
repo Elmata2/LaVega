@@ -12,6 +12,25 @@ const persistence = vi.hoisted(() => ({
   credentials: vi.fn(async () => null),
   connected: false,
   resume: null as BrokerSyncResume | null,
+  /* Stored dashboards, standing in for investing.dashboard_snapshots. Null is
+   * a database without the table, so the other tests keep building. */
+  dashboards: null as Map<string, { version: number; dashboard: unknown }> | null,
+  sourceVersion: 0,
+}));
+
+vi.mock("@lavega/database", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@lavega/database")>()),
+  createDashboardSnapshotRepository: (_db: unknown, tenantId: string) => ({
+    async get(key: string) {
+      if (!persistence.dashboards) throw new Error("no dashboard table");
+      const stored = persistence.dashboards.get(`${tenantId}\u0000${key}`);
+      const version = persistence.sourceVersion;
+      return { version, dashboard: stored?.version === version ? stored.dashboard : null };
+    },
+    async put(key: string, version: number, dashboard: unknown) {
+      persistence.dashboards?.set(`${tenantId}\u0000${key}`, { version, dashboard });
+    },
+  }),
 }));
 
 vi.mock("./credentialStore.js", () => ({
@@ -96,6 +115,8 @@ afterEach(() => {
   persistence.credentials.mockReset().mockResolvedValue(null);
   persistence.connected = false;
   persistence.resume = null;
+  persistence.dashboards = null;
+  persistence.sourceVersion = 0;
 });
 
 function snapshot(quantity: number): RuntimeBrokerDataSnapshot {
@@ -145,6 +166,28 @@ test("warm dashboard instances reload shared broker and price data after fifteen
   expect((await read(second)).positions[0]?.quantity).toBe(2);
   expect(persistence.reads).toHaveBeenCalledTimes(4);
   expect(priceReads.mock.calls.length).toBeGreaterThan(initialPriceReads);
+});
+
+test("a stored dashboard is served by any instance without reading the vault", async () => {
+  persistence.dashboards = new Map();
+  persistence.snapshots.set("tenant", snapshot(1));
+  const priceStore = createInMemoryPriceStore();
+  const read = async () => {
+    const app = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
+    const response = await app.request("/api/investing/dashboard");
+    return ((await response.json()) as InvestingDashboardData).positions[0]?.quantity;
+  };
+
+  expect(await read()).toBe(1);
+  expect(persistence.reads).toHaveBeenCalledTimes(1);
+
+  expect(await read()).toBe(1);
+  expect(persistence.reads).toHaveBeenCalledTimes(1);
+
+  persistence.snapshots.set("tenant", snapshot(2));
+  persistence.sourceVersion += 1;
+  expect(await read()).toBe(2);
+  expect(persistence.reads).toHaveBeenCalledTimes(2);
 });
 
 test("requests that never show positions do not read the broker snapshots", async () => {

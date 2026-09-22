@@ -73,6 +73,7 @@ import {
 } from "./priceOrchestrator.js";
 import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
+import { createDashboardSnapshotRepository } from "@lavega/database";
 
 export { app };
 export { createDashboardCache } from "./dashboardCache.js";
@@ -254,6 +255,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
     const brokerData = createBrokerDataCache({});
+    const dashboardSnapshots =
+      database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
       await priceStore.upsert(tenantId, createDevFixturePriceBars());
@@ -451,6 +454,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }
     };
     const dashboardReader = async ({ symbol }: { symbol?: string }) => {
+      const storedKey = symbol?.trim().toUpperCase() ?? "";
+      const stored = await dashboardSnapshots?.get(storedKey).catch(() => null);
+      if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
       const refreshProblems: string[] = [];
       try {
         await refreshBrokerData();
@@ -509,7 +515,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             .getHistoricalRates(historyFrom, today)
             .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
         ]);
-        return buildInvestingDashboard({
+        const dashboard = buildInvestingDashboard({
           positions,
           trades,
           dividends,
@@ -535,6 +541,18 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           ],
           dataVersion: version,
         });
+        /* A failed price or FX read is a problem of this moment, not of the
+         * data; storing it would show it until the next sync. */
+        const transientProblems =
+          refreshProblems.length +
+          priceProblems.length +
+          latestFx.problems.length +
+          historicalFx.problems.length;
+        if (stored && transientProblems === 0)
+          await dashboardSnapshots
+            ?.put(storedKey, stored.version, dashboard)
+            .catch(() => undefined);
+        return dashboard;
       };
       return refreshProblems.length > 0
         ? buildDashboard()
@@ -629,7 +647,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       void agentRunStore.put(record);
       const run = (async () => {
         try {
-          if ((await credentials.status()) === "unlocked") await restoreBrokerData();
           const dashboard = await dashboardReader({});
           const result = options.runAgent
             ? await options.runAgent({ dashboard, model })
