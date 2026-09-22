@@ -92,11 +92,20 @@ test("the chrome no longer asserts 'lokaal & privé', and no longer holds Vergre
   );
 });
 
-test("the floating chat widget is not rendered by the shell (the file stays)", () => {
+/* DE ZWEVENDE CHATWIDGET IS WEG. Zijn besluit, 22 september.
+ *
+ * Hij stond hier maanden geparkeerd: niet gerenderd, en ondertussen tweehonderd
+ * regels volledig Nederlandse UI die niemand zag. Dat is duurder dan het lijkt
+ * — een geautomatiseerde taalsweep zette hem bovenaan als grootste probleem van
+ * de app, want vanaf de code is "niet gemonteerd" niet te zien. Wat hij deed
+ * staat in de geschiedenis en de serverkant (`/api/agent/chat`, de
+ * redactiegrens) is onaangeroerd, dus terugbouwen is goedkoop.
+ *
+ * Deze test bewaakt dat niemand hem per ongeluk terugzet zonder dat besluit. */
+test("the floating chat widget is gone from the shell and from the tree", () => {
   expect(app).not.toContain("<ChatWidget");
   expect(app).not.toContain('from "./components/ChatWidget"');
-  // Parked, not deleted — it is coming back in some form.
-  expect(() => readFileSync(new URL("./ChatWidget.tsx", import.meta.url), "utf8")).not.toThrow();
+  expect(() => readFileSync(new URL("./ChatWidget.tsx", import.meta.url), "utf8")).toThrow();
 });
 
 test("'Widget toevoegen' sits in the header and opens the picker", () => {

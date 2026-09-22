@@ -559,3 +559,32 @@ export function setDefaultScope(scope: EntityScope): void {
     /* non-fatal for a preference */
   }
 }
+
+const DEFAULT_ENTITY_KEY = "lavega.defaultEntity";
+
+/** The name an import files new accounts under, until the owner types another.
+ *
+ *  PINNED ON FIRST USE, and that is the whole reason this is stored rather than
+ *  read from the copy module every time. The word should be in the reader's
+ *  language — "Persoonlijk" is meaningless to someone who opened the app in
+ *  English — but an entity name is DATA, not a label: it is stored on every
+ *  account it files and it is what the company filter groups on. Deriving it
+ *  from the current locale would mean that switching language halfway splits
+ *  one entity into two ("Persoonlijk" and "Personal"), and the owner would see
+ *  two groups of accounts that are the same thing.
+ *
+ *  So the language decides it once, and after that it is a name like any other
+ *  name the owner could have typed. Existing vaults are untouched: an account
+ *  already filed under "Persoonlijk" keeps that, because renaming someone's
+ *  data to tidy it is not ours to do. */
+export function getDefaultEntity(fallback: string): string {
+  try {
+    if (typeof localStorage === "undefined") return fallback;
+    const raw = localStorage.getItem(DEFAULT_ENTITY_KEY);
+    if (raw && raw.trim()) return raw;
+    localStorage.setItem(DEFAULT_ENTITY_KEY, fallback);
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}

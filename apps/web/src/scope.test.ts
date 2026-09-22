@@ -151,9 +151,13 @@ test("an emptied filter is a state that was left, not an unopened half", () => {
   expect(screenOnSwitch(parked, "business", screen("overview")).view).toBe("belasting");
 });
 
-test("the import files new accounts under Persoonlijk, not under a BV nobody asked for", () => {
+test("the import files new accounts under the personal half, not under a BV nobody asked for", () => {
   const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  expect(app).toContain('useState("Persoonlijk")');
+  // De naam komt uit de copy en niet meer als letterlijke "Persoonlijk" uit de
+  // code: wie de app in het Engels opent kreeg anders een Nederlands woord als
+  // naam op elke rekening die hij importeert.
+  expect(app).toContain("getDefaultEntity(shellCopy[locale].scope.personal)");
+  expect(app).not.toContain('useState("Persoonlijk")');
   expect(app).not.toContain('useState("BV1")');
 });
 

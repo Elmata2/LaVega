@@ -20,7 +20,9 @@ import {
   setHomeRegion,
   setOwnerName,
   storedHomeCountry,
+  getDefaultEntity,
 } from "./settings.js";
+import { shellCopy } from "./copy/shell.js";
 
 /* DE EENMALIGE INSTELSTAP. Hij bestaat om één reden: `getHomeCountry()` viel
  * terug op NL, dus een Duitse gebruiker opende op Nederlandse BTW-termijnen en
@@ -157,4 +159,23 @@ test("the step is laid out like the vault screen it follows", () => {
   expect(html).toContain("vault-gate-card");
   // En het is één formulier, zodat Enter hem afrondt.
   expect(html).toContain("<form");
+});
+
+/* DE STANDAARD-ENTITEIT IS DATA, GEEN LABEL.
+ *
+ * Elke import zet deze naam op elke rekening die hij aanmaakt, en de
+ * bedrijfsfilter groepeert erop. Hij hoort dus in de taal van de lezer — een
+ * Engelse gebruiker kreeg "Persoonlijk" op al zijn rekeningen — maar hij mag
+ * daarna NIET meer met de taal meebewegen: dan splitst één entiteit zich in
+ * twee zodra iemand wisselt, en ziet hij twee groepen rekeningen die hetzelfde
+ * zijn. Eén keer kiezen, daarna een naam als elke andere. */
+test("the default entity follows the language once, then stays put", () => {
+  expect(getDefaultEntity(shellCopy.en.scope.personal)).toBe("Personal");
+  // Taal gewisseld: de naam die al op rekeningen staat verandert niet mee.
+  expect(getDefaultEntity(shellCopy.nl.scope.personal)).toBe("Personal");
+});
+
+test("an existing vault keeps the name its accounts already carry", () => {
+  localStorage.setItem("lavega.defaultEntity", "Persoonlijk");
+  expect(getDefaultEntity(shellCopy.en.scope.personal)).toBe("Persoonlijk");
 });

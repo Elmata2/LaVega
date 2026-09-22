@@ -90,6 +90,9 @@ gebouwd, getest en gedeployed.
 
 | Uit      | Wat                                                                                                                                                                                      | Waar                 |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| V2       | `enumerated-absence` aanvaard als grond voor een nul; de zeven regels in `staging-points.json` staan niet langer voorwaardelijk                                                           | zijn besluit, 22 sep |
+| V6       | De zwevende chatwidget verwijderd — niet gerenderd, en tweehonderd regels onvertaalde UI die een taalsweep bovenaan zette                                                                | zijn besluit, 22 sep |
+| —        | De import boekt niet meer onder een hardgecodeerd "Persoonlijk": de naam volgt de taal, en wordt één keer vastgezet zodat wisselen één entiteit niet in tweeën splitst                   | deze ronde           |
 | UI-ronde | Optimalisatie toonde Nederlandse ritmewoorden op een Engels scherm, en "maandelijks" in de afschriftkolom                                                                                 | `9ab1eec`            |
 | UI-ronde | "Totale positie (deels)" zei niet wát er deels was; de kop noemt nu het aantal niet-meegetelde rekeningen                                                                                 | `9ab1eec`            |
 | UI-ronde | Statistieken tekende twee legenda's — de CSS-regel die er één verborg verloor van een Tailwind-utility (`@layer components` verliest van `utilities`). Nu een `legend={false}`-prop      | `9ab1eec`            |
@@ -409,7 +412,13 @@ Amex-aanbiedingen lezen. Gebouwd op 22–23 augustus: aparte vraag, standaard ui
 er ligt, en `host_permissions` blijft leeg zodat Chrome het pad afdwingt. Wat nog niet is gezien is
 de echte pagina — dat kan alleen hij.
 
-**V2 — de zeven `enumerated-absence`-regels staan op nul, maar op een ANDERE grond dan gevraagd.**
+**V2 — AANVAARD op 22 september 2026.** `enumerated-absence` draagt een nul: een aanbieder die zijn
+eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. De zeven
+regels in `staging-points.json` dragen nu een onvoorwaardelijk `vul 0.0` plus de beslissing zelf, en
+`confidence` blijft `middel` — de aanbieder zegt het niet met zoveel woorden, en dat verschil hoort
+zichtbaar te blijven. Wat hieronder stond blijft staan als de weg ernaartoe.
+
+**Hoe het er vóór die beslissing bij stond: op nul, maar op een ANDERE grond dan gevraagd.**
 Zijn woorden: _"ik weet dat er voor die banken geen puntenschema's zijn en verwacht niet dat die
 binnenkort zullen komen."_ Dat is geen instemming met de bewijssoort maar iets sterkers: een
 uitspraak van de eigenaar, en in deze app verslaat een gebruikersfeit elke agent. De zeven dragen
@@ -445,10 +454,8 @@ verdubbelen een oversteek; de woordwacht mist verbogen vormen) staan in §0b. **
 
 | #      | De vraag                                                                                                                                                                                                                  | Waarom niemand anders hem kan beantwoorden                                                                                                        |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **V2** | **Is `enumerated-absence` sterk genoeg bewijs?** Zes regels in `staging-points.json` leunen erop: een complete eigen productopsomming waarin punten ontbreken, terwijl de aanbieder nergens zegt "wij hebben geen punten" | Consistent met hoe ICS, ABN en Rabobank al op 0.0 staan. Accepteert hij het niet, dan blijven die zes leeg — één regel werk, maar het is zijn lat |
-| **V5** | **Kleuren en fontgroottes**                                                                                                                                                                                               | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop                                                                          |
-| **V6** | **Wat de chatwidget wordt**                                                                                                                                                                                               | Uit de chrome gehaald, zijn `[later]`                                                                                                             |
-| **V7** | **Meldingen in het profiel**                                                                                                                                                                                              | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie                                                |
+| **V5** | **Kleuren en fontgroottes**                                                                                                                                                                                               | **Gevraagd op 22 sep, antwoord: nog niet — ná de test van Tom.** Zijn feedback kan de inhoud opnieuw verschuiven, en twee keer een palet doen is precies wat de oorspronkelijke regel moest voorkomen |
+| **V7** | **Meldingen in het profiel**                                                                                                                                                                                              | **Gevraagd op 22 sep, antwoord: uitstellen.** Er is nog geen meldingsmechanisme, en de aandachtskaart op Overzicht toont al wat er speelt zolang de app open is. Een echt mechanisme is een functie, geen instelling |
 | **V8** | **Disclaimers en voorwaarden**                                                                                                                                                                                            | Bij lancering, niet in het werkscherm                                                                                                             |
 | **V9** | **Enable Banking met meerdere rekeningen**                                                                                                                                                                                | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst                                                                                     |
 

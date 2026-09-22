@@ -67,6 +67,7 @@ import {
   getBufferCents,
   setBufferCents,
   getHomeCountry,
+  getDefaultEntity,
   getDefaultScope,
   setHomeCountry,
   getHomeRegion,
@@ -182,15 +183,19 @@ export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
-  // Which entity an import files its accounts under. Persoonlijk, because that
-  // is what most statements are and because core's hard default for an
-  // unclassified entity is personal — so the imported accounts land in the half
-  // the app opens on instead of in a "BV1" nobody asked for. He can retype it
-  // before importing, and change it per account in Rekeningen afterwards.
-  const [entity, setEntity] = useState("Persoonlijk");
   const [busy, setBusy] = useState(false);
   const [locale] = useAppLocale();
   const shell = shellCopy[locale];
+  /* Which entity an import files its accounts under. The personal half, because
+   * that is what most statements are and because core's hard default for an
+   * unclassified entity is personal — so imported accounts land in the half the
+   * app opens on instead of in a "BV1" nobody asked for. He can retype it
+   * before importing, and change it per account in Rekeningen afterwards.
+   *
+   * The WORD follows the reader's language, but only the first time: see
+   * `getDefaultEntity` for why an entity name that tracks the current locale
+   * would split one entity into two the moment someone switches. */
+  const [entity, setEntity] = useState(() => getDefaultEntity(shellCopy[locale].scope.personal));
   const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
