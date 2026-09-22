@@ -6,6 +6,8 @@ import {
   type PriceSyncProgress,
 } from "./priceSync";
 
+import type { HistoryProgress } from "./historyGate";
+
 export type BrokerProgress = {
   status: "idle" | "running" | "waiting" | "completed" | "problem";
   pages: number;
@@ -15,6 +17,10 @@ export type BrokerProgress = {
   remaining: number | null;
   updatedAt: string | null;
   message: string | null;
+  /* De server stuurt dit al mee en de client liet het vallen. Het is het enige
+   * veld dat zegt of een geschiedenis tot de laatste pagina is gelezen, en
+   * zonder dat rekent het dashboard door op de helft ervan. */
+  history: HistoryProgress | null;
 };
 
 export type SyncSnapshot = {

@@ -44,6 +44,7 @@ import {
   type BrokerProgress,
 } from "./lib/syncSession";
 import { PERSONAL_URL } from "./lib/personal";
+import { brokerLabel, historyGate } from "./lib/historyGate";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
@@ -1789,8 +1790,53 @@ function Layout() {
   );
 }
 
+/* HET SCHERM TERWIJL DE EERSTE GESCHIEDENIS NOG BINNENKOMT.
+ *
+ * Niet de cijfers met een spinner erbij, maar in plaats van de cijfers. Zie
+ * `historyGate`: met de helft van de transacties is het rendement niet
+ * onvolledig maar fout, en het zou er met twee decimalen bij staan alsof dat
+ * niet zo is. Wat er wel staat is wat er tot nu toe is binnengehaald, zodat
+ * zichtbaar blijft dat er iets gebeurt. */
+function HistoryLoading({ brokers }: { brokers: string[] }) {
+  const { broker } = useSyncSession();
+  const names = brokers.map(brokerLabel).join(" and ");
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Still loading your history</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-3 text-sm leading-6 text-muted-foreground">
+        <p>
+          {names} {brokers.length > 1 ? "are" : "is"} still sending transactions. LaVega fetches
+          them a page at a time and picks up where it left off, so this survives a timeout — it may
+          take a few runs on a large account.
+        </p>
+        <p>
+          Your figures stay hidden until it finishes. Returns and cost basis are worked out from the
+          full transaction history, so a half-loaded one would not be a smaller answer — it would be
+          a wrong one.
+        </p>
+        {broker && (
+          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs tabular-nums">
+            <dt>pages</dt>
+            <dd className="m-0">{broker.pages}</dd>
+            <dt>orders</dt>
+            <dd className="m-0">{broker.ordersRead}</dd>
+            <dt>positions</dt>
+            <dd className="m-0">{broker.positionsRead}</dd>
+          </dl>
+        )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Overview() {
   const state = useDashboard();
+  const { broker } = useSyncSession();
+  const gate = historyGate(broker?.history);
   return (
     <div className="space-y-5">
       <AppOpenSync />
@@ -1798,6 +1844,8 @@ function Overview() {
         <DashboardLoading />
       ) : state.status === "error" ? (
         <DashboardError message={state.message} />
+      ) : gate.kind === "first-sync" ? (
+        <HistoryLoading brokers={gate.brokers} />
       ) : (
         <>
           {state.refreshError && <DashboardRefreshError message={state.refreshError} />}

@@ -2176,3 +2176,65 @@ test("Trading 212 requires both halves of the key pair", async () => {
 
   root.unmount();
 });
+
+/* EEN HALVE GESCHIEDENIS WORDT NIET ALS HEEL GETOOND.
+ *
+ * Zijn melding: het liep in de time-out en toonde ondertussen data halverwege.
+ * Het pagineren en hervatten werkte al; wat ontbrak is dat het dashboard dat
+ * niet wist en gewoon doorrekende op wat er toevallig lag. Rendement komt uit
+ * `trades`, dus dat getal was niet onvolledig maar fout — mét decimalen. */
+test("the overview withholds the figures while a first history is still loading", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/brokers/sync/status"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "waiting",
+              pages: 3,
+              ordersRead: 412,
+              positionsRead: 18,
+              waitUntil: null,
+              remaining: null,
+              updatedAt: null,
+              message: null,
+              history: {
+                trading212: {
+                  lastSyncedAt: null,
+                  ordersComplete: false,
+                  transactionsComplete: false,
+                  dividendsComplete: false,
+                },
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+        );
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const text = container.textContent ?? "";
+  expect(text).toContain("Still loading your history");
+  expect(text).toContain("Trading 212");
+  // En nadrukkelijk NIET de cijfers die op die halve geschiedenis zouden rusten.
+  expect(text).not.toContain("Portfolio value");
+  expect(text).not.toContain("ASML");
+  // Wel wat er tot nu toe binnen is, zodat zichtbaar blijft dat het loopt.
+  expect(text).toContain("412");
+  root.unmount();
+});
