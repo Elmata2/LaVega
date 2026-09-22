@@ -2089,12 +2089,15 @@ test("the header offers a way back to the personal app", async () => {
   root.unmount();
 });
 
-/* WAT JE BIJ DE BROKER MOET DOEN, op het scherm waar je het nodig hebt.
+/* WELKE PERMISSIES DE SLEUTEL NODIG HEEFT, op de kaart die de opzet uitlegt.
  *
- * Er stond niets, en het kostte een middag: drie permissies aangevinkt die
- * redelijk klonken, waarvan er precies één raakte wat de adapter gebruikt. De
- * vijf scopes hieronder zijn die van de vijf endpoints die hij echt aanroept. */
-test("the Trading 212 connect form names the exact permissions to enable", async () => {
+ * Er stond "choose read-only scope if Trading 212 shows that option", en dat is
+ * niet te volgen: hun app toont elf losse vinkjes en geen read-only-knop. Drie
+ * aanvinken die redelijk klinken raakt er precies één die wij gebruiken — en
+ * een ontbrekende permissie faalt niet bij het opslaan maar pas bij de eerste
+ * sync, als HTTP 403. De vijf hieronder zijn één per endpoint dat de adapter
+ * echt aanroept. */
+test("the Trading 212 card names the exact permissions the key needs", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
@@ -2111,13 +2114,6 @@ test("the Trading 212 connect form names the exact permissions to enable", async
     await Promise.resolve();
   });
 
-  const picker = container.querySelector('select[aria-label="Broker"]') as HTMLSelectElement | null;
-  expect(picker).not.toBeNull();
-  await act(async () => {
-    picker!.value = "trading212";
-    picker!.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-
   const text = container.textContent ?? "";
   for (const scope of [
     "Account data",
@@ -2128,17 +2124,13 @@ test("the Trading 212 connect form names the exact permissions to enable", async
   ]) {
     expect(text, scope).toContain(scope);
   }
-
-  /* De volgorde is geen nettigheid: permissies wijzigen geeft de sleutel
-     opnieuw uit, en een sleutel van ervóór faalt met dezelfde 401 als een
-     verkeerd wachtwoord. */
-  expect(text).toContain("Changing");
-  expect(text).toContain("reissues the key");
-
-  /* En de read-only houding hoort op het scherm te staan, niet alleen in een
-     architectuurdocument. */
+  // De read-only houding, op het scherm en niet alleen in een ontwerpdocument.
   expect(text).toContain("Orders – Execute");
   expect(text).toContain("Pies – Write");
+  // En waar een vergeten vinkje zich later meldt.
+  expect(text).toContain("403");
+  // Het accounttype, want op een ander type werkt geen enkele sleutel.
+  expect(text).toContain("Stocks ISA");
 
   root.unmount();
 });
@@ -2178,8 +2170,8 @@ test("Trading 212 requires both halves of the key pair", async () => {
   const token = container.querySelector('input[name="token"]') as HTMLInputElement;
   expect(token.required).toBe(true);
 
-  // En het scherm zegt dat het er twee zijn, want dat is waar dit op stukliep.
-  expect(container.textContent).toContain("both");
+  // En de kaart erboven zegt dat het er twee zijn, want daar liep dit op stuk.
+  expect(container.textContent).toContain("both the API key and the API secret");
   expect(container.textContent).toContain("shown once");
 
   root.unmount();
