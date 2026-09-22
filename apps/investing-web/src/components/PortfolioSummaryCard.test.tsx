@@ -133,3 +133,59 @@ test("keeps controls during parent renders and refreshes only on request", async
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(container.querySelector('select[aria-label="Risk period"]')).not.toBeNull();
 });
+
+/* "UNAVAILABLE" TERWIJL DE DATA NOG BINNENKOMT LEEST ALS EEN OORDEEL.
+ *
+ * Zijn scherm: "Historical account risk · Unavailable", met daaronder zes
+ * regels als "Prices missing for 113 instruments" en "At least 60 valid daily
+ * returns are required" — terwijl de prijsgeschiedenis op dat moment gewoon nog
+ * aan het downloaden was. Die 113 was geen tekortkoming maar een stand van een
+ * minuut geleden.
+ *
+ * De risicomodule zelf doet het goed: volatiliteit rekenen over 113 ontbrekende
+ * instrumenten zou een verzonnen getal opleveren, dus weigeren is juist. Wat
+ * fout was, is dat het scherm "dit kan niet" zei waar "dit kan nog niet" gold —
+ * het verschil tussen iets repareren en even wachten. */
+const loadingSummary: PortfolioSummary = {
+  ...summary,
+  metrics: { ...summary.metrics, annualizedVolatility: null, beta: null, observationDays: 0 },
+  risk: {
+    ...summary.risk,
+    status: "unavailable",
+    reasons: ["Prices missing for 113 instruments."],
+  },
+};
+
+async function renderCard(stillLoading: boolean) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(loadingSummary), { status: 200 })),
+  );
+  const { container, root } = render();
+  await act(async () => {
+    root.render(<PortfolioSummaryCard stillLoading={stillLoading} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return { container, root };
+}
+
+test("a sync in flight reads as still loading, not as unavailable", async () => {
+  const { container, root } = await renderCard(true);
+  const text = container.textContent ?? "";
+  expect(text).toContain("Still loading");
+  expect(text).toContain("nothing here needs fixing");
+  expect(text).not.toContain("Use Refresh risk after broker or price updates.");
+  root.unmount();
+});
+
+/* En met alles binnen blijft "Unavailable" gewoon staan — een blok dat altijd
+ * "nog even wachten" zegt is net zo nutteloos als een dat altijd afkeurt. */
+test("with nothing syncing it still says unavailable, and what to do", async () => {
+  const { container, root } = await renderCard(false);
+  const text = container.textContent ?? "";
+  expect(text).toContain("Unavailable");
+  expect(text).toContain("Use Refresh risk after broker or price updates.");
+  expect(text).not.toContain("Still loading");
+  root.unmount();
+});

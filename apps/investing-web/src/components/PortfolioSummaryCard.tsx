@@ -97,9 +97,16 @@ const decimal = (value: number | null): string =>
 export function PortfolioSummaryCard({
   currency,
   revision = "",
+  stillLoading = false,
 }: {
   currency?: string;
   revision?: string;
+  /** A broker or price sync is in flight, so the reasons below are a status
+   *  rather than a verdict. Passed in rather than read here: this card is
+   *  presentational, and subscribing to the sync session from inside it made
+   *  mounting it start polling — which an existing test caught by counting
+   *  four fetches where it expects one. */
+  stillLoading?: boolean;
 }) {
   const [range, setRange] = useState<RiskRange>("1Y");
   const [refresh, setRefresh] = useState(0);
@@ -180,9 +187,27 @@ export function PortfolioSummaryCard({
         <div className="space-y-2 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">
             Historical account risk ·{" "}
-            {risk.status === "unavailable" ? "Unavailable" : "Estimate, currency moves excluded"}
+            {risk.status === "unavailable"
+              ? stillLoading
+                ? "Still loading"
+                : "Unavailable"
+              : "Estimate, currency moves excluded"}
           </p>
-          <p>Use Refresh risk after broker or price updates.</p>
+          {/* "Unavailable" NAAST EEN LIJST REDENEN LEEST ALS EEN OORDEEL, en zo
+              stond het er ook terwijl de prijsgeschiedenis nog gewoon binnenkwam:
+              "Prices missing for 113 instruments" is dan geen tekortkoming maar
+              een stand van zaken van een minuut geleden. Het verschil tussen
+              "dit kan niet" en "dit kan nog niet" is precies het verschil tussen
+              iets repareren en even wachten, en dat hoort het scherm te zeggen. */}
+          {stillLoading ? (
+            <p>
+              Your history is still downloading, so there is not enough of it to measure risk
+              against yet. The figures below fill in on their own once it finishes — nothing here
+              needs fixing.
+            </p>
+          ) : (
+            <p>Use Refresh risk after broker or price updates.</p>
+          )}
           {risk.from && risk.to && (
             <p>
               {risk.from} to {risk.to} · {risk.currency}

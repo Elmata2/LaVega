@@ -1835,7 +1835,7 @@ function HistoryLoading({ brokers }: { brokers: string[] }) {
 
 function Overview() {
   const state = useDashboard();
-  const { broker } = useSyncSession();
+  const { broker, price } = useSyncSession();
   const gate = historyGate(broker?.history);
   return (
     <div className="space-y-5">
@@ -1874,6 +1874,16 @@ function Overview() {
             <aside aria-label="Portfolio overview" className="space-y-5">
               <PortfolioKpis data={state.data} />
               <PortfolioSummaryCard
+                /* De kaart is presentational; of er nog iets binnenkomt weet
+                   dit scherm, dat de sync-sessie toch al leest. */
+                stillLoading={
+                  gate.updating.length > 0 ||
+                  broker?.status === "running" ||
+                  broker?.status === "waiting" ||
+                  price?.status === "running" ||
+                  price?.status === "paused" ||
+                  (price?.remainingSymbols?.length ?? 0) > 0
+                }
                 currency={state.data.presentationCurrency}
                 revision={state.data.benchmarks.map((item) => item.symbol).join(",")}
               />
