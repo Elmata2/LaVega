@@ -41,6 +41,21 @@ export type Account = {
    *  stempelt daarom alleen wat aantoonbaar nieuw is; de rest blijft leeg en het
    *  scherm zegt dat het onbekend is. */
   linkedAt?: string;
+  /** WANNEER WIJ HET SALDO LAATST HEBBEN OPGEHAALD — weer iets anders dan de
+   *  twee hierboven.
+   *
+   *  `balanceDate` is de dag waarop het BEDRAG gold, zoals de bank hem noemt.
+   *  `linkedAt` is de dag waarop deze rekening binnenkwam. Dit is de dag waarop
+   *  we het laatst hebben gevraagd. Voor een geïmporteerd afschrift vallen die
+   *  laatste twee samen, maar voor een bankkoppeling die zichzelf ververst niet
+   *  meer: sinds `/api/eb/refresh` bestaat kan een rekening van vorige maand een
+   *  saldo van vanochtend dragen, en dan is "gekoppeld op 8 september" naast dat
+   *  bedrag pertinent misleidend — het suggereert dat het bedrag ook van toen is.
+   *
+   *  Alleen gezet waar het te bewijzen valt: op het antwoord van een bank. Een
+   *  import zet hem niet, want daar is "opgehaald" geen gebeurtenis die los
+   *  staat van het afschrift zelf. */
+  balanceFetchedAt?: string;
 };
 
 /** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.

@@ -694,13 +694,26 @@ export function latestTxDates(txs: readonly Tx[]): Map<string, string> {
  *  spreken. De tekst moet dus weten of dat moment bekend is. */
 export type SaldoAge =
   | { kind: "dated"; date: string; laterTx: string | null }
-  | { kind: "undated"; latestTx: string | null; linkedAt: string | null }
+  | {
+      kind: "undated";
+      latestTx: string | null;
+      linkedAt: string | null;
+      /** Wanneer WIJ het saldo laatst ophaalden. Gaat vóór `linkedAt`: het is
+       *  het recentere en het preciezere feit over dit bedrag. */
+      fetchedAt: string | null;
+    }
   | { kind: "none"; latestTx: string | null };
 
 export function saldoAge(account: Account, latestTx: string | null): SaldoAge {
   if (account.balance === null) return { kind: "none", latestTx };
   const date = account.balanceDate;
-  if (!date) return { kind: "undated", latestTx, linkedAt: account.linkedAt ?? null };
+  if (!date)
+    return {
+      kind: "undated",
+      latestTx,
+      linkedAt: account.linkedAt ?? null,
+      fetchedAt: account.balanceFetchedAt ?? null,
+    };
   return { kind: "dated", date, laterTx: latestTx !== null && latestTx > date ? latestTx : null };
 }
 
@@ -709,7 +722,8 @@ export function saldoAge(account: Account, latestTx: string | null): SaldoAge {
 export function saldoAgeShort(age: SaldoAge, locale: Locale): string {
   const c = moneyCopy[locale].rekeningen;
   if (age.kind === "dated") return c.standVan(dayFullIn(locale, age.date));
-  if (age.kind === "undated") return c.datumOnbekend;
+  if (age.kind === "undated")
+    return age.fetchedAt ? c.opgehaaldOp(dayFullIn(locale, age.fetchedAt)) : c.datumOnbekend;
   return c.geenSaldo;
 }
 
@@ -740,6 +754,11 @@ export function saldoAgeNote(age: SaldoAge, locale: Locale): string {
      * koppelmoment. Eén regel die voor beide bronnen waar moet zijn, kan die
      * grens dus niet trekken — dus trekt hij hem niet, en wijst hij naar de
      * regel eronder die over de koppeling gaat en over niets anders. */
+    /* HET OPHAALMOMENT GAAT VOOR. Sinds een bankkoppeling zichzelf ververst is
+       * het koppelmoment niet langer het beste wat we over dit bedrag weten:
+       * een rekening van vorige maand kan een saldo van vanochtend dragen, en
+       * "gekoppeld op <toen>" leest dan als een uitspraak over het bedrag. */
+    if (age.fetchedAt) return c.saldoAgeUndatedFetched + tx + invite;
     if (age.linkedAt) return c.saldoAgeUndatedLinked + tx + invite;
     return c.saldoAgeUndatedUnlinked + tx + invite;
   }

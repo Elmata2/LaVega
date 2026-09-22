@@ -849,3 +849,54 @@ test("een overboeking tussen zijn eigen twee rekeningen telt aan GEEN van beide 
     ),
   ).toBe("Boodschappen");
 });
+
+/* EEN OPGEHAALD-MOMENT REIST MEE MET HET BEDRAG WAAR HET OVER GAAT.
+ *
+ * Gevonden in review. `balance` en `balanceDate` hadden allebei al de regel
+ * "geen vers saldo in deze import? dan houdt de rekening die van hiervoor", en
+ * `balanceFetchedAt` niet — die werd gewoon overschreven door het spreidden van
+ * de nieuwe rekening. Gevolg: een afschrift zonder saldoregel over een
+ * bankgekoppelde rekening liet het bedrag staan maar gooide het bewijs weg dat
+ * we het die ochtend hadden opgehaald, en het scherm viel terug op het oudere
+ * "gekoppeld op". Een rekening die minder over zichzelf weet na een import die
+ * haar saldo niet eens aanraakte. */
+test("a fetched-on date survives an import that carries no balance of its own", () => {
+  const linked: Account = {
+    key: "NL01INGB",
+    iban: "NL01INGB0001",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1_250,
+    balanceFetchedAt: "2026-09-22",
+  };
+  // Een afschrift zonder saldoregel: geen bedrag, dus ook geen nieuw moment.
+  const statement: Account = { ...linked, balance: null, balanceFetchedAt: undefined };
+
+  const [merged] = mergeImportedAccounts([linked], [statement]);
+  expect(merged.balance).toBe(1_250); // dit werkte al
+  expect(merged.balanceFetchedAt).toBe("2026-09-22"); // dit niet
+});
+
+test("an import that DOES carry a balance replaces the fetched-on date with its own", () => {
+  const linked: Account = {
+    key: "NL01INGB",
+    iban: "NL01INGB0001",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1_250,
+    balanceFetchedAt: "2026-09-22",
+  };
+  // Een vers saldo uit een afschrift: dat is niet door ons opgehaald, dus het
+  // oude ophaalmoment mag er niet naast blijven staan alsof het erbij hoort.
+  const statement: Account = { ...linked, balance: 900, balanceDate: "2026-09-30" };
+  statement.balanceFetchedAt = undefined;
+
+  const [merged] = mergeImportedAccounts([linked], [statement]);
+  expect(merged.balance).toBe(900);
+  expect(merged.balanceDate).toBe("2026-09-30");
+  expect(merged.balanceFetchedAt).toBeUndefined();
+});

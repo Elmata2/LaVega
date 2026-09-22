@@ -154,6 +154,8 @@ type RekeningenCopy = {
   saldoAgeNoneTx: (date: string) => string;
   saldoAgeNoneInvite: string;
   gekoppeldOp: (date: string) => string;
+  opgehaaldOp: (date: string) => string;
+  saldoAgeUndatedFetched: string;
   koppelmomentOnbekend: string;
   linkedNoteKnown: (date: string) => string;
   linkedNoteUnknown: string;
@@ -682,6 +684,9 @@ const nl: MoneyCopy = {
     saldoAgeNoneInvite:
       " Vul het bedrag in het veld hierboven in zoals je bankapp het laat zien; LaVega legt de dag van vandaag erbij vast.",
     gekoppeldOp: (date) => `gekoppeld op ${date}`,
+    opgehaaldOp: (date) => `opgehaald op ${date}`,
+    saldoAgeUndatedFetched:
+      "Dit is het saldo zoals je bank het gaf toen LaVega er het laatst om vroeg. De bank stuurde er geen dag bij, dus staat er de dag waarop wij het ophaalden — niet de dag waarop het bedrag gold. ",
     koppelmomentOnbekend: "koppelmoment onbekend",
     linkedNoteKnown: (date) =>
       `Deze rekening staat sinds ${date} in LaVega — de dag van de koppeling of de import.` +
@@ -1326,6 +1331,9 @@ const en: MoneyCopy = {
     saldoAgeNoneInvite:
       " Fill in the amount in the field above as your banking app shows it; LaVega records today's date with it.",
     gekoppeldOp: (date) => `linked on ${date}`,
+    opgehaaldOp: (date) => `fetched on ${date}`,
+    saldoAgeUndatedFetched:
+      "This is the balance your bank gave when LaVega last asked for it. The bank sent no date with it, so what you see is the day we fetched it — not the day the amount held. ",
     koppelmomentOnbekend: "link date unknown",
     linkedNoteKnown: (date) =>
       `This account has been in LaVega since ${date} — the day of the link or the import.` +

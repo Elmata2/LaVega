@@ -96,6 +96,13 @@ import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import Onboarding from "./components/Onboarding";
 import { isFreshVault, onboardingSeen, showOnboarding } from "./onboarding.js";
+import {
+  autoRefreshDue,
+  everConnectedBank,
+  lastEbRefreshAt,
+  markBankConnected,
+  markEbRefreshAttempted,
+} from "./ebAutoRefresh.js";
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
@@ -534,6 +541,16 @@ export default function App() {
     aspsp: string,
     items: Array<{ account: EbAccount; balances: EbBalance[]; transactions: EbTransaction[] }>,
   ): Promise<{ accounts: number; txs: number }> {
+    /* DE ECHTE KLOK, en nadrukkelijk niet `asOf`.
+     *
+     * `asOf` wordt één keer bij het monteren gezet en daarna nooit meer, zodat
+     * de prognose binnen een sessie niet onder je handen verschuift. Precies
+     * goed daarvoor, en fout hier: dit blok bestaat om een tabblad dat dagen
+     * openstaat vier keer per dag te verversen, en dan zou "opgehaald op" de
+     * dag noemen waarop het tabblad openging in plaats van de dag waarop we
+     * het vroegen. Dat is dezelfde fout die dit veld moest wegnemen, één as
+     * verderop. */
+    const fetchedOn = new Date().toISOString().slice(0, 10);
         const newAccounts: Account[] = [];
     const rawTxs: Array<Omit<Tx, "id">> = [];
     for (const item of items) {
@@ -550,6 +567,11 @@ export default function App() {
         pickEbBalanceDate(item.balances) ?? undefined,
       );
       acc.entity = entity;
+      /* WIJ HEBBEN HET NU GEVRAAGD, en dat is het enige moment dat we hier
+       * kunnen bewijzen. Zonder dit zou een ververste rekening zonder
+       * bank-saldodatum nog steeds "gekoppeld op <toen>" tonen naast een bedrag
+       * van vanochtend. */
+      acc.balanceFetchedAt = fetchedOn;
       newAccounts.push(acc);
       const key = ebAccountKey(item.account);
       for (const t of item.transactions ?? [])
@@ -599,7 +621,10 @@ export default function App() {
    * Een verlopen toestemming wordt GENOEMD. Stil overslaan zou de gebruiker
    * laten kijken naar een saldo dat niet meer bijwerkt zonder te zeggen welke
    * bank opnieuw gekoppeld moet worden. */
-  async function handleRefreshBank() {
+  /** @param silent - true for the timer's own pass: report only what changed,
+   *  a lapsed consent, or a failure. A banner on every open that says nothing
+   *  happened trains the eye to skip the banner that one day does. */
+  async function handleRefreshBank(silent = false) {
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/eb/refresh`, { method: "POST" });
@@ -621,7 +646,13 @@ export default function App() {
         accounts += got.accounts;
         txs += got.txs;
       }
-      if ((data.refreshed ?? []).length > 0)
+      /* STIL BETEKENT STIL. De timer draait vier keer per dag en vindt meestal
+         niets nieuws; een balk die dan "0 rekeningen, 0 transacties" meldt,
+         leert het oog de balk over te slaan op de dag dat er wél iets staat.
+         Een verversing die de gebruiker zelf aanzette meldt zich altijd — hij
+         drukte op een knop en verdient een antwoord. */
+      const changed = accounts > 0 || txs > 0;
+      if ((data.refreshed ?? []).length > 0 && (changed || !silent))
         notices.push({
           kind: "bank-linked",
           accounts,
@@ -632,13 +663,22 @@ export default function App() {
         notices.push({ kind: "bank-consent-expired", aspsp: name });
       for (const f of data.failed ?? [])
         notices.push({ kind: "bank-link-failed", detail: `${f.aspsp}: ${f.error}` });
-      if (notices.length === 0) notices.push({ kind: "bank-nothing-to-refresh" });
+      if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
+      // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
+      // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere
+      // melding op te ruimen die de gebruiker nog niet gelezen had.
+      if (silent && notices.length === 0) return;
       setProblems(notices);
     } catch (e) {
       setProblems([
         { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
       ]);
     } finally {
+      /* DE POGING WORDT GESTEMPELD, niet de uitkomst — zie
+         `markEbRefreshAttempted`. Alleen bij succes stempelen maakt van elke
+         mislukking een lus: het effect draait opnieuw zodra `busy` omslaat, en
+         vindt de verversing dan meteen weer nodig. */
+      markEbRefreshAttempted(Date.now());
       setBusy(false);
     }
   }
@@ -670,6 +710,8 @@ export default function App() {
           return;
         }
         const { accounts: n, txs: m } = await ingestEbItems(data.aspsp ?? "", data.items ?? []);
+        markBankConnected();
+        markEbRefreshAttempted(Date.now());
         setProblems([{ kind: "bank-linked", accounts: n, aspsp: data.aspsp ?? "", txs: m }]);
       } catch (e) {
         setProblems([
@@ -681,6 +723,35 @@ export default function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate]);
+
+  /* VIER KEER PER DAG, zolang de app open is. Zijn verzoek.
+   *
+   * Eén controle bij het ontgrendelen en daarna elk uur, want een tabblad dat
+   * een week openstaat moet ook meedoen — het interval is de ONDERGRENS van hoe
+   * vaak we kijken, `EB_AUTO_REFRESH_MS` de ondergrens van hoe vaak we de bank
+   * bellen. Waarom dit geen cron is, staat in `ebAutoRefresh.ts`: de server kan
+   * de kluis niet lezen en er dus ook niets in schrijven.
+   *
+   * Niet tijdens `busy`: een verversing die tussen `putAccounts` en `putTxs`
+   * van een import valt, schrijft over een half geschreven kluis heen. */
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const tick = () => {
+      if (
+        autoRefreshDue({
+          connected: everConnectedBank(),
+          lastAt: lastEbRefreshAt(),
+          now: Date.now(),
+          busy,
+        })
+      )
+        void handleRefreshBank(true);
+    };
+    tick();
+    const timer = setInterval(tick, 60 * 60 * 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, busy]);
 
   // M7 (2026-08-28 security review): the vault never locked itself. 15
   // minutes without pointer/key/touch/scroll activity, or a tab hidden that

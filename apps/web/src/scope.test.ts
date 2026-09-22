@@ -173,3 +173,22 @@ test("the rules are mounted with the transactions view, not with the profile", (
   // en de montage in één blok, zodat herindenteren hem niet omgooit.
   expect(app).toMatch(/view === "transactions" &&[\s\S]{0,400}?<Regels/);
 });
+
+/* DE KLOK VAN HET OPHAALMOMENT MAG NIET DIE VAN DE SESSIE ZIJN.
+ *
+ * `asOf` in App.tsx wordt één keer bij het monteren gezet en daarna nooit meer,
+ * zodat de prognose binnen een sessie niet verschuift. Dat is daar goed en hier
+ * fout: dit blok bestaat om een tabblad dat DAGEN openstaat te verversen, en
+ * met `asOf` zou "opgehaald op" de dag noemen waarop het tabblad openging.
+ * Dezelfde fout die dit veld moest wegnemen, één as verderop.
+ *
+ * Een bronlezing, in de geest van de andere App.tsx-controles in deze suite:
+ * wat hier misgaat is dat iemand `asOf` terugzet omdat het "consistenter" oogt,
+ * en dat is aan de toewijzing te zien. */
+test("the fetched-on stamp reads the clock, not the session's frozen asOf", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  expect(app).toContain("acc.balanceFetchedAt = fetchedOn;");
+  expect(app).not.toContain("acc.balanceFetchedAt = asOf;");
+  // En `fetchedOn` komt echt van de klok, niet van een tweede alias van asOf.
+  expect(app).toMatch(/const fetchedOn = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/);
+});

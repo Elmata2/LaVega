@@ -637,6 +637,14 @@ export function mergeImportedAccounts(existing: Account[], imported: Account[]):
       type: prev.type,
       balance: imp.balance !== null ? imp.balance : prev.balance,
       balanceDate: imp.balance !== null ? imp.balanceDate : prev.balanceDate,
+      /* HETZELFDE VOORBEHOUD ALS `balanceDate` HIERBOVEN, en om dezelfde reden:
+       * beide zeggen iets over het BEDRAG, dus ze horen mee te reizen met het
+       * bedrag dat blijft staan. Een afschrift zonder saldoregel laat hierboven
+       * het bankbedrag staan; zonder deze regel verdween dan wél het bewijs dat
+       * we het vanochtend hadden opgehaald, en de rekening viel terug op
+       * "gekoppeld op <toen>" — een ouder en zwakker feit over een bedrag dat
+       * niet is veranderd. */
+      balanceFetchedAt: imp.balance !== null ? imp.balanceFetchedAt : prev.balanceFetchedAt,
       // A bank/name the owner typed himself survives a re-import; one that only
       // ever came from a parser does not, so an improved parser can still fix a
       // stale row (his old ING savings accounts came in as their own number).

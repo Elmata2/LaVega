@@ -24,6 +24,7 @@ import Rekeningen, {
   saldoAgeNote,
   saldoAgeShort,
 } from "./Rekeningen";
+import { moneyCopy } from "../copy/money.js";
 
 /* Drie gaten die de eigenaar noemde, en de invarianten die ze dichthouden.
  *
@@ -676,4 +677,34 @@ test("een rekening van vóór dit veld zegt het eerlijk in het paneel", () => {
   const linked = panel.querySelector("[data-testid=bank-panel-linked]")!;
   expect(linked.textContent).toContain("koppelmoment onbekend");
   expect(linked.textContent).not.toMatch(/\d{4}/);
+});
+
+/* "EEN GETAL ZONDER DATUM LEEST ALS EEN GETAL VAN NU." Zijn woorden, en de helft
+ * van die klacht die nog openstond. Sinds `/api/eb/refresh` bestaat is het
+ * KOPPELMOMENT niet langer het beste wat we over een bedrag weten: een rekening
+ * van vorige maand kan een saldo van vanochtend dragen, en "gekoppeld op
+ * 8 september" ernaast leest dan als een uitspraak over dát bedrag. */
+test("a balance we fetched today says so, even when the bank sent no date", () => {
+  const account = acc({ key: "EB1", balance: 2_400, linkedAt: "2026-08-08" });
+  account.balanceFetchedAt = "2026-09-22";
+  const age = saldoAge(account, null);
+  if (age.kind !== "undated") throw new Error("onbereikbaar");
+  expect(age.fetchedAt).toBe("2026-09-22");
+
+  for (const locale of ["nl", "en"] as const) {
+    const short = saldoAgeShort(age, locale);
+    expect(short, locale).toMatch(/22/); // de dag waarop we het vroegen
+    expect(short, locale).not.toMatch(/8 augustus|8 August/); // niet het koppelmoment
+  }
+  // En de uitleg zegt expliciet WELKE dag dit is, want de twee zijn niet gelijk.
+  expect(saldoAgeNote(age, "en")).toContain("not the day the amount held");
+});
+
+/* Zonder ophaalmoment verandert er niets: dan is het koppelmoment nog steeds
+ * het beste wat er is, en blijft de oude zin staan. */
+test("without a fetch moment the linked-on wording is unchanged", () => {
+  const age = saldoAge(acc({ key: "EB2", balance: 900, linkedAt: "2026-08-08" }), null);
+  if (age.kind !== "undated") throw new Error("onbereikbaar");
+  expect(age.fetchedAt).toBeNull();
+  expect(saldoAgeShort(age, "nl")).toBe(moneyCopy.nl.rekeningen.datumOnbekend);
 });
