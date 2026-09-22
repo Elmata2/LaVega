@@ -182,3 +182,33 @@ test("a resume cursor survives a restart", async () => {
     resume,
   });
 });
+
+/* GEEN ENKELE TEST SCHRIJFT NOG IN DE WERKMAP.
+ *
+ * `runtimeDataFile` valt zonder override terug op `process.cwd()/.lavega`, één
+ * map voor de hele suite. Een test die geen store injecteert schreef daar,
+ * terwijl een andere zijn eigen tijdelijke mappen opruimde — en op CI landde
+ * die opruiming tussen de `writeFile` en de `rename`:
+ *
+ *   ENOENT: rename '.lavega/agent-run.json.tmp' -> '.lavega/agent-run.json'
+ *
+ * Vijf tests liepen daarna in hun time-out. Lokaal was het vier volle runs lang
+ * niet te reproduceren, want het hangt aan timing en workers — dus bewaakt deze
+ * test de OORZAAK en niet het symptoom. Zie src/testSetup.ts. */
+test("every runtime state file lives outside the working directory", () => {
+  const variables = [
+    "LAVEGA_AGENT_RUN_FILE",
+    "LAVEGA_BROKER_SYNC_STATE_FILE",
+    "LAVEGA_VAULT_FILE",
+    "INVESTING_BENCHMARK_STORE_FILE",
+    "INVESTING_MARKET_DATA_CONSENT_FILE",
+    "INVESTING_SECTOR_STORE_FILE",
+  ];
+  for (const variable of variables) {
+    const configured = process.env[variable];
+    expect(configured, variable).toBeTruthy();
+    expect(configured!.startsWith(process.cwd()), `${variable} points into the working directory`).toBe(
+      false,
+    );
+  }
+});
