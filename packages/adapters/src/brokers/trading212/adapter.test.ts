@@ -316,7 +316,9 @@ test("maps sell fills with negative quantities to positive quantity and side sel
 });
 
 test("a rejected API key fails the whole sync and says how to fix it", async () => {
-  const baseUrl = await serve((_request, response) => json(response, 401, { code: "Unauthorized" }));
+  const baseUrl = await serve((_request, response) =>
+    json(response, 401, { code: "Unauthorized" }),
+  );
 
   await expect(
     createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({

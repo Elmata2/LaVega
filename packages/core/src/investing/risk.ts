@@ -18,7 +18,8 @@ export function buildHistoricalRisk(
     point.unpriced.length === 0 &&
     point.cashUnknown.length === 0 &&
     (point.holdingsUnknown?.length ?? 0) === 0;
-  const usable = (point: (typeof points)[number]) => known(point) && point.forwardFilled.length === 0;
+  const usable = (point: (typeof points)[number]) =>
+    known(point) && point.forwardFilled.length === 0;
   let end = points.length;
   while (end > 0 && known(points[end - 1]!) && !usable(points[end - 1]!)) end -= 1;
   let start = end;

@@ -38,7 +38,15 @@ export function createYahooPriceProvider(
         const bars: PriceBar[] = history.points.flatMap((point) =>
           point.close == null
             ? []
-            : [{ symbol: request.symbol, date: point.date, close: point.close, currency, split: 1 }],
+            : [
+                {
+                  symbol: request.symbol,
+                  date: point.date,
+                  close: point.close,
+                  currency,
+                  split: 1,
+                },
+              ],
         );
         for (const split of history.splits) {
           const session = bars.find((bar) => bar.date >= split.date);

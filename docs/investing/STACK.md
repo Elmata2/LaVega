@@ -46,6 +46,10 @@ Local broker positions, trades, dividends, cash balances, and cash flows use an 
 
 `cashOnDate` mirrors `quantityOnDate`'s bidirectional walk from the `CashBalance.asOf` anchor, folding `CashFlow` and `Dividend` (dividends always additive, regardless of walk direction). Dates the walk can't reach return unknown (`null`), surfaced via a `cashUnknown: string[]` field (`broker:currency` keys) on `PortfolioValuePoint`, sibling to the existing `unpriced` field rather than merged into it.
 
+Trades move cash too. A `Trade` carries an optional `settlement` (signed wallet effect in the wallet currency; Trading 212 fills supply it from `walletImpact.netValue`). Without it a trade settles in its own currency as amount plus commission. A broker that anchors one cash balance per entity (Trading 212) holds one wallet: a leg it lists in another currency has no anchor of its own, so its events fold into that wallet at the day's FX rate.
+
+Stock splits come from market data. Yahoo closes are split-adjusted, so `PriceBar.split` records each split on the session it takes effect (1 when none) and `inCurrentShareUnits` puts trades and snapshots into today's share units at the dashboard boundary. A stored bar without `split` is stale and its symbol is re-read; a split arriving in a top-up re-reads the whole range. Trading 212 `STOCK_SPLIT` fills stay ignored so splits are never counted twice.
+
 `computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Reconciling the stored `CashBalance` against a fold-over-flows total is deferred: real value, but no parser produces `CashFlow` rows yet to reconcile against.
 
 Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlows` per broker, synced and persisted whole the same way `positions`/`trades`/`dividends` already are — not `StorageAdapter` (personal-finance-only, see below) and not `PriceStore` (market-data-specific carve-out, see below).

@@ -46,7 +46,11 @@ test("scales a broker snapshot taken before a split", () => {
     currency: "USD",
     asOf: "2025-06-17",
   };
-  const { positions } = inCurrentShareUnits([snapshot, { ...snapshot, asOf: "2025-06-18" }], [], bars);
+  const { positions } = inCurrentShareUnits(
+    [snapshot, { ...snapshot, asOf: "2025-06-18" }],
+    [],
+    bars,
+  );
 
   expect(positions.map(({ quantity, averagePrice }) => ({ quantity, averagePrice }))).toEqual([
     { quantity: 4, averagePrice: 50 },

@@ -195,9 +195,10 @@ function cashLegs(
   for (const trade of trades) {
     if (!trade.broker) continue;
     const settlement = tradeSettlement(trade);
-    leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push(
-      { date: trade.date, amount: settlement.amount },
-    );
+    leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push({
+      date: trade.date,
+      amount: settlement.amount,
+    });
   }
 
   const wallets = new Map<string, CashLeg[]>();
