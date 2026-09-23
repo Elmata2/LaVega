@@ -47,7 +47,8 @@ export function createFileCredentialStore(
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
   lock(): void;
-  getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
+  /** Null when the vault holds nothing it can read: empty, or still locked. */
+  getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
   getAgentRun(): Promise<AgentRunRecord | null>;
   startAgentRun(record: AgentRunRecord): Promise<boolean>;
@@ -168,8 +169,7 @@ export function createFileCredentialStore(
       });
     },
     async getBrokerData() {
-      if (!data) throw new Error("credential vault is locked");
-      return structuredClone(data.brokerData ?? {});
+      return data ? structuredClone(data.brokerData ?? {}) : null;
     },
     putBrokerData(snapshot) {
       return queue(async () => {

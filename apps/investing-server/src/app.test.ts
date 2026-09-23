@@ -61,7 +61,20 @@ test("dashboard route returns injected core-shaped read model and selected symbo
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ...dashboard, problems: ["selected:aapl"] });
-  expect(dashboardReader).toHaveBeenCalledWith({ symbol: "aapl" });
+  expect(dashboardReader).toHaveBeenCalledWith(expect.objectContaining({ symbol: "aapl" }));
+});
+
+test("dashboard route reports each phase it ran in Server-Timing", async () => {
+  const investingApp = createApp({
+    dashboardReader: async ({ timing }) => {
+      await timing?.measure("stored", async () => null);
+      return emptyInvestingDashboard();
+    },
+  });
+
+  const response = await investingApp.request("/api/investing/dashboard");
+
+  expect(response.headers.get("Server-Timing")).toMatch(/^stored;dur=\d+\.\d, total;dur=\d+\.\d$/);
 });
 
 test("dashboard route reports read-model failures without inventing values", async () => {

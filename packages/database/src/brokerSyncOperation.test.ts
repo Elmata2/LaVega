@@ -11,6 +11,7 @@ import {
   type SyncProgressRow,
   type SyncStateRow,
 } from "./index.js";
+import { databaseOver } from "./testing.js";
 import { priceSyncLeaseContract, type Progress } from "./priceSyncLease.contract.js";
 
 /* These tests run the real migrations against a real Postgres. The lease and
@@ -38,19 +39,17 @@ priceSyncLeaseContract("Neon price progress SQL", () => ({
 /** PGlite is one connection, so a transaction has to finish before the next begins. */
 function pgliteDatabase(instance: PGlite): Database {
   let inUse: Promise<unknown> = Promise.resolve();
-  return {
-    async connect() {
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => (release = resolve));
-      const ahead = inUse;
-      inUse = inUse.then(() => held);
-      await ahead;
-      return {
-        query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
-        release,
-      };
-    },
-  } as unknown as Database;
+  return databaseOver(async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const ahead = inUse;
+    inUse = inUse.then(() => held);
+    await ahead;
+    return {
+      query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
+      release,
+    };
+  });
 }
 
 const progress = (status: SyncProgressRow["status"], leaseId: string | null): SyncProgressRow => ({
@@ -171,7 +170,7 @@ test("an expired lease is taken over, and the evicted run changes neither snapsh
     snapshot: { value: { positions: ["stale"] }, credentialGeneration: generation },
   });
   expect(committed).toBe(false);
-  expect((await createBrokerRepository(db, "tenant-a").snapshots()).trading212).toEqual({
+  expect((await createBrokerRepository(db, "tenant-a").snapshots())?.trading212).toEqual({
     positions: ["first"],
   });
   const still = await repository.claim("trading212", {
@@ -207,7 +206,7 @@ test("a reconnect during a run stops that run from restoring the old account", a
   expect((await vault.get<{ token: string }>("trading212"))?.credentials.token).toBe(
     "reconnected-token",
   );
-  expect((await vault.snapshots()).trading212).toBeUndefined();
+  expect((await vault.snapshots())?.trading212).toBeUndefined();
 });
 
 test("reconnect clears old snapshot and history cursor", async () => {
@@ -224,7 +223,7 @@ test("reconnect clears old snapshot and history cursor", async () => {
 
   await vault.put("trading212", { token: "new" });
 
-  expect((await vault.snapshots()).trading212).toBeUndefined();
+  expect((await vault.snapshots())?.trading212).toBeUndefined();
   expect(await storedState("tenant-a")).toBeNull();
   const next = await sync.claim("trading212", {
     leaseId: "new-run",

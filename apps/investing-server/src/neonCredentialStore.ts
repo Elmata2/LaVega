@@ -31,7 +31,7 @@ export function createNeonCredentialStore(
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
   lock(): void;
-  getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
+  getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
   brokerReadability(): Promise<BrokerReadability>;
 } {
@@ -80,6 +80,7 @@ export function createNeonCredentialStore(
     },
     async getBrokerData() {
       const stored = await repository.snapshots();
+      if (!stored) return null;
       const snapshot: RuntimeBrokerDataSnapshot = {};
       for (const broker of BROKERS)
         if (stored[broker]) snapshot[broker] = stored[broker] as BrokerSnapshot;

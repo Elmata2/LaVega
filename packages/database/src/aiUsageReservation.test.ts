@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createAiUsageRepository, type Database } from "./index.js";
+import { databaseOver } from "./testing.js";
 
 /* Real migrations, real Postgres (via PGlite) — the reservation guard is a
  * transaction and an advisory lock, and a SQL-string mock would prove the
@@ -18,19 +19,17 @@ let db: Database;
  *  what that does and does not let it prove. */
 function pgliteDatabase(instance: PGlite): Database {
   let inUse: Promise<unknown> = Promise.resolve();
-  return {
-    async connect() {
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => (release = resolve));
-      const ahead = inUse;
-      inUse = inUse.then(() => held);
-      await ahead;
-      return {
-        query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
-        release,
-      };
-    },
-  } as unknown as Database;
+  return databaseOver(async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const ahead = inUse;
+    inUse = inUse.then(() => held);
+    await ahead;
+    return {
+      query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
+      release,
+    };
+  });
 }
 
 beforeAll(async () => {
@@ -141,10 +140,10 @@ test("reconcile() turns a reservation into the real charge in place, not a secon
   });
 
   expect(await dayTotal("2026-09-20")).toBe(2);
-  const { rows } = await pglite.query<{ model: string; reconciled_at: string | null }>(
-    "SELECT model, reconciled_at FROM personal.ai_usage WHERE id = $1",
-    [reserved.id],
-  );
+  const { rows } = await pglite.query<{
+    model: string;
+    reconciled_at: string | null;
+  }>("SELECT model, reconciled_at FROM personal.ai_usage WHERE id = $1", [reserved.id]);
   expect(rows).toHaveLength(1); // still one row — reconciled, not duplicated
   expect(rows[0]!.model).toBe("mistral-small-latest");
   expect(rows[0]!.reconciled_at).not.toBeNull();

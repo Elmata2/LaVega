@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createAgentRunRepository, type AgentRunRow, type Database } from "./index.js";
+import { databaseOver } from "./testing.js";
 
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let postgres: PGlite;
@@ -17,12 +18,10 @@ beforeAll(async () => {
     .sort())
     await postgres.exec(readFileSync(join(migrationsDir, file), "utf8"));
   await postgres.exec("SET ROLE lavega_runtime;");
-  db = {
-    connect: async () => ({
-      query: (sql: string, values?: unknown[]) => postgres.query(sql, values as never[]),
-      release: () => undefined,
-    }),
-  } as unknown as Database;
+  db = databaseOver(async () => ({
+    query: (sql: string, values?: unknown[]) => postgres.query(sql, values as never[]),
+    release: () => undefined,
+  }));
 }, 60_000);
 
 afterAll(async () => {

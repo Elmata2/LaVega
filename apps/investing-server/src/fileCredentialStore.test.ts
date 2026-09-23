@@ -208,7 +208,7 @@ test("failed vault setup and mutations leave committed state unchanged", async (
     const latest = createFileCredentialStore(path);
     expect(await latest.unlock("passphrase")).toBe(true);
     expect(await latest.getCredentials("local", "trading212")).toEqual(credentials("later"));
-    expect((await latest.getBrokerData()).ibkr).toBeDefined();
+    expect((await latest.getBrokerData())?.ibkr).toBeDefined();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

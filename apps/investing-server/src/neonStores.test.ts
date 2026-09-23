@@ -5,7 +5,7 @@ import {
   createNeonPriceStore,
 } from "./neonStores.js";
 import { YAHOO_DISCLOSURE_VERSION } from "./marketDataConsent.js";
-import type { Database } from "@lavega/database";
+import { databaseOver } from "@lavega/database/testing";
 
 /** A pool whose client records every statement and replays canned rows. */
 function fakeDatabase(rows: Record<string, unknown>[] = []) {
@@ -17,7 +17,7 @@ function fakeDatabase(rows: Record<string, unknown>[] = []) {
     },
     release: () => undefined,
   };
-  return { db: { connect: async () => client } as unknown as Database, calls };
+  return { db: databaseOver(async () => client), calls };
 }
 
 const identities = (calls: Array<{ sql: string; values?: unknown[] }>) =>
