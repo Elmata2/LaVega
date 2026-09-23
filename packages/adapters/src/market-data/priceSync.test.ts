@@ -200,6 +200,23 @@ test("refetches from earliest cached currency mismatch so stale rows self-heal",
   expect(result.bars.map((bar) => bar.currency)).toEqual(["GBX", "GBX", "GBX"]);
 });
 
+test("fills history before the first cached bar once older trades arrive", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-20", close: 100, currency: "EUR", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({ bars: [], problems: [] }));
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
+    request: { ...request, backfillFrom: "2026-01-01", today: "2026-01-20" },
+  });
+
+  expect(get).toHaveBeenCalledWith(expect.objectContaining({ from: "2026-01-01" }));
+});
+
 test("refetches bars stored before splits were recorded", async () => {
   const store = createInMemoryPriceStore();
   await store.upsert("local", [

@@ -1,3 +1,4 @@
+import { businessDaysAfter, MAX_MISSED_BUSINESS_DAYS } from "@lavega/core";
 import type { PriceStore } from "../prices/PriceStore.js";
 import type { Provider } from "./providerRouter.js";
 import { firstProviderResult, hasProblems } from "./providerRouter.js";
@@ -27,7 +28,17 @@ export async function syncPrices(input: {
     today,
   );
   const lastDate = cachedBars.at(-1)?.date ?? null;
-  const staleFrom = firstStaleDate(cachedBars, input.request.currency);
+  /* The start moves earlier when older trades arrive after the first price
+   * sync (a history read in pages). A first trade cannot precede the listing,
+   * so a cache starting well after it has a gap, not a later IPO. */
+  const firstDate = cachedBars[0]?.date;
+  const missingStart =
+    firstDate !== undefined &&
+    input.request.backfillFrom !== undefined &&
+    businessDaysAfter(input.request.backfillFrom, firstDate) > MAX_MISSED_BUSINESS_DAYS;
+  const staleFrom = missingStart
+    ? input.request.backfillFrom
+    : firstStaleDate(cachedBars, input.request.currency);
   const from = staleFrom ?? (lastDate ? nextDate(lastDate) : input.request.backfillFrom);
   /* Only a path that upserted needs to read the range again. Every other
    * return has written nothing since the read above, so re-reading costs a
