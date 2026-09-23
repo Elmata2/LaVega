@@ -93,6 +93,19 @@ class Trading212RateLimitError extends Trading212SyncPausedError {
   }
 }
 
+/** Every request carries the same key, so once one is refused none can
+ *  succeed. The sync fails as a whole instead of pausing on a cursor it can
+ *  never move past. */
+class Trading212CredentialsRejectedError extends Error {}
+
+function responseError(label: string, status: number): Error {
+  return status === 401 || status === 403
+    ? new Trading212CredentialsRejectedError(
+        `Trading 212 rejected the API key (HTTP ${status}). Create a new key in Trading 212 and save it again.`,
+      )
+    : new Error(`Trading 212 ${label} request failed with HTTP ${status}`);
+}
+
 function throwIfHostDeadline(deadlineMs: number | undefined, waitMs = 0): void {
   if (hasBrokerSyncTime(deadlineMs, waitMs)) return;
   throw new Trading212SyncPausedError(HOST_DEADLINE_MESSAGE, Math.max(0, waitMs));
@@ -509,8 +522,7 @@ async function accountSummary(
   limiter: RateLimiter,
 ): Promise<Trading212Order> {
   const response = await request(url, config, limiter);
-  if (!response.ok)
-    throw new Error(`Trading 212 account-summary request failed with HTTP ${response.status}`);
+  if (!response.ok) throw responseError("account-summary", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
       `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
@@ -529,8 +541,7 @@ async function historyPage(
   limiter: RateLimiter,
 ): Promise<Trading212Page> {
   const response = await request(url, config, limiter);
-  if (!response.ok)
-    throw new Error(`Trading 212 ${label}-history request failed with HTTP ${response.status}`);
+  if (!response.ok) throw responseError(`${label}-history`, response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
       `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
@@ -572,7 +583,7 @@ async function page(
   // Order history allows 6 requests per minute. `limiter` waits out a spent
   // window between cursors, so sync stays one sequential request per cursor.
   const response = await request(url, config, limiter);
-  if (!response.ok) throw new Error(`Trading 212 request failed with HTTP ${response.status}`);
+  if (!response.ok) throw responseError("order-history", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
       `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
@@ -638,8 +649,7 @@ async function positions(
   limiter: RateLimiter,
 ): Promise<Trading212Positions> {
   const response = await request(url, config, limiter);
-  if (!response.ok)
-    throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
+  if (!response.ok) throw responseError("holdings", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
       `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
@@ -684,6 +694,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), deadlineMs);
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
+        if (error instanceof Trading212CredentialsRejectedError) throw error;
         if (error instanceof Trading212SyncPausedError)
           retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
       };
