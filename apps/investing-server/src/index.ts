@@ -714,7 +714,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                   "https://live.trading212.com/api/v0/equity/history/transactions",
                 );
                 url.searchParams.set("limit", "50");
-                if (transactionCursor !== "first" && /^\d+$/.test(transactionCursor))
+          if (transactionCursor !== "first" && /^[A-Za-z0-9-]{1,64}$/.test(transactionCursor))
                   url.searchParams.set("cursor", transactionCursor);
                 const response = await fetch(url, {
                   headers: {
