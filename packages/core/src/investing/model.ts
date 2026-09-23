@@ -78,5 +78,9 @@ export type Trade = {
   amount: number | null;
   currency: string;
   commission: number | null;
+  /** Signed cash the trade moved in the account wallet, when the broker
+   *  reports it (negative for a buy). Absent means it settled in `currency`
+   *  as amount plus commission. */
+  settlement?: { currency: string; amount: number };
   brokerTradeId?: string;
 };

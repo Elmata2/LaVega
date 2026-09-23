@@ -400,6 +400,17 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
           return total + (nullableNumber((tax as Trading212Order).fillAmount) ?? 0);
         }, 0)
       : null;
+  // netValue is the account-currency figure after taxes. Its sign has not
+  // been verified against a live sell, so direction comes from the side.
+  const walletCurrency = walletImpact ? optionalString(walletImpact.currency) : undefined;
+  const walletValue = walletImpact ? nullableNumber(walletImpact.netValue) : null;
+  const settlement =
+    walletCurrency && walletValue !== null && tradeSide !== "other"
+      ? {
+          currency: walletCurrency,
+          amount: tradeSide === "buy" ? -Math.abs(walletValue) : Math.abs(walletValue),
+        }
+      : undefined;
   return {
     entity,
     broker: "trading212",
@@ -414,6 +425,7 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
     amount: fillPrice * fillQuantity,
     currency: string(value(instrument, "currency") ?? order.currency, "order currency"),
     commission,
+    ...(settlement ? { settlement } : {}),
     ...(brokerTradeId !== undefined && brokerTradeId !== null
       ? { brokerTradeId: String(brokerTradeId) }
       : {}),

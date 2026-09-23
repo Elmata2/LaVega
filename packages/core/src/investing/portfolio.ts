@@ -141,6 +141,96 @@ function cashAmountOnDate(
   return covered ? anchoredAmountOnDate(date, anchors, events) : null;
 }
 
+type CashLeg = {
+  entity: string;
+  broker: string;
+  currency: string;
+  anchors: CashBalance[];
+  events: CashEvent[];
+};
+
+/** Signed cash a trade moved: the broker's own wallet figure when reported,
+ *  otherwise amount plus commission in the trade currency. NaN when neither
+ *  is known, which leaves every date the walk crosses it unknown. */
+function tradeSettlement(trade: Trade): { currency: string; amount: number } {
+  if (trade.settlement) return trade.settlement;
+  const gross = Math.abs(trade.amount ?? Number.NaN);
+  const commission = Math.abs(trade.commission ?? 0);
+  const amount =
+    trade.side === "buy" ? -gross - commission : trade.side === "sell" ? gross - commission : 0;
+  return { currency: trade.currency, amount };
+}
+
+/** Every cash wallet with its broker anchors and the events that move it.
+ *
+ *  A broker that reports one cash balance per entity (Trading 212) holds one
+ *  wallet: a movement it lists in another currency was converted into that
+ *  wallet, so it folds in at the day's rate instead of forming a leg no anchor
+ *  can ever reach. Brokers that anchor each currency keep separate legs. */
+function cashLegs(
+  cashBalances: readonly CashBalance[],
+  cashFlows: readonly CashFlow[],
+  dividends: readonly Dividend[],
+  trades: readonly Trade[],
+  fxRates: FxRates,
+): CashLeg[] {
+  const legs = new Map<string, CashLeg>();
+  const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
+    const key = cashKey(value);
+    const existing = legs.get(key);
+    if (existing) return existing;
+    const created: CashLeg = {
+      entity: value.entity,
+      broker: value.broker,
+      currency: value.currency,
+      anchors: [],
+      events: [],
+    };
+    legs.set(key, created);
+    return created;
+  };
+  for (const balance of cashBalances) leg(balance).anchors.push(balance);
+  for (const flow of [...cashFlows, ...dividends])
+    leg(flow).events.push({ date: flow.date, amount: flow.amount });
+  for (const trade of trades) {
+    if (!trade.broker) continue;
+    const settlement = tradeSettlement(trade);
+    leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push(
+      { date: trade.date, amount: settlement.amount },
+    );
+  }
+
+  const wallets = new Map<string, CashLeg[]>();
+  for (const candidate of legs.values()) {
+    if (candidate.anchors.length === 0) continue;
+    const owner = `${candidate.entity}\u0000${candidate.broker}`;
+    wallets.set(owner, [...(wallets.get(owner) ?? []), candidate]);
+  }
+  for (const [key, candidate] of legs) {
+    if (candidate.anchors.length > 0) continue;
+    const owned = wallets.get(`${candidate.entity}\u0000${candidate.broker}`);
+    if (owned?.length !== 1) continue;
+    const wallet = owned[0]!;
+    for (const event of candidate.events) {
+      let amount: number;
+      try {
+        amount = convertCurrency(
+          event.amount,
+          candidate.currency,
+          wallet.currency,
+          event.date,
+          fxRates,
+        );
+      } catch {
+        amount = Number.NaN;
+      }
+      wallet.events.push({ date: event.date, amount });
+    }
+    legs.delete(key);
+  }
+  return [...legs.values()];
+}
+
 /** One symbol held by one owner: broker quantity snapshots plus signed trades.
  *
  *  The owner is the full ownership identity, not just the entity. Two brokers
@@ -243,12 +333,7 @@ export function computePortfolioValueSeries(
     options.dividends ?? [],
     (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`,
   );
-  const cashBalances = options.cashBalances ?? [];
-  const cashLegKeys = new Set([
-    ...cashBalances.map(cashKey),
-    ...cashFlows.map(cashKey),
-    ...dividends.map(cashKey),
-  ]);
+  const legs = cashLegs(options.cashBalances ?? [], cashFlows, dividends, trades, fxRates);
 
   return dates.map((date) => {
     let positionsValue = 0;
@@ -303,36 +388,22 @@ export function computePortfolioValueSeries(
     let cashValue = 0;
     let reachableCashLegs = 0;
     const cashUnknown = new Set<string>();
-    for (const key of cashLegKeys) {
-      const anchorGroup = cashBalances.filter((anchor) => cashKey(anchor) === key);
-      const sample =
-        anchorGroup[0] ??
-        cashFlows.find((flow) => cashKey(flow) === key) ??
-        dividends.find((dividend) => cashKey(dividend) === key);
-      if (!sample) continue;
-      const events: CashEvent[] = [
-        ...cashFlows
-          .filter((flow) => cashKey(flow) === key)
-          .map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
-        ...dividends
-          .filter((dividend) => cashKey(dividend) === key)
-          .map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
-      ];
-      const amount = cashAmountOnDate(date, anchorGroup, events);
-      if (amount === null) {
-        cashUnknown.add(displayCashKey(sample));
+    for (const leg of legs) {
+      const amount = cashAmountOnDate(date, leg.anchors, leg.events);
+      if (amount === null || !Number.isFinite(amount)) {
+        cashUnknown.add(displayCashKey(leg));
         continue;
       }
       try {
-        cashValue += convertCurrency(amount, sample.currency, presentationCurrency, date, fxRates);
+        cashValue += convertCurrency(amount, leg.currency, presentationCurrency, date, fxRates);
         reachableCashLegs += 1;
       } catch {
-        cashUnknown.add(displayCashKey(sample));
+        cashUnknown.add(displayCashKey(leg));
       }
     }
 
     const knownPositionsValue = held > 0 && priced === 0 ? null : positionsValue;
-    const knownCashValue = cashLegKeys.size === 0 || reachableCashLegs === 0 ? null : cashValue;
+    const knownCashValue = legs.length === 0 || reachableCashLegs === 0 ? null : cashValue;
     const reachableValues = [knownPositionsValue, knownCashValue].filter(
       (value): value is number => value !== null,
     );

@@ -329,6 +329,60 @@ test("maps sell fills with negative quantities to positive quantity and side sel
   ]);
 });
 
+test("maps the fill wallet impact to the cash the trade moved in the account currency", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 4,
+              type: "TRADE",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 110,
+              quantity: 1,
+              walletImpact: { currency: "EUR", netValue: 100.15, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 4,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          {
+            fill: {
+              id: 5,
+              type: "TRADE",
+              filledAt: "2026-08-19T10:15:00Z",
+              price: 120,
+              quantity: -1,
+              walletImpact: { currency: "EUR", netValue: -108.9, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 5,
+              ticker: "AAPL",
+              side: "SELL",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+        ],
+      });
+    } else standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+
+  expect(result.sections.trades.rows).toMatchObject([
+    { side: "buy", settlement: { currency: "EUR", amount: -100.15 } },
+    { side: "sell", settlement: { currency: "EUR", amount: 108.9 } },
+  ]);
+});
+
 test("ignores non-trade fill rows and maps nested instruments", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) {
