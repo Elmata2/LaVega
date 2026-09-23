@@ -53,6 +53,47 @@ const empty = (overrides: {
   retryAfter: overrides.retryAfter,
 });
 
+test("order rebuild starts at first page, then resumes saved cursor", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () =>
+    empty({
+      tradesComplete: false,
+      resume: {
+        ordersNextPagePath: "/api/v0/equity/history/orders?cursor=2",
+        transactionsComplete: true,
+        dividendsComplete: true,
+      },
+    }),
+  );
+  const input = {
+    adapters: adapters(sync),
+    credentials,
+    operations,
+    tenantId: "local",
+    entity: "personal",
+    force: true,
+    now: new Date("2026-09-23T12:00:00.000Z"),
+  };
+
+  await syncScheduledBrokers({ ...input, rebuildOrders: true });
+  expect(sync).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      resume: { ordersComplete: false, transactionsComplete: true, dividendsComplete: true },
+    }),
+  );
+
+  await syncScheduledBrokers(input);
+  expect(sync).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      resume: {
+        ordersNextPagePath: "/api/v0/equity/history/orders?cursor=2",
+        transactionsComplete: true,
+        dividendsComplete: true,
+      },
+    }),
+  );
+});
+
 /** Stores a cursor the way a finished run would, so a test can start from it. */
 async function seed(store: BrokerSyncOperationStore, state: BrokerSyncState) {
   const progress = { status: "completed" as const, message: null, updatedAt: null, leaseId: null };

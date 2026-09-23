@@ -145,14 +145,14 @@ export function createRuntimeBrokerSync(
   operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
-): (force: boolean, deadlineMs?: number) => Promise<ScheduledSyncResult> {
+): (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
     tenantId,
     onTrading212Diagnostic,
   });
-  return async (force, deadlineMs) => {
+  return async (force, deadlineMs, rebuildOrders) => {
     const result = await syncScheduledBrokers({
       adapters,
       credentials,
@@ -160,6 +160,7 @@ export function createRuntimeBrokerSync(
       tenantId,
       entity,
       force,
+      rebuildOrders,
       deadlineMs,
     });
     await onCompleted?.(result);
@@ -406,7 +407,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       updateProgress,
       tenantId,
     );
-    const brokerSync = async (force: boolean, deadlineMs?: number) => {
+    const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
       if (devFixtureEnabled) {
         syncProgress = {
           status: "completed",
@@ -435,7 +436,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
       }
       try {
-        const result = await scheduledBrokerSync(force, deadlineMs);
+        const result = await scheduledBrokerSync(force, deadlineMs, rebuildOrders);
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
@@ -849,15 +850,17 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
- healthCheck: async (includeLiveBroker?: boolean) =>
+    healthCheck: async (includeLiveBroker?: boolean) =>
       (await currentRuntime()).healthCheck(includeLiveBroker),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean, deadlineMs?: number) => {
+  const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
     const tenantId = await resolveTenantId();
-    const result = await (await tenantRuntime(tenantId)).brokerSync(force, deadlineMs);
+    const result = await (
+      await tenantRuntime(tenantId)
+    ).brokerSync(force, deadlineMs, rebuildOrders);
     dashboardCache.invalidate(tenantId);
     return result;
   };

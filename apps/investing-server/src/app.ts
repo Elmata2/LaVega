@@ -134,6 +134,7 @@ type PriceDependencies = {
   brokerSync: (
     force: boolean,
     deadlineMs?: number,
+    rebuildOrders?: boolean,
   ) => Promise<{ outcomes: unknown[]; problems: string[] }>;
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
@@ -409,7 +410,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.post("/api/brokers/sync", async (c) => {
     const deadline = priceSyncDeadline();
     try {
-      const result = await brokerSync(c.req.query("force") === "true", deadline);
+      const result = await brokerSync(
+        c.req.query("force") === "true",
+        deadline,
+        c.req.query("rebuildOrders") === "true",
+      );
       problemReporter({ source: "broker-sync", problems: result.problems });
       /* Awaited, not detached. Work started after the response is not
        * guaranteed to run at all on a serverless host, which is how prices

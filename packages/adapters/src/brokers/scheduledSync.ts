@@ -199,6 +199,7 @@ export async function syncScheduledBrokers(input: {
   tenantId: string;
   entity: string;
   force?: boolean;
+  rebuildOrders?: boolean;
   now?: Date;
   deadlineMs?: BrokerSyncRequest["deadlineMs"];
   leaseId?: () => string;
@@ -247,7 +248,10 @@ export async function syncScheduledBrokers(input: {
     try {
       result = await entry.adapter.sync({
         entity: input.entity,
-        resume: claim.state.resume ?? undefined,
+        resume:
+          input.rebuildOrders && broker === "trading212" && !claim.state.resume
+            ? { ordersComplete: false, transactionsComplete: true, dividendsComplete: true }
+            : (claim.state.resume ?? undefined),
         deadlineMs: input.deadlineMs,
       });
     } catch (error) {
