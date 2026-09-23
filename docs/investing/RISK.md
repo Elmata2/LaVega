@@ -31,7 +31,7 @@ Composition uses current priced investment value, excluding cash. Missing positi
 
 ## Confirmed source-data limits
 
-Read-only production checks on 2026-09-10 confirmed market history predates the first account trade by more than 24 years. The account has missing USD cash history, missing historical instrument prices and opening-quantity evidence gaps. All supported risk periods can therefore correctly report unavailable. This change repairs calculation and disclosure; it does not repair or invent broker records.
+Read-only production checks on 2026-09-23 show a one-year risk estimate using 72 returns from 2026-06-12 through 2026-09-22. Three instruments still lack historical prices. The cash walk reports EUR -575.32 on 2025-09-23 and negative cash on 27 dates inside the selected risk window. Trading 212 cash cannot be negative, so these estimated returns may use incorrect account values. A current cash anchor and the existing event stream do not establish a correct historical balance; reconcile them against broker records before treating the risk estimate as verified.
 
 To unlock reliable figures: reconcile every broker cash currency from a dated balance, complete historical order/transfer and corporate-action records, backfill missing held-date prices, then add historical FX and a total-return benchmark. Recheck against broker statements before removing quality flags. A separate current-holdings model also needs adjusted-price history and an explicit treatment of uncovered holdings; silently rescaling a covered subset is not acceptable.
 
@@ -39,9 +39,9 @@ To unlock reliable figures: reconcile every broker cash currency from a dated ba
 
 Axis: selected risk period. Persona: signed-in account owner. Screen: `/investing`.
 
-1. One year: selected risk window spans one year, unavailable metrics state missing cash history, valid daily returns are zero for the checked account, and no extreme volatility/drawdown numbers appear.
-2. Six months: select `6 months` in `Risk period`. Start date changes to six months before the end. Missing USD cash and unavailable metrics remain visible.
-3. Account history: select `Account history`. Start is 2024-10-01 for the checked account, never 2000. Metrics remain unavailable.
+1. One year: risk window starts at 2026-06-12 for the checked account, with 72 returns as of 2026-09-23. Volatility and drawdown show estimates; the cash reconciliation caveat above still applies.
+2. Six months: select `6 months` in `Risk period`. Confirm the selected range and any stated data limits; do not infer cash coverage from a non-null value alone.
+3. Account history: select `Account history`. History starts at the first dated account evidence, not the earliest market quote. Confirm the stated risk start and data limits.
 4. Method disclosure: expand `How to read these metrics`. Read end-of-day cash-flow convention, fixed latest FX, 0% cash rate and price-only benchmark limits. Collapse and re-open it.
 5. Current composition: read investment-only denominator, missing/estimated counts and sector limitation; percentages have no `+` gain sign.
 

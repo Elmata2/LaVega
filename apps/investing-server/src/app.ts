@@ -98,7 +98,19 @@ export type InvestingHealth = {
     trading212Sync: "fresh" | "stale" | "never" | "problem" | "down";
     snapshot: "loaded" | "empty" | "down";
   };
-  trading212: { lastSyncedAt: string | null; positions: number };
+  trading212: {
+    lastSyncedAt: string | null;
+    positions: number;
+    cashEvidence?: {
+      date: string;
+      anchor: { date: string; amount: number; currency: string } | null;
+      tradesAfterDate: number;
+      tradesWithSettlement: number;
+      tradesWithoutSettlement: number;
+      flowsAfterDate: Record<string, { count: number; amount: number }>;
+      dividendsAfterDate: Record<string, { count: number; amount: number }>;
+    };
+  };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;

@@ -584,7 +584,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         trading212Sync: "never",
         snapshot: "empty",
       };
-      const trading212 = { lastSyncedAt: null as string | null, positions: 0 };
+      const trading212: InvestingHealth["trading212"] = { lastSyncedAt: null, positions: 0 };
 
       if (database) {
         try {
@@ -626,6 +626,42 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           await restoreBrokerData();
           const snapshot = brokerData.snapshot().trading212;
           trading212.positions = snapshot?.positions.length ?? 0;
+          if (snapshot) {
+            const date = "2025-09-23";
+            const anchor = (snapshot.cashBalances ?? [])
+              .filter((balance) => balance.asOf > date)
+              .sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
+            const tradesAfterDate = snapshot.trades.filter((trade) => trade.date > date);
+            const group = (
+              events: readonly { date: string; amount: number; currency: string; kind?: string }[],
+            ) =>
+              events
+                .filter((event) => event.date > date)
+                .reduce<Record<string, { count: number; amount: number }>>((groups, event) => {
+                  const key = `${event.kind ?? "dividend"}:${event.currency}`;
+                  const previous = groups[key] ?? { count: 0, amount: 0 };
+                  groups[key] = {
+                    count: previous.count + 1,
+                    amount: previous.amount + event.amount,
+                  };
+                  return groups;
+                }, {});
+            trading212.cashEvidence = {
+              date,
+              anchor: anchor
+                ? { date: anchor.asOf, amount: anchor.amount, currency: anchor.currency }
+                : null,
+              tradesAfterDate: tradesAfterDate.length,
+              tradesWithSettlement: tradesAfterDate.filter(
+                (trade) => trade.settlement !== undefined,
+              ).length,
+              tradesWithoutSettlement: tradesAfterDate.filter(
+                (trade) => trade.settlement === undefined,
+              ).length,
+              flowsAfterDate: group(snapshot.cashFlows ?? []),
+              dividendsAfterDate: group(snapshot.dividends),
+            };
+          }
           checks.snapshot = snapshot ? "loaded" : "empty";
           const state = await syncStateStore.get("trading212");
           const progress = await syncStateStore.progress("trading212");
