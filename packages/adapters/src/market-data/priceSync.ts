@@ -1,3 +1,4 @@
+import { businessDaysAfter, MAX_MISSED_BUSINESS_DAYS } from "@lavega/core";
 import type { PriceStore } from "../prices/PriceStore.js";
 import type { Provider } from "./providerRouter.js";
 import { firstProviderResult, hasProblems } from "./providerRouter.js";
@@ -27,7 +28,17 @@ export async function syncPrices(input: {
     today,
   );
   const lastDate = cachedBars.at(-1)?.date ?? null;
-  const staleFrom = firstCurrencyMismatchDate(cachedBars, input.request.currency);
+  /* The start moves earlier when older trades arrive after the first price
+   * sync (a history read in pages). A first trade cannot precede the listing,
+   * so a cache starting well after it has a gap, not a later IPO. */
+  const firstDate = cachedBars[0]?.date;
+  const missingStart =
+    firstDate !== undefined &&
+    input.request.backfillFrom !== undefined &&
+    businessDaysAfter(input.request.backfillFrom, firstDate) > MAX_MISSED_BUSINESS_DAYS;
+  const staleFrom = missingStart
+    ? input.request.backfillFrom
+    : firstStaleDate(cachedBars, input.request.currency);
   const from = staleFrom ?? (lastDate ? nextDate(lastDate) : input.request.backfillFrom);
   /* Only a path that upserted needs to read the range again. Every other
    * return has written nothing since the read above, so re-reading costs a
@@ -35,12 +46,21 @@ export async function syncPrices(input: {
   const cached = () =>
     input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom, today);
   if (from && from > today) return { bars: cachedBars, problems: [], fetched: false };
-  const result = await firstProviderResult(
-    input.priceProviders,
-    { ...input.request, from, to: today },
-    undefined,
-    hasProblems,
-  );
+  const fetchFrom = (start: string | undefined) =>
+    firstProviderResult(
+      input.priceProviders,
+      { ...input.request, from: start, to: today },
+      undefined,
+      hasProblems,
+    );
+  let result = await fetchFrom(from);
+  /* Closes come split-adjusted, so a split inside a top-up leaves every
+   * cached close before it in the old share units. Re-read the whole range. */
+  const splitInTopUp =
+    from !== input.request.backfillFrom &&
+    cachedBars.some((bar) => from === undefined || bar.date < from) &&
+    result?.value.bars.some((bar) => (bar.split ?? 1) !== 1);
+  if (splitInTopUp) result = await fetchFrom(input.request.backfillFrom);
   if (!result)
     return { bars: cachedBars, problems: ["No price provider returned data"], fetched: true };
   if (result.value.problems.length || result.value.bars.length === 0)
@@ -61,9 +81,13 @@ function nextDate(date: string): string {
   return value.toISOString().slice(0, 10);
 }
 
-function firstCurrencyMismatchDate(
+/** A cached bar is stale when it names another currency or was stored before
+ *  splits were recorded; the sync re-reads from the first one. */
+function firstStaleDate(
   bars: Awaited<ReturnType<PriceStore["getRange"]>>,
   expectedCurrency: string,
 ): string | null {
-  return bars.find((bar) => bar.currency !== expectedCurrency)?.date ?? null;
+  return (
+    bars.find((bar) => bar.currency !== expectedCurrency || bar.split === undefined)?.date ?? null
+  );
 }

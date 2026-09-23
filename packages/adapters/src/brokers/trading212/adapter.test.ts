@@ -189,7 +189,7 @@ test("sync returns collected trades and problem when later page fails", async ()
 
   expect(result.sections.trades.rows).toHaveLength(1);
   expect(result.sections.trades.status).toBe("partial");
-  expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
+  expect(result.problems).toEqual(["Trading 212 order-history request failed with HTTP 503"]);
   expect(result.resume?.ordersNextPagePath).toContain("/next");
 });
 
@@ -233,20 +233,6 @@ test("holdings failure returns trades and holdings problem", async () => {
   expect(result.sections.positions.status).toBe("unavailable");
   expect(result.sections.trades.status).toBe("complete");
   expect(result.problems).toEqual(["Trading 212 holdings request failed with HTTP 503"]);
-});
-
-test("rejected credentials return empty arrays and Trading 212 problem", async () => {
-  const baseUrl = await serve((_request, response) =>
-    json(response, 401, { error: "unauthorized" }),
-  );
-
-  const result = await createTrading212Adapter({ token: "wrong", secret: "wrong", baseUrl }).sync({
-    entity: "BV",
-  });
-
-  expect(result.sections.positions.rows).toEqual([]);
-  expect(result.sections.trades.rows).toEqual([]);
-  expect(result.problems[0]).toContain("Trading 212");
 });
 
 test("retries rate-limited order-history request using Retry-After", async () => {
@@ -326,6 +312,75 @@ test("maps sell fills with negative quantities to positive quantity and side sel
       date: "2026-08-18",
       executionAt: "2026-08-18T10:15:00.000Z",
     },
+  ]);
+});
+
+test("a rejected API key fails the whole sync and says how to fix it", async () => {
+  const baseUrl = await serve((_request, response) =>
+    json(response, 401, { code: "Unauthorized" }),
+  );
+
+  await expect(
+    createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+      entity: "BV",
+      resume: { ordersComplete: true, transactionsNextPagePath: `${baseUrl}/next` },
+    }),
+  ).rejects.toThrow(
+    "Trading 212 rejected the API key (HTTP 401). Create a new key in Trading 212 and save it again.",
+  );
+});
+
+test("maps the fill wallet impact to the cash the trade moved in the account currency", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 4,
+              type: "TRADE",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 110,
+              quantity: 1,
+              walletImpact: { currency: "EUR", netValue: 100.15, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 4,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          {
+            fill: {
+              id: 5,
+              type: "TRADE",
+              filledAt: "2026-08-19T10:15:00Z",
+              price: 120,
+              quantity: -1,
+              walletImpact: { currency: "EUR", netValue: -108.9, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 5,
+              ticker: "AAPL",
+              side: "SELL",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+        ],
+      });
+    } else standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+
+  expect(result.sections.trades.rows).toMatchObject([
+    { side: "buy", settlement: { currency: "EUR", amount: -100.15 } },
+    { side: "sell", settlement: { currency: "EUR", amount: 108.9 } },
   ]);
 });
 

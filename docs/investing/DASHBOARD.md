@@ -80,7 +80,7 @@ Build the date axis from a shared Monday-to-Friday calendar plus all price-bar d
 For a held symbol with no close on a business day:
 
 - Reuse its last close for at most five consecutive business days.
-- Add the symbol to `forwardFilled` while a reused close remains within the cap.
+- Add the symbol to `forwardFilled` only while no later close exists yet (a session still settling). A gap followed by a later close was a closed market, and the reused close is the true value.
 - After five business days, exclude the symbol from `positionsValue` and add it to `unpriced`.
 - Never replace missing value with zero.
 

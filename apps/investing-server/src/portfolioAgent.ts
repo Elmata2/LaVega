@@ -8,6 +8,7 @@ import type {
 } from "@typesafe-ai/sdk";
 import {
   computePortfolioValueSeries,
+  inCurrentShareUnits,
   type CashBalance,
   type CashFlow,
   type Dividend,
@@ -97,9 +98,10 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
           .map((bar) => bar.date)
           .sort()
           .at(-1);
+        const units = inCurrentShareUnits(positions, trades, bars);
         const series = computePortfolioValueSeries(
-          positions,
-          trades,
+          units.positions,
+          units.trades,
           bars,
           "EUR",
           deps.fxRate ?? IDENTITY_FX,

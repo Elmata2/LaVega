@@ -220,6 +220,23 @@ test("forward-fills five business days then marks held symbol unpriced", () => {
   });
 });
 
+test("a day the market was closed carries the last close as a real value", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
+    { symbol: "AAPL", date: "2026-01-07", close: 101, currency: "USD" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-08",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-06")).toMatchObject({
+    forwardFilled: [],
+    unpriced: [],
+  });
+  expect(result.find(({ date }) => date === "2026-01-08")?.forwardFilled).toEqual(["AAPL"]);
+});
+
 test("with no FX rate at all, foreign holdings go unpriced but EUR cash still values", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL");
@@ -287,6 +304,107 @@ test("walks cash anchors with deduplicated flows and dividends", () => {
   expect(result.find(({ date }) => date === "2026-01-02")?.cashValue).toBe(100);
   expect(result.find(({ date }) => date === "2026-01-05")?.cashValue).toBe(150);
   expect(result.find(({ date }) => date === "2026-01-06")?.cashValue).toBe(150);
+});
+
+test("a trade moves cash between the deposit and the broker balance", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 10,
+      price: 100,
+      amount: 1000,
+      currency: "EUR",
+      commission: 1,
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-02", close: 100, currency: "EUR" },
+    { symbol: "AAPL", date: "2026-01-06", close: 100, currency: "EUR" },
+  ];
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 0, asOf: "2026-01-06" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 1001,
+      kind: "deposit",
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-06",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({
+    cashValue: 1001,
+    value: 1001,
+  });
+  expect(result.find(({ date }) => date === "2026-01-06")).toMatchObject({
+    cashValue: 0,
+    value: 1000,
+  });
+});
+
+test("a single-wallet broker settles foreign trades and flows into its wallet", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 1,
+      price: 110,
+      amount: 110,
+      currency: "USD",
+      commission: 0,
+      settlement: { currency: "EUR", amount: -100.15 },
+    },
+  ];
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "trading212", currency: "EUR", amount: 0, asOf: "2026-01-06" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 99.15,
+      kind: "deposit",
+    },
+    {
+      id: "interest",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-06",
+      currency: "USD",
+      amount: 1.05,
+      kind: "interest",
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-06",
+  });
+
+  const opening = result.find(({ date }) => date === "2026-01-02");
+  expect(opening?.cashUnknown).toEqual([]);
+  expect(opening?.cashValue).toBeCloseTo(99.15, 9);
 });
 
 test("keeps unreachable and unconvertible cash legs unknown", () => {

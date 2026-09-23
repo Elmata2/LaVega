@@ -892,6 +892,43 @@ test("sync status reports history completeness from durable state, not the invoc
   }
 });
 
+test("a rejected API key stays visible to the next invocation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-rejected-"));
+  try {
+    const credentialsFile = join(directory, "credentials.json");
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "revoked-key",
+      secret: "api-secret",
+    });
+    const baseUrl = await serve((_request, response) => {
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end(JSON.stringify({ code: "Unauthorized" }));
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
+
+    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const progress = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
+      status: string;
+      message: string | null;
+    };
+
+    expect(progress.status).toBe("problem");
+    expect(progress.message).toContain("Trading 212 rejected the API key (HTTP 401)");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("each tenant gets its own runtime, so no cache is shared between users", async () => {
   const priceStore = createInMemoryPriceStore();
   const getRange = vi.spyOn(priceStore, "getRange");

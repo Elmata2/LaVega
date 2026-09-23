@@ -71,7 +71,9 @@ test("a cache hit costs one store read, not two", async () => {
    * where a re-read of the range just read costs about as much as the symbol
    * it serves, which is what caps warm-cache sync throughput. */
   const store = createInMemoryPriceStore();
-  await store.upsert("local", [{ symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR" }]);
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR", split: 1 },
+  ]);
   const getRange = vi.fn(store.getRange);
   const priceProviders = [
     {
@@ -196,4 +198,65 @@ test("refetches from earliest cached currency mismatch so stale rows self-heal",
     expect.objectContaining({ from: "2026-01-01", to: "2026-01-03" }),
   );
   expect(result.bars.map((bar) => bar.currency)).toEqual(["GBX", "GBX", "GBX"]);
+});
+
+test("fills history before the first cached bar once older trades arrive", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-20", close: 100, currency: "EUR", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({ bars: [], problems: [] }));
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
+    request: { ...request, backfillFrom: "2026-01-01", today: "2026-01-20" },
+  });
+
+  expect(get).toHaveBeenCalledWith(expect.objectContaining({ from: "2026-01-01" }));
+});
+
+test("refetches bars stored before splits were recorded", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" },
+    { symbol: "ASML", date: "2026-01-02", close: 101, currency: "EUR", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({ bars: [], problems: [] }));
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
+    request,
+  });
+
+  expect(get).toHaveBeenCalledWith(expect.objectContaining({ from: "2026-01-01" }));
+});
+
+test("a new split refetches the older bars so every close is in today's units", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "ASML", date: "2026-01-01", close: 400, currency: "EUR", split: 1 },
+    { symbol: "ASML", date: "2026-01-02", close: 404, currency: "EUR", split: 1 },
+  ]);
+  const get = vi.fn(async ({ from }: { from?: string }) => ({
+    bars: [
+      { symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR", split: 1 },
+      { symbol: "ASML", date: "2026-01-02", close: 101, currency: "EUR", split: 1 },
+      { symbol: "ASML", date: "2026-01-03", close: 102, currency: "EUR", split: 4 },
+    ].filter((bar) => !from || bar.date >= from),
+    problems: [],
+  }));
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
+    request,
+  });
+
+  expect(get.mock.calls.map(([call]) => call.from)).toEqual(["2026-01-03", undefined]);
+  expect(result.bars.map((bar) => bar.close)).toEqual([100, 101, 102]);
 });

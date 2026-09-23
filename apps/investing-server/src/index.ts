@@ -690,7 +690,20 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     };
     return {
       brokerSync,
-      brokerSyncStatus: async () => ({ ...syncProgress, history: await readHistoryProgress() }),
+      brokerSyncStatus: async () => {
+        /* The counters above live in this invocation only. A problem the last
+         * run stored (a revoked key above all) must reach whichever invocation
+         * answers next, or the dashboard shows "idle" while nothing can sync. */
+        const stored =
+          syncProgress.status === "idle" ? await syncStateStore.progress("trading212") : null;
+        return {
+          ...syncProgress,
+          ...(stored?.status === "problem"
+            ? { status: "problem" as const, message: stored.message, updatedAt: stored.updatedAt }
+            : {}),
+          history: await readHistoryProgress(),
+        };
+      },
       configureBroker: createRuntimeBrokerCredentialSetup(
         credentials,
         async (broker) => {
