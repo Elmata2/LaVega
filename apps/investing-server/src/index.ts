@@ -575,7 +575,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ? buildDashboard()
         : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
     };
-    const healthCheck = async (includeLiveBroker = false): Promise<InvestingHealth> => {
+    const healthCheck = async (
+      includeLiveBroker = false,
+      transactionCursor?: string,
+    ): Promise<InvestingHealth> => {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",
         migrationLedger: database ? "ok" : "not-applicable",
@@ -704,6 +707,58 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                   errorStatus: !positionsResponse.ok
                     ? positionsResponse.status
                     : summaryResponse.status,
+                };
+              }
+              if (transactionCursor !== undefined && brokerCredentials) {
+                const url = new URL(
+                  "https://live.trading212.com/api/v0/equity/history/transactions",
+                );
+                url.searchParams.set("limit", "50");
+                if (transactionCursor !== "first" && /^\d+$/.test(transactionCursor))
+                  url.searchParams.set("cursor", transactionCursor);
+                const response = await fetch(url, {
+                  headers: {
+                    Authorization: `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`,
+                  },
+                  signal: AbortSignal.timeout(5000),
+                });
+                const page = response.ok
+                  ? ((await response.json()) as {
+                      items?: {
+                        type?: string;
+                        amount?: number;
+                        currency?: string;
+                        dateTime?: string;
+                      }[];
+                      nextPagePath?: string;
+                    })
+                  : null;
+                const items = page?.items ?? [];
+                const dates = items
+                  .map((item) => item.dateTime?.slice(0, 10))
+                  .filter((date): date is string => Boolean(date))
+                  .sort();
+                const byType = items.reduce<Record<string, { count: number; amount: number }>>(
+                  (groups, item) => {
+                    const key = `${item.type ?? "unknown"}:${item.currency ?? "unknown"}`;
+                    const previous = groups[key] ?? { count: 0, amount: 0 };
+                    groups[key] = {
+                      count: previous.count + 1,
+                      amount: previous.amount + (item.amount ?? 0),
+                    };
+                    return groups;
+                  },
+                  {},
+                );
+                const nextCursor = page?.nextPagePath
+                  ? new URL(page.nextPagePath, url).searchParams.get("cursor")
+                  : null;
+                trading212.transactionPage = {
+                  status: response.status,
+                  rows: items.length,
+                  byType,
+                  dateRange: [dates[0] ?? null, dates.at(-1) ?? null],
+                  nextCursor,
                 };
               }
             }
@@ -850,8 +905,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
-    healthCheck: async (includeLiveBroker?: boolean) =>
-      (await currentRuntime()).healthCheck(includeLiveBroker),
+    healthCheck: async (includeLiveBroker?: boolean, transactionCursor?: string) =>
+      (await currentRuntime()).healthCheck(includeLiveBroker, transactionCursor),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
