@@ -149,6 +149,13 @@ export type EncryptedBrokerRepository = {
   putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number): Promise<boolean>;
 };
 
+export class UnreadableBrokerCredentialsError extends Error {
+  constructor() {
+    super("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    this.name = "UnreadableBrokerCredentialsError";
+  }
+}
+
 export function createBrokerRepository(
   db: Database,
   userId: string | undefined | null,
@@ -166,10 +173,7 @@ export function createBrokerRepository(
         /* Credentials are the only copy there is. Reporting them as missing
          * would send the user to re-enter their broker tokens, and that write
          * would replace ciphertext a restored key could still have opened. */
-        if (!credentials.readable)
-          throw new Error(
-            "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
-          );
+        if (!credentials.readable) throw new UnreadableBrokerCredentialsError();
         return {
           credentials: credentials.value,
           credentialGeneration: Number(row.credential_generation ?? 1),
@@ -197,11 +201,13 @@ export function createBrokerRepository(
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const credentialsBlob = encryptBlob(credentials);
       const snapshotBlob = snapshot === undefined ? null : encryptBlob(snapshot);
-      await withTenantStatement(db, userId, async (client) => {
+      await withTenant(db, userId, async (client) => {
         await client.query(
-          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = EXCLUDED.snapshot_blob, credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
           [broker, credentialsBlob, snapshotBlob],
         );
+        // A new connection must never resume another account's history or lease.
+        await client.query("DELETE FROM investing.sync_state WHERE broker = $1", [broker]);
       });
     },
     async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
@@ -719,7 +725,7 @@ export function createBrokerSyncOperationRepository(
 
 export type PriceSyncStateRepository = {
   get(): Promise<unknown | null>;
-  put(progress: unknown, status: string, leaseId?: string): Promise<boolean>;
+  put(progress: unknown, status: string, leaseId: string): Promise<boolean>;
   claim(progress: unknown, status: string, staleBefore: string): Promise<unknown | null>;
 };
 
@@ -755,14 +761,8 @@ export function createPriceSyncStateRepository(
       });
     },
     async put(progress, status, leaseId) {
-      return withTenant(db, tenantId, async (client) => {
-        if (!leaseId) {
-          await client.query(
-            "INSERT INTO investing.sync_state (user_id, broker, status, state) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb) ON CONFLICT (user_id, broker) DO UPDATE SET status = EXCLUDED.status, state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP",
-            [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress)],
-          );
-          return true;
-        }
+      return withTenantStatement(db, tenantId, async (client) => {
+        if (!leaseId) throw new Error("Price progress write requires a lease");
         const result = await client.query<QueryResultRow>(
           "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->>'leaseId' = $4 RETURNING state",
           [
@@ -866,10 +866,10 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
         };
       });
     },
-    async put(record: AgentRunRow): Promise<void> {
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP",
+    async start(record: AgentRunRow): Promise<boolean> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query(
+          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP WHERE investing.agent_runs.started_at < EXCLUDED.started_at RETURNING run_id",
           [
             record.id,
             AGENT_STATUS_TO_COLUMN[record.status],
@@ -883,6 +883,26 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
             record.finishedAt,
           ],
         );
+        return result.rows.length > 0;
+      });
+    },
+    async finish(record: AgentRunRow): Promise<boolean> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query(
+          "UPDATE investing.agent_runs SET status = $2, run_result = $3::jsonb, finished_at = $4, updated_at = CURRENT_TIMESTAMP WHERE run_id = $1 AND status = 'running' RETURNING run_id",
+          [
+            record.id,
+            AGENT_STATUS_TO_COLUMN[record.status],
+            JSON.stringify({
+              agentId: record.agentId,
+              summary: record.summary,
+              error: record.error,
+              result: record.result,
+            }),
+            record.finishedAt,
+          ],
+        );
+        return result.rows.length > 0;
       });
     },
   };

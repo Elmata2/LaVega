@@ -101,6 +101,7 @@ export type InvestingHealth = {
   trading212: { lastSyncedAt: string | null; positions: number };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
+type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
 type PriceDependencies = {
   store: PriceStore;
   provider: ReturnType<typeof createYahooPriceProvider>;
@@ -121,6 +122,7 @@ type PriceDependencies = {
   priceSyncDeadline: () => number | undefined;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
   credentialStatus: () => Promise<BrokerVaultStatus>;
+  brokerReadability: () => Promise<BrokerReadability | undefined>;
   unlockCredentials: (passphrase: string) => Promise<boolean>;
   problemReporter: ProblemReporter;
   dashboardReader: InvestingDashboardReader;
@@ -291,9 +293,33 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const timing = createServerTiming();
     try {
       const symbol = c.req.query("symbol")?.trim() || undefined;
-      const data = await timing.measure("total", () => dashboardReader({ symbol, timing }));
+      const dashboard = await timing.measure("total", () => dashboardReader({ symbol, timing }));
       c.header("Server-Timing", timing.header());
-      return c.json(data);
+      if (!dependencies.brokerReadability) return c.json(dashboard);
+      try {
+        const readability = await dependencies.brokerReadability();
+        const unreadable = (["ibkr", "trading212"] as const).filter(
+          (broker) => readability?.[broker] === "unreadable",
+        );
+        return c.json({
+          ...dashboard,
+          problems: [
+            ...dashboard.problems,
+            ...unreadable.map(
+              (broker) =>
+                `${broker === "ibkr" ? "IBKR" : "Trading 212"} credentials cannot be read. Reconnect broker to restore data.`,
+            ),
+          ],
+        });
+      } catch {
+        return c.json({
+          ...dashboard,
+          problems: [
+            ...dashboard.problems,
+            "Broker connection status could not be checked. Showing available data.",
+          ],
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dashboard data could not be loaded";
       problemReporter({ source: "dashboard-read", problems: [message] });
@@ -426,6 +452,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({
         status: await dependencies.credentialStatus(),
         passphrase: passphraseMode(),
+        ...(dependencies.brokerReadability
+          ? { brokers: await dependencies.brokerReadability() }
+          : {}),
       });
     } catch {
       return c.json({ problems: ["Broker credential vault status could not be read"] }, 500);

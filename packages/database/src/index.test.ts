@@ -243,6 +243,11 @@ test("price sync writes require the lease that claimed the row", async () => {
   const { db, calls } = fakeDatabase();
   const repository = createPriceSyncStateRepository(db, "user-123");
 
+  await expect(repository.put({ status: "completed" }, "completed", "")).rejects.toThrow(
+    "requires a lease",
+  );
+  expect(executed(calls)).toHaveLength(0);
+
   await expect(
     repository.put({ status: "paused", leaseId: "mine", problems: [] }, "paused", "mine"),
   ).resolves.toBe(false);
@@ -261,7 +266,7 @@ test("agent run status is mapped onto the values the table allows", async () => 
   const { db, calls } = fakeDatabase();
   const repository = createAgentRunRepository(db, "user-123");
 
-  await repository.put({
+  await repository.start({
     id: "run-1",
     agentId: "bill_ackman",
     startedAt: "2026-01-02T00:00:00.000Z",
@@ -274,12 +279,28 @@ test("agent run status is mapped onto the values the table allows", async () => 
 
   const values = executed(calls).at(-1)?.values as unknown[];
   expect(values[1]).toBe("succeeded");
+  expect(executed(calls).at(-1)?.sql).toContain(
+    "investing.agent_runs.started_at < EXCLUDED.started_at",
+  );
   expect(JSON.parse(values[2] as string)).toEqual({
     agentId: "bill_ackman",
     summary: "fine",
     error: null,
     result: { signal: "neutral" },
   });
+});
+
+test("agent run terminal update checks current run ownership", async () => {
+  const { db, calls } = fakeDatabase();
+  await createAgentRunRepository(db, "user-123").finish({
+    id: "run-1",
+    startedAt: "2026-01-02T00:00:00.000Z",
+    finishedAt: "2026-01-02T00:01:00.000Z",
+    status: "done",
+    summary: null,
+    error: null,
+  });
+  expect(executed(calls).at(-1)?.sql).toContain("WHERE run_id = $1 AND status = 'running'");
 });
 
 test("agent runs are read back in the runtime's own vocabulary", async () => {

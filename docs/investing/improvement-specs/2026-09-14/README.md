@@ -85,7 +85,7 @@ FIN-08 requires FIN-01/FIN-02 and representative settlement fixtures before chan
 - `DASHBOARD.md` prohibits incomplete-history return estimates while implementation supports broker-average estimates: FIN-05 must document honest coverage and labels rather than silently remove useful estimates.
 - Market-data consent descriptions differ between older dashboard text and current workflow. Preserve current behavior; reconcile documentation from actual accepted decisions, without introducing a new consent flow under these specs.
 - Risk summary intentionally refreshes manually after sync, with a test enforcing it. UI-05 preserves that behavior. Automatic refresh is not an approved correctness fix.
-- Local agent-run encryption in R7 needs explicit storage-policy documentation: ADR-0002 directly governs broker snapshots; applying its protection approach to derived insights is a proposed extension, not an existing explicit agent-run mandate.
+- R7 extends ADR-0002 to local agent-run summaries and results because these can contain exact portfolio facts. Local runs now persist inside the encrypted credential vault.
 
 ## Verification evidence and limits
 

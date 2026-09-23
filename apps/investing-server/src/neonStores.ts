@@ -139,16 +139,13 @@ export function createNeonPriceSyncProgressStore(db: Database): PriceSyncProgres
   };
 }
 
-export function createNeonAgentRunStore(
-  db: Database,
-  resolveTenantId: () => string | Promise<string>,
-): AgentRunStore {
+export function createNeonAgentRunStore(db: Database, tenantId: string): AgentRunStore {
+  const repository = createAgentRunRepository(db, tenantId);
   return {
     async get(): Promise<AgentRunRecord | null> {
-      return createAgentRunRepository(db, await resolveTenantId()).get();
+      return repository.get();
     },
-    async put(record: AgentRunRecord): Promise<void> {
-      await createAgentRunRepository(db, await resolveTenantId()).put(record);
-    },
+    start: (record) => repository.start(record),
+    finish: (record) => repository.finish(record),
   };
 }

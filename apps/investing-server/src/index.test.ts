@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -770,6 +770,39 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test.each(["locked", "empty"] as const)(
+  "cold runtime removes sensitive legacy run while vault is %s",
+  async (vaultStatus) => {
+    const directory = await mkdtemp(join(tmpdir(), "lavega-legacy-run-"));
+    const credentialsFile = join(directory, "credentials.json");
+    const legacyFile = join(directory, "agent-run.json");
+    try {
+      if (vaultStatus === "locked")
+        await createFileCredentialStore(credentialsFile).setup("vault-passphrase");
+      await writeFile(
+        legacyFile,
+        JSON.stringify({
+          id: "legacy",
+          startedAt: "2026-08-19T12:00:00.000Z",
+          status: "done",
+          finishedAt: "2026-08-19T12:01:00.000Z",
+          result: { balance: 12345, positions: 42, reasoning: "private" },
+        }),
+      );
+      vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+      vi.stubEnv("LAVEGA_AGENT_RUN_FILE", legacyFile);
+      vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "");
+
+      await expect(
+        createRuntimeApp({ priceStore: createInMemoryPriceStore() }),
+      ).resolves.toBeDefined();
+      await expect(readFile(legacyFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 test("runtime forwards the request deadline through broker orchestration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-deadline-"));

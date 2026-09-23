@@ -4,6 +4,8 @@ Static review; findings below are code-confirmed failure paths, not claims of pr
 
 ## R7 — P2: Persist agent run transitions in order
 
+Status: implemented by Issue #120. Agent-run controller awaits a durable start before model work and conditionally finishes only its current run. Latest means latest-started. Neon binds tenant when constructing its adapter and guards start by `started_at` and finish by `run_id` plus running status. Shared injected stores are single-tenant only; multi-tenant injection uses a tenant factory. Local run records share the encrypted credential vault and its durable write queue; vault unlock is required before a run. No run history or background queue was added.
+
 Evidence: `index.ts:658-717` deduplicates identical prompt/persona/model only within process; `:673` discards promise from initial agentRunStore.put(record). Final put is awaited. Default hosted store is Neon (not memory), `neonStores.ts:119-132`, and database `index.ts:484-488` unconditionally upserts latest user row. Default local store is plain JSON `fileAgentRunStore.ts:41-63`.
 
 Failure: slow initial running write can finish after done write and replace completed row with running; rejected detached write is unhandled. Two distinct agent runs overlap and older run finishing last replaces newer run. Shared injected store has no tenant in interface, but production Neon resolves trusted AsyncLocalStorage context; do not claim observed production tenant leak from shared object alone.
@@ -42,6 +44,8 @@ Depth/locality/leverage: merge and commit invariants currently cross scheduler, 
 
 ## R3 — P1/P2: Price progress must honor durable lease and commit failures
 
+Implementation note: price progress writes require the claimed lease in both memory and Neon stores. Claim precedes discovery, including empty and failed discovery. Initial durable read and start, checkpoint, heartbeat, and final write failures reject the run. A periodic heartbeat renews the lease during provider work; elapsed time also forces a write before further symbols. The shared lease contract runs against memory and Neon repository with real SQL migrations in PGlite, including wrong-owner rejection and stale takeover. If ownership changes while a provider request is already running, that request can still finish and upsert idempotent price bars through the price adapter. Its old worker cannot publish progress or start another provider request after lease rejection.
+
 Evidence: `priceOrchestrator.ts:195-197` takeover 30s with checkpoints counted by symbols; `:221-224` suppresses every store.put exception and proceeds, including terminal writes at :392-407. A slow provider call (`:359`) can outlive lease without heartbeat. Error/no-target branches `:251-285` write without a lease, and database `index.ts:374-379` allows those unconditional writes. Shared in-memory adapter `priceOrchestrator.ts:48-50` ignores lease argument entirely.
 
 Failure: storage outage during final write returns completed while DB still running. Another request can take lease during long active fetch. A discovery-failure/no-target caller can overwrite progress held by another worker because those branches precede claim. Five-count checkpoint does not bound elapsed time.
@@ -53,6 +57,8 @@ Acceptance: two orchestrators share store and fake clock; slow target past lease
 Depth/locality/leverage: progress interface should expose safe transitions and ownership, not optional claim plus unguarded put. Deletion test: thin Neon translation adapter has necessary type translation; deleting it only moves mapping, so keep it.
 
 ## R4 — P2: Publish local storage state only after successful durable write
+
+Status: implemented by Issue #117. JSON state mutations use isolated copies and publish cache only after rename. Encrypted vault setup and mutations publish memory only after rename; setup and unlock join the write queue. Lock invalidates any pending in-memory publication. Filesystem fault tests cover rejected writes and renames, reopen behavior, retries, and queued updates.
 
 Evidence: `jsonFileStore.ts:78-82` assigns cache before writeValue; `fileCredentialStore.ts:114-124` and `:134-135` assign data before encryption/write/rename succeeds.
 
@@ -76,7 +82,11 @@ Acceptance: two runtimes over shared storage: A warms, B commits new instrument,
 
 Depth/locality/leverage: one read interface owns freshness for both real consumers; remove consumer-specific refresh placement. Deletion test: extracting map getters alone adds no depth; move freshness and version policy together.
 
+Implementation note: `apps/investing-server/src/brokerSnapshotReader.ts` owns tenant-local snapshot freshness and version checks. Dashboard reads allow a labeled cached fallback after storage failure; price target discovery requires a successful refresh and reports failure through price sync progress.
+
 ## R6 — P2: Reconnect must survive one unreadable broker row
+
+Status: implemented by Issue #119. Hosted reads distinguish unreadable ciphertext from database failures. Runtime snapshot loading keeps readable brokers available; status API and reconnect view identify unreadable brokers. Credential writes precede restore. Replacing credentials clears that broker's snapshot and durable sync cursor, with generation increment guarding in-flight writes. Runtime route tests cover one or both unreadable rows and storage failure; Postgres test covers reconnect reset.
 
 Evidence: `neonCredentialStore.ts:46-55` status catches any row decryption error and returns empty, but `getBrokerData` (:75-80) does not isolate per-broker errors. `index.ts:110` invokes restore callback before writing new credentials in createRuntimeBrokerCredentialSetup; callback calls getBrokerData. When one credential row is unreadable, saving fresh credentials calls setup (no-op) then restore, which throws before replacement. If IBKR is valid and Trading 212 unreadable, initial status returns unlocked then runtime construction reads all rows and fails.
 

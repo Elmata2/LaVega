@@ -50,6 +50,29 @@ test("state survives a restart, which is what stops every restart re-syncing", a
   });
 });
 
+test("reconnect reset removes only affected broker cursor and lease", async () => {
+  const filePath = await statePath();
+  const operations = createFileBrokerSyncStateStore(filePath);
+  await store(operations, { lastSyncedAt: "2026-08-19T12:00:00.000Z", retryAfter: null });
+  await operations.claim("ibkr", {
+    leaseId: "ibkr-run",
+    staleBefore: new Date(0).toISOString(),
+    progress,
+  });
+  await operations.commit("ibkr", {
+    leaseId: "ibkr-run",
+    credentialGeneration: 1,
+    state: { lastSyncedAt: "2026-08-18T09:00:00.000Z", retryAfter: null },
+    progress,
+    data: null,
+  });
+  await operations.reset("trading212");
+  const reopened = createFileBrokerSyncStateStore(filePath);
+  expect((await reopened.get("trading212")).lastSyncedAt).toBeNull();
+  expect((await reopened.get("ibkr")).lastSyncedAt).toBe("2026-08-18T09:00:00.000Z");
+  expect(await reopened.progress("trading212")).toBeNull();
+});
+
 test("brokers keep separate state and separate claims", async () => {
   const filePath = await statePath();
   const operations = createFileBrokerSyncStateStore(filePath);
@@ -207,8 +230,9 @@ test("every runtime state file lives outside the working directory", () => {
   for (const variable of variables) {
     const configured = process.env[variable];
     expect(configured, variable).toBeTruthy();
-    expect(configured!.startsWith(process.cwd()), `${variable} points into the working directory`).toBe(
-      false,
-    );
+    expect(
+      configured!.startsWith(process.cwd()),
+      `${variable} points into the working directory`,
+    ).toBe(false);
   }
 });

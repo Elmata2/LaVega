@@ -1,60 +1,62 @@
-import { createJsonFileStore, runtimeDataFile } from "./jsonFileStore.js";
+import type { createFileCredentialStore } from "./fileCredentialStore.js";
+import { readFile, unlink } from "node:fs/promises";
+import { runtimeDataFile } from "./jsonFileStore.js";
+import type { AgentRunRecord, AgentRunStore } from "./agentRunTypes.js";
 
-export type AgentRunStatus = "running" | "done" | "error";
+export type { AgentRunRecord, AgentRunStore, AgentRunStatus } from "./agentRunTypes.js";
 
-export type AgentRunRecord = {
-  id: string;
-  agentId?: string;
-  startedAt: string;
-  finishedAt: string | null;
-  status: AgentRunStatus;
-  summary: string | null;
-  error: string | null;
-  result?: unknown;
-};
-
-export function runtimeAgentRunFile(): string {
-  return runtimeDataFile("LAVEGA_AGENT_RUN_FILE", "agent-run.json");
-}
-
-function isRecord(value: unknown): value is AgentRunRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Partial<AgentRunRecord>;
-  const optionalString = (item: unknown) =>
-    item === undefined || item === null || typeof item === "string";
-  return (
-    typeof record.id === "string" &&
-    optionalString(record.agentId) &&
-    typeof record.startedAt === "string" &&
-    optionalString(record.finishedAt) &&
-    (record.status === "running" || record.status === "done" || record.status === "error") &&
-    optionalString(record.summary) &&
-    optionalString(record.error)
-  );
-}
-
-/** Only the latest agent run is kept: this is operational state, not history. */
-export function createFileAgentRunStore(filePath = runtimeAgentRunFile()) {
-  const store = createJsonFileStore<AgentRunRecord | null>(filePath, {
-    empty: null,
-    validate: (contents) => {
-      try {
-        const parsed: unknown = JSON.parse(contents);
-        return isRecord(parsed) ? parsed : null;
-      } catch {
-        return null;
-      }
-    },
-  });
-
+/** Single-tenant local adapter; record lives in the encrypted credential vault. */
+export function createFileAgentRunStore(
+  vault: Pick<
+    ReturnType<typeof createFileCredentialStore>,
+    "getAgentRun" | "startAgentRun" | "finishAgentRun"
+  >,
+): AgentRunStore {
   return {
-    async get() {
-      return await store.read();
-    },
-    async put(record: AgentRunRecord) {
-      await store.update(() => record);
-    },
+    get: () => vault.getAgentRun(),
+    start: (record) => vault.startAgentRun(record),
+    finish: (record) => vault.finishAgentRun(record),
   };
 }
 
-export type AgentRunStore = ReturnType<typeof createFileAgentRunStore>;
+/** Discard legacy operational state when no unlocked vault can encrypt it. */
+export async function discardPlaintextAgentRun(): Promise<void> {
+  const path = runtimeDataFile("LAVEGA_AGENT_RUN_FILE", "agent-run.json");
+  try {
+    await unlink(path);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  }
+}
+
+/** Move old plaintext operational state into the vault, then remove its file. */
+export async function migratePlaintextAgentRun(store: AgentRunStore): Promise<void> {
+  const path = runtimeDataFile("LAVEGA_AGENT_RUN_FILE", "agent-run.json");
+  let contents: string;
+  try {
+    contents = await readFile(path, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  }
+  let record: AgentRunRecord | null = null;
+  try {
+    const parsed: unknown = JSON.parse(contents);
+    if (parsed && typeof parsed === "object") {
+      const value = parsed as Partial<AgentRunRecord>;
+      if (
+        typeof value.id === "string" &&
+        typeof value.startedAt === "string" &&
+        (value.status === "running" || value.status === "done" || value.status === "error")
+      )
+        record = value as AgentRunRecord;
+    }
+  } catch {
+    /* malformed legacy state is removed */
+  }
+  if (record && (await store.start({ ...record, status: "running", finishedAt: null }))) {
+    if (record.status !== "running") await store.finish(record);
+  }
+  await discardPlaintextAgentRun();
+}

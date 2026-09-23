@@ -61,7 +61,7 @@ function readOperation(value: unknown): StoredOperation | null {
 export function createFileBrokerSyncStateStore(
   filePath = runtimeBrokerSyncStateFile(),
   data?: BrokerDataFile,
-): BrokerSyncOperationStore {
+): BrokerSyncOperationStore & { reset(broker: ScheduledBroker): Promise<void> } {
   // A corrupt state file must not block a sync; the worst case is one extra run.
   const store = createJsonFileStore<StoredOperations>(filePath, {
     empty: {},
@@ -82,6 +82,13 @@ export function createFileBrokerSyncStateStore(
     (await store.read())[broker]?.lease?.id === leaseId;
 
   return {
+    async reset(broker) {
+      await store.update((operations) => {
+        const next = { ...operations };
+        delete next[broker];
+        return next;
+      });
+    },
     async get(broker) {
       return (await store.read())[broker]?.state ?? EMPTY;
     },

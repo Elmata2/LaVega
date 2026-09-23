@@ -6,11 +6,13 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import {
   createBrokerRepository,
   createBrokerSyncOperationRepository,
+  createPriceSyncStateRepository,
   type Database,
   type SyncProgressRow,
   type SyncStateRow,
 } from "./index.js";
 import { databaseOver } from "./testing.js";
+import { priceSyncLeaseContract, type Progress } from "./priceSyncLease.contract.js";
 
 /* These tests run the real migrations against a real Postgres. The lease and
  * the credential generation are enforced by WHERE clauses and by RLS, and a
@@ -20,6 +22,19 @@ import { databaseOver } from "./testing.js";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let pglite: PGlite;
 let db: Database;
+
+priceSyncLeaseContract("Neon price progress SQL", () => ({
+  get: async (tenantId) =>
+    (await createPriceSyncStateRepository(db, tenantId).get()) as Progress | null,
+  claim: async (tenantId, progress, staleBefore) =>
+    (await createPriceSyncStateRepository(db, tenantId).claim(
+      progress,
+      progress.status,
+      staleBefore,
+    )) as Progress | null,
+  put: (tenantId, progress, leaseId) =>
+    createPriceSyncStateRepository(db, tenantId).put(progress, progress.status, leaseId),
+}));
 
 /** PGlite is one connection, so a transaction has to finish before the next begins. */
 function pgliteDatabase(instance: PGlite): Database {
@@ -192,6 +207,32 @@ test("a reconnect during a run stops that run from restoring the old account", a
     "reconnected-token",
   );
   expect((await vault.snapshots())?.trading212).toBeUndefined();
+});
+
+test("reconnect clears old snapshot and history cursor", async () => {
+  const vault = createBrokerRepository(db, "tenant-a");
+  await vault.put("trading212", { token: "old" });
+  const generation = (await vault.get("trading212"))!.credentialGeneration;
+  await vault.putSnapshot("trading212", { positions: ["old-account"] }, generation);
+  const sync = createBrokerSyncOperationRepository(db, "tenant-a");
+  await sync.claim("trading212", {
+    leaseId: "old-run",
+    staleBefore: iso(-60_000),
+    progress: progress("running", "old-run"),
+  });
+
+  await vault.put("trading212", { token: "new" });
+
+  expect((await vault.snapshots())?.trading212).toBeUndefined();
+  expect(await storedState("tenant-a")).toBeNull();
+  const next = await sync.claim("trading212", {
+    leaseId: "new-run",
+    staleBefore: iso(-60_000),
+    progress: progress("running", "new-run"),
+  });
+  expect(next.claimed).toBe(true);
+  expect(next.snapshot).toBeNull();
+  expect(next.state.lastSyncedAt ?? null).toBeNull();
 });
 
 test("a failed snapshot write leaves the cursor untouched", async () => {

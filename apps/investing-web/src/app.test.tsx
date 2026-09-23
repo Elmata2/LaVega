@@ -1407,6 +1407,77 @@ test("connect broker opens setup guide with IBKR instructions", async () => {
   root.unmount();
 });
 
+test("connect broker names an unreadable broker and offers reconnect", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/brokers/credentials/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "unlocked",
+              passphrase: "unused",
+              brokers: { ibkr: "readable", trading212: "unreadable" },
+            }),
+            { status: 200 },
+          ),
+        );
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/brokers/connect"]}>
+        <App />
+      </MemoryRouter>,
+    );
+  });
+  expect(container.textContent).toContain("Trading 212 credentials cannot be read");
+  expect(container.textContent).toContain("Save new credentials below to reconnect");
+  root.unmount();
+});
+
+test("overview keeps portfolio visible and links to reconnect for unreadable broker", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/investing/dashboard"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ...dashboard,
+              problems: [
+                "Trading 212 credentials cannot be read. Reconnect broker to restore data.",
+              ],
+            }),
+          ),
+        );
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+  });
+  expect(container.textContent).toContain("ASML");
+  expect(container.textContent).toContain("Trading 212 credentials cannot be read");
+  expect(
+    Array.from(container.querySelectorAll('a[href="/brokers/connect"]')).some(
+      (link) => link.textContent === "Reconnect broker",
+    ),
+  ).toBe(true);
+  root.unmount();
+});
+
 test("broker setup starts forced sync and shows returned problems", async () => {
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal(

@@ -9,6 +9,8 @@ import {
 } from "./app.js";
 import {
   createFileAgentRunStore,
+  discardPlaintextAgentRun,
+  migratePlaintextAgentRun,
   type AgentRunRecord,
   type AgentRunStore,
 } from "./fileAgentRunStore.js";
@@ -76,6 +78,8 @@ import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import { createDashboardSnapshotRepository, createFxRateRepository } from "@lavega/database";
 import { createStoredFxProvider } from "./storedFxProvider.js";
 import { untimed } from "./serverTiming.js";
+import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
+import { createAgentRunController } from "./agentRun.js";
 
 export { app };
 export { createDashboardCache } from "./dashboardCache.js";
@@ -105,7 +109,7 @@ type RuntimeCredentialStore = RuntimeCredentialStoreType;
 
 export function createRuntimeBrokerCredentialSetup(
   credentials: RuntimeCredentialStore,
-  onUnlocked?: () => void | Promise<void>,
+  onStored?: (broker: BrokerCredentialInput["broker"]) => void | Promise<void>,
   tenantId: string = LOCAL_TENANT_ID,
 ) {
   return async (input: BrokerCredentialInput): Promise<void> => {
@@ -113,7 +117,6 @@ export function createRuntimeBrokerCredentialSetup(
     if (status === "empty") await credentials.setup(input.passphrase ?? "");
     else if (!(await credentials.unlock(input.passphrase ?? "")))
       throw new Error("Vault passphrase is incorrect");
-    await onUnlocked?.();
     if (input.broker === "ibkr") {
       await credentials.putCredentials({
         broker: "ibkr",
@@ -129,6 +132,7 @@ export function createRuntimeBrokerCredentialSetup(
         secret: input.secret!,
       });
     }
+    await onStored?.(input.broker);
   };
 }
 
@@ -137,7 +141,7 @@ export function createRuntimeBrokerCredentialSetup(
  * did. */
 export function createRuntimeBrokerSync(
   onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>,
-  credentials = createFileCredentialStore(),
+  credentials: RuntimeCredentialStore = createFileCredentialStore(),
   operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
@@ -179,7 +183,9 @@ export type RuntimeAppOptions = {
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
+  /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
+  agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
   runAgent?: PortfolioAgentRunner;
   runConversation?: PortfolioConversationRunner;
   dashboardCache?: DashboardCache;
@@ -222,9 +228,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   /* The request path must not import node:async_hooks, so systemOneUsage is
    * handed its database source here rather than importing it. See its comment. */
   useDatabaseSource(runtimeDatabase);
-  const agentRunStore =
-    options.agentRunStore ??
-    (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
   /* Progress belongs next to the data on a hosted deployment, where the status
    * poll and the run that answers it are different instances. A local process
    * is both, so memory is the whole truth there. */
@@ -255,9 +258,25 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       history: null,
     };
     const credentials = createRuntimeCredentialStore(tenantId);
+    if (options.agentRunStore && tenantId !== LOCAL_TENANT_ID)
+      throw new Error(
+        "Shared agent run store is single-tenant only; supply agentRunStoreForTenant",
+      );
+    const agentRunStore =
+      options.agentRunStoreForTenant?.(tenantId) ??
+      options.agentRunStore ??
+      (database
+        ? createNeonAgentRunStore(database, tenantId)
+        : createFileAgentRunStore(credentials as ReturnType<typeof createFileCredentialStore>));
+    const agentRuns = createAgentRunController(agentRunStore);
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
+    if (!database && !options.agentRunStore && !options.agentRunStoreForTenant) {
+      if ((await credentials.status()) === "unlocked")
+        await migratePlaintextAgentRun(agentRunStore);
+      else await discardPlaintextAgentRun();
+    }
     const brokerData = createBrokerDataCache({});
     const dashboardSnapshots =
       database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
@@ -266,16 +285,20 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       await priceStore.upsert(tenantId, createDevFixturePriceBars());
       onPriceDataChanged();
     }
-    let brokerDataReadAt = Date.now();
-    let brokerDataRefresh: Promise<void> | null = null;
+    const brokerSnapshot = createBrokerSnapshotReader({
+      cache: brokerData,
+      load: async () => (await credentials.getBrokerData()) ?? {},
+      hosted: Boolean(database) && !devFixtureEnabled,
+      isSyncing: () => syncProgress.status === "running" || syncProgress.status === "waiting",
+      ttlMs: DASHBOARD_CACHE_TTL_MS,
+    });
     /* The runtime is built per request (docs/investing/STACK.md), and most
      * requests never read positions, so the vault's snapshots are read on first
      * use rather than here. */
     let brokerDataLoad: Promise<void> | null = devFixtureEnabled ? Promise.resolve() : null;
     const restoreBrokerData = async () => {
       const snapshot = await credentials.getBrokerData();
-      if (snapshot) brokerData.restore(snapshot);
-      brokerDataReadAt = Date.now();
+      if (snapshot) brokerSnapshot.restore(snapshot);
       brokerDataLoad = Promise.resolve();
     };
     const loadBrokerData = () =>
@@ -283,32 +306,6 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         brokerDataLoad = null;
         throw error;
       }));
-    const refreshBrokerData = async () => {
-      await loadBrokerData();
-      if (!database || devFixtureEnabled || Date.now() - brokerDataReadAt < DASHBOARD_CACHE_TTL_MS)
-        return;
-      if (syncProgress.status === "running" || syncProgress.status === "waiting") return;
-      if (brokerDataRefresh) return brokerDataRefresh;
-      const version = brokerData.read().dataVersion;
-      const refresh = (async () => {
-        const snapshot = await credentials.getBrokerData();
-        if (
-          snapshot &&
-          brokerData.read().dataVersion === version &&
-          syncProgress.status !== "running" &&
-          syncProgress.status !== "waiting"
-        ) {
-          brokerData.restore(snapshot);
-          brokerDataReadAt = Date.now();
-        }
-      })();
-      brokerDataRefresh = refresh;
-      try {
-        await refresh;
-      } finally {
-        if (brokerDataRefresh === refresh) brokerDataRefresh = null;
-      }
-    };
     const updateProgress = (event: Trading212DiagnosticEvent) => {
       const updatedAt = new Date().toISOString();
       if (event.type === "history-page") {
@@ -402,7 +399,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         if (Object.keys(result.committed).length === 0) return;
         await loadBrokerData().catch(() => undefined);
         brokerData.restore({ ...brokerData.snapshot(), ...result.committed });
-        brokerDataReadAt = Date.now();
+        brokerSnapshot.markCurrent();
       },
       credentials,
       syncStateStore,
@@ -469,7 +466,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
       const refreshProblems: string[] = [];
       try {
-        await timing.measure("broker", refreshBrokerData);
+        await timing.measure("broker", async () => {
+          await loadBrokerData();
+          await brokerSnapshot.read("cached");
+        });
       } catch (error) {
         const snapshot = brokerData.read();
         if (
@@ -652,53 +652,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           : "degraded";
       return { status, storage: database ? "neon" : "file", checks, trading212 };
     };
-    const agentInFlight = new Map<string, Promise<AgentRunRecord>>();
     const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> => {
-      const runKey = model?.trim() ?? "";
-      const inFlight = agentInFlight.get(runKey);
-      if (inFlight) return inFlight;
-      const record: AgentRunRecord = {
-        id: crypto.randomUUID(),
-        agentId: "portfolio-judgments",
-        startedAt: new Date().toISOString(),
-        finishedAt: null,
-        status: "running",
-        summary: null,
-        error: null,
-      };
-      void agentRunStore.put(record);
-      const run = (async () => {
-        try {
-          const dashboard = await dashboardReader({});
-          const result = options.runAgent
-            ? await options.runAgent({ dashboard, model })
-            : await runPortfolioAgent({ dashboard, model });
-          const done: AgentRunRecord = {
-            ...record,
-            finishedAt: new Date().toISOString(),
-            status: "done",
-            summary: null,
-            result,
-          };
-          await agentRunStore.put(done);
-          return done;
-        } catch (error) {
-          const failed: AgentRunRecord = {
-            ...record,
-            finishedAt: new Date().toISOString(),
-            status: "error",
-            error: error instanceof Error ? error.message : "Portfolio agent run failed",
-          };
-          await agentRunStore.put(failed);
-          throw error;
-        }
-      })();
-      agentInFlight.set(runKey, run);
-      try {
-        return await run;
-      } finally {
-        if (agentInFlight.get(runKey) === run) agentInFlight.delete(runKey);
-      }
+      return agentRuns.run(model, async () => {
+        await restoreBrokerData();
+        const dashboard = await dashboardReader({});
+        return options.runAgent
+          ? await options.runAgent({ dashboard, model })
+          : await runPortfolioAgent({ dashboard, model });
+      });
     };
     const answerPortfolioConversation = async (
       agentId: import("./portfolioAgent.js").PortfolioAgentId,
@@ -730,18 +691,35 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return {
       brokerSync,
       brokerSyncStatus: async () => ({ ...syncProgress, history: await readHistoryProgress() }),
-      configureBroker: createRuntimeBrokerCredentialSetup(credentials, restoreBrokerData, tenantId),
+      configureBroker: createRuntimeBrokerCredentialSetup(
+        credentials,
+        async (broker) => {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
+          if (!database)
+            await (syncStateStore as ReturnType<typeof createFileBrokerSyncStateStore>).reset(
+              broker,
+            );
+          await restoreBrokerData();
+        },
+        tenantId,
+      ),
       credentialStatus: () => credentials.status(),
+      brokerReadability: () => credentials.brokerReadability?.(),
       unlockCredentials: async (passphrase: string) => {
         const unlocked = await credentials.unlock(passphrase);
-        if (unlocked) await restoreBrokerData();
+        if (unlocked) {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
+          await restoreBrokerData();
+        }
         return unlocked;
       },
       dashboardReader,
       healthCheck,
       priceSyncTargets: async () => {
         await loadBrokerData();
-        const { positions, trades } = brokerData.read();
+        const { positions, trades } = await brokerSnapshot.read("fresh");
         const benchmarkSymbols = options.benchmarkSymbols
           ? await options.benchmarkSymbols(tenantId)
           : (await benchmarkSelectionStore.get(tenantId)).symbols;
@@ -773,6 +751,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     configureBroker: async (input: BrokerCredentialInput) =>
       (await currentRuntime()).configureBroker(input),
     credentialStatus: async () => (await currentRuntime()).credentialStatus(),
+    brokerReadability: async () => (await currentRuntime()).brokerReadability(),
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
