@@ -11,6 +11,8 @@ export type PortfolioValuePoint = {
   cashValue: number | null;
   value: number | null;
   unpriced: string[];
+  /** Valued at a close from before this date with no later close yet: the
+   *  session has not settled, so the value can still move. */
   forwardFilled: string[];
   cashUnknown: string[];
   /** Holdings inferred from a later snapshot without dated ownership evidence. */
@@ -289,7 +291,10 @@ export function computePortfolioValueSeries(
           fxRates,
         );
         priced += 1;
-        if (!exact) forwardFilled.add(symbol);
+        // A later bar means the market traded again after this date, so the
+        // gap was a closed session and the last close is the true value.
+        const tradedLater = prices !== undefined && prices.index < prices.bars.length;
+        if (!exact && !tradedLater) forwardFilled.add(symbol);
       } catch {
         unpriced.add(symbol);
       }

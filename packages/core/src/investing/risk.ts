@@ -14,28 +14,31 @@ export function buildHistoricalRisk(
   const benchmark = benchmarkSymbol
     ? data.benchmarks.find((item) => item.symbol === benchmarkSymbol)
     : data.benchmarks[0];
-  const missingPrices = [...new Set(points.flatMap((point) => point.unpriced))].sort();
-  const missingCash = [...new Set(points.flatMap((point) => point.cashUnknown))].sort();
-  const missingHoldings = [
-    ...new Set(points.flatMap((point) => point.holdingsUnknown ?? [])),
-  ].sort();
-  const estimatedPrices = points.some((point) => point.forwardFilled.length > 0);
-  const usable = (point: (typeof points)[number]) =>
+  const known = (point: (typeof points)[number]) =>
     point.unpriced.length === 0 &&
     point.cashUnknown.length === 0 &&
-    (point.holdingsUnknown?.length ?? 0) === 0 &&
-    point.forwardFilled.length === 0;
+    (point.holdingsUnknown?.length ?? 0) === 0;
+  const usable = (point: (typeof points)[number]) => known(point) && point.forwardFilled.length === 0;
+  let end = points.length;
+  while (end > 0 && known(points[end - 1]!) && !usable(points[end - 1]!)) end -= 1;
+  let start = end;
+  while (start > 0 && usable(points[start - 1]!)) start -= 1;
+  const window = points.slice(start, end);
+  const earlier = points.slice(0, start);
+  const missingPrices = [...new Set(earlier.flatMap((point) => point.unpriced))].sort();
+  const missingCash = [...new Set(earlier.flatMap((point) => point.cashUnknown))].sort();
+  const missingHoldings = [
+    ...new Set(earlier.flatMap((point) => point.holdingsUnknown ?? [])),
+  ].sort();
+  const estimatedPrices = earlier.some((point) => point.forwardFilled.length > 0);
   const comparable = benchmark?.currency === data.presentationCurrency;
   const computed = computePortfolioMetrics({
-    valuePoints: points.map((point) => ({
-      date: point.date,
-      value: usable(point) ? point.value : null,
-    })),
+    valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
     externalCashFlows: data.externalCashFlows,
     benchmarkPoints: comparable ? benchmark?.points : undefined,
     minObservations: RISK_MINIMUM_OBSERVATIONS,
   });
-  const complete = points.every(usable) && computed.excludedIntervals === 0;
+  const complete = window.length > 0 && computed.excludedIntervals === 0;
   const available = complete && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
   const metrics = available
     ? computed
@@ -53,8 +56,13 @@ export function buildHistoricalRisk(
   if (missingHoldings.length)
     reasons.push(`Ownership history incomplete for ${missingHoldings.length} holdings.`);
   if (estimatedPrices) reasons.push("Some dates use carried-forward prices.");
-  if (!complete)
-    reasons.push("A complete return history is required; partial values are excluded.");
+  if (window.length === 0) reasons.push("No recent date has complete data.");
+  else if (start > 0)
+    reasons.push(
+      `Measured from ${window[0]!.date}; earlier dates in this range lack complete data.`,
+    );
+  if (window.length > 0 && computed.excludedIntervals > 0)
+    reasons.push("Some return intervals could not be measured and are excluded.");
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
   if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
@@ -71,8 +79,8 @@ export function buildHistoricalRisk(
     risk: {
       status: available ? ("estimate" as const) : ("unavailable" as const),
       range,
-      from: points[0]?.date ?? null,
-      to: points.at(-1)?.date ?? null,
+      from: window[0]?.date ?? null,
+      to: window.at(-1)?.date ?? null,
       minimumObservations: RISK_MINIMUM_OBSERVATIONS,
       benchmark: benchmark
         ? { symbol: benchmark.symbol, name: benchmark.name, currency: benchmark.currency }

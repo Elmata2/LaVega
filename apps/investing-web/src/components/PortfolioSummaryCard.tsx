@@ -270,8 +270,9 @@ export function PortfolioSummaryCard({
             <p>
               Currency conversion uses fixed latest exchange rates. Historical currency gains and
               losses are excluded. Complete dates and at least 60 valid daily returns are required.
-              Missing or carried-forward prices, unknown cash and unsupported ownership history
-              prevent calculation.
+              Risk uses the most recent stretch of complete dates in the range. A date with a
+              missing price, unknown cash or unknown ownership ends that stretch. A day the market
+              was closed keeps its last close. Today is left out until its closes are in.
             </p>
           </div>
         </details>

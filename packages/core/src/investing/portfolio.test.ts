@@ -220,6 +220,23 @@ test("forward-fills five business days then marks held symbol unpriced", () => {
   });
 });
 
+test("a day the market was closed carries the last close as a real value", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
+    { symbol: "AAPL", date: "2026-01-07", close: 101, currency: "USD" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-08",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-06")).toMatchObject({
+    forwardFilled: [],
+    unpriced: [],
+  });
+  expect(result.find(({ date }) => date === "2026-01-08")?.forwardFilled).toEqual(["AAPL"]);
+});
+
 test("with no FX rate at all, foreign holdings go unpriced but EUR cash still values", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL");

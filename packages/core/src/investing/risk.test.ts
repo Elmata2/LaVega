@@ -131,11 +131,39 @@ test.each(incompleteQualityCases)(
       alpha: null,
       maxDrawdown: null,
     });
+    expect(report.risk.from).toBe(points[31]!.date);
     expect(report.risk.reasons).toContain(
-      "A complete return history is required; partial values are excluded.",
+      `Measured from ${points[31]!.date}; earlier dates in this range lack complete data.`,
     );
   },
 );
+
+test("measures the complete window after an incomplete stretch", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, (_, index) => (index % 2 ? 0.002 : 0)),
+  );
+  points[10] = { ...points[10]!, unpriced: ["MASI"] };
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.from).toBe(points[11]!.date);
+  expect(report.metrics.observationDays).toBe(points.length - 12);
+  expect(report.risk.missingPrices).toEqual(["MASI"]);
+});
+
+test("leaves out a last day whose closes are still settling", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
+  );
+  points[points.length - 1] = { ...points.at(-1)!, forwardFilled: ["AAPL"] };
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(points.at(-2)!.date);
+  expect(report.risk.reasons).toEqual([
+    "Add a benchmark with Compare above to calculate beta and alpha.",
+  ]);
+});
 
 test("keeps beta and alpha null when no benchmark is selected", () => {
   const points = pointsFromReturns(
