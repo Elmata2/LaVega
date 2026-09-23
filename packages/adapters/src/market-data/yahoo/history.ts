@@ -1,7 +1,7 @@
 import { YahooHttpClient } from "./http.js";
 import { getYahooSymbolsToTry } from "./symbols.js";
 import { resolveYahooSymbolByIsin } from "./search.js";
-import { mapYahooChart } from "./mappers.js";
+import { mapYahooChart, mapYahooSplits } from "./mappers.js";
 import type { YahooChartResponse, YahooPricePoint } from "./types.js";
 
 export type YahooRange = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "5y" | "max";
@@ -10,6 +10,7 @@ export type YahooPriceHistory = {
   symbol: string;
   currency: string | null;
   points: YahooPricePoint[];
+  splits: Array<{ date: string; ratio?: number }>;
 };
 export type YahooPriceHistoryInput = {
   ticker: string;
@@ -44,6 +45,7 @@ export async function loadYahooPriceHistory(
         symbol,
         currency: result.meta?.currency ?? null,
         points: mapYahooChart(result),
+        splits: mapYahooSplits(result.events),
       };
       // A listing can exist and carry no closes at all, the way BY6.DE shadows
       // the BYD line that trades. Keep looking before settling for nothing.

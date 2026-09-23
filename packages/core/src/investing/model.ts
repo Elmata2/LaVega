@@ -23,12 +23,17 @@ export type Position = {
   asOf: string;
 };
 
-/** Daily closing price used by investing-side portfolio calculations. */
+/** Daily closing price used by investing-side portfolio calculations. Closes
+ *  are split-adjusted: every bar is in today's share units. */
 export type PriceBar = {
   symbol: string;
   date: string;
   close: number;
   currency: string;
+  /** Shares after per share before for a split taking effect at this
+   *  session's open; 1 when none. Absent on bars stored before splits were
+   *  recorded, which makes them stale. */
+  split?: number;
 };
 
 /** Broker-reported cash anchor. Amount uses the recorded currency. */

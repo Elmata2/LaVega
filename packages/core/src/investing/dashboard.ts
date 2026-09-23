@@ -7,6 +7,7 @@ import {
   type PortfolioValuePoint,
 } from "./portfolio.js";
 import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
+import { inCurrentShareUnits } from "./splits.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
@@ -130,7 +131,11 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
 }
 
 /** Shape local domain records once, before they cross the server boundary. */
-export function buildInvestingDashboard(input: InvestingDashboardInput): InvestingDashboardData {
+export function buildInvestingDashboard(reported: InvestingDashboardInput): InvestingDashboardData {
+  const input = {
+    ...reported,
+    ...inCurrentShareUnits(reported.positions, reported.trades, reported.priceBars),
+  };
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const portfolioValues = computePortfolioValueSeries(
     [...input.positions],

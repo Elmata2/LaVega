@@ -348,7 +348,21 @@ export type PriceBarRow = {
   date: string;
   close: number;
   currency: string;
+  split?: number;
 };
+
+const PRICE_BAR_COLUMNS = "symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency, split";
+
+// NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
+function priceBarRow(row: QueryResultRow): PriceBarRow {
+  return {
+    symbol: row.symbol as string,
+    date: row.date as string,
+    close: Number(row.close),
+    currency: row.currency as string,
+    ...(row.split == null ? {} : { split: Number(row.split) }),
+  };
+}
 
 /**
  * Daily bars for one user. `provider` records where a bar came from; the bar
@@ -365,15 +379,10 @@ export function createPriceBarRepository(
       if (symbols.length === 0) return [];
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
+          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol`,
           [[...new Set(symbols)]],
         );
-        return result.rows.map((row) => ({
-          symbol: row.symbol as string,
-          date: row.date as string,
-          close: Number(row.close),
-          currency: row.currency as string,
-        }));
+        return result.rows.map(priceBarRow);
       });
     },
     async getRange(symbol, from, to) {
@@ -386,16 +395,10 @@ export function createPriceBarRepository(
       if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
+          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
           values,
         );
-        // NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-        return result.rows.map((row) => ({
-          symbol: row.symbol as string,
-          date: row.date as string,
-          close: Number(row.close),
-          currency: row.currency as string,
-        }));
+        return result.rows.map(priceBarRow);
       });
     },
     async lastDate(symbol) {
@@ -411,7 +414,7 @@ export function createPriceBarRepository(
       if (bars.length === 0) return;
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider, split) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[], $6::numeric[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP",
           [
             bars.map((bar) => bar.symbol),
             bars.map((bar) => bar.date),
@@ -421,6 +424,7 @@ export function createPriceBarRepository(
              * canonicalise on the way in instead. */
             bars.map((bar) => bar.currency),
             bars.map(() => provider),
+            bars.map((bar) => bar.split ?? null),
           ],
         );
       });

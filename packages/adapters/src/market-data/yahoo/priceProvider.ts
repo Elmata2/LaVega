@@ -35,14 +35,17 @@ export function createYahooPriceProvider(
         // Label a bar with the currency the quote is actually in. The broker's
         // instrument currency can name a different listing of the same stock.
         const currency = normalizeCurrencyCode(history.currency ?? request.currency);
-        return {
-          bars: history.points.flatMap((point) =>
-            point.close == null
-              ? []
-              : [{ symbol: request.symbol, date: point.date, close: point.close, currency }],
-          ),
-          problems: [],
-        };
+        const bars: PriceBar[] = history.points.flatMap((point) =>
+          point.close == null
+            ? []
+            : [{ symbol: request.symbol, date: point.date, close: point.close, currency, split: 1 }],
+        );
+        for (const split of history.splits) {
+          const session = bars.find((bar) => bar.date >= split.date);
+          if (session && split.ratio !== undefined && split.ratio > 0)
+            session.split = (session.split ?? 1) * split.ratio;
+        }
+        return { bars, problems: [] };
       } catch (error) {
         return { bars: [], problems: [readableYahooProblem(error)] };
       }

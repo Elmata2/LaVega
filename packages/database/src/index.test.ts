@@ -96,7 +96,7 @@ test("bulk price reads use one tenant transaction and deduplicate symbols", asyn
   ]);
   expect(executed(calls)).toEqual([
     {
-      sql: "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
+      sql: "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency, split FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
       values: [["AAPL", "MSFT"]],
     },
   ]);

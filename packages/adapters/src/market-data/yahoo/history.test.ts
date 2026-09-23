@@ -1,8 +1,13 @@
 import { expect, test } from "vitest";
 import { YahooHttpClient } from "./http.js";
 import { loadYahooPriceHistory } from "./history.js";
+import { createYahooPriceProvider } from "./priceProvider.js";
 
-type Chart = { currency?: string; closes?: number[] };
+type Chart = {
+  currency?: string;
+  closes?: number[];
+  splits?: Array<{ day: number; numerator: number; denominator: number }>;
+};
 
 function stubClient(
   charts: Record<string, Chart>,
@@ -35,6 +40,18 @@ function stubClient(
             meta: { currency: chart.currency },
             timestamp: (chart.closes ?? []).map((_, index) => index * 86400),
             indicators: { quote: [{ close: chart.closes ?? [] }] },
+            events: {
+              splits: Object.fromEntries(
+                (chart.splits ?? []).map((split) => [
+                  String(split.day),
+                  {
+                    date: split.day * 86400,
+                    numerator: split.numerator,
+                    denominator: split.denominator,
+                  },
+                ]),
+              ),
+            },
           },
         ],
       },
@@ -87,4 +104,29 @@ test("returns an empty series rather than failing when no listing has closes", a
   const history = await loadYahooPriceHistory({ ticker: "SOF_BE_EQ", exchange: "UNKNOWN", client });
 
   expect(history).toMatchObject({ symbol: "SOF.BR", points: [] });
+});
+
+test("records each split on the bar of the session it takes effect", async () => {
+  const { client } = stubClient({
+    IBKR: {
+      currency: "USD",
+      closes: [50, 51, 52],
+      splits: [{ day: 1, numerator: 4, denominator: 1 }],
+    },
+  });
+  const provider = createYahooPriceProvider({ client, today: () => "1970-01-03" });
+
+  const result = await provider.get({
+    ticker: "IBKR_US_EQ",
+    exchange: "UNKNOWN",
+    symbol: "IBKR_US_EQ",
+    currency: "USD",
+    from: "1970-01-01",
+  });
+
+  expect(result?.bars.map(({ date, split }) => ({ date, split }))).toEqual([
+    { date: "1970-01-01", split: 1 },
+    { date: "1970-01-02", split: 4 },
+    { date: "1970-01-03", split: 1 },
+  ]);
 });
