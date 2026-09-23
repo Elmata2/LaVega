@@ -574,7 +574,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ? buildDashboard()
         : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
     };
-    const healthCheck = async (): Promise<InvestingHealth> => {
+    const healthCheck = async (includeLiveBroker = false): Promise<InvestingHealth> => {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",
         migrationLedger: database ? "ok" : "not-applicable",
@@ -618,9 +618,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       try {
         const vaultStatus = await credentials.status();
         checks.vault = vaultStatus === "unlocked" ? "ok" : vaultStatus;
-        const configured =
-          vaultStatus === "unlocked" &&
-          (await credentials.getCredentials(tenantId, "trading212")) !== null;
+        const brokerCredentials =
+          vaultStatus === "unlocked"
+            ? await credentials.getCredentials(tenantId, "trading212")
+            : null;
+        const configured = brokerCredentials !== null;
         checks.trading212Credentials = configured ? "configured" : "missing";
         if (configured) {
           await restoreBrokerData();
@@ -661,6 +663,49 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
               flowsAfterDate: group(snapshot.cashFlows ?? []),
               dividendsAfterDate: group(snapshot.dividends),
             };
+            if (includeLiveBroker && brokerCredentials) {
+              const authorization = `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`;
+              const headers = { Authorization: authorization };
+              const [positionsResponse, summaryResponse] = await Promise.all([
+                fetch("https://live.trading212.com/api/v0/equity/positions", {
+                  headers,
+                  signal: AbortSignal.timeout(5000),
+                }),
+                fetch("https://live.trading212.com/api/v0/equity/account/summary", {
+                  headers,
+                  signal: AbortSignal.timeout(5000),
+                }),
+              ]);
+              if (positionsResponse.ok && summaryResponse.ok) {
+                const positions = (await positionsResponse.json()) as {
+                  instrument?: { ticker?: string };
+                }[];
+                const summary = (await summaryResponse.json()) as {
+                  currency: string;
+                  cash: { availableToTrade: number; inPies?: number; reservedForOrders?: number };
+                };
+                const storedSymbols = new Set(
+                  snapshot.positions.map((position) => position.symbol),
+                );
+                trading212.liveEvidence = {
+                  positions: positions.length,
+                  matchingSymbols: positions.filter((position) =>
+                    storedSymbols.has(position.instrument?.ticker ?? ""),
+                  ).length,
+                  cash:
+                    summary.cash.availableToTrade +
+                    (summary.cash.inPies ?? 0) +
+                    (summary.cash.reservedForOrders ?? 0),
+                  currency: summary.currency,
+                };
+              } else {
+                trading212.liveEvidence = {
+                  errorStatus: !positionsResponse.ok
+                    ? positionsResponse.status
+                    : summaryResponse.status,
+                };
+              }
+            }
           }
           checks.snapshot = snapshot ? "loaded" : "empty";
           const state = await syncStateStore.get("trading212");
@@ -804,7 +849,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
-    healthCheck: async () => (await currentRuntime()).healthCheck(),
+ healthCheck: async (includeLiveBroker?: boolean) =>
+      (await currentRuntime()).healthCheck(includeLiveBroker),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),

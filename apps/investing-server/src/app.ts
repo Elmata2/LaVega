@@ -110,6 +110,14 @@ export type InvestingHealth = {
       flowsAfterDate: Record<string, { count: number; amount: number }>;
       dividendsAfterDate: Record<string, { count: number; amount: number }>;
     };
+    liveEvidence?:
+      | {
+          positions: number;
+          matchingSymbols: number;
+          cash: number;
+          currency: string;
+        }
+      | { errorStatus: number };
   };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
@@ -144,7 +152,7 @@ type PriceDependencies = {
   sectorStore: SectorProfileStore;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
-  healthCheck: () => Promise<InvestingHealth>;
+  healthCheck: (includeLiveBroker?: boolean) => Promise<InvestingHealth>;
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
@@ -242,7 +250,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (!dependencies.healthCheck)
       return c.json({ problems: ["Detailed health is not available"] }, 503);
     try {
-      const report = await dependencies.healthCheck();
+      const report = await dependencies.healthCheck(c.req.query("live") === "1");
       return c.json(report, report.status === "ok" ? 200 : 503);
     } catch {
       return c.json({ problems: ["Detailed health check failed"] }, 503);
