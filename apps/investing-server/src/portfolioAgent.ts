@@ -11,6 +11,7 @@ import {
   inCurrentShareUnits,
   type CashBalance,
   type CashFlow,
+  type CashHistoryCoverage,
   type Dividend,
   type InvestingDashboardData,
   type Position,
@@ -34,6 +35,7 @@ export type PortfolioAgentBrokerData = {
   dividends: Dividend[];
   cashBalances: CashBalance[];
   cashFlows: CashFlow[];
+  cashCoverage?: CashHistoryCoverage[];
 };
 
 export type PortfolioAgentDeps = {
@@ -86,7 +88,8 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
         additionalProperties: false,
       }),
       execute: async () => {
-        const { positions, trades, dividends, cashBalances, cashFlows } = deps.readBrokerData();
+        const { positions, trades, dividends, cashBalances, cashFlows, cashCoverage } =
+          deps.readBrokerData();
         const symbols = [
           ...new Set([
             ...positions.map((position) => position.symbol),
@@ -105,7 +108,7 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
           bars,
           "EUR",
           deps.fxRate ?? IDENTITY_FX,
-          { cashBalances, cashFlows, dividends, today },
+          { cashBalances, cashFlows, cashCoverage, dividends, today },
         );
         return series.at(-1) ?? null;
       },

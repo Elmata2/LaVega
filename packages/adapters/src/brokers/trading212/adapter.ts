@@ -76,6 +76,12 @@ const HOST_DEADLINE_MESSAGE =
   "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
 const RATE_LIMIT_MESSAGE =
   "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
+/** No sanitized live payload yet shows whether the transactions stream also
+ *  books execution cash that fills report as walletImpact, or how far back
+ *  either stream is retained. Walking cash through both could count a trade
+ *  twice, so historical cash stays unknown until that evidence exists. */
+const CASH_HISTORY_UNPROVEN =
+  "Trading 212 cash history is unproven: trade settlement and transaction retention are unverified";
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
@@ -979,6 +985,12 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       );
       return {
         ...synced,
+        cashHistory: {
+          entity,
+          broker: "trading212",
+          status: "unknown",
+          reason: CASH_HISTORY_UNPROVEN,
+        },
         ...(historyPending(inputResume ?? config.resume)
           ? { historyMode: "incremental" as const }
           : {}),

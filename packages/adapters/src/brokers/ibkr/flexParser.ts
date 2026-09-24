@@ -4,6 +4,7 @@ import {
   type CashBalance,
   type CashFlow,
   type CashFlowKind,
+  type CashHistoryCoverage,
   type Dividend,
   type Position,
   type TradeSide,
@@ -15,6 +16,7 @@ import type { BrokerSection, BrokerSections } from "../BrokerAccessAdapter.js";
 type Attributes = Record<string, string>;
 export type FlexStatementResult = {
   sections: BrokerSections;
+  cashHistory?: CashHistoryCoverage;
   problems: string[];
 };
 
@@ -97,7 +99,7 @@ function parseCashBalances(
   for (const attrs of rows(xml, "CashReportCurrency")) {
     try {
       const currency = first(attrs, "currency")?.trim() ?? "";
-      if (!currency || /base\s+summary/i.test(currency)) continue;
+      if (!currency || /^base[\s_]*summary$/i.test(currency)) continue;
       const amount = requiredNumber(
         first(attrs, "endingCash", "endingSettledCash"),
         "cash ending balance",
@@ -158,7 +160,7 @@ function parseStatementFunds(
     try {
       const flowDate = cashDate(attrs, "Statement of Funds date");
       const currency = first(attrs, "currency")?.trim() ?? "";
-      if (!currency || /base\s+summary/i.test(currency))
+      if (!currency || /^base[\s_]*summary$/i.test(currency))
         throw new Error("IBKR Flex Statement of Funds currency is missing or invalid");
       const rawAmount = requiredNumber(first(attrs, "amount"), "Statement of Funds amount");
       const description = first(attrs, "activityDescription", "description");
@@ -212,6 +214,48 @@ function parseStatementFunds(
     }
   }
   return { dividends: [...dividends.values()], cashFlows: [...cashFlows.values()], problems };
+}
+
+/** Statement of Funds books every cash movement in the statement period,
+ *  trades included, so it is the one trade-cash stream and the period is the
+ *  proven window. Accounts share one wallet identity here and their Cash
+ *  Report rows merge by currency and date, so a window is proven only when
+ *  every account statement carries both cash sections for the same period. */
+function cashHistory(
+  xml: string,
+  entity: string,
+  sections: Pick<BrokerSections, "cashBalances" | "cashFlows" | "dividends">,
+): CashHistoryCoverage {
+  const unknown = (reason: string): CashHistoryCoverage => ({
+    entity,
+    broker: "ibkr",
+    status: "unknown",
+    reason,
+  });
+  if (Object.values(sections).some((value) => value.status !== "complete"))
+    return unknown("IBKR Flex cash report or Statement of Funds is missing or partial");
+  const periods = new Set<string>();
+  const statements = [...xml.matchAll(/<FlexStatement\b([^>]*)>([\s\S]*?)<\/FlexStatement\s*>/gi)];
+  for (const [, attrs = "", body = ""] of statements) {
+    if (!hasTag(body, "CashReport") || !hasTag(body, "StatementOfFunds"))
+      return unknown("An IBKR Flex account statement lacks its cash report or Statement of Funds");
+    const { fromDate, toDate } = attributes(attrs);
+    if (!fromDate || !toDate || !/^\d{8}$/.test(fromDate) || !/^\d{8}$/.test(toDate))
+      return unknown("IBKR Flex statement period is missing");
+    periods.add(`${fromDate}-${toDate}`);
+  }
+  const [period, ...others] = periods;
+  if (!period) return unknown("IBKR Flex statement period is missing");
+  if (others.length > 0) return unknown("IBKR Flex account statements cover different periods");
+  const [fromDate, toDate] = period.split("-");
+  return {
+    entity,
+    broker: "ibkr",
+    status: "complete",
+    from: date(fromDate, "statement period start"),
+    to: date(toDate, "statement period end"),
+    tradeCash: "cash-flows",
+  };
 }
 
 function date(value: string | undefined, field: string): string {
@@ -359,14 +403,16 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   }
   const cash = parseCashBalances(xml, entity);
   const funds = parseStatementFunds(xml, entity);
+  const sections: BrokerSections = {
+    positions: section(positions, hasTag(xml, "OpenPositions"), positionProblems),
+    trades: section(trades, hasTag(xml, "Trades"), tradeProblems),
+    dividends: section(funds.dividends, hasTag(xml, "StatementOfFunds"), funds.problems),
+    cashBalances: section(cash.cashBalances, hasTag(xml, "CashReport"), cash.problems),
+    cashFlows: section(funds.cashFlows, hasTag(xml, "StatementOfFunds"), funds.problems),
+  };
   return {
-    sections: {
-      positions: section(positions, hasTag(xml, "OpenPositions"), positionProblems),
-      trades: section(trades, hasTag(xml, "Trades"), tradeProblems),
-      dividends: section(funds.dividends, hasTag(xml, "StatementOfFunds"), funds.problems),
-      cashBalances: section(cash.cashBalances, hasTag(xml, "CashReport"), cash.problems),
-      cashFlows: section(funds.cashFlows, hasTag(xml, "StatementOfFunds"), funds.problems),
-    },
+    sections,
+    cashHistory: cashHistory(xml, entity, sections),
     problems: [...positionProblems, ...tradeProblems, ...cash.problems, ...funds.problems],
   };
 }

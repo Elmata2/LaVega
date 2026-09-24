@@ -35,6 +35,8 @@ Production checks on 2026-09-23 show a one-year risk estimate using 73 returns f
 
 The risk report now states how many dates in its measured window have negative cash, so the estimate shows this limitation beside other data warnings.
 
+Since FIN-08 ([#113](https://github.com/Elmata2/LaVega/issues/113)) Trading 212 reports its cash history as unproven. Trading 212 cash before its latest balance date is now unknown instead of negative, so those dates end a risk run rather than feed it. The latest balance carries forward, so the current value keeps its cash. The production figures above predate this change and were not re-measured.
+
 To unlock reliable figures: reconcile every broker cash currency from a dated balance, complete historical order/transfer and corporate-action records, backfill missing held-date prices, then add historical FX and a total-return benchmark. Recheck against broker statements before removing quality flags. A separate current-holdings model also needs adjusted-price history and an explicit treatment of uncovered holdings; silently rescaling a covered subset is not acceptable.
 
 ## Verification cases

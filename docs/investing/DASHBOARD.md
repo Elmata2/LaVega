@@ -66,6 +66,7 @@ Broker coverage differs ([Research: broker cash and cash-flow reporting](https:/
 - IBKR Cash Report supplies balance anchors. Statement of Funds supplies dated deposits, withdrawals, fees, and dividends. Users can add both sections to their existing Flex query without changing the token and Query ID setup.
 - Trading 212 `/api/v0/equity/account/summary` supplies current available cash. `/history/transactions` and `/history/dividends` supply dated activity. Official documentation now exposes these schemas. Sanitized live-response verification remains required for provider sign behavior, `TRANSFER` direction, and account-specific history retention. Until verified, ambiguous transfers become explicit problems and non-zero `inPies` or `reservedForOrders` prevents an unsafe total-cash anchor.
 - If flow history cannot reach a requested date, return unknown. Never fabricate an opening cash balance.
+- Flow history reaches a date only inside the window the adapter proves complete (`CashHistoryCoverage`, see `CONNECTORS.md`). IBKR proves its Flex statement period. Trading 212 proves nothing yet, so its cash is known from its latest balance date onwards and unknown before it.
 
 ## Historical portfolio value
 

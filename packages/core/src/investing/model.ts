@@ -60,6 +60,24 @@ export type CashFlow = {
   brokerFlowId?: string;
 };
 
+/** What a broker proved about one account's cash history.
+ *
+ *  Complete means every cash movement from `from` through `to` is in the
+ *  reported events, and `tradeCash` names the one stream that records what a
+ *  trade moved: the trade's own settlement, or ledger rows among the cash
+ *  flows. Counting both would double a purchase. Unknown means only a dated
+ *  broker balance says what cash was; the first retained event proves nothing
+ *  about movements before or between. */
+export type CashHistoryCoverage = { entity: string; broker: string } & (
+  | {
+      status: "complete";
+      from: string;
+      to: string;
+      tradeCash: "trade-settlement" | "cash-flows";
+    }
+  | { status: "unknown"; reason: string }
+);
+
 export type TradeSide = "buy" | "sell" | "other";
 
 /** A broker-reported execution. `quantity` is a positive magnitude; `side`

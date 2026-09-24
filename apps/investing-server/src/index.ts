@@ -484,8 +484,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           throw error;
         refreshProblems.push("Broker data could not be refreshed. Showing the last loaded data.");
       }
-      const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } =
-        brokerData.read();
+      const {
+        positions,
+        trades,
+        dividends,
+        cashBalances,
+        cashFlows,
+        cashCoverage,
+        problems,
+        dataVersion,
+      } = brokerData.read();
       const version = dataVersion + priceDataVersion;
       const selectedBenchmarks = options.benchmarkSymbols
         ? await options.benchmarkSymbols(tenantId)
@@ -537,6 +545,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             dividends,
             cashBalances,
             cashFlows,
+            cashCoverage,
             priceBars: prices.bars,
             benchmarkBars: benches.bars,
             benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({

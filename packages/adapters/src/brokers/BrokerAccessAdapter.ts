@@ -1,4 +1,11 @@
-import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Dividend,
+  Position,
+  Trade,
+} from "@lavega/core";
 
 /** Cursor so a later invocation can continue a history that did not finish. */
 export type BrokerSyncResume = {
@@ -45,6 +52,8 @@ export type BrokerSections = {
 
 export type BrokerResult = {
   sections: BrokerSections;
+  /** What these sections prove about past cash. Absent means unknown. */
+  cashHistory?: CashHistoryCoverage;
   historyMode?: "snapshot" | "incremental";
   source: string;
   problems: string[];
