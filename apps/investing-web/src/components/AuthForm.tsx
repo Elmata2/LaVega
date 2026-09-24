@@ -33,7 +33,9 @@ export function AuthForm() {
     }
     if (result.pendingVerification) {
       setStatus("verify");
-      setMessage("Check your email and confirm the account. Then sign in.");
+      setMessage(
+        "If this address is new, the confirmation mail is on its way. If you already have an account, sign in. An address that is already registered does not get another mail.",
+      );
       return;
     }
     navigate(location.state?.from?.pathname ?? "/", { replace: true });

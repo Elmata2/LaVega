@@ -26,6 +26,18 @@ export async function sendAuthEmail(input: {
     body: JSON.stringify({ from, to: [input.to], subject: input.subject, text: input.text }),
   });
   if (!response.ok) {
-    throw new Error(`Verification email failed (${response.status})`);
+    const detail = await response.text();
+    let reason = "";
+    try {
+      const parsed = JSON.parse(detail) as { message?: string };
+      reason = parsed.message?.trim() ?? "";
+    } catch {
+      reason = "";
+    }
+    const message = reason
+      ? `Verification email failed (${response.status}): ${reason}`
+      : `Verification email failed (${response.status})`;
+    console.error(message);
+    throw new Error(message);
   }
 }

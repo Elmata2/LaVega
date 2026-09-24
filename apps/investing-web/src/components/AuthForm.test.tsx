@@ -172,6 +172,6 @@ test("a sign-up with no session token tells the person to confirm their email", 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Check your email");
+  expect(container.textContent).toContain("If this address is new");
   root.unmount();
 });

@@ -32,10 +32,12 @@ test("sendAuthEmail posts the confirmation to Resend and refuses a non-2xx", asy
     }),
   );
 
-  fetchMock.mockResolvedValueOnce(new Response("", { status: 422 }));
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ message: "The domain is not verified" }), { status: 403 }),
+  );
   await expect(
     sendAuthEmail({ to: "person@example.com", subject: "Confirm", text: "x" }),
-  ).rejects.toThrow("Verification email failed (422)");
+  ).rejects.toThrow("Verification email failed (403): The domain is not verified");
 });
 
 test("sendAuthEmail refuses to pretend a mail went out when it is not configured", async () => {
