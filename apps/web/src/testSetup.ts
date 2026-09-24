@@ -21,3 +21,29 @@ beforeEach(() => {
   if (typeof document === "undefined") return;
   document.cookie = `${LOCALE_COOKIE}=nl; Path=/`;
 });
+
+/* jsdom 30.0.1 has no `showModal`/`close` on HTMLDialogElement at all — not a
+ * broken stub, the properties are simply undefined, so calling either throws
+ * "is not a function". `.open` already reflects the `open` attribute in both
+ * directions in this jsdom version (verified with a throwaway script), so the
+ * polyfill only needs to own the attribute; it does not need to redefine
+ * `.open` itself.
+ *
+ * `close()` does NOT dispatch a `close` event here, matching the real browser:
+ * measured against the built app with a plain native listener and no React
+ * involved (showModal()+close() on one dialog, 600ms observed), the real
+ * browser fired zero `close` events. A polyfill that synthesized one — as
+ * this used to — asserts a mechanism production doesn't have; Landing.tsx no
+ * longer depends on `close` for anything, so the polyfill shouldn't either. */
+if (typeof document !== "undefined" && typeof HTMLDialogElement !== "undefined") {
+  if (typeof HTMLDialogElement.prototype.showModal !== "function") {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    };
+  }
+  if (typeof HTMLDialogElement.prototype.close !== "function") {
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute("open");
+    };
+  }
+}

@@ -18,9 +18,19 @@ export type SignInFormProps = {
   locale: Locale;
   intro: string;
   onSuccess: () => void;
+  /** Profiel's `cell-sub` (monospace, muted) reads wrong at landing scale; the
+   *  landing page passes its own class here instead of every caller open-coding
+   *  the intro paragraph. Defaults to `cell-sub` so Profiel's call site is
+   *  unchanged. */
+  introClassName?: string;
 };
 
-export default function SignInForm({ locale, intro, onSuccess }: SignInFormProps) {
+export default function SignInForm({
+  locale,
+  intro,
+  onSuccess,
+  introClassName = "cell-sub",
+}: SignInFormProps) {
   const c = shellCopy[locale];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +53,7 @@ export default function SignInForm({ locale, intro, onSuccess }: SignInFormProps
 
   return (
     <>
-      <p className="cell-sub">{intro}</p>
+      <p className={introClassName}>{intro}</p>
       <form onSubmit={(e) => void handleSignIn(e)}>
         <Field>
           <label htmlFor="account-email">{c.profiel.account.emailLabel}</label>

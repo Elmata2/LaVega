@@ -57,7 +57,11 @@ function setValue(el: HTMLInputElement, value: string) {
 }
 
 function fillEmail(el: HTMLElement, value: string) {
-  setValue(el.querySelector<HTMLInputElement>('input[type="email"]')!, value);
+  /* Scoped to the waitlist form, not the page: the sign-in dialog's
+   * #account-email is now always mounted too (native <dialog>, Landing.tsx),
+   * so an unscoped input[type="email"] would match that one first. */
+  const form = el.querySelector<HTMLFormElement>('[data-testid="waitlist-form"]')!;
+  setValue(form.querySelector<HTMLInputElement>('input[type="email"]')!, value);
 }
 
 function submit(el: HTMLElement) {

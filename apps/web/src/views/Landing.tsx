@@ -13,7 +13,6 @@ import {
 } from "../locale.js";
 import { useAuthState } from "../authClient.js";
 import SignInForm from "../components/SignInForm.js";
-import Card from "../components/ui/Card.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -69,6 +68,31 @@ export default function Landing({
   const c = landingCopy(locale);
   const { state: authState } = useAuthState();
   const [showSignIn, setShowSignIn] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  /* The dialog is always mounted; only showModal()/close() move it on/off
+   * screen. That's what gives the CSS exit transition something to animate
+   * (an unmount has nothing left to fade), and it's why a failed sign-in
+   * never wipes the typed email — the form stays alive underneath.
+   *
+   * `showSignIn` is the only thing that opens or closes it. The obvious
+   * alternative, syncing state back from the dialog's `close` event, does not
+   * work: measured in Chrome on the built page, showModal() and close() both
+   * work and the `close` event never fires at all, which left the trigger
+   * needing two clicks to reopen and focus stranded inside a hidden dialog. */
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const shouldOpen = showSignIn && authState.kind !== "signed-in";
+    if (shouldOpen && !dialog.open) {
+      dialog.showModal();
+      dialog.querySelector<HTMLInputElement>("#account-email")?.focus();
+    } else if (!shouldOpen && dialog.open) {
+      dialog.close();
+      triggerRef.current?.focus();
+    }
+  }, [showSignIn, authState.kind]);
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
@@ -249,6 +273,7 @@ export default function Landing({
           {c.langSwitch.label}
         </a>
         <button
+          ref={triggerRef}
           type="button"
           className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
           onClick={() => {
@@ -263,23 +288,37 @@ export default function Landing({
         </button>
       </header>
 
-      {showSignIn && authState.kind !== "signed-in" && (
-        <Card
-          as="section"
-          aria-label={c.nav.login}
-          className="absolute right-[28px] top-[78px] z-50 w-[320px] max-w-[calc(100vw-56px)]"
+      <dialog
+        ref={dialogRef}
+        className="lp-signin-dialog"
+        aria-label={c.nav.login}
+        onClick={(e) => {
+          if (e.target === dialogRef.current) setShowSignIn(false);
+        }}
+        onCancel={(e) => {
+          e.preventDefault();
+          setShowSignIn(false);
+        }}
+      >
+        <button
+          type="button"
+          className="lp-signin-dialog-close"
+          aria-label={c.login.close}
+          onClick={() => setShowSignIn(false)}
         >
-          <h2>{c.nav.login}</h2>
-          <SignInForm
-            locale={locale}
-            intro={c.login.intro}
-            onSuccess={() => {
-              setShowSignIn(false);
-              onEnter();
-            }}
-          />
-        </Card>
-      )}
+          ×
+        </button>
+        <h2>{c.nav.login}</h2>
+        <SignInForm
+          locale={locale}
+          intro={c.login.intro}
+          introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+          onSuccess={() => {
+            setShowSignIn(false);
+            onEnter();
+          }}
+        />
+      </dialog>
 
       {/* Hero */}
       <section className="lp-hero max-w-[1000px] mx-auto pt-[48px] px-[28px] pb-[40px] text-center">
