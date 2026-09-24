@@ -113,6 +113,112 @@ test("undefined fxRates (a failed FX provider) marks foreign positions missing-f
   expect(dashboard.problems).toEqual(["FX-koers kon niet worden geladen"]);
 });
 
+test("a non-FX failure in return calculation reaches problems instead of claiming missing-fx", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        symbol: "GBPCO",
+        quantity: 1,
+        averagePrice: 10,
+        marketPrice: 10,
+        marketValue: 10,
+        currency: "EUR",
+        asOf: "2026-01-05",
+      },
+    ],
+    trades: [
+      {
+        id: "buy",
+        entity: "personal",
+        date: "2026-01-02",
+        symbol: "GBPCO",
+        side: "buy",
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "GBP",
+        commission: 0,
+      },
+    ],
+    dividends: [],
+    priceBars: [{ symbol: "GBPCO", date: "2026-01-05", close: 10, currency: "EUR" }],
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: { base: "EUR", date: "2026-01-02", rates: {} },
+    today: "2026-01-05",
+  });
+
+  const position = dashboard.positions.find((entry) => entry.symbol === "GBPCO")!;
+  expect(position.returns.status).not.toBe("missing-fx");
+  expect(dashboard.problems).toEqual(["GBPCO: Unknown currency: GBP"]);
+});
+
+test("portfolio weight over an unpriced subset gets a problem instead of a silent 100 percent", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        symbol: "PRICED",
+        quantity: 1,
+        averagePrice: 10,
+        marketPrice: 10,
+        marketValue: 10,
+        currency: "EUR",
+        asOf: "2026-01-05",
+      },
+      {
+        entity: "personal",
+        symbol: "DARK",
+        quantity: 1,
+        averagePrice: 10,
+        marketPrice: 10,
+        marketValue: 10,
+        currency: "EUR",
+        asOf: "2026-01-05",
+      },
+    ],
+    trades: [
+      {
+        id: "p1",
+        entity: "personal",
+        date: "2026-01-02",
+        symbol: "PRICED",
+        side: "buy",
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+      },
+      {
+        id: "d1",
+        entity: "personal",
+        date: "2026-01-02",
+        symbol: "DARK",
+        side: "buy",
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+      },
+    ],
+    dividends: [],
+    priceBars: [{ symbol: "PRICED", date: "2026-01-05", close: 10, currency: "EUR" }],
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: undefined,
+    today: "2026-01-05",
+  });
+
+  const priced = dashboard.positions.find((entry) => entry.symbol === "PRICED")!;
+  expect(priced.portfolioWeight).toBe(1);
+  expect(dashboard.problems).toEqual([
+    "Portfolio weight is calculated only across priced positions: 1 of 2 positions are unpriced and excluded from the total.",
+  ]);
+});
+
 test("allocation uses current price bars and omits values beyond the five-day cap", () => {
   const dashboard = buildInvestingDashboard({
     positions: [

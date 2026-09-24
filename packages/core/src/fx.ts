@@ -6,6 +6,18 @@ import { isEurCurrency } from "./model.js";
 
 export type FxRate = { base: string; date: string; rates: Record<string, number> };
 
+/** A currency code a rate payload does not cover. Carries the code so a
+ *  caller can act on it; the message is developer-facing English, never
+ *  rendered to a user directly (a copy module owns that, per commit 9ab1eec). */
+export class UnknownCurrencyError extends Error {
+  readonly currency: string;
+  constructor(currency: string) {
+    super(`Unknown currency: ${currency}`);
+    this.name = "UnknownCurrencyError";
+    this.currency = currency;
+  }
+}
+
 /* London quotes several instruments in pence under GBp (Yahoo) or GBX (brokers).
  * No FX table lists them, so resolve them to their major unit before crossing. */
 const MINOR_UNITS: Record<string, { major: string; perMajor: number }> = {
@@ -40,7 +52,7 @@ export function crossRate(from: string, to: string, rate: FxRate): number {
   const perBase = (ccy: string): number => {
     if (ccy === rate.base) return 1;
     const v = rate.rates[ccy];
-    if (typeof v !== "number" || !(v > 0)) throw new Error(`onbekende valuta: ${ccy}`);
+    if (typeof v !== "number" || !(v > 0)) throw new UnknownCurrencyError(ccy);
     return v;
   };
   return (perBase(target.code) * target.perMajor) / (perBase(source.code) * source.perMajor);

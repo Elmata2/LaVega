@@ -6,6 +6,7 @@ import {
   FX_RATE_FALLBACK,
   rateOn,
   toEur,
+  UnknownCurrencyError,
 } from "./fx.js";
 
 const RATE = { base: "EUR", date: "2026-08-04", rates: { USD: 1.15, GBP: 0.85 } };
@@ -37,8 +38,16 @@ test("normalized pence still cross at a hundredth of a pound", () => {
   expect(crossRate(normalizeCurrencyCode("GBp"), "GBP", RATE)).toBeCloseTo(0.01, 9);
 });
 
-test("crossRate throws on an unknown currency", () => {
-  expect(() => crossRate("EUR", "XXX", RATE)).toThrow();
+test("crossRate throws a typed, English error on an unknown currency", () => {
+  expect(() => crossRate("EUR", "XXX", RATE)).toThrow(UnknownCurrencyError);
+  try {
+    crossRate("GBP", "EUR", { base: "EUR", date: "2000-01-01", rates: { USD: 1.15 } });
+    throw new Error("expected crossRate to throw");
+  } catch (error) {
+    expect(error).toBeInstanceOf(UnknownCurrencyError);
+    expect((error as UnknownCurrencyError).currency).toBe("GBP");
+    expect((error as Error).message).not.toMatch(/valuta/);
+  }
 });
 
 test("parseFxRatePayload accepts a Frankfurter-shaped payload and rejects junk", () => {
