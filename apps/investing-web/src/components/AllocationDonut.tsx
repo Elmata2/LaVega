@@ -39,6 +39,24 @@ type DisplayBucket = {
   members?: { key: string; label: string; value: number }[];
 };
 
+// Largest-remainder (Hamilton) apportionment: floor every share, then hand
+// the leftover points to the largest fractional remainders, so the displayed
+// integers always sum to exactly 100 instead of drifting from independent
+// per-bucket rounding.
+export function apportionPercentages(values: number[]): number[] {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return values.map(() => 0);
+  const shares = values.map((value) => (value / total) * 100);
+  const floors = shares.map(Math.floor);
+  const remainder = 100 - floors.reduce((sum, value) => sum + value, 0);
+  const byRemainder = shares
+    .map((share, index) => ({ index, fraction: share - Math.floor(share) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  const result = [...floors];
+  for (let i = 0; i < remainder; i += 1) result[byRemainder[i]!.index] += 1;
+  return result;
+}
+
 function buildDisplayBuckets(
   priced: { key: string; label: string; value: number | null }[],
 ): DisplayBucket[] {
@@ -70,7 +88,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
     (bucket) => !bucket.unpriced && bucket.value !== null && bucket.value > 0,
   );
   const display = buildDisplayBuckets(priced);
-  const total = display.reduce((sum, bucket) => sum + bucket.value, 0);
+  const percentages = apportionPercentages(display.map((bucket) => bucket.value));
 
   return (
     <Card>
@@ -150,7 +168,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
               )}
             </div>
             <ul aria-label="Allocation details" className="space-y-3 text-sm">
-              {display.map((bucket) => (
+              {display.map((bucket, index) => (
                 <li key={bucket.key}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex min-w-0 items-center gap-2">
@@ -174,7 +192,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                     </span>
                     <span className="flex items-baseline gap-2">
                       <span className="text-xs text-muted-foreground tabular-nums">
-                        {Math.round((bucket.value / total) * 100)}%
+                        {percentages[index]}%
                       </span>
                       <span className="font-semibold tabular-nums">
                         {bucket.value.toLocaleString("en-GB", {

@@ -237,7 +237,7 @@ test("overview shell fetches and displays investing server health", async () => 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("investing-server: beschikbaar");
+  expect(container.textContent).toContain("investing-server: available");
   expect(container.textContent).toContain("Portfolio value");
   expect(container.textContent).toContain("ASML");
   expect(fetch).toHaveBeenCalledWith(
@@ -267,6 +267,28 @@ test("positions route renders its empty state", async () => {
 
   expect(container.textContent).toContain("No positions loaded");
   expect(container.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("positions route shows its own eyebrow and heading, not the overview's", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/positions"]}>
+        <App />
+      </MemoryRouter>,
+    );
+  });
+
+  expect(container.querySelector("main p.text-primary")?.textContent).toBe("Positions");
+  expect(container.querySelector("main h2.font-display")?.textContent).toBe("Positions");
   root.unmount();
 });
 
@@ -1777,7 +1799,7 @@ test("the health line asks the investing server, not whoever owns the origin roo
   });
 
   expect(calls).toEqual(["/api/investing/health"]);
-  expect(container.textContent).toContain("investing-server: beschikbaar");
+  expect(container.textContent).toContain("investing-server: available");
   root.unmount();
   vi.unstubAllEnvs();
 });
