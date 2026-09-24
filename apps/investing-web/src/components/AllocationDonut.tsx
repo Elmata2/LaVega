@@ -154,6 +154,12 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                       outerRadius="88%"
                       paddingAngle={2}
                       strokeWidth={0}
+                      /* The card mounts below the fold, and Recharts' sweep
+                       * never advances past its first frame there — the ring
+                       * renders as three 3-degree slivers until a resize
+                       * forces a re-render. A static allocation snapshot has
+                       * nothing to gain from sweeping anyway. */
+                      isAnimationActive={false}
                     >
                       {display.map((bucket) => (
                         <Cell key={bucket.key} fill={bucket.color} />
