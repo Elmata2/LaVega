@@ -15,6 +15,7 @@ LaVega implementation:
 
 - Backend route `GET /api/agents/portfolio` returns available personas for UI selection.
 - Backend route `POST /api/agents/portfolio/run` evaluates all six lenses against one snapshot.
+- Backend route `POST /api/agents/portfolio/conversation` answers one follow-up `prompt` from a single persona (`agentId`), with the last 12 `user`/`assistant` turns as `history`.
 - Supported personas: `warren_buffett`, `charlie_munger`, `bill_ackman`, `ben_graham`, `peter_lynch`, `stanley_druckenmiller`.
 - Agent input is a portfolio snapshot from the signed-in user's broker data and price cache.
 - Snapshot includes portfolio value, allocation, top positions, returns, price status, missing prices, and dashboard problems.
