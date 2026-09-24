@@ -65,9 +65,14 @@ test("clicking Inloggen signed-out reveals the sign-in form", () => {
   expect(el.querySelector("#account-email")).not.toBeNull();
 });
 
-test("submitting valid credentials calls onEnter", async () => {
+test("submitting valid credentials navigates to the app", async () => {
   vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
   vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, assign },
+  });
   const onEnter = vi.fn();
   const el = render(onEnter);
   act(() => click(loginButton(el)));
@@ -76,7 +81,7 @@ test("submitting valid credentials calls onEnter", async () => {
     setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"),
   );
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
-  expect(onEnter).toHaveBeenCalledTimes(1);
+  expect(assign).toHaveBeenCalledWith("/app");
 });
 
 test("clicking Inloggen while already signed in calls onEnter immediately without showing the form", () => {

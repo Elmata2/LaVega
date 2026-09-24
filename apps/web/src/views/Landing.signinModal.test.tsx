@@ -147,9 +147,18 @@ test("a failed sign-in keeps the dialog open and keeps the typed email", async (
   expect((el.querySelector("#account-email") as HTMLInputElement).value).toBe("x@y.nl");
 });
 
-test("submitting valid credentials calls onEnter once", async () => {
+/* Not onEnter(): Root holds its own useAuthState, read once at page load, so a
+ * client-side transition into /app left that gate still reading "signed-out"
+ * and bounced the user back to this page with the URL saying /app. Signing in
+ * looked like it did nothing. A real navigation re-reads the session. */
+test("submitting valid credentials navigates to the app, not a pushState", async () => {
   vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
   vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, assign },
+  });
   const onEnter = vi.fn();
   const el = render(onEnter);
   act(() => click(loginButton(el)));
@@ -158,5 +167,6 @@ test("submitting valid credentials calls onEnter once", async () => {
     setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"),
   );
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
-  expect(onEnter).toHaveBeenCalledTimes(1);
+  expect(assign).toHaveBeenCalledWith("/app");
+  expect(onEnter).not.toHaveBeenCalled();
 });

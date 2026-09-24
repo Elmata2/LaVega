@@ -11,6 +11,7 @@ import {
   rememberLocale,
   type Locale,
 } from "../locale.js";
+import { APP_BASE } from "../appRoutes.js";
 import { useAuthState } from "../authClient.js";
 import SignInForm from "../components/SignInForm.js";
 
@@ -315,7 +316,14 @@ export default function Landing({
           introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
           onSuccess={() => {
             setShowSignIn(false);
-            onEnter();
+            /* A full navigation, not onEnter()'s pushState. Root holds its own
+             * useAuthState, fetched once at page load, and a client-side
+             * transition leaves it reading "signed-out" — so Root's gate sent
+             * the freshly signed-in user straight back to this landing page
+             * while the URL said /app, and signing in looked like it did
+             * nothing. Loading /app for real re-reads the session, and the
+             * server gate sees the cookie that now exists. */
+            window.location.assign(APP_BASE);
           }}
         />
       </dialog>
