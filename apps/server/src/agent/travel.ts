@@ -109,7 +109,7 @@ export type ProviderTerms = {
   convertFeePct?: number;
   cashbackPct?: number;
   pointsPerEuro?: number;
-  transferFreeViaIdeal?: number;
+  topUpFree?: number;
   note?: string;
   /** When the SOURCE says the figure was last checked (bank.nl stamps this).
    *  Absent means "as of when we fetched it". Used by the precedence ladder:
@@ -242,8 +242,7 @@ export async function lookupProviderTerms(
       convertFeePct: numeric(o.convertFeePct),
       cashbackPct: numeric(o.cashbackPct),
       pointsPerEuro: numeric(o.pointsPerEuro),
-      transferFreeViaIdeal:
-        o.transferFreeViaIdeal === 1 ? 1 : o.transferFreeViaIdeal === 0 ? 0 : undefined,
+      topUpFree: o.topUpFree === 1 ? 1 : o.topUpFree === 0 ? 0 : undefined,
       // Roomy enough for the caveats that actually matter (weekend surcharge,
       // free-withdrawal limit, "credit card differs from debit"). 400 chopped
       // real sentences mid-word in the UI.

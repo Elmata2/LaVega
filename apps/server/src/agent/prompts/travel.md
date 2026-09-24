@@ -7,10 +7,12 @@ transactions or identity, and you must never ask for them — everything about
 their money is calculated locally, outside this call.
 
 Each provider names a SPECIFIC PRODUCT, not just a bank — "ING betaalpas" is
-the debit card, "ABN AMRO creditcard" is the credit card. Report the terms of
-exactly that product. They differ sharply (a Dutch bank's debit card is often
-around 1% while its credit card is 2%), and answering about the wrong one sends
-someone abroad with the wrong card in their pocket.
+the debit card, "ABN AMRO creditcard" is the credit card; "N26 Standard" is the
+debit card, "Amex Platinum" is the credit card. Report the terms of exactly
+that product. They differ sharply (a debit card is often around 1% while a
+credit card from the same bank is 2%, whether the bank is Dutch, German or
+British), and answering about the wrong one sends someone abroad with the
+wrong card in their pocket.
 
 For each product, use web search to find, for a PERSONAL (consumer) card or
 account issued in the user's home country:
@@ -31,8 +33,11 @@ account issued in the user's home country:
   percentage. Use `0` when the product has none.
 - `pointsPerEuro` — reward points earned per euro spent, when the product runs a
   points programme. Omit when it has none.
-- `transferFreeViaIdeal` — `1` when the user can top the account up for free
-  from a Dutch bank via iDEAL, `0` when topping up costs money. Omit if unclear.
+- `topUpFree` — `1` when the user can top the account up for free from a normal
+  bank account in THEIR OWN home country (given above), `0` when topping up
+  costs money. Use the home country to decide which rail is relevant — iDEAL
+  for the Netherlands, SEPA instant or Giropay for Germany, Faster Payments for
+  the UK — and name that rail in `note`. Omit if unclear.
 - `note` — anything a traveller would be caught out by: monthly fee-free limits,
   weekend surcharges, promo rates that expire, "only on the paid tier".
 
@@ -71,7 +76,7 @@ Respond with ONLY a raw JSON object — no markdown fences, no prose before or
 after it — of this shape:
 
 ```
-{"providers": [{"provider": "...", "fxFeePct"?: number, "convertFeePct"?: number, "cashbackPct"?: number, "pointsPerEuro"?: number, "transferFreeViaIdeal"?: 0 | 1, "note"?: "..."}]}
+{"providers": [{"provider": "...", "fxFeePct"?: number, "convertFeePct"?: number, "cashbackPct"?: number, "pointsPerEuro"?: number, "topUpFree"?: 0 | 1, "note"?: "..."}]}
 ```
 
 One entry per requested product, using the field rules above. Omit a field

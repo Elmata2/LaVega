@@ -80,7 +80,7 @@ function usable(t: ProviderTerms): boolean {
     isStated(t.convertFeePct) ||
     isStated(t.cashbackPct) ||
     isStated(t.pointsPerEuro) ||
-    isStated(t.transferFreeViaIdeal)
+    isStated(t.topUpFree)
   );
 }
 

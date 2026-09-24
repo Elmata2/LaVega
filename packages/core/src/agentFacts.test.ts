@@ -44,7 +44,7 @@ test("one valid fact per agent passes the guard", () => {
       fact({
         agent: AGENTS.travel,
         subject: "Trading 212 creditcard",
-        key: "transferFreeViaIdeal",
+        key: "topUpFree",
         value: "1",
       }),
     ),
@@ -142,7 +142,7 @@ test("an agent, subject or key outside the namespace is refused", () => {
       fact({
         agent: AGENTS.travel,
         subject: "ING betaalpas",
-        key: "transferFreeViaIdeal",
+        key: "topUpFree",
         value: "misschien",
       }),
     ),

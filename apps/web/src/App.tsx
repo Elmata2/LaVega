@@ -67,6 +67,7 @@ import {
   getBufferCents,
   setBufferCents,
   getHomeCountry,
+  storedHomeCountry,
   getDefaultEntity,
   getDefaultScope,
   setHomeCountry,
@@ -237,6 +238,12 @@ export default function App() {
   // travel agent looks up. A local preference, edited in the profile — held in
   // state so changing it re-renders everything that reads it.
   const [homeCountry, setHomeCountryState] = useState<string>(() => getHomeCountry());
+  // Whether that value came from a real choice or is the silent NL fallback —
+  // TravelBlock needs this to say so, since onboarding's country question is
+  // skippable and `homeCountry` above cannot distinguish "NL" from "never said".
+  const [homeCountryChosen, setHomeCountryChosen] = useState<boolean>(
+    () => storedHomeCountry() !== "",
+  );
   // The level beneath it: "Texas" and "New York" are not the same tax question,
   // and a country code cannot carry that. "" = he has not said, which nothing
   // may read as a region. Typed by hand, always — LaVega never infers location.
@@ -244,6 +251,7 @@ export default function App() {
   function handleHomeCountryChange(code: string) {
     setHomeCountry(code);
     setHomeCountryState(getHomeCountry()); // read back: setHomeCountry rejects a non-ISO code
+    setHomeCountryChosen(storedHomeCountry() !== "");
     // A region belongs to a country. Keeping "Texas" while the country becomes
     // Duitsland would leave a value on screen that means nothing anywhere.
     setHomeRegion("");
@@ -1246,7 +1254,7 @@ export default function App() {
         put("convertFeePct", t.convertFeePct);
         put("cashbackPct", t.cashbackPct);
         put("pointsPerEuro", t.pointsPerEuro);
-        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+        put("topUpFree", t.topUpFree);
       }
       if (learned.length > 0) await saveFacts(learned);
       setPendingTerms(reply.pending);
@@ -1269,10 +1277,18 @@ export default function App() {
       const providers = plan.spend.map((o) => o.provider).filter(Boolean);
       if (providers.length === 0) return;
       const today = new Date().toISOString().slice(0, 10);
-      // Send what he corrected so the model is told not to contradict it.
+      // Send what he corrected so the model is told not to contradict it. A
+      // correction made before the topUpFree rename is still keyed
+      // transferFreeViaIdeal in his vault — translated here, at the wire, so it
+      // still reaches the model under a name the server's registry accepts;
+      // his stored fact itself is never rewritten.
       const knownFacts = facts
         .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
-        .map((f) => ({ subject: f.subject, key: f.key, value: f.value }));
+        .map((f) => ({
+          subject: f.subject,
+          key: f.key === "transferFreeViaIdeal" ? "topUpFree" : f.key,
+          value: f.value,
+        }));
 
       // One fast call: the server answers from its shared cache of PUBLIC card
       // tariffs and starts background lookups for whatever it doesn't have yet.
@@ -1314,7 +1330,7 @@ export default function App() {
         put("convertFeePct", t.convertFeePct);
         put("cashbackPct", t.cashbackPct);
         put("pointsPerEuro", t.pointsPerEuro);
-        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+        put("topUpFree", t.topUpFree);
       }
       if (learned.length > 0) await saveFacts(learned);
 
@@ -1450,6 +1466,8 @@ export default function App() {
                 facts,
                 asOf,
                 homeCountry,
+                homeCountryChosen,
+                onNavigate: setView,
                 busy,
                 aiAvailable: llmConfigured,
                 onRefreshTerms: handleRefreshTravelTerms,

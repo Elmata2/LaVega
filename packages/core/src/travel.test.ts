@@ -91,12 +91,14 @@ test("an unknown card does not outrank a known cheap one even at 0% cashback", (
 });
 
 test("planTravel combines the three answers for a non-euro destination", () => {
+  // The transferFreeViaIdeal fact is already resident (upsertFacts's first
+  // argument, which is never re-validated) — a vault entry from before the
+  // topUpFree rename, exactly like ROUTE_FACTS below.
   const facts = upsertFacts(
-    [],
+    [fact("Trading 212 creditcard", "transferFreeViaIdeal", "1")],
     [
       fact("Trading 212 creditcard", "fxFeePct", "0"),
       fact("Trading 212 creditcard", "cashbackPct", "1"),
-      fact("Trading 212 creditcard", "transferFreeViaIdeal", "1"),
       fact("ING betaalpas", "fxFeePct", "1.2"),
     ],
   );
@@ -113,16 +115,38 @@ test("planTravel combines the three answers for a non-euro destination", () => {
   expect(plan.spend[0].provider).toBe("Trading 212 creditcard"); // pay with this
   expect(plan.convert.toProvider).toBe("Trading 212 creditcard"); // move money here
   expect(plan.convert.fromProvider).toBe("ING"); // out of the fullest payment account
-  expect(plan.convert.method).toBe("iDEAL");
-  // "move-funds" met een niet-null `method` is de gratis-via-iDEAL variant (zie
-  // ConvertStepNote); met `method: null` zou het "geen methode bekend" zijn.
+  expect(plan.convert.free).toBe(true);
+  // "move-funds" met `free: true` is de gratis-overboeking-variant (zie
+  // ConvertStepNote); met `free: false` zou het "geen methode bekend" zijn.
+  // Welke rail dat is, weet core niet — dat is de UI's werk (homeCountry).
   expect(plan.convert.note).toEqual({
     kind: "move-funds",
     fromProvider: "ING",
     toProvider: "Trading 212 creditcard",
-    method: "iDEAL",
+    free: true,
   });
   expect(plan.unknownProviders).toEqual(["American Express creditcard"]);
+});
+
+test("planTravel's convert step also resolves topUpFree under its new name", () => {
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Trading 212 creditcard", "fxFeePct", "0"),
+      fact("Trading 212 creditcard", "cashbackPct", "1"),
+      fact("Trading 212 creditcard", "topUpFree", "1"),
+      fact("ING betaalpas", "fxFeePct", "1.2"),
+    ],
+  );
+  const plan = planTravel({
+    accounts: CARDS,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-13",
+  });
+  expect(plan.convert.free).toBe(true);
 });
 
 test("planTravel skips conversion advice entirely for a euro destination", () => {
@@ -136,7 +160,7 @@ test("planTravel skips conversion advice entirely for a euro destination", () =>
     asOf: "2026-08-13",
   });
   expect(plan.currency).toBe("EUR");
-  expect(plan.convert.method).toBeNull();
+  expect(plan.convert.free).toBe(false);
   expect(plan.convert.note).toEqual({ kind: "eur" });
 });
 
@@ -394,12 +418,13 @@ const ROUTE_ACCOUNTS = [
 ];
 
 const ROUTE_FACTS = upsertFacts(
-  [],
+  // Already resident under the pre-rename key — upsertFacts never re-checks
+  // its first argument, which is exactly the point being tested.
+  [fact("Revolut betaalpas", "transferFreeViaIdeal", "1")],
   [
     fact("ING betaalpas", "fxFeePct", "1.4"),
     fact("Revolut betaalpas", "fxFeePct", "0.5"), // paying direct still carries a surcharge
     fact("Revolut betaalpas", "convertFeePct", "0"), // converting inside the app is free
-    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
   ],
 );
 
@@ -409,7 +434,7 @@ test("rankJourneys prices the transfer and conversion legs, which can change the
 
   expect(best.via).toBe("Revolut betaalpas"); // moving first wins
   expect(best.fundedFrom).toBe("ING"); // out of the fullest account at another bank
-  expect(best.method).toBe("iDEAL");
+  expect(best.free).toBe(true);
   expect(best.totalCostPct).toBe(0);
   expect(best.costOnReference).toBe(0);
 
@@ -455,18 +480,60 @@ test("an unknown transfer cost is not treated as free either", () => {
 
   expect(via?.transferPct).toBeNull();
   expect(via?.known).toBe(false);
-  expect(via?.method).toBeNull();
+  expect(via?.free).toBe(false);
+});
+
+/* --- topUpFree replaces transferFreeViaIdeal (country-neutral: the rail isn't
+ * always iDEAL). Vaults in the wild still hold the old key, so both must keep
+ * resolving. --- */
+
+test("topUpFree, stored under its own name, marks the transfer leg free", () => {
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Revolut betaalpas", "fxFeePct", "0"),
+      fact("Revolut betaalpas", "convertFeePct", "0"),
+      fact("Revolut betaalpas", "topUpFree", "1"),
+    ],
+  );
+  const js = rankJourneys(ROUTE_ACCOUNTS, facts);
+  const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
+
+  expect(via?.free).toBe(true);
+  expect(via?.transferPct).toBe(0);
+  expect(via?.known).toBe(true);
+});
+
+test("a fact still stored under the old key transferFreeViaIdeal is read as topUpFree", () => {
+  const facts = upsertFacts(
+    // Already resident, from before the rename — upsertFacts's first argument
+    // is never re-checked against the registry, which no longer accepts this
+    // key as a WRITE. A real vault holding an old-key fact behaves exactly
+    // this way: nobody re-validates what is already stored.
+    [fact("Revolut betaalpas", "transferFreeViaIdeal", "1")],
+    [
+      fact("Revolut betaalpas", "fxFeePct", "0"),
+      fact("Revolut betaalpas", "convertFeePct", "0"),
+    ],
+  );
+  const js = rankJourneys(ROUTE_ACCOUNTS, facts);
+  const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
+
+  expect(via?.free).toBe(true);
+  expect(via?.transferPct).toBe(0);
+  expect(via?.known).toBe(true);
 });
 
 test("journeyHeadline states the winner and what it saves, in euros", () => {
   const js = rankJourneys(ROUTE_ACCOUNTS, ROUTE_FACTS);
   const line = journeyHeadline(js, "USD");
 
-  // Route: van ING naar Revolut betaalpas, via iDEAL, € 5,00 goedkoper dan
-  // rechtstreeks met Revolut.
+  // Route: van ING naar Revolut betaalpas, gratis over te zetten, € 5,00
+  // goedkoper dan rechtstreeks met Revolut. Welke rail dat is (iDEAL, in dit
+  // geval) beslist de UI aan de hand van het thuisland, niet core.
   expect(line).toEqual({
     kind: "route",
-    head: { kind: "via", fundedFrom: "ING", via: "Revolut betaalpas", method: "iDEAL" },
+    head: { kind: "via", fundedFrom: "ING", via: "Revolut betaalpas", free: true },
     costOnReference: 0,
     versus: {
       kind: "cheaper",
@@ -1235,12 +1302,11 @@ test("the baseline is the cheapest thing he can ALREADY do, route included — n
     acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
   ];
   const facts = upsertFacts(
-    [],
+    [fact("Revolut betaalpas", "transferFreeViaIdeal", "1")], // already resident, pre-rename
     [
       fact("ING betaalpas", "fxFeePct", "1.4"),
       fact("Revolut betaalpas", "fxFeePct", "0.5"),
       fact("Revolut betaalpas", "convertFeePct", "0.2"),
-      fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
     ],
   );
   const plan = planTravel({

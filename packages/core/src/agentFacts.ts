@@ -15,7 +15,7 @@ import { norm } from "./hash.js";
  *  travel       | a product/brand name, e.g.     | fxFeePct               | percentage 0..100
  *               | "ING betaalpas"                | cashbackPct            | percentage 0..100
  *               |                                | pointsPerEuro          | percentage 0..100
- *               |                                | transferFreeViaIdeal   | "0" | "1"
+ *               |                                | topUpFree              | "0" | "1"
  *  categorize   | a category from CATEGORY_      | corrigeerNaar          | a category
  *               | OPTIONS, e.g. "Overboekingen"  |                        |
  *  facturen     | an invoice FIELD name:         | voorkeur               | short text, e.g.
@@ -113,9 +113,9 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
       },
       { key: "pointsPerEuro", kind: "percentage", what: "Reward points earned per euro spent." },
       {
-        key: "transferFreeViaIdeal",
+        key: "topUpFree",
         kind: "flag",
-        what: "1 when the account can be topped up for free via iDEAL.",
+        what: "1 when the account can be topped up for free from a normal bank account in the owner's home country.",
       },
     ],
   },
