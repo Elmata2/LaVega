@@ -86,6 +86,9 @@ test("sign-up stays open and a session requires a confirmed email", () => {
   expect(options.emailAndPassword.requireEmailVerification).toBe(true);
   expect(options.emailVerification.sendOnSignUp).toBe(true);
   expect(options.emailVerification.sendOnSignIn).toBe(true);
+  expect(options.emailVerification.expiresIn).toBe(60 * 60);
+  expect(options.emailAndPassword.revokeSessionsOnPasswordReset).toBe(true);
+  expect(options.emailAndPassword.resetPasswordTokenExpiresIn).toBe(60 * 60);
   expect(options.rateLimit.enabled).toBe(true);
 });
 

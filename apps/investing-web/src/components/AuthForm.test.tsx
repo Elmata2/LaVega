@@ -1,177 +1,203 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
-import { verificationCallbackUrl } from "../lib/auth-client";
-import { AuthForm } from "./AuthForm";
+import {
+  AuthForm,
+  CheckEmailPage,
+  EmailConfirmedPage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+} from "./AuthForm";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  document.body.replaceChildren();
 });
 
-function type(input: Element, value: string) {
+async function render(initialEntry = "/sign-up") {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/sign-up" element={<AuthForm mode="sign-up" />} />
+          <Route path="/sign-in" element={<AuthForm mode="sign-in" />} />
+          <Route path="/check-email" element={<CheckEmailPage />} />
+          <Route path="/email-confirmed" element={<EmailConfirmedPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/" element={<p>Dashboard</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  });
+  return { container, root };
+}
+
+function type(container: Element, name: string, value: string) {
+  const input = container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   setter.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-test("defaults to sign-up and posts name, email and password", async () => {
-  const fetchMock = vi.fn(() =>
-    Promise.resolve(new Response(JSON.stringify({ user: { id: "u1" } }), { status: 200 })),
-  );
-  vi.stubGlobal("fetch", fetchMock);
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <MemoryRouter>
-        <AuthForm />
-      </MemoryRouter>,
-    );
-  });
-
-  act(() => {
-    type(container.querySelector('input[name="name"]')!, "Jort");
-    type(container.querySelector('input[name="email"]')!, "jort@example.com");
-    type(container.querySelector('input[name="password"]')!, "correct horse battery staple");
-  });
+async function submit(container: Element) {
   await act(async () => {
     container
       .querySelector("form")!
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await Promise.resolve();
-    await Promise.resolve();
   });
+}
 
+test("signup uses shadcn form and opens check-email screen after successful unverified signup", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ token: null }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = await render();
+  type(container, "name", "Jort");
+  type(container, "email", "jort@example.com");
+  type(container, "password", "correct horse battery staple");
+  type(container, "confirm-password", "correct horse battery staple");
+  await submit(container);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/auth/sign-up/email",
     expect.objectContaining({
-      body: JSON.stringify({
-        name: "Jort",
-        email: "jort@example.com",
-        password: "correct horse battery staple",
-        callbackURL: verificationCallbackUrl(),
-      }),
+      body: expect.stringContaining('"email":"jort@example.com"'),
     }),
   );
-  root.unmount();
+  expect(container.textContent).toContain("Check your email");
+  expect(container.textContent).toContain("If this address is new to LaVega");
+  expect(container.textContent).toContain("jort@example.com");
+  await act(async () => {
+    root.unmount();
+  });
 });
 
-test("switches to sign-in and posts only email and password", async () => {
+test("signup rejects mismatched passwords before request", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = await render();
+  type(container, "name", "Jort");
+  type(container, "email", "jort@example.com");
+  type(container, "password", "correct horse battery staple");
+  type(container, "confirm-password", "other password");
+  await submit(container);
+  expect(container.textContent).toContain("Passwords do not match.");
+  expect(fetchMock).not.toHaveBeenCalled();
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("signup links to signin and signin posts credentials", async () => {
   const fetchMock = vi.fn(() =>
     Promise.resolve(new Response(JSON.stringify({ user: { id: "u1" } }), { status: 200 })),
   );
   vi.stubGlobal("fetch", fetchMock);
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
+  const { container, root } = await render();
   await act(async () => {
-    root.render(
-      <MemoryRouter>
-        <AuthForm />
-      </MemoryRouter>,
-    );
-  });
-
-  await act(async () => {
-    (container.querySelector('button[data-action="switch-mode"]') as HTMLButtonElement).click();
+    container.querySelector<HTMLAnchorElement>('a[href="/sign-in"]')!.click();
   });
   expect(container.querySelector('input[name="name"]')).toBeNull();
-
-  act(() => {
-    type(container.querySelector('input[name="email"]')!, "jort@example.com");
-    type(container.querySelector('input[name="password"]')!, "correct horse battery staple");
-  });
-  await act(async () => {
-    container
-      .querySelector("form")!
-      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
+  type(container, "email", "jort@example.com");
+  type(container, "password", "correct horse battery staple");
+  await submit(container);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/auth/sign-in/email",
     expect.objectContaining({
       body: JSON.stringify({ email: "jort@example.com", password: "correct horse battery staple" }),
     }),
   );
-  root.unmount();
+  expect(container.textContent).toContain("Dashboard");
+  await act(async () => {
+    root.unmount();
+  });
 });
 
-test("shows the server's error message on failure", async () => {
+test("check-email requests another link and handles an expired callback", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ status: true }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = await render("/check-email");
+  await act(async () => {
+    type(container, "email", "jort@example.com");
+  });
+  await submit(container);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/auth/send-verification-email",
+    expect.objectContaining({
+      body: expect.stringContaining('"email":"jort@example.com"'),
+    }),
+  );
+  expect(container.textContent).toContain("new email is on its way");
+  await act(async () => {
+    root.unmount();
+  });
+
+  const failed = await render("/email-confirmed?error=TOKEN_EXPIRED");
+  expect(failed.container.textContent).toContain("Confirmation link did not work");
+  expect(failed.container.querySelector('a[href="/check-email"]')).not.toBeNull();
+  await act(async () => {
+    failed.root.unmount();
+  });
+});
+
+test("forgot password sends generic recovery notice", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ status: true }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = await render("/forgot-password");
+  await act(async () => {
+    type(container, "email", "jort@example.com");
+  });
+  await submit(container);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/auth/request-password-reset",
+    expect.objectContaining({
+      body: expect.stringContaining('"email":"jort@example.com"'),
+    }),
+  );
+  expect(container.textContent).toContain("If an account uses that address");
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("expired password reset link offers a fresh request", async () => {
+  const { container, root } = await render("/reset-password?error=INVALID_TOKEN");
+  expect(container.textContent).toContain("invalid or expired");
+  expect(container.querySelector('a[href="/forgot-password"]')).not.toBeNull();
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("confirmed email opens dashboard when Better Auth created a session", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(() =>
       Promise.resolve(
-        new Response(JSON.stringify({ message: "E-mailadres al in gebruik" }), { status: 422 }),
+        new Response(JSON.stringify({ user: { id: "u1", email: "jort@example.com" } }), {
+          status: 200,
+        }),
       ),
     ),
   );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
+  const { container, root } = await render("/email-confirmed");
+  expect(container.textContent).toContain("Dashboard");
   await act(async () => {
-    root.render(
-      <MemoryRouter>
-        <AuthForm />
-      </MemoryRouter>,
-    );
+    root.unmount();
   });
-
-  act(() => {
-    type(container.querySelector('input[name="name"]')!, "Jort");
-    type(container.querySelector('input[name="email"]')!, "jort@example.com");
-    type(container.querySelector('input[name="password"]')!, "x");
-  });
-  await act(async () => {
-    container
-      .querySelector("form")!
-      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(container.textContent).toContain("E-mailadres al in gebruik");
-  root.unmount();
-});
-
-test("a sign-up with no session token tells the person to confirm their email", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ token: null, user: { id: "u1" } }), { status: 200 }),
-      ),
-    ),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <MemoryRouter>
-        <AuthForm />
-      </MemoryRouter>,
-    );
-  });
-  act(() => {
-    type(container.querySelector('input[name="name"]')!, "Jort");
-    type(container.querySelector('input[name="email"]')!, "jort@example.com");
-    type(container.querySelector('input[name="password"]')!, "correct horse battery staple");
-  });
-  await act(async () => {
-    container
-      .querySelector("form")!
-      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.textContent).toContain("If this address is new");
-  root.unmount();
 });
