@@ -121,10 +121,11 @@ freshness (stale after 26 hours), and stored Trading 212 snapshot position
 count. It returns `200` only when all checks are healthy; `503` when degraded
 or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
 
-- **Sign-up is closed unless `LAVEGA_ALLOW_SIGNUP=1`.** An open registration is a
-  way to mint the very credential the guard asks for, which would leave the guard
-  decorative. To create the owner's account: set it, register once, remove it,
-  redeploy.
+- **Sign-up is open.** A new account is its own tenant (`session.user.id`) and
+  cannot read another account's vault, brokers, or holdings. Sign-in waits until
+  the address is confirmed. `RESEND_API_KEY` and `AUTH_EMAIL_FROM` send that
+  mail. Accounts that existed before confirmation was required are marked
+  verified by `db/migrations/0014_verify_existing_users.sql`.
 - With `DATABASE_URL` set, every user-scoped store is in Neon and survives the
   invocation:
 
@@ -258,8 +259,9 @@ locally, create your own Neon branch and put its connection string, a
 - `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
   they reach Neon; Neon never sees the key. Losing it loses every stored
   credential.
-- `LAVEGA_ALLOW_SIGNUP` — set to `1` only while creating an account, then remove
-  it. Absent means registration is refused.
+- `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account-confirmation mail.
+  Both are required in production. `AUTH_EMAIL_FROM` is a verified Resend
+  sender, for example `LaVega <accounts@lavega.dev>`.
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
@@ -267,11 +269,11 @@ locally, create your own Neon branch and put its connection string, a
   categorization). Obtained from console.mistral.ai (La Plateforme). Absent
   means `/api/agent/status` answers `configured: false` and the agent routes
   answer `503`.
-- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend, in euro cents. Default `400`
-  (€4). The four `/api/agent/*` routes refuse with 429 once today's recorded
-  spend meets or exceeds this.
-- `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend, in euro cents. Default
-  `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
+- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend per account, in euro cents.
+  Default `400` (€4). The agent routes refuse with 429 once that account's
+  recorded spend for today meets or exceeds this.
+- `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend per account, in euro cents.
+  Default `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.

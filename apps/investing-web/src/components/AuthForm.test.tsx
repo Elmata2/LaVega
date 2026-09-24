@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
+import { verificationCallbackUrl } from "../lib/auth-client";
 import { AuthForm } from "./AuthForm";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -54,6 +55,7 @@ test("defaults to sign-up and posts name, email and password", async () => {
         name: "Jort",
         email: "jort@example.com",
         password: "correct horse battery staple",
+        callbackURL: verificationCallbackUrl(),
       }),
     }),
   );
@@ -136,5 +138,40 @@ test("shows the server's error message on failure", async () => {
   });
 
   expect(container.textContent).toContain("E-mailadres al in gebruik");
+  root.unmount();
+});
+
+test("a sign-up with no session token tells the person to confirm their email", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ token: null, user: { id: "u1" } }), { status: 200 }),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <AuthForm />
+      </MemoryRouter>,
+    );
+  });
+  act(() => {
+    type(container.querySelector('input[name="name"]')!, "Jort");
+    type(container.querySelector('input[name="email"]')!, "jort@example.com");
+    type(container.querySelector('input[name="password"]')!, "correct horse battery staple");
+  });
+  await act(async () => {
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Check your email");
   root.unmount();
 });

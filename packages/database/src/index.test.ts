@@ -603,11 +603,12 @@ test("AiUsage.record inserts all 8 columns in order", async () => {
     pages: 0,
     searches: 0,
     costCents: 2,
+    userId: "user-a",
   });
   expect(calls).toEqual([
     {
-      sql: "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-      values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2],
+      sql: "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2, "user-a"],
     },
   ]);
 });
@@ -615,6 +616,7 @@ test("AiUsage.record inserts all 8 columns in order", async () => {
 test("AiUsage.spentCents reads back day and month totals", async () => {
   const { db, calls } = fakeDatabase([{ total: 150 }]);
   const spent = await createAiUsageRepository(db).spentCents({
+    userId: "user-a",
     day: "2026-09-08",
     month: "2026-09",
   });
@@ -626,12 +628,12 @@ test("AiUsage.spentCents reads back day and month totals", async () => {
   const freshness =
     "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
   expect(calls[0]).toEqual({
-    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE day = $1 AND ${freshness}`,
-    values: ["2026-09-08"],
+    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE day = $1 AND user_id = $2 AND ${freshness}`,
+    values: ["2026-09-08", "user-a"],
   });
   expect(calls[1]).toEqual({
-    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE to_char(day, 'YYYY-MM') = $1 AND ${freshness}`,
-    values: ["2026-09"],
+    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${freshness}`,
+    values: ["2026-09", "user-a"],
   });
 });
 

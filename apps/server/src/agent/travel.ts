@@ -151,7 +151,7 @@ function attribute(reported: string, asked: string[], alreadyTaken: number): str
 export async function lookupProviderTerms(
   input: TravelInput,
   apiKey: string,
-  deps: { provider?: LlmProvider } = {},
+  deps: { provider?: LlmProvider; userId?: string } = {},
 ): Promise<ProviderTerms[]> {
   const provider = deps.provider ?? createMistralProvider(apiKey, MISTRAL_MEDIUM);
   // `_base.md` + `travel.md`, and what the owner has already corrected — the
@@ -176,7 +176,7 @@ export async function lookupProviderTerms(
   // this resolves; a thrown error is treated the same as any other failed
   // lookup, so the provider stays eligible for retry once the budget resets
   // instead of being wrongly recorded as "asked, and the model had nothing".
-  const budget = await checkBudget("travel");
+  const budget = await checkBudget("travel", deps.userId);
   if (!budget.ok) throw new Error(`agent/travel: AI-limiet bereikt (${budget.scope})`);
 
   let text: string;
