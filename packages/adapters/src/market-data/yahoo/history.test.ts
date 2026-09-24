@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 import { YahooHttpClient } from "./http.js";
-import { loadYahooPriceHistory } from "./history.js";
+import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
+import { notFoundYahooFixture } from "./__fixtures__/not-found.js";
 
 type Chart = {
   currency?: string;
@@ -29,10 +30,7 @@ function stubClient(
     requested.push(symbol);
     const chart = charts[symbol];
     if (!chart)
-      return new Response(
-        JSON.stringify({ chart: { result: null, error: { description: "No data found" } } }),
-        { status: 404 },
-      );
+      return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
     return json({
       chart: {
         result: [
@@ -129,4 +127,45 @@ test("records each split on the bar of the session it takes effect", async () =>
     { date: "1970-01-02", split: 4 },
     { date: "1970-01-03", split: 1 },
   ]);
+});
+
+test("reports no-listing naming the primary symbol when every candidate is genuinely not found", async () => {
+  const { client, charts } = stubClient({});
+
+  const rejection = await loadYahooPriceHistory({
+    ticker: "SKX_US_EQ",
+    exchange: "",
+    client,
+  }).catch((error: unknown) => error);
+
+  expect(rejection).toBeInstanceOf(YahooNoListingError);
+  const error = rejection as YahooNoListingError;
+  expect(error.candidates[0]).toBe("SKX");
+  expect(error.candidates).toHaveLength(16);
+  expect(charts).toEqual(error.candidates);
+});
+
+test("reports the primary candidate's error, not the last fallback's, when failures are mixed", async () => {
+  const requested: string[] = [];
+  const fetchFn = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://fc.yahoo.com/")
+      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (url.includes("getcrumb")) return new Response("crumb-value");
+    const symbol = decodeURIComponent(url.slice(url.indexOf("/chart/") + 7, url.indexOf("?")));
+    requested.push(symbol);
+    if (symbol === "SKX") return new Response("Internal Server Error", { status: 500 });
+    return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
+  }) as typeof fetch;
+  const client = new YahooHttpClient(fetchFn, 20_000, 1);
+
+  const rejection = await loadYahooPriceHistory({
+    ticker: "SKX_US_EQ",
+    exchange: "",
+    client,
+  }).catch((error: unknown) => error);
+
+  expect(requested[0]).toBe("SKX");
+  expect(rejection).toBeInstanceOf(Error);
+  expect((rejection as Error).message).toContain("[500]");
 });

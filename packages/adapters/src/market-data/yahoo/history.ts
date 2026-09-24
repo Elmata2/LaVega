@@ -24,11 +24,34 @@ export type YahooPriceHistoryInput = {
 };
 const CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
+/** Every candidate symbol got a genuine Yahoo not-found, so retrying is pointless;
+ *  this is almost always a delisting, never a fetch failure. */
+export class YahooNoListingError extends Error {
+  constructor(
+    public readonly ticker: string,
+    public readonly candidates: string[],
+  ) {
+    super(`No Yahoo listing found for ${ticker} among ${candidates.length} candidates`);
+    this.name = "YahooNoListingError";
+  }
+}
+
+function isYahooNotFound(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const match = /^\[404\] (.*)$/s.exec(error.message);
+  if (!match) return false;
+  try {
+    return (JSON.parse(match[1]!) as YahooChartResponse).chart?.error?.code === "Not Found";
+  } catch {
+    return false;
+  }
+}
+
 export async function loadYahooPriceHistory(
   input: YahooPriceHistoryInput,
 ): Promise<YahooPriceHistory> {
   const client = input.client ?? new YahooHttpClient();
-  let lastError: unknown;
+  const failures: Array<{ symbol: string; error: unknown; notFound: boolean }> = [];
   let empty: YahooPriceHistory | null = null;
   for (const symbol of await yahooSymbolCandidates(input, client)) {
     try {
@@ -55,11 +78,16 @@ export async function loadYahooPriceHistory(
       }
       return history;
     } catch (error) {
-      lastError = error;
+      failures.push({ symbol, error, notFound: isYahooNotFound(error) });
     }
   }
   if (empty) return empty;
-  throw lastError ?? new Error(`No Yahoo history for ${input.ticker}`);
+  if (failures.length > 0 && failures.every((failure) => failure.notFound))
+    throw new YahooNoListingError(
+      input.ticker,
+      failures.map((failure) => failure.symbol),
+    );
+  throw failures[0]?.error ?? new Error(`No Yahoo history for ${input.ticker}`);
 }
 
 /** The ISIN is the instrument's own identifier, so Yahoo can answer with the

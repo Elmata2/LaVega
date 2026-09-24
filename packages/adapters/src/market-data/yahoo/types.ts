@@ -25,7 +25,7 @@ export type YahooChartResult = {
 };
 
 export type YahooChartResponse = {
-  chart?: { result?: YahooChartResult[]; error?: { description?: string } | null };
+  chart?: { result?: YahooChartResult[]; error?: { code?: string; description?: string } | null };
 };
 
 export type YahooPricePoint = {
