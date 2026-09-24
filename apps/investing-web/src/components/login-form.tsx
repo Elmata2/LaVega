@@ -30,13 +30,13 @@ export function LoginForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
         <CardTitle as="h1">Sign in</CardTitle>
         <CardDescription>Enter your email and password to continue.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit}>
-          <FieldGroup className="gap-5">
+          <FieldGroup>
             <Field>
               <FieldLabel htmlFor="login-email">Email address</FieldLabel>
               <Input id="login-email" name="email" type="email" autoComplete="email" required />

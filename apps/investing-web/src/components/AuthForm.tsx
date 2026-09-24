@@ -110,7 +110,7 @@ export function CheckEmailPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
           <CardTitle as="h1">Check your email</CardTitle>
           <CardDescription>
             If this address is new to LaVega, a confirmation link is on its way
@@ -123,43 +123,45 @@ export function CheckEmailPage() {
             . Open it to finish creating your account. Link expires in one hour.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            No email? Check spam, or request another link below.
-          </p>
-          <form onSubmit={resend} className="space-y-3">
-            <Label htmlFor="resend-email">Email address</Label>
-            <Input
-              id="resend-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-            {message && (
-              <p role="status" className="text-sm text-positive">
-                {message}
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-negative">
-                {error}
-              </p>
-            )}
-            <Button type="submit" variant="outline" disabled={pending} className="w-full">
-              {pending ? "Sending…" : "Resend confirmation email"}
-            </Button>
-          </form>
-          <p className="text-center text-sm text-muted-foreground">
-            <Link
-              to="/sign-in"
-              className="font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              Back to sign in
-            </Link>
-          </p>
+        <CardContent>
+          <div className="space-y-5">
+            <p className="text-sm text-muted-foreground">
+              No email? Check spam, or request another link below.
+            </p>
+            <form onSubmit={resend} className="space-y-3">
+              <Label htmlFor="resend-email">Email address</Label>
+              <Input
+                id="resend-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+              {message && (
+                <p role="status" className="text-sm text-positive">
+                  {message}
+                </p>
+              )}
+              {error && (
+                <p role="alert" className="text-sm text-negative">
+                  {error}
+                </p>
+              )}
+              <Button type="submit" variant="outline" disabled={pending} className="w-full">
+                {pending ? "Sending…" : "Resend confirmation email"}
+              </Button>
+            </form>
+            <p className="text-center text-sm text-muted-foreground">
+              <Link
+                to="/sign-in"
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                Back to sign in
+              </Link>
+            </p>
+          </div>
         </CardContent>
       </Card>
     </AuthShell>
@@ -204,19 +206,21 @@ export function EmailConfirmedPage() {
             Link may have expired or already been used. Request a new one and try again.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex gap-4 text-sm">
-          <Link
-            to="/check-email"
-            className="font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            Request another link
-          </Link>
-          <Link
-            to="/sign-in"
-            className="font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            Sign in
-          </Link>
+        <CardContent>
+          <div className="flex gap-4 text-sm">
+            <Link
+              to="/check-email"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              Request another link
+            </Link>
+            <Link
+              to="/sign-in"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              Sign in
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </AuthShell>
@@ -248,40 +252,48 @@ export function ForgotPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
           <CardTitle as="h1">Reset your password</CardTitle>
           <CardDescription>
             Enter your account email. We will send a link to set a new password.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {sent ? (
-            <p role="status" className="text-sm">
-              If an account uses that address, a reset link is on its way. Check your inbox and spam
-              folder.
+        <CardContent>
+          <div className="space-y-5">
+            {sent ? (
+              <p role="status" className="text-sm">
+                If an account uses that address, a reset link is on its way. Check your inbox and
+                spam folder.
+              </p>
+            ) : (
+              <form onSubmit={submit} className="space-y-4">
+                <Label htmlFor="recovery-email">Email address</Label>
+                <Input
+                  id="recovery-email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                />
+                {error && (
+                  <p role="alert" className="text-sm text-negative">
+                    {error}
+                  </p>
+                )}
+                <Button type="submit" disabled={pending} className="w-full">
+                  {pending ? "Sending…" : "Send reset link"}
+                </Button>
+              </form>
+            )}
+            <p className="text-center text-sm">
+              <Link
+                to="/sign-in"
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                Back to sign in
+              </Link>
             </p>
-          ) : (
-            <form onSubmit={submit} className="space-y-4">
-              <Label htmlFor="recovery-email">Email address</Label>
-              <Input id="recovery-email" name="email" type="email" autoComplete="email" required />
-              {error && (
-                <p role="alert" className="text-sm text-negative">
-                  {error}
-                </p>
-              )}
-              <Button type="submit" disabled={pending} className="w-full">
-                {pending ? "Sending…" : "Send reset link"}
-              </Button>
-            </form>
-          )}
-          <p className="text-center text-sm">
-            <Link
-              to="/sign-in"
-              className="font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              Back to sign in
-            </Link>
-          </p>
+          </div>
         </CardContent>
       </Card>
     </AuthShell>
@@ -324,7 +336,7 @@ export function ResetPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
           <CardTitle as="h1">{done ? "Password changed" : "Choose a new password"}</CardTitle>
           <CardDescription>
             {done
@@ -332,50 +344,52 @@ export function ResetPasswordPage() {
               : "Use at least 8 characters. Your other sessions will be signed out."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {!token || params.has("error") ? (
-            <p role="alert" className="text-sm text-negative">
-              Reset link is invalid or expired. Request a new link.
+        <CardContent>
+          <div className="space-y-5">
+            {!token || params.has("error") ? (
+              <p role="alert" className="text-sm text-negative">
+                Reset link is invalid or expired. Request a new link.
+              </p>
+            ) : done ? null : (
+              <form onSubmit={submit} className="space-y-4">
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+                <Label htmlFor="confirm-new-password">Confirm new password</Label>
+                <Input
+                  id="confirm-new-password"
+                  name="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+                {error && (
+                  <p role="alert" className="text-sm text-negative">
+                    {error}
+                  </p>
+                )}
+                <Button type="submit" disabled={pending} className="w-full">
+                  {pending ? "Saving…" : "Save new password"}
+                </Button>
+              </form>
+            )}
+            <p className="text-center text-sm">
+              <Link
+                to={done ? "/sign-in" : "/forgot-password"}
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                {done ? "Sign in" : "Request another link"}
+              </Link>
             </p>
-          ) : done ? null : (
-            <form onSubmit={submit} className="space-y-4">
-              <Label htmlFor="new-password">New password</Label>
-              <Input
-                id="new-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
-                required
-              />
-              <Label htmlFor="confirm-new-password">Confirm new password</Label>
-              <Input
-                id="confirm-new-password"
-                name="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                required
-              />
-              {error && (
-                <p role="alert" className="text-sm text-negative">
-                  {error}
-                </p>
-              )}
-              <Button type="submit" disabled={pending} className="w-full">
-                {pending ? "Saving…" : "Save new password"}
-              </Button>
-            </form>
-          )}
-          <p className="text-center text-sm">
-            <Link
-              to={done ? "/sign-in" : "/forgot-password"}
-              className="font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              {done ? "Sign in" : "Request another link"}
-            </Link>
-          </p>
+          </div>
         </CardContent>
       </Card>
     </AuthShell>

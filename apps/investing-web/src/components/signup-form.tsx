@@ -37,13 +37,13 @@ export function SignupForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
         <CardTitle as="h1">Create your account</CardTitle>
         <CardDescription>Start with your name, email address, and a password.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit}>
-          <FieldGroup className="gap-5">
+          <FieldGroup>
             <Field>
               <FieldLabel htmlFor="signup-name">Full name</FieldLabel>
               <Input id="signup-name" name="name" autoComplete="name" required maxLength={100} />
