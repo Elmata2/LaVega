@@ -23,6 +23,7 @@ import {
   shouldMountInvesting,
 } from "./investing-mount.js";
 import { getAuth, SIGN_UP_RATE_LIMIT, verifiedSession } from "./auth.js";
+import { authEmailConfig } from "./authEmail.js";
 import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
 import { apiGuard, guardIsDisabled } from "./apiGuard.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
@@ -180,6 +181,17 @@ app.all("/api/auth/*", async (c) => {
   }
   const auth = getAuth();
   if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
+  if (
+    c.req.method === "POST" &&
+    [
+      "/api/auth/sign-up/email",
+      "/api/auth/send-verification-email",
+      "/api/auth/request-password-reset",
+    ].includes(c.req.path) &&
+    !authEmailConfig().configured
+  ) {
+    return c.json({ message: "Email service is unavailable. Try again later." }, 503);
+  }
   return auth.handler(c.req.raw);
 });
 

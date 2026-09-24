@@ -17,7 +17,13 @@ import {
 } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
-import { AuthForm } from "./components/AuthForm";
+import {
+  AuthForm,
+  CheckEmailPage,
+  EmailConfirmedPage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+} from "./components/AuthForm";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -2321,7 +2327,12 @@ function PositionDetail() {
 export function App() {
   return (
     <Routes>
-      <Route path="/sign-in" element={<AuthForm />} />
+      <Route path="/sign-up" element={<AuthForm mode="sign-up" />} />
+      <Route path="/sign-in" element={<AuthForm mode="sign-in" />} />
+      <Route path="/check-email" element={<CheckEmailPage />} />
+      <Route path="/email-confirmed" element={<EmailConfirmedPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Overview />} />
