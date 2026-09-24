@@ -135,7 +135,7 @@ async function requireBudget(
   route: AiUsage["route"],
 ): Promise<{ blocked: Response } | { blocked: null; reservation?: ReservationHandle }> {
   try {
-    const budget = await checkBudget(route);
+    const budget = await checkBudget(route, sessionUserId(c));
     if (!budget.ok)
       return {
         blocked: c.json(
@@ -179,7 +179,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.get("/api/agent/budget", async (c) => {
     let spent: { dayCents: number; monthCents: number };
     try {
-      spent = await spentCents();
+      spent = await spentCents(sessionUserId(c));
     } catch (e) {
       logAiError("budget", e);
       return c.json({ error: AI_UNAVAILABLE_MESSAGE, code: "ai-unavailable" }, 503);
@@ -296,7 +296,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // because streamSSE structurally rules out a plain JSON 429 here.
       let budget: Awaited<ReturnType<typeof checkBudget>>;
       try {
-        budget = await checkBudget("chat");
+        budget = await checkBudget("chat", sessionUserId(c));
       } catch (e) {
         logAiError("budget", e);
         await writeSseError(stream, "ai-unavailable", AI_UNAVAILABLE_MESSAGE);
@@ -440,7 +440,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     // for seven Dutch banks at once, including ING and Rabobank, whose own
     // tariff pages refuse us. It ranks BELOW a provider's own tariff page and
     // below the owner's correction — see the ladder in cardTerms.ts.
-    return c.json(getCardTerms(input, apiKey, { lookup: travelFacts, comparison: cardComparison }));
+    return c.json(
+      getCardTerms(input, apiKey, {
+        lookup: travelFacts,
+        comparison: cardComparison,
+        userId: sessionUserId(c),
+      }),
+    );
   });
 
   // Ingest from the n8n workflow, which fetches each provider's OWN tariff page

@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -22,8 +22,10 @@ import {
   runInvestingCron,
   shouldMountInvesting,
 } from "./investing-mount.js";
-import { getAuth } from "./auth.js";
-import { apiGuard } from "./apiGuard.js";
+import { getAuth, SIGN_UP_RATE_LIMIT, verifiedSession } from "./auth.js";
+import { authEmailConfig } from "./authEmail.js";
+import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
+import { apiGuard, guardIsDisabled } from "./apiGuard.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { localeRedirectTarget } from "@lavega/core";
 
@@ -168,9 +170,28 @@ app.use("/api/*", apiGuard());
 
 app.get("/health", (c) => c.json({ ok: true }));
 
+const signUpAttempts = createRateLimiter(SIGN_UP_RATE_LIMIT.max, SIGN_UP_RATE_LIMIT.window * 1000);
+
 app.all("/api/auth/*", async (c) => {
+  if (c.req.method === "POST" && c.req.path === "/api/auth/sign-up/email") {
+    const allowed = signUpAttempts(
+      rateLimitKey("sign-up", undefined, c.req.header("x-forwarded-for")),
+    );
+    if (!allowed) return c.json({ message: "Too many sign-up attempts. Try again later." }, 429);
+  }
   const auth = getAuth();
   if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
+  if (
+    c.req.method === "POST" &&
+    [
+      "/api/auth/sign-up/email",
+      "/api/auth/send-verification-email",
+      "/api/auth/request-password-reset",
+    ].includes(c.req.path) &&
+    !authEmailConfig().configured
+  ) {
+    return c.json({ message: "Email service is unavailable. Try again later." }, 503);
+  }
   return auth.handler(c.req.raw);
 });
 
@@ -308,6 +329,29 @@ app.get("/", async (c, next) => {
   if (target === null) return next();
   return c.body(null, 302, { Location: target, Vary: "Accept-Language, Cookie" });
 });
+
+/* /app and /app/* are the personal vault's SPA shell, so a request here is
+ * gated on the same verified session as /api/* — anonymous visitors are sent
+ * to `/`, where sign-in has moved. It had to move out of /app first: locking
+ * this door before the way in existed would have trapped everyone, including
+ * a legitimate user, behind it. This gate respects the same
+ * `guardIsDisabled()` escape hatch as apiGuard for the same reason —
+ * `pnpm dev`'s cross-origin Vite page never carries the session cookie either. */
+async function requireAppSession(c: Context, next: Next) {
+  if (guardIsDisabled()) return next();
+  /* Whether this path answers 302 or the shell is decided by the session
+   * cookie, and a shared cache that does not know that can serve one user's
+   * answer to another — either bouncing a signed-in user to `/`, or handing
+   * the shell to an anonymous one and voiding the gate. Vercel currently
+   * revalidates this path on every request, so `Vary` is what keeps that true
+   * if a caching layer is ever put in front. */
+  c.header("Vary", "Cookie");
+  const session = await verifiedSession(c.req.raw);
+  if (!session) return c.body(null, 302, { Location: "/", "Cache-Control": "private, no-store" });
+  return next();
+}
+app.use("/app", requireAppSession);
+app.use("/app/*", requireAppSession);
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web

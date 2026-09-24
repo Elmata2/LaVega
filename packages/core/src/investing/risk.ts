@@ -32,6 +32,9 @@ export function buildHistoricalRisk(
     ...new Set(earlier.flatMap((point) => point.holdingsUnknown ?? [])),
   ].sort();
   const estimatedPrices = earlier.some((point) => point.forwardFilled.length > 0);
+  const negativeCashDays = window.filter(
+    (point) => point.cashValue !== null && point.cashValue < -0.01,
+  ).length;
   const comparable = benchmark?.currency === data.presentationCurrency;
   const computed = computePortfolioMetrics({
     valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
@@ -53,6 +56,10 @@ export function buildHistoricalRisk(
       };
   const reasons: string[] = [];
   if (missingCash.length) reasons.push(`Cash history missing: ${missingCash.join(", ")}.`);
+  if (negativeCashDays > 0)
+    reasons.push(
+      `Cash balance is below zero on ${negativeCashDays} dates; risk estimates may be inaccurate.`,
+    );
   if (missingPrices.length) reasons.push(`Prices missing for ${missingPrices.length} instruments.`);
   if (missingHoldings.length)
     reasons.push(`Ownership history incomplete for ${missingHoldings.length} holdings.`);

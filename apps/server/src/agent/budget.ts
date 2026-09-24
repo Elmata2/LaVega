@@ -4,6 +4,7 @@ import { loadBudgetConfig } from "../config.js";
 import { totalCostCents } from "./pricing.js";
 
 export type UsageInput = {
+  userId?: string;
   route: AiUsage["route"];
   model: string;
   inputTokens?: number;
@@ -30,6 +31,7 @@ export type ReservationHandle =
   | { readonly kind: "db"; readonly id: number }
   | {
       readonly kind: "memory";
+      readonly userId: string;
       readonly day: string;
       readonly month: string;
       readonly amount: number;
@@ -50,6 +52,19 @@ export type BudgetGate =
 const memory = new Map<string, number>();
 let warnedNoDatabase = false;
 
+/** Callers with no session (tests, local dev with the guard stood down) share
+ *  one bucket. A real request always passes the session user id. */
+export const UNSCOPED_AI_USER = "unscoped";
+
+export function aiAccountId(userId: string | undefined): string {
+  const trimmed = userId?.trim();
+  return trimmed ? trimmed : UNSCOPED_AI_USER;
+}
+
+function memoryKey(scope: "day" | "month", userId: string, period: string): string {
+  return `${scope}:${userId}:${period}`;
+}
+
 // UTC day/month boundary, not Europe/Amsterdam — the caps only need to reset
 // roughly once a day, so the 1-2 hour skew near local midnight (the Dutch
 // "vandaag"/"deze maand" wording implies the owner's own calendar) is an
@@ -59,17 +74,20 @@ function todayParts(): { day: string; month: string } {
   return { day: iso.slice(0, 10), month: iso.slice(0, 7) };
 }
 
-export async function spentCents(): Promise<{ dayCents: number; monthCents: number }> {
+export async function spentCents(
+  userId?: string,
+): Promise<{ dayCents: number; monthCents: number }> {
+  const account = aiAccountId(userId);
   const { day, month } = todayParts();
   const db = runtimeDatabase();
-  if (db) return createAiUsageRepository(db).spentCents({ day, month });
+  if (db) return createAiUsageRepository(db).spentCents({ userId: account, day, month });
   if (!warnedNoDatabase) {
     warnedNoDatabase = true;
     console.warn("agent/budget: no DATABASE_URL — using an in-memory, per-process spend counter");
   }
   return {
-    dayCents: memory.get(`day:${day}`) ?? 0,
-    monthCents: memory.get(`month:${month}`) ?? 0,
+    dayCents: memory.get(memoryKey("day", account, day)) ?? 0,
+    monthCents: memory.get(memoryKey("month", account, month)) ?? 0,
   };
 }
 
@@ -108,12 +126,16 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
  *  `releaseReservation(reservation)` (it didn't; give the room back) —
  *  `reservation` is `undefined` only when `route` itself was omitted, the
  *  read-only form used to just peek at the caps without charging anything. */
-export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate> {
+export async function checkBudget(
+  route?: AiUsage["route"],
+  userId?: string,
+): Promise<BudgetGate> {
+  const account = aiAccountId(userId);
   const caps = loadBudgetConfig();
 
   if (!route) {
     // Nothing to attribute a hold to — read-only, as this always was.
-    const spent = await spentCents();
+    const spent = await spentCents(account);
     if (spent.dayCents >= caps.dayCents) return { ok: false, scope: "day" };
     if (spent.monthCents >= caps.monthCents) return { ok: false, scope: "month" };
     return { ok: true };
@@ -125,6 +147,7 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
 
   if (db) {
     const result = await createAiUsageRepository(db).reserve({
+      userId: account,
       day,
       month,
       route,
@@ -149,8 +172,8 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
   // second call's body even starts. Reintroducing an `await` in between (e.g.
   // routing this through the async `spentCents()` above) would reopen exactly
   // the gap this function exists to close.
-  const dayKey = `day:${day}`;
-  const monthKey = `month:${month}`;
+  const dayKey = memoryKey("day", account, day);
+  const monthKey = memoryKey("month", account, month);
   const dayCents = memory.get(dayKey) ?? 0;
   const monthCents = memory.get(monthKey) ?? 0;
   if (dayCents + worstCase >= caps.dayCents) return { ok: false, scope: "day" };
@@ -159,7 +182,7 @@ export async function checkBudget(route?: AiUsage["route"]): Promise<BudgetGate>
   memory.set(monthKey, monthCents + worstCase);
   return {
     ok: true,
-    reservation: { kind: "memory", day, month, amount: worstCase, settled: false },
+    reservation: { kind: "memory", userId: account, day, month, amount: worstCase, settled: false },
   };
 }
 
@@ -229,6 +252,7 @@ export async function recordUsage(
         });
       } else {
         await repo.record({
+          userId: aiAccountId(input.userId),
           day,
           route: input.route,
           model: input.model,
@@ -245,17 +269,28 @@ export async function recordUsage(
       if (reservation.settled) return; // already reconciled or released — see ReservationHandle's own comment
       reservation.settled = true;
       memory.set(
-        `day:${reservation.day}`,
-        (memory.get(`day:${reservation.day}`) ?? 0) - reservation.amount + costCents,
+        memoryKey("day", reservation.userId, reservation.day),
+        (memory.get(memoryKey("day", reservation.userId, reservation.day)) ?? 0) -
+          reservation.amount +
+          costCents,
       );
       memory.set(
-        `month:${reservation.month}`,
-        (memory.get(`month:${reservation.month}`) ?? 0) - reservation.amount + costCents,
+        memoryKey("month", reservation.userId, reservation.month),
+        (memory.get(memoryKey("month", reservation.userId, reservation.month)) ?? 0) -
+          reservation.amount +
+          costCents,
       );
       return;
     }
-    memory.set(`day:${day}`, (memory.get(`day:${day}`) ?? 0) + costCents);
-    memory.set(`month:${month}`, (memory.get(`month:${month}`) ?? 0) + costCents);
+    const account = aiAccountId(input.userId);
+    memory.set(
+      memoryKey("day", account, day),
+      (memory.get(memoryKey("day", account, day)) ?? 0) + costCents,
+    );
+    memory.set(
+      memoryKey("month", account, month),
+      (memory.get(memoryKey("month", account, month)) ?? 0) + costCents,
+    );
   } catch (e) {
     console.error(
       `agent/budget: failed to persist usage: ${e instanceof Error ? e.message : String(e)}`,
@@ -286,12 +321,20 @@ export async function releaseReservation(
     if (reservation.settled) return;
     reservation.settled = true;
     memory.set(
-      `day:${reservation.day}`,
-      Math.max(0, (memory.get(`day:${reservation.day}`) ?? 0) - reservation.amount),
+      memoryKey("day", reservation.userId, reservation.day),
+      Math.max(
+        0,
+        (memory.get(memoryKey("day", reservation.userId, reservation.day)) ?? 0) -
+          reservation.amount,
+      ),
     );
     memory.set(
-      `month:${reservation.month}`,
-      Math.max(0, (memory.get(`month:${reservation.month}`) ?? 0) - reservation.amount),
+      memoryKey("month", reservation.userId, reservation.month),
+      Math.max(
+        0,
+        (memory.get(memoryKey("month", reservation.userId, reservation.month)) ?? 0) -
+          reservation.amount,
+      ),
     );
   } catch (e) {
     console.error(

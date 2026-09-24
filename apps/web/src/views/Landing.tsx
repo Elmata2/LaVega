@@ -11,6 +11,9 @@ import {
   rememberLocale,
   type Locale,
 } from "../locale.js";
+import { useAuthState } from "../authClient.js";
+import SignInForm from "../components/SignInForm.js";
+import Card from "../components/ui/Card.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -64,6 +67,8 @@ export default function Landing({
   locale?: Locale;
 }) {
   const c = landingCopy(locale);
+  const { state: authState } = useAuthState();
+  const [showSignIn, setShowSignIn] = useState(false);
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
@@ -187,7 +192,7 @@ export default function Landing({
   const otherLocale = locale === "en" ? "nl" : "en";
 
   return (
-    <div className="lp" ref={rootRef}>
+    <div className="lp relative" ref={rootRef}>
       {/* Nav */}
       <header className="flex items-center justify-between gap-[var(--sp-4)] max-w-[1200px] mx-auto px-[28px] py-[22px]">
         <button
@@ -243,10 +248,38 @@ export default function Landing({
         >
           {c.langSwitch.label}
         </a>
-        <button type="button" className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`} onClick={onEnter}>
+        <button
+          type="button"
+          className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
+          onClick={() => {
+            if (authState.kind === "signed-in") {
+              onEnter();
+              return;
+            }
+            setShowSignIn((shown) => !shown);
+          }}
+        >
           {c.nav.login}
         </button>
       </header>
+
+      {showSignIn && authState.kind !== "signed-in" && (
+        <Card
+          as="section"
+          aria-label={c.nav.login}
+          className="absolute right-[28px] top-[78px] z-50 w-[320px] max-w-[calc(100vw-56px)]"
+        >
+          <h2>{c.nav.login}</h2>
+          <SignInForm
+            locale={locale}
+            intro={c.login.intro}
+            onSuccess={() => {
+              setShowSignIn(false);
+              onEnter();
+            }}
+          />
+        </Card>
+      )}
 
       {/* Hero */}
       <section className="lp-hero max-w-[1000px] mx-auto pt-[48px] px-[28px] pb-[40px] text-center">

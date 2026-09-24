@@ -14,6 +14,8 @@ The former v1 ruling against zoom, pan, and brush was deliberately overturned by
 
 `apps/investing-web` inherits the personal side's **React + Vite** pattern — no SSR; hosted-tier auth and multi-tenancy stay in the Hono API server, the same client/server split as today. Revisit only if hosting concretely needs server-rendering. Routing is **React Router**, library mode, decided now since the dashboard will have multiple views. Data fetching/caching (TanStack Query) is deliberately deferred — local reads go through `StorageAdapter`/IndexedDB, no remote server-state to cache yet; add it when hosted-tier sync introduces real remote fetching ([investing-web UI framework](https://github.com/Elmata2/LaVega/issues/17)).
 
+Account creation, confirmation, sign-in, and password recovery are documented in [Account access](./AUTH.md).
+
 Styling is **shadcn/ui (Tailwind + Radix)** — a deliberate divergence from `apps/web`'s hand-written CSS and `tokens.css`. shadcn's CSS-variable theming plays the same token-layer role `tokens.css` does, and it carries the same values: `investing-web` is the same LaVega brand, re-expressed as Tailwind/shadcn variables rather than reusing the `tokens.css` file itself (mechanically impossible once styling moved to Tailwind). Palette, type (EB Garamond / Inter), and the `--pos`/`--neg` pair carry over unchanged; the data-viz palette extends from 3 hues to ~5 to cover the allocation donut's categories. The frame/radius/shadow language carries over too — the floating rounded shell (`--r-lg`, `--shadow-float`) on a soft gutter, flat border-only cards (`--r-sm`, no shadow) — rejecting shadcn's own tighter/flatter defaults, confirmed by a side-by-side prototype. Wire it with **cva** for type-safe, variant-driven Tailwind styling ([investing-web visual identity](https://github.com/Elmata2/LaVega/issues/29)).
 
 ## Charting library
@@ -50,7 +52,7 @@ Trades move cash too. A `Trade` carries an optional `settlement` (signed wallet 
 
 Stock splits come from market data. Yahoo closes are split-adjusted, so `PriceBar.split` records each split on the session it takes effect (1 when none) and `inCurrentShareUnits` puts trades and snapshots into today's share units at the dashboard boundary. A stored bar without `split` is stale and its symbol is re-read; a split arriving in a top-up re-reads the whole range. Trading 212 `STOCK_SPLIT` fills stay ignored so splits are never counted twice.
 
-`computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Trading 212 now produces cash-flow rows, but its historical cash walk is not reconciled against broker statements. Production still shows impossible negative historical cash; see `RISK.md`.
+`computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Trading 212 produces cash-flow rows and wallet settlements for refreshed orders, but its historical cash walk is not reconciled against broker statements. Production still shows impossible negative historical cash; see `RISK.md`.
 
 Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlows` per broker, synced and persisted whole the same way `positions`/`trades`/`dividends` already are — not `StorageAdapter` (personal-finance-only, see below) and not `PriceStore` (market-data-specific carve-out, see below).
 
@@ -67,7 +69,7 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Local tier:** a Docker image running `investing-server`, with the storage backend gated by environment variable ([#23](https://github.com/Elmata2/LaVega/issues/23)) — self-hostable, and matches how a scaled-for-others deployment would look too.
 
-**Local-tier sync trigger: app-open, no cron.** The self-hosted Docker image has no Workers-style scheduler behind it, so IBKR and Trading 212 sync when the app opens, gated by a per-adapter `lastSyncedAt` timestamp that skips re-fetching within 24h of the last successful sync. The same sync endpoint can be called by a host-level cron for self-hosters who want it running with the app closed.
+**Local-tier sync trigger: app-open, no cron.** The self-hosted Docker image has no scheduler behind it, so IBKR and Trading 212 sync when the app opens, gated by a per-adapter `lastSyncedAt` timestamp that skips re-fetching within 24h of the last successful sync. The same sync endpoint can be called by a host-level cron for self-hosters who want it running with the app closed.
 
 **Current Vercel bridge:** the repository ships a Build Output API deployment that registers `GET /api/cron/investing-sync` daily at `0 4 * * *` UTC. Vercel calls it only on production deployments and sends `Authorization: Bearer $CRON_SECRET`; the route refuses missing or wrong secrets. With Better Auth enabled, the cron route cannot infer a browser session, so `INVESTING_CRON_TENANT_IDS` must list tenant ids explicitly. Each pass runs broker sync and one bounded price slice per tenant; the persisted price row lets later cron or dashboard calls resume.
 
@@ -77,36 +79,19 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Stored dashboard:** the built dashboard is stored encrypted in `investing.dashboard_snapshots` (migration `0010`), so any instance serves it in one read without touching the vault, prices or FX. It counts only while its version equals the user's `investing.dashboard_sources.version`, which a statement trigger raises in the same transaction as every write to `broker_vaults`, `price_bars` or `preferences`, and only on the UTC day it was built. A dashboard built from data a sync replaced mid-build is therefore never served. A dashboard whose price or FX read failed is not stored. The browser also keeps the last dashboard per query in memory, and the signed-in user's overview in `localStorage`; `signOut()` clears both.
 
-**Hosted tier: Cloudflare Workers.**
-
-- Cron Triggers are native on the free tier, not plan-gated — unlike Vercel, which caps Function duration at 10s on Hobby and needs Pro for anything past that.
-- Workers' CPU-time ceiling counts only active compute, not idle/backoff waiting — IBKR's Flex `SendRequest`/`GetStatement` poll (~30–60s, mostly waiting) fits this billing model far better than Vercel's wall-clock `maxDuration`.
-- `node:crypto` isn't native on Workers. Resolved by rewriting Enable Banking's JWT signing to WebCrypto (`crypto.subtle.sign`, RS256/RSASSA-PKCS1-v1_5 supported natively) — portable across Node, Workers, and Vercel Edge alike. Tracked as its own follow-up: [Rewrite Enable Banking JWT signing to WebCrypto](https://github.com/Elmata2/LaVega/issues/30).
-
-**Artifact shape:** one `investing-server` codebase, two deploy targets — a Docker image for local/self-host, Cloudflare Workers for the hosted tier — not one identical artifact everywhere, since Workers doesn't run arbitrary containers.
-
 **Ruled out:**
 
 - **No-server / pure-browser.** Broker and market-data APIs don't set CORS for browser origins, and client-held API keys would break the server-side-secret pattern `apps/server/src/config.ts` already established. Not viable.
-- **Vercel as final hosted architecture.** Vercel is the current bridge for `lavega.dev`, but Workers still fits the long-poll/scheduler profile better if the investing server becomes a multi-tenant hosted product. Vercel's AI agentic suite (Eve, AI Gateway) was separately researched and not carried forward — see [in-product agent seam](#in-product-agent-seam) below.
 
 ([Hosting & runtime for investing-server](https://github.com/Elmata2/LaVega/issues/24))
 
-**Sync model this hosting must serve** (from `CONNECTORS.md`): IBKR and Trading 212 sync daily and automatically; DeGiro is manual, user-triggered file upload, no scheduling at all. **Decision: one shared Cron Trigger, one `wrangler.toml` entry**, firing a single daily job that loops both adapters — not a separate trigger per adapter. Each adapter's failure lands in its own `problems[]` (the existing `BrokerAccessAdapter` shape), so one broker going down doesn't block the other; nothing in `CONNECTORS.md` gives IBKR and Trading 212 different run-time needs, so a second trigger would just be one more moving part for no benefit. Local tier's answer is above, under Local tier. Investing-side only: Enable Banking's sync on the personal side has no scheduler today either — it's pulled on-demand, not cron-driven — and stays out of this ticket's scope ([Sync scheduling mechanism](https://github.com/Elmata2/LaVega/issues/31)).
+**Sync scheduling:** the daily cron above is the only scheduler. Each pass runs every connected broker adapter; an adapter's failure lands in its own `problems[]`, so one broker going down does not block another. DeGiro stays a manual, user-triggered file upload.
 
 ## Observability & error reporting
 
-**Hosted tier: Sentry (Workers SDK).** Captures uncaught exceptions from the daily Cron Trigger job, and — since `BrokerAccessAdapter` never throws — also calls `captureMessage()` at warning level for every non-empty `problems[]` result, naming the broker and reason. Without that second path, this ticket's own motivating scenario (IBKR failing mid-backoff) would never reach Sentry, since a Flex poll timeout surfaces via `problems[]`, not an exception.
-
-Ruled out: Workers-native (Tail Workers + Logpush + Workers Analytics Engine) — Logpush needs Workers Paid, which conflicts with #24's free-tier-not-plan-gated reasoning for picking Workers in the first place. Sentry's free tier (5k events/month) covers one daily cron job with room to spare.
-
-**DSN custody:** a Workers Secret, not the `CredentialStore`/`KeySource` seam (#27) — it's one static ops-level value for the whole deployment, not per-tenant data.
-
-**Scrubbing:** a `beforeSend` hook strips anything matching broker Query ID / API-key shape before an event leaves the Worker — `problems[]` messages can echo raw provider error text.
+**Structured stdout, Sentry opt-in.** `createProblemReporter` (`apps/investing-server/src/observability.ts`) writes every broker-sync and dashboard-read problem as one JSON line, after `redactProblem` strips credential-shaped values (API keys, tokens, `Authorization` headers). When `SENTRY_DSN` is set, `apps/investing-server/src/index.ts` initializes `@sentry/node` and the same redacted context goes to Sentry as an exception. Without it, stdout is the only sink.
 
 **Alerting:** Sentry's built-in email notification. No Slack/Discord webhook for v1.
-
-**Local/self-hosted tier: stdout logs only.** No Sentry wiring by default — an optional DSN env var lets a self-hoster opt in themselves; matches the local-tier stance elsewhere in this map (#24, #35) of never forcing a third-party cloud dependency onto the self-hosted deploy.
 
 ([Observability / error reporting for investing-server hosted tier](https://github.com/Elmata2/LaVega/issues/32))
 
@@ -120,15 +105,7 @@ This reverses the earlier conclusion of [Research: browser infrastructure for AP
 
 ## In-product agent seam
 
-An `AgentRuntime` interface sits behind the in-product agent chat feature. Three candidates were weighed:
-
-1. **Direct Anthropic SDK** — what's actually built today (`apps/server/src/agent/`, `chat.ts`), API key held server-side, never sent to the browser (`apps/server/src/config.ts`). Zero new work; this is the runtime in use.
-2. **Vercel AI SDK** — dropped; lost on infra, since hosting picked Cloudflare Workers, not Vercel ([#24](https://github.com/Elmata2/LaVega/issues/24)).
-3. **Cloudflare `agents` SDK (Durable Objects)** — the marked fallback runtime if ever swapping off Anthropic-direct. A free pick since the hosted tier already runs on Cloudflare Workers; earlier research ([#20](https://github.com/Elmata2/LaVega/issues/20)) never evaluated this option, a gap in that research rather than a deliberate ruling-out.
-
-([In-product agent seam](https://github.com/Elmata2/LaVega/issues/26))
-
-Separately, research into closing the tool-use gap recommends staying on the direct Anthropic SDK and using Anthropic's beta Tool Runner with real client tools (`get_positions`/`get_trades`/`get_price_history`) instead of the current context-stuffing chat pattern — no new framework needed for that either. Of the two names surfaced by the user while charting this map: "Eve" is a real, brand-new Vercel durable-agent framework (eve.dev) built for a different job (background/multi-channel agents); "Pi" turned out to be an unrelated third-party coding-agent CLI, not a Vercel product, and isn't relevant here ([Research: in-product agent runtimes](https://github.com/Elmata2/LaVega/issues/20)).
+The portfolio agents (`apps/investing-server/src/portfolioAgent.ts`) use the Vercel AI SDK (`ai`) with `@ai-sdk/openai-compatible`, and call tools over the user's own positions and price history. See `PORTFOLIO-AGENTS.md` for personas, routes, and model configuration.
 
 ## Hosted-tier seams: identity, secrets, API keys
 
