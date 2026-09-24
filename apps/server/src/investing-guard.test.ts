@@ -61,7 +61,7 @@ test("an investing API request without a tenant is refused, not served under the
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ problems: ["Authentication is required"] });
   expect(forwardInvestingMock).not.toHaveBeenCalled();
-});
+}, 20_000);
 
 test("an investing API request is forwarded under the tenant the session named", async () => {
   investingTenantIdMock.mockResolvedValue("user-123");

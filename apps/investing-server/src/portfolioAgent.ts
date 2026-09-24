@@ -121,6 +121,8 @@ export type RunPortfolioAgentOptions = {
    *  entity name and never as a guessed industry. */
   sectors?: readonly SectorExposure[];
   provider?: SystemOneProvider;
+  /** Session user charged for the TypeSafe call. */
+  userId?: string;
 };
 
 export const PORTFOLIO_AGENT_IDS = [
@@ -350,10 +352,12 @@ export async function runPortfolioAgent({
   model,
   dashboard,
   sectors,
-  provider = createSystemOneProvider(),
+  provider,
+  userId,
 }: RunPortfolioAgentOptions): Promise<PortfolioJudgmentRun> {
+  const judge = provider ?? createSystemOneProvider({ userId });
   if (!dashboard) throw new Error("Portfolio dashboard is required for typed judgments");
-  const result = await provider.judge({
+  const result = await judge.judge({
     state: JSON.parse(renderPortfolioSnapshot(dashboard, sectors)),
     questions: portfolioJudgmentQuestions(),
     model: model?.trim() || undefined,

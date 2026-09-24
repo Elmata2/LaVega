@@ -221,6 +221,7 @@ function startLookup(
       const found = await (deps.lookup ?? lookupProviderTerms)(
         { ...base, providers: [provider] },
         apiKey,
+        { userId: deps.userId },
       );
       // Only cache an answer that actually carries a NUMBER. A reply with just
       // a note ("couldn't verify — the search tool hit its limit") is a failed
@@ -291,6 +292,8 @@ export type Deps = {
   /** The bank.nl comparison table. Injected rather than imported so a test can
    *  never reach the network, and so the layer can simply be absent. */
   comparison?: () => Promise<BankNlTable>;
+  /** Session user charged for the model calls this request starts. */
+  userId?: string;
 };
 
 export type CardTermsResult = {

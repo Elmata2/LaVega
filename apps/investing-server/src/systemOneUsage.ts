@@ -35,12 +35,15 @@ function cap(raw: string | undefined, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-export async function checkSystemOneBudget(): Promise<SystemOneBudget> {
+export async function checkSystemOneBudget(userId = "unscoped"): Promise<SystemOneBudget> {
   const { day, month } = parts();
   const database = databaseSource();
   const spent = database
-    ? await createAiUsageRepository(database).spentCents({ day, month })
-    : { dayCents: memory.get(`day:${day}`) ?? 0, monthCents: memory.get(`month:${month}`) ?? 0 };
+    ? await createAiUsageRepository(database).spentCents({ userId, day, month })
+    : {
+        dayCents: memory.get(`day:${userId}:${day}`) ?? 0,
+        monthCents: memory.get(`month:${userId}:${month}`) ?? 0,
+      };
   if (spent.dayCents + WORST_CASE_CENTS >= cap(process.env.AI_DAILY_BUDGET_CENTS, 400))
     return { ok: false, scope: "day" };
   if (spent.monthCents + WORST_CASE_CENTS >= cap(process.env.AI_MONTHLY_BUDGET_CENTS, 2000))
@@ -52,12 +55,14 @@ export async function recordSystemOneUsage(
   model: string,
   inputTokens: number,
   outputTokens: number,
+  userId = "unscoped",
 ): Promise<void> {
   const { day, month } = parts();
   const costCents = Math.max(1, Math.ceil((inputTokens / 1_000_000) * INPUT_EUR_CENTS_PER_MILLION));
   const database = databaseSource();
   if (database) {
     await createAiUsageRepository(database).record({
+      userId,
       day,
       route: "portfolio-persona",
       model,
@@ -69,8 +74,8 @@ export async function recordSystemOneUsage(
     });
     return;
   }
-  memory.set(`day:${day}`, (memory.get(`day:${day}`) ?? 0) + costCents);
-  memory.set(`month:${month}`, (memory.get(`month:${month}`) ?? 0) + costCents);
+  memory.set(`day:${userId}:${day}`, (memory.get(`day:${userId}:${day}`) ?? 0) + costCents);
+  memory.set(`month:${userId}:${month}`, (memory.get(`month:${userId}:${month}`) ?? 0) + costCents);
 }
 
 export function resetSystemOneUsageMemory(): void {

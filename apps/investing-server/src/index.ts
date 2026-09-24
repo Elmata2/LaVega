@@ -659,7 +659,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         const dashboard = await dashboardReader({});
         return options.runAgent
           ? await options.runAgent({ dashboard, model })
-          : await runPortfolioAgent({ dashboard, model });
+          : await runPortfolioAgent({ dashboard, model, userId: tenantId });
       });
     };
     const answerPortfolioConversation = async (
