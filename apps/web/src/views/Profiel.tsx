@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import type { Account, EntityScope, EntitySummary, LearnedFact } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
 import {
@@ -30,7 +29,7 @@ import {
   type OwnerName,
 } from "../settings.js";
 import { SCOPE_ORDER } from "../scope.js";
-import { signIn, signOut, useAuthState, type SignInFailure } from "../authClient.js";
+import { signOut, useAuthState } from "../authClient.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -40,8 +39,8 @@ import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
-import { Field } from "../components/ui/Field.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import SignInForm from "../components/SignInForm.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
  *
@@ -102,25 +101,6 @@ function AccountBlock() {
   const c = shellCopy[locale];
   const { state, refresh } = useAuthState();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<SignInFailure | null>(null);
-
-  async function handleSignIn(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setFailure(null);
-    const result = await signIn(email, password);
-    setBusy(false);
-    if (!result.ok) {
-      setFailure(result.kind);
-      return;
-    }
-    setPassword("");
-    refresh();
-  }
-
   async function handleSignOut() {
     await signOut();
     refresh();
@@ -135,41 +115,7 @@ function AccountBlock() {
         <p className="cell-sub">{c.profiel.account.unconfigured}</p>
       )}
       {state.kind === "signed-out" && (
-        <>
-          <p className="cell-sub">{c.profiel.account.signedOutIntro}</p>
-          <form onSubmit={(e) => void handleSignIn(e)}>
-            <Field>
-              <label htmlFor="account-email">{c.profiel.account.emailLabel}</label>
-              <input
-                id="account-email"
-                type="email"
-                value={email}
-                disabled={busy}
-                autoComplete="username"
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <label htmlFor="account-password">{c.profiel.account.passwordLabel}</label>
-              <input
-                id="account-password"
-                type="password"
-                value={password}
-                disabled={busy}
-                autoComplete="current-password"
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </Field>
-            {failure !== null && (
-              <p role="alert" className="text-warn">
-                {c.profiel.account.signInError[failure]}
-              </p>
-            )}
-            <Button type="submit" variant="primary" disabled={busy || !email || !password}>
-              {c.profiel.account.signIn}
-            </Button>
-          </form>
-        </>
+        <SignInForm locale={locale} intro={c.profiel.account.signedOutIntro} onSuccess={refresh} />
       )}
       {state.kind === "signed-in" && (
         <>

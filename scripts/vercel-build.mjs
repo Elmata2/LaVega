@@ -243,6 +243,38 @@ await writeFile(
         { src: "/terms", dest: "/api/[...route]" },
         { src: "/investing/(.*)", dest: "/investing/index.html" },
         { src: "/investing", dest: "/investing/index.html" },
+        /* Layer 2 (edge) of the /app session gate — see apps/web/src/Root.tsx
+         * for layer 1 (the one that actually closes the hole; a hash route
+         * like `#app` never reaches here at all) and requireAppSession in
+         * apps/server/src/index.ts for layer 3 (Docker/Railway/`pnpm dev`,
+         * where the Hono function runs and this static routing table does
+         * not apply). This layer checks cookie PRESENCE only, not validity —
+         * a funnel gate ahead of the CDN-served static shell below, not an
+         * auth check; /api/* still verifies for real. Ordered ahead of the
+         * static /app routes so a request with no session cookie never
+         * reaches them; a request that DOES carry the cookie falls through
+         * to those routes unchanged, so a signed-in visitor keeps the CDN
+         * HIT and costs no function invocation. The cookie name is
+         * better-auth 1.7.1's emitted name for an https baseURL — true for
+         * every Vercel deployment, preview or production, since VERCEL_URL
+         * is always https — proved empirically against its getCookies() with
+         * apps/server/src/auth.ts's exact options; see the comment and the
+         * parity test at apps/server/src/appGateCookie.vercelParity.test.ts,
+         * which reads this literal array and fails if the two diverge. */
+        // APP_GATE_ROUTES_START
+        {
+          src: "/app/(.*)",
+          missing: [{ type: "cookie", key: "__Secure-better-auth.session_token" }],
+          status: 302,
+          headers: { Location: "/", Vary: "Cookie", "Cache-Control": "private, no-store" },
+        },
+        {
+          src: "/app",
+          missing: [{ type: "cookie", key: "__Secure-better-auth.session_token" }],
+          status: 302,
+          headers: { Location: "/", Vary: "Cookie", "Cache-Control": "private, no-store" },
+        },
+        // APP_GATE_ROUTES_END
         { src: "/app/(.*)", dest: "/index.html" },
         { src: "/app", dest: "/index.html" },
         /* The English landing page. Same SPA; `Root` reads the locale off the
