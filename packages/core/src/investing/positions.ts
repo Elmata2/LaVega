@@ -1,6 +1,6 @@
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
-import { convertCurrency, type FxRates } from "./portfolio.js";
+import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
@@ -25,6 +25,10 @@ export type PositionReturn = {
   totalReturnPercentage: number | null;
   sinceFirstBuyPercentage: number | null;
   firstBuyDate: string | null;
+  /** Set only when the calculation degraded for a reason other than a missing
+   *  FX rate, so the cause is not silently discarded. Developer-facing text;
+   *  a caller renders or drops it, it is never shown verbatim as copy. */
+  problem?: string;
 };
 
 export type CurrentPosition = {
@@ -194,8 +198,9 @@ export function calculatePositionReturn(
       sinceFirstBuyPercentage,
       firstBuyDate,
     };
-  } catch {
-    return emptyReturn("missing-fx", firstBuyDate);
+  } catch (error) {
+    if (error instanceof MissingFxRateError) return emptyReturn("missing-fx", firstBuyDate);
+    return { ...fallback(), problem: error instanceof Error ? error.message : String(error) };
   }
 }
 
