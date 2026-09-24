@@ -31,7 +31,9 @@ Composition uses current priced investment value, excluding cash. Missing positi
 
 ## Confirmed source-data limits
 
-Read-only production checks on 2026-09-23 show a one-year risk estimate using 72 returns from 2026-06-12 through 2026-09-22. Three instruments still lack historical prices. The cash walk reports EUR -575.32 on 2025-09-23 and negative cash on 27 dates inside the selected risk window. Trading 212 cash cannot be negative, so these estimated returns may use incorrect account values. A current cash anchor and the existing event stream do not establish a correct historical balance; reconcile them against broker records before treating the risk estimate as verified.
+Production checks on 2026-09-23 show a one-year risk estimate using 73 returns from 2026-06-12 through 2026-09-23. Three instruments still lack historical prices. A complete order-history rebuild added broker wallet settlements to all 545 trades after 2025-09-23; the cash walk changed from EUR -575.32 to EUR -564.19 on that date. Cash remains negative on 27 dates inside the risk window. A live scan of 997 broker transactions found no omitted post-date transaction type. Trading 212 cash cannot be negative, so estimated returns may use incorrect account values. The remaining gap needs a historical broker cash statement or pie activity records; do not clamp or invent cash values.
+
+The risk report now states how many dates in its measured window have negative cash, so the estimate shows this limitation beside other data warnings.
 
 To unlock reliable figures: reconcile every broker cash currency from a dated balance, complete historical order/transfer and corporate-action records, backfill missing held-date prices, then add historical FX and a total-return benchmark. Recheck against broker statements before removing quality flags. A separate current-holdings model also needs adjusted-price history and an explicit treatment of uncovered holdings; silently rescaling a covered subset is not acceptable.
 
@@ -39,7 +41,7 @@ To unlock reliable figures: reconcile every broker cash currency from a dated ba
 
 Axis: selected risk period. Persona: signed-in account owner. Screen: `/investing`.
 
-1. One year: risk window starts at 2026-06-12 for the checked account, with 72 returns as of 2026-09-23. Volatility and drawdown show estimates; the cash reconciliation caveat above still applies.
+1. One year: risk window starts at 2026-06-12 for the checked account, with 73 returns as of 2026-09-23. Volatility and drawdown show estimates; the cash reconciliation caveat above still applies.
 2. Six months: select `6 months` in `Risk period`. Confirm the selected range and any stated data limits; do not infer cash coverage from a non-null value alone.
 3. Account history: select `Account history`. History starts at the first dated account evidence, not the earliest market quote. Confirm the stated risk start and data limits.
 4. Method disclosure: expand `How to read these metrics`. Read end-of-day cash-flow convention, fixed latest FX, 0% cash rate and price-only benchmark limits. Collapse and re-open it.

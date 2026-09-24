@@ -575,11 +575,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ? buildDashboard()
         : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
     };
-    const healthCheck = async (
-      includeLiveBroker = false,
-      transactionCursor?: string,
-      transactionTime?: string,
-    ): Promise<InvestingHealth> => {
+    const healthCheck = async (): Promise<InvestingHealth> => {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",
         migrationLedger: database ? "ok" : "not-applicable",
@@ -589,7 +585,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         trading212Sync: "never",
         snapshot: "empty",
       };
-      const trading212: InvestingHealth["trading212"] = { lastSyncedAt: null, positions: 0 };
+      const trading212 = { lastSyncedAt: null as string | null, positions: 0 };
 
       if (database) {
         try {
@@ -623,151 +619,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       try {
         const vaultStatus = await credentials.status();
         checks.vault = vaultStatus === "unlocked" ? "ok" : vaultStatus;
-        const brokerCredentials =
-          vaultStatus === "unlocked"
-            ? await credentials.getCredentials(tenantId, "trading212")
-            : null;
-        const configured = brokerCredentials !== null;
+        const configured =
+          vaultStatus === "unlocked" &&
+          (await credentials.getCredentials(tenantId, "trading212")) !== null;
         checks.trading212Credentials = configured ? "configured" : "missing";
         if (configured) {
           await restoreBrokerData();
           const snapshot = brokerData.snapshot().trading212;
           trading212.positions = snapshot?.positions.length ?? 0;
-          if (snapshot) {
-            const date = "2025-09-23";
-            const anchor = (snapshot.cashBalances ?? [])
-              .filter((balance) => balance.asOf > date)
-              .sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
-            const tradesAfterDate = snapshot.trades.filter((trade) => trade.date > date);
-            const group = (
-              events: readonly { date: string; amount: number; currency: string; kind?: string }[],
-            ) =>
-              events
-                .filter((event) => event.date > date)
-                .reduce<Record<string, { count: number; amount: number }>>((groups, event) => {
-                  const key = `${event.kind ?? "dividend"}:${event.currency}`;
-                  const previous = groups[key] ?? { count: 0, amount: 0 };
-                  groups[key] = {
-                    count: previous.count + 1,
-                    amount: previous.amount + event.amount,
-                  };
-                  return groups;
-                }, {});
-            trading212.cashEvidence = {
-              date,
-              anchor: anchor
-                ? { date: anchor.asOf, amount: anchor.amount, currency: anchor.currency }
-                : null,
-              tradesAfterDate: tradesAfterDate.length,
-              tradesWithSettlement: tradesAfterDate.filter(
-                (trade) => trade.settlement !== undefined,
-              ).length,
-              tradesWithoutSettlement: tradesAfterDate.filter(
-                (trade) => trade.settlement === undefined,
-              ).length,
-              flowsAfterDate: group(snapshot.cashFlows ?? []),
-              dividendsAfterDate: group(snapshot.dividends),
-            };
-            if (includeLiveBroker && brokerCredentials) {
-              const authorization = `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`;
-              const headers = { Authorization: authorization };
-              const [positionsResponse, summaryResponse] = await Promise.all([
-                fetch("https://live.trading212.com/api/v0/equity/positions", {
-                  headers,
-                  signal: AbortSignal.timeout(5000),
-                }),
-                fetch("https://live.trading212.com/api/v0/equity/account/summary", {
-                  headers,
-                  signal: AbortSignal.timeout(5000),
-                }),
-              ]);
-              if (positionsResponse.ok && summaryResponse.ok) {
-                const positions = (await positionsResponse.json()) as {
-                  instrument?: { ticker?: string };
-                }[];
-                const summary = (await summaryResponse.json()) as {
-                  currency: string;
-                  cash: { availableToTrade: number; inPies?: number; reservedForOrders?: number };
-                };
-                const storedSymbols = new Set(
-                  snapshot.positions.map((position) => position.symbol),
-                );
-                trading212.liveEvidence = {
-                  positions: positions.length,
-                  matchingSymbols: positions.filter((position) =>
-                    storedSymbols.has(position.instrument?.ticker ?? ""),
-                  ).length,
-                  cash:
-                    summary.cash.availableToTrade +
-                    (summary.cash.inPies ?? 0) +
-                    (summary.cash.reservedForOrders ?? 0),
-                  currency: summary.currency,
-                };
-              } else {
-                trading212.liveEvidence = {
-                  errorStatus: !positionsResponse.ok
-                    ? positionsResponse.status
-                    : summaryResponse.status,
-                };
-              }
-            }
-            if (transactionCursor !== undefined && brokerCredentials) {
-              const url = new URL("https://live.trading212.com/api/v0/equity/history/transactions");
-              url.searchParams.set("limit", "50");
-              if (transactionCursor !== "first" && /^[A-Za-z0-9-]{1,64}$/.test(transactionCursor))
-                url.searchParams.set("cursor", transactionCursor);
-              if (transactionTime && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(transactionTime))
-                url.searchParams.set("time", transactionTime);
-              const response = await fetch(url, {
-                headers: {
-                  Authorization: `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`,
-                },
-                signal: AbortSignal.timeout(5000),
-              });
-              const page = response.ok
-                ? ((await response.json()) as {
-                    items?: {
-                      type?: string;
-                      amount?: number;
-                      currency?: string;
-                      dateTime?: string;
-                    }[];
-                    nextPagePath?: string;
-                  })
-                : null;
-              const items = page?.items ?? [];
-              const dates = items
-                .map((item) => item.dateTime?.slice(0, 10))
-                .filter((date): date is string => Boolean(date))
-                .sort();
-              const byType = items.reduce<Record<string, { count: number; amount: number }>>(
-                (groups, item) => {
-                  const key = `${item.type ?? "unknown"}:${item.currency ?? "unknown"}`;
-                  const previous = groups[key] ?? { count: 0, amount: 0 };
-                  groups[key] = {
-                    count: previous.count + 1,
-                    amount: previous.amount + (item.amount ?? 0),
-                  };
-                  return groups;
-                },
-                {},
-              );
-              const nextCursor = page?.nextPagePath
-                ? new URL(page.nextPagePath, url).searchParams.get("cursor")
-                : null;
-              const nextTime = page?.nextPagePath
-                ? new URL(page.nextPagePath, url).searchParams.get("time")
-                : null;
-              trading212.transactionPage = {
-                status: response.status,
-                rows: items.length,
-                byType,
-                dateRange: [dates[0] ?? null, dates.at(-1) ?? null],
-                nextCursor,
-                nextTime,
-              };
-            }
-          }
           checks.snapshot = snapshot ? "loaded" : "empty";
           const state = await syncStateStore.get("trading212");
           const progress = await syncStateStore.progress("trading212");
@@ -910,12 +769,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
-    healthCheck: async (
-      includeLiveBroker?: boolean,
-      transactionCursor?: string,
-      transactionTime?: string,
-    ) =>
-      (await currentRuntime()).healthCheck(includeLiveBroker, transactionCursor, transactionTime),
+    healthCheck: async () => (await currentRuntime()).healthCheck(),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),

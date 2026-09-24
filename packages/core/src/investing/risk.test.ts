@@ -32,6 +32,24 @@ function pointsFromReturns(returns: readonly number[]): PortfolioValuePoint[] {
   });
 }
 
+test("warns when the measured risk window contains negative cash", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 2 }, (_, index) =>
+      index % 2 === 0 ? 0.01 : -0.005,
+    ),
+  );
+  for (const index of [10, 11, 12]) {
+    points[index] = { ...points[index]!, positionsValue: points[index]!.value! + 5, cashValue: -5 };
+  }
+
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.reasons).toContain(
+    "Cash balance is below zero on 3 dates; risk estimates may be inaccurate.",
+  );
+});
+
 function benchmarkFromReturns(returns: readonly number[], currency = "EUR"): BenchmarkSeries {
   return {
     symbol: "BENCH",
