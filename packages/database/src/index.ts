@@ -339,7 +339,27 @@ export type PriceBarRepository = {
   getRanges(symbols: readonly string[]): Promise<PriceBarRow[]>;
   lastDate(symbol: string): Promise<string | null>;
   upsert(bars: readonly PriceBarRow[]): Promise<void>;
+  /** Makes `bars` the symbol's whole history from `from` to `to`: a stored bar
+   *  in that window that `bars` lacks is deleted. Omitting a bound means no bound. */
+  replaceRange(
+    symbol: string,
+    bars: readonly PriceBarRow[],
+    from?: string,
+    to?: string,
+  ): Promise<void>;
+  getCoverage(symbol: string): Promise<PriceCoverageRow | null>;
+  putCoverage(coverage: PriceCoverageRow): Promise<void>;
+  /** Clears coverage with the bars, so an emptied cache is fetched again. */
   purgeAll(): Promise<void>;
+};
+
+/** The dates the provider answered for one symbol, and what it quoted them as. */
+export type PriceCoverageRow = {
+  symbol: string;
+  from: string;
+  to: string;
+  listing: string | null;
+  currency: string;
 };
 
 /** The repository is built for one tenant, so a row never names its own. */
@@ -362,6 +382,23 @@ function priceBarRow(row: QueryResultRow): PriceBarRow {
     currency: row.currency as string,
     ...(row.split == null ? {} : { split: Number(row.split) }),
   };
+}
+
+const UPSERT_PRICE_BARS =
+  "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider, split) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[], $6::numeric[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP";
+
+function priceBarParams(bars: readonly PriceBarRow[], provider: string): unknown[] {
+  return [
+    bars.map((bar) => bar.symbol),
+    bars.map((bar) => bar.date),
+    bars.map((bar) => bar.close),
+    /* Stored verbatim. `GBp` and `GBP` differ by case and by a factor
+     * of 100, so uppercasing here repriced pence as pounds; providers
+     * canonicalise on the way in instead. */
+    bars.map((bar) => bar.currency),
+    bars.map(() => provider),
+    bars.map((bar) => bar.split ?? null),
+  ];
 }
 
 /**
@@ -413,25 +450,45 @@ export function createPriceBarRepository(
     async upsert(bars) {
       if (bars.length === 0) return;
       await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(UPSERT_PRICE_BARS, priceBarParams(bars, provider));
+      });
+    },
+    async replaceRange(symbol, bars, from, to) {
+      /* One statement: the delete spares the dates the insert writes, so the
+       * two never touch the same row. */
+      const values = priceBarParams(bars, provider);
+      const conditions = [`symbol = $${values.push(symbol)}`, "date <> ALL($2::date[])"];
+      if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
+      if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
+      await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider, split) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[], $6::numeric[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP",
-          [
-            bars.map((bar) => bar.symbol),
-            bars.map((bar) => bar.date),
-            bars.map((bar) => bar.close),
-            /* Stored verbatim. `GBp` and `GBP` differ by case and by a factor
-             * of 100, so uppercasing here repriced pence as pounds; providers
-             * canonicalise on the way in instead. */
-            bars.map((bar) => bar.currency),
-            bars.map(() => provider),
-            bars.map((bar) => bar.split ?? null),
-          ],
+          `WITH stale AS (DELETE FROM investing.price_bars WHERE ${conditions.join(" AND ")}) ${UPSERT_PRICE_BARS}`,
+          values,
+        );
+      });
+    },
+    async getCoverage(symbol) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency FROM investing.price_coverage WHERE symbol = $1`,
+          [symbol],
+        );
+        return (result.rows[0] as PriceCoverageRow | undefined) ?? null;
+      });
+    },
+    async putCoverage(coverage) {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(
+          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, updated_at = CURRENT_TIMESTAMP",
+          [coverage.symbol, coverage.from, coverage.to, coverage.listing, coverage.currency],
         );
       });
     },
     async purgeAll() {
       await withTenantStatement(db, tenantId, async (client) => {
-        await client.query("DELETE FROM investing.price_bars");
+        await client.query(
+          "WITH coverage AS (DELETE FROM investing.price_coverage) DELETE FROM investing.price_bars",
+        );
       });
     },
   };
@@ -998,6 +1055,7 @@ const USER_DATA_TABLES = [
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
+  "investing.price_coverage",
   "investing.price_bars",
   "investing.broker_vaults",
   // After the tables above: deleting their rows raises this user's dashboard version.
@@ -1021,7 +1079,7 @@ export type ErasureReport = { table: string; rows: number }[];
  * only one: `personal.eb_pending_auth` deliberately has no RLS policy at all
  * (`0003_eb_flow.sql`), so an unqualified `DELETE FROM` against it would
  * empty every user's pending bank authorisations, not just this one's.
- * Either all eight tables are cleared or none are; a half-erased account
+ * Either every table is cleared or none is; a half-erased account
  * is worse than a failed request, because the caller is told they are gone.
  *
  * It returns what it deleted per table. An erasure you cannot evidence is one

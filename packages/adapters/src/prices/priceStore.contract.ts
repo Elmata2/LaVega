@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PriceBar } from "@lavega/core";
-import type { PriceStore } from "./PriceStore.js";
+import type { PriceCoverage, PriceStore } from "./PriceStore.js";
 
 const bars: PriceBar[] = [
   { symbol: "AAA", date: "2026-01-01", close: 10, currency: "EUR" },
@@ -8,6 +8,13 @@ const bars: PriceBar[] = [
   { symbol: "AAA", date: "2026-01-03", close: 12, currency: "EUR" },
   { symbol: "BBB", date: "2026-01-02", close: 20, currency: "USD" },
 ];
+const coverage: PriceCoverage = {
+  symbol: "AAA",
+  from: "2026-01-01",
+  to: "2026-01-03",
+  listing: "AAA.AS",
+  currency: "EUR",
+};
 
 export function registerPriceStoreContract(name: string, createStore: () => PriceStore): void {
   describe(`${name} PriceStore contract`, () => {
@@ -65,12 +72,55 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       ]);
     });
 
+    test("replaceRange makes the given bars the symbol's whole history in the window", async () => {
+      const store = createStore();
+      await store.upsert("local", bars);
+      await store.upsert("other", [bars[1]!]);
+      const replaced = { ...bars[1]!, close: 50, currency: "USD" };
+
+      await store.replaceRange("local", "AAA", [replaced], "2026-01-02", "2026-01-03");
+
+      expect(await store.getRange("local", "AAA")).toEqual([bars[0], replaced]);
+      expect(await store.getRange("local", "BBB")).toEqual([bars[3]]);
+      expect(await store.getRange("other", "AAA")).toEqual([bars[1]]);
+    });
+
+    test("replaceRange without bounds replaces the symbol's whole history", async () => {
+      const store = createStore();
+      await store.upsert("local", bars);
+
+      await store.replaceRange("local", "AAA", []);
+
+      expect(await store.getRange("local", "AAA")).toEqual([]);
+      expect(await store.lastDate("local", "AAA")).toBeNull();
+      expect(await store.getRange("local", "BBB")).toEqual([bars[3]]);
+    });
+
     test("purgeAll leaves store readable and empty", async () => {
       const store = createStore();
       await store.upsert("local", bars);
+      await store.putCoverage("local", coverage);
       await store.purgeAll();
       expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-03")).toEqual([]);
       expect(await store.lastDate("local", "AAA")).toBeNull();
+      expect(await store.getCoverage("local", "AAA")).toBeNull();
+    });
+
+    test("coverage is null until recorded, and the latest record replaces it", async () => {
+      const store = createStore();
+      expect(await store.getCoverage("local", "AAA")).toBeNull();
+      await store.putCoverage("local", coverage);
+      expect(await store.getCoverage("local", "AAA")).toEqual(coverage);
+      const widened = { ...coverage, from: "2025-06-02", listing: null, currency: "USD" };
+      await store.putCoverage("local", widened);
+      expect(await store.getCoverage("local", "AAA")).toEqual(widened);
+      expect(await store.getCoverage("local", "BBB")).toBeNull();
+    });
+
+    test("isolates coverage between tenants", async () => {
+      const store = createStore();
+      await store.putCoverage("local", coverage);
+      expect(await store.getCoverage("other", "AAA")).toBeNull();
     });
   });
 }

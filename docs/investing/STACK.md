@@ -58,7 +58,7 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 - **Local:** IndexedDB. Volume is trivial (~41 series × 5yr daily ≈ 51,660 rows, ~300K numbers total, per the market-data research), so a hand-rolled range scan over a `(symbol, date)`-indexed store is enough — no SQLite-wasm or DuckDB-wasm needed as a second local-storage engine.
 - **Hosted:** plain Postgres. Same volume argument — a `(symbol, date)` composite index covers the access pattern; TimescaleDB's compression and continuous aggregates buy nothing at this scale.
-- **Caching policy: incremental.** One backfill call per symbol, then daily top-up calls for new rows only. `PriceStore` exposes a `purgeAll()`/TTL-aware delete — required if a licence like EODHD's Non-Professional tier is in use, which requires deleting cached data within one month of cancelling.
+- **Caching policy: incremental.** One backfill call per symbol, then calls only for dates outside the symbol's recorded coverage (`PriceStore.getCoverage`, stored in `investing.price_coverage` by migration `0015`). `PriceStore` exposes a `purgeAll()`/TTL-aware delete — required if a licence like EODHD's Non-Professional tier is in use, which requires deleting cached data within one month of cancelling.
 - **`Position`/`Trade` are unchanged** — price series are stored entirely separately from `core`'s domain types, joined only by symbol/ISIN at the view layer.
 
 ([Storage seam for price series](https://github.com/Elmata2/LaVega/issues/23))

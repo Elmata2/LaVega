@@ -166,11 +166,11 @@ test("labels a London pence quote GBX so it cannot be read as pounds", async () 
   expect(result?.bars.map((bar) => bar.currency)).toEqual(["GBX"]);
 });
 
-test("refetches from earliest cached currency mismatch so stale rows self-heal", async () => {
+test("a provider now quoting pence refreshes history cached in pounds", async () => {
   const store = createInMemoryPriceStore();
   await store.upsert("local", [
-    { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBP" },
-    { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBP" },
+    { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBP", split: 1 },
+    { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBP", split: 1 },
   ]);
   const priceProviders = [
     {
@@ -257,6 +257,271 @@ test("a new split refetches the older bars so every close is in today's units", 
     request,
   });
 
-  expect(get.mock.calls.map(([call]) => call.from)).toEqual(["2026-01-03", undefined]);
+  expect(get.mock.calls.map(([call]) => call.from)).toEqual(["2026-01-03", "2026-01-01"]);
   expect(result.bars.map((bar) => bar.close)).toEqual([100, 101, 102]);
+});
+
+type Quote = { date: string; close: number };
+
+/** A provider over a fixed market: answers any window with the sessions in it. */
+function market(
+  sessions: readonly Quote[],
+  quote: { listing: string; currency: string } = { listing: "ASML.AS", currency: "EUR" },
+) {
+  const get = vi.fn(async ({ from, to }: { from?: string; to?: string }) => ({
+    bars: sessions
+      .filter((bar) => (!from || bar.date >= from) && (!to || bar.date <= to))
+      .map((bar) => ({ symbol: "ASML", currency: quote.currency, split: 1, ...bar })),
+    problems: [],
+    listing: quote.listing,
+  }));
+  return { get, providers: [{ sourceKey: "stub", priority: 10, get }] };
+}
+
+const windows = (get: ReturnType<typeof market>["get"]) =>
+  get.mock.calls.map(([call]) => [call.from, call.to]);
+
+function weekdays(from: string, to: string): Quote[] {
+  const sessions: Quote[] = [];
+  for (let day = new Date(`${from}T00:00:00Z`); day <= new Date(`${to}T00:00:00Z`);) {
+    if (day.getUTCDay() % 6 !== 0)
+      sessions.push({ date: day.toISOString().slice(0, 10), close: 100 });
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  return sessions;
+}
+
+const asBars = (sessions: readonly Quote[]) =>
+  sessions.map((bar) => ({ symbol: "ASML", currency: "EUR", split: 1, ...bar }));
+
+test("seeded January to September, a June backfill asks only for the missing prefix", async () => {
+  const store = createInMemoryPriceStore();
+  const history = weekdays("2024-06-03", "2025-09-30");
+  await store.upsert("local", asBars(history.filter((bar) => bar.date >= "2025-01-02")));
+  const { get, providers } = market(history);
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: providers,
+    request: { ...request, backfillFrom: "2024-06-03", today: "2025-09-30" },
+  });
+
+  expect(windows(get)).toEqual([["2024-06-03", "2025-01-01"]]);
+  expect(result.bars[0]?.date).toBe("2024-06-03");
+  expect(result.problems).toEqual([]);
+});
+
+test("the same request twice over complete coverage fetches history once", async () => {
+  const store = createInMemoryPriceStore();
+  const { get, providers } = market(weekdays("2025-06-02", "2025-09-30"));
+  const sync = () =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders: providers,
+      request: { ...request, backfillFrom: "2025-06-01", today: "2025-09-30" },
+    });
+
+  await sync();
+  const second = await sync();
+
+  expect(windows(get)).toEqual([["2025-06-01", "2025-09-30"]]);
+  expect(second).toMatchObject({ fetched: false, problems: [] });
+  expect(second.bars[0]?.date).toBe("2025-06-02");
+});
+
+test("a listing quoted in another currency than the broker's is not refetched", async () => {
+  const store = createInMemoryPriceStore();
+  const { get, providers } = market(weekdays("2025-01-01", "2025-01-10"));
+  const sync = (today: string) =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders: providers,
+      request: { ...request, currency: "USD", backfillFrom: "2025-01-01", today },
+    });
+
+  await sync("2025-01-08");
+  await sync("2025-01-10");
+
+  expect(windows(get)).toEqual([
+    ["2025-01-01", "2025-01-08"],
+    ["2025-01-09", "2025-01-10"],
+  ]);
+  await expect(store.getCoverage("local", "ASML")).resolves.toEqual({
+    symbol: "ASML",
+    from: "2025-01-01",
+    to: "2025-01-10",
+    listing: "ASML.AS",
+    currency: "EUR",
+  });
+});
+
+test("a provider that now quotes another listing refreshes the whole history", async () => {
+  const store = createInMemoryPriceStore();
+  const sessions = weekdays("2025-01-01", "2025-01-10");
+  const amsterdam = market(sessions);
+  const nasdaq = market(
+    sessions.map((bar) => ({ ...bar, close: 110 })),
+    { listing: "ASML", currency: "USD" },
+  );
+  const sync = (priceProviders: typeof amsterdam.providers, today: string) =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders,
+      request: { ...request, backfillFrom: "2025-01-01", today },
+    });
+
+  await sync(amsterdam.providers, "2025-01-08");
+  const result = await sync(nasdaq.providers, "2025-01-10");
+
+  expect(windows(nasdaq.get)).toEqual([
+    ["2025-01-09", "2025-01-10"],
+    ["2025-01-01", "2025-01-10"],
+  ]);
+  expect(new Set(result.bars.map((bar) => `${bar.currency} ${bar.close}`))).toEqual(
+    new Set(["USD 110"]),
+  );
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+    from: "2025-01-01",
+    to: "2025-01-10",
+    listing: "ASML",
+    currency: "USD",
+  });
+});
+
+test("an empty holiday prefix is asked for once, not on every sync", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars([{ date: "2025-01-02", close: 100 }]));
+  const { get, providers } = market([{ date: "2025-01-02", close: 100 }]);
+  const sync = () =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders: providers,
+      request: { ...request, backfillFrom: "2025-01-01", today: "2025-01-02" },
+    });
+
+  await expect(sync()).resolves.toMatchObject({ problems: [] });
+  await expect(sync()).resolves.toMatchObject({ fetched: false });
+
+  expect(windows(get)).toEqual([["2025-01-01", "2025-01-01"]]);
+});
+
+test("a failed prefix keeps the cache and still stores the new suffix", async () => {
+  const store = createInMemoryPriceStore();
+  const coverage = {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-10",
+    listing: "ASML.AS",
+    currency: "EUR",
+  };
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-10")));
+  await store.putCoverage("local", coverage);
+  const get = vi.fn(async ({ from, to }: { from?: string; to?: string }) =>
+    from === "2025-01-01"
+      ? { bars: [], problems: ["Yahoo Finance rate-limited price request"] }
+      : { bars: asBars(weekdays(from!, to!)), problems: [], listing: "ASML.AS" },
+  );
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "stub", priority: 10, get }],
+    request: { ...request, backfillFrom: "2025-01-01", today: "2025-01-14" },
+  });
+
+  expect(result.problems).toEqual(["Yahoo Finance rate-limited price request"]);
+  expect(result.bars.map((bar) => bar.date)).toEqual(
+    weekdays("2025-01-06", "2025-01-14").map((bar) => bar.date),
+  );
+  await expect(store.getCoverage("local", "ASML")).resolves.toEqual({
+    ...coverage,
+    to: "2025-01-14",
+  });
+});
+
+test("a failed refresh leaves the cached history and its coverage as they were", async () => {
+  const store = createInMemoryPriceStore();
+  const coverage = {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-07",
+    listing: "ASML.AS",
+    currency: "EUR",
+  };
+  const cached = asBars(weekdays("2025-01-06", "2025-01-07"));
+  await store.upsert("local", cached);
+  await store.putCoverage("local", coverage);
+  const get = vi.fn(async ({ from }: { from?: string }) =>
+    from === "2025-01-08"
+      ? {
+          bars: [{ symbol: "ASML", date: "2025-01-08", close: 90, currency: "GBP", split: 1 }],
+          problems: [],
+          listing: "ASML.L",
+        }
+      : { bars: [], problems: ["Yahoo Finance blocked price request"] },
+  );
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "stub", priority: 10, get }],
+    request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-08" },
+  });
+
+  expect(result).toMatchObject({ bars: cached, problems: ["Yahoo Finance blocked price request"] });
+  await expect(store.getCoverage("local", "ASML")).resolves.toEqual(coverage);
+});
+
+test("a refresh to another listing drops cached sessions that listing did not trade", async () => {
+  const store = createInMemoryPriceStore();
+  const sessions = weekdays("2025-01-15", "2025-01-24");
+  const amsterdam = market(sessions);
+  const nasdaq = market(
+    sessions.filter((bar) => bar.date !== "2025-01-20"),
+    { listing: "ASML", currency: "USD" },
+  );
+  const sync = (priceProviders: typeof amsterdam.providers, today: string) =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders,
+      request: { ...request, backfillFrom: "2025-01-15", today },
+    });
+
+  await sync(amsterdam.providers, "2025-01-22");
+  await sync(nasdaq.providers, "2025-01-24");
+  nasdaq.get.mockClear();
+  const settled = await sync(nasdaq.providers, "2025-01-24");
+
+  expect(nasdaq.get).not.toHaveBeenCalled();
+  expect(settled.fetched).toBe(false);
+  expect(settled.bars.map((bar) => bar.date)).not.toContain("2025-01-20");
+  expect(new Set(settled.bars.map((bar) => bar.currency))).toEqual(new Set(["USD"]));
+});
+
+test("a cache written before splits were recorded refreshes once, then settles", async () => {
+  const store = createInMemoryPriceStore();
+  const sessions = weekdays("2025-01-06", "2025-01-10");
+  await store.upsert(
+    "local",
+    sessions.map((bar) => ({ symbol: "ASML", currency: "EUR", ...bar })),
+  );
+  const { get, providers } = market(sessions);
+  const sync = () =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders: providers,
+      request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-10" },
+    });
+
+  await sync();
+  await expect(sync()).resolves.toMatchObject({ fetched: false });
+
+  expect(windows(get)).toEqual([["2025-01-06", "2025-01-10"]]);
 });

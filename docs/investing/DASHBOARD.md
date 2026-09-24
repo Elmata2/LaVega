@@ -156,7 +156,9 @@ Fetch in this order:
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
-If cached bars for a symbol contain a currency that no longer matches the symbol's normalized currency, restart that symbol from the earliest mismatched date and overwrite the stale rows. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge.
+Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.
+
+The broker's currency is not evidence of a stale cache, because a listing can quote in another currency. When the provider quotes another listing or currency than the coverage records, or reports a split after it, refetch the whole covered history and make the answer the only rows in that window. A cached session the new answer lacks is deleted, so a holiday on the old listing cannot mark the cache stale on every later sync. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge. Caches written before coverage existed take it from their bars once.
 
 Expose price progress separately from broker progress at `GET /api/prices/sync/status`. Use the same status vocabulary as `BrokerSyncProgress`. Show remaining symbols and running or waiting state in the dashboard right rail.
 

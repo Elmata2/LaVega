@@ -13,7 +13,8 @@ export type YahooPriceRequest = {
   to?: string;
   today?: string;
 };
-export type PriceProviderResult = { bars: PriceBar[]; problems: string[] };
+/** `listing` names the provider's own symbol for the listing it quoted. */
+export type PriceProviderResult = { bars: PriceBar[]; problems: string[]; listing?: string };
 
 export function createYahooPriceProvider(
   input: { client?: YahooHttpClient; today?: () => string } = {},
@@ -53,7 +54,7 @@ export function createYahooPriceProvider(
           if (session && split.ratio !== undefined && split.ratio > 0)
             session.split = (session.split ?? 1) * split.ratio;
         }
-        return { bars, problems: [] };
+        return { bars, problems: [], listing: history.symbol };
       } catch (error) {
         return { bars: [], problems: [readableYahooProblem(error)] };
       }

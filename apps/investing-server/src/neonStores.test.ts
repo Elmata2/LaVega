@@ -33,9 +33,10 @@ test("price reads and writes run under the tenant that owns the bars", async () 
 
   await store.getRange("user-a", "AAPL", "2026-01-01", "2026-01-31");
   await store.upsert("user-b", [{ symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]);
+  await store.replaceRange("user-c", "AAPL", [], "2026-01-01");
   await store.purgeAll();
 
-  expect(identities(calls)).toEqual(["user-a", "user-b", "user-purge"]);
+  expect(identities(calls)).toEqual(["user-a", "user-b", "user-c", "user-purge"]);
 });
 
 test("purging the price cache clears only the caller's rows", async () => {
@@ -43,7 +44,13 @@ test("purging the price cache clears only the caller's rows", async () => {
 
   await createNeonPriceStore(db, () => "user-a").purgeAll();
 
-  expect(calls.some((call) => call.sql === "DELETE FROM investing.price_bars")).toBe(true);
+  expect(
+    calls.some(
+      (call) =>
+        call.sql ===
+        "WITH coverage AS (DELETE FROM investing.price_coverage) DELETE FROM investing.price_bars",
+    ),
+  ).toBe(true);
   expect(calls.some((call) => call.sql.includes("TRUNCATE"))).toBe(false);
 });
 

@@ -1,22 +1,30 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { PriceBar } from "@lavega/core";
-import type { PriceStore } from "./PriceStore.js";
+import type { PriceCoverage, PriceStore } from "./PriceStore.js";
 
 const DEFAULT_DB_NAME = "lavega-prices";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "prices";
+const COVERAGE_STORE_NAME = "coverage";
 
 type StoredPriceBar = PriceBar & { tenantId: string };
+type StoredPriceCoverage = PriceCoverage & { tenantId: string };
 
 function openPriceDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       /* v1 rows were keyed on a tenant the writer chose rather than the tenant
        * the caller asked for, so they cannot be mapped onto v2 keys. Prices are
        * a rebuildable cache; drop them and let the next sync refill. */
-      if (db.objectStoreNames.contains(STORE_NAME)) db.deleteObjectStore(STORE_NAME);
-      const store = db.createObjectStore(STORE_NAME, { keyPath: ["tenantId", "symbol", "date"] });
-      store.createIndex("tenant-symbol-date", ["tenantId", "symbol", "date"], { unique: true });
+      if (oldVersion < 2) {
+        if (db.objectStoreNames.contains(STORE_NAME)) db.deleteObjectStore(STORE_NAME);
+        const store = db.createObjectStore(STORE_NAME, {
+          keyPath: ["tenantId", "symbol", "date"],
+        });
+        store.createIndex("tenant-symbol-date", ["tenantId", "symbol", "date"], { unique: true });
+      }
+      if (oldVersion < 3)
+        db.createObjectStore(COVERAGE_STORE_NAME, { keyPath: ["tenantId", "symbol"] });
     },
   });
 }
@@ -60,9 +68,43 @@ export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore 
       await tx.done;
       db.close();
     },
+    async replaceRange(tenantId, symbol, bars, from, to) {
+      const db = await openPriceDb(dbName);
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      await tx.store.delete(
+        IDBKeyRange.bound([tenantId, symbol, from ?? ""], [tenantId, symbol, to ?? "￿"]),
+      );
+      await Promise.all(
+        bars.map((bar) => tx.store.put({ ...bar, tenantId } satisfies StoredPriceBar)),
+      );
+      await tx.done;
+      db.close();
+    },
+    async getCoverage(tenantId, symbol) {
+      const db = await openPriceDb(dbName);
+      const row: StoredPriceCoverage | undefined = await db.get(COVERAGE_STORE_NAME, [
+        tenantId,
+        symbol,
+      ]);
+      db.close();
+      if (!row) return null;
+      const { tenantId: owner, ...coverage } = row;
+      void owner;
+      return coverage;
+    },
+    async putCoverage(tenantId, coverage) {
+      const db = await openPriceDb(dbName);
+      await db.put(COVERAGE_STORE_NAME, { ...coverage, tenantId } satisfies StoredPriceCoverage);
+      db.close();
+    },
     async purgeAll() {
       const db = await openPriceDb(dbName);
-      await db.clear(STORE_NAME);
+      const tx = db.transaction([STORE_NAME, COVERAGE_STORE_NAME], "readwrite");
+      await Promise.all([
+        tx.objectStore(STORE_NAME).clear(),
+        tx.objectStore(COVERAGE_STORE_NAME).clear(),
+      ]);
+      await tx.done;
       db.close();
     },
   };

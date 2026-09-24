@@ -50,3 +50,22 @@ export function databaseOver(connect: () => Promise<Connection>): Database {
   };
   return { connect, http } as unknown as Database;
 }
+
+/** A `Database` over one in-process Postgres such as PGlite, which has a single
+ *  connection: each caller waits for the one before it to release. */
+export function singleConnectionDatabase(instance: {
+  query(text: string, params?: never[]): Promise<unknown>;
+}): Database {
+  let inUse: Promise<unknown> = Promise.resolve();
+  return databaseOver(async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const ahead = inUse;
+    inUse = inUse.then(() => held);
+    await ahead;
+    return {
+      query: (text: string, params?: unknown[]) => instance.query(text, params as never[]),
+      release,
+    };
+  });
+}
