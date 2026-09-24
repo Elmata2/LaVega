@@ -19,6 +19,7 @@ export type LandingCopy = {
     investing: string;
     login: string;
   };
+  login: { intro: string };
   langSwitch: { label: string; to: string };
   hero: {
     titleTop: string;
@@ -89,6 +90,7 @@ const nl: LandingCopy = {
     investing: "Investing",
     login: "Inloggen",
   },
+  login: { intro: "Log in met je LaVega-account." },
   langSwitch: { label: "English", to: "Switch to English" },
   hero: {
     titleTop: "Al je rekeningen,",
@@ -233,6 +235,7 @@ const en: LandingCopy = {
     investing: "Investing",
     login: "Sign in",
   },
+  login: { intro: "Sign in with your LaVega account." },
   langSwitch: { label: "Nederlands", to: "Bekijk deze pagina in het Nederlands" },
   hero: {
     titleTop: "Every account,",

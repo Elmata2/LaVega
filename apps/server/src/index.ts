@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -22,8 +22,8 @@ import {
   runInvestingCron,
   shouldMountInvesting,
 } from "./investing-mount.js";
-import { getAuth } from "./auth.js";
-import { apiGuard } from "./apiGuard.js";
+import { getAuth, verifiedSession } from "./auth.js";
+import { apiGuard, guardIsDisabled } from "./apiGuard.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { localeRedirectTarget } from "@lavega/core";
 
@@ -308,6 +308,29 @@ app.get("/", async (c, next) => {
   if (target === null) return next();
   return c.body(null, 302, { Location: target, Vary: "Accept-Language, Cookie" });
 });
+
+/* /app and /app/* are the personal vault's SPA shell, so a request here is
+ * gated on the same verified session as /api/* — anonymous visitors are sent
+ * to `/`, where sign-in has moved. It had to move out of /app first: locking
+ * this door before the way in existed would have trapped everyone, including
+ * a legitimate user, behind it. This gate respects the same
+ * `guardIsDisabled()` escape hatch as apiGuard for the same reason —
+ * `pnpm dev`'s cross-origin Vite page never carries the session cookie either. */
+async function requireAppSession(c: Context, next: Next) {
+  if (guardIsDisabled()) return next();
+  /* Whether this path answers 302 or the shell is decided by the session
+   * cookie, and a shared cache that does not know that can serve one user's
+   * answer to another — either bouncing a signed-in user to `/`, or handing
+   * the shell to an anonymous one and voiding the gate. Vercel currently
+   * revalidates this path on every request, so `Vary` is what keeps that true
+   * if a caching layer is ever put in front. */
+  c.header("Vary", "Cookie");
+  const session = await verifiedSession(c.req.raw);
+  if (!session) return c.body(null, 302, { Location: "/", "Cache-Control": "private, no-store" });
+  return next();
+}
+app.use("/app", requireAppSession);
+app.use("/app/*", requireAppSession);
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web
