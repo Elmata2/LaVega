@@ -22,9 +22,21 @@ import {
 } from "./netBenefit.js";
 
 /** Travel's slot in the agent namespace (see `agentFacts.ts` for what it may
- *  learn: fxFeePct / convertFeePct / cashbackPct / pointsPerEuro /
- *  transferFreeViaIdeal, keyed by product name). */
+ *  learn: fxFeePct / convertFeePct / cashbackPct / pointsPerEuro / topUpFree,
+ *  keyed by product name). */
 export const TRAVEL_AGENT = AGENTS.travel;
+
+/** `topUpFree` replaced the Netherlands-only `transferFreeViaIdeal` (see
+ *  `agentFacts.ts`), but this is a local-first vault: a fact written under the
+ *  old key before the rename has no server to migrate it, so it has to keep
+ *  reading. Only these two call sites care — `factNumber` itself stays generic
+ *  for every other key. */
+function topUpFreeFlag(facts: readonly LearnedFact[], subject: string): number | null {
+  return (
+    factNumber(facts, TRAVEL_AGENT, subject, "topUpFree") ??
+    factNumber(facts, TRAVEL_AGENT, subject, "transferFreeViaIdeal")
+  );
+}
 
 /** The reference spend the advice is priced against. A percentage is hard to
  *  act on; "€14 op €1.000" is not. */
@@ -157,9 +169,10 @@ export type SpendOption = {
 
 /** DE "eur"-VARIANT deelt ÉÉN copy-string met `PayHeadline`'s "eur" en
  *  `JourneyHeadline`'s "eur" — zie de opmerking bij `JourneyHeadline`.
- *  "move-funds" met `method: null` is het bestaande "geen methode bekend" pad;
- *  met `method` erbij is het de gratis-via-iDEAL zin — zelfde onderscheid als
- *  het `method ? … : …` sjabloon hiervoor. */
+ *  "move-funds" met `free: false` is het bestaande "geen methode bekend" pad;
+ *  met `free: true` is het de gratis-overboeking-zin. Welke rail dat is (iDEAL,
+ *  SEPA instant, …) beslist de UI aan de hand van het thuisland — core kent dat
+ *  land niet en hoort het ook niet te kennen. */
 /** Waar het geld het best staat, als feit. Was één Nederlandse zin die core
  *  opbouwde en het reisblok letterlijk afdrukte; `best` is null als er geen
  *  betere rente bekend is, en dat is iets anders dan nul. */
@@ -184,12 +197,12 @@ export type ConvertStepNote =
   | { kind: "eur" }
   | { kind: "no-terms" }
   | { kind: "pay-directly"; provider: string }
-  | { kind: "move-funds"; fromProvider: string; toProvider: string; method: string | null };
+  | { kind: "move-funds"; fromProvider: string; toProvider: string; free: boolean };
 
 export type ConvertStep = {
   fromProvider: string | null;
   toProvider: string | null;
-  method: string | null; // e.g. "iDEAL"
+  free: boolean; // which rail that is (iDEAL, SEPA instant, …) is the UI's call
   note: ConvertStepNote;
 };
 
@@ -657,7 +670,7 @@ function planConversion(
     return {
       fromProvider: null,
       toProvider: null,
-      method: null,
+      free: false,
       note: { kind: "no-terms" },
     };
   }
@@ -675,25 +688,24 @@ function planConversion(
           providerOf(a) !== winningBank,
       )
       .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0] ?? null;
-  const method =
-    factNumber(facts, TRAVEL_AGENT, best.provider, "transferFreeViaIdeal") === 1 ? "iDEAL" : null;
+  const free = topUpFreeFlag(facts, best.provider) === 1;
   if (!funding) {
     return {
       fromProvider: null,
       toProvider: best.provider,
-      method,
+      free,
       note: { kind: "pay-directly", provider: best.provider },
     };
   }
   return {
     fromProvider: providerOf(funding),
     toProvider: best.provider,
-    method,
+    free,
     note: {
       kind: "move-funds",
       fromProvider: providerOf(funding),
       toProvider: best.provider,
-      method,
+      free,
     },
   };
 }
@@ -701,7 +713,7 @@ function planConversion(
 /** Why a journey's cost is what it is (or isn't known), as facts. Mirrors
  *  `SpendWhy` for the direct leg — a journey that pays directly IS that spend
  *  option, worded with "direct betalen" in front — and adds the via-route's
- *  own two facts (a free iDEAL transfer, the exchange leg's markup). */
+ *  own two facts (a free transfer, the exchange leg's markup). */
 export type JourneyWhy =
   | { kind: "direct"; spend: SpendWhy }
   | { kind: "direct-unknown" }
@@ -727,7 +739,7 @@ export type Journey = {
   via: string | null;
   /** The bank the money leaves, when a move is involved. */
   fundedFrom: string | null;
-  method: string | null; // "iDEAL" when the transfer leg is free
+  free: boolean; // the transfer leg is free; which rail that is is the UI's call
   transferPct: number | null;
   convertPct: number | null;
   /** The card leg. Paying direct costs the card's FX surcharge minus cashback;
@@ -772,7 +784,7 @@ export function rankJourneys(
       productKind: s.productKind,
       via: null,
       fundedFrom: null,
-      method: null,
+      free: false,
       transferPct: null,
       convertPct: null,
       spendPct: s.netCostPct,
@@ -795,7 +807,7 @@ export function rankJourneys(
       .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0];
     if (!funding) continue;
 
-    const free = factNumber(facts, TRAVEL_AGENT, s.provider, "transferFreeViaIdeal") === 1;
+    const free = topUpFreeFlag(facts, s.provider) === 1;
     const transferPct = free ? 0 : null; // unknown until an agent or the owner says so
     const convertPct = factNumber(facts, TRAVEL_AGENT, s.provider, "convertFeePct");
     // You already hold the currency by the time you pay, so the card's FX
@@ -810,7 +822,7 @@ export function rankJourneys(
       productKind: s.productKind,
       via: s.provider,
       fundedFrom: providerOf(funding),
-      method: free ? "iDEAL" : null,
+      free,
       transferPct,
       convertPct,
       spendPct,
@@ -872,7 +884,7 @@ export type JourneyHeadline =
       kind: "route";
       head:
         | { kind: "direct"; provider: string }
-        | { kind: "via"; fundedFrom: string | null; via: string; method: string | null };
+        | { kind: "via"; fundedFrom: string | null; via: string; free: boolean };
       /** Euros on € 1.000, matching `Journey.costOnReference`'s own unit. */
       costOnReference: number | null;
       versus: VersusNote;
@@ -899,7 +911,7 @@ export function journeyHeadline(
     head:
       best.via === null
         ? { kind: "direct", provider: best.provider }
-        : { kind: "via", fundedFrom: best.fundedFrom, via: best.via, method: best.method },
+        : { kind: "via", fundedFrom: best.fundedFrom, via: best.via, free: best.free },
     costOnReference: best.costOnReference,
     versus: versusNote(saving, runnerUp),
   };
@@ -963,7 +975,7 @@ export function planTravel(input: {
       ? {
           fromProvider: null,
           toProvider: null,
-          method: null,
+          free: false,
           note: { kind: "eur" },
         }
       : planConversion(accounts, bestSpend, facts);

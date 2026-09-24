@@ -34,11 +34,13 @@ const props: TravelBlockProps = {
   facts: [],
   asOf: ASOF,
   homeCountry: "NL",
+  homeCountryChosen: true,
   busy: false,
   aiAvailable: false,
   onRefreshTerms: () => {},
   onRecheckAi: () => {},
   onCorrectFact: () => {},
+  onNavigate: () => {},
 };
 
 test("TravelBlock renders as a module and asks for a destination first", () => {
@@ -53,6 +55,16 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
   expect(html).toContain("Kies een land");
   // No destination picked, so there is no plan and no terms notice yet.
   expect(html).not.toContain("travel-terms");
+});
+
+test("a never-chosen home country says results assume the Netherlands", () => {
+  const c = optimiseCopy.nl.travel;
+  const chosen = renderToStaticMarkup(<TravelBlock {...props} homeCountryChosen={true} />);
+  expect(chosen).not.toContain(c.controls.homeAssumedNote);
+
+  const assumed = renderToStaticMarkup(<TravelBlock {...props} homeCountryChosen={false} />);
+  expect(assumed).toContain(c.controls.homeAssumedNote);
+  expect(assumed).toContain(c.controls.homeAssumedChange);
 });
 
 /* --- The block with a destination. Needs a real DOM because the destination,
@@ -202,6 +214,13 @@ function rerender(overrides: Partial<TravelBlockProps> = {}) {
   });
 }
 
+test("the assumed-NL note's link navigates to the profile, where the country is set", () => {
+  const seen: string[] = [];
+  renderWithDestination({ homeCountryChosen: false, onNavigate: (v) => seen.push(v) });
+  click(byText("button", optimiseCopy.nl.travel.controls.homeAssumedChange));
+  expect(seen).toEqual(["profiel"]);
+});
+
 test("the block leads with the plan's headline — the one answer, in euros", () => {
   const c = renderWithDestination();
   const expected = payHeadlineSentence(
@@ -215,6 +234,7 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
     }).headline,
     optimiseCopy.nl.travel,
     "nl",
+    optimiseCopy.nl.travel.railFor("NL"),
   );
 
   const answer = c.querySelector(".travel-winner-name")!;
@@ -229,6 +249,17 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
   expect(c.querySelector('.travel-winner [data-testid="travel-journeys"]')).toBeNull();
   expect(foldText(c)).toContain("Bewaren");
   expect(c.querySelector(".travel-winner")!.textContent).not.toContain("Bewaren");
+});
+
+test("an NL home country names iDEAL as the free transfer rail", () => {
+  const nl = renderWithDestination({ homeCountry: "NL", homeCountryChosen: true });
+  expect(nl.textContent).toContain("iDEAL");
+});
+
+test("a DE home country never says iDEAL — it gets its own rail", () => {
+  const de = renderWithDestination({ homeCountry: "DE", homeCountryChosen: true });
+  expect(de.textContent).not.toContain("iDEAL");
+  expect(de.textContent).toContain("SEPA instant");
 });
 
 test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () => {
@@ -1117,6 +1148,7 @@ test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen z
     }).headline,
     optimiseCopy.nl.travel,
     "nl",
+    optimiseCopy.nl.travel.railFor("NL"),
   );
   const shown = headlineText(el);
 

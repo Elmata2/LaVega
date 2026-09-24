@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { View } from "../../App";
 import type {
   Account,
   Tx,
@@ -110,6 +111,10 @@ export type TravelBlockProps = {
    *  test can pin behaviour without the whole 122-product file. */
   catalogue?: readonly CatalogueEntryLike[];
   homeCountry: string;
+  /** Whether the owner ever actually picked a home country — false means
+   *  `homeCountry` above is the silent NL fallback, and the screen must say so. */
+  homeCountryChosen: boolean;
+  onNavigate: (view: View) => void;
   busy: boolean;
   /** Whether the server has an API key — hides the refresh action when not. */
   aiAvailable: boolean;
@@ -266,7 +271,7 @@ function spendWhySentence(why: SpendWhy, c: TravelCopy): string {
 /** Same pattern for `Journey.why`. The "direct" case wraps `spendWhySentence`
  *  rather than duplicating it — a direct journey's reasoning IS its spend
  *  option's reasoning, said with "pay directly" in front. */
-function journeyWhySentence(why: JourneyWhy, c: TravelCopy): string {
+function journeyWhySentence(why: JourneyWhy, c: TravelCopy, rail = ""): string {
   switch (why.kind) {
     case "direct":
       return c.journeyWhy.direct(spendWhySentence(why.spend, c));
@@ -277,6 +282,7 @@ function journeyWhySentence(why: JourneyWhy, c: TravelCopy): string {
         why.free,
         pct(c, why.convertPct),
         why.cashbackPct === null ? null : pct(c, why.cashbackPct),
+        rail,
       );
     case "via-unknown-convert":
       return c.journeyWhy.viaUnknownConvert;
@@ -456,7 +462,12 @@ function versusNoteSentence(v: VersusNote, c: TravelCopy, locale: Locale): strin
 
 /** The one place a `JourneyHeadline` becomes a sentence — `payHeadline`'s
  *  fallback when the winning route is one of his own. */
-function journeyHeadlineSentence(h: JourneyHeadline, c: TravelCopy, locale: Locale): string {
+function journeyHeadlineSentence(
+  h: JourneyHeadline,
+  c: TravelCopy,
+  locale: Locale,
+  rail: string,
+): string {
   switch (h.kind) {
     case "eur":
       return c.common.euroNoExchangeNeeded;
@@ -469,7 +480,7 @@ function journeyHeadlineSentence(h: JourneyHeadline, c: TravelCopy, locale: Loca
           : c.journeyHeadline.via(
               h.head.fundedFrom ?? "",
               displayProduct(h.head.via, c),
-              h.head.method,
+              h.head.free ? rail : null,
             );
       const cost =
         h.costOnReference === null
@@ -485,12 +496,17 @@ function journeyHeadlineSentence(h: JourneyHeadline, c: TravelCopy, locale: Loca
 /** The one place a `PayHeadline` becomes a sentence — THE answer the block
  *  leads with. Exhaustive by switch, so a new kind in `payHeadline` (core)
  *  fails the build here instead of rendering nothing. */
-export function payHeadlineSentence(h: PayHeadline, c: TravelCopy, locale: Locale): string {
+export function payHeadlineSentence(
+  h: PayHeadline,
+  c: TravelCopy,
+  locale: Locale,
+  rail: string,
+): string {
   switch (h.kind) {
     case "eur":
       return c.common.euroNoExchangeNeeded;
     case "journey":
-      return journeyHeadlineSentence(h.headline, c, locale);
+      return journeyHeadlineSentence(h.headline, c, locale, rail);
     case "catalogue-card": {
       const cost =
         h.costOnReference === null
@@ -516,7 +532,7 @@ export function payHeadlineSentence(h: PayHeadline, c: TravelCopy, locale: Local
 }
 
 /** The one place a `ConvertStepNote` becomes a sentence. */
-function convertStepNoteSentence(note: ConvertStepNote, c: TravelCopy): string {
+function convertStepNoteSentence(note: ConvertStepNote, c: TravelCopy, rail: string): string {
   switch (note.kind) {
     case "eur":
       return c.common.euroNoExchangeNeeded;
@@ -525,12 +541,8 @@ function convertStepNoteSentence(note: ConvertStepNote, c: TravelCopy): string {
     case "pay-directly":
       return c.convertStep.payDirectly(displayProduct(note.provider, c));
     case "move-funds":
-      return note.method
-        ? c.convertStep.moveFundsFree(
-            note.fromProvider,
-            displayProduct(note.toProvider, c),
-            note.method,
-          )
+      return note.free
+        ? c.convertStep.moveFundsFree(note.fromProvider, displayProduct(note.toProvider, c), rail)
         : c.convertStep.moveFundsPlain(note.fromProvider, displayProduct(note.toProvider, c));
   }
 }
@@ -951,7 +963,7 @@ type Leg = { name: string; detail: string; cost: string };
  *  wisselen → betalen. Named after the sections they replace, so the detail the
  *  owner already knows how to read is still there — now inside one route
  *  instead of standing next to it as a rival answer. */
-function legsOf(j: Journey, locale: Locale, c: TravelCopy): Leg[] {
+function legsOf(j: Journey, locale: Locale, c: TravelCopy, rail: string): Leg[] {
   const product = productLabel(j.bank, j.productKind, c);
   if (j.via === null) {
     return [
@@ -963,7 +975,7 @@ function legsOf(j: Journey, locale: Locale, c: TravelCopy): Leg[] {
   return [
     {
       name: c.legs.transfer,
-      detail: `${j.fundedFrom ?? c.legs.defaultFundingSource} → ${product}${j.method ? fill(c.legs.viaMethodSuffix, { method: j.method }) : ""}`,
+      detail: `${j.fundedFrom ?? c.legs.defaultFundingSource} → ${product}${j.free ? fill(c.legs.viaMethodSuffix, { method: rail }) : ""}`,
       cost: legCost(locale, c, j.transferPct),
     },
     {
@@ -1569,6 +1581,8 @@ export default function TravelBlock({
   facts,
   asOf,
   homeCountry,
+  homeCountryChosen,
+  onNavigate,
   busy,
   aiAvailable,
   pendingTerms = [],
@@ -1581,6 +1595,10 @@ export default function TravelBlock({
 }: TravelBlockProps) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].travel;
+  // "" (never a guessed country) when no home country was ever chosen — the
+  // banner above already says results assume the Netherlands, so this stays
+  // the neutral rail rather than repeating that specific guess.
+  const rail = c.railFor(homeCountryChosen ? homeCountry : "");
   const [destination, setDestination] = useState("");
   /* Eén uitklap voor het hele blok, en die staat in `ToonMeer` — geen `useState`
    * meer hier. Dat is niet alleen minder code: de stand zat in React en dus
@@ -1676,6 +1694,7 @@ export default function TravelBlock({
             : plan.headline,
           c,
           locale,
+          rail,
         );
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
@@ -1730,6 +1749,12 @@ export default function TravelBlock({
           <span className="eyebrow">{fill(c.controls.payingIn, { currency: plan.currency })}</span>
         )}
       </div>
+      {!homeCountryChosen && (
+        <p className="cell-sub">
+          {c.controls.homeAssumedNote}{" "}
+          <CardLink onClick={() => onNavigate("profiel")}>{c.controls.homeAssumedChange}</CardLink>
+        </p>
+      )}
 
       {!plan ? (
         <p className="block-empty">{c.empty}</p>
@@ -1949,7 +1974,7 @@ export default function TravelBlock({
                       </div>
 
                       <ul className="list-none mt-2 mx-0 mb-0 p-0 flex flex-col gap-1">
-                        {legsOf(j, locale, c).map((leg) => (
+                        {legsOf(j, locale, c, rail).map((leg) => (
                           <li
                             key={leg.name}
                             className="flex items-baseline justify-between gap-3 text-[0.85rem] text-muted"
@@ -1966,8 +1991,10 @@ export default function TravelBlock({
 
                       <p className="cell-sub travel-note">
                         {j.known
-                          ? journeyWhySentence(j.why, c)
-                          : fill(c.journeys.unknownReason, { why: journeyWhySentence(j.why, c) })}
+                          ? journeyWhySentence(j.why, c, rail)
+                          : fill(c.journeys.unknownReason, {
+                              why: journeyWhySentence(j.why, c, rail),
+                            })}
                       </p>
 
                       {j.via === null ? (
@@ -2029,7 +2056,7 @@ export default function TravelBlock({
                       instruction that may be impossible to follow. */}
                   <p className="travel-step-line">
                     {bestJourney
-                      ? convertStepNoteSentence(plan.convert.note, c)
+                      ? convertStepNoteSentence(plan.convert.note, c, rail)
                       : c.steps.exchangeNoCard}
                   </p>
                 </div>

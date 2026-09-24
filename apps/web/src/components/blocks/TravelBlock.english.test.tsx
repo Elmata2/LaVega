@@ -66,6 +66,8 @@ const baseProps: TravelBlockProps = {
   asOf: ASOF,
   catalogue: CATALOGUE,
   homeCountry: "NL",
+  homeCountryChosen: true,
+  onNavigate: () => {},
   busy: false,
   aiAvailable: false,
   onRefreshTerms: () => {},

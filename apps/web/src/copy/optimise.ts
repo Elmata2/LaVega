@@ -3119,6 +3119,24 @@ const TRAVEL_COUNTRIES = [
   { code: "IT", nl: "Italië", en: "Italy" },
 ] as const;
 
+/** Home country → the instant-transfer rail that country's banks actually
+ *  offer — NOT `COUNTRY_CURRENCY` in core's travel.ts: core only prices
+ *  whether a transfer is free (`Journey.free`/`ConvertStep.free`), never which
+ *  rail that is, because it doesn't and shouldn't know the home country (see
+ *  `topUpFreeFlag`'s doc comment there). Shared verbatim by both locales, same
+ *  as `TRAVEL_COUNTRIES` above: these are proper nouns, not translations. An
+ *  uncovered country (or "" for "no home country chosen yet") falls back to
+ *  the rail every SEPA bank supports — never a guess at a specific one. */
+const RAIL_BY_COUNTRY: Record<string, string> = {
+  NL: "iDEAL",
+  DE: "SEPA instant",
+  GB: "Faster Payments",
+};
+
+function railFor(country: string): string {
+  return RAIL_BY_COUNTRY[country.trim().toUpperCase()] ?? "SEPA";
+}
+
 /**
  * Draft copy slice for TravelBlock.tsx.
  *
@@ -3142,6 +3160,10 @@ export type TravelCopy = {
     countryPlaceholder: string;
     /** "je betaalt daar in {currency}" */
     payingIn: string;
+    /** Shown when `homeCountry` is the silent NL fallback, never a real choice. */
+    homeAssumedNote: string;
+    /** The link that follows `homeAssumedNote`, to the Profiel country picker. */
+    homeAssumedChange: string;
   };
   /** Shown before a destination is picked. */
   empty: string;
@@ -3187,7 +3209,7 @@ export type TravelCopy = {
   journeyWhy: {
     direct: (spend: string) => string;
     directUnknown: string;
-    via: (free: boolean, convertPct: string, cashbackPct: string | null) => string;
+    via: (free: boolean, convertPct: string, cashbackPct: string | null, method: string) => string;
     viaUnknownConvert: string;
     viaUnknownTransfer: string;
   };
@@ -3560,6 +3582,13 @@ export type TravelCopy = {
   };
   /** Destination options for the country <select>; identical across locales. */
   countries: typeof TRAVEL_COUNTRIES;
+  /** Home country → the transfer rail those banks offer, for every free-transfer
+   *  sentence below (`journeyWhy.via`, `journeyHeadline.via`,
+   *  `convertStep.moveFundsFree`, `legs.viaMethodSuffix`). Core only says a
+   *  transfer is free; it never names the rail — see `RAIL_BY_COUNTRY` above.
+   *  Pass "" for "no home country chosen yet" to get the neutral fallback
+   *  instead of guessing a specific rail. */
+  railFor: (country: string) => string;
   /** De opnameprijs in woorden. Stond als `describeWithdrawalFee` in core en
    *  was daarmee altijd Nederlands op een scherm dat ook Engels kan zijn — de
    *  kop van die functie noemde zichzelf al "de ene nog-Nederlandse string die
@@ -3577,6 +3606,8 @@ const travelCopy_nl: TravelCopy = {
     from: "Ik reis vanuit {country} naar",
     countryPlaceholder: "— kies een land —",
     payingIn: "je betaalt daar in {currency}",
+    homeAssumedNote: "Nog geen thuisland gekozen: deze uitkomsten gaan uit van Nederland.",
+    homeAssumedChange: "Kies je eigen land",
   },
   empty: "Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.",
   badge: {
@@ -3602,8 +3633,8 @@ const travelCopy_nl: TravelCopy = {
   journeyWhy: {
     direct: (spend) => `direct betalen: ${spend}`,
     directUnknown: "voorwaarden nog onbekend",
-    via: (free, convertPct, cashbackPct) =>
-      `overzetten${free ? " via iDEAL (gratis)" : ""} en daar wisselen: ${convertPct} wisselkosten${cashbackPct ? ` − ${cashbackPct} cashback` : ""}`,
+    via: (free, convertPct, cashbackPct, method) =>
+      `overzetten${free ? ` via ${method} (gratis)` : ""} en daar wisselen: ${convertPct} wisselkosten${cashbackPct ? ` − ${cashbackPct} cashback` : ""}`,
     viaUnknownConvert: "wisselkosten nog onbekend",
     viaUnknownTransfer: "overboekkosten nog onbekend",
   },
@@ -3863,6 +3894,7 @@ const travelCopy_nl: TravelCopy = {
     userSetFee: "door jou ingesteld",
   },
   countries: TRAVEL_COUNTRIES,
+  railFor,
   caveat: (c) => {
     switch (c.kind) {
       case "capped":
@@ -3894,6 +3926,8 @@ const travelCopy_en: TravelCopy = {
     from: "Travelling from {country} to",
     countryPlaceholder: "— choose a country —",
     payingIn: "you'll pay there in {currency}",
+    homeAssumedNote: "No home country chosen yet: these results assume the Netherlands.",
+    homeAssumedChange: "Choose your own country",
   },
   empty: "Pick a country and LaVega will say where to keep, exchange and spend your money.",
   badge: {
@@ -3921,8 +3955,8 @@ const travelCopy_en: TravelCopy = {
   journeyWhy: {
     direct: (spend) => `pay directly: ${spend}`,
     directUnknown: "terms still unknown",
-    via: (free, convertPct, cashbackPct) =>
-      `transfer${free ? " via iDEAL (free)" : ""} and exchange there: ${convertPct} exchange fee${cashbackPct ? ` − ${cashbackPct} cashback` : ""}`,
+    via: (free, convertPct, cashbackPct, method) =>
+      `transfer${free ? ` via ${method} (free)` : ""} and exchange there: ${convertPct} exchange fee${cashbackPct ? ` − ${cashbackPct} cashback` : ""}`,
     viaUnknownConvert: "exchange fee still unknown",
     viaUnknownTransfer: "transfer fee still unknown",
   },
@@ -4180,6 +4214,7 @@ const travelCopy_en: TravelCopy = {
     userSetFee: "set by you",
   },
   countries: TRAVEL_COUNTRIES,
+  railFor,
   caveat: (c) => {
     switch (c.kind) {
       case "capped":
