@@ -219,3 +219,11 @@ test("recordUsage with an unrecognized model logs loudly and does not throw or r
   ).toBe(true);
   errSpy.mockRestore();
 });
+
+test("one account's spend does not fill another account's cap", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = String(WORST_CASE_CENTS.categorize + 1);
+  process.env.AI_MONTHLY_BUDGET_CENTS = "1000000";
+  expect((await checkBudget("categorize", "user-a")).ok).toBe(true);
+  expect((await checkBudget("categorize", "user-b")).ok).toBe(true);
+  expect(await checkBudget("categorize", "user-a")).toEqual({ ok: false, scope: "day" });
+});

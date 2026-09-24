@@ -22,7 +22,8 @@ import {
   runInvestingCron,
   shouldMountInvesting,
 } from "./investing-mount.js";
-import { getAuth } from "./auth.js";
+import { getAuth, SIGN_UP_RATE_LIMIT } from "./auth.js";
+import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
 import { apiGuard } from "./apiGuard.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { localeRedirectTarget } from "@lavega/core";
@@ -168,7 +169,15 @@ app.use("/api/*", apiGuard());
 
 app.get("/health", (c) => c.json({ ok: true }));
 
+const signUpAttempts = createRateLimiter(SIGN_UP_RATE_LIMIT.max, SIGN_UP_RATE_LIMIT.window * 1000);
+
 app.all("/api/auth/*", async (c) => {
+  if (c.req.method === "POST" && c.req.path === "/api/auth/sign-up/email") {
+    const allowed = signUpAttempts(
+      rateLimitKey("sign-up", undefined, c.req.header("x-forwarded-for")),
+    );
+    if (!allowed) return c.json({ message: "Too many sign-up attempts. Try again later." }, 429);
+  }
   const auth = getAuth();
   if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
   return auth.handler(c.req.raw);

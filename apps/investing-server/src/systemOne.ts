@@ -41,6 +41,7 @@ export function createSystemOneProvider(
   deps: {
     client?: SystemOneClient;
     config?: SystemOneConfig;
+    userId?: string;
     checkBudget?: () => Promise<{ ok: true } | { ok: false; scope: "day" | "month" }>;
     recordUsage?: (model: string, inputTokens: number, outputTokens: number) => Promise<void>;
   } = {},
@@ -48,10 +49,16 @@ export function createSystemOneProvider(
   const config = deps.config ?? resolveSystemOneConfig();
   const client =
     deps.client ?? new TypeSafeClient({ apiKey: config.apiKey, defaultModel: config.model });
+  const userId = deps.userId;
+  const gate = deps.checkBudget ?? (() => checkSystemOneBudget(userId));
+  const record =
+    deps.recordUsage ??
+    ((model: string, inputTokens: number, outputTokens: number) =>
+      recordSystemOneUsage(model, inputTokens, outputTokens, userId));
   return {
     async judge(request) {
       assertStateSize(request.state);
-      const budget = await (deps.checkBudget ?? checkSystemOneBudget)();
+      const budget = await gate();
       if (!budget.ok) throw new Error(`System One budget exhausted for ${budget.scope}`);
       let result;
       try {
@@ -61,18 +68,10 @@ export function createSystemOneProvider(
           model: request.model ?? config.model,
         });
       } catch (error) {
-        await (deps.recordUsage ?? recordSystemOneUsage)(
-          request.model ?? config.model,
-          FAILED_REQUEST_INPUT_TOKENS,
-          0,
-        );
+        await record(request.model ?? config.model, FAILED_REQUEST_INPUT_TOKENS, 0);
         throw error;
       }
-      await (deps.recordUsage ?? recordSystemOneUsage)(
-        result.model,
-        result.usage.input_tokens,
-        result.usage.output_tokens,
-      );
+      await record(result.model, result.usage.input_tokens, result.usage.output_tokens);
       return {
         model: result.model,
         answers: result.answers,

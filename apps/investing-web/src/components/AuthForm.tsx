@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { signIn, signUp } from "../lib/auth-client";
+import { signIn, signUp, verificationCallbackUrl } from "../lib/auth-client";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -13,7 +13,7 @@ export function AuthForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "error" | "verify">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: { pathname: string } } };
@@ -24,11 +24,18 @@ export function AuthForm() {
     setMessage(null);
     const result =
       mode === "sign-up"
-        ? await signUp({ name, email, password })
+        ? await signUp({ name, email, password, callbackURL: verificationCallbackUrl() })
         : await signIn({ email, password });
     if (!result.ok) {
       setStatus("error");
       setMessage(result.message);
+      return;
+    }
+    if (result.pendingVerification) {
+      setStatus("verify");
+      setMessage(
+        "If this address is new, the confirmation mail is on its way. If you already have an account, sign in. An address that is already registered does not get another mail.",
+      );
       return;
     }
     navigate(location.state?.from?.pathname ?? "/", { replace: true });
@@ -87,7 +94,10 @@ export function AuthForm() {
               />
             </Label>
             {message && (
-              <p role="alert" className="text-sm text-negative">
+              <p
+                role={status === "error" ? "alert" : "status"}
+                className={status === "error" ? "text-sm text-negative" : "text-sm"}
+              >
                 {message}
               </p>
             )}

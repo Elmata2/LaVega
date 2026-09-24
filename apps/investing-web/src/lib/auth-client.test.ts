@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { getSession, signIn, signOut, signUp } from "./auth-client";
+import { getSession, signIn, signOut, signUp, verificationCallbackUrl } from "./auth-client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -58,8 +58,23 @@ test("signUp posts name, email and password to sign-up/email", async () => {
       name: "Jort",
       email: "jort@example.com",
       password: "correct horse battery staple",
+      callbackURL: verificationCallbackUrl(),
     }),
   });
+});
+
+test("signUp with no session token asks the person to confirm their email", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ token: null, user: { id: "u1" } }), { status: 200 }),
+      ),
+    ),
+  );
+  expect(
+    await signUp({ name: "Jort", email: "jort@example.com", password: "correct horse" }),
+  ).toEqual({ ok: true, pendingVerification: true });
 });
 
 test("signUp surfaces the server's error message", async () => {
