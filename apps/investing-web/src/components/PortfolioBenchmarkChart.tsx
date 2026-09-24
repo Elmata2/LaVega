@@ -222,14 +222,14 @@ export function PortfolioBenchmarkChart({
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="relative h-5 text-sm font-medium text-muted-foreground">
+          <p className="grid h-5 text-sm font-medium text-muted-foreground">
             <span
-              className={`axis-label absolute inset-0 ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
+              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
             >
               Portfolio value
             </span>
             <span
-              className={`axis-label absolute inset-0 ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
+              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
             >
               Indexed return
             </span>

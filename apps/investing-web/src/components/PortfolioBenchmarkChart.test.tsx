@@ -241,6 +241,27 @@ test("wheel and pointer drag write custom zoom without brush", async () => {
   await act(async () => root.unmount());
 });
 
+test("axis label box sizes to the widest label instead of wrapping under the title", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
+    await Promise.resolve();
+  });
+  const labels = Array.from(container.querySelectorAll(".axis-label"));
+  expect(labels).toHaveLength(2);
+  for (const label of labels) {
+    expect(label.classList.contains("absolute")).toBe(false);
+    expect(label.classList.contains("whitespace-nowrap")).toBe(true);
+    expect(label.classList.contains("col-start-1")).toBe(true);
+    expect(label.classList.contains("row-start-1")).toBe(true);
+  }
+  expect(labels[0]!.parentElement!.classList.contains("grid")).toBe(true);
+  await act(async () => root.unmount());
+});
+
 test("window helper preserves original requested start", () => {
   expect(
     pointsForWindow(

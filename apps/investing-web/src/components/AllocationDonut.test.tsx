@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { AllocationDonut } from "./AllocationDonut";
+import { AllocationDonut, apportionPercentages } from "./AllocationDonut";
 import type { Allocation } from "@lavega/core";
 
 const allocation: Allocation = {
@@ -103,4 +103,49 @@ test("caps named slices, sorts by value, and folds the rest into an expandable O
   expect(container.textContent).toContain("Kilo");
   expect(container.textContent).toContain("Lima");
   root.unmount();
+});
+
+test("renders largest-remainder percentages that sum to 100, not naive rounding's 101", () => {
+  const holdings: Allocation = {
+    buckets: [
+      { key: "AAPL", label: "Apple", value: 43.73, unpriced: false },
+      { key: "MSFT", label: "Microsoft", value: 31.68, unpriced: false },
+      { key: "ASML", label: "ASML", value: 24.59, unpriced: false },
+    ],
+    unpriced: [],
+  };
+  const { container, root } = render(holdings, holdings);
+  const percentages = [...container.querySelectorAll("li > div .tabular-nums")]
+    .map((node) => node.textContent)
+    .filter((text): text is string => !!text?.endsWith("%"));
+  expect(percentages).toEqual(["44%", "32%", "24%"]);
+  root.unmount();
+});
+
+test("apportionPercentages always sums to exactly 100 across random weight vectors, ties, zeros, and single-bucket cases", () => {
+  let seed = 42;
+  const nextRandom = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let trial = 0; trial < 500; trial += 1) {
+    const size = 1 + Math.floor(nextRandom() * 8);
+    const values = Array.from({ length: size }, () => Math.floor(nextRandom() * 50));
+    const percentages = apportionPercentages(values);
+    expect(percentages).toHaveLength(values.length);
+    if (values.some((value) => value > 0)) {
+      expect(percentages.reduce((sum, value) => sum + value, 0)).toBe(100);
+    }
+    for (const value of percentages) {
+      expect(Number.isInteger(value)).toBe(true);
+      expect(value).toBeGreaterThanOrEqual(0);
+    }
+  }
+  expect(apportionPercentages([1, 1, 1])).toEqual(
+    expect.arrayContaining([expect.any(Number), expect.any(Number), expect.any(Number)]),
+  );
+  expect(apportionPercentages([1, 1, 1]).reduce((sum, value) => sum + value, 0)).toBe(100);
+  expect(apportionPercentages([0, 0, 5]).reduce((sum, value) => sum + value, 0)).toBe(100);
+  expect(apportionPercentages([7])).toEqual([100]);
+  expect(apportionPercentages([0, 0, 0])).toEqual([0, 0, 0]);
 });

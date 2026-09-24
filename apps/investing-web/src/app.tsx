@@ -1722,7 +1722,7 @@ export function HealthStatus() {
   if (!health) return <span>Verbinden met investeringsserver…</span>;
   return (
     <span>
-      {health.service ?? "server"}: {health.ok ? "beschikbaar" : "niet beschikbaar"}
+      {health.service ?? "server"}: {health.ok ? "available" : "unavailable"}
     </span>
   );
 }
@@ -1747,6 +1747,7 @@ function SignOutLink() {
 function Layout() {
   const location = useLocation();
   const detail = location.pathname.startsWith("/positions/");
+  const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
   const connect = location.pathname === "/brokers/connect";
   return (
@@ -1818,10 +1819,18 @@ function Layout() {
                     ? "Position detail"
                     : agentView
                       ? "Agent conversation"
-                      : "Your financial overview"}
+                      : positionsList
+                        ? "Positions"
+                        : "Your financial overview"}
                 </p>
                 <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {detail ? "Position" : agentView ? "Agent" : "Overview"}
+                  {detail
+                    ? "Position"
+                    : agentView
+                      ? "Agent"
+                      : positionsList
+                        ? "Positions"
+                        : "Overview"}
                 </h2>
               </div>
               {!detail && !agentView && (
