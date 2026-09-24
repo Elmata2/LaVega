@@ -709,58 +709,56 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                     : summaryResponse.status,
                 };
               }
-              if (transactionCursor !== undefined && brokerCredentials) {
-                const url = new URL(
-                  "https://live.trading212.com/api/v0/equity/history/transactions",
-                );
-                url.searchParams.set("limit", "50");
-          if (transactionCursor !== "first" && /^[A-Za-z0-9-]{1,64}$/.test(transactionCursor))
-                  url.searchParams.set("cursor", transactionCursor);
-                const response = await fetch(url, {
-                  headers: {
-                    Authorization: `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`,
-                  },
-                  signal: AbortSignal.timeout(5000),
-                });
-                const page = response.ok
-                  ? ((await response.json()) as {
-                      items?: {
-                        type?: string;
-                        amount?: number;
-                        currency?: string;
-                        dateTime?: string;
-                      }[];
-                      nextPagePath?: string;
-                    })
-                  : null;
-                const items = page?.items ?? [];
-                const dates = items
-                  .map((item) => item.dateTime?.slice(0, 10))
-                  .filter((date): date is string => Boolean(date))
-                  .sort();
-                const byType = items.reduce<Record<string, { count: number; amount: number }>>(
-                  (groups, item) => {
-                    const key = `${item.type ?? "unknown"}:${item.currency ?? "unknown"}`;
-                    const previous = groups[key] ?? { count: 0, amount: 0 };
-                    groups[key] = {
-                      count: previous.count + 1,
-                      amount: previous.amount + (item.amount ?? 0),
-                    };
-                    return groups;
-                  },
-                  {},
-                );
-                const nextCursor = page?.nextPagePath
-                  ? new URL(page.nextPagePath, url).searchParams.get("cursor")
-                  : null;
-                trading212.transactionPage = {
-                  status: response.status,
-                  rows: items.length,
-                  byType,
-                  dateRange: [dates[0] ?? null, dates.at(-1) ?? null],
-                  nextCursor,
-                };
-              }
+            }
+            if (transactionCursor !== undefined && brokerCredentials) {
+              const url = new URL("https://live.trading212.com/api/v0/equity/history/transactions");
+              url.searchParams.set("limit", "50");
+              if (transactionCursor !== "first" && /^[A-Za-z0-9-]{1,64}$/.test(transactionCursor))
+                url.searchParams.set("cursor", transactionCursor);
+              const response = await fetch(url, {
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`,
+                },
+                signal: AbortSignal.timeout(5000),
+              });
+              const page = response.ok
+                ? ((await response.json()) as {
+                    items?: {
+                      type?: string;
+                      amount?: number;
+                      currency?: string;
+                      dateTime?: string;
+                    }[];
+                    nextPagePath?: string;
+                  })
+                : null;
+              const items = page?.items ?? [];
+              const dates = items
+                .map((item) => item.dateTime?.slice(0, 10))
+                .filter((date): date is string => Boolean(date))
+                .sort();
+              const byType = items.reduce<Record<string, { count: number; amount: number }>>(
+                (groups, item) => {
+                  const key = `${item.type ?? "unknown"}:${item.currency ?? "unknown"}`;
+                  const previous = groups[key] ?? { count: 0, amount: 0 };
+                  groups[key] = {
+                    count: previous.count + 1,
+                    amount: previous.amount + (item.amount ?? 0),
+                  };
+                  return groups;
+                },
+                {},
+              );
+              const nextCursor = page?.nextPagePath
+                ? new URL(page.nextPagePath, url).searchParams.get("cursor")
+                : null;
+              trading212.transactionPage = {
+                status: response.status,
+                rows: items.length,
+                byType,
+                dateRange: [dates[0] ?? null, dates.at(-1) ?? null],
+                nextCursor,
+              };
             }
           }
           checks.snapshot = snapshot ? "loaded" : "empty";
