@@ -269,11 +269,19 @@ async function doctor(args) {
     `${health.status} ${excerpt(health)}`,
   );
 
+  /* `/app` is gated on a verified session. Anonymous, prod bounces to `/` and
+   * the shell is the WRONG answer — serving it there is the bug the gate
+   * exists to stop. Locally the guard stands down (LAVEGA_ALLOW_UNAUTHENTICATED),
+   * so the shell is exactly what should come back. */
   const shell = await req(base, "GET", "/app");
   add(
-    "SPA shell served at /app",
-    shell.status === 200 && /id="root"/.test(shell.text),
-    `${shell.status} ${shell.text.length}b`,
+    prod ? "/app bounces an anonymous visitor to /" : "SPA shell served at /app",
+    prod
+      ? shell.status === 302 && shell.headers?.location === "/"
+      : shell.status === 200 && /id="root"/.test(shell.text),
+    prod
+      ? `${shell.status} → ${shell.headers?.location ?? "(no location)"}`
+      : `${shell.status} ${shell.text.length}b`,
   );
 
   const agent = await req(base, "GET", "/api/agent/status");
