@@ -578,6 +578,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const healthCheck = async (
       includeLiveBroker = false,
       transactionCursor?: string,
+      transactionTime?: string,
     ): Promise<InvestingHealth> => {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",
@@ -715,6 +716,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
               url.searchParams.set("limit", "50");
               if (transactionCursor !== "first" && /^[A-Za-z0-9-]{1,64}$/.test(transactionCursor))
                 url.searchParams.set("cursor", transactionCursor);
+              if (transactionTime && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(transactionTime))
+                url.searchParams.set("time", transactionTime);
               const response = await fetch(url, {
                 headers: {
                   Authorization: `Basic ${Buffer.from(`${brokerCredentials.token}:${brokerCredentials.secret}`).toString("base64")}`,
@@ -752,12 +755,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
               const nextCursor = page?.nextPagePath
                 ? new URL(page.nextPagePath, url).searchParams.get("cursor")
                 : null;
+              const nextTime = page?.nextPagePath
+                ? new URL(page.nextPagePath, url).searchParams.get("time")
+                : null;
               trading212.transactionPage = {
                 status: response.status,
                 rows: items.length,
                 byType,
                 dateRange: [dates[0] ?? null, dates.at(-1) ?? null],
                 nextCursor,
+                nextTime,
               };
             }
           }
@@ -903,8 +910,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     unlockCredentials: async (passphrase: string) =>
       (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
-    healthCheck: async (includeLiveBroker?: boolean, transactionCursor?: string) =>
-      (await currentRuntime()).healthCheck(includeLiveBroker, transactionCursor),
+    healthCheck: async (
+      includeLiveBroker?: boolean,
+      transactionCursor?: string,
+      transactionTime?: string,
+    ) =>
+      (await currentRuntime()).healthCheck(includeLiveBroker, transactionCursor, transactionTime),
     passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),

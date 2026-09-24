@@ -124,6 +124,7 @@ export type InvestingHealth = {
       byType: Record<string, { count: number; amount: number }>;
       dateRange: [string | null, string | null];
       nextCursor: string | null;
+      nextTime: string | null;
     };
   };
 };
@@ -163,6 +164,7 @@ type PriceDependencies = {
   healthCheck: (
     includeLiveBroker?: boolean,
     transactionCursor?: string,
+    transactionTime?: string,
   ) => Promise<InvestingHealth>;
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
@@ -264,6 +266,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       const report = await dependencies.healthCheck(
         c.req.query("live") === "1",
         c.req.query("transactionCursor"),
+        c.req.query("transactionTime"),
       );
       return c.json(report, report.status === "ok" ? 200 : 503);
     } catch {
