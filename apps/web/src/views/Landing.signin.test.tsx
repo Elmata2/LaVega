@@ -88,5 +88,5 @@ test("clicking Inloggen while already signed in calls onEnter immediately withou
   const el = render(onEnter);
   act(() => click(loginButton(el)));
   expect(onEnter).toHaveBeenCalledTimes(1);
-  expect(el.querySelector("#account-email")).toBeNull();
+  expect((el.querySelector("dialog") as HTMLDialogElement).open).toBe(false);
 });

@@ -672,4 +672,96 @@
    * `motion-safe:hover:-translate-y-px` in Landing.tsx: the hover lift only
    * applies when motion is safe, so there is nothing left to cancel here. */
   }
+
+  /* ---- Sign-in dialog ---- */
+  /* Native <dialog> (Landing.tsx), not a hand-rolled overlay: showModal()/close()
+ * give focus trapping and Escape for free. The modern "animating a dialog"
+ * recipe — `overlay`/`display` staged through `allow-discrete` plus
+ * `@starting-style` — lets the closed state (`display:none`) and the open
+ * state cross-fade instead of the open state just snapping in. */
+  .lp-signin-dialog {
+    position: relative;
+    padding: 32px;
+    background: var(--lp-card);
+    border: 1px solid var(--lp-line);
+    border-radius: 20px;
+    box-shadow:
+      0 40px 80px -40px rgba(43, 33, 23, 0.45),
+      0 8px 20px -12px rgba(43, 33, 23, 0.2);
+    max-width: min(360px, calc(100vw - 56px));
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--lp-ink);
+    transform-origin: center;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+      opacity 250ms var(--ease-emphasized),
+      transform 250ms var(--ease-emphasized),
+      overlay 250ms allow-discrete,
+      display 250ms allow-discrete;
+  }
+  .lp-signin-dialog[open] {
+    opacity: 1;
+    transform: scale(1);
+  }
+  @starting-style {
+    .lp-signin-dialog[open] {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  .lp-signin-dialog::backdrop {
+    background: rgba(43, 33, 23, 0.45);
+    opacity: 0;
+    transition: opacity 250ms var(--ease-emphasized);
+  }
+  .lp-signin-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .lp-signin-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  .lp-signin-dialog h2 {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+  }
+  .lp-signin-dialog-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 999px;
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--lp-ink2);
+    cursor: pointer;
+  }
+  .lp-signin-dialog-close:hover {
+    background: var(--lp-line);
+    color: var(--lp-ink);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lp-signin-dialog {
+      transform: none;
+      transition:
+        opacity 250ms ease,
+        overlay 250ms allow-discrete,
+        display 250ms allow-discrete;
+    }
+    @starting-style {
+      .lp-signin-dialog[open] {
+        opacity: 0;
+      }
+    }
+  }
 } /* @layer components */
