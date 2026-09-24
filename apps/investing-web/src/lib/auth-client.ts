@@ -12,7 +12,14 @@ export type SessionState =
   | { status: "anonymous" }
   | { status: "authenticated"; user: AuthUser };
 
-export type AuthResult = { ok: true } | { ok: false; message: string };
+export type AuthResult =
+  | { ok: true; pendingVerification?: boolean }
+  | { ok: false; message: string };
+
+export function verificationCallbackUrl(): string {
+  const base = import.meta.env.BASE_URL || "/";
+  return new URL(base, window.location.origin).href;
+}
 
 async function readMessage(response: Response, fallback: string): Promise<string> {
   const body = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -32,14 +39,22 @@ export async function signUp(input: {
   name: string;
   email: string;
   password: string;
+  callbackURL?: string;
 }): Promise<AuthResult> {
   const response = await fetch("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      callbackURL: input.callbackURL ?? verificationCallbackUrl(),
+    }),
   });
-  if (!response.ok)
-    return { ok: false, message: await readMessage(response, "Failed to create account.") };
+  const body = (await response.json().catch(() => null)) as {
+    token?: string | null;
+    message?: string;
+  } | null;
+  if (!response.ok) return { ok: false, message: body?.message ?? "Failed to create account." };
+  if (body?.token === null) return { ok: true, pendingVerification: true };
   return { ok: true };
 }
 

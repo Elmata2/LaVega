@@ -1242,9 +1242,11 @@ const RESERVATION_FRESH_SQL =
 
 /**
  * The internal AI-spend ledger (`personal.ai_usage`), read and written by the
- * budget guard in front of the four `/api/agent/*` routes. Not tenant data —
- * one Mistral key, one owner's aggregate spend — so this uses `db.connect()`
- * directly, the same shape as `createEbFlowRepository`'s non-tenant methods.
+ * budget guard in front of the agent routes. One model key, one cap per
+ * account: `userId` is the session user, and sums never cross accounts.
+ * Rows with a NULL `user_id` are the pre-signup ledger and count toward no
+ * account. This uses `db.connect()` directly, the same shape as
+ * `createEbFlowRepository`'s non-tenant methods.
  */
 export function createAiUsageRepository(db: Database) {
   return {
@@ -1256,12 +1258,13 @@ export function createAiUsageRepository(db: Database) {
      *  former comment on checkBudget()/recordUsage() not being atomic).
      *
      *  `pg_advisory_xact_lock` serializes every reservation attempt for the
-     *  same month behind one lock (day is a subset of month, so this also
-     *  covers the day cap), auto-released on COMMIT or ROLLBACK — a crashed
-     *  client can never leave it held. Locking on month rather than day means
-     *  a request landing right at midnight still serializes against the
-     *  request just before it. */
+     *  same account and month behind one lock (day is a subset of month, so
+     *  this also covers the day cap), auto-released on COMMIT or ROLLBACK — a
+     *  crashed client can never leave it held. Locking on month rather than
+     *  day means a request landing right at midnight still serializes against
+     *  the request just before it. */
     async reserve(params: {
+      userId: string;
       day: string;
       month: string;
       route: AiUsage["route"];
@@ -1273,12 +1276,12 @@ export function createAiUsageRepository(db: Database) {
       try {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-          `ai_budget:${params.month}`,
+          `ai_budget:${params.userId}:${params.month}`,
         ]);
         const dayResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
-           WHERE day = $1 AND ${RESERVATION_FRESH_SQL}`,
-          [params.day],
+           WHERE day = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [params.day, params.userId],
         );
         const dayCents = Number(dayResult.rows[0]?.total ?? 0);
         if (dayCents + params.worstCaseCents >= params.dayCapCents) {
@@ -1287,8 +1290,8 @@ export function createAiUsageRepository(db: Database) {
         }
         const monthResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
-           WHERE to_char(day, 'YYYY-MM') = $1 AND ${RESERVATION_FRESH_SQL}`,
-          [params.month],
+           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [params.month, params.userId],
         );
         const monthCents = Number(monthResult.rows[0]?.total ?? 0);
         if (monthCents + params.worstCaseCents >= params.monthCapCents) {
@@ -1296,9 +1299,9 @@ export function createAiUsageRepository(db: Database) {
           return { ok: false, scope: "month" };
         }
         const inserted = await client.query<QueryResultRow>(
-          `INSERT INTO personal.ai_usage (day, route, model, cost_cents, reserved_at)
-           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING id`,
-          [params.day, params.route, "pending", params.worstCaseCents],
+          `INSERT INTO personal.ai_usage (day, route, model, cost_cents, reserved_at, user_id)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5) RETURNING id`,
+          [params.day, params.route, "pending", params.worstCaseCents, params.userId],
         );
         await client.query("COMMIT");
         return { ok: true, id: Number(inserted.rows[0]!.id) };
@@ -1357,11 +1360,11 @@ export function createAiUsageRepository(db: Database) {
       }
     },
 
-    async record(usage: AiUsage): Promise<void> {
+    async record(usage: AiUsage & { userId: string }): Promise<void> {
       const client = await db.connect();
       try {
         await client.query(
-          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
           [
             usage.day,
             usage.route,
@@ -1371,6 +1374,7 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            usage.userId,
           ],
         );
       } finally {
@@ -1378,7 +1382,7 @@ export function createAiUsageRepository(db: Database) {
       }
     },
 
-    async spentCents(range: { day: string; month: string }): Promise<{
+    async spentCents(range: { userId: string; day: string; month: string }): Promise<{
       dayCents: number;
       monthCents: number;
     }> {
@@ -1386,13 +1390,13 @@ export function createAiUsageRepository(db: Database) {
       try {
         const dayResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
-           WHERE day = $1 AND ${RESERVATION_FRESH_SQL}`,
-          [range.day],
+           WHERE day = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [range.day, range.userId],
         );
         const monthResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
-           WHERE to_char(day, 'YYYY-MM') = $1 AND ${RESERVATION_FRESH_SQL}`,
-          [range.month],
+           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [range.month, range.userId],
         );
         return {
           dayCents: Number(dayResult.rows[0]?.total ?? 0),

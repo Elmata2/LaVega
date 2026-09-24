@@ -425,8 +425,6 @@ Keep broker sync, price sync, vault, cache, market-data, and incomplete-history 
 
 Status changes must not depend on animation. Pressable controls respond immediately. Honor `prefers-reduced-motion`. Preserve visible focus, adequate touch targets, and keyboard equivalence for pointer actions.
 
-## Future work
-
 ## Portfolio agent conversation
 
 The overview agent panel links each investor persona to `/agents/:agentId`. The route keeps a
@@ -439,6 +437,8 @@ Messages remain in browser memory.
 
 Typed System One `no_view` means no judgment signal. It never replaces written chat answer.
 
+## Future work
+
 Map-wide future work:
 
 - A dashboard-wide USD presentation toggle. EUR remains the only presentation currency.
@@ -447,6 +447,6 @@ Map-wide future work:
 
 v1 deferrals:
 
-- Broker grouping in the allocation donut or positions table until `Position` has a reliable broker field.
+- Broker grouping in the allocation donut or positions table. `Position.broker` exists but is optional on older persisted snapshots.
 - Position-versus-benchmark or position-versus-portfolio comparison.
 - A separate closed-position history or transaction browser.

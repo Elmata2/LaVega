@@ -51,8 +51,14 @@ beforeEach(async () => {
   await pglite.exec("RESET ROLE; DELETE FROM personal.ai_usage; SET ROLE lavega_runtime;");
 });
 
-async function dayTotal(day: string): Promise<number> {
-  return (await createAiUsageRepository(db).spentCents({ day, month: day.slice(0, 7) })).dayCents;
+async function dayTotal(day: string, userId = "user-a"): Promise<number> {
+  return (
+    await createAiUsageRepository(db).spentCents({
+      userId,
+      day,
+      month: day.slice(0, 7),
+    })
+  ).dayCents;
 }
 
 /** Backdates a reservation past the 10-minute freshness window (see
@@ -71,6 +77,7 @@ test("reserve() admits exactly one caller when the cap has room for exactly one 
   const attempt = () =>
     repo.reserve({
       day: "2026-09-20",
+      userId: "user-a",
       month: "2026-09",
       route: "categorize",
       worstCaseCents: 5,
@@ -120,6 +127,7 @@ test("reconcile() turns a reservation into the real charge in place, not a secon
   const repo = createAiUsageRepository(db);
   const reserved = await repo.reserve({
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize",
     worstCaseCents: 5,
@@ -153,6 +161,7 @@ test("release() frees a reservation nothing ever reconciled, so the next caller 
   const repo = createAiUsageRepository(db);
   const params = {
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize" as const,
     worstCaseCents: 5,
@@ -176,6 +185,7 @@ test("release() after reconcile() is a no-op — the real charge is not erased b
   const repo = createAiUsageRepository(db);
   const reserved = await repo.reserve({
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize",
     worstCaseCents: 5,
@@ -202,6 +212,7 @@ test("an unreconciled reservation stops counting toward the cap once it goes sta
   const repo = createAiUsageRepository(db);
   const reserved = await repo.reserve({
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize",
     worstCaseCents: 5,
@@ -214,6 +225,7 @@ test("an unreconciled reservation stops counting toward the cap once it goes sta
   // crashed). Still fresh: it keeps blocking a second reservation.
   const stillBlocked = await repo.reserve({
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize",
     worstCaseCents: 5,
@@ -227,6 +239,7 @@ test("an unreconciled reservation stops counting toward the cap once it goes sta
   expect(await dayTotal("2026-09-20")).toBe(0); // the stale hold no longer counts
   const admittedAfterExpiry = await repo.reserve({
     day: "2026-09-20",
+    userId: "user-a",
     month: "2026-09",
     route: "categorize",
     worstCaseCents: 5,
@@ -234,4 +247,30 @@ test("an unreconciled reservation stops counting toward the cap once it goes sta
     monthCapCents: 1000,
   });
   expect(admittedAfterExpiry.ok).toBe(true);
+});
+
+test("one account's reservation does not fill another account's cap", async () => {
+  const repo = createAiUsageRepository(db);
+  const params = {
+    day: "2026-09-20",
+    month: "2026-09",
+    route: "categorize" as const,
+    worstCaseCents: 5,
+    dayCapCents: 6,
+    monthCapCents: 1000,
+  };
+  const first = await repo.reserve({ ...params, userId: "user-a" });
+  const second = await repo.reserve({ ...params, userId: "user-b" });
+  expect(first.ok).toBe(true);
+  expect(second.ok).toBe(true);
+  expect(await dayTotal("2026-09-20")).toBe(5);
+  expect(
+    (
+      await createAiUsageRepository(db).spentCents({
+        userId: "user-b",
+        day: "2026-09-20",
+        month: "2026-09",
+      })
+    ).dayCents,
+  ).toBe(5);
 });

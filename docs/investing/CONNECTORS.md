@@ -159,6 +159,9 @@ IBKR uses the same request deadline and five-second persistence margin. It check
 
 **Sync model: scheduled, automatic, daily.** Deliberately coarse and paced by confirmed limits above. Sync state (`lastSyncedAt`, rate-limit cooldown, and any unfinished `resume` cursor) is persisted, so a restart or a Vercel invocation boundary does not turn into a fresh full sync.
 
+
+**Order-history repair:** Authenticated `POST /api/brokers/sync?force=true&rebuildOrders=true` starts the Trading 212 order stream at its first page when no earlier cursor is pending. Subsequent `POST /api/brokers/sync?force=true` calls resume saved cursors until order history completes. This repairs older snapshots after wallet-settlement mapping changes without replaying transactions or dividends. Production rebuild on 2026-09-23 populated settlements for all 545 trades after 2025-09-23; it reduced negative historical cash by EUR 11.13 but did not resolve the remaining gap. See `RISK.md`.
+
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
 
 **Open items carried into implementation.**

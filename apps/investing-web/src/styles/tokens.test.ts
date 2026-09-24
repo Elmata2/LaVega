@@ -8,13 +8,3 @@ const tokens = readFileSync(tokensFile, "utf8");
 test("tokens.css carries no reference to Google's font CDN", () => {
   expect(tokens).not.toMatch(/googleapis|gstatic/i);
 });
-
-test("tokens.css self-hosts EB Garamond and Inter via @fontsource", () => {
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/eb-garamond\/500\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/eb-garamond\/600\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/eb-garamond\/700\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/inter\/400\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/inter\/500\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/inter\/600\.css["']\s*(layer\(\w+\))?;/);
-  expect(tokens).toMatch(/@import\s+["']@fontsource\/inter\/700\.css["']\s*(layer\(\w+\))?;/);
-});

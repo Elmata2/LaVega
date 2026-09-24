@@ -98,34 +98,7 @@ export type InvestingHealth = {
     trading212Sync: "fresh" | "stale" | "never" | "problem" | "down";
     snapshot: "loaded" | "empty" | "down";
   };
-  trading212: {
-    lastSyncedAt: string | null;
-    positions: number;
-    cashEvidence?: {
-      date: string;
-      anchor: { date: string; amount: number; currency: string } | null;
-      tradesAfterDate: number;
-      tradesWithSettlement: number;
-      tradesWithoutSettlement: number;
-      flowsAfterDate: Record<string, { count: number; amount: number }>;
-      dividendsAfterDate: Record<string, { count: number; amount: number }>;
-    };
-    liveEvidence?:
-      | {
-          positions: number;
-          matchingSymbols: number;
-          cash: number;
-          currency: string;
-        }
-      | { errorStatus: number };
-    transactionPage?: {
-      status: number;
-      rows: number;
-      byType: Record<string, { count: number; amount: number }>;
-      dateRange: [string | null, string | null];
-      nextCursor: string | null;
-    };
-  };
+  trading212: { lastSyncedAt: string | null; positions: number };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
@@ -160,10 +133,7 @@ type PriceDependencies = {
   sectorStore: SectorProfileStore;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
-  healthCheck: (
-    includeLiveBroker?: boolean,
-    transactionCursor?: string,
-  ) => Promise<InvestingHealth>;
+  healthCheck: () => Promise<InvestingHealth>;
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
@@ -261,10 +231,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (!dependencies.healthCheck)
       return c.json({ problems: ["Detailed health is not available"] }, 503);
     try {
-      const report = await dependencies.healthCheck(
-        c.req.query("live") === "1",
-        c.req.query("transactionCursor"),
-      );
+      const report = await dependencies.healthCheck();
       return c.json(report, report.status === "ok" ? 200 : 503);
     } catch {
       return c.json({ problems: ["Detailed health check failed"] }, 503);

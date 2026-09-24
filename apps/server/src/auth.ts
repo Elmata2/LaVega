@@ -1,6 +1,7 @@
 import { betterAuth, type Auth } from "better-auth";
 import { type Database } from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { sendAuthEmail } from "./authEmail.js";
 
 const origin = (host: string | undefined) => (host?.trim() ? `https://${host.trim()}` : null);
 
@@ -61,23 +62,50 @@ export function getAuth(): Auth<any> | null {
   });
 }
 
+/** Five new accounts per IP per 10 minutes. Better Auth's own default is 3 per
+ *  10 seconds, which still allows a script to create accounts all day. */
+export const SIGN_UP_RATE_LIMIT = { window: 600, max: 5 };
+
 /**
- * The options that decide who may create an account.
+ * Who may create an account, and what that account is allowed to do.
  *
- * Registration used to be open: `emailAndPassword: { enabled: true }` with no
- * `disableSignUp`, writing straight into Neon. On its own that was a write path
- * with no verification and no rate limit; once /api/* started demanding a
- * session it became worse than that — an open sign-up is a way to MINT the
- * credential the guard asks for, which would leave the guard decorative.
+ * Signup stays open. A session is not a key to someone else's data: every
+ * private store is keyed by `session.user.id`. What signup must not do is
+ * hand out a session for an address the person does not control, or let one
+ * address create accounts without a limit.
  *
- * So: closed unless explicitly opened. To create the owner's account, set
- * LAVEGA_ALLOW_SIGNUP=1, register once, then remove it.
+ * `requireEmailVerification` refuses sign-in until the address is confirmed.
+ * The confirmation link is sent through `sendAuthEmail`. Accounts that
+ * existed before this rule are marked verified by migration 0014.
  */
 export function authOptions() {
   return {
     emailAndPassword: {
       enabled: true,
-      disableSignUp: process.env.LAVEGA_ALLOW_SIGNUP !== "1",
+      disableSignUp: false,
+      requireEmailVerification: true,
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async (data: { user: { email: string }; url: string }) => {
+        await sendAuthEmail({
+          to: data.user.email,
+          subject: "Confirm your LaVega account",
+          text: `Confirm your LaVega account:\n${data.url}\n`,
+        });
+      },
+    },
+    /* Better Auth's own limiter keys on a client IP it will refuse to guess
+     * when X-Forwarded-For has more than one address. That collapses every
+     * visitor into one bucket. The signup cap therefore lives on the route
+     * (index.ts), which uses the rightmost forwarded address. This switch
+     * only turns on Better Auth's short burst limit for sign-in. */
+    rateLimit: {
+      enabled: true,
+      window: 60,
+      max: 30,
     },
   };
 }
