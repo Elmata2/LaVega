@@ -47,14 +47,16 @@ export type CashBalance = {
 
 export type CashFlowKind = "deposit" | "withdrawal" | "interest" | "fee" | "other";
 
-/** Signed broker cash movement. Positive means cash in; negative means cash out. */
+/** Signed broker cash movement. Positive means cash in; negative means cash
+ *  out. Null means the movement happened but its size or direction is not
+ *  known; callers must treat the period as unmeasurable, never guess a sign. */
 export type CashFlow = {
   id: string;
   entity: string;
   broker: string;
   date: string;
   currency: string;
-  amount: number;
+  amount: number | null;
   kind: CashFlowKind;
   description?: string;
   brokerFlowId?: string;

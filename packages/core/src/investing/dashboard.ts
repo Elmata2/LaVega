@@ -214,16 +214,18 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     if (seenFlows.has(identity)) continue;
     seenFlows.add(identity);
     let converted: number | null = null;
-    try {
-      converted = convertCurrency(
-        flow.amount,
-        flow.currency,
-        input.presentationCurrency,
-        flow.date,
-        input.fxRates,
-      );
-    } catch {
-      // Keep unknown owner flow visible. TWR must not skip or move it.
+    if (flow.amount !== null) {
+      try {
+        converted = convertCurrency(
+          flow.amount,
+          flow.currency,
+          input.presentationCurrency,
+          flow.date,
+          input.fxRates,
+        );
+      } catch {
+        // Keep unknown owner flow visible. TWR must not skip or move it.
+      }
     }
     const current = externalByDate.get(flow.date);
     externalByDate.set(

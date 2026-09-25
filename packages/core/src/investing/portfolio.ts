@@ -209,7 +209,7 @@ function cashLegs(
   };
   for (const balance of cashBalances) leg(balance).anchors.push(balance);
   for (const flow of [...cashFlows, ...dividends])
-    leg(flow).events.push({ date: flow.date, amount: flow.amount });
+    leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
   for (const trade of trades) {
     if (!trade.broker) continue;
     const settlement = tradeSettlement(trade);

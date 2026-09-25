@@ -499,6 +499,45 @@ test("dashboard exposes cash-aware value fields and netted external TWR inputs",
     cashUnknown: [],
   });
 });
+
+test("a deposit or withdrawal with an unknown amount stays unmeasurable, not a crash or a guessed sign", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [],
+    trades: [],
+    dividends: [],
+    cashBalances: [
+      { entity: "personal", broker: "ibkr", currency: "EUR", amount: 300, asOf: "2026-01-05" },
+    ],
+    cashFlows: [
+      {
+        id: "known",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2026-01-05",
+        currency: "EUR",
+        amount: 50,
+        kind: "deposit",
+      },
+      {
+        id: "unknown",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2026-01-05",
+        currency: "EUR",
+        amount: null,
+        kind: "deposit",
+      },
+    ],
+    priceBars: [],
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-01-05",
+    dataVersion: 1,
+  });
+
+  expect(dashboard.externalCashFlows).toEqual([{ date: "2026-01-05", amount: null }]);
+});
 function freshnessInput() {
   return {
     positions: [
