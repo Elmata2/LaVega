@@ -85,10 +85,8 @@ export function PortfolioBenchmarkChart({
   const {
     points,
     focusIndex,
-    setFocusIndex,
     pointerRatio,
-    setPointerRatio,
-    drag,
+    selection,
     chartRef,
     dateFrom,
     setDateFrom,
@@ -416,21 +414,7 @@ export function PortfolioBenchmarkChart({
               tabIndex={0}
               aria-label={`${label}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
               className="touch-pan-y select-none rounded-[12px]"
-              onKeyDown={chart.onKeyDown}
-              onPointerDown={chart.onPointerDown}
-              onPointerMove={(event) => {
-                const index = chart.indexForClientX(event.clientX);
-                if (index !== null) setFocusIndex(index);
-                const rect = event.currentTarget.getBoundingClientRect();
-                setPointerRatio(
-                  Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
-                );
-                chart.onPointerMove(event);
-              }}
-              onPointerUp={chart.onPointerUp}
-              onPointerLeave={() => {
-                if (!drag) setFocusIndex(null);
-              }}
+              {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
                 <LineChart
@@ -438,7 +422,7 @@ export function PortfolioBenchmarkChart({
                   margin={{ top: 12, right: 12, left: 8, bottom: 0 }}
                   onMouseMove={(state) => {
                     if (typeof state?.activeTooltipIndex === "number")
-                      setFocusIndex(state.activeTooltipIndex);
+                      chart.focus(state.activeTooltipIndex);
                   }}
                 >
                   <XAxis
@@ -474,10 +458,10 @@ export function PortfolioBenchmarkChart({
                       strokeDasharray="3 3"
                     />
                   )}
-                  {drag && (
+                  {selection && (
                     <ReferenceArea
-                      x1={points[Math.min(drag.from, drag.to)]?.date}
-                      x2={points[Math.max(drag.from, drag.to)]?.date}
+                      x1={selection.from}
+                      x2={selection.to}
                       fill="hsl(var(--chart-blue))"
                       fillOpacity={0.12}
                       strokeOpacity={0}

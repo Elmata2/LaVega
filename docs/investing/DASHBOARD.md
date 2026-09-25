@@ -299,6 +299,14 @@ The chart supports direct drag-to-zoom, scroll-wheel zoom, and typed date input 
 
 Direct manipulation must respond during the gesture. Capture the pointer so dragging continues outside plot bounds. Keep the interaction interruptible. Range or zoom changes update the visible window and indexed-return anchor together.
 
+Window transitions follow these rules. `chartWindowReducer` in `useChartWindow.ts` owns them, and each chart keeps its own instance.
+
+- Zooming out never narrows the window. It stops at full history and stays there; it does not jump back to the preset.
+- The wheel ignores a chart that has fewer points than its wheel minimum.
+- Escape and the zoom pill restore the preset the custom window started from.
+- One pointer owns a drag. A second pointer cannot take it over. Pointer cancel and lost pointer capture end the drag without zooming.
+- A drag holds dates, not indices. If the chart data is replaced during a drag, the drag ends without zooming.
+
 The tooltip flips before it reaches the right card edge. Trade markers use click or keyboard activation for drilldown. Hover never performs navigation.
 
 Keyboard behavior:

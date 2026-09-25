@@ -148,3 +148,63 @@ test("moves exact-value crosshair with keyboard and clears zoom with Escape", as
   );
   root.unmount();
 });
+
+test("replacing the data during a drag leaves a valid window", async () => {
+  const series = (length: number) =>
+    Array.from({ length }, (_, index) => ({
+      symbol: "AAPL",
+      date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+      close: 100 + index,
+      currency: "USD",
+      markers: [],
+    }));
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={series(20)} />);
+  });
+  const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  chart.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 400,
+    bottom: 320,
+    width: 400,
+    height: 320,
+    toJSON: () => ({}),
+  });
+  const pointer = (type: string, clientX: number) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, button: 0 });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    return event;
+  };
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.error);
+    event.preventDefault();
+  };
+  window.addEventListener("error", onError);
+  await act(async () => {
+    chart.dispatchEvent(pointer("pointerdown", 390));
+  });
+  await act(async () => {
+    chart.dispatchEvent(pointer("pointermove", 100));
+  });
+  await act(async () => {
+    root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={series(3)} />);
+  });
+  await act(async () => {
+    chart.dispatchEvent(pointer("pointerup", 70));
+  });
+  window.removeEventListener("error", onError);
+  expect(errors).toEqual([]);
+  expect(
+    container.querySelector('button[aria-label="Clear zoom"]')?.textContent ?? "",
+  ).not.toContain("Invalid");
+  expect(container.querySelector('[aria-label="Exact price values"]')?.textContent).not.toContain(
+    "Invalid",
+  );
+  root.unmount();
+});
