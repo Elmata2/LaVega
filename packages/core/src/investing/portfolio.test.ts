@@ -306,6 +306,37 @@ test("walks cash anchors with deduplicated flows and dividends", () => {
   expect(result.find(({ date }) => date === "2026-01-06")?.cashValue).toBe(150);
 });
 
+test("a cash flow with an unknown amount marks the leg unknown instead of crashing or guessing", () => {
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 9.54, asOf: "2026-01-01" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "transfer",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: null,
+      kind: "other",
+    },
+  ];
+  const result = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-05",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-01")).toMatchObject({
+    cashValue: 9.54,
+    cashUnknown: [],
+  });
+  expect(result.find(({ date }) => date === "2026-01-05")).toMatchObject({
+    cashValue: null,
+    cashUnknown: ["ibkr:EUR"],
+  });
+});
+
 test("a trade moves cash between the deposit and the broker balance", () => {
   const trades: Trade[] = [
     {

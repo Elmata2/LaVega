@@ -280,7 +280,7 @@ function mapCashBalance(
   };
 }
 
-function transactionKind(type: string): CashFlowKind | null {
+function transactionKind(type: string): CashFlowKind {
   switch (type) {
     case "DEPOSIT":
       return "deposit";
@@ -291,8 +291,6 @@ function transactionKind(type: string): CashFlowKind | null {
     case "INTEREST_ON_FREE_CASH":
     case "LENDING_INTEREST":
       return "interest";
-    case "TRANSFER":
-      return null;
     default:
       return "other";
   }
@@ -305,16 +303,16 @@ function mapTransaction(
 ): { flow: CashFlow | null; problem?: string } {
   const reference = string(raw.reference, "transaction reference");
   const sourceType = string(raw.type, "transaction type").toUpperCase();
-  const kind = transactionKind(sourceType);
-  if (kind === null) {
-    return {
-      flow: null,
-      problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction`,
-    };
-  }
   const sourceAmount = number(raw.amount, "transaction amount");
-  const amount =
-    sourceAmount < 0
+  // A TRANSFER's direction is only known when the sign is negative. A
+  // positive or zero amount could be either an inflow or an unsigned
+  // outflow; guessing a sign on it is worse than admitting ignorance.
+  const isAmbiguousTransfer = sourceType === "TRANSFER" && sourceAmount >= 0;
+  const kind: CashFlowKind =
+    sourceType === "TRANSFER" && sourceAmount < 0 ? "withdrawal" : transactionKind(sourceType);
+  const amount = isAmbiguousTransfer
+    ? null
+    : sourceAmount < 0
       ? sourceAmount
       : kind === "withdrawal" || kind === "fee"
         ? -sourceAmount
@@ -331,11 +329,18 @@ function mapTransaction(
     description: `Trading 212 ${sourceType}`,
     brokerFlowId: reference,
   };
+  if (isAmbiguousTransfer) {
+    return {
+      flow,
+      problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction`,
+    };
+  }
   return sourceType === "DEPOSIT" ||
     sourceType === "WITHDRAW" ||
     sourceType === "FEE" ||
     sourceType === "INTEREST_ON_FREE_CASH" ||
-    sourceType === "LENDING_INTEREST"
+    sourceType === "LENDING_INTEREST" ||
+    sourceType === "TRANSFER"
     ? { flow }
     : {
         flow,

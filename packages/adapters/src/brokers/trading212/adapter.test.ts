@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
+import { computePortfolioValueSeries } from "@lavega/core";
 import { createTrading212Adapter } from "./adapter.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -630,6 +631,7 @@ test("counts inPies and reservedForOrders toward the balance instead of discardi
     expect.objectContaining({ broker: "trading212", currency: "EUR", amount: 107 }),
   ]);
   expect(result.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "transfer-1", amount: null, kind: "other" },
     { brokerFlowId: "future-1", amount: -4, kind: "other" },
   ]);
   expect(result.problems).toEqual(
@@ -639,6 +641,97 @@ test("counts inPies and reservedForOrders toward the balance instead of discardi
       "Trading 212 transaction amount is missing or invalid",
     ]),
   );
+});
+
+test("a negative-amount TRANSFER is unambiguously an outflow and keeps its sign", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 0 } });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: -75,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "transfer-out",
+            type: "TRANSFER",
+          },
+        ],
+      });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+
+  expect(result.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "transfer-out", amount: -75, kind: "withdrawal" },
+  ]);
+  expect(result.problems).not.toContain(
+    "Trading 212 transaction transfer-out has ambiguous TRANSFER direction",
+  );
+});
+
+/* Measured on the owner's real account: the balance went from EUR 9.54 to EUR
+ * 11,116.34 on 2025-08-11. Trading 212 reported one EUR 150 deposit that day;
+ * the other ~EUR 10,960 arrived as a TRANSFER row the adapter used to throw
+ * away. Dropping the row removed the explanation and the return calculation
+ * booked the money as performance. Keeping the row with amount: null must let
+ * the portfolio series say the day is unmeasurable instead. */
+test("an ambiguous TRANSFER reaches the portfolio series as unknown cash, not as invented performance", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 11_116.34 } });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: 150,
+            currency: "EUR",
+            dateTime: "2025-08-11T09:00:00Z",
+            reference: "deposit-1",
+            type: "DEPOSIT",
+          },
+          {
+            amount: 10_966.34,
+            currency: "EUR",
+            dateTime: "2025-08-11T09:05:00Z",
+            reference: "transfer-1",
+            type: "TRANSFER",
+          },
+        ],
+      });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+  const transfer = result.sections.cashFlows.rows.find(
+    (flow) => flow.brokerFlowId === "transfer-1",
+  );
+  expect(transfer).toMatchObject({ amount: null, kind: "other" });
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", undefined, {
+    cashBalances: [
+      { entity: "BV", broker: "trading212", currency: "EUR", amount: 9.54, asOf: "2025-08-09" },
+    ],
+    cashFlows: result.sections.cashFlows.rows,
+    today: "2025-08-12",
+  });
+  const day = series.find((point) => point.date === "2025-08-12");
+  expect(day?.cashUnknown).not.toEqual([]);
+  expect(day?.cashValue).toBeNull();
 });
 
 test("repeated cash-history nextPagePath stops with an explicit partial-history problem", async () => {
