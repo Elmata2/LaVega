@@ -341,7 +341,7 @@ export function PortfolioBenchmarkChart({
                       {result.symbol} · {result.exchange} · {result.currency}
                     </span>
                     {result.currency !== currency && (
-                      <span className="block text-[11px] text-muted-foreground">
+                      <span className="block text-xs text-muted-foreground">
                         {benchmarkCurrencyMismatchReason(currency, result)}
                       </span>
                     )}
@@ -639,7 +639,7 @@ function PerformanceSummary({
                     </span>
                   </div>
                   {benchmark.currency !== currency && (
-                    <p className="mt-2 text-[11px] text-muted-foreground">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {benchmarkCurrencyMismatchReason(currency, benchmark)}
                     </p>
                   )}
