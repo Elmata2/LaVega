@@ -89,6 +89,17 @@ export function computeTimeWeightedReturnSeries(
       cumulative = null;
       return { date: point.date, cumulativeReturn: null };
     }
+    /* `previous > 0` is not enough to divide by. A flow bigger than the whole
+     * opening capital means the period is dominated by money moving in or out,
+     * not by performance, so the quotient describes nothing — EUR 6.64 growing
+     * to EUR 11,116.34 against a recorded EUR 150 yielded a 165,007% day that
+     * chained into a headline "+173,621.97%". Restart the chain instead, the
+     * same answer this function already gives a non-positive base. */
+    if (Math.abs(flow) > previous) {
+      previous = value;
+      cumulative = value > 0 ? 0 : null;
+      return { date: point.date, cumulativeReturn: cumulative };
+    }
     const daily = (value - previous - flow) / previous;
     cumulative = cumulative === null ? null : (1 + cumulative) * (1 + daily) - 1;
     previous = value;
