@@ -4,6 +4,13 @@ import { computePortfolioMetrics } from "./summary.js";
 export const RISK_MINIMUM_OBSERVATIONS = 60;
 export type RiskRange = "6M" | "1Y" | "All";
 
+export function benchmarkCurrencyMismatchReason(
+  presentationCurrency: string,
+  benchmark: { symbol: string; currency: string },
+): string {
+  return `Beta and alpha need a ${presentationCurrency}-quoted benchmark; ${benchmark.symbol} is quoted in ${benchmark.currency}.`;
+}
+
 /** Historical account risk. Partial valuations are never market returns. */
 export function buildHistoricalRisk(
   data: InvestingDashboardData,
@@ -75,9 +82,7 @@ export function buildHistoricalRisk(
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
   if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
   else if (!comparable)
-    reasons.push(
-      `Beta and alpha need a ${data.presentationCurrency}-quoted benchmark; ${benchmark.symbol} is quoted in ${benchmark.currency}.`,
-    );
+    reasons.push(benchmarkCurrencyMismatchReason(data.presentationCurrency, benchmark));
   else if (available && metrics.beta === null)
     reasons.push(
       "Beta and alpha need 60 matching return intervals and a benchmark with non-zero variance.",
