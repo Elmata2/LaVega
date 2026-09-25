@@ -36,7 +36,7 @@ import {
   type PortfolioAgentDefinition,
   type PortfolioAgentInsight,
 } from "./lib/portfolioAgents";
-import { type PriceSyncProgress } from "./lib/priceSync";
+import { priceOutcomeProblems, type PriceSyncProgress } from "./lib/priceSync";
 import {
   continuePriceSync,
   startBrokerSync,
@@ -861,7 +861,7 @@ function StatusChip({
 }
 
 function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
-  const { broker, price, priceProblem, vault } = useSyncSession();
+  const { broker, price, priceProblem, vault, connection } = useSyncSession();
   const brokerValue =
     broker?.status === "running"
       ? "In progress"
@@ -907,6 +907,18 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
         Status
       </p>
       <div className="space-y-2" aria-live="polite">
+        {connection !== "online" && (
+          <StatusChip
+            label="Connection"
+            value={connection === "retrying" ? "Reconnecting" : "Offline"}
+            tone={connection === "retrying" ? "warning" : "problem"}
+            detail={
+              connection === "retrying"
+                ? "Sync continues; status checks retry"
+                : "Status could not be read"
+            }
+          />
+        )}
         <StatusChip
           label="Brokers"
           value={brokerValue}
@@ -970,7 +982,7 @@ function AppOpenSync() {
     try {
       const brokerResult = await startBrokerSync();
       if (current()) setProblems(filterVisibleSyncProblems(brokerResult?.problems ?? []));
-      const priceProblems = await continuePriceSync();
+      const priceProblems = priceOutcomeProblems(await continuePriceSync());
       if (current() && priceProblems.length > 0)
         setProblems((existing) => [...existing, ...priceProblems]);
     } catch {

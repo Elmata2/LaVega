@@ -31,16 +31,23 @@ test("keeps asking while the server pauses on its time budget", async () => {
     .mockResolvedValueOnce(progress("completed", { completed: 2, remainingSymbols: [] }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual([]);
+  const rounds: string[] = [];
+  await expect(
+    runPriceSyncUntilComplete((progress) => rounds.push(progress.status)),
+  ).resolves.toEqual({ kind: "finished", problems: [] });
   expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(fetchMock).toHaveBeenCalledWith("/api/prices/sync", { method: "POST" });
+  expect(rounds).toEqual(["paused", "paused", "completed"]);
 });
 
 test("stops at the first terminal answer and reports its problems", async () => {
   const fetchMock = vi.fn().mockResolvedValue(progress("problem", { problems: ["ASML: failed"] }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual(["ASML: failed"]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({
+    kind: "finished",
+    problems: ["ASML: failed"],
+  });
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 
@@ -50,15 +57,7 @@ test("missing Yahoo consent is an answer, not a failure to retry", async () => {
     .mockResolvedValue(new Response(JSON.stringify({ consentRequired: true }), { status: 428 }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual([]);
-  expect(fetchMock).toHaveBeenCalledOnce();
-});
-
-test("an unmounted caller stops the loop", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(progress("paused"));
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-  await expect(runPriceSyncUntilComplete(() => false)).resolves.toEqual([]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({ kind: "finished", problems: [] });
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 
@@ -70,7 +69,7 @@ test("a cut-off round is picked up again instead of read as a failure", async ()
     .mockResolvedValueOnce(progress("completed", { completed: 2, remainingSymbols: [] }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual([]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({ kind: "finished", problems: [] });
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -78,9 +77,10 @@ test("a server that keeps failing is reported rather than hammered", async () =>
   const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 500 }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual([
-    "Price history could not be updated.",
-  ]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({
+    kind: "failed",
+    message: "Price history could not be updated.",
+  });
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
@@ -88,6 +88,9 @@ test("reports when bounded continuation cannot finish", async () => {
   const fetchMock = vi.fn(() => Promise.resolve(progress("paused")));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual([PRICE_SYNC_EXHAUSTED_MESSAGE]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({
+    kind: "incomplete",
+    message: PRICE_SYNC_EXHAUSTED_MESSAGE,
+  });
   expect(fetchMock).toHaveBeenCalledTimes(40);
 });
