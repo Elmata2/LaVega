@@ -77,6 +77,24 @@ describe("benchmark chart domain", () => {
     expect(returns[2]?.cumulativeReturn).toBeCloseTo(0.1);
   });
 
+  /* Measured on the owner's real account: the portfolio went from EUR 6.64 to
+   * EUR 11,116.34 in a day while only EUR 150 of that was recorded as an
+   * external flow, so ~EUR 10,959 was booked as performance. That one day
+   * chained out to a headline "Total return +173,621.97%". A flow that dwarfs
+   * the opening capital does not describe a measurable sub-period. */
+  test("a flow larger than the opening value restarts the chain instead of inventing a return", () => {
+    const returns = computeTimeWeightedReturnSeries(
+      [
+        { date: "2025-08-10", value: 6.64 },
+        { date: "2025-08-11", value: 11116.34 },
+        { date: "2025-08-12", value: 11150 },
+      ],
+      [{ date: "2025-08-11", amount: 150 }],
+    );
+    expect(returns[1]?.cumulativeReturn).toBe(0);
+    expect(returns[2]?.cumulativeReturn).toBeCloseTo((11150 - 11116.34) / 11116.34, 6);
+  });
+
   test("nets same-day owner flows and does not treat internal cash as external", () => {
     const points = [
       { date: "2026-01-01", value: 100 },
