@@ -632,7 +632,7 @@ const ibkrFlow = (id: string, date: string, amount: number): CashFlow => ({
   kind: amount > 0 ? "deposit" : "other",
 });
 
-test("a proven window ends at its last date and later flows are not walked", () => {
+test("a proven window ends at its last date and a later flow makes cash unknown", () => {
   expect(
     cashSeries({
       cashBalances: [{ ...eurCash(800, "2026-01-05"), broker: "ibkr" }],
@@ -648,9 +648,76 @@ test("a proven window ends at its last date and later flows are not walked", () 
     { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
     { date: "2026-01-05", cashValue: 800, cashUnknown: [] },
     { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
-    { date: "2026-01-07", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: null, cashUnknown: ["ibkr:EUR"] },
   ]);
 });
+
+test.each([
+  [
+    "a purchase",
+    {
+      trades: [
+        {
+          id: "buy",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          symbol: "X",
+          side: "buy",
+          quantity: 1,
+          price: 200,
+          amount: 200,
+          currency: "EUR",
+          commission: 0,
+        },
+      ],
+      cashFlows: [],
+    },
+  ],
+  [
+    "a withdrawal",
+    {
+      trades: [],
+      cashFlows: [
+        {
+          id: "withdrawal",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          currency: "EUR",
+          amount: -200,
+          kind: "withdrawal",
+        },
+      ],
+    },
+  ],
+] satisfies [string, { trades: Trade[]; cashFlows: CashFlow[] }][])(
+  "the latest balance stops carrying at %s after it when history is unknown",
+  (_, { trades, cashFlows }) => {
+    const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+      symbol: "X",
+      date,
+      close: 200,
+      currency: "EUR",
+    }));
+    const series = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+      cashBalances: [eurCash(1000, "2026-01-02")],
+      cashFlows,
+      cashCoverage: [
+        { entity: "personal", broker: "trading212", status: "unknown", reason: "unverified" },
+      ],
+      today: "2026-01-06",
+    });
+
+    expect(
+      series.map(({ date, cashValue, cashUnknown }) => ({ date, cashValue, cashUnknown })),
+    ).toEqual([
+      { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+      { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-06", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    ]);
+  },
+);
 
 test("the balance walked to a window's end carries past an earlier statement", () => {
   expect(

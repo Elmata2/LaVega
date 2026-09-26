@@ -136,8 +136,10 @@ function anchoredAmountOnDate(
 
 /** A walk may only cross the proven window. Outside it the balance is known on
  *  the broker's own statement dates, and the last known balance (the latest
- *  statement, or the window's end when that is later) stands for every later
- *  date: unknown history must not hide the current balance. */
+ *  statement, or the window's end when that is later) stands for later dates
+ *  until the wallet's next cash flow, dividend or trade: unknown history must
+ *  not hide the current balance, and an unwalked movement must not hide behind
+ *  it. */
 function cashAmountOnDate(date: string, leg: CashLeg): number | null {
   const { proven } = leg;
   const walk = (day: string) =>
@@ -155,8 +157,15 @@ function cashAmountOnDate(date: string, leg: CashLeg): number | null {
     (last, anchor) => (last && last.asOf >= anchor.asOf ? last : anchor),
     undefined,
   );
-  if (proven && proven.to >= (latest?.asOf ?? "") && date > proven.to) return walk(proven.to);
-  return latest && date > latest.asOf ? latest.amount : null;
+  const carried =
+    proven && proven.to >= (latest?.asOf ?? "")
+      ? { asOf: proven.to, amount: walk(proven.to) }
+      : latest;
+  if (!carried || date <= carried.asOf) return null;
+  const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+    (day) => day > carried.asOf && day <= date,
+  );
+  return moved ? null : carried.amount;
 }
 
 type CashLeg = {
@@ -166,6 +175,9 @@ type CashLeg = {
   proven?: { from: string; to: string };
   anchors: CashBalance[];
   events: CashEvent[];
+  /** Every trade date of the owner, whatever stream books its cash: a trade
+   *  may settle in any of the owner's wallets. */
+  tradeDates: string[];
 };
 
 /** Signed cash a trade moved: the broker's own wallet figure when reported,
@@ -214,6 +226,7 @@ function cashLegs(
       ...(coverage ? { proven: { from: coverage.from, to: coverage.to } } : {}),
       anchors: [],
       events: [],
+      tradeDates: [],
     };
     legs.set(key, created);
     return created;
@@ -260,6 +273,10 @@ function cashLegs(
     }
     legs.delete(key);
   }
+  for (const candidate of legs.values())
+    candidate.tradeDates = trades
+      .filter((trade) => trade.entity === candidate.entity && trade.broker === candidate.broker)
+      .map((trade) => trade.date);
   return [...legs.values()];
 }
 
