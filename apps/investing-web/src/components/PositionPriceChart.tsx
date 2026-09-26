@@ -124,8 +124,7 @@ export function PositionPriceChart({
   const {
     points: visible,
     focusIndex,
-    setFocusIndex,
-    drag,
+    selection,
     chartRef,
     dateFrom,
     setDateFrom,
@@ -153,7 +152,7 @@ export function PositionPriceChart({
   }
 
   function activateMarker(pointIndex: number, eventDate: string) {
-    setFocusIndex(pointIndex);
+    chart.focus(pointIndex);
     setActiveEventDate(eventDate);
     onMarkerActivate?.(eventDate);
   }
@@ -255,19 +254,17 @@ export function PositionPriceChart({
               aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
               className="touch-pan-y select-none rounded-[12px] outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
-                chart.onKeyDown(event);
+                chart.handlers.onKeyDown(event);
                 setActiveEventDate(null);
               }}
-              onPointerDown={chart.onPointerDown}
+              onPointerDown={chart.handlers.onPointerDown}
               onPointerMove={(event) => {
-                const index = chart.indexForClientX(event.clientX);
-                if (index !== null) {
-                  setFocusIndex(index);
-                  setActiveEventDate(null);
-                }
-                chart.onPointerMove(event);
+                chart.handlers.onPointerMove(event);
+                setActiveEventDate(null);
               }}
-              onPointerUp={chart.onPointerUp}
+              onPointerUp={chart.handlers.onPointerUp}
+              onPointerCancel={chart.handlers.onPointerCancel}
+              onLostPointerCapture={chart.handlers.onLostPointerCapture}
             >
               <ChartContainer className="h-[300px]" aria-hidden="true">
                 <LineChart data={plotPoints} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
@@ -296,10 +293,10 @@ export function PositionPriceChart({
                       strokeDasharray="3 3"
                     />
                   )}
-                  {drag && (
+                  {selection && (
                     <ReferenceArea
-                      x1={visible[Math.min(drag.from, drag.to)]?.date}
-                      x2={visible[Math.max(drag.from, drag.to)]?.date}
+                      x1={selection.from}
+                      x2={selection.to}
                       fill="hsl(var(--chart-blue))"
                       fillOpacity={0.12}
                     />

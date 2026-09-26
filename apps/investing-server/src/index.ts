@@ -484,8 +484,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           throw error;
         refreshProblems.push("Broker data could not be refreshed. Showing the last loaded data.");
       }
-      const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } =
-        brokerData.read();
+      const {
+        positions,
+        trades,
+        dividends,
+        cashBalances,
+        cashFlows,
+        cashCoverage,
+        problems,
+        dataVersion,
+      } = brokerData.read();
       // `problems` above lives only in this invocation's in-memory cache: a sync's
       // row-level problem (an unclassifiable transaction, say) never reaches a
       // later invocation that did not run that sync. The sync's own durable
@@ -545,6 +553,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             dividends,
             cashBalances,
             cashFlows,
+            cashCoverage,
             priceBars: prices.bars,
             benchmarkBars: benches.bars,
             benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({

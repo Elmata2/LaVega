@@ -872,6 +872,48 @@ test("overview makes KPIs and all operational status chips visible", async () =>
   root.unmount();
 });
 
+test("overview shows when sync status cannot be read", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/sync/status") return new Response("", { status: 503 });
+      if (url === "/api/prices/sync/status")
+        return new Response(
+          JSON.stringify({
+            status: "idle",
+            total: 0,
+            completed: 0,
+            remainingSymbols: [],
+            currentSymbol: null,
+            waitUntil: null,
+            updatedAt: null,
+            message: null,
+            problems: [],
+          }),
+        );
+      if (url === "/api/brokers/credentials/status")
+        return new Response(JSON.stringify({ status: "unlocked" }));
+      return responseFor(input, init);
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  // The sync session is module state, so an earlier test's active run can make this Reconnecting.
+  expect(container.textContent).toMatch(/Connection(Offline|Reconnecting)/);
+  root.unmount();
+});
+
 test("overview separates positions, cash, and incomplete value states", async () => {
   const incomplete: InvestingDashboardData = {
     ...dashboard,

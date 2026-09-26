@@ -1,78 +1,7 @@
-import { useEffect, useState } from "react";
-import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from "@lavega/core";
+import { useState } from "react";
+import type { RiskRange } from "@lavega/core";
+import { usePortfolioSummary } from "../lib/summaryResource";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-
-export type PortfolioSummary = {
-  metrics: PortfolioMetrics;
-  sectors: SectorExposure[];
-  topPositions: Array<{ symbol: string; weight: number }>;
-  risk: HistoricalRisk;
-  composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
-};
-
-function isPortfolioSummary(value: unknown): value is PortfolioSummary {
-  if (!value || typeof value !== "object") return false;
-  const summary = value as Partial<PortfolioSummary>;
-  return Boolean(
-    summary.metrics &&
-    typeof summary.metrics === "object" &&
-    summary.risk &&
-    Array.isArray(summary.risk.reasons) &&
-    Array.isArray(summary.sectors) &&
-    Array.isArray(summary.topPositions),
-  );
-}
-
-export async function fetchPortfolioSummary(
-  range: RiskRange = "1Y",
-  benchmark = "",
-): Promise<PortfolioSummary> {
-  const query = new URLSearchParams({ range });
-  if (benchmark) query.set("benchmark", benchmark);
-  const response = await fetch(`/api/investing/summary?${query}`);
-  if (!response.ok) throw new Error(`Failed to load summary: ${response.status}`);
-  const payload: unknown = await response.json();
-  if (!isPortfolioSummary(payload)) throw new Error("Summary has an invalid format.");
-  return payload;
-}
-
-type SummaryState =
-  | { status: "loading" }
-  | { status: "ready"; data: PortfolioSummary }
-  | { status: "error"; message: string };
-
-export function usePortfolioSummary(
-  range: RiskRange,
-  benchmark: string,
-  revision: string,
-): SummaryState {
-  const requestKey = JSON.stringify([range, benchmark, revision]);
-  const [state, setState] = useState<{ key: string; result: SummaryState }>({
-    key: "",
-    result: { status: "loading" },
-  });
-  useEffect(() => {
-    let current = true;
-    void fetchPortfolioSummary(range, benchmark)
-      .then((data) => {
-        if (current) setState({ key: requestKey, result: { status: "ready", data } });
-      })
-      .catch((reason: unknown) => {
-        if (current)
-          setState({
-            key: requestKey,
-            result: {
-              status: "error",
-              message: reason instanceof Error ? reason.message : "Failed to load summary",
-            },
-          });
-      });
-    return () => {
-      current = false;
-    };
-  }, [range, benchmark, requestKey]);
-  return state.key === requestKey ? state.result : { status: "loading" };
-}
 
 const barColors = [
   "hsl(var(--chart-blue))",
@@ -109,10 +38,9 @@ export function PortfolioSummaryCard({
   stillLoading?: boolean;
 }) {
   const [range, setRange] = useState<RiskRange>("1Y");
-  const [refresh, setRefresh] = useState(0);
   const [selection, setSelection] = useState({ value: "", revision });
   const benchmark = selection.revision === revision ? selection.value : "";
-  const state = usePortfolioSummary(range, benchmark, `${revision}:${refresh}`);
+  const { state, refresh } = usePortfolioSummary(range, benchmark, revision);
   if (state.status === "loading")
     return (
       <Card aria-busy="true">
@@ -146,11 +74,7 @@ export function PortfolioSummaryCard({
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap gap-3 text-sm">
-          <button
-            type="button"
-            className="self-end rounded-md border px-2 py-1"
-            onClick={() => setRefresh((value) => value + 1)}
-          >
+          <button type="button" className="self-end rounded-md border px-2 py-1" onClick={refresh}>
             Refresh risk
           </button>
           <label className="flex flex-col gap-1">

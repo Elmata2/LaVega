@@ -42,6 +42,11 @@ export function createNeonPriceStore(
       createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
     lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),
     upsert: (tenantId, bars) => createPriceBarRepository(db, tenantId).upsert(bars),
+    replaceRange: (tenantId, symbol, bars, from, to) =>
+      createPriceBarRepository(db, tenantId).replaceRange(symbol, bars, from, to),
+    getCoverage: (tenantId, symbol) => createPriceBarRepository(db, tenantId).getCoverage(symbol),
+    putCoverage: (tenantId, coverage) =>
+      createPriceBarRepository(db, tenantId).putCoverage(coverage),
     async purgeAll() {
       // No tenant in the signature, so the caller's own is the only safe one.
       await createPriceBarRepository(db, await resolveTenantId()).purgeAll();

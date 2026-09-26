@@ -1,4 +1,11 @@
-import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Dividend,
+  Position,
+  Trade,
+} from "@lavega/core";
 import type { ScheduledSyncResult } from "./scheduledSync.js";
 
 /* What a broker knows about an account, as this runtime keeps it.
@@ -10,6 +17,11 @@ import type { ScheduledSyncResult } from "./scheduledSync.js";
  * selling the last position is a real answer and a failed read is not. Each
  * section is judged on its own, so paused order-history pagination no longer
  * holds back holdings that were read successfully.
+ *
+ * Cash-history coverage travels with the cash it describes. A sync that read
+ * any cash section replaces it, with unknown when the adapter proved nothing;
+ * a sync that read no cash leaves the stored cash and its proof together.
+ * Snapshots written before coverage existed restore as unknown.
  */
 export type BrokerAccountSnapshot = {
   positions: Position[];
@@ -17,6 +29,7 @@ export type BrokerAccountSnapshot = {
   dividends: Dividend[];
   cashBalances?: CashBalance[];
   cashFlows?: CashFlow[];
+  cashHistory?: CashHistoryCoverage;
 };
 export type BrokerDataSnapshot = Partial<Record<"ibkr" | "trading212", BrokerAccountSnapshot>>;
 
@@ -67,6 +80,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   const dividendsByBroker = new Map<string, Dividend[]>();
   const cashBalancesByBroker = new Map<string, CashBalance[]>();
   const cashFlowsByBroker = new Map<string, CashFlow[]>();
+  const cashHistoryByBroker = new Map<string, CashHistoryCoverage>();
   let problems: string[] = [];
   let dataVersion = 0;
 
@@ -76,6 +90,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
     dividendsByBroker.clear();
     cashBalancesByBroker.clear();
     cashFlowsByBroker.clear();
+    cashHistoryByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
       positionsByBroker.set(broker, structuredClone(restorePositions(broker, data.positions)));
@@ -86,6 +101,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         structuredClone(withBroker(broker, data.cashBalances ?? [])),
       );
       cashFlowsByBroker.set(broker, structuredClone(withBroker(broker, data.cashFlows ?? [])));
+      if (data.cashHistory) cashHistoryByBroker.set(broker, structuredClone(data.cashHistory));
     }
     dataVersion += 1;
   };
@@ -136,6 +152,11 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             outcome.broker,
             mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows),
           );
+        const readCash = [sections.cashBalances, sections.cashFlows, sections.dividends].some(
+          (section) => section.status !== "unavailable",
+        );
+        if (incoming.cashHistory) cashHistoryByBroker.set(outcome.broker, incoming.cashHistory);
+        else if (readCash) cashHistoryByBroker.delete(outcome.broker);
       }
       problems = result.problems;
       if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;
@@ -147,6 +168,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         dividends: [...dividendsByBroker.values()].flat(),
         cashBalances: [...cashBalancesByBroker.values()].flat(),
         cashFlows: [...cashFlowsByBroker.values()].flat(),
+        cashCoverage: [...cashHistoryByBroker.values()],
         problems: [...problems],
         dataVersion,
       };
@@ -168,6 +190,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           dividends: structuredClone(dividendsByBroker.get(broker) ?? []),
           cashBalances: structuredClone(cashBalancesByBroker.get(broker) ?? []),
           cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
+          ...(cashHistoryByBroker.has(broker)
+            ? { cashHistory: structuredClone(cashHistoryByBroker.get(broker)!) }
+            : {}),
         };
       }
       return snapshot;

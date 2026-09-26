@@ -86,10 +86,8 @@ export function PortfolioBenchmarkChart({
   const {
     points,
     focusIndex,
-    setFocusIndex,
     pointerRatio,
-    setPointerRatio,
-    drag,
+    selection,
     chartRef,
     dateFrom,
     setDateFrom,
@@ -422,21 +420,7 @@ export function PortfolioBenchmarkChart({
               tabIndex={0}
               aria-label={`${label}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
               className="touch-pan-y select-none rounded-[12px]"
-              onKeyDown={chart.onKeyDown}
-              onPointerDown={chart.onPointerDown}
-              onPointerMove={(event) => {
-                const index = chart.indexForClientX(event.clientX);
-                if (index !== null) setFocusIndex(index);
-                const rect = event.currentTarget.getBoundingClientRect();
-                setPointerRatio(
-                  Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
-                );
-                chart.onPointerMove(event);
-              }}
-              onPointerUp={chart.onPointerUp}
-              onPointerLeave={() => {
-                if (!drag) setFocusIndex(null);
-              }}
+              {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
                 <LineChart
@@ -444,7 +428,7 @@ export function PortfolioBenchmarkChart({
                   margin={{ top: 12, right: 12, left: 8, bottom: 0 }}
                   onMouseMove={(state) => {
                     if (typeof state?.activeTooltipIndex === "number")
-                      setFocusIndex(state.activeTooltipIndex);
+                      chart.focus(state.activeTooltipIndex);
                   }}
                 >
                   <XAxis
@@ -480,10 +464,10 @@ export function PortfolioBenchmarkChart({
                       strokeDasharray="3 3"
                     />
                   )}
-                  {drag && (
+                  {selection && (
                     <ReferenceArea
-                      x1={points[Math.min(drag.from, drag.to)]?.date}
-                      x2={points[Math.max(drag.from, drag.to)]?.date}
+                      x1={selection.from}
+                      x2={selection.to}
                       fill="hsl(var(--chart-blue))"
                       fillOpacity={0.12}
                       strokeOpacity={0}
@@ -678,7 +662,7 @@ function MetricSpread({
   );
 }
 
-function PerformanceTooltip({
+export function PerformanceTooltip({
   active,
   payload,
   mode,
@@ -703,35 +687,37 @@ function PerformanceTooltip({
       ) : (
         <div className="flex flex-wrap gap-3">
           {benchmarks.map((benchmark) => {
-            const benchmarkTwr = point.benchmarkReturns[benchmark.symbol] ?? null;
-            const benchmarkMwr = point.benchmarkXirr[benchmark.symbol] ?? null;
+            const portfolioTwr = point.portfolioReturn ?? null;
+            const portfolioMwr = point.portfolioXirr ?? null;
+            const benchmarkTwr = point.benchmarkReturns?.[benchmark.symbol] ?? null;
+            const benchmarkMwr = point.benchmarkXirr?.[benchmark.symbol] ?? null;
             return (
               <div key={benchmark.symbol} className="min-w-[180px] flex-1">
                 <p className="mb-1 font-semibold">vs. {benchmark.name}</p>
                 <MetricSpread
                   label="TWR"
                   value={
-                    point.portfolioReturn === null || benchmarkTwr === null
+                    portfolioTwr === null || benchmarkTwr === null
                       ? null
-                      : point.portfolioReturn - benchmarkTwr
+                      : portfolioTwr - benchmarkTwr
                   }
                   tone="blue"
                 />
                 <MetricSpread
                   label="XIRR p.j."
                   value={
-                    point.portfolioXirr === null || benchmarkMwr === null
+                    portfolioMwr === null || benchmarkMwr === null
                       ? null
-                      : point.portfolioXirr - benchmarkMwr
+                      : portfolioMwr - benchmarkMwr
                   }
                   tone="amber"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Portfolio {valueOrUnknown(point.portfolioReturn, percent)} · {benchmark.name}{" "}
+                  Portfolio {valueOrUnknown(portfolioTwr, percent)} · {benchmark.name}{" "}
                   {valueOrUnknown(benchmarkTwr, percent)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  XIRR {cappedXirr(point.portfolioXirr)} · {cappedXirr(benchmarkMwr)}
+                  XIRR {cappedXirr(portfolioMwr)} · {cappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );

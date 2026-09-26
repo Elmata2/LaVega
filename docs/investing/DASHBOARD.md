@@ -66,6 +66,7 @@ Broker coverage differs ([Research: broker cash and cash-flow reporting](https:/
 - IBKR Cash Report supplies balance anchors. Statement of Funds supplies dated deposits, withdrawals, fees, and dividends. Users can add both sections to their existing Flex query without changing the token and Query ID setup.
 - Trading 212 `/api/v0/equity/account/summary` supplies current available cash. `/history/transactions` and `/history/dividends` supply dated activity. Official documentation now exposes these schemas. Sanitized live-response verification remains required for provider sign behavior, `TRANSFER` direction, and account-specific history retention. Until verified, ambiguous transfers become explicit problems and non-zero `inPies` or `reservedForOrders` prevents an unsafe total-cash anchor.
 - If flow history cannot reach a requested date, return unknown. Never fabricate an opening cash balance.
+- Flow history reaches a date only inside the window the adapter proves complete (`CashHistoryCoverage`, see `CONNECTORS.md`). IBKR proves its Flex statement period. Trading 212 proves nothing yet, so its cash is known from its latest balance date onwards and unknown before it.
 
 ## Historical portfolio value
 
@@ -146,17 +147,19 @@ Price backfill runs on the server, separate from broker sync ([Backfill set and 
 
 After broker sync completes, start the price orchestrator. Its symbol set is every traded symbol, including closed positions, plus the selected benchmarks. Backfill a position symbol from its first trade. Backfill a benchmark from the portfolio's first trade.
 
-Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
+Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. The browser waits for that run to settle, then starts a fresh discovery so a benchmark chosen during the run is included. A paused slice also includes selected benchmarks, including ones chosen since the previous slice. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
 
 Fetch in this order:
 
-1. Current holdings.
-2. Closed holdings.
-3. Benchmarks.
+1. Selected benchmarks.
+2. Current holdings.
+3. Closed holdings.
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
-If cached bars for a symbol contain a currency that no longer matches the symbol's normalized currency, restart that symbol from the earliest mismatched date and overwrite the stale rows. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge.
+Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.
+
+The broker's currency is not evidence of a stale cache, because a listing can quote in another currency. When the provider quotes another listing or currency than the coverage records, or reports a split after it, refetch the whole covered history and make the answer the only rows in that window. A cached session the new answer lacks is deleted, so a holiday on the old listing cannot mark the cache stale on every later sync. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge. Caches written before coverage existed take it from their bars once.
 
 Expose price progress separately from broker progress at `GET /api/prices/sync/status`. Use the same status vocabulary as `BrokerSyncProgress`. Show remaining symbols and running or waiting state in the dashboard right rail.
 
@@ -281,6 +284,7 @@ The store is authoritative across reloads. Do not mirror benchmark selection in 
 Assign benchmark colors by current selection order: `chart-blue`, `chart-purple`, then `chart-teal`. Reflow colors when a selection is removed. Keep coral unused because it conflicts with the negative color. The legend shows name and color for the portfolio and each benchmark. A legend entry toggles line visibility. Wrap only when horizontal space is insufficient.
 
 Render missing benchmark history as `null` with disconnected line segments. Keep its legend entry visible while its backfill progresses.
+Price sync requests selected benchmarks before holdings, including when a paused run resumes, so a large portfolio backfill does not leave the comparison line last in the queue.
 
 ## Portfolio chart interaction
 
@@ -296,6 +300,14 @@ The chart supports direct drag-to-zoom, scroll-wheel zoom, and typed date input 
 - Do not add a separate brush strip.
 
 Direct manipulation must respond during the gesture. Capture the pointer so dragging continues outside plot bounds. Keep the interaction interruptible. Range or zoom changes update the visible window and indexed-return anchor together.
+
+Window transitions follow these rules. `chartWindowReducer` in `useChartWindow.ts` owns them, and each chart keeps its own instance.
+
+- Zooming out never narrows the window. It stops at full history and stays there; it does not jump back to the preset.
+- The wheel ignores a chart that has fewer points than its wheel minimum.
+- Escape and the zoom pill restore the preset the custom window started from.
+- One pointer owns a drag. A second pointer cannot take it over. Pointer cancel and lost pointer capture end the drag without zooming.
+- A drag holds dates, not indices. If the chart data is replaced during a drag, the drag ends without zooming.
 
 The tooltip flips before it reaches the right card edge. Trade markers use click or keyboard activation for drilldown. Hover never performs navigation.
 
@@ -415,6 +427,15 @@ Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega
 ## Loading, empty, and error states
 
 Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
+
+One module, `apps/investing-web/src/lib/syncSession.ts`, owns sync polling for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls `startBrokerSync` or `continuePriceSync` there, and every status reader subscribes to the same snapshot. The module keeps these rules:
+
+- At most one status read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
+- While a broker or price run is known to be active, the module reads status every second. Active means a broker or price row that is `running` or `waiting`, or a start this page still owns. A `paused` price row counts only while this page is posting the next round; a paused row on its own (a cron slice, or a run that hit the round limit) is at rest and does not poll. A failed read during an active run retries with backoff (2, 4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the one-second rhythm without a reload.
+- Idle, completed, and problem states stop polling. A failed read with no active run also stops and shows **Connection: Offline** until the next wake (a new subscriber or a sync start).
+- The dashboard is invalidated once per price round this page posts, because each round stores new bars, and once when a channel this page saw unfinished reaches completed or problem. A final price round that is also that transition invalidates once, not twice. A failed status read or a recovery from one does not invalidate.
+- One subscriber that unmounts removes only its listener. Polling stops when the last subscriber leaves.
+- Price continuation that reaches its round limit returns an explicit `incomplete` outcome. The status rail shows **Price history: Incomplete** with a message to start sync again.
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.

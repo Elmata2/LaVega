@@ -1,11 +1,25 @@
 import { expect, test } from "vitest";
-import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Position,
+  PriceBar,
+  Trade,
+} from "./model.js";
 import {
   computePortfolioValueSeries,
   filterPortfolioValueRange,
   type PortfolioValuePoint,
 } from "./portfolio.js";
 import { FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
+
+const complete = (
+  broker: string,
+  from: string,
+  tradeCash: "trade-settlement" | "cash-flows",
+  to = "2026-01-06",
+): CashHistoryCoverage => ({ entity: "personal", broker, status: "complete", from, to, tradeCash });
 
 const point = (date: string, value: number, unpriced: string[] = []): PortfolioValuePoint => ({
   date,
@@ -348,6 +362,7 @@ test("walks cash anchors with deduplicated flows and dividends", () => {
     cashBalances,
     cashFlows,
     dividends,
+    cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows")],
     today: "2026-01-06",
   });
 
@@ -424,6 +439,7 @@ test("a trade moves cash between the deposit and the broker balance", () => {
   const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
     cashBalances,
     cashFlows,
+    cashCoverage: [complete("ibkr", "2026-01-02", "trade-settlement")],
     today: "2026-01-06",
   });
 
@@ -480,6 +496,7 @@ test("a single-wallet broker settles foreign trades and flows into its wallet", 
   const result = computePortfolioValueSeries([], trades, PRICE_BARS, "EUR", FX_RATES, {
     cashBalances,
     cashFlows,
+    cashCoverage: [complete("trading212", "2026-01-02", "trade-settlement")],
     today: "2026-01-06",
   });
 
@@ -511,6 +528,292 @@ test("keeps unreachable and unconvertible cash legs unknown", () => {
   });
 
   expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });
+});
+
+function thousandEuroAccount(broker: string) {
+  const deposit: CashFlow = {
+    id: "deposit",
+    entity: "personal",
+    broker,
+    date: "2026-01-02",
+    currency: "EUR",
+    amount: 1000,
+    kind: "deposit",
+  };
+  const purchase: Trade = {
+    id: "buy",
+    entity: "personal",
+    broker,
+    date: "2026-01-05",
+    symbol: "X",
+    side: "buy",
+    quantity: 1,
+    price: 200,
+    amount: 200,
+    currency: "EUR",
+    commission: 0,
+    settlement: { currency: "EUR", amount: -200 },
+  };
+  const purchaseCash: CashFlow = {
+    id: "purchase-cash",
+    entity: "personal",
+    broker,
+    date: "2026-01-05",
+    currency: "EUR",
+    amount: -200,
+    kind: "other",
+  };
+  const holding: Position = {
+    entity: "personal",
+    broker,
+    symbol: "X",
+    quantity: 1,
+    averagePrice: 200,
+    marketPrice: 200,
+    marketValue: 200,
+    currency: "EUR",
+    asOf: "2026-01-06",
+  };
+  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+    symbol: "X",
+    date,
+    close: 200,
+    currency: "EUR",
+  }));
+  const closingCash: CashBalance = {
+    entity: "personal",
+    broker,
+    currency: "EUR",
+    amount: 800,
+    asOf: "2026-01-06",
+  };
+  const series = (cashFlows: CashFlow[], cashCoverage: CashHistoryCoverage[]) =>
+    computePortfolioValueSeries([holding], [purchase], bars, "EUR", FX_RATES, {
+      cashBalances: [closingCash],
+      cashFlows,
+      cashCoverage,
+      today: "2026-01-06",
+    }).map(({ date, value, cashUnknown }) => ({ date, value, cashUnknown }));
+  return { deposit, purchaseCash, series };
+}
+
+test("settles a purchase once from the trade when the broker proves its settlement", () => {
+  const account = thousandEuroAccount("trading212");
+
+  expect(
+    account.series([account.deposit], [complete("trading212", "2026-01-02", "trade-settlement")]),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
+  ]);
+});
+
+test("settles a purchase once from the ledger row when the broker books trade cash", () => {
+  const account = thousandEuroAccount("ibkr");
+
+  expect(
+    account.series(
+      [account.deposit, account.purchaseCash],
+      [complete("ibkr", "2026-01-02", "cash-flows")],
+    ),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
+  ]);
+});
+
+test.each([
+  ["no coverage", []],
+  [
+    "unknown coverage",
+    [
+      {
+        entity: "personal",
+        broker: "trading212",
+        status: "unknown",
+        reason: "trade settlement unverified",
+      },
+    ],
+  ],
+] satisfies [string, CashHistoryCoverage[]][])(
+  "with %s only the dated broker balance says what cash was",
+  (_, cashCoverage) => {
+    const account = thousandEuroAccount("trading212");
+
+    expect(account.series([account.deposit], cashCoverage)).toEqual([
+      { date: "2026-01-02", value: 0, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-05", value: 200, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-06", value: 1000, cashUnknown: [] },
+    ]);
+  },
+);
+
+test("a proven window leaves cash before it unknown", () => {
+  const account = thousandEuroAccount("ibkr");
+
+  expect(
+    account.series(
+      [account.deposit, account.purchaseCash],
+      [complete("ibkr", "2026-01-05", "cash-flows")],
+    ),
+  ).toEqual([
+    { date: "2026-01-02", value: 0, cashUnknown: ["ibkr:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
+  ]);
+});
+
+function eurCash(amount: number, asOf: string): CashBalance {
+  return { entity: "personal", broker: "trading212", currency: "EUR", amount, asOf };
+}
+
+const cashSeries = (options: Parameters<typeof computePortfolioValueSeries>[5]) =>
+  computePortfolioValueSeries([], [], [], "EUR", FX_RATES, options).map(
+    ({ date, cashValue, cashUnknown }) => ({ date, cashValue, cashUnknown }),
+  );
+
+test("the latest broker balance carries to dates after it when history is unknown", () => {
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
+      today: "2026-01-08",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 500, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-08", cashValue: 800, cashUnknown: [] },
+  ]);
+});
+
+test("a weekend broker balance carries to the next business day", () => {
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(700, "2026-01-08"), eurCash(800, "2026-01-10")],
+      today: "2026-01-13",
+    }),
+  ).toEqual([
+    { date: "2026-01-08", cashValue: 700, cashUnknown: [] },
+    { date: "2026-01-09", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    { date: "2026-01-12", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-13", cashValue: 800, cashUnknown: [] },
+  ]);
+});
+
+const ibkrFlow = (id: string, date: string, amount: number): CashFlow => ({
+  id,
+  entity: "personal",
+  broker: "ibkr",
+  date,
+  currency: "EUR",
+  amount,
+  kind: amount > 0 ? "deposit" : "other",
+});
+
+test("a proven window ends at its last date and a later flow makes cash unknown", () => {
+  expect(
+    cashSeries({
+      cashBalances: [{ ...eurCash(800, "2026-01-05"), broker: "ibkr" }],
+      cashFlows: [
+        ibkrFlow("deposit", "2026-01-02", 1000),
+        ibkrFlow("purchase-cash", "2026-01-05", -200),
+        ibkrFlow("after-statement", "2026-01-07", -50),
+      ],
+      cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows", "2026-01-05")],
+      today: "2026-01-07",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: null, cashUnknown: ["ibkr:EUR"] },
+  ]);
+});
+
+test.each([
+  [
+    "a purchase",
+    {
+      trades: [
+        {
+          id: "buy",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          symbol: "X",
+          side: "buy",
+          quantity: 1,
+          price: 200,
+          amount: 200,
+          currency: "EUR",
+          commission: 0,
+        },
+      ],
+      cashFlows: [],
+    },
+  ],
+  [
+    "a withdrawal",
+    {
+      trades: [],
+      cashFlows: [
+        {
+          id: "withdrawal",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          currency: "EUR",
+          amount: -200,
+          kind: "withdrawal",
+        },
+      ],
+    },
+  ],
+] satisfies [string, { trades: Trade[]; cashFlows: CashFlow[] }][])(
+  "the latest balance stops carrying at %s after it when history is unknown",
+  (_, { trades, cashFlows }) => {
+    const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+      symbol: "X",
+      date,
+      close: 200,
+      currency: "EUR",
+    }));
+    const series = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+      cashBalances: [eurCash(1000, "2026-01-02")],
+      cashFlows,
+      cashCoverage: [
+        { entity: "personal", broker: "trading212", status: "unknown", reason: "unverified" },
+      ],
+      today: "2026-01-06",
+    });
+
+    expect(
+      series.map(({ date, cashValue, cashUnknown }) => ({ date, cashValue, cashUnknown })),
+    ).toEqual([
+      { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+      { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-06", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    ]);
+  },
+);
+
+test("the balance walked to a window's end carries past an earlier statement", () => {
+  expect(
+    cashSeries({
+      cashBalances: [{ ...eurCash(1000, "2026-01-02"), broker: "ibkr" }],
+      cashFlows: [ibkrFlow("purchase-cash", "2026-01-05", -200)],
+      cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows", "2026-01-05")],
+      today: "2026-01-07",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [] },
+  ]);
 });
 
 test.each([

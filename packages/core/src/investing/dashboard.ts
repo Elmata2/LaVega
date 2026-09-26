@@ -9,7 +9,14 @@ import {
 import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
 import { inCurrentShareUnits } from "./splits.js";
 import type { Dividend } from "./dividend.js";
-import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Position,
+  PriceBar,
+  Trade,
+} from "./model.js";
 import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
 import {
   brokerCostCoverage,
@@ -100,6 +107,7 @@ export type InvestingDashboardInput = {
   dividends: readonly Dividend[];
   cashBalances?: readonly CashBalance[];
   cashFlows?: readonly CashFlow[];
+  cashCoverage?: readonly CashHistoryCoverage[];
   priceBars: readonly PriceBar[];
   benchmarkBars: readonly PriceBar[];
   benchmarkInstruments?: readonly BenchmarkInstrument[];
@@ -146,6 +154,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     {
       cashBalances: input.cashBalances,
       cashFlows: input.cashFlows,
+      cashCoverage: input.cashCoverage,
       dividends: input.dividends,
       today: input.today,
     },

@@ -140,6 +140,74 @@ describe("parseFlexStatement", () => {
     expect(result.sections.trades.rows[0]).not.toHaveProperty("executionAt");
   });
 
+  const body = xml.slice(
+    xml.indexOf("<FlexStatement>") + "<FlexStatement>".length,
+    xml.indexOf("</FlexStatement>"),
+  );
+  const statements = (...accounts: [string, string, string, string][]) =>
+    `<FlexStatements>${accounts
+      .map(
+        ([account, from, to, content]) =>
+          `<FlexStatement accountId="${account}" fromDate="${from}" toDate="${to}">${content}</FlexStatement>`,
+      )
+      .join("")}</FlexStatements>`;
+  const withoutFunds = body.slice(0, body.indexOf("<StatementOfFunds>"));
+
+  test.each([
+    ["without a statement period", xml, { status: "unknown" }],
+    [
+      "for one account statement period",
+      statements(["U1", "20260801", "20260818", body]),
+      { status: "complete", from: "2026-08-01", to: "2026-08-18", tradeCash: "cash-flows" },
+    ],
+    [
+      "when every account statement covers the same period",
+      statements(["U1", "20260801", "20260818", body], ["U2", "20260801", "20260818", body]),
+      { status: "complete", from: "2026-08-01", to: "2026-08-18", tradeCash: "cash-flows" },
+    ],
+    [
+      "not when one account statement lacks Statement of Funds",
+      statements(
+        ["U1", "20260801", "20260818", body],
+        ["U2", "20260801", "20260818", withoutFunds],
+      ),
+      { status: "unknown" },
+    ],
+    [
+      "not when account statements start on different dates",
+      statements(["U1", "20260803", "20260818", body], ["U2", "20260801", "20260818", body]),
+      { status: "unknown" },
+    ],
+    [
+      "not when account statements end on different dates",
+      statements(["U1", "20260801", "20260818", body], ["U2", "20260801", "20260817", body]),
+      { status: "unknown" },
+    ],
+    [
+      "not with a partial Statement of Funds",
+      statements(["U1", "20260801", "20260818", body.replace('amount="3"', "")]),
+      { status: "unknown" },
+    ],
+  ])("proves cash history %s", (_, statement, expected) => {
+    expect(parseFlexStatement(statement, "personal").cashHistory).toMatchObject({
+      entity: "personal",
+      broker: "ibkr",
+      ...expected,
+    });
+  });
+
+  test.each(["Base Summary", "BASE_SUMMARY"])(
+    "leaves the %s Cash Report row out of the cash balances",
+    (summary) => {
+      const result = parseFlexStatement(
+        xml.replace('currency="Base Summary"', `currency="${summary}"`),
+        "personal",
+      );
+
+      expect(result.sections.cashBalances.rows.map((row) => row.currency)).toEqual(["USD", "EUR"]);
+    },
+  );
+
   test("keeps partial cash history and reports invalid cash rows", () => {
     const partial = `<FlexStatements><FlexStatement><CashReport>
       <CashReportCurrency currency="GBP" toDate="20260818" endingCash="25" />

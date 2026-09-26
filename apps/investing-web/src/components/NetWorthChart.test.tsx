@@ -165,3 +165,45 @@ test("supports chart-local wheel and drag zoom", async () => {
   ).not.toBe(wheelWindow);
   await act(async () => root.unmount());
 });
+
+test("outward wheel zoom from 1M never jumps back to 1M", async () => {
+  const history: PortfolioValuePoint[] = Array.from({ length: 40 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10),
+    positionsValue: 100 + index,
+    cashValue: 20,
+    value: 120 + index,
+    unpriced: [],
+    forwardFilled: [],
+    cashUnknown: [],
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<NetWorthChart data={{ "1M": history.slice(-5), All: history }} />);
+  });
+  const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  Object.defineProperty(chart, "clientWidth", { configurable: true, value: 400 });
+  const visibleCount = () =>
+    container.querySelectorAll('[aria-label="Exact net worth values"] li').length;
+  const counts = [visibleCount()];
+  for (let tick = 0; tick < 40; tick += 1) {
+    await act(async () => {
+      chart.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 200, deltaY: 100 }),
+      );
+    });
+    counts.push(visibleCount());
+  }
+  expect(counts[0]).toBe(5);
+  for (let index = 1; index < counts.length; index += 1) {
+    expect(counts[index]).toBeGreaterThanOrEqual(counts[index - 1]!);
+  }
+  expect(counts.at(-1)).toBe(40);
+  expect(container.querySelector('button[aria-label="Clear net worth zoom"]')).not.toBeNull();
+  await act(async () => {
+    chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(visibleCount()).toBe(5);
+  await act(async () => root.unmount());
+});

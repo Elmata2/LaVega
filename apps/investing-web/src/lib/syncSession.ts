@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 import {
   DASHBOARD_REFRESH_EVENT,
-  PRICE_SYNC_EXHAUSTED_MESSAGE,
   runPriceSyncUntilComplete,
+  type PriceSyncOutcome,
   type PriceSyncProgress,
 } from "./priceSync";
 
@@ -23,28 +23,43 @@ export type BrokerProgress = {
   history: HistoryProgress | null;
 };
 
+/** Whether the last status read reached every channel. "retrying" keeps
+ * polling with backoff because a run is known to be active; "offline" means
+ * the read failed with nothing active, so polling waits for the next wake. */
+export type SyncConnection = "online" | "retrying" | "offline";
+
 export type SyncSnapshot = {
   broker: BrokerProgress | null;
   price: PriceSyncProgress | null;
   priceProblem: string | null;
   vault: "empty" | "locked" | "unlocked" | "unknown";
+  connection: SyncConnection;
 };
 
 type SyncResult = { problems?: string[] } | null;
 
-const idleSnapshot: SyncSnapshot = {
+/* One status read at a time. A wake during a read only marks it for one
+ * immediate rerun; a wake while a timer waits replaces the timer. */
+type PollLoop =
+  | { kind: "stopped" }
+  | { kind: "reading"; rerun: boolean }
+  | { kind: "scheduled"; timer: ReturnType<typeof setTimeout> };
+
+const ACTIVE_POLL_MS = 1_000;
+const MAX_RETRY_MS = 30_000;
+
+const initialSnapshot: SyncSnapshot = {
   broker: null,
   price: null,
   priceProblem: null,
   vault: "unknown",
+  connection: "online",
 };
-let snapshot = idleSnapshot;
+let snapshot = initialSnapshot;
+let loop: PollLoop = { kind: "stopped" };
+let failedReads = 0;
 let brokerRun: Promise<SyncResult> | null = null;
-let priceRun: Promise<string[]> | null = null;
-let pollRun: Promise<void> | null = null;
-let pollTimer: number | null = null;
-let wakeQueued = false;
-let refreshedPriceRun: string | null = null;
+let priceRun: Promise<PriceSyncOutcome> | null = null;
 const listeners = new Set<() => void>();
 
 function brokerActive(status?: BrokerProgress["status"]): boolean {
@@ -52,96 +67,108 @@ function brokerActive(status?: BrokerProgress["status"]): boolean {
 }
 
 function priceActive(status?: PriceSyncProgress["status"]): boolean {
-  return status === "running" || status === "waiting" || status === "paused";
+  return status === "running" || status === "waiting";
 }
 
-function publish(next: Partial<SyncSnapshot>) {
-  snapshot = { ...snapshot, ...next };
-  listeners.forEach((listener) => listener());
+/* A paused row waits for someone to post again. This page only does that while
+ * it owns a continuation (priceRun), so a paused row alone, such as a cron
+ * slice or an exhausted run, is at rest and must not keep polling. */
+function priceUnfinished(status?: PriceSyncProgress["status"]): boolean {
+  return priceActive(status) || status === "paused";
+}
+
+function terminal(status?: string): boolean {
+  return status === "completed" || status === "problem";
 }
 
 function dispatchDashboardRefresh() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
 }
 
-async function readJson<T>(url: string): Promise<T | null> {
+/* Invalidates the dashboard when a channel this page saw unfinished reaches a
+ * final state, so a sync that finished in the background still shows up.
+ * Returns whether it did. */
+function publish(next: Partial<SyncSnapshot>): boolean {
+  const finished = Boolean(
+    (next.broker && brokerActive(snapshot.broker?.status) && terminal(next.broker.status)) ||
+    (next.price && priceUnfinished(snapshot.price?.status) && terminal(next.price.status)),
+  );
+  snapshot = { ...snapshot, ...next };
+  listeners.forEach((listener) => listener());
+  if (finished) dispatchDashboardRefresh();
+  return finished;
+}
+
+const BROKER_STATUSES = new Set(["idle", "running", "waiting", "completed", "problem"]);
+const PRICE_STATUSES = new Set([...BROKER_STATUSES, "paused"]);
+const VAULT_STATUSES = new Set(["empty", "locked", "unlocked"]);
+
+function statusOf(value: unknown): unknown {
+  return typeof value === "object" && value !== null && "status" in value
+    ? value.status
+    : undefined;
+}
+
+function isBroker(value: unknown): value is BrokerProgress {
+  return BROKER_STATUSES.has(String(statusOf(value)));
+}
+
+function isPrice(value: unknown): value is PriceSyncProgress {
+  return PRICE_STATUSES.has(String(statusOf(value)));
+}
+
+function isVault(value: unknown): value is { status: Exclude<SyncSnapshot["vault"], "unknown"> } {
+  return VAULT_STATUSES.has(String(statusOf(value)));
+}
+
+async function readChannel<T>(url: string, valid: (value: unknown) => value is T): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Sync status failed: ${response.status}`);
-  return (await response.json()) as T;
+  const value: unknown = await response.json();
+  if (!valid(value)) throw new Error(`Sync status has an invalid format: ${url}`);
+  return value;
 }
 
-function validBroker(value: BrokerProgress | null): value is BrokerProgress {
-  return (
-    value !== null && ["idle", "running", "waiting", "completed", "problem"].includes(value.status)
-  );
-}
-
-function validPrice(value: PriceSyncProgress | null): value is PriceSyncProgress {
-  return (
-    value !== null &&
-    ["idle", "running", "waiting", "paused", "completed", "problem"].includes(value.status)
-  );
-}
-
-function clearPollTimer() {
-  if (pollTimer !== null && typeof window !== "undefined") window.clearTimeout(pollTimer);
-  pollTimer = null;
-}
-
-function schedulePoll(active: boolean) {
-  clearPollTimer();
-  if (!active || listeners.size === 0 || typeof window === "undefined") return;
-  pollTimer = window.setTimeout(() => void poll(), 1_000);
-}
-
-async function poll() {
-  if (pollRun) {
-    wakeQueued = true;
-    return pollRun;
+async function readStatus() {
+  loop = { kind: "reading", rerun: false };
+  const [broker, price, vault] = await Promise.allSettled([
+    readChannel("/api/brokers/sync/status", isBroker),
+    readChannel("/api/prices/sync/status", isPrice),
+    readChannel("/api/brokers/credentials/status", isVault),
+  ]);
+  const failed = [broker, price, vault].some((read) => read.status === "rejected");
+  failedReads = failed ? failedReads + 1 : 0;
+  const next: Partial<SyncSnapshot> = {
+    ...(broker.status === "fulfilled" && { broker: broker.value }),
+    ...(price.status === "fulfilled" && { price: price.value }),
+    ...(vault.status === "fulfilled" && { vault: vault.value.status }),
+  };
+  const active =
+    brokerRun !== null ||
+    priceRun !== null ||
+    brokerActive((next.broker ?? snapshot.broker)?.status) ||
+    priceActive((next.price ?? snapshot.price)?.status);
+  publish({ ...next, connection: !failed ? "online" : active ? "retrying" : "offline" });
+  const rerun = loop.kind === "reading" && loop.rerun;
+  loop = { kind: "stopped" };
+  if (listeners.size === 0) return;
+  if (rerun) {
+    void readStatus();
+    return;
   }
-  pollRun = (async () => {
-    let retry = false;
-    try {
-      const [broker, price, vault] = await Promise.all([
-        readJson<BrokerProgress>("/api/brokers/sync/status"),
-        readJson<PriceSyncProgress>("/api/prices/sync/status"),
-        readJson<{ status?: string }>("/api/brokers/credentials/status"),
-      ]);
-      const next: Partial<SyncSnapshot> = {};
-      if (validBroker(broker)) next.broker = broker;
-      if (validPrice(price)) next.price = price;
-      if (vault && ["empty", "locked", "unlocked"].includes(vault.status ?? ""))
-        next.vault = vault.status as SyncSnapshot["vault"];
-      publish(next);
-      if (
-        price?.updatedAt &&
-        (price.status === "completed" || price.status === "problem") &&
-        refreshedPriceRun !== price.updatedAt
-      ) {
-        refreshedPriceRun = price.updatedAt;
-        dispatchDashboardRefresh();
-      }
-    } catch {
-      retry = true;
-    } finally {
-      pollRun = null;
-      if (wakeQueued) {
-        wakeQueued = false;
-        void poll();
-      } else {
-        schedulePoll(
-          retry || brokerActive(snapshot.broker?.status) || priceActive(snapshot.price?.status),
-        );
-      }
-    }
-  })();
-  return pollRun;
+  if (!active) return;
+  const delay = failed ? Math.min(ACTIVE_POLL_MS * 2 ** failedReads, MAX_RETRY_MS) : ACTIVE_POLL_MS;
+  loop = { kind: "scheduled", timer: setTimeout(() => void readStatus(), delay) };
 }
 
 export function wakeSyncSession() {
   if (listeners.size === 0) return;
-  clearPollTimer();
-  void poll();
+  if (loop.kind === "reading") {
+    loop.rerun = true;
+    return;
+  }
+  if (loop.kind === "scheduled") clearTimeout(loop.timer);
+  void readStatus();
 }
 
 export function subscribeSyncSession(listener: () => void) {
@@ -149,37 +176,49 @@ export function subscribeSyncSession(listener: () => void) {
   wakeSyncSession();
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0) clearPollTimer();
+    if (listeners.size > 0 || loop.kind !== "scheduled") return;
+    clearTimeout(loop.timer);
+    loop = { kind: "stopped" };
   };
 }
 
+export function readSyncSnapshot(): SyncSnapshot {
+  return snapshot;
+}
+
 export function useSyncSession(): SyncSnapshot {
-  return useSyncExternalStore(
-    subscribeSyncSession,
-    () => snapshot,
-    () => idleSnapshot,
-  );
+  return useSyncExternalStore(subscribeSyncSession, readSyncSnapshot, () => initialSnapshot);
 }
 
 async function readSyncResult(response: Response): Promise<SyncResult> {
   return (await response.json().catch(() => null)) as SyncResult;
 }
 
-export function continuePriceSync(): Promise<string[]> {
+/** Drives price sync until the server has nothing left for this run. Callers
+ * that overlap share one run and its outcome. */
+export function continuePriceSync(): Promise<PriceSyncOutcome> {
   if (!priceRun) {
-    priceRun = (async () => {
-      publish({ priceProblem: null });
-      const problems = await runPriceSyncUntilComplete();
-      if (problems.includes(PRICE_SYNC_EXHAUSTED_MESSAGE)) publish({ priceProblem: problems[0] });
-      return problems;
-    })().finally(() => {
-      priceRun = null;
-      wakeSyncSession();
-    });
+    publish({ priceProblem: null });
+    priceRun = runPriceSyncUntilComplete((progress) => {
+      const refreshed = isPrice(progress) && publish({ price: progress });
+      if (!refreshed) dispatchDashboardRefresh();
+    })
+      .then((outcome) => {
+        if (outcome.kind === "incomplete") publish({ priceProblem: outcome.message });
+        return outcome;
+      })
+      .finally(() => {
+        priceRun = null;
+        wakeSyncSession();
+      });
+    wakeSyncSession();
   }
   return priceRun;
 }
 
+/** Starts a broker sync, or joins the one already running, then continues
+ * price sync. Every start path (app open, manual, save, unlock) goes through
+ * here so they share polling, invalidation and terminal outcomes. */
 export function startBrokerSync(force = false): Promise<SyncResult> {
   if (!brokerRun) {
     brokerRun = (async () => {
@@ -187,6 +226,10 @@ export function startBrokerSync(force = false): Promise<SyncResult> {
         method: "POST",
       });
       const result = await readSyncResult(response);
+      /* A non-OK answer without a JSON body is a proxy cutting the request off
+       * (Cloudflare 524 after ~100 s) while the server keeps syncing, so the
+       * run continues as if it succeeded. Only the server's own JSON error
+       * fails the start. */
       if (!response.ok && result) throw new Error(result.problems?.[0] ?? "Broker sync failed.");
       dispatchDashboardRefresh();
       void continuePriceSync();

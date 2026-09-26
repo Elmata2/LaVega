@@ -2,7 +2,8 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { PortfolioSummaryCard, type PortfolioSummary } from "./PortfolioSummaryCard";
+import type { PortfolioSummary } from "../lib/summaryResource";
+import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
 
 const summary: PortfolioSummary = {
   metrics: {
@@ -103,7 +104,9 @@ test("shows incomplete-data reasons and requests a new risk period", async () =>
     select.value = "6M";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(fetcher).toHaveBeenLastCalledWith("/api/investing/summary?range=6M");
+  expect(fetcher).toHaveBeenLastCalledWith("/api/investing/summary?range=6M", {
+    signal: expect.any(AbortSignal),
+  });
 });
 
 test("renders error state when the API fails", async () => {
@@ -117,6 +120,74 @@ test("renders error state when the API fails", async () => {
   });
   await act(async () => {});
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("503");
+});
+
+test("shows a stable message when the network request fails", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }),
+  );
+  const { container, root } = render();
+  await act(async () => root.render(<PortfolioSummaryCard />));
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "Failed to load summary: network error.",
+  );
+});
+
+test("reports a body that is not JSON as an invalid format", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("<!doctype html>", { status: 200 })),
+  );
+  const { container, root } = render();
+  await act(async () => root.render(<PortfolioSummaryCard />));
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "Summary has an invalid format.",
+  );
+});
+
+test("a newer request wins when an older response arrives last", async () => {
+  const pending: Array<(response: Response) => void> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
+  );
+  const withPosition = (symbol: string) =>
+    new Response(JSON.stringify({ ...summary, topPositions: [{ symbol, weight: 1 }] }));
+  const { container, root } = render();
+  await act(async () => root.render(<PortfolioSummaryCard revision="old" />));
+  await act(async () => root.render(<PortfolioSummaryCard revision="new" />));
+  expect(pending).toHaveLength(2);
+  await act(async () => pending[1]!(withPosition("NEWER")));
+  await act(async () => pending[0]!(withPosition("OLDER")));
+  const positions = container.querySelector('[aria-label="Largest positions"]')?.textContent;
+  expect(positions).toContain("NEWER");
+  expect(positions).not.toContain("OLDER");
+});
+
+test.each([
+  ["risk benchmarks", { ...summary, risk: { ...summary.risk, benchmarks: undefined } }],
+  ["missing prices", { ...summary, risk: { ...summary.risk, missingPrices: null } }],
+  ["missing holdings", { ...summary, risk: { ...summary.risk, missingHoldings: "AAPL" } }],
+  ["a benchmark entry", { ...summary, risk: { ...summary.risk, benchmarks: [null] } }],
+  ["a sector entry", { ...summary, sectors: [null] }],
+  ["a top position", { ...summary, topPositions: [7] }],
+  ["a sector name", { ...summary, sectors: [{ sector: {}, weight: 1 }] }],
+  ["a benchmark name", { ...summary, risk: { ...summary.risk, benchmarks: [{ symbol: "X" }] } }],
+  ["a risk date", { ...summary, risk: { ...summary.risk, from: 20250910 } }],
+  ["a return count", { ...summary, metrics: { ...summary.metrics, observationDays: "252" } }],
+])("rejects a summary with malformed %s before rendering", async (_field, payload) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 })),
+  );
+  const { container, root } = render();
+  await act(async () => root.render(<PortfolioSummaryCard />));
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "Summary has an invalid format.",
+  );
 });
 
 test("keeps controls during parent renders and refreshes only on request", async () => {

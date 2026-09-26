@@ -586,6 +586,13 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
     },
   ]);
   expect(paths).toContain("/cash-page-2?cursor=opaque");
+  // Complete pagination still leaves past cash unproven: no sanitized payload
+  // yet shows whether transactions also book the fills' wallet impact.
+  expect(result.cashHistory).toMatchObject({
+    entity: "Holding BV",
+    broker: "trading212",
+    status: "unknown",
+  });
 });
 
 test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {

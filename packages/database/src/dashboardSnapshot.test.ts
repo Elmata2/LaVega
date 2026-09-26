@@ -11,7 +11,7 @@ import {
   eraseUserData,
   type Database,
 } from "./index.js";
-import { databaseOver } from "./testing.js";
+import { singleConnectionDatabase } from "./testing.js";
 
 /* Staleness is decided by triggers, so these run the real migrations on real
  * Postgres. A mock could only assert the SQL text, not that a write in another
@@ -20,21 +20,6 @@ import { databaseOver } from "./testing.js";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let pglite: PGlite;
 let db: Database;
-
-function pgliteDatabase(instance: PGlite): Database {
-  let inUse: Promise<unknown> = Promise.resolve();
-  return databaseOver(async () => {
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    const ahead = inUse;
-    inUse = inUse.then(() => held);
-    await ahead;
-    return {
-      query: (sql: string, values?: unknown[]) => instance.query(sql, values as never[]),
-      release,
-    };
-  });
-}
 
 beforeAll(async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
@@ -46,7 +31,7 @@ beforeAll(async () => {
     await pglite.exec(readFileSync(join(migrationsDir, name), "utf8"));
   // Only a non-superuser is subject to row-level security.
   await pglite.exec("SET ROLE lavega_runtime;");
-  db = pgliteDatabase(pglite);
+  db = singleConnectionDatabase(pglite);
 }, 60_000);
 
 afterAll(async () => {

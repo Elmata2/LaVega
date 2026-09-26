@@ -1,6 +1,13 @@
 import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
-import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Position,
+  PriceBar,
+  Trade,
+} from "./model.js";
 import { businessDateRange, isPriceFresh } from "./calendar.js";
 import { ownershipKey, type Ownership } from "./ownership.js";
 import { tradeDelta } from "./quantity.js";
@@ -153,26 +160,50 @@ function anchoredAmountOnDate(
   return after.amount - sumBetween(events, date, after.asOf);
 }
 
-function cashAmountOnDate(
-  date: string,
-  anchors: readonly CashBalance[],
-  events: readonly CashEvent[],
-): number | null {
-  // Before the first recorded flow an untracked earlier movement could sit
-  // between us and the anchor, so report unknown rather than a wrong balance.
-  const firstEvent = [...events].sort((a, b) => a.date.localeCompare(b.date))[0];
-  const covered =
-    anchors.some((anchor) => anchor.asOf <= date) ||
-    (firstEvent !== undefined && date >= firstEvent.date);
-  return covered ? anchoredAmountOnDate(date, anchors, events) : null;
+/** A walk may only cross the proven window. Outside it the balance is known on
+ *  the broker's own statement dates, and the last known balance (the latest
+ *  statement, or the window's end when that is later) stands for later dates
+ *  until the wallet's next cash flow, dividend or trade: unknown history must
+ *  not hide the current balance, and an unwalked movement must not hide behind
+ *  it. */
+function cashAmountOnDate(date: string, leg: CashLeg): number | null {
+  const { proven } = leg;
+  const walk = (day: string) =>
+    proven
+      ? anchoredAmountOnDate(
+          day,
+          leg.anchors.filter((anchor) => anchor.asOf >= proven.from && anchor.asOf <= proven.to),
+          leg.events,
+        )
+      : null;
+  if (proven && date >= proven.from && date <= proven.to) return walk(date);
+  const statement = leg.anchors.find((anchor) => anchor.asOf === date);
+  if (statement) return statement.amount;
+  const latest = leg.anchors.reduce<CashBalance | undefined>(
+    (last, anchor) => (last && last.asOf >= anchor.asOf ? last : anchor),
+    undefined,
+  );
+  const carried =
+    proven && proven.to >= (latest?.asOf ?? "")
+      ? { asOf: proven.to, amount: walk(proven.to) }
+      : latest;
+  if (!carried || date <= carried.asOf) return null;
+  const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+    (day) => day > carried.asOf && day <= date,
+  );
+  return moved ? null : carried.amount;
 }
 
 type CashLeg = {
   entity: string;
   broker: string;
   currency: string;
+  proven?: { from: string; to: string };
   anchors: CashBalance[];
   events: CashEvent[];
+  /** Every trade date of the owner, whatever stream books its cash: a trade
+   *  may settle in any of the owner's wallets. */
+  tradeDates: string[];
 };
 
 /** Signed cash a trade moved: the broker's own wallet figure when reported,
@@ -198,19 +229,30 @@ function cashLegs(
   cashFlows: readonly CashFlow[],
   dividends: readonly Dividend[],
   trades: readonly Trade[],
+  cashCoverage: readonly CashHistoryCoverage[],
   fxRates: FxRates,
 ): CashLeg[] {
+  const proven = new Map(
+    cashCoverage.flatMap((value) =>
+      value.status === "complete" ? [[`${value.entity}\u0000${value.broker}`, value] as const] : [],
+    ),
+  );
+  const provenFor = (value: { entity: string; broker: string }) =>
+    proven.get(`${value.entity}\u0000${value.broker}`);
   const legs = new Map<string, CashLeg>();
   const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
     const key = cashKey(value);
     const existing = legs.get(key);
     if (existing) return existing;
+    const coverage = provenFor(value);
     const created: CashLeg = {
       entity: value.entity,
       broker: value.broker,
       currency: value.currency,
+      ...(coverage ? { proven: { from: coverage.from, to: coverage.to } } : {}),
       anchors: [],
       events: [],
+      tradeDates: [],
     };
     legs.set(key, created);
     return created;
@@ -220,6 +262,8 @@ function cashLegs(
     leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
   for (const trade of trades) {
     if (!trade.broker) continue;
+    if (provenFor({ entity: trade.entity, broker: trade.broker })?.tradeCash !== "trade-settlement")
+      continue;
     const settlement = tradeSettlement(trade);
     leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push({
       date: trade.date,
@@ -255,6 +299,10 @@ function cashLegs(
     }
     legs.delete(key);
   }
+  for (const candidate of legs.values())
+    candidate.tradeDates = trades
+      .filter((trade) => trade.entity === candidate.entity && trade.broker === candidate.broker)
+      .map((trade) => trade.date);
   return [...legs.values()];
 }
 
@@ -317,6 +365,7 @@ export function computePortfolioValueSeries(
     cashBalances?: readonly CashBalance[];
     cashFlows?: readonly CashFlow[];
     dividends?: readonly Dividend[];
+    cashCoverage?: readonly CashHistoryCoverage[];
     today?: string;
   } = {},
 ): PortfolioValuePoint[] {
@@ -360,7 +409,14 @@ export function computePortfolioValueSeries(
     options.dividends ?? [],
     (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`,
   );
-  const legs = cashLegs(options.cashBalances ?? [], cashFlows, dividends, trades, fxRates);
+  const legs = cashLegs(
+    options.cashBalances ?? [],
+    cashFlows,
+    dividends,
+    trades,
+    options.cashCoverage ?? [],
+    fxRates,
+  );
   const lastKnownValue = new Map<string, number>();
 
   return dates.map((date) => {
@@ -433,7 +489,7 @@ export function computePortfolioValueSeries(
     let reachableCashLegs = 0;
     const cashUnknown = new Set<string>();
     for (const leg of legs) {
-      const amount = cashAmountOnDate(date, leg.anchors, leg.events);
+      const amount = cashAmountOnDate(date, leg);
       if (amount === null || !Number.isFinite(amount)) {
         cashUnknown.add(displayCashKey(leg));
         continue;

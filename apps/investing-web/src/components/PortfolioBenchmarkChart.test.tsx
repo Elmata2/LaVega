@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { PortfolioBenchmarkChart, pointsForWindow } from "./PortfolioBenchmarkChart";
+import { PerformanceTooltip, PortfolioBenchmarkChart, pointsForWindow } from "./PortfolioBenchmarkChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -63,6 +63,26 @@ const longPoints = Array.from({ length: 10 }, (_, index) => ({
   cashUnknown: [],
 }));
 
+test("stale chart tooltip point does not crash when a benchmark is selected", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PerformanceTooltip
+        active
+        payload={[{ payload: points[0] as never }]}
+        mode="indexed"
+        benchmarks={benchmarks}
+        currency="EUR"
+      />,
+    );
+  });
+  expect(container.textContent).toContain("vs. AEX");
+  expect(container.textContent).toContain("Unknown");
+  await act(async () => root.unmount());
+});
+
 function mockSelectionFetch() {
   vi.stubGlobal(
     "fetch",
@@ -79,10 +99,45 @@ function changeInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-function pointerEvent(type: string, clientX: number) {
+function pointerEvent(type: string, clientX: number, pointerId = 1) {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, button: 0 });
-  Object.defineProperty(event, "pointerId", { value: 1 });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
   return event;
+}
+
+async function renderZoomableChart() {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart
+        data={{ "1M": longPoints, All: longPoints }}
+        benchmarks={benchmarks}
+      />,
+    );
+    await Promise.resolve();
+  });
+  const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  chart.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 400,
+    bottom: 320,
+    width: 400,
+    height: 320,
+    toJSON: () => ({}),
+  });
+  const dispatch = async (event: Event) => {
+    await act(async () => {
+      chart.dispatchEvent(event);
+    });
+  };
+  const zoomPill = () => container.querySelector('button[aria-label="Clear zoom"]');
+  return { root, dispatch, zoomPill };
 }
 
 test("renders indexed mode, accessible legend, and reflows colors after removal", async () => {
@@ -394,3 +449,28 @@ test("window helper preserves original requested start", () => {
     ).map(({ date }) => date),
   ).toEqual(["2026-01-03", "2026-01-04", "2026-01-05"]);
 });
+
+test("a second pointer cannot overwrite the first pointer's drag", async () => {
+  const { root, dispatch, zoomPill } = await renderZoomableChart();
+  await dispatch(pointerEvent("pointerdown", 80, 1));
+  await dispatch(pointerEvent("pointerdown", 300, 2));
+  await dispatch(pointerEvent("pointerup", 300, 2));
+  expect(zoomPill()).toBeNull();
+  await dispatch(pointerEvent("pointermove", 300, 1));
+  await dispatch(pointerEvent("pointerup", 300, 1));
+  expect(zoomPill()?.textContent).toContain("1 Jan");
+  await act(async () => root.unmount());
+});
+
+test.each(["pointercancel", "lostpointercapture"])(
+  "%s ends the drag without zooming",
+  async (type) => {
+    const { root, dispatch, zoomPill } = await renderZoomableChart();
+    await dispatch(pointerEvent("pointerdown", 80));
+    await dispatch(pointerEvent("pointermove", 300));
+    await dispatch(pointerEvent(type, 300));
+    await dispatch(pointerEvent("pointerup", 300));
+    expect(zoomPill()).toBeNull();
+    await act(async () => root.unmount());
+  },
+);

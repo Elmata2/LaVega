@@ -50,9 +50,11 @@ Local broker positions, trades, dividends, cash balances, and cash flows use an 
 
 Trades move cash too. A `Trade` carries an optional `settlement` (signed wallet effect in the wallet currency; Trading 212 fills supply it from `walletImpact.netValue`). Without it a trade settles in its own currency as amount plus commission. A broker that anchors one cash balance per entity (Trading 212) holds one wallet: a leg it lists in another currency has no anchor of its own, so its events fold into that wallet at the day's FX rate.
 
+A cash walk crosses only proven history. Each broker reports a `CashHistoryCoverage` per entity: `complete` over a dated window, naming whether trade cash comes from trade settlements or from ledger cash flows, or `unknown`. Trade cash is counted from that one stream, so IBKR's Statement of Funds trade rows and its `Trade` rows never both move cash. Outside that window, cash is known on broker balance dates and the last known balance carries forward; earlier dates stay unknown. See `CONNECTORS.md`.
+
 Stock splits come from market data. Yahoo closes are split-adjusted, so `PriceBar.split` records each split on the session it takes effect (1 when none) and `inCurrentShareUnits` puts trades and snapshots into today's share units at the dashboard boundary. A stored bar without `split` is stale and its symbol is re-read; a split arriving in a top-up re-reads the whole range. Trading 212 `STOCK_SPLIT` fills stay ignored so splits are never counted twice.
 
-`computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Trading 212 produces cash-flow rows and wallet settlements for refreshed orders, but its historical cash walk is not reconciled against broker statements. Production still shows impossible negative historical cash; see `RISK.md`.
+`computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Trading 212 produces cash-flow rows and wallet settlements for refreshed orders, but its cash history is unproven, so its historical cash is unknown rather than walked. See `RISK.md`.
 
 Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlows` per broker, synced and persisted whole the same way `positions`/`trades`/`dividends` already are — not `StorageAdapter` (personal-finance-only, see below) and not `PriceStore` (market-data-specific carve-out, see below).
 
@@ -60,7 +62,7 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 - **Local:** IndexedDB. Volume is trivial (~41 series × 5yr daily ≈ 51,660 rows, ~300K numbers total, per the market-data research), so a hand-rolled range scan over a `(symbol, date)`-indexed store is enough — no SQLite-wasm or DuckDB-wasm needed as a second local-storage engine.
 - **Hosted:** plain Postgres. Same volume argument — a `(symbol, date)` composite index covers the access pattern; TimescaleDB's compression and continuous aggregates buy nothing at this scale.
-- **Caching policy: incremental.** One backfill call per symbol, then daily top-up calls for new rows only. `PriceStore` exposes a `purgeAll()`/TTL-aware delete — required if a licence like EODHD's Non-Professional tier is in use, which requires deleting cached data within one month of cancelling.
+- **Caching policy: incremental.** One backfill call per symbol, then calls only for dates outside the symbol's recorded coverage (`PriceStore.getCoverage`, stored in `investing.price_coverage` by migration `0015`). `PriceStore` exposes a `purgeAll()`/TTL-aware delete — required if a licence like EODHD's Non-Professional tier is in use, which requires deleting cached data within one month of cancelling.
 - **`Position`/`Trade` are unchanged** — price series are stored entirely separately from `core`'s domain types, joined only by symbol/ISIN at the view layer.
 
 ([Storage seam for price series](https://github.com/Elmata2/LaVega/issues/23))

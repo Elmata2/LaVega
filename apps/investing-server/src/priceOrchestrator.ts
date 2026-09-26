@@ -113,7 +113,7 @@ function instrument(
   };
 }
 
-/** Discover one ordered target per symbol: current holdings, closed holdings, then benchmarks. */
+/** Discover one target per symbol, with selected benchmarks first so comparison does not wait behind the full holdings backfill. */
 export function discoverPriceSyncTargets(input: {
   positions: readonly Position[];
   trades: readonly Trade[];
@@ -161,7 +161,15 @@ export function discoverPriceSyncTargets(input: {
       });
     }
   }
-  return targets;
+  const benchmarkOrder = new Map(
+    (input.benchmarkSymbols ?? []).map((symbol, index) => [symbol.trim().toUpperCase(), index]),
+  );
+  const unselectedOrder = input.benchmarkSymbols?.length ?? 0;
+  return targets.sort(
+    (left, right) =>
+      (benchmarkOrder.get(left.symbol.toUpperCase()) ?? unselectedOrder) -
+      (benchmarkOrder.get(right.symbol.toUpperCase()) ?? unselectedOrder),
+  );
 }
 
 /**
@@ -287,14 +295,16 @@ export function createPriceOrchestrator(input: {
         );
       }
 
-      /* A paused run names the symbols it never reached. Resuming from that
-       * list, rather than from the full set, is what keeps repeated slices
-       * cheap: a symbol already stored costs neither a request nor a read. */
+      /* A paused run names the symbols it never reached. Include selected
+       * benchmarks again because one may have been added during the last slice.
+       * Cached benchmark bars avoid a second provider request. */
       const paused = stored?.status === "paused" ? stored : null;
       const pending = new Set(paused?.remainingSymbols ?? []);
-      const resumed = paused ? targets.filter((target) => pending.has(target.symbol)) : [];
+      const resumed = paused
+        ? targets.filter((target) => pending.has(target.symbol) || target.kind === "benchmark")
+        : [];
       const queue = resumed.length > 0 ? resumed : targets;
-      const total = resumed.length > 0 ? Math.max(paused!.total, queue.length) : queue.length;
+      const total = resumed.length > 0 ? paused!.completed + queue.length : queue.length;
       const done = total - queue.length;
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
 
