@@ -169,18 +169,41 @@ test("measures the complete window after an incomplete stretch", () => {
   expect(report.risk.missingPrices).toEqual(["MASI"]);
 });
 
-test("leaves out a last day whose closes are still settling", () => {
+test("includes a last day whose close is still settling when the position is immaterial", () => {
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
   );
-  points[points.length - 1] = { ...points.at(-1)!, forwardFilled: ["AAPL"] };
+  const last = points.at(-1)!;
+  points[points.length - 1] = {
+    ...last,
+    forwardFilled: ["AAPL"],
+    unaccountedValue: last.value! * 0.0003,
+  };
   const report = buildHistoricalRisk(dashboard(points));
 
   expect(report.risk.status).toBe("estimate");
-  expect(report.risk.to).toBe(points.at(-2)!.date);
+  expect(report.risk.to).toBe(last.date);
+  expect(report.risk.coverage).not.toBeNull();
+  expect(report.risk.coverage!).toBeLessThan(1);
   expect(report.risk.reasons).toEqual([
+    expect.stringMatching(/^Estimate covers \d+\.\d{2}% of portfolio value/),
     "Add a benchmark with Compare above to calculate beta and alpha.",
   ]);
+});
+
+test("still disqualifies a last day whose carried-forward position is too large to bound", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
+  );
+  const last = points.at(-1)!;
+  points[points.length - 1] = {
+    ...last,
+    forwardFilled: ["AAPL"],
+    unaccountedValue: last.value! * 0.2,
+  };
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("unavailable");
 });
 
 test("keeps beta and alpha null when no benchmark is selected", () => {
@@ -221,6 +244,78 @@ test("benchmarkCurrencyMismatchReason builds the mismatch sentence", () => {
   expect(benchmarkCurrencyMismatchReason("EUR", { symbol: "SPY", currency: "USD" })).toBe(
     "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
   );
+});
+
+test("treats a small unresolved holding as immaterial and reports coverage", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 5 }, () => 0.001),
+  ).map((point) => ({
+    ...point,
+    holdingsUnknown: ["TWND_US_EQ"],
+    unaccountedValue: point.value! * 0.0003,
+  }));
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.coverage).not.toBeNull();
+  expect(report.risk.coverage!).toBeGreaterThan(0.999);
+  expect(report.risk.coverage!).toBeLessThan(1);
+  expect(report.risk.reasons.some((reason) => reason.startsWith("Estimate covers"))).toBe(true);
+});
+
+test("still disqualifies a materially large unresolved holding", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 5 }, () => 0.001),
+  ).map((point) => ({
+    ...point,
+    holdingsUnknown: ["TWND_US_EQ"],
+    unaccountedValue: point.value! * 0.2,
+  }));
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("unavailable");
+});
+
+test("a tiny holding failing through holdingsUnknown, unpriced, and forwardFilled still yields a usable window", () => {
+  const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
+  const tiny = (point: PortfolioValuePoint) => point.value! * 0.0003;
+  points[40] = { ...points[40]!, holdingsUnknown: ["TWND_US_EQ"], unaccountedValue: tiny(points[40]!) };
+  points[120] = { ...points[120]!, unpriced: ["TWND_US_EQ"], unaccountedValue: tiny(points[120]!) };
+  const last = points.at(-1)!;
+  points[points.length - 1] = { ...last, forwardFilled: ["TWND_US_EQ"], unaccountedValue: tiny(last) };
+
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.observationDays).toBeGreaterThan(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.risk.to).toBe(last.date);
+  expect(report.risk.from).toBe(points[0]!.date);
+  expect(report.risk.coverage).not.toBeNull();
+  expect(report.risk.coverage!).toBeLessThan(1);
+});
+
+test.each([
+  ["holdingsUnknown", (point: PortfolioValuePoint): PortfolioValuePoint => ({
+    ...point,
+    holdingsUnknown: ["TWND_US_EQ"],
+  })],
+  ["unpriced", (point: PortfolioValuePoint): PortfolioValuePoint => ({
+    ...point,
+    unpriced: ["TWND_US_EQ"],
+  })],
+  ["forwardFilled", (point: PortfolioValuePoint): PortfolioValuePoint => ({
+    ...point,
+    forwardFilled: ["TWND_US_EQ"],
+  })],
+])("a holding at 20%% of value still disqualifies via %s on the latest date", (_route, apply) => {
+  const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
+  const last = points.at(-1)!;
+  points[points.length - 1] = { ...apply(last), unaccountedValue: last.value! * 0.2 };
+
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("unavailable");
 });
 
 test("requires 60 valid daily return observations", () => {

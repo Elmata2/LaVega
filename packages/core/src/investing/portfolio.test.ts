@@ -234,6 +234,56 @@ test("forward-fills five business days then marks held symbol unpriced", () => {
   });
 });
 
+test("bounds a stale holding by its last known value instead of leaving it unaccounted for", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL" && bar.date === "2026-01-05");
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-13",
+  });
+
+  const stale = result.find(({ date }) => date === "2026-01-13");
+  expect(stale?.unpriced).toEqual(["AAPL"]);
+  expect(stale?.unaccountedValue).toBeCloseTo(1000 / 1.05, 9);
+});
+
+test("leaves the date unbounded when a held symbol has never been priced", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "GHOST",
+      side: "buy",
+      quantity: 1,
+      price: 10,
+      amount: 10,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    today: "2026-01-02",
+  });
+
+  expect(result[0]).toMatchObject({ unpriced: ["GHOST"], unaccountedValue: null });
+});
+
+test("counts a forward-filled holding's value toward the unaccounted total", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
+    { symbol: "AAPL", date: "2026-01-07", close: 101, currency: "USD" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-08",
+  });
+
+  const point = result.find(({ date }) => date === "2026-01-08");
+  expect(point?.forwardFilled).toEqual(["AAPL"]);
+  expect(point?.value).toBeCloseTo(1010 / 1.05, 9);
+  expect(point?.unaccountedValue).toBeCloseTo(1010 / 1.05, 9);
+});
+
 test("a day the market was closed carries the last close as a real value", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars: PriceBar[] = [

@@ -24,6 +24,14 @@ export type PortfolioValuePoint = {
   cashUnknown: string[];
   /** Holdings inferred from a later snapshot without dated ownership evidence. */
   holdingsUnknown?: string[];
+  /** Value, in `presentationCurrency`, of the `unpriced`/`holdingsUnknown`/
+   *  `forwardFilled` symbols on this date — what `buildHistoricalRisk`'s
+   *  materiality gate weighs against `value`. An unpriced symbol is bounded
+   *  by its own last known value, never invented. Present only when one of
+   *  those three sets is non-empty. Null when an unpriced symbol has no
+   *  known value at all (nothing to bound the gap by), which keeps the date
+   *  disqualifying. */
+  unaccountedValue?: number | null;
 };
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
 /** Undefined means the FX provider failed. Conversions then throw and every
@@ -409,6 +417,7 @@ export function computePortfolioValueSeries(
     options.cashCoverage ?? [],
     fxRates,
   );
+  const lastKnownValue = new Map<string, number>();
 
   return dates.map((date) => {
     let positionsValue = 0;
@@ -417,16 +426,22 @@ export function computePortfolioValueSeries(
     const unpriced = new Set<string>();
     const forwardFilled = new Set<string>();
     const holdingsUnknown = new Set<string>();
+    let unaccountedValue = 0;
+    let unaccountedUnknown = false;
 
     for (const symbol of symbols) {
       const quantity = quantityOnDate(date, holdings.get(symbol) ?? []);
       if (Math.abs(quantity) < 1e-12) continue;
+      let symbolHoldingUnknown = false;
       for (const holding of holdings.get(symbol) ?? []) {
         const firstAnchor = [...holding.anchors.keys()].sort()[0];
         if (!firstAnchor || date >= firstAnchor) continue;
         const inferredOpening =
           holding.anchors.get(firstAnchor)! - sumBetween(holding.events, "", firstAnchor);
-        if (Math.abs(inferredOpening) > 1e-8) holdingsUnknown.add(symbol);
+        if (Math.abs(inferredOpening) > 1e-8) {
+          holdingsUnknown.add(symbol);
+          symbolHoldingUnknown = true;
+        }
       }
       held += 1;
       const prices = barsBySymbol.get(symbol);
@@ -434,29 +449,39 @@ export function computePortfolioValueSeries(
         prices.latest = prices.bars[prices.index++]!;
       const latest = prices?.latest;
       const exact = latest?.date === date ? latest : undefined;
-      if (!latest) {
+      const bound = (): void => {
         unpriced.add(symbol);
+        const known = lastKnownValue.get(symbol);
+        if (known === undefined) unaccountedUnknown = true;
+        else unaccountedValue += Math.abs(known);
+      };
+      if (!latest) {
+        bound();
         continue;
       }
       if (!exact && !isPriceFresh(latest.date, date)) {
-        unpriced.add(symbol);
+        bound();
         continue;
       }
       try {
-        positionsValue += convertCurrency(
+        const symbolValue = convertCurrency(
           quantity * latest.close,
           latest.currency,
           presentationCurrency,
           date,
           fxRates,
         );
+        positionsValue += symbolValue;
         priced += 1;
+        lastKnownValue.set(symbol, symbolValue);
         // A later bar means the market traded again after this date, so the
         // gap was a closed session and the last close is the true value.
         const tradedLater = prices !== undefined && prices.index < prices.bars.length;
-        if (!exact && !tradedLater) forwardFilled.add(symbol);
+        const symbolForwardFilled = !exact && !tradedLater;
+        if (symbolForwardFilled) forwardFilled.add(symbol);
+        if (symbolHoldingUnknown || symbolForwardFilled) unaccountedValue += Math.abs(symbolValue);
       } catch {
-        unpriced.add(symbol);
+        bound();
       }
     }
 
@@ -494,6 +519,9 @@ export function computePortfolioValueSeries(
       forwardFilled: [...forwardFilled].sort(),
       cashUnknown: [...cashUnknown].sort(),
       ...(holdingsUnknown.size ? { holdingsUnknown: [...holdingsUnknown].sort() } : {}),
+      ...(unpriced.size || holdingsUnknown.size || forwardFilled.size
+        ? { unaccountedValue: unaccountedUnknown ? null : unaccountedValue }
+        : {}),
     };
   });
 }
