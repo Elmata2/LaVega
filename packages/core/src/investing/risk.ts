@@ -2,6 +2,11 @@ import type { InvestingDashboardData } from "./dashboard.js";
 import { computePortfolioMetrics } from "./summary.js";
 
 export const RISK_MINIMUM_OBSERVATIONS = 60;
+/** 0.5% of the date's portfolio value. An unaccounted slice this small
+ *  perturbs a daily return by far less than a typical daily move, so it
+ *  cannot meaningfully change a volatility or drawdown estimate; anything
+ *  larger can, so the date stays disqualified. */
+export const RISK_MATERIALITY_THRESHOLD = 0.005;
 export type RiskRange = "6M" | "1Y" | "All";
 
 export function benchmarkCurrencyMismatchReason(
@@ -21,17 +26,21 @@ export function buildHistoricalRisk(
   const benchmark = benchmarkSymbol
     ? data.benchmarks.find((item) => item.symbol === benchmarkSymbol)
     : data.benchmarks[0];
+  const isImmaterial = (point: (typeof points)[number]): boolean => {
+    const hasUnresolved =
+      point.unpriced.length > 0 ||
+      point.forwardFilled.length > 0 ||
+      (point.holdingsUnknown?.length ?? 0) > 0;
+    if (!hasUnresolved) return true;
+    const unaccounted = point.unaccountedValue;
+    if (unaccounted == null || point.value == null) return false;
+    return Math.abs(unaccounted) <= RISK_MATERIALITY_THRESHOLD * Math.abs(point.value);
+  };
   const known = (point: (typeof points)[number]) =>
-    point.unpriced.length === 0 &&
-    point.cashUnknown.length === 0 &&
-    (point.holdingsUnknown?.length ?? 0) === 0;
-  const usable = (point: (typeof points)[number]) =>
-    known(point) && point.forwardFilled.length === 0;
-  let end = points.length;
-  while (end > 0 && known(points[end - 1]!) && !usable(points[end - 1]!)) end -= 1;
-  let start = end;
-  while (start > 0 && usable(points[start - 1]!)) start -= 1;
-  const window = points.slice(start, end);
+    point.cashUnknown.length === 0 && isImmaterial(point);
+  let start = points.length;
+  while (start > 0 && known(points[start - 1]!)) start -= 1;
+  const window = points.slice(start);
   const earlier = points.slice(0, start);
   const missingPrices = [...new Set(earlier.flatMap((point) => point.unpriced))].sort();
   const missingCash = [...new Set(earlier.flatMap((point) => point.cashUnknown))].sort();
@@ -39,6 +48,15 @@ export function buildHistoricalRisk(
     ...new Set(earlier.flatMap((point) => point.holdingsUnknown ?? [])),
   ].sort();
   const estimatedPrices = earlier.some((point) => point.forwardFilled.length > 0);
+  const coverage =
+    window.length === 0
+      ? null
+      : Math.min(
+          ...window.map((point) => {
+            if (!point.value) return 1;
+            return 1 - Math.abs(point.unaccountedValue ?? 0) / Math.abs(point.value);
+          }),
+        );
   const negativeCashDays = window.filter(
     (point) => point.cashValue !== null && point.cashValue < -0.01,
   ).length;
@@ -71,6 +89,10 @@ export function buildHistoricalRisk(
   if (missingHoldings.length)
     reasons.push(`Ownership history incomplete for ${missingHoldings.length} holdings.`);
   if (estimatedPrices) reasons.push("Some dates use carried-forward prices.");
+  if (coverage !== null && coverage < 1)
+    reasons.push(
+      `Estimate covers ${(coverage * 100).toFixed(2)}% of portfolio value; the rest carries uncertain ownership or pricing but is too small to change the result.`,
+    );
   if (window.length === 0) reasons.push("No recent date has complete data.");
   else if (start > 0)
     reasons.push(
@@ -102,6 +124,7 @@ export function buildHistoricalRisk(
       reasons,
       missingHoldings,
       missingPrices,
+      coverage,
       currency: data.presentationCurrency,
     },
   };

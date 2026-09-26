@@ -28,6 +28,7 @@ const summary: PortfolioSummary = {
     reasons: [],
     missingHoldings: [],
     missingPrices: [],
+    coverage: 1,
     currency: "EUR",
   },
   sectors: [
