@@ -39,9 +39,27 @@ function daysSince(observation: string, date: string): number | null {
   return (requestedAt - observedAt) / 86_400_000;
 }
 
-function rateFor(rates: FxRates, date: string): FxRate {
+/** No candidate rate reaches `date`, either because none was supplied or
+ *  because the nearest one is more than `FX_CARRY_DAYS` stale. Carries the
+ *  pair and date so a caller can report exactly what is missing, and so
+ *  `calculatePositionReturn` can tell this apart from any other failure a
+ *  conversion might raise (e.g. `UnknownCurrencyError` from `crossRate`). */
+export class MissingFxRateError extends Error {
+  readonly from: string;
+  readonly to: string;
+  readonly date: string;
+  constructor(from: string, to: string, date: string) {
+    super(`No FX rate available for ${date} (${from} to ${to})`);
+    this.name = "MissingFxRateError";
+    this.from = from;
+    this.to = to;
+    this.date = date;
+  }
+}
+
+function rateFor(rates: FxRates, from: string, to: string, date: string): FxRate {
   const candidates = rates === undefined ? [] : Array.isArray(rates) ? rates : [rates];
-  if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
+  if (candidates.length === 0) throw new MissingFxRateError(from, to, date);
   let sorted: FxRate[];
   if (Array.isArray(rates)) {
     sorted =
@@ -61,7 +79,7 @@ function rateFor(rates: FxRates, date: string): FxRate {
   const rate = sorted[low - 1];
   const age = rate ? daysSince(rate.date, date) : null;
   if (age === null || age < 0 || age > FX_CARRY_DAYS)
-    throw new Error(`No FX rate available for ${date}`);
+    throw new MissingFxRateError(from, to, date);
   return rate;
 }
 
@@ -73,7 +91,7 @@ export function convertCurrency(
   fxRates: FxRates,
 ): number {
   if (from === to) return value;
-  return value * crossRate(from, to, rateFor(fxRates, date));
+  return value * crossRate(from, to, rateFor(fxRates, from, to, date));
 }
 
 function isoDate(date: Date): string {
@@ -233,7 +251,7 @@ function cashLegs(
   };
   for (const balance of cashBalances) leg(balance).anchors.push(balance);
   for (const flow of [...cashFlows, ...dividends])
-    leg(flow).events.push({ date: flow.date, amount: flow.amount });
+    leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
   for (const trade of trades) {
     if (!trade.broker) continue;
     if (provenFor({ entity: trade.entity, broker: trade.broker })?.tradeCash !== "trade-settlement")

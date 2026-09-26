@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   // Production all-in-one deploy serves this app under `/investing/` on lavega.dev.
@@ -16,6 +17,7 @@ export default defineConfig({
   // (verified with `turbo run build --dry=json`: it appears under `inferred`).
   base: process.env.VITE_INVESTING_BASE ?? "/",
   plugins: [react()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     proxy: {
       "/health": "http://localhost:8788",

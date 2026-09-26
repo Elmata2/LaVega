@@ -1,4 +1,5 @@
 import {
+  benchmarkCurrencyMismatchReason,
   buildIndexedSeries,
   deriveChartMode,
   type BenchmarkInstrument,
@@ -220,14 +221,14 @@ export function PortfolioBenchmarkChart({
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="relative h-5 text-sm font-medium text-muted-foreground">
+          <p className="grid h-5 text-sm font-medium text-muted-foreground">
             <span
-              className={`axis-label absolute inset-0 ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
+              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
             >
               Portfolio value
             </span>
             <span
-              className={`axis-label absolute inset-0 ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
+              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
             >
               Indexed return
             </span>
@@ -337,6 +338,11 @@ export function PortfolioBenchmarkChart({
                     <span className="block text-xs text-muted-foreground">
                       {result.symbol} · {result.exchange} · {result.currency}
                     </span>
+                    {result.currency !== currency && (
+                      <span className="block text-xs text-muted-foreground">
+                        {benchmarkCurrencyMismatchReason(currency, result)}
+                      </span>
+                    )}
                   </button>
                 </li>
               ))}
@@ -575,6 +581,7 @@ function PerformanceSummary({
       </p>
       <div className="flex flex-wrap gap-3">
         {benchmarks.map((benchmark) => {
+          const hasHistory = benchmark.points.length > 0;
           const benchmarkTwr = point.benchmarkReturns[benchmark.symbol] ?? null;
           const benchmarkMwr = point.benchmarkXirr[benchmark.symbol] ?? null;
           const twrSpread =
@@ -591,24 +598,37 @@ function PerformanceSummary({
               className="min-w-[220px] flex-1 rounded-[12px] bg-card p-3 shadow-soft"
             >
               <p className="mb-2 text-xs font-semibold">vs. {benchmark.name}</p>
-              <MetricSpread label="TWR" value={twrSpread} tone="blue" />
-              <MetricSpread label="XIRR p.j." value={mwrSpread} tone="amber" />
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                <span>Portfolio {valueOrUnknown(point.portfolioReturn, percent)}</span>
-                <span>
-                  {benchmark.name} {valueOrUnknown(benchmarkTwr, percent)}
-                </span>
-                <span>XIRR {cappedXirr(point.portfolioXirr)}</span>
-                <span>XIRR {cappedXirr(benchmarkMwr)}</span>
-                <span>
-                  {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
-                </span>
-                <span>
-                  {valueOrUnknown(point.benchmarkValues[benchmark.symbol] ?? null, (value) =>
-                    money(value, benchmark.currency),
+              {!hasHistory ? (
+                <p className="text-xs text-muted-foreground">
+                  No price history for {benchmark.symbol}.
+                </p>
+              ) : (
+                <>
+                  <MetricSpread label="TWR" value={twrSpread} tone="blue" />
+                  <MetricSpread label="XIRR p.j." value={mwrSpread} tone="amber" />
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
+                    <span>Portfolio {valueOrUnknown(point.portfolioReturn, percent)}</span>
+                    <span>
+                      {benchmark.name} {valueOrUnknown(benchmarkTwr, percent)}
+                    </span>
+                    <span>XIRR {cappedXirr(point.portfolioXirr)}</span>
+                    <span>XIRR {cappedXirr(benchmarkMwr)}</span>
+                    <span>
+                      {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
+                    </span>
+                    <span>
+                      {valueOrUnknown(point.benchmarkValues[benchmark.symbol] ?? null, (value) =>
+                        money(value, benchmark.currency),
+                      )}
+                    </span>
+                  </div>
+                  {benchmark.currency !== currency && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {benchmarkCurrencyMismatchReason(currency, benchmark)}
+                    </p>
                   )}
-                </span>
-              </div>
+                </>
+              )}
             </div>
           );
         })}

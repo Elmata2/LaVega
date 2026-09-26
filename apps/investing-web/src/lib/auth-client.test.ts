@@ -1,6 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { getSession, signIn, signOut, signUp, verificationCallbackUrl } from "./auth-client";
+import {
+  getSession,
+  passwordResetCallbackUrl,
+  requestPasswordReset,
+  resendVerificationEmail,
+  resetPassword,
+  signIn,
+  signOut,
+  signUp,
+  verificationCallbackUrl,
+} from "./auth-client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -75,6 +85,38 @@ test("signUp with no session token asks the person to confirm their email", asyn
   expect(
     await signUp({ name: "Jort", email: "jort@example.com", password: "correct horse" }),
   ).toEqual({ ok: true, pendingVerification: true });
+});
+
+test("resendVerificationEmail sends callback to Better Auth", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ status: true }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  expect(await resendVerificationEmail("jort@example.com")).toEqual({ ok: true });
+  expect(fetchMock).toHaveBeenCalledWith("/api/auth/send-verification-email", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "jort@example.com", callbackURL: verificationCallbackUrl() }),
+  });
+});
+
+test("password recovery sends reset callback and exchanges token for new password", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ status: true }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  expect(await requestPasswordReset("jort@example.com")).toEqual({ ok: true });
+  expect(fetchMock).toHaveBeenCalledWith("/api/auth/request-password-reset", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "jort@example.com", redirectTo: passwordResetCallbackUrl() }),
+  });
+  expect(await resetPassword("reset-token", "new password")).toEqual({ ok: true });
+  expect(fetchMock).toHaveBeenCalledWith("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: "reset-token", newPassword: "new password" }),
+  });
 });
 
 test("signUp surfaces the server's error message", async () => {

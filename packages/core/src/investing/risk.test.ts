@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { BenchmarkSeries } from "./benchmarks.js";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "./dashboard.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
-import { buildHistoricalRisk, RISK_MINIMUM_OBSERVATIONS } from "./risk.js";
+import { benchmarkCurrencyMismatchReason, buildHistoricalRisk, RISK_MINIMUM_OBSERVATIONS } from "./risk.js";
 
 function businessDates(count: number): string[] {
   const dates: string[] = [];
@@ -214,6 +214,12 @@ test("rejects benchmark quoted outside presentation currency", () => {
   expect(report.metrics.alpha).toBeNull();
   expect(report.risk.reasons).toContain(
     "Beta and alpha need a EUR-quoted benchmark; BENCH is quoted in USD.",
+  );
+});
+
+test("benchmarkCurrencyMismatchReason builds the mismatch sentence", () => {
+  expect(benchmarkCurrencyMismatchReason("EUR", { symbol: "SPY", currency: "USD" })).toBe(
+    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
   );
 });
 

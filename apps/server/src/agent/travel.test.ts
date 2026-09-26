@@ -145,12 +145,22 @@ function stubProvider(providers: unknown) {
 test("lookup returns terms for the providers we asked about", async () => {
   const provider = stubProvider([
     { provider: "Trading 212", fxFeePct: 0, cashbackPct: 1, note: "geen wisselkosten" },
-    { provider: "ING", fxFeePct: 1.2 },
+    { provider: "ING", fxFeePct: 1.2, topUpFree: 1 },
   ]);
   const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
   expect(out).toHaveLength(2);
   expect(out[0]).toMatchObject({ provider: "Trading 212", fxFeePct: 0, cashbackPct: 1 });
-  expect(out[1]).toMatchObject({ provider: "ING", fxFeePct: 1.2 });
+  expect(out[1]).toMatchObject({ provider: "ING", fxFeePct: 1.2, topUpFree: 1 });
+});
+
+test("topUpFree is read from the model's reply as 0, 1, or omitted — never coerced", async () => {
+  const provider = stubProvider([
+    { provider: "Trading 212", topUpFree: 1 },
+    { provider: "ING", topUpFree: 0 },
+  ]);
+  const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
+  expect(out[0].topUpFree).toBe(1);
+  expect(out[1].topUpFree).toBe(0);
 });
 
 test("a product the user does not hold is dropped, and unverifiable fields stay undefined", async () => {

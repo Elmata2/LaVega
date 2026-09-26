@@ -1,7 +1,7 @@
 import { betterAuth, type Auth } from "better-auth";
 import { type Database } from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { sendAuthEmail } from "./authEmail.js";
+import { passwordResetEmail, sendAuthEmail, verificationEmail } from "./authEmail.js";
 
 const origin = (host: string | undefined) => (host?.trim() ? `https://${host.trim()}` : null);
 
@@ -84,16 +84,23 @@ export function authOptions() {
       enabled: true,
       disableSignUp: false,
       requireEmailVerification: true,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      sendResetPassword: async (data: { user: { email: string }; url: string }) => {
+        await sendAuthEmail({ to: data.user.email, ...passwordResetEmail(data.url) });
+      },
     },
     emailVerification: {
       sendOnSignUp: true,
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
+      expiresIn: 60 * 60,
       sendVerificationEmail: async (data: { user: { email: string }; url: string }) => {
         await sendAuthEmail({
           to: data.user.email,
-          subject: "Confirm your LaVega account",
-          text: `Confirm your LaVega account:\n${data.url}\n`,
+          ...verificationEmail(data.url),
         });
       },
     },

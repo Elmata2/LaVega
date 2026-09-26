@@ -1071,3 +1071,68 @@ test("dashboard keeps positions when price history reads fail", async () => {
   expect(body.positions.length).toBeGreaterThan(0);
   expect(body.problems).toContain("Price data could not be fully loaded");
 });
+
+/* A row-level sync problem (an unclassifiable transaction, say) reached
+ * `/api/brokers/sync/status` from durable state, but not the dashboard: the
+ * in-memory broker cache that carries it is rebuilt empty on every
+ * invocation that did not itself run the sync, so `/api/investing/dashboard`
+ * came back with `problems: []` even though the sync knew better. */
+test("dashboard surfaces a durable sync problem the invocation did not itself produce", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-dashboard-problem-"));
+  try {
+    const credentialsFile = join(directory, "credentials.json");
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
+    const baseUrl = await serve((request, response) => {
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders"))
+        return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary")
+        return json(response, {
+          currency: "EUR",
+          cash: { availableToTrade: 11116.34, inPies: 0, reservedForOrders: 0 },
+        });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions"))
+        return json(response, {
+          items: [
+            {
+              amount: 10966.34,
+              currency: "EUR",
+              dateTime: "2025-08-11T09:05:00Z",
+              reference: "transfer-1",
+              type: "TRANSFER",
+            },
+          ],
+        });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/dividends"))
+        return json(response, { items: [] });
+      return json(response, []);
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
+
+    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const status = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
+      status: string;
+      message: string | null;
+    };
+    const dashboard = (await (await restarted.request("/api/investing/dashboard")).json()) as {
+      problems: string[];
+    };
+
+    expect(status.status).toBe("problem");
+    expect(dashboard.problems).toContain(status.message);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

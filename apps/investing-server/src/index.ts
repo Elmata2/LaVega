@@ -494,6 +494,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         problems,
         dataVersion,
       } = brokerData.read();
+      // `problems` above lives only in this invocation's in-memory cache: a sync's
+      // row-level problem (an unclassifiable transaction, say) never reaches a
+      // later invocation that did not run that sync. The sync's own durable
+      // progress record does survive, so a stored "problem" status is read back
+      // here the same way `/api/brokers/sync/status` already reads it.
+      const storedBrokerProblems = (
+        await Promise.all(SCHEDULED_BROKERS.map((broker) => syncStateStore.progress(broker)))
+      ).flatMap((entry) => (entry?.status === "problem" && entry.message ? [entry.message] : []));
       const version = dataVersion + priceDataVersion;
       const selectedBenchmarks = options.benchmarkSymbols
         ? await options.benchmarkSymbols(tenantId)
@@ -558,7 +566,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
             selectedSymbol: symbol,
             problems: [
-              ...problems,
+              ...new Set([...problems, ...storedBrokerProblems]),
               ...refreshProblems,
               ...priceProblems,
               ...latestFx.problems,

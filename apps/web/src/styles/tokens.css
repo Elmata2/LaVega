@@ -84,6 +84,9 @@
   /* Layout */
   --frame-gap: 14px; /* gutter around the floating app */
 
+  /* Motion */
+  --ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1); /* fast out, gentle settle */
+
   /* Module grid — the homescreen layout language. A block declares a span
    * (1/2/3 columns) and a height (short/tall); the grid places it. Adding a
    * block is one <Module span=…> line, never a layout rewrite. */

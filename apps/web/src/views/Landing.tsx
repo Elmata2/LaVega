@@ -11,6 +11,9 @@ import {
   rememberLocale,
   type Locale,
 } from "../locale.js";
+import { APP_BASE } from "../appRoutes.js";
+import { useAuthState } from "../authClient.js";
+import SignInForm from "../components/SignInForm.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -64,6 +67,33 @@ export default function Landing({
   locale?: Locale;
 }) {
   const c = landingCopy(locale);
+  const { state: authState } = useAuthState();
+  const [showSignIn, setShowSignIn] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  /* The dialog is always mounted; only showModal()/close() move it on/off
+   * screen. That's what gives the CSS exit transition something to animate
+   * (an unmount has nothing left to fade), and it's why a failed sign-in
+   * never wipes the typed email — the form stays alive underneath.
+   *
+   * `showSignIn` is the only thing that opens or closes it. The obvious
+   * alternative, syncing state back from the dialog's `close` event, does not
+   * work: measured in Chrome on the built page, showModal() and close() both
+   * work and the `close` event never fires at all, which left the trigger
+   * needing two clicks to reopen and focus stranded inside a hidden dialog. */
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const shouldOpen = showSignIn && authState.kind !== "signed-in";
+    if (shouldOpen && !dialog.open) {
+      dialog.showModal();
+      dialog.querySelector<HTMLInputElement>("#account-email")?.focus();
+    } else if (!shouldOpen && dialog.open) {
+      dialog.close();
+      triggerRef.current?.focus();
+    }
+  }, [showSignIn, authState.kind]);
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
@@ -187,7 +217,7 @@ export default function Landing({
   const otherLocale = locale === "en" ? "nl" : "en";
 
   return (
-    <div className="lp" ref={rootRef}>
+    <div className="lp relative" ref={rootRef}>
       {/* Nav */}
       <header className="flex items-center justify-between gap-[var(--sp-4)] max-w-[1200px] mx-auto px-[28px] py-[22px]">
         <button
@@ -243,10 +273,60 @@ export default function Landing({
         >
           {c.langSwitch.label}
         </a>
-        <button type="button" className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`} onClick={onEnter}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
+          onClick={() => {
+            if (authState.kind === "signed-in") {
+              onEnter();
+              return;
+            }
+            setShowSignIn((shown) => !shown);
+          }}
+        >
           {c.nav.login}
         </button>
       </header>
+
+      <dialog
+        ref={dialogRef}
+        className="lp-signin-dialog"
+        aria-label={c.nav.login}
+        onClick={(e) => {
+          if (e.target === dialogRef.current) setShowSignIn(false);
+        }}
+        onCancel={(e) => {
+          e.preventDefault();
+          setShowSignIn(false);
+        }}
+      >
+        <button
+          type="button"
+          className="lp-signin-dialog-close"
+          aria-label={c.login.close}
+          onClick={() => setShowSignIn(false)}
+        >
+          ×
+        </button>
+        <h2>{c.nav.login}</h2>
+        <SignInForm
+          locale={locale}
+          intro={c.login.intro}
+          introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+          onSuccess={() => {
+            setShowSignIn(false);
+            /* A full navigation, not onEnter()'s pushState. Root holds its own
+             * useAuthState, fetched once at page load, and a client-side
+             * transition leaves it reading "signed-out" — so Root's gate sent
+             * the freshly signed-in user straight back to this landing page
+             * while the URL said /app, and signing in looked like it did
+             * nothing. Loading /app for real re-reads the session, and the
+             * server gate sees the cookie that now exists. */
+            window.location.assign(APP_BASE);
+          }}
+        />
+      </dialog>
 
       {/* Hero */}
       <section className="lp-hero max-w-[1000px] mx-auto pt-[48px] px-[28px] pb-[40px] text-center">

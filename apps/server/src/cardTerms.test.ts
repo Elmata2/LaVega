@@ -151,6 +151,13 @@ test("a reply carrying any usable number IS cached", async () => {
   expect(getCardTerms(input(["ING"]), "k", { lookup: withNumber as never }).pending).toEqual([]);
 });
 
+test("topUpFree alone (no other number) is still a usable reply", async () => {
+  const topUpOnly = async () => [{ provider: "ING", topUpFree: 0 }];
+  getCardTerms(input(["ING"]), "k", { lookup: topUpOnly as never });
+  await settle();
+  expect(getCardTerms(input(["ING"]), "k", { lookup: topUpOnly as never }).pending).toEqual([]);
+});
+
 /* --- Ingest from the n8n workflow (fetches the provider's own tariff page, so
  * there is no "couldn't find it" step to fail). --- */
 

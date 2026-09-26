@@ -1,6 +1,6 @@
 import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
-import { loadYahooPriceHistory } from "./history.js";
+import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import type { YahooHttpClient } from "./http.js";
 
 export type YahooPriceRequest = {
@@ -66,6 +66,8 @@ function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 function readableYahooProblem(error: unknown): string {
+  if (error instanceof YahooNoListingError)
+    return `No listing found on Yahoo Finance for ${error.candidates[0]} (tried ${error.candidates.length} symbols) - the instrument is probably delisted`;
   const message = error instanceof Error ? error.message : String(error);
   if (/\[429\]|rate.?limit/i.test(message)) return "Yahoo Finance rate-limited price request";
   if (/\[403\]|blocked|forbidden/i.test(message)) return "Yahoo Finance blocked price request";

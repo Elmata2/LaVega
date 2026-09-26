@@ -187,13 +187,26 @@ export function createDevFixturePriceBars(now = new Date()): PriceBar[] {
   ];
 }
 
-/** Canned EUR/USD rate, dated well before any fixture price bar so `rateFor`
- * (packages/core/src/investing/portfolio.ts) always finds a match, however far
- * back the requested date is. The real Frankfurter provider only ever holds
- * today's rate, which leaves the fixture's older history without FX coverage. */
+/** Canned EUR/USD rate for a spot conversion (`get`/`getLatestRate`, which take
+ * no date and never go through `rateFor`'s carry window). */
 const FIXTURE_FX_RATE: FxRate = { base: "EUR", date: "2000-01-01", rates: { USD: 1.15 } };
 
-export function createDevFixtureFxProvider() {
+/** One rate per day across the fixture's own history window, so `rateFor`
+ * (packages/core/src/investing/portfolio.ts) finds an exact-day match for
+ * every trade, dividend, and price-bar date the fixture generates. A single
+ * old rate cannot do this: `rateFor` only carries a rate forward ten calendar
+ * days, far short of HISTORY_DAYS — the real Frankfurter provider only ever
+ * holds today's rate anyway, which leaves the fixture's older history without
+ * FX coverage unless the fixture manufactures its own. */
+function fixtureFxHistory(now: Date): FxRate[] {
+  const rates: FxRate[] = [];
+  for (let day = HISTORY_DAYS; day >= 0; day -= 1) {
+    rates.push({ base: "EUR", date: isoDate(daysAgo(now, day)), rates: { USD: 1.15 } });
+  }
+  return rates;
+}
+
+export function createDevFixtureFxProvider(now = new Date()) {
   return {
     sourceKey: "dev-fixture",
     priority: 10,
@@ -215,7 +228,7 @@ export function createDevFixtureFxProvider() {
       _from: string,
       _to: string,
     ): Promise<{ rates: FxRate[]; problems: string[] }> {
-      return { rates: [FIXTURE_FX_RATE], problems: [] };
+      return { rates: fixtureFxHistory(now), problems: [] };
     },
   };
 }

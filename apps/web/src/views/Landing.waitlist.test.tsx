@@ -4,16 +4,27 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Landing from "./Landing";
 import { landingCopy } from "../landingCopy.js";
+import { useAuthState } from "../authClient.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("./CardSpiral", () => ({ default: () => null }));
+
+/* Landing now also checks the session (to decide whether "Inloggen" shows the
+ * sign-in form or enters straight away) — mocked here so that check's own
+ * fetch does not land on this file's `fetchSpy`, which exists to prove the
+ * waitlist request shape, not the sign-in one. */
+vi.mock("../authClient.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../authClient.js")>();
+  return { ...actual, useAuthState: vi.fn() };
+});
 
 let container: HTMLElement | null = null;
 let root: Root | null = null;
 let fetchSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
   fetchSpy = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal("fetch", fetchSpy);
 });
@@ -46,7 +57,11 @@ function setValue(el: HTMLInputElement, value: string) {
 }
 
 function fillEmail(el: HTMLElement, value: string) {
-  setValue(el.querySelector<HTMLInputElement>('input[type="email"]')!, value);
+  /* Scoped to the waitlist form, not the page: the sign-in dialog's
+   * #account-email is now always mounted too (native <dialog>, Landing.tsx),
+   * so an unscoped input[type="email"] would match that one first. */
+  const form = el.querySelector<HTMLFormElement>('[data-testid="waitlist-form"]')!;
+  setValue(form.querySelector<HTMLInputElement>('input[type="email"]')!, value);
 }
 
 function submit(el: HTMLElement) {

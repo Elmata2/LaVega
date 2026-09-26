@@ -276,6 +276,151 @@ test("wheel and pointer drag write custom zoom without brush", async () => {
   await act(async () => root.unmount());
 });
 
+test("axis label box sizes to the widest label instead of wrapping under the title", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
+    await Promise.resolve();
+  });
+  const labels = Array.from(container.querySelectorAll(".axis-label"));
+  expect(labels).toHaveLength(2);
+  for (const label of labels) {
+    expect(label.classList.contains("absolute")).toBe(false);
+    expect(label.classList.contains("whitespace-nowrap")).toBe(true);
+    expect(label.classList.contains("col-start-1")).toBe(true);
+    expect(label.classList.contains("row-start-1")).toBe(true);
+  }
+  expect(labels[0]!.parentElement!.classList.contains("grid")).toBe(true);
+  await act(async () => root.unmount());
+});
+
+test("comparison card says no price history for a benchmark with zero points", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(JSON.stringify({ tenantId: "local", symbols: ["NEWETF"] }))
+        : new Response(JSON.stringify({ tenantId: "local", symbols: ["NEWETF"] })),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart
+        data={{ "1M": points }}
+        benchmarks={[{ symbol: "NEWETF", name: "New ETF", exchange: "NYSE Arca", currency: "EUR", points: [] }]}
+      />,
+    );
+    await Promise.resolve();
+  });
+  const heading = Array.from(container.querySelectorAll("p")).find((node) =>
+    node.textContent?.startsWith("vs. New ETF"),
+  )!;
+  const card = heading.closest("div")!;
+  expect(card.textContent).toContain("No price history for NEWETF.");
+  expect(card.textContent).not.toContain("Unknown");
+  await act(async () => root.unmount());
+});
+
+test("comparison card surfaces the currency-mismatch reason for a foreign-currency benchmark", async () => {
+  const usdBenchmark = {
+    symbol: "SPY",
+    name: "SPDR S&P 500",
+    exchange: "NYSE Arca",
+    currency: "USD",
+    points: [
+      { date: "2026-01-01", value: 470 },
+      { date: "2026-01-02", value: 475 },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(JSON.stringify({ tenantId: "local", symbols: ["SPY"] }))
+        : new Response(JSON.stringify({ tenantId: "local", symbols: ["SPY"] })),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={[usdBenchmark]} />);
+    await Promise.resolve();
+  });
+  const heading = Array.from(container.querySelectorAll("p")).find((node) =>
+    node.textContent?.startsWith("vs. SPDR S&P 500"),
+  )!;
+  const card = heading.closest("div")!;
+  expect(card.textContent).toContain(
+    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
+  );
+  await act(async () => root.unmount());
+});
+
+test("comparison card omits the currency-mismatch reason when currencies match", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
+    await Promise.resolve();
+  });
+  expect(container.textContent).not.toContain("Beta and alpha need a");
+  await act(async () => root.unmount());
+});
+
+test("search results mark an instrument whose currency differs from the portfolio's currency", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/benchmarks/search"))
+        return new Response(
+          JSON.stringify({
+            results: [
+              { symbol: "SPY", name: "SPDR S&P 500", exchange: "NYSE Arca", currency: "USD" },
+            ],
+          }),
+        );
+      return new Response(JSON.stringify({ tenantId: "local", symbols: [] }));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} />);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "+ Compare")!
+      .click();
+  });
+  const input = container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  await act(async () => {
+    changeInput(input, "SPY");
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 260));
+  });
+  const resultButton = container.querySelector<HTMLButtonElement>(
+    '#benchmark-results button',
+  )!;
+  expect(resultButton.textContent).toContain(
+    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
+  );
+  expect(resultButton.disabled).toBe(false);
+  await act(async () => root.unmount());
+});
+
 test("window helper preserves original requested start", () => {
   expect(
     pointsForWindow(

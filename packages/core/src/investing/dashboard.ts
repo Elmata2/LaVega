@@ -171,6 +171,19 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     fxRates: input.fxRates,
     today,
   });
+  const positionProblems: string[] = [];
+  for (const position of positions) {
+    if (position.returns.problem) positionProblems.push(`${position.symbol}: ${position.returns.problem}`);
+  }
+  const unpricedCount = positions.filter((position) => position.marketValue === null).length;
+  // Only when SOME positions are priced does a null-for-the-rest weight look
+  // like a real total; if every position is dark, weights are already null
+  // across the board and add nothing misleading to flag.
+  if (unpricedCount > 0 && unpricedCount < positions.length) {
+    positionProblems.push(
+      `Portfolio weight is calculated only across priced positions: ${unpricedCount} of ${positions.length} ${positions.length === 1 ? "position is" : "positions are"} unpriced and excluded from the total.`,
+    );
+  }
 
   const selected = input.selectedSymbol?.trim().toUpperCase();
   const selectedPositions = selected
@@ -210,16 +223,18 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     if (seenFlows.has(identity)) continue;
     seenFlows.add(identity);
     let converted: number | null = null;
-    try {
-      converted = convertCurrency(
-        flow.amount,
-        flow.currency,
-        input.presentationCurrency,
-        flow.date,
-        input.fxRates,
-      );
-    } catch {
-      // Keep unknown owner flow visible. TWR must not skip or move it.
+    if (flow.amount !== null) {
+      try {
+        converted = convertCurrency(
+          flow.amount,
+          flow.currency,
+          input.presentationCurrency,
+          flow.date,
+          input.fxRates,
+        );
+      } catch {
+        // Keep unknown owner flow visible. TWR must not skip or move it.
+      }
     }
     const current = externalByDate.get(flow.date);
     externalByDate.set(
@@ -248,7 +263,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     },
     positions,
     position,
-    problems: [...(input.problems ?? [])],
+    problems: [...(input.problems ?? []), ...positionProblems],
   };
 }
 

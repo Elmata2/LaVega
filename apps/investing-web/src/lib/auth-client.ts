@@ -18,7 +18,7 @@ export type AuthResult =
 
 export function verificationCallbackUrl(): string {
   const base = import.meta.env.BASE_URL || "/";
-  return new URL(base, window.location.origin).href;
+  return new URL(`${base.replace(/\/$/, "")}/email-confirmed`, window.location.origin).href;
 }
 
 async function readMessage(response: Response, fallback: string): Promise<string> {
@@ -55,6 +55,51 @@ export async function signUp(input: {
   } | null;
   if (!response.ok) return { ok: false, message: body?.message ?? "Failed to create account." };
   if (body?.token === null) return { ok: true, pendingVerification: true };
+  return { ok: true };
+}
+
+export async function resendVerificationEmail(email: string): Promise<AuthResult> {
+  const response = await fetch("/api/auth/send-verification-email", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, callbackURL: verificationCallbackUrl() }),
+  });
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: await readMessage(response, "Could not send confirmation email."),
+    };
+  }
+  return { ok: true };
+}
+
+export function passwordResetCallbackUrl(): string {
+  const base = import.meta.env.BASE_URL || "/";
+  return new URL(`${base.replace(/\/$/, "")}/reset-password`, window.location.origin).href;
+}
+
+export async function requestPasswordReset(email: string): Promise<AuthResult> {
+  const response = await fetch("/api/auth/request-password-reset", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, redirectTo: passwordResetCallbackUrl() }),
+  });
+  if (!response.ok)
+    return { ok: false, message: await readMessage(response, "Could not request password reset.") };
+  return { ok: true };
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<AuthResult> {
+  const response = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  if (!response.ok)
+    return {
+      ok: false,
+      message: await readMessage(response, "Could not reset password. Request a new link."),
+    };
   return { ok: true };
 }
 

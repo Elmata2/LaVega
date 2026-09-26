@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { EbConfig } from "./config.js";
 import type { FxHistoryResponse } from "./fxHistory.js";
 
@@ -10,6 +10,15 @@ const { loadConfigMock } = vi.hoisted(() => ({ loadConfigMock: vi.fn<() => EbCon
 vi.mock("./config.js", async () => {
   const actual = await vi.importActual<typeof import("./config.js")>("./config.js");
   return { ...actual, loadConfig: loadConfigMock };
+});
+
+/* The /app gate asks auth.js whether this request carries a verified session,
+ * same mocking pattern as apiGuard.test.ts — a test can be "logged in"
+ * without a Neon database. */
+const { verifiedSessionMock } = vi.hoisted(() => ({ verifiedSessionMock: vi.fn() }));
+vi.mock("./auth.js", async () => {
+  const actual = await vi.importActual<typeof import("./auth.js")>("./auth.js");
+  return { ...actual, verifiedSession: verifiedSessionMock };
 });
 
 // getFxHistory hits the network (ECB via Frankfurter); mocked so the 503 and
@@ -26,9 +35,16 @@ vi.mock("./fxHistory.js", async () => {
 
 const { app, isStaticAssetPath } = await import("./index.js");
 
+beforeEach(() => {
+  verifiedSessionMock.mockResolvedValue(null); // nobody is logged in
+  delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
+});
+
 afterEach(() => {
   loadConfigMock.mockReset();
   getFxHistoryMock.mockReset();
+  verifiedSessionMock.mockReset();
+  delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
 });
 
 test("GET /health returns ok:true", async () => {
@@ -181,6 +197,58 @@ test("an SPA view path is not treated as a missing file", async () => {
   // decision rather than the file outcome: the asset guard must not answer.
   const res = await app.request("/app/rekeningen");
   expect(await res.text()).not.toBe("Not Found");
+});
+
+/* --- /app is gated on a verified session; everyone else is bounced to `/`,
+ * where sign-in now lives. --- */
+
+test("GET /app with no session redirects to /", async () => {
+  const res = await app.request("/app");
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/");
+});
+
+test("GET /app/rekeningen with no session redirects to /", async () => {
+  const res = await app.request("/app/rekeningen");
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/");
+});
+
+test("GET /app with a verified session is not redirected", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "u1" } });
+  const res = await app.request("/app");
+  // apps/web/dist does not exist in this test environment, so this cannot
+  // assert 200 — see "an SPA view path is not treated as a missing file" above.
+  expect(res.status).not.toBe(302);
+});
+
+/* --- What /app answers depends on the session cookie, so a shared cache must
+ * be told that, or it serves one visitor's answer to the next. --- */
+
+test("the /app bounce is marked uncacheable and varying on the cookie", async () => {
+  const res = await app.request("/app");
+  expect(res.status).toBe(302);
+  expect(res.headers.get("vary")).toBe("Cookie");
+  expect(res.headers.get("cache-control")).toBe("private, no-store");
+});
+
+test("/app served to a signed-in visitor still varies on the cookie", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "u1" } });
+  const res = await app.request("/app");
+  expect(res.headers.get("vary")).toBe("Cookie");
+});
+
+test("routes other than /app are unaffected by the session gate", async () => {
+  for (const path of ["/en", "/assets/index-DQzV9ttd.js", "/api/rates"]) {
+    const res = await app.request(path);
+    expect(res.status, path).not.toBe(302);
+  }
+});
+
+test("LAVEGA_ALLOW_UNAUTHENTICATED=1 bypasses the /app gate", async () => {
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  const res = await app.request("/app");
+  expect(res.status).not.toBe(302);
 });
 
 test("isStaticAssetPath asks for a file extension, not merely for a dot", () => {

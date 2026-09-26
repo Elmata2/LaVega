@@ -89,6 +89,25 @@ test("position return stays unavailable for incomplete history and a zero denomi
   expect(zero.sinceFirstBuyPercentage).toBeNull();
 });
 
+test("a genuinely missing FX rate keeps the missing-fx status and carries no problem", () => {
+  const result = calculatePositionReturn(
+    10,
+    20,
+    [trade({ date: "2099-01-01" })],
+    [],
+    "EUR",
+    rates,
+  );
+  expect(result).toMatchObject({ status: "missing-fx" });
+  expect(result.problem).toBeUndefined();
+});
+
+test("an unknown currency degrades to the existing fallback and carries the reason, not missing-fx", () => {
+  const result = calculatePositionReturn(10, 20, [trade({ currency: "GBP" })], [], "EUR", rates);
+  expect(result.status).not.toBe("missing-fx");
+  expect(result.problem).toContain("GBP");
+});
+
 test("future-only FX leaves historical basis unknown while current value stays usable", () => {
   const result = buildCurrentPositions({
     positions: [
@@ -236,7 +255,11 @@ test("current positions omit closed holdings and expose price quality, EUR weigh
   ).sinceFirstBuyPercentage;
   expect(result[0]!.returns.sinceFirstBuyPercentage).toBeCloseTo(expectedSinceFirstBuy!);
 
-  const missingFx = buildCurrentPositions({
+  // A rate object present for the date but not covering USD is a different
+  // failure than no rate at all: it must not claim missing-fx (valuation's
+  // own price quality is a separate, unrelated bare catch, out of scope here,
+  // and still reports missing-fx for the same underlying conversion failure).
+  const unknownCurrency = buildCurrentPositions({
     positions: [positions[0]!],
     trades: [trades[0]!],
     dividends: [],
@@ -245,12 +268,13 @@ test("current positions omit closed holdings and expose price quality, EUR weigh
     fxRates: { base: "EUR", date: "2026-01-01", rates: {} },
     today: "2026-01-09",
   });
-  expect(missingFx[0]).toMatchObject({
+  expect(unknownCurrency[0]).toMatchObject({
     marketValue: null,
     portfolioWeight: null,
     priceStatus: "missing-fx",
-    returns: { status: "missing-fx" },
+    returns: { status: "missing-cost" },
   });
+  expect(unknownCurrency[0]!.returns.problem).toMatch(/USD/);
 
   // fxRates undefined is what a failed FX provider actually passes (not an
   // empty rate set), and must fail closed the same way rather than crash.

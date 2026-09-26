@@ -83,7 +83,7 @@ export type ProviderTerms = {
   convertFeePct?: number;
   cashbackPct?: number;
   pointsPerEuro?: number;
-  transferFreeViaIdeal?: number;
+  topUpFree?: number;
   note?: string;
   /** When the SOURCE says the figure was last checked. bank.nl stamps its rows;
    *  an agent lookup states nothing because it is as of now. Used to date the
