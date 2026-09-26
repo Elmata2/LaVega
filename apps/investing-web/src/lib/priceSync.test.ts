@@ -40,6 +40,23 @@ test("keeps asking while the server pauses on its time budget", async () => {
   expect(rounds).toEqual(["paused", "paused", "completed"]);
 });
 
+test("joins an active server run, then starts a fresh discovery", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(progress("running"))
+    .mockResolvedValueOnce(progress("completed", { completed: 2, remainingSymbols: [] }))
+    .mockResolvedValueOnce(progress("completed", { completed: 1, remainingSymbols: [] }));
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual({ kind: "finished", problems: [] });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    "/api/prices/sync",
+    "/api/prices/sync/status",
+    "/api/prices/sync",
+  ]);
+});
+
 test("stops at the first terminal answer and reports its problems", async () => {
   const fetchMock = vi.fn().mockResolvedValue(progress("problem", { problems: ["ASML: failed"] }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;

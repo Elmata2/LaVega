@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { PortfolioBenchmarkChart, pointsForWindow } from "./PortfolioBenchmarkChart";
+import { PerformanceTooltip, PortfolioBenchmarkChart, pointsForWindow } from "./PortfolioBenchmarkChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -62,6 +62,26 @@ const longPoints = Array.from({ length: 10 }, (_, index) => ({
   forwardFilled: [],
   cashUnknown: [],
 }));
+
+test("stale chart tooltip point does not crash when a benchmark is selected", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PerformanceTooltip
+        active
+        payload={[{ payload: points[0] as never }]}
+        mode="indexed"
+        benchmarks={benchmarks}
+        currency="EUR"
+      />,
+    );
+  });
+  expect(container.textContent).toContain("vs. AEX");
+  expect(container.textContent).toContain("Unknown");
+  await act(async () => root.unmount());
+});
 
 function mockSelectionFetch() {
   vi.stubGlobal(

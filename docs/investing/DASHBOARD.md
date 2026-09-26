@@ -147,13 +147,13 @@ Price backfill runs on the server, separate from broker sync ([Backfill set and 
 
 After broker sync completes, start the price orchestrator. Its symbol set is every traded symbol, including closed positions, plus the selected benchmarks. Backfill a position symbol from its first trade. Backfill a benchmark from the portfolio's first trade.
 
-Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
+Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. The browser waits for that run to settle, then starts a fresh discovery so a benchmark chosen during the run is included. A paused slice also includes selected benchmarks, including ones chosen since the previous slice. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
 
 Fetch in this order:
 
-1. Current holdings.
-2. Closed holdings.
-3. Benchmarks.
+1. Selected benchmarks.
+2. Current holdings.
+3. Closed holdings.
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
@@ -284,6 +284,7 @@ The store is authoritative across reloads. Do not mirror benchmark selection in 
 Assign benchmark colors by current selection order: `chart-blue`, `chart-purple`, then `chart-teal`. Reflow colors when a selection is removed. Keep coral unused because it conflicts with the negative color. The legend shows name and color for the portfolio and each benchmark. A legend entry toggles line visibility. Wrap only when horizontal space is insufficient.
 
 Render missing benchmark history as `null` with disconnected line segments. Keep its legend entry visible while its backfill progresses.
+Price sync requests selected benchmarks before holdings, including when a paused run resumes, so a large portfolio backfill does not leave the comparison line last in the queue.
 
 ## Portfolio chart interaction
 

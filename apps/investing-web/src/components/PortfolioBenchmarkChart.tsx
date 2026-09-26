@@ -662,7 +662,7 @@ function MetricSpread({
   );
 }
 
-function PerformanceTooltip({
+export function PerformanceTooltip({
   active,
   payload,
   mode,
@@ -687,35 +687,37 @@ function PerformanceTooltip({
       ) : (
         <div className="flex flex-wrap gap-3">
           {benchmarks.map((benchmark) => {
-            const benchmarkTwr = point.benchmarkReturns[benchmark.symbol] ?? null;
-            const benchmarkMwr = point.benchmarkXirr[benchmark.symbol] ?? null;
+            const portfolioTwr = point.portfolioReturn ?? null;
+            const portfolioMwr = point.portfolioXirr ?? null;
+            const benchmarkTwr = point.benchmarkReturns?.[benchmark.symbol] ?? null;
+            const benchmarkMwr = point.benchmarkXirr?.[benchmark.symbol] ?? null;
             return (
               <div key={benchmark.symbol} className="min-w-[180px] flex-1">
                 <p className="mb-1 font-semibold">vs. {benchmark.name}</p>
                 <MetricSpread
                   label="TWR"
                   value={
-                    point.portfolioReturn === null || benchmarkTwr === null
+                    portfolioTwr === null || benchmarkTwr === null
                       ? null
-                      : point.portfolioReturn - benchmarkTwr
+                      : portfolioTwr - benchmarkTwr
                   }
                   tone="blue"
                 />
                 <MetricSpread
                   label="XIRR p.j."
                   value={
-                    point.portfolioXirr === null || benchmarkMwr === null
+                    portfolioMwr === null || benchmarkMwr === null
                       ? null
-                      : point.portfolioXirr - benchmarkMwr
+                      : portfolioMwr - benchmarkMwr
                   }
                   tone="amber"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Portfolio {valueOrUnknown(point.portfolioReturn, percent)} · {benchmark.name}{" "}
+                  Portfolio {valueOrUnknown(portfolioTwr, percent)} · {benchmark.name}{" "}
                   {valueOrUnknown(benchmarkTwr, percent)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  XIRR {cappedXirr(point.portfolioXirr)} · {cappedXirr(benchmarkMwr)}
+                  XIRR {cappedXirr(portfolioMwr)} · {cappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );

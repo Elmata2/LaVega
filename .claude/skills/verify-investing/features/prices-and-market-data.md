@@ -11,6 +11,7 @@ overlay, and the consent gate in front of Yahoo Finance.
 - price cache purge (`Cache`, confirmed with `Ja, alles verwijderen`, then
   `Prijsgegevens verwijderd`).
 - benchmark selection and search for the chart overlay.
+- selected benchmarks are first in the price-sync queue. New selections enter a paused run on its next slice. A page that joins an active server run waits for it, then starts a fresh discovery.
 - FX rates and ISIN → ticker mapping used while pricing.
 - key status (`Niet ingesteld`) for `ANTHROPIC_API_KEY` and `MARKET_DATA_API_KEY`.
 

@@ -49,7 +49,7 @@ async function waitForAssertion(assertion: () => void) {
   throw lastError;
 }
 
-test("discovers current, closed, and benchmark symbols in request order with correct starts", () => {
+test("discovers selected benchmarks before holdings with correct starts", () => {
   const targets = discoverPriceSyncTargets({
     positions: [position("ASML"), position("ZERO", 0)],
     trades: [
@@ -62,9 +62,9 @@ test("discovers current, closed, and benchmark symbols in request order with cor
 
   expect(targets.map(({ symbol, kind, backfillFrom }) => ({ symbol, kind, backfillFrom }))).toEqual(
     [
+      { symbol: "^STOXX50E", kind: "benchmark", backfillFrom: "2024-01-02" },
       { symbol: "ASML", kind: "current", backfillFrom: "2024-01-02" },
       { symbol: "CLOSED", kind: "closed", backfillFrom: "2024-02-01" },
-      { symbol: "^STOXX50E", kind: "benchmark", backfillFrom: "2024-01-02" },
     ],
   );
 });
@@ -334,6 +334,70 @@ test("a paused run resumes at the symbol it stopped on and finishes", async () =
   });
   // Symbols the first slice already stored cost the second one no request at all.
   expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "TWO", "THREE"]);
+});
+
+test("a resumed run uses fresh benchmark priority for its remaining symbols", async () => {
+  const holdingsFirst = ["ONE", "TWO", "^AEX"].map(symbolTarget);
+  let discovered = holdingsFirst;
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => discovered,
+    sync,
+    paceMs: 0,
+    pauseMarginMs: 3_000,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  await expect(orchestrator.run("local", 6_000)).resolves.toMatchObject({
+    status: "paused",
+    remainingSymbols: ["TWO", "^AEX"],
+  });
+  discovered = [holdingsFirst[2]!, ...holdingsFirst.slice(0, 2)];
+  await expect(orchestrator.run("local", clock + 60_000)).resolves.toMatchObject({
+    status: "completed",
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO"]);
+});
+
+test("a benchmark selected during a paused run joins its next slice", async () => {
+  const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  let discovered = holdings;
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => discovered,
+    sync,
+    paceMs: 0,
+    pauseMarginMs: 3_000,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  await expect(orchestrator.run("local", 6_000)).resolves.toMatchObject({
+    status: "paused",
+    remainingSymbols: ["TWO", "THREE"],
+  });
+  discovered = [{ ...symbolTarget("^AEX"), kind: "benchmark" }, ...holdings];
+  await expect(orchestrator.run("local", clock + 60_000)).resolves.toMatchObject({
+    status: "completed",
+    total: 4,
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual([
+    "ONE",
+    "^AEX",
+    "TWO",
+    "THREE",
+  ]);
 });
 
 test("progress survives the process that produced it", async () => {
