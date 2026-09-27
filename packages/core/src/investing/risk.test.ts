@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import type { BenchmarkSeries } from "./benchmarks.js";
-import { emptyInvestingDashboard, type InvestingDashboardData } from "./dashboard.js";
+import {
+  buildInvestingDashboard,
+  emptyInvestingDashboard,
+  type InvestingDashboardData,
+} from "./dashboard.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 import { benchmarkCurrencyMismatchReason, buildHistoricalRisk, RISK_MINIMUM_OBSERVATIONS } from "./risk.js";
 
@@ -238,6 +242,48 @@ test("rejects benchmark quoted outside presentation currency", () => {
   expect(report.risk.reasons).toContain(
     "Beta and alpha need a EUR-quoted benchmark; BENCH is quoted in USD.",
   );
+});
+
+test("a benchmark converted by buildInvestingDashboard resolves comparable without touching risk.ts", () => {
+  const dates = businessDates(RISK_MINIMUM_OBSERVATIONS + 1);
+  const benchmarkReturns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
+    index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002,
+  );
+  const portfolioReturns = benchmarkReturns.map((value) => 1.5 * value + 0.0007);
+
+  let usdClose = 100;
+  const usdBars = dates.map((date, index) => {
+    if (index > 0) usdClose *= 1 + benchmarkReturns[index - 1]!;
+    return { symbol: "SP500US", date, close: usdClose, currency: "USD" };
+  });
+  const fxRates = dates.map((date) => ({ base: "EUR", date, rates: { USD: 1.1 } }));
+
+  const converted = buildInvestingDashboard({
+    positions: [],
+    trades: [],
+    dividends: [],
+    priceBars: [],
+    benchmarkBars: usdBars,
+    benchmarkInstruments: [
+      { symbol: "SP500US", name: "S&P 500", exchange: "NYSE Arca", currency: "USD" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates,
+    today: dates.at(-1)!,
+  }).benchmarks[0]!;
+  expect(converted.currency).toBe("EUR");
+  expect(converted.converted).toBe(true);
+
+  const report = buildHistoricalRisk(
+    dashboard(pointsFromReturns(portfolioReturns), { benchmarks: [converted] }),
+  );
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.beta).toBeCloseTo(1.5, 6);
+  expect(report.metrics.alpha).toBeCloseTo(0.0007 * 252, 6);
+  expect(
+    report.risk.reasons.some((reason) => reason.startsWith("Beta and alpha need a")),
+  ).toBe(false);
 });
 
 test("benchmarkCurrencyMismatchReason builds the mismatch sentence", () => {

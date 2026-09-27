@@ -1,4 +1,4 @@
-import { convertCurrency, type FxRates } from "./portfolio.js";
+import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
 import { bucketPricedAllocation, type Allocation } from "./allocation.js";
 import {
   computePortfolioValueSeries,
@@ -247,13 +247,35 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     dataVersion: input.dataVersion ?? 0,
     presentationCurrency: input.presentationCurrency,
     portfolio,
-    benchmarks: (input.benchmarkInstruments ?? []).map((instrument) => ({
-      ...instrument,
-      points: input.benchmarkBars
+    benchmarks: (input.benchmarkInstruments ?? []).map((instrument) => {
+      const isConverted = instrument.currency !== input.presentationCurrency;
+      const bars = input.benchmarkBars
         .filter((bar) => bar.symbol.toUpperCase() === instrument.symbol.toUpperCase())
-        .sort((left, right) => left.date.localeCompare(right.date))
-        .map((bar) => ({ date: bar.date, value: bar.close })),
-    })),
+        .sort((left, right) => left.date.localeCompare(right.date));
+      return {
+        ...instrument,
+        currency: isConverted ? input.presentationCurrency : instrument.currency,
+        converted: isConverted,
+        points: bars.map((bar) => {
+          if (!isConverted) return { date: bar.date, value: bar.close };
+          try {
+            return {
+              date: bar.date,
+              value: convertCurrency(
+                bar.close,
+                instrument.currency,
+                input.presentationCurrency,
+                bar.date,
+                input.fxRates,
+              ),
+            };
+          } catch (error) {
+            if (error instanceof MissingFxRateError) return { date: bar.date, value: null };
+            throw error;
+          }
+        }),
+      };
+    }),
     externalCashFlows: [...externalByDate]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([date, amount]) => ({ date, amount })),

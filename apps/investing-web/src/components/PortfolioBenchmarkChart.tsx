@@ -1,5 +1,4 @@
 import {
-  benchmarkCurrencyMismatchReason,
   buildIndexedSeries,
   deriveChartMode,
   type BenchmarkInstrument,
@@ -35,6 +34,8 @@ const percent = (value: number) =>
     maximumFractionDigits: 2,
   });
 const dateLabel = shortDate;
+const benchmarkLabel = (benchmark: { name: string; converted?: boolean }): string =>
+  benchmark.converted ? `${benchmark.name} (converted)` : benchmark.name;
 const valueOrUnknown = (value: number | null, formatter: (value: number) => string) =>
   value === null ? "Unknown" : formatter(value);
 const pp = (value: number) =>
@@ -255,28 +256,31 @@ export function PortfolioBenchmarkChart({
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Selected benchmarks">
-          {selected.map((symbol, index) => (
-            <span
-              key={symbol}
-              className="inline-flex items-center gap-2 rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold"
-            >
+          {selected.map((symbol, index) => {
+            const item = benchmarks.find((entry) => entry.symbol === symbol);
+            return (
               <span
-                aria-hidden="true"
-                className="size-2 rounded-full"
-                style={{ backgroundColor: `hsl(var(--${colors[index]}))` }}
-              />
-              {benchmarks.find((item) => item.symbol === symbol)?.name ?? symbol}
-              <button
-                type="button"
-                disabled={busy}
-                aria-label={`${symbol} remove`}
-                onClick={() => void replaceSelection(selected.filter((item) => item !== symbol))}
-                className="pressable -mr-1 rounded-full px-1 text-muted-foreground hover:text-foreground"
+                key={symbol}
+                className="inline-flex items-center gap-2 rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold"
               >
-                ×
-              </button>
-            </span>
-          ))}
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: `hsl(var(--${colors[index]}))` }}
+                />
+                {item ? benchmarkLabel(item) : symbol}
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label={`${symbol} remove`}
+                  onClick={() => void replaceSelection(selected.filter((entry) => entry !== symbol))}
+                  className="pressable -mr-1 rounded-full px-1 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
           {selected.length < 3 && !comparing && (
             <button
               type="button"
@@ -340,7 +344,7 @@ export function PortfolioBenchmarkChart({
                     </span>
                     {result.currency !== currency && (
                       <span className="block text-xs text-muted-foreground">
-                        {benchmarkCurrencyMismatchReason(currency, result)}
+                        Converted to {currency} at each day&apos;s ECB rate.
                       </span>
                     )}
                   </button>
@@ -500,7 +504,7 @@ export function PortfolioBenchmarkChart({
                       <Line
                         key={benchmark.symbol}
                         dataKey={`benchmark:${benchmark.symbol}`}
-                        name={benchmark.name}
+                        name={benchmarkLabel(benchmark)}
                         hide={!visible.has(benchmark.symbol)}
                         connectNulls={false}
                         stroke={`hsl(var(--${colors[index]}))`}
@@ -550,7 +554,7 @@ export function PortfolioBenchmarkChart({
                     className="size-2 rounded-full"
                     style={{ backgroundColor: `hsl(var(--${colors[index]}))` }}
                   />
-                  {benchmark.name}
+                  {benchmarkLabel(benchmark)}
                 </button>
               ))}
             </div>
@@ -597,7 +601,7 @@ function PerformanceSummary({
               key={benchmark.symbol}
               className="min-w-[220px] flex-1 rounded-[12px] bg-card p-3 shadow-soft"
             >
-              <p className="mb-2 text-xs font-semibold">vs. {benchmark.name}</p>
+              <p className="mb-2 text-xs font-semibold">vs. {benchmarkLabel(benchmark)}</p>
               {!hasHistory ? (
                 <p className="text-xs text-muted-foreground">
                   No price history for {benchmark.symbol}.
@@ -609,7 +613,7 @@ function PerformanceSummary({
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
                     <span>Portfolio {valueOrUnknown(point.portfolioReturn, percent)}</span>
                     <span>
-                      {benchmark.name} {valueOrUnknown(benchmarkTwr, percent)}
+                      {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, percent)}
                     </span>
                     <span>XIRR {cappedXirr(point.portfolioXirr)}</span>
                     <span>XIRR {cappedXirr(benchmarkMwr)}</span>
@@ -622,9 +626,11 @@ function PerformanceSummary({
                       )}
                     </span>
                   </div>
-                  {benchmark.currency !== currency && (
+                  {benchmark.converted && (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {benchmarkCurrencyMismatchReason(currency, benchmark)}
+                      {benchmark.name} is converted to {currency} using each day's ECB rate; its
+                      return will not match the {benchmark.symbol} figure quoted in its own
+                      currency.
                     </p>
                   )}
                 </>
@@ -693,7 +699,7 @@ export function PerformanceTooltip({
             const benchmarkMwr = point.benchmarkXirr?.[benchmark.symbol] ?? null;
             return (
               <div key={benchmark.symbol} className="min-w-[180px] flex-1">
-                <p className="mb-1 font-semibold">vs. {benchmark.name}</p>
+                <p className="mb-1 font-semibold">vs. {benchmarkLabel(benchmark)}</p>
                 <MetricSpread
                   label="TWR"
                   value={
@@ -713,7 +719,7 @@ export function PerformanceTooltip({
                   tone="amber"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Portfolio {valueOrUnknown(portfolioTwr, percent)} · {benchmark.name}{" "}
+                  Portfolio {valueOrUnknown(portfolioTwr, percent)} · {benchmarkLabel(benchmark)}{" "}
                   {valueOrUnknown(benchmarkTwr, percent)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
@@ -739,7 +745,7 @@ function accessiblePoint(
   currency: string,
 ): string {
   const unknown = [...point.unpriced, ...point.cashUnknown];
-  return `${dateLabel(point.date)}: portfolio ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmark.name} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, unknown: ${unknown.join(", ")}` : ""}`;
+  return `${dateLabel(point.date)}: portfolio ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmarkLabel(benchmark)} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, unknown: ${unknown.join(", ")}` : ""}`;
 }
 
 function toggle(current: Set<string>, key: string): Set<string> {
