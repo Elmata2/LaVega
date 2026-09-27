@@ -18,6 +18,9 @@ export type BenchmarkInstrument = {
 
 export type BenchmarkSeries = BenchmarkInstrument & {
   points: Array<{ date: string; value: number | null }>;
+  /** True when `points` were converted from the instrument's native currency
+   *  into the presentation currency (see buildInvestingDashboard). */
+  converted?: boolean;
 };
 
 export type ChartMode = "euros" | "indexed";

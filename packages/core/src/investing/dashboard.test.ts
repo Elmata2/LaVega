@@ -4,6 +4,7 @@ import {
   emptyInvestingDashboard,
   type InvestingDashboardInput,
 } from "./dashboard.js";
+import { convertCurrency } from "./portfolio.js";
 import {
   BENCHMARK_BARS,
   FX_RATES,
@@ -654,4 +655,82 @@ test("a multiweek quote gap is not reported as one day of movement", () => {
     ],
   });
   expect(consecutive.position).toMatchObject({ dailyChange: 4, dailyChangePercentage: 0.25 });
+});
+
+test("a USD-quoted benchmark converts to the presentation currency at each date's own rate", () => {
+  const usdBars = [
+    { symbol: "SP500US", date: "2026-01-02", close: 100, currency: "USD" },
+    { symbol: "SP500US", date: "2026-01-05", close: 105, currency: "USD" },
+  ];
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: usdBars,
+    benchmarkInstruments: [
+      { symbol: "SP500US", name: "S&P 500", exchange: "NYSE Arca", currency: "USD" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  const benchmark = dashboard.benchmarks[0]!;
+  expect(benchmark.currency).toBe("EUR");
+  expect(benchmark.converted).toBe(true);
+  expect(benchmark.points).toEqual([
+    { date: "2026-01-02", value: convertCurrency(100, "USD", "EUR", "2026-01-02", FX_RATES) },
+    { date: "2026-01-05", value: convertCurrency(105, "USD", "EUR", "2026-01-05", FX_RATES) },
+  ]);
+});
+
+test("a converted benchmark point outside FX coverage is null, not dropped or carried by hand", () => {
+  const usdBars = [
+    { symbol: "SP500US", date: "2025-01-01", close: 100, currency: "USD" },
+    { symbol: "SP500US", date: "2026-01-02", close: 110, currency: "USD" },
+  ];
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: usdBars,
+    benchmarkInstruments: [
+      { symbol: "SP500US", name: "S&P 500", exchange: "NYSE Arca", currency: "USD" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  const benchmark = dashboard.benchmarks[0]!;
+  expect(benchmark.points).toEqual([
+    { date: "2025-01-01", value: null },
+    { date: "2026-01-02", value: convertCurrency(110, "USD", "EUR", "2026-01-02", FX_RATES) },
+  ]);
+});
+
+test("a benchmark already in the presentation currency is left unconverted", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: BENCHMARK_BARS,
+    benchmarkInstruments: [
+      { symbol: "SP500", name: "S&P 500", exchange: "NYSE Arca", currency: "EUR" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  const benchmark = dashboard.benchmarks[0]!;
+  expect(benchmark.currency).toBe("EUR");
+  expect(benchmark.converted).toBe(false);
+  expect(benchmark.points).toEqual([
+    { date: "2026-01-02", value: 100 },
+    { date: "2026-01-05", value: 105 },
+  ]);
 });

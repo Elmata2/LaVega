@@ -347,7 +347,7 @@ test("comparison card says no price history for a benchmark with zero points", a
   await act(async () => root.unmount());
 });
 
-test("comparison card surfaces the currency-mismatch reason for a foreign-currency benchmark", async () => {
+test("comparison card makes no beta/alpha currency claim about an unconverted series", async () => {
   const usdBenchmark = {
     symbol: "SPY",
     name: "SPDR S&P 500",
@@ -377,9 +377,53 @@ test("comparison card surfaces the currency-mismatch reason for a foreign-curren
     node.textContent?.startsWith("vs. SPDR S&P 500"),
   )!;
   const card = heading.closest("div")!;
-  expect(card.textContent).toContain(
-    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
+  /* The dashboard relabels every series to the presentation currency, so a
+   * foreign-currency series is not a state it can produce. What must never
+   * appear is the old claim that beta and alpha are unavailable: they are
+   * computed from the converted series. */
+  expect(card.textContent).not.toContain("Beta and alpha need a");
+  await act(async () => root.unmount());
+});
+
+test("comparison card marks a converted benchmark and shows the conversion notice", async () => {
+  const convertedBenchmark = {
+    symbol: "SPY",
+    name: "SPDR S&P 500",
+    exchange: "NYSE Arca",
+    currency: "EUR",
+    converted: true,
+    points: [
+      { date: "2026-01-01", value: 427 },
+      { date: "2026-01-02", value: 432 },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(JSON.stringify({ tenantId: "local", symbols: ["SPY"] }))
+        : new Response(JSON.stringify({ tenantId: "local", symbols: ["SPY"] })),
+    ),
   );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={[convertedBenchmark]} />,
+    );
+    await Promise.resolve();
+  });
+  const heading = Array.from(container.querySelectorAll("p")).find((node) =>
+    node.textContent?.startsWith("vs. SPDR S&P 500 (converted)"),
+  )!;
+  expect(heading).toBeTruthy();
+  const card = heading.closest("div")!;
+  expect(card.textContent).toContain("(converted)");
+  expect(card.textContent).toContain(
+    "SPDR S&P 500 is converted to EUR using each day's ECB rate; its return will not match the SPY figure quoted in its own currency.",
+  );
+  expect(card.textContent).not.toContain("Beta and alpha need a");
   await act(async () => root.unmount());
 });
 
@@ -434,9 +478,8 @@ test("search results mark an instrument whose currency differs from the portfoli
   const resultButton = container.querySelector<HTMLButtonElement>(
     '#benchmark-results button',
   )!;
-  expect(resultButton.textContent).toContain(
-    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
-  );
+  expect(resultButton.textContent).toContain("Converted to EUR at each day's ECB rate.");
+  expect(resultButton.textContent).not.toContain("Beta and alpha need a");
   expect(resultButton.disabled).toBe(false);
   await act(async () => root.unmount());
 });
