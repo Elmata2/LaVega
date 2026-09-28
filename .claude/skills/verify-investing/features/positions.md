@@ -4,17 +4,17 @@ The holdings table and the per-instrument page behind it.
 
 ## Sub-features
 
-- positions table (`Posities`) — instrument, quantity, market value, return.
-- open and closed positions (`Open positie`, `Gesloten positie`, `Gesloten`).
-- position detail (`Positiedetail`) at `/positions/:symbol` — price chart, position activity
-  (`Positieactiviteit`), buys and dividends (`Koop`, `Dividend`).
-- quantity history toggle (`Aantalhistorie tonen` / `Historie verbergen`).
-- empty and missing states: `Geen posities geladen`, `Positie niet gevonden`,
-  `Geen positie gekozen`.
+- positions table (`Positions`) — instrument, quantity, market value, return.
+- open and closed positions (`Open position`, `Closed position`, `Open`, `Closed`).
+- position detail (`Position detail`) at `/positions/:symbol` — price chart, position activity
+  (`Position activity`), buys, sells and dividends (`Buy`, `Sell`, `Dividend`).
+- quantity history toggle (`Show quantity history` / `Hide history`).
+- empty and missing states: `No positions loaded`, `Position not found`,
+  `No position selected`.
 
 ## How to get to it (user POV)
 
-`Posities` in the main navigation, then a row to open its detail page. Deep links work:
+`Positions` in the main navigation, then a row to open its detail page. Deep links work:
 `/investing/positions/AAPL`.
 
 ## Driving it with control-investing
@@ -34,7 +34,7 @@ broken overview usually share one cause.
 - A position with `marketValue: null` is unpriced, not missing. It is excluded from totals,
   weights and the KPI block, which is why a filled positions table can still show an empty
   donut — check the price store before the positions code.
-- `FX-koers ontbreekt` means the position is priced in a currency with no FX rate, not that
+- `FX rate missing` means the position is priced in a currency with no FX rate, not that
   the position failed to sync.
 - Symbols in the URL are matched case-insensitively; a symbol containing a dot is a real deep
   link and must not be treated as a file request by the static fallback.

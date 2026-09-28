@@ -5,21 +5,25 @@ dividends. This is where most investing reports originate.
 
 ## Sub-features
 
-- credential form (`Broker koppelen`) for Trading 212 (`API key`) and Interactive Brokers
-  (`Flex-token`, `Numeriek Query ID`), plus the vault passphrase.
-- vault (`Kluis`): `empty` / `locked` / `unlocked`. Credentials are AES-GCM encrypted; after
-  a restart the vault is locked and only the passphrase reopens it.
-- `Opslaan en synchroniseren` — save credentials, then force a sync.
-- `Ontgrendelen en synchroniseren` — unlock an existing vault, then force a sync.
-- sync progress: `Bezig`, `Gereed`, `API-pauze` / `API-capaciteit wordt afgewacht`,
-  and the failure states `Broker synchronisatie mislukt.`, `Broker koppelen mislukt.`,
-  `Kluis ontgrendelen mislukt.`
+- credential form (`Save credentials`, broker radio group `Broker`) for Trading 212
+  (`API key`) and Interactive Brokers (`Flex-token`, `Numeric Query ID`), plus the vault
+  passphrase.
+- vault (`Vault` chip): `Not set up` / `Locked` / `Open`, from the API states `empty` /
+  `locked` / `unlocked`. Credentials are AES-GCM encrypted; after a restart the vault is
+  locked and only the passphrase reopens it.
+- `Save and sync` (`Saving and syncing…` while pending) — save credentials, then force a sync.
+- `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
+  vault, then force a sync. Success reads `Vault unlocked. Sync completed.`
+- `Start sync` (`Syncing…` while pending) — force a sync with the vault already open.
+- sync progress: `In progress`, `Ready`, `Completed`, `API pause` / `Waiting for API
+capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
+  `Failed to unlock vault.`, `Broker credential storage is unavailable. Try again later.`
 
 ## How to get to it (user POV)
 
-`Brokers` in the main navigation, or `/investing/brokers/connect`. Pick a broker, paste the
-credentials, enter the vault passphrase, press `Opslaan en synchroniseren`. On a later visit
-the vault is already populated and the button reads `Ontgrendelen en synchroniseren`.
+`Connect broker` in the header, or `/investing/brokers/connect`. Pick a broker, paste the
+credentials, enter the vault passphrase, and press `Save and sync`. On a later visit the vault
+is already populated and the form is `Unlock vault` with `Unlock and sync`.
 
 ## Driving it with control-investing
 
