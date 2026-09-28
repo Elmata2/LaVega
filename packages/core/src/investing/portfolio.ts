@@ -175,6 +175,24 @@ function anchoredAmountOnDate(
  *  gap states a figure the other contradicts. */
 const RECONCILIATION_TOLERANCE = 0.01;
 
+/**
+ * How far a total may drift before it means something.
+ *
+ *  Every amount a broker reports is rounded to its currency's last place, and
+ *  a foreign one is rounded again by the rate that converts it, so a total of
+ *  many of them carries the error of all of them. A cent per movement is what
+ *  that comes to at worst, and it grows with the count because that is where
+ *  it comes from.
+ *
+ *  It stays far below what a missing movement looks like. A live account
+ *  reconciled to 1.15 EUR across some eighteen hundred movements, while the
+ *  same account with its purchases dropped was out by 16,627: the whole of its
+ *  funding, and three orders of magnitude past any rounding.
+ */
+function reconciliationTolerance(movements: number): number {
+  return Math.max(RECONCILIATION_TOLERANCE, movements * RECONCILIATION_TOLERANCE);
+}
+
 function bracketsReconcile(leg: CashLeg, date: string): boolean {
   const sorted = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf));
   const before = sorted.filter((anchor) => anchor.asOf <= date).at(-1);
@@ -215,7 +233,10 @@ function historyResidual(leg: CashLeg): number | null {
 
 function historyCloses(leg: CashLeg): boolean {
   const residual = historyResidual(leg);
-  return residual !== null && Math.abs(residual) <= RECONCILIATION_TOLERANCE;
+  if (residual === null) return false;
+  const earliest = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
+  const counted = leg.events.filter((event) => event.date <= (earliest?.asOf ?? "")).length;
+  return Math.abs(residual) <= reconciliationTolerance(counted);
 }
 
 /** What a leg held on a date, and whether the broker's history proves it.
@@ -631,7 +652,7 @@ export function computePortfolioValueSeries(
          * side: below zero the spending is recorded without the funding,
          * above it the funding without the spending. */
         const residual = historyResidual(leg);
-        if (residual !== null && Math.abs(residual) > RECONCILIATION_TOLERANCE)
+        if (residual !== null && !historyCloses(leg))
           cashShortfall[displayCashKey(leg)] = residual;
         continue;
       }
