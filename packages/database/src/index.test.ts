@@ -193,6 +193,26 @@ test("a tenant with no preferences row reads empty rather than throwing", async 
   expect(await repository.getMarketDataConsent()).toBeNull();
 });
 
+test("layout shares the preferences row and round-trips independently of benchmarks", async () => {
+  const { db, calls } = fakeDatabase([
+    { benchmark_symbols: ["^AEX"], layout: { modules: { positions: false }, widgets: {} } },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getLayout()).toEqual({ modules: { positions: false }, widgets: {} });
+
+  await repository.setLayout({ modules: {}, widgets: { agent: false } });
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("layout");
+  expect(write.sql).not.toContain("benchmark_symbols");
+  expect(write.values).toEqual([JSON.stringify({ modules: {}, widgets: { agent: false } })]);
+});
+
+test("a tenant with no preferences row reads an empty layout rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getLayout()).toBeNull();
+});
+
 test("broker sync state round-trips per broker", async () => {
   const { db, calls } = fakeDatabase([
     { state: { lastSyncedAt: "2026-01-02T00:00:00.000Z", retryAfter: null } },
