@@ -5,6 +5,7 @@
   "scripts": {
     "test": "turbo run test",
     "test:watch": "turbo watch test",
+    "test:verify-investing": "node --test .claude/skills/verify-investing/control-investing.test.mjs",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "start": "pnpm --filter @lavega/server start",

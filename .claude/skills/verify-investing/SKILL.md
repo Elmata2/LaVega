@@ -56,6 +56,30 @@ node .claude/skills/verify-investing/control-investing.mjs cleanup
 a dev server the user started — removes the run directory, and keeps
 `/tmp/lavega-verify-investing/evidence`.
 
+## CLI contract
+
+The CLI is built for an agent to drive. Learn it from the CLI, not from this page:
+
+```bash
+node .claude/skills/verify-investing/control-investing.mjs help          # overview by group
+node .claude/skills/verify-investing/control-investing.mjs sync --help   # one command: flags, effect, examples
+node .claude/skills/verify-investing/control-investing.mjs browser --help
+node .claude/skills/verify-investing/control-investing.mjs help --json   # the whole surface as JSON
+```
+
+- **Output.** Every command prints JSON on stdout. `watch` prints one JSON object per line.
+- **Errors.** Errors print on stderr as `{"ok":false,"command":…,"error":{"code","message","fix"}}`.
+  `fix` names the command or change to make next. Unknown commands and flags fail with a
+  did-you-mean. Numbers, enums and required arguments are checked before any request.
+- **Exit codes.** `0` ok, `1` a check or request failed, `2` usage error or refused.
+- **Side effects.** Every command with a side effect takes `--dry-run`, which prints the
+  request or action and changes nothing. `help --json` lists each effect as `remote-write`,
+  `local-destructive` or `browser-action`. A `remote-write` on `--target prod` also needs
+  `--allow-prod-write`.
+- **Tests.** Run `pnpm run test:verify-investing`. This is a black-box `node:test` suite
+  against a stub HTTP server and a fake `browse` binary. Run it after any change to the CLI,
+  and add a test for each new command or flag.
+
 ## Doctor
 
 ```bash
@@ -105,8 +129,17 @@ node $C unlock --target preview --passphrase <passphrase>
 node $C api GET /api/investing/benchmarks --target prod
 node $C api PUT /api/investing/benchmarks --target preview --body '{"symbols":["^GSPC"]}'
 
-# the local instance's stdout/stderr
+# wait until broker and price sync stop working
+node $C wait-settle --target preview --timeout 300000
+
+# time the reads the dashboard page makes
+node $C perf --target prod --runs 10
+
+# the local instance: where things are, its log, restart, keep it alive while editing
+node $C info
 node $C logs --lines 40
+node $C restart
+node $C watch --restart          # run in the background; one JSON line per up/down
 ```
 
 Credentials are the user's. Ask for them, and take them through the credentials file rather
@@ -114,20 +147,32 @@ than a `--password` argument, which would land in shell history and in the run's
 Never invent an account or sign one up.
 
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
-print what they would send. `prices purge` additionally refuses without `--yes`.
+print what they would send. `prices purge` also refuses without `--yes`.
 
-For the visual side — a blank page, stuck spinner, or chart that does not render — use shared
-gstack Chromium. It works for any agent and does not require Computer Use.
+For the visual side, use `browser`. Examples are a blank page, a stuck spinner, or a chart
+that does not render. It drives shared gstack Chromium through `browse`, works for any agent,
+and does not need Computer Use.
 
 ```bash
-node .claude/skills/verify-investing/browser-login.mjs
+node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
+node $C browser snapshot --interactive      # accessibility tree with @e refs
+node $C browser click @e3                   # --dry-run prints the action instead
+node $C browser wait-settle                 # network idle
+node $C browser screenshot                  # PNG into the evidence directory
+node $C browser console --errors
+node $C browser network
+node $C browser perf
+node $C browser eval "document.title"
+node $C browser raw -- viewport 390x844     # any browse command not wrapped
+node $C browser stop
 ```
 
-This imports the already authenticated CLI session into isolated Chromium and opens
-`/investing?verify=1`. Verification mode prevents the app-open effect from starting broker or
-price sync. Normal users keep existing automatic-sync behavior. Capture screenshots, text,
-console and network evidence with `browse`; stop the browser after the run. If `browse` is
-missing, install its pinned Chromium shell once with `bunx playwright@1.58.2 install chromium`.
+`browser open` imports the CLI session for the target's host and never prints a cookie
+value. On local it needs no session. `?verify=1` puts the app in verification mode, so the
+app-open effect does not start a broker or price sync. Normal users keep the automatic sync.
+`browser-login.mjs` remains as a shim for `browser open --target prod`. If `browse` reports
+missing Chromium, install the pinned build once with
+`bunx playwright@1.58.2 install chromium`.
 
 Use the browser when the question is "what does the user see", not "what does the API return".
 
@@ -164,7 +209,7 @@ real tenant. Prefer it over prod for anything that writes.
   Each origin gets its own cookie jar, so a preview login never replaces the prod session.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
-  `browser-login.mjs` sets Vercel's bypass cookie. Neither sends it to prod.
+  `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.
 - **URL.** Every deploy has its own URL. Get the latest with
   `vercel ls --environment preview --cwd /Users/jortwiebrens/Documents/LaVega`; worktrees
   are not Vercel-linked.
@@ -174,7 +219,7 @@ export LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app
 node $C doctor --target preview
 node $C login --target preview
 node $C sync --target preview --force --wait
-node .claude/skills/verify-investing/browser-login.mjs --target preview
+node $C browser open --target preview
 ```
 
 Write commands on `--target prod` (`sync`, `prices sync`, `prices purge`, `consent --accept`,
