@@ -284,3 +284,43 @@ test("an older toggle's late success does not regress the confirmed layout past 
   );
   root.unmount();
 });
+
+test("an older toggle's success while a newer one is still pending becomes the revert target if that newer one fails", async () => {
+  const resolvers = stubQueuedPuts();
+  const { container, root } = render();
+  await act(async () => {
+    root.render(<ControlProbe />);
+    await flush();
+  });
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click(); // A
+    await flush();
+  });
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('[data-testid="toggle-positions"]')?.click(); // B
+    await flush();
+  });
+  expect(resolvers).toHaveLength(2);
+
+  // A (older) succeeds while B (the request the reader is still waiting on)
+  // is still in flight — A's save is real and must not be forgotten.
+  await act(async () => {
+    resolvers[0]!(new Response(null, { status: 204 }));
+    await flush();
+  });
+  // B then fails: there is nothing newer confirmed than A, so the revert
+  // must land on A's layout, not further back.
+  await act(async () => {
+    resolvers[1]!(new Response(null, { status: 500 }));
+    await flush();
+  });
+
+  expect(container.querySelector('[data-testid="save-error"]')?.textContent).toBe(
+    "Couldn't save — try again.",
+  );
+  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
+    "overview,positions,net-worth",
+  );
+  root.unmount();
+});

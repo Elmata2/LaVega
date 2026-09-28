@@ -82,17 +82,26 @@ export function useInvestingLayout(): InvestingLayoutResource {
    *  - localEditsRef is only the reader's own explicit choices (never the
    *    server's), so a slow initial GET can merge underneath them instead
    *    of overwriting a toggle made while it was still in flight.
-   *  - saveSeqRef numbers every PUT this hook sends. Two toggles in a row
-   *    fire two independent requests that can land in either order (or one
-   *    can fail while the other succeeds); only the response matching the
-   *    highest number in flight is allowed to touch confirmedRef/saveError
-   *    — an older response, success or failure, is stale news and is
-   *    dropped rather than regressing state a newer request already moved
-   *    past.
+   *  - saveSeqRef numbers every PUT this hook sends, so a response can tell
+   *    whether it belongs to the toggle the reader is currently looking at
+   *    (the latest one issued) or an earlier one a later toggle has since
+   *    superseded.
+   *  - confirmedSeqRef is the sequence number of whichever PUT most
+   *    recently confirmed confirmedRef. A *success* is real, permanent
+   *    server state the instant it arrives, however late — dropping it
+   *    entirely (as an older-response check alone would) would forget a
+   *    save that did land. So any success newer than confirmedSeqRef still
+   *    updates confirmedRef, even out of order; only a *failure* is
+   *    ignored when it isn't the latest request, since an old failure says
+   *    nothing about whether a newer edit saved. Only the latest request,
+   *    success or failure, is allowed to touch what's on screen
+   *    (state.layout/saveError) — an older success updates the fallback
+   *    silently, an older failure is simply stale news.
    *  - mountedRef guards every async continuation against running after
    *    unmount, for both the initial GET and every PUT. */
   const layoutRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
   const confirmedRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
+  const confirmedSeqRef = useRef(0);
   const localEditsRef = useRef<InvestingLayout>({ modules: {}, widgets: {} });
   const saveSeqRef = useRef(0);
   const mountedRef = useRef(true);
@@ -126,12 +135,20 @@ export function useInvestingLayout(): InvestingLayoutResource {
     const mySeq = ++saveSeqRef.current;
     void putLayout(nextLayout).then((ok) => {
       if (!mountedRef.current) return;
-      if (mySeq !== saveSeqRef.current) return; // superseded by a later toggle
+      const isLatest = mySeq === saveSeqRef.current;
       if (ok) {
-        confirmedRef.current = nextLayout;
-        setState((previous) => ({ ...previous, saveError: null }));
+        // A success is real server state the moment it arrives, however
+        // late — record it as long as nothing newer already has, but only
+        // touch what's on screen if this was the request the reader is
+        // still waiting on.
+        if (mySeq > confirmedSeqRef.current) {
+          confirmedRef.current = nextLayout;
+          confirmedSeqRef.current = mySeq;
+        }
+        if (isLatest) setState((previous) => ({ ...previous, saveError: null }));
         return;
       }
+      if (!isLatest) return; // superseded by a later toggle
       layoutRef.current = confirmedRef.current;
       setState({ status: "ready", layout: confirmedRef.current, saveError: SAVE_ERROR_MESSAGE });
     });
