@@ -258,7 +258,7 @@ function cashAmountOnDate(
     );
     if (!moved) return known(carried.amount);
   }
-  if (!leg.tradeCashDeclared || !bracketsReconcile(leg, date) || !historyCloses(leg))
+  if (!leg.tradeCashResolved || !bracketsReconcile(leg, date) || !historyCloses(leg))
     return known(null);
   const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
   return estimate === null || !Number.isFinite(estimate)
@@ -269,12 +269,11 @@ function cashAmountOnDate(
 type CashLeg = {
   entity: string;
   broker: string;
-  /** The broker named the stream that books the cash a trade moves. A row
-   *  that carries no such name is not a broker that said "neither": it is a
-   *  row written before there was a field to say it in, and it reads the same
-   *  either way. Without the name the walk cannot know whether trades are
-   *  among these events, so what it sums may be missing every purchase. */
-  tradeCashDeclared: boolean;
+  /** It is settled which stream books the cash a trade moves: the broker named
+   *  it, or one reading of the movements closed and the other did not. While
+   *  it is unsettled the walk cannot know whether trades are among these
+   *  events, so what it sums may be missing every purchase. */
+  tradeCashResolved: boolean;
   currency: string;
   proven?: { from: string; to: string };
   anchors: CashBalance[];
@@ -302,6 +301,10 @@ function tradeSettlement(trade: Trade): { currency: string; amount: number } {
  *  wallet: a movement it lists in another currency was converted into that
  *  wallet, so it folds in at the day's rate instead of forming a leg no anchor
  *  can ever reach. Brokers that anchor each currency keep separate legs. */
+function ownerKey(value: { entity: string; broker: string }): string {
+  return `${value.entity}\u0000${value.broker}`;
+}
+
 function cashLegs(
   cashBalances: readonly CashBalance[],
   cashFlows: readonly CashFlow[],
@@ -310,85 +313,120 @@ function cashLegs(
   cashCoverage: readonly CashHistoryCoverage[],
   fxRates: FxRates,
 ): CashLeg[] {
-  const owner = (value: { entity: string; broker: string }) =>
-    `${value.entity}\u0000${value.broker}`;
-  /* Where a broker books trade cash is true of the broker, so it is read from
-   * any coverage it reported, proven window or not. Reading it only from a
-   * proven one dropped every trade out of the cash walk exactly when the walk
-   * was already working without a window. */
-  const coverage = new Map(cashCoverage.map((value) => [owner(value), value] as const));
+  const coverage = new Map(cashCoverage.map((value) => [ownerKey(value), value] as const));
   const proven = new Map(
     cashCoverage.flatMap((value) =>
-      value.status === "complete" ? [[owner(value), value] as const] : [],
+      value.status === "complete" ? [[ownerKey(value), value] as const] : [],
     ),
   );
-  const provenFor = (value: { entity: string; broker: string }) => proven.get(owner(value));
-  const legs = new Map<string, CashLeg>();
-  const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
-    const key = cashKey(value);
-    const existing = legs.get(key);
-    if (existing) return existing;
-    const window = provenFor(value);
-    const created: CashLeg = {
-      entity: value.entity,
-      broker: value.broker,
-      currency: value.currency,
-      tradeCashDeclared: coverage.get(owner(value))?.tradeCash !== undefined,
-      ...(window ? { proven: { from: window.from, to: window.to } } : {}),
-      anchors: [],
-      events: [],
-      tradeDates: [],
-    };
-    legs.set(key, created);
-    return created;
-  };
-  for (const balance of cashBalances) leg(balance).anchors.push(balance);
-  for (const flow of [...cashFlows, ...dividends])
-    leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
-  for (const trade of trades) {
-    if (!trade.broker) continue;
-    if (coverage.get(`${trade.entity}\u0000${trade.broker}`)?.tradeCash !== "trade-settlement")
-      continue;
-    const settlement = tradeSettlement(trade);
-    leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push({
-      date: trade.date,
-      amount: settlement.amount,
-    });
-  }
 
-  const wallets = new Map<string, CashLeg[]>();
-  for (const candidate of legs.values()) {
-    if (candidate.anchors.length === 0) continue;
-    const owner = `${candidate.entity}\u0000${candidate.broker}`;
-    wallets.set(owner, [...(wallets.get(owner) ?? []), candidate]);
-  }
-  for (const [key, candidate] of legs) {
-    if (candidate.anchors.length > 0) continue;
-    const owned = wallets.get(`${candidate.entity}\u0000${candidate.broker}`);
-    if (owned?.length !== 1) continue;
-    const wallet = owned[0]!;
-    for (const event of candidate.events) {
-      let amount: number;
-      try {
-        amount = convertCurrency(
-          event.amount,
-          candidate.currency,
-          wallet.currency,
-          event.date,
-          fxRates,
-        );
-      } catch {
-        amount = Number.NaN;
+  const build = (countTrades: boolean): CashLeg[] => {
+    const legs = new Map<string, CashLeg>();
+    const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
+      const key = cashKey(value);
+      const existing = legs.get(key);
+      if (existing) return existing;
+      const window = proven.get(ownerKey(value));
+      const created: CashLeg = {
+        entity: value.entity,
+        broker: value.broker,
+        currency: value.currency,
+        tradeCashResolved: false,
+        ...(window ? { proven: { from: window.from, to: window.to } } : {}),
+        anchors: [],
+        events: [],
+        tradeDates: [],
+      };
+      legs.set(key, created);
+      return created;
+    };
+    for (const balance of cashBalances) leg(balance).anchors.push(balance);
+    for (const flow of [...cashFlows, ...dividends])
+      leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
+    if (countTrades)
+      for (const trade of trades) {
+        if (!trade.broker) continue;
+        const settlement = tradeSettlement(trade);
+        leg({
+          entity: trade.entity,
+          broker: trade.broker,
+          currency: settlement.currency,
+        }).events.push({ date: trade.date, amount: settlement.amount });
       }
-      wallet.events.push({ date: event.date, amount });
+
+    const wallets = new Map<string, CashLeg[]>();
+    for (const candidate of legs.values()) {
+      if (candidate.anchors.length === 0) continue;
+      wallets.set(ownerKey(candidate), [...(wallets.get(ownerKey(candidate)) ?? []), candidate]);
     }
-    legs.delete(key);
+    for (const [key, candidate] of legs) {
+      if (candidate.anchors.length > 0) continue;
+      const owned = wallets.get(ownerKey(candidate));
+      if (owned?.length !== 1) continue;
+      const wallet = owned[0]!;
+      for (const event of candidate.events) {
+        let amount: number;
+        try {
+          amount = convertCurrency(
+            event.amount,
+            candidate.currency,
+            wallet.currency,
+            event.date,
+            fxRates,
+          );
+        } catch {
+          amount = Number.NaN;
+        }
+        wallet.events.push({ date: event.date, amount });
+      }
+      legs.delete(key);
+    }
+    for (const candidate of legs.values())
+      candidate.tradeDates = trades
+        .filter((trade) => trade.entity === candidate.entity && trade.broker === candidate.broker)
+        .map((trade) => trade.date);
+    return [...legs.values()];
+  };
+
+  const counted = build(true);
+  const uncounted = build(false);
+  const owners = new Set([...counted, ...uncounted].map(ownerKey));
+  const chosen: CashLeg[] = [];
+  for (const owner of owners) {
+    const mine = (from: CashLeg[]) => from.filter((candidate) => ownerKey(candidate) === owner);
+    const declared = coverage.get(owner)?.tradeCash;
+    if (declared === "trade-settlement" || declared === "cash-flows") {
+      const picked = mine(declared === "trade-settlement" ? counted : uncounted);
+      for (const candidate of picked) candidate.tradeCashResolved = true;
+      chosen.push(...picked);
+      continue;
+    }
+    /* Nothing said where this broker books trade cash, so the movements are
+     * asked instead. A wallet begins empty: whichever reading totals back to
+     * nothing on the day before its first movement is the reading that has all
+     * of them. Both readings closing means the trades net to nothing over the
+     * whole history, which the ledger reading already accounts for. */
+    const closes = (from: CashLeg[]) => {
+      const anchored = from.filter((candidate) => candidate.anchors.length > 0);
+      return anchored.length > 0 && anchored.every(historyCloses);
+    };
+    const withTrades = mine(counted);
+    const withoutTrades = mine(uncounted);
+    const countedCloses = closes(withTrades);
+    const uncountedCloses = closes(withoutTrades);
+    const picked =
+      countedCloses && !uncountedCloses
+        ? withTrades
+        : uncountedCloses && !countedCloses
+          ? withoutTrades
+          : countedCloses && uncountedCloses
+            ? withoutTrades
+            : withTrades;
+    for (const candidate of picked)
+      candidate.tradeCashResolved = countedCloses !== uncountedCloses;
+    chosen.push(...picked);
   }
-  for (const candidate of legs.values())
-    candidate.tradeDates = trades
-      .filter((trade) => trade.entity === candidate.entity && trade.broker === candidate.broker)
-      .map((trade) => trade.date);
-  return [...legs.values()];
+  return chosen;
 }
 
 /** One symbol held by one owner: broker quantity snapshots plus signed trades.

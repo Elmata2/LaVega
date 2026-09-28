@@ -144,7 +144,7 @@ describe("IBKR cash history from adapter to portfolio", () => {
     ]);
   });
 
-  test("a snapshot stored before coverage existed restores as unknown", () => {
+  test("a snapshot stored before coverage existed reaches the same cash by arithmetic", () => {
     const current = createBrokerDataCache();
     current.apply(outcome("ibkr", ibkrResult()));
     const legacy: BrokerDataSnapshot = { ibkr: { ...current.snapshot().ibkr! } };
@@ -153,7 +153,19 @@ describe("IBKR cash history from adapter to portfolio", () => {
     const restored = createBrokerDataCache(legacy);
 
     expect(restored.read().cashCoverage).toEqual([]);
-    expect(valueSeries(restored)[0]).toMatchObject({ cashUnknown: ["ibkr:EUR", "ibkr:USD"] });
+    /* Nothing here says where IBKR books trade cash. Counting the executions
+     * on top of the ledger rows that already carry them double-counts and
+     * leaves the wallet short; counting the ledger alone closes it. The
+     * movements pick the same reading the statement would have declared, to
+     * the cent, and the only difference is that these figures say they were
+     * walked rather than proven. */
+    expect(valueSeries(restored)).toEqual(
+      settled.map((point) =>
+        point.date === "2026-01-09"
+          ? point
+          : { ...point, cashEstimated: ["ibkr:EUR", "ibkr:USD"] },
+      ),
+    );
   });
 });
 

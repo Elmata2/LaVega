@@ -641,7 +641,7 @@ test("an unproven broker folds a foreign trade into the one wallet it anchors", 
   expect(after?.cashValue).toBeGreaterThan(800);
 });
 
-test("a coverage row stored before tradeCash existed does not pass for a declaration", () => {
+test("a coverage row stored before tradeCash existed is settled by the movements", () => {
   /* This shipped. Rows written before the field existed read exactly like a
    * broker that named no trade-cash stream, so every trade was dropped and the
    * walk summed deposits without the purchases they funded. It put the wallet
@@ -687,11 +687,14 @@ test("a coverage row stored before tradeCash existed does not pass for a declara
     today: "2026-01-06",
   });
 
-  // Walking 1000 of deposits back off a 100 balance without the 900 purchase
-  // would read -900 on the opening day. It must refuse instead.
+  /* Counting the purchase, 1000 of deposits less 900 spent comes back to an
+   * empty wallet. Not counting it reads -900 on the day the account opened.
+   * One closes and one does not, so the movements settle what the stored row
+   * could not say, and the opening day is the deposit rather than a debt. */
   expect(series.every((point) => (point.cashValue ?? 0) >= 0)).toBe(true);
-  expect(series[0]?.cashValue).toBeNull();
-  expect(series[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+  expect(series[0]?.cashValue).toBe(1000);
+  expect(series[0]?.cashUnknown).toEqual([]);
+  expect(series[0]?.cashEstimated).toEqual(["trading212:EUR"]);
 });
 
 test("a history whose movements do not close on an empty wallet is refused", () => {
@@ -882,16 +885,17 @@ test("settles a purchase once from the ledger row when the broker books trade ca
   ]);
 });
 
-test("with no coverage only the dated broker balance says what cash was", () => {
+test("with no coverage the movements settle which stream carries trade cash", () => {
   /* Nothing says whether this broker books trade cash in its ledger or on the
-   * trade, so the walk cannot tell whether a purchase is among these events or
-   * missing from them. A balance summed from movements that may omit every
-   * trade is not an estimate, it is a guess. */
+   * trade, so both readings are totalled. Counting the purchase closes the
+   * wallet; leaving it out leaves 200 unaccounted for. The account held 1000
+   * throughout, and saying 0 and 200 for the first two days understated a
+   * funded account by the whole of its cash. */
   const account = thousandEuroAccount("trading212");
 
   expect(account.series([account.deposit], [])).toEqual([
-    { date: "2026-01-02", value: 0, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-05", value: 200, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
     { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
   ]);
 });
