@@ -256,7 +256,9 @@ function PositionList({
                       {money(position.marketValue).replace(/^\+/, "")}
                     </span>
                     {position.priceStatus === "forward-filled" && (
-                      <span className="block text-xs text-warning">Estimated price</span>
+                      <span className="ml-2 text-xs font-medium text-warning" title="Price is estimated from latest available market data">
+                        · <span aria-hidden="true">est.</span><span className="sr-only">Estimated price</span>
+                      </span>
                     )}
                   </>
                 )}
@@ -408,9 +410,10 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         </div>
       </dl>
       {latest && latest.forwardFilled.length > 0 && (
-        <p className="mt-4 text-xs text-muted-foreground">
-          Estimated price: {latest.forwardFilled.join(", ")}
-        </p>
+        <details className="mt-4 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Estimated prices ({latest.forwardFilled.length})</summary>
+          <p className="mt-1 break-words"><span className="sr-only">Estimated price: </span>{latest.forwardFilled.join(", ")}</p>
+        </details>
       )}
       {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
         <div
@@ -1981,6 +1984,7 @@ function Overview() {
               <OverviewStatusRail dataVersion={state.data.dataVersion} />
             </aside>
           </div>
+          <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />
           <section aria-labelledby="positions-heading" data-dashboard-section="positions">
             <h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">
               Positions
@@ -1990,7 +1994,6 @@ function Overview() {
               currency={state.data.presentationCurrency}
             />
           </section>
-          <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />
         </>
       )}
     </div>

@@ -185,11 +185,13 @@ export function PortfolioBenchmarkChart({
       ),
     [selected, benchmarks],
   );
+  // Saved selection can arrive before benchmark prices. Ignore placeholders.
+  const loadedSeries = selectedSeries.filter((benchmark) => benchmark.points.length > 0);
   const visibleBenchmarks = selectedSeries.filter((benchmark) => visible.has(benchmark.symbol));
   const mode = deriveChartMode(selected);
   const indexed = useMemo(
-    () => buildIndexedSeries(points, selectedSeries, externalCashFlows),
-    [points, selectedSeries, externalCashFlows],
+    () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
+    [points, loadedSeries, externalCashFlows],
   );
   const chartPoints =
     mode === "euros"
@@ -500,7 +502,7 @@ export function PortfolioBenchmarkChart({
                     isAnimationActive={false}
                   />
                   {mode === "indexed" &&
-                    selectedSeries.map((benchmark, index) => (
+                    loadedSeries.map((benchmark, index) => (
                       <Line
                         key={benchmark.symbol}
                         dataKey={`benchmark:${benchmark.symbol}`}
