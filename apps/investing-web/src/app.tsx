@@ -422,7 +422,19 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           {latest.cashUnknown.length > 0 && (
             <p>Cash history unknown: {latest.cashUnknown.join(", ")}</p>
           )}
+          {Object.entries(latest.cashShortfall ?? {}).map(([wallet, amount]) => (
+            <p key={wallet}>
+              {wallet} is missing about {money(Math.abs(amount))} of{" "}
+              {amount < 0 ? "funding" : "spending"} before its balances add up.
+            </p>
+          ))}
         </div>
+      )}
+      {latest && (latest.cashEstimated?.length ?? 0) > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Estimated cash: {latest.cashEstimated?.join(", ")}. Walked from movements your broker
+          reported without proving the history complete.
+        </p>
       )}
     </section>
   );

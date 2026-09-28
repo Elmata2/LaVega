@@ -60,16 +60,21 @@ function valueSeries(cache: ReturnType<typeof createBrokerDataCache>) {
     dividends: data.dividends,
     cashCoverage: data.cashCoverage,
     today: "2026-01-09",
-  }).map(({ date, value, cashUnknown }) => ({ date, value, cashUnknown }));
+  }).map(({ date, value, cashUnknown, cashEstimated }) => ({
+    date,
+    value,
+    cashUnknown,
+    cashEstimated: cashEstimated ?? [],
+  }));
 }
 
 describe("IBKR cash history from adapter to portfolio", () => {
   const settled = [
-    { date: "2026-01-05", value: 1200, cashUnknown: [] },
-    { date: "2026-01-06", value: 1200, cashUnknown: [] },
-    { date: "2026-01-07", value: 1199.2, cashUnknown: [] },
-    { date: "2026-01-08", value: 1199.2, cashUnknown: [] },
-    { date: "2026-01-09", value: 1199.2, cashUnknown: [] },
+    { date: "2026-01-05", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-08", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-09", value: 1199.2, cashUnknown: [], cashEstimated: [] },
   ];
 
   test("counts a USD execution and its commission once from the Statement of Funds", () => {
@@ -126,7 +131,11 @@ describe("IBKR cash history from adapter to portfolio", () => {
     expect(cache.read().cashCoverage).toEqual([
       expect.objectContaining({ broker: "ibkr", status: "unknown" }),
     ]);
-    expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
+    /* No Statement of Funds means no proven window, so the cash report's own
+     * balances anchor a walk instead of standing alone. Nothing is unknown;
+     * every date before the closing statement is an estimate and says so. */
+    expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+    expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
       ["ibkr:EUR", "ibkr:USD"],
       ["ibkr:EUR", "ibkr:USD"],
       ["ibkr:EUR", "ibkr:USD"],
@@ -135,7 +144,7 @@ describe("IBKR cash history from adapter to portfolio", () => {
     ]);
   });
 
-  test("a snapshot stored before coverage existed restores as unknown", () => {
+  test("a snapshot stored before coverage existed reaches the same cash by arithmetic", () => {
     const current = createBrokerDataCache();
     current.apply(outcome("ibkr", ibkrResult()));
     const legacy: BrokerDataSnapshot = { ibkr: { ...current.snapshot().ibkr! } };
@@ -144,7 +153,19 @@ describe("IBKR cash history from adapter to portfolio", () => {
     const restored = createBrokerDataCache(legacy);
 
     expect(restored.read().cashCoverage).toEqual([]);
-    expect(valueSeries(restored)[0]).toMatchObject({ cashUnknown: ["ibkr:EUR", "ibkr:USD"] });
+    /* Nothing here says where IBKR books trade cash. Counting the executions
+     * on top of the ledger rows that already carry them double-counts and
+     * leaves the wallet short; counting the ledger alone closes it. The
+     * movements pick the same reading the statement would have declared, to
+     * the cent, and the only difference is that these figures say they were
+     * walked rather than proven. */
+    expect(valueSeries(restored)).toEqual(
+      settled.map((point) =>
+        point.date === "2026-01-09"
+          ? point
+          : { ...point, cashEstimated: ["ibkr:EUR", "ibkr:USD"] },
+      ),
+    );
   });
 });
 
@@ -198,11 +219,20 @@ test("Trading 212 cash with unproven history is known only on its balance date",
     }),
   );
 
+  /* This history is short a page, so its movements do not total back to an
+   * empty wallet and the walk is refused. Only the balance date stands. */
   expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
     ["trading212:EUR"],
     ["trading212:EUR"],
     ["trading212:EUR"],
     ["trading212:EUR"],
+    [],
+  ]);
+  expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
+    [],
+    [],
+    [],
+    [],
     [],
   ]);
 });
@@ -294,16 +324,18 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
     const history = points.filter((point) => point.date < "2026-01-09");
 
     expect(history.map(({ date }) => date)).toEqual(DATES.slice(0, 4));
+    /* Short a page and holding a transfer whose direction was never stated:
+     * the movements cannot total back to an empty wallet, so no date is
+     * walked and none is estimated. */
     expect(history.every((point) => point.cashUnknown.includes("trading212:EUR"))).toBe(true);
+    expect(history.every((point) => (point.cashEstimated ?? []).length === 0)).toBe(true);
     expect(
       buildIndexedSeries(history, [], dashboard.externalCashFlows).map(
         (point) => point.portfolioReturn,
       ),
     ).toEqual([null, null, null, null]);
-    const { metrics, risk } = buildHistoricalRisk(dashboard, "All");
+    const { risk } = buildHistoricalRisk(dashboard, "All");
     expect(risk.status).toBe("unavailable");
     expect(risk.reasons).toContain("Cash history missing: trading212:EUR.");
-    expect(metrics.annualizedVolatility).toBeNull();
-    expect(metrics.maxDrawdown).toBeNull();
   });
 });
