@@ -189,6 +189,7 @@ test("Trading 212 cash with unproven history is known only on its balance date",
       cashHistory: {
         entity: "personal",
         broker: "trading212",
+        tradeCash: "trade-settlement",
         status: "unknown",
         reason: "unproven",
       },

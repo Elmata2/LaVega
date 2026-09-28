@@ -226,9 +226,12 @@ function cashHistory(
   entity: string,
   sections: Pick<BrokerSections, "cashBalances" | "cashFlows" | "dividends">,
 ): CashHistoryCoverage {
+  /* Statement of Funds books every cash movement including trades, so that is
+   * where IBKR trade cash lives whether or not a window is proven. */
   const unknown = (reason: string): CashHistoryCoverage => ({
     entity,
     broker: "ibkr",
+    tradeCash: "cash-flows",
     status: "unknown",
     reason,
   });

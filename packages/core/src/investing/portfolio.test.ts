@@ -632,6 +632,7 @@ test.each([
       {
         entity: "personal",
         broker: "trading212",
+        tradeCash: "trade-settlement",
         status: "unknown",
         reason: "trade settlement unverified",
       },
@@ -785,7 +786,13 @@ test.each([
       cashBalances: [eurCash(1000, "2026-01-02")],
       cashFlows,
       cashCoverage: [
-        { entity: "personal", broker: "trading212", status: "unknown", reason: "unverified" },
+        {
+          entity: "personal",
+          broker: "trading212",
+          tradeCash: "trade-settlement",
+          status: "unknown",
+          reason: "unverified",
+        },
       ],
       today: "2026-01-06",
     });
