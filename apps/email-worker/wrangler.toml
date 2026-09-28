@@ -10,6 +10,8 @@
 # De volledige stappen — Email Routing aanzetten, de catch-all-regel, de
 # n8n-credential — staan in docs/n8n/DOORSTUURADRES.md.
 
+# Workers Builds (root /apps/email-worker, branch master) deploys this Worker.
+# Name stays lavega-email-in so Email Routing on lavega.dev keeps matching.
 name = "lavega-email-in"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
@@ -21,6 +23,10 @@ compatibility_flags = []
 
 [observability]
 enabled = true
+
+# Non-production Workers Builds runs `npx wrangler preview`.
+# Wrangler requires this block. Empty: no preview-only bindings.
+[previews]
 
 # N8N_WEBHOOK_URL en N8N_SHARED_SECRET staan hier NIET. Het zijn secrets:
 #     pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL
