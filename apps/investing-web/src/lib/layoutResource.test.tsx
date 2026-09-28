@@ -51,13 +51,6 @@ function ControlProbe() {
       </button>
       <button
         type="button"
-        data-testid="toggle-positions"
-        onClick={() => layout.setModules({ positions: false })}
-      >
-        toggle positions
-      </button>
-      <button
-        type="button"
         data-testid="toggle-sectors"
         onClick={() => layout.setWidgets({ sectors: false })}
       >
@@ -67,32 +60,70 @@ function ControlProbe() {
   );
 }
 
-/** Stubs `fetch` so the initial GET resolves immediately with an empty
- *  layout, and every PUT instead parks its resolver in order of arrival —
- *  the test decides which PUT answers first by calling `resolvers[n]`. */
-function stubQueuedPuts(): Array<(response: Response) => void> {
-  const resolvers: Array<(response: Response) => void> = [];
+type QueuedPut = { body: unknown; resolve: (response: Response) => void; settled: boolean };
+
+/** Stubs `fetch` so the initial GET resolves immediately with `server`, and
+ *  every PUT parks its resolver so the test decides when and how it answers.
+ *  `store.saved` is the last body the fake server accepted. */
+function stubQueuedPuts(server: unknown = { modules: {}, widgets: {} }) {
+  const puts: QueuedPut[] = [];
+  const store = { saved: server };
   vi.stubGlobal(
     "fetch",
     vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "PUT") {
-        return new Promise<Response>((resolve) => resolvers.push(resolve));
+        const body: unknown = JSON.parse(String(init.body));
+        return new Promise<Response>((resolve) => {
+          const put: QueuedPut = {
+            body,
+            settled: false,
+            resolve: (response) => {
+              put.settled = true;
+              if (response.ok) store.saved = body;
+              resolve(response);
+            },
+          };
+          puts.push(put);
+        });
       }
-      return Promise.resolve(new Response(JSON.stringify({ modules: {}, widgets: {} })));
+      return Promise.resolve(new Response(JSON.stringify(server)));
     }),
   );
-  return resolvers;
+  const outstanding = () => puts.filter((put) => !put.settled);
+  return { puts, store, outstanding };
+}
+
+const ok = () => new Response(null, { status: 204 });
+const fail = () => new Response(null, { status: 500 });
+
+function text(container: HTMLElement, id: string) {
+  return container.querySelector(`[data-testid="${id}"]`)?.textContent;
+}
+
+function click(container: HTMLElement, id: string) {
+  container.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)?.click();
+}
+
+async function step(fn: () => void) {
+  await act(async () => {
+    fn();
+    await flush();
+  });
+}
+
+async function mountReady() {
+  const { container, root } = render();
+  await step(() => root.render(<ControlProbe />));
+  return { container, root };
 }
 
 test("resolves registry defaults immediately, before the fetch settles", async () => {
   vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
   const { container, root } = render();
   act(() => root.render(<Probe />));
-  expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("loading");
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth,agents",
-  );
-  root.unmount();
+  expect(text(container, "status")).toBe("loading");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth,agents");
+  act(() => root.unmount());
 });
 
 test("applies the tenant's stored choices once the fetch resolves", async () => {
@@ -105,33 +136,19 @@ test("applies the tenant's stored choices once the fetch resolves", async () => 
     ),
   );
   const { container, root } = render();
-  await act(async () => {
-    root.render(<Probe />);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("ready");
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth",
-  );
-  expect(container.querySelector('[data-testid="widgets"]')?.textContent).toBe(
-    "performance,allocation,kpis,risk,agent",
-  );
-  root.unmount();
+  await step(() => root.render(<Probe />));
+  expect(text(container, "status")).toBe("ready");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  act(() => root.unmount());
 });
 
 test("a failed or unauthorized fetch keeps the registry defaults instead of erroring", async () => {
   vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("", { status: 401 }))));
   const { container, root } = render();
-  await act(async () => {
-    root.render(<Probe />);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth,agents",
-  );
-  root.unmount();
+  await step(() => root.render(<Probe />));
+  expect(text(container, "modules")).toBe("overview,positions,net-worth,agents");
+  act(() => root.unmount());
 });
 
 test("a module toggle made before the initial fetch resolves survives that fetch", async () => {
@@ -139,7 +156,7 @@ test("a module toggle made before the initial fetch resolves survives that fetch
   vi.stubGlobal(
     "fetch",
     vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "PUT") return Promise.resolve(new Response(null, { status: 204 }));
+      if (init?.method === "PUT") return Promise.resolve(ok());
       return new Promise<Response>((resolve) => {
         resolveGet = resolve;
       });
@@ -148,179 +165,143 @@ test("a module toggle made before the initial fetch resolves survives that fetch
   const { container, root } = render();
   act(() => root.render(<ControlProbe />));
 
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth",
-  );
+  await step(() => click(container, "toggle-agents"));
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
 
-  await act(async () => {
-    resolveGet(new Response(JSON.stringify({ modules: {}, widgets: {} })));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("ready");
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth",
-  );
-  root.unmount();
+  await step(() => resolveGet(new Response(JSON.stringify({ modules: {}, widgets: {} }))));
+  expect(text(container, "status")).toBe("ready");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  act(() => root.unmount());
 });
 
-test("a failed save reverts to the last confirmed layout and surfaces an error", async () => {
+test("a toggle made before the initial fetch resolves is saved on top of the server's layout", async () => {
+  let resolveGet: (value: Response) => void = () => {};
+  const bodies: unknown[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "PUT") return Promise.resolve(new Response(null, { status: 500 }));
-      return Promise.resolve(new Response(JSON.stringify({ modules: {}, widgets: {} })));
+      if (init?.method === "PUT") {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(ok());
+      }
+      return new Promise<Response>((resolve) => {
+        resolveGet = resolve;
+      });
     }),
   );
   const { container, root } = render();
-  await act(async () => {
-    root.render(<ControlProbe />);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth,agents",
+  act(() => root.render(<ControlProbe />));
+
+  await step(() => click(container, "toggle-agents"));
+  await step(() =>
+    resolveGet(new Response(JSON.stringify({ modules: {}, widgets: { sectors: false } }))),
   );
 
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.querySelector('[data-testid="save-error"]')?.textContent).toBe(
-    "Couldn't save — try again.",
-  );
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth,agents",
-  );
-  root.unmount();
+  expect(bodies).toEqual([{ modules: { agents: false }, widgets: { sectors: false } }]);
+  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  act(() => root.unmount());
 });
 
-test("an older toggle's failure does not override a newer toggle's success", async () => {
-  const resolvers = stubQueuedPuts();
-  const { container, root } = render();
-  await act(async () => {
-    root.render(<ControlProbe />);
-    await flush();
-  });
+test("a failed save reverts to the last confirmed layout and surfaces an error", async () => {
+  const { puts } = stubQueuedPuts();
+  const { container, root } = await mountReady();
 
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click(); // A
-    await flush();
-  });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-positions"]')?.click(); // B
-    await flush();
-  });
-  expect(resolvers).toHaveLength(2);
+  await step(() => click(container, "toggle-agents"));
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  await step(() => puts[0]!.resolve(fail()));
 
-  // B (the newer request) answers first, and succeeds.
-  await act(async () => {
-    resolvers[1]!(new Response(null, { status: 204 }));
-    await flush();
-  });
-  // A (the older, superseded request) answers late, and fails.
-  await act(async () => {
-    resolvers[0]!(new Response(null, { status: 500 }));
-    await flush();
-  });
-
-  expect(container.querySelector('[data-testid="save-error"]')?.textContent).toBe("");
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,net-worth,agents",
-  );
-  root.unmount();
+  expect(text(container, "save-error")).toBe("Couldn't save — try again.");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth,agents");
+  act(() => root.unmount());
 });
 
-test("an older toggle's late success does not regress the confirmed layout past a newer success", async () => {
-  const resolvers = stubQueuedPuts();
-  const { container, root } = render();
-  await act(async () => {
-    root.render(<ControlProbe />);
-    await flush();
-  });
+test("a burst of toggles sends one PUT at a time, the second carrying every edit", async () => {
+  const { puts } = stubQueuedPuts();
+  const { container, root } = await mountReady();
 
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click(); // A
-    await flush();
-  });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-positions"]')?.click(); // B
-    await flush();
-  });
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  expect(puts).toHaveLength(1);
+  expect(puts[0]!.body).toEqual({ modules: { agents: false }, widgets: {} });
 
-  // B (the newer request) answers first, and succeeds.
-  await act(async () => {
-    resolvers[1]!(new Response(null, { status: 204 }));
-    await flush();
-  });
-  // A answers late, also a success — it must not become the confirmed layout.
-  await act(async () => {
-    resolvers[0]!(new Response(null, { status: 204 }));
-    await flush();
-  });
+  await step(() => puts[0]!.resolve(ok()));
+  expect(puts).toHaveLength(2);
+  expect(puts[1]!.body).toEqual({ modules: { agents: false }, widgets: { sectors: false } });
 
-  // A third toggle (C) fails; it must revert to B's layout, not A's.
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-sectors"]')?.click();
-    await flush();
-  });
-  expect(resolvers).toHaveLength(3);
-  await act(async () => {
-    resolvers[2]!(new Response(null, { status: 500 }));
-    await flush();
-  });
-
-  expect(container.querySelector('[data-testid="save-error"]')?.textContent).toBe(
-    "Couldn't save — try again.",
-  );
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,net-worth,agents",
-  );
-  root.unmount();
+  await step(() => puts[1]!.resolve(ok()));
+  expect(puts).toHaveLength(2);
+  expect(text(container, "save-error")).toBe("");
+  act(() => root.unmount());
 });
 
-test("an older toggle's success while a newer one is still pending becomes the revert target if that newer one fails", async () => {
-  const resolvers = stubQueuedPuts();
-  const { container, root } = render();
-  await act(async () => {
-    root.render(<ControlProbe />);
-    await flush();
-  });
+test("when the in-flight save fails, the queued edit is still sent and its success clears the error", async () => {
+  const { puts } = stubQueuedPuts();
+  const { container, root } = await mountReady();
 
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-agents"]')?.click(); // A
-    await flush();
-  });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-testid="toggle-positions"]')?.click(); // B
-    await flush();
-  });
-  expect(resolvers).toHaveLength(2);
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  await step(() => puts[0]!.resolve(fail()));
+  expect(puts).toHaveLength(2);
+  expect(puts[1]!.body).toEqual({ modules: { agents: false }, widgets: { sectors: false } });
 
-  // A (older) succeeds while B (the request the reader is still waiting on)
-  // is still in flight — A's save is real and must not be forgotten.
-  await act(async () => {
-    resolvers[0]!(new Response(null, { status: 204 }));
-    await flush();
-  });
-  // B then fails: there is nothing newer confirmed than A, so the revert
-  // must land on A's layout, not further back.
-  await act(async () => {
-    resolvers[1]!(new Response(null, { status: 500 }));
-    await flush();
-  });
+  await step(() => puts[1]!.resolve(ok()));
+  expect(text(container, "save-error")).toBe("");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  act(() => root.unmount());
+});
 
-  expect(container.querySelector('[data-testid="save-error"]')?.textContent).toBe(
-    "Couldn't save — try again.",
+test("when the first save lands and the queued one fails, the layout reverts to the first save", async () => {
+  const { puts, store } = stubQueuedPuts();
+  const { container, root } = await mountReady();
+
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  await step(() => puts[0]!.resolve(ok()));
+  await step(() => puts[1]!.resolve(fail()));
+
+  expect(store.saved).toEqual({ modules: { agents: false }, widgets: {} });
+  expect(text(container, "save-error")).toBe("Couldn't save — try again.");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,sectors,agent");
+  act(() => root.unmount());
+});
+
+test("once saves settle, the layout on screen is the layout the server holds", async () => {
+  const { store, outstanding } = stubQueuedPuts();
+  const { container, root } = await mountReady();
+
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  // The newest outstanding save fails first, then the oldest succeeds.
+  await step(() => outstanding().at(-1)!.resolve(fail()));
+  await step(() => outstanding()[0]!.resolve(ok()));
+  expect(outstanding()).toHaveLength(0);
+
+  const saved = store.saved as {
+    modules: Record<string, boolean>;
+    widgets: Record<string, boolean>;
+  };
+  expect(text(container, "modules")!.split(",").includes("agents")).toBe(
+    saved.modules.agents !== false,
   );
-  expect(container.querySelector('[data-testid="modules"]')?.textContent).toBe(
-    "overview,positions,net-worth",
+  expect(text(container, "widgets")!.split(",").includes("sectors")).toBe(
+    saved.widgets.sectors !== false,
   );
-  root.unmount();
+  act(() => root.unmount());
+});
+
+test("unmounting mid-save still sends the queued edit and never updates the unmounted hook", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { puts } = stubQueuedPuts();
+  const { container, root } = await mountReady();
+
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  act(() => root.unmount());
+
+  await step(() => puts[0]!.resolve(ok()));
+  expect(puts).toHaveLength(2);
+  await step(() => puts[1]!.resolve(fail()));
+  expect(errors).not.toHaveBeenCalled();
 });

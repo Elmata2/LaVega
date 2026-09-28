@@ -64,6 +64,25 @@ export type InvestingLayoutResource = {
   saveError: string | null;
 };
 
+/** The save pipeline, single-flight: at most one PUT is ever on the wire.
+ *  `confirmed` is what the server holds; `inFlight` is the body of the PUT
+ *  now outstanding; `pending` is the newest desired layout waiting its turn,
+ *  so any number of toggles made during one PUT coalesce into the next. What
+ *  the reader sees is always the newest of the three. Nothing is sent until
+ *  the initial GET settles, so a PUT never overwrites server choices the
+ *  hook hasn't read yet. */
+type SaveQueue = {
+  loaded: boolean;
+  confirmed: InvestingLayout;
+  inFlight: InvestingLayout | null;
+  pending: InvestingLayout | null;
+  saveError: string | null;
+};
+
+function displayed(queue: SaveQueue): InvestingLayout {
+  return queue.pending ?? queue.inFlight ?? queue.confirmed;
+}
+
 export function useInvestingLayout(): InvestingLayoutResource {
   const [state, setState] = useState<LayoutState>({
     status: "loading",
@@ -71,39 +90,19 @@ export function useInvestingLayout(): InvestingLayoutResource {
     saveError: null,
   });
 
-  /* The refs below exist because closures over `state` go stale the instant
-   * a second call — the initial GET, or a second toggle — lands before the
-   * first setState has re-rendered:
-   *  - layoutRef mirrors the optimistic layout the reader is looking at, so
-   *    a PUT body always reflects every edit made so far, not just the one
-   *    that triggered it.
-   *  - confirmedRef is the last layout the server actually has, so a failed
-   *    save has something honest to revert to.
-   *  - localEditsRef is only the reader's own explicit choices (never the
-   *    server's), so a slow initial GET can merge underneath them instead
-   *    of overwriting a toggle made while it was still in flight.
-   *  - saveSeqRef numbers every PUT this hook sends, so a response can tell
-   *    whether it belongs to the toggle the reader is currently looking at
-   *    (the latest one issued) or an earlier one a later toggle has since
-   *    superseded.
-   *  - confirmedSeqRef is the sequence number of whichever PUT most
-   *    recently confirmed confirmedRef. A *success* is real, permanent
-   *    server state the instant it arrives, however late — dropping it
-   *    entirely (as an older-response check alone would) would forget a
-   *    save that did land. So any success newer than confirmedSeqRef still
-   *    updates confirmedRef, even out of order; only a *failure* is
-   *    ignored when it isn't the latest request, since an old failure says
-   *    nothing about whether a newer edit saved. Only the latest request,
-   *    success or failure, is allowed to touch what's on screen
-   *    (state.layout/saveError) — an older success updates the fallback
-   *    silently, an older failure is simply stale news.
-   *  - mountedRef guards every async continuation against running after
-   *    unmount, for both the initial GET and every PUT. */
-  const layoutRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
-  const confirmedRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
-  const confirmedSeqRef = useRef(0);
+  /* A ref, not state: a second toggle can land before the first one's
+   * setState re-renders, and it must build on the first. localEditsRef is
+   * only the reader's explicit choices, so the initial GET merges under them.
+   * The queue keeps draining after unmount so an edit is never dropped;
+   * mountedRef only stops the setState. */
+  const queueRef = useRef<SaveQueue>({
+    loaded: false,
+    confirmed: EMPTY_LAYOUT,
+    inFlight: null,
+    pending: null,
+    saveError: null,
+  });
   const localEditsRef = useRef<InvestingLayout>({ modules: {}, widgets: {} });
-  const saveSeqRef = useRef(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -113,45 +112,49 @@ export function useInvestingLayout(): InvestingLayoutResource {
     };
   }, []);
 
+  function render() {
+    if (!mountedRef.current) return;
+    const queue = queueRef.current;
+    setState({ status: "ready", layout: displayed(queue), saveError: queue.saveError });
+  }
+
+  function pump() {
+    const queue = queueRef.current;
+    if (!queue.loaded || queue.inFlight || !queue.pending) return;
+    const sent = queue.pending;
+    queue.inFlight = sent;
+    queue.pending = null;
+    void putLayout(sent).then((ok) => {
+      queue.inFlight = null;
+      if (ok) queue.confirmed = sent;
+      if (!queue.pending) queue.saveError = ok ? null : SAVE_ERROR_MESSAGE;
+      pump();
+      render();
+    });
+  }
+
   useEffect(() => {
     void fetchLayout().then((serverLayout) => {
-      if (!mountedRef.current) return;
-      const merged: InvestingLayout = {
-        modules: { ...serverLayout.modules, ...localEditsRef.current.modules },
-        widgets: { ...serverLayout.widgets, ...localEditsRef.current.widgets },
-      };
-      confirmedRef.current = merged;
-      layoutRef.current = merged;
-      setState((previous) => ({ status: "ready", layout: merged, saveError: previous.saveError }));
+      const queue = queueRef.current;
+      queue.loaded = true;
+      queue.confirmed = serverLayout;
+      if (queue.pending) {
+        queue.pending = {
+          modules: { ...serverLayout.modules, ...localEditsRef.current.modules },
+          widgets: { ...serverLayout.widgets, ...localEditsRef.current.widgets },
+        };
+      }
+      pump();
+      render();
     });
   }, []);
 
   function applyChange<K extends "modules" | "widgets">(kind: K, next: InvestingLayout[K]) {
-    const nextLayout: InvestingLayout = { ...layoutRef.current, [kind]: next };
-    layoutRef.current = nextLayout;
+    const queue = queueRef.current;
     localEditsRef.current = { ...localEditsRef.current, [kind]: next };
-    setState((previous) => ({ status: "ready", layout: nextLayout, saveError: previous.saveError }));
-
-    const mySeq = ++saveSeqRef.current;
-    void putLayout(nextLayout).then((ok) => {
-      if (!mountedRef.current) return;
-      const isLatest = mySeq === saveSeqRef.current;
-      if (ok) {
-        // A success is real server state the moment it arrives, however
-        // late — record it as long as nothing newer already has, but only
-        // touch what's on screen if this was the request the reader is
-        // still waiting on.
-        if (mySeq > confirmedSeqRef.current) {
-          confirmedRef.current = nextLayout;
-          confirmedSeqRef.current = mySeq;
-        }
-        if (isLatest) setState((previous) => ({ ...previous, saveError: null }));
-        return;
-      }
-      if (!isLatest) return; // superseded by a later toggle
-      layoutRef.current = confirmedRef.current;
-      setState({ status: "ready", layout: confirmedRef.current, saveError: SAVE_ERROR_MESSAGE });
-    });
+    queue.pending = { ...displayed(queue), [kind]: next };
+    pump();
+    render();
   }
 
   function setModules(next: Partial<Record<InvestingModuleId, boolean>>) {
