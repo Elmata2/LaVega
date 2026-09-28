@@ -305,3 +305,91 @@ test("unmounting mid-save still sends the queued edit and never updates the unmo
   await step(() => puts[1]!.resolve(fail()));
   expect(errors).not.toHaveBeenCalled();
 });
+
+const LOAD_ERROR = "Couldn't load your settings — changes aren't saved yet.";
+
+/** GETs answer from `gets` in order (a missing entry hangs until aborted);
+ *  PUT bodies are recorded and answered 204. */
+function stubGets(gets: Array<() => Promise<Response>>) {
+  const bodies: unknown[] = [];
+  let getCount = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(ok());
+      }
+      const answer = gets[getCount++];
+      if (answer) return answer();
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    }),
+  );
+  return { bodies, getCount: () => getCount };
+}
+
+test("a hanging initial fetch times out, shows a load error and saves nothing", async () => {
+  vi.useFakeTimers();
+  try {
+    const { bodies } = stubGets([]);
+    const { container, root } = render();
+    act(() => root.render(<ControlProbe />));
+    await act(async () => {
+      click(container, "toggle-agents");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(text(container, "save-error")).toBe("");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_000);
+    });
+    expect(text(container, "save-error")).toBe(LOAD_ERROR);
+    expect(text(container, "modules")).toBe("overview,positions,net-worth");
+    expect(bodies).toEqual([]);
+    act(() => root.unmount());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("after a failed initial fetch, a toggle retries the fetch instead of saving over the server", async () => {
+  let resolveRetry: (value: Response) => void = () => {};
+  const { bodies, getCount } = stubGets([
+    () => Promise.resolve(new Response("", { status: 500 })),
+    () =>
+      new Promise<Response>((resolve) => {
+        resolveRetry = resolve;
+      }),
+  ]);
+  const { container, root } = await mountReady();
+  expect(text(container, "save-error")).toBe(LOAD_ERROR);
+
+  await step(() => click(container, "toggle-agents"));
+  expect(getCount()).toBe(2);
+  expect(bodies).toEqual([]);
+  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+
+  await step(() =>
+    resolveRetry(new Response(JSON.stringify({ modules: {}, widgets: { sectors: false } }))),
+  );
+  expect(bodies).toEqual([{ modules: { agents: false }, widgets: { sectors: false } }]);
+  expect(text(container, "save-error")).toBe("");
+  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  act(() => root.unmount());
+});
+
+test("an empty 200 is a real load, so a toggle saves straight away", async () => {
+  const { bodies, getCount } = stubGets([
+    () => Promise.resolve(new Response(JSON.stringify({ modules: {}, widgets: {} }))),
+  ]);
+  const { container, root } = await mountReady();
+  await step(() => click(container, "toggle-agents"));
+  expect(getCount()).toBe(1);
+  expect(bodies).toEqual([{ modules: { agents: false }, widgets: {} }]);
+  expect(text(container, "save-error")).toBe("");
+  act(() => root.unmount());
+});

@@ -9,6 +9,8 @@ type LayoutState = {
 };
 
 const SAVE_ERROR_MESSAGE = "Couldn't save — try again.";
+const LOAD_ERROR_MESSAGE = "Couldn't load your settings — changes aren't saved yet.";
+const LOAD_TIMEOUT_MS = 8_000;
 
 const EMPTY_LAYOUT: InvestingLayout = { modules: {}, widgets: {} };
 
@@ -16,10 +18,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-/** Decodes only as much of the contract as this app reads. Any other shape —
- *  including a 401/500 body — falls back to EMPTY_LAYOUT, which resolves to
- *  registry defaults exactly like a tenant who never chose. A layout
- *  preference failing to load must never blank the shell (spec §5). */
+/** Decodes only as much of the contract as this app reads. A shape it
+ *  doesn't recognise resolves to registry defaults, exactly like a tenant
+ *  who never chose. */
 function decodeLayout(payload: unknown): InvestingLayout {
   if (!isRecord(payload)) return EMPTY_LAYOUT;
   return {
@@ -28,13 +29,20 @@ function decodeLayout(payload: unknown): InvestingLayout {
   };
 }
 
-async function fetchLayout(): Promise<InvestingLayout> {
+/** Returns the stored layout, or null when the server's answer is unknown
+ *  (non-2xx, unreadable body, network error, timeout). The caller must not
+ *  save while it's unknown: a PUT would overwrite choices it never read. */
+async function fetchLayout(): Promise<InvestingLayout | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOAD_TIMEOUT_MS);
   try {
-    const response = await fetch("/api/investing/layout");
-    if (!response.ok) return EMPTY_LAYOUT;
-    return decodeLayout(await response.json().catch(() => null));
+    const response = await fetch("/api/investing/layout", { signal: controller.signal });
+    if (!response.ok) return null;
+    return decodeLayout(await response.json());
   } catch {
-    return EMPTY_LAYOUT;
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -69,10 +77,10 @@ export type InvestingLayoutResource = {
  *  now outstanding; `pending` is the newest desired layout waiting its turn,
  *  so any number of toggles made during one PUT coalesce into the next. What
  *  the reader sees is always the newest of the three. Nothing is sent until
- *  the initial GET settles, so a PUT never overwrites server choices the
- *  hook hasn't read yet. */
+ *  the GET has `loaded`, so a PUT never overwrites server choices the hook
+ *  hasn't read; a `failed` load is retried by the next toggle. */
 type SaveQueue = {
-  loaded: boolean;
+  load: "loading" | "loaded" | "failed";
   confirmed: InvestingLayout;
   inFlight: InvestingLayout | null;
   pending: InvestingLayout | null;
@@ -96,7 +104,7 @@ export function useInvestingLayout(): InvestingLayoutResource {
    * The queue keeps draining after unmount so an edit is never dropped;
    * mountedRef only stops the setState. */
   const queueRef = useRef<SaveQueue>({
-    loaded: false,
+    load: "loading",
     confirmed: EMPTY_LAYOUT,
     inFlight: null,
     pending: null,
@@ -120,7 +128,7 @@ export function useInvestingLayout(): InvestingLayoutResource {
 
   function pump() {
     const queue = queueRef.current;
-    if (!queue.loaded || queue.inFlight || !queue.pending) return;
+    if (queue.load !== "loaded" || queue.inFlight || !queue.pending) return;
     const sent = queue.pending;
     queue.inFlight = sent;
     queue.pending = null;
@@ -133,11 +141,19 @@ export function useInvestingLayout(): InvestingLayoutResource {
     });
   }
 
-  useEffect(() => {
+  function load() {
+    const queue = queueRef.current;
+    queue.load = "loading";
     void fetchLayout().then((serverLayout) => {
-      const queue = queueRef.current;
-      queue.loaded = true;
+      if (serverLayout === null) {
+        queue.load = "failed";
+        queue.saveError = LOAD_ERROR_MESSAGE;
+        render();
+        return;
+      }
+      queue.load = "loaded";
       queue.confirmed = serverLayout;
+      queue.saveError = null;
       if (queue.pending) {
         queue.pending = {
           modules: { ...serverLayout.modules, ...localEditsRef.current.modules },
@@ -147,12 +163,15 @@ export function useInvestingLayout(): InvestingLayoutResource {
       pump();
       render();
     });
-  }, []);
+  }
+
+  useEffect(load, []);
 
   function applyChange<K extends "modules" | "widgets">(kind: K, next: InvestingLayout[K]) {
     const queue = queueRef.current;
     localEditsRef.current = { ...localEditsRef.current, [kind]: next };
     queue.pending = { ...displayed(queue), [kind]: next };
+    if (queue.load === "failed") load();
     pump();
     render();
   }
