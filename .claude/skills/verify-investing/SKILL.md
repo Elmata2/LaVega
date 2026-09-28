@@ -80,7 +80,7 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
   - `pnpm run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
     the prod guard. It runs against a stub HTTP server and fake `browse` and `vercel`
     binaries, so it is fast and offline, and it can exercise writes such as `prices purge
-    --yes` without deleting real data. Run it after any change to the CLI, and add a test
+--yes` without deleting real data. Run it after any change to the CLI, and add a test
     for each new command or flag.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
@@ -193,7 +193,7 @@ Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`. `p
 
 Standards for the proof, not just the pass:
 
-- Exercise the real path. `sync --force` posts to the same route the **Nu synchroniseren**
+- Exercise the real path. `sync --force` posts to the same route the **Start sync**
   button posts to. Do not reach into a store or call a test-only helper to fake the state.
 - Capture the action and the resulting state, not only the end screen. For a sync: the status
   before, the POST response, the settled progress, and the dashboard afterwards.

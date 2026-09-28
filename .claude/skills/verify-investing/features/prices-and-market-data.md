@@ -5,20 +5,19 @@ overlay, and the consent gate in front of Yahoo Finance.
 
 ## Sub-features
 
-- market-data consent — asked before the server makes any Yahoo request; the disclosure has
-  a version (`yahoo-finance-v1`) and a re-ask when it changes.
-- price sync and backfill, with its own progress (`Bezig`, `API-pauze`).
-- price cache purge (`Cache`, confirmed with `Ja, alles verwijderen`, then
-  `Prijsgegevens verwijderd`).
+- market-data consent (`Allow Yahoo Finance`) — asked before the server makes any Yahoo
+  request; the disclosure has a version (`yahoo-finance-v1`) and a re-ask when it changes.
+- price sync and backfill, with its own progress (`In progress`, `API pause`).
+- price cache purge (`Cache`, confirmed with `Yes, delete everything`, then
+  `Price data deleted`; `Failed to clear` on error).
 - benchmark selection and search for the chart overlay.
 - selected benchmarks are first in the price-sync queue. New selections enter a paused run on its next slice. A page that joins an active server run waits for it, then starts a fresh discovery.
 - FX rates and ISIN → ticker mapping used while pricing.
-- key status (`Niet ingesteld`) for `ANTHROPIC_API_KEY` and `MARKET_DATA_API_KEY`.
 
 ## How to get to it (user POV)
 
 Consent is requested on the overview before the first market-data call. The `Cache` and
-`Operationele status` panels on the overview hold the purge and the progress readouts;
+`Operational status` panels on the overview hold the purge and the progress readouts;
 benchmarks are chosen from the portfolio chart.
 
 ## Driving it with control-investing
@@ -46,4 +45,4 @@ node $C api GET '/api/market-data/identifier?isin=US0378331005'
   `--target prod` it throws away the real cache — the next dashboard load is slow and
   entirely dependent on Yahoo being up.
 - Missing `MARKET_DATA_API_KEY` degrades to a clear status rather than an error. Yahoo and
-  Frankfurter need no key, so `Niet ingesteld` is not by itself a fault.
+  Frankfurter need no key, so a missing key is not by itself a fault.

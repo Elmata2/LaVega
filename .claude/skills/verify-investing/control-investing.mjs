@@ -1734,7 +1734,7 @@ const COMMANDS = [
     name: "sync",
     group: "Write",
     summary: "Start a broker sync; --wait polls until it settles",
-    description: "Posts the same route the Nu synchroniseren button posts to.",
+    description: "Posts the same route the Start sync button posts to.",
     flags: {
       force: { type: "boolean", description: "sync even if the last run is recent" },
       wait: { type: "boolean", description: "poll sync status until it settles" },

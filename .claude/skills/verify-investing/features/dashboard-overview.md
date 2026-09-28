@@ -4,18 +4,22 @@ The landing view: portfolio value over time, KPIs, allocation, and the operation
 
 ## Sub-features
 
-- portfolio chart (`Portefeuilleoverzicht`) with window modes and a benchmark overlay.
-- KPI block (`Portefeuille-KPI's`) — volatility, beta, alpha, max drawdown, from
+- headline figures: `Portfolio value`, `Daily change`, `Total return`; `Value partly
+unknown` when some positions are unpriced.
+- portfolio chart (aside `Portfolio overview`) with window modes and a benchmark overlay.
+- KPI block (`Portfolio KPIs`) — volatility, beta, alpha, max drawdown, from
   `/api/investing/summary`.
-- allocation donut and sector exposure.
-- net-worth chart.
-- operational status (`Operationele status`) — key configuration, vault state, sync progress.
-- degraded and empty states: `Dashboard laden mislukt`, `Dashboard niet beschikbaar`,
-  `Geen posities geladen`, `Gecachete gegevens blijven zichtbaar`.
+- allocation donut (`Allocation`, `Allocation details`) and `Sector allocation`.
+- net-worth chart (`Net worth`, `Net worth partly unknown`).
+- portfolio agents card (`Choose agent`) — see [portfolio-agents.md](portfolio-agents.md).
+- operational status (`Operational status`) — chips `Connection`, `Brokers`,
+  `Price history`, `Vault`, `Cache`.
+- degraded and empty states: `Dashboard unavailable`, `Refresh failed`, `Reading problems`,
+  `No positions loaded`, `Cached data remains visible`, `Still loading your history`.
 
 ## How to get to it (user POV)
 
-`https://www.lavega.dev/investing` after signing in. It is the first screen; `Overzicht` in
+`https://www.lavega.dev/investing` after signing in. It is the first screen; `Overview` in
 the main navigation returns to it.
 
 ## Driving it with control-investing
