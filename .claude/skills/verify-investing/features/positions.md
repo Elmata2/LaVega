@@ -59,11 +59,11 @@ Exit 0, and one of these is true. Assert the field. Do not treat a loaded page a
 
 ## Verified-unreachable
 
-- Preview or prod with no session: every `/api/*` is 401. `doctor` fails `credentialsFile`
-  when `auth.preview.json` (preview) or `auth.json` (prod) is missing and
-  `LAVEGA_VERIFY_EMAIL` plus `LAVEGA_VERIFY_PASSWORD` are unset. Prerequisite: that file or
-  those two env vars, then `login` exit 0 and `whoami` `state` `authenticated`. Do not invent
-  an account.
+- Preview or prod with no session: every `/api/*` is 401. On preview, `login` loads
+  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` with `vercel env pull`. Prerequisite
+  when that pull fails: those two env vars in the process, or `vercel link` plus
+  `vercel login`. Then `login` exit 0, `whoami` `state` `authenticated`, and report `page`.
+  Do not write `auth.preview.json`. Do not invent an account.
 - Row count ≥ 1 with no broker holdings: prerequisite is `sync-status` `positionsRead` > 0
   after `sync --wait`, or a vault that already holds holdings. Until then only observable
   success 2 (the verbatim empty copy) can pass.

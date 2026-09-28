@@ -24,10 +24,15 @@ a logged-in marker.
 
 ## Drive
 
-Credential order: `auth.preview.json` on `--target preview`, `auth.json` on `--target prod`,
-then `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` (both), then `--email` and
-`--password`. Do not invent an account. Do not put the password on the command line when the
-file or the env pair exists.
+Credential order on preview: a readable `auth.preview.json` only when this process can open
+it, then `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` in the process, then
+`vercel env pull --environment preview` (those names are in the Vercel project Config), then
+`--email` and `--password`. Do not write `auth.preview.json` under `/tmp`. The next agent
+cannot read that file. Do not invent an account. Do not put the password on the command line
+when the pull or the env pair works.
+
+`login`, `doctor`, and `preview` print `page`. That is the URL the user opens
+(`https://<deploy>/investing/`). Put it in the reply.
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
@@ -51,9 +56,11 @@ the evidence JSON.
 
 - `login` exit 0.
 - `auth-login.json` `signedIn` is `true` and `user` is an object.
-- `credentialsFrom` is `environment` when `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`
-  supplied the password, or a path ending in `auth.preview.json` or `auth.json` when the file
+- `credentialsFrom` is `vercel-env` when `vercel env pull` supplied the password,
+  `environment` when `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` were already in the
+  process, or a path ending in `auth.preview.json` or `auth.json` when a readable file
   supplied it.
+- `page` is the preview URL (`https://<deploy>/investing/`). Report that URL.
 - `whoami` exit 0, `state` is `authenticated`, `status` is 200, `user` is an object.
 - `dashboard` status is not 401.
 - The cookie jar path in `cookieJar` exists and is non-empty. `cleanup` deletes that jar
@@ -68,10 +75,12 @@ auth". It does not satisfy the logged-in marker.
 
 ## Verified-unreachable
 
-- No `auth.preview.json`, no `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD`, and no
-  session: `doctor --target preview` fails `credentialsFile`. Stop. Logged-in success is
-  verified-unreachable. Prerequisite: that file or those two env vars. Do not invent an
-  account and do not ask for a personal password. Prod is the same check against `auth.json`.
+- `vercel env pull` fails, the process has no `LAVEGA_VERIFY_EMAIL` +
+  `LAVEGA_VERIFY_PASSWORD`, and no readable credentials file: `doctor --target preview`
+  fails `credentialsFile`. Stop. Logged-in success is verified-unreachable. Prerequisite:
+  `vercel` logged in against the LaVega project (`vercel link`), or those two env vars in
+  the process. Do not write `auth.preview.json`. Do not invent an account and do not ask
+  for a personal password. Prod is a readable `auth.json`, then the same env pair.
 - `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, and
   `/reset-password` are mounted routes. They are verified-unreachable on `--target local`.
   Prerequisite: `--target preview` or `--target prod`.

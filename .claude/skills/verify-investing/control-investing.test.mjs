@@ -86,7 +86,21 @@ beforeEach(() => {
   vercelLog = join(stateDir, "vercel.log");
   vercelReply = join(stateDir, "vercel.json");
   fakeVercel = join(stateDir, "vercel");
-  writeFileSync(fakeVercel, `#!/bin/sh\necho "$@" >> "${vercelLog}"\ncat "${vercelReply}"\n`);
+  writeFileSync(
+    fakeVercel,
+    `#!/bin/sh
+echo "$@" >> "${vercelLog}"
+if [ "$1" = "env" ] && [ "$2" = "pull" ]; then
+  if [ -n "$LAVEGA_TEST_ENV_PULL" ]; then
+    cp "$LAVEGA_TEST_ENV_PULL" "$3"
+    exit 0
+  fi
+  echo "not linked" >&2
+  exit 1
+fi
+cat "${vercelReply}"
+`,
+  );
   chmodSync(fakeVercel, 0o755);
   vercelDeployments([{ url: "lavega-newest.vercel.app", ref: "feature-a", sha: "abcdef123" }]);
   const shell = join(stateDir, "ms-playwright", "chromium_headless_shell-1208", "chrome-linux");
@@ -337,16 +351,19 @@ describe("errors", () => {
     assert.equal(received.length, 0);
   });
 
-  test("login without credentials names the preview file and the env vars", async () => {
+  test("login without credentials names the vercel env pull, not a /tmp handoff", async () => {
     const result = await run(["login", "--base", `http://127.0.0.1:${port}`]);
     assert.equal(result.code, 2);
     assert.equal(result.error.error.code, "credentials-missing");
     assert.match(result.error.error.fix, /auth\.preview\.json/);
+    assert.match(result.error.error.fix, /Do not write/);
+    assert.match(result.error.error.fix, /vercel env pull/);
     assert.match(result.error.error.fix, /LAVEGA_VERIFY_EMAIL/);
     assert.match(result.error.error.fix, /LAVEGA_VERIFY_PASSWORD/);
     assert.match(result.error.error.fix, /Do not ask for a personal password/);
     assert.match(result.error.error.fix, /Do not invent an account/);
-    assert.match(result.error.error.fix, /Vercel project Config/);
+    assert.match(result.error.error.fix, /page/);
+    assert.match(vercelCalls()[0], /^env pull /);
   });
 });
 
@@ -590,11 +607,13 @@ describe("reads", () => {
     assert.equal(check.ok, false);
     assert.equal(check.env, false);
     assert.match(check.path, /auth\.preview\.json$/);
-    assert.match(check.fix, /auth\.preview\.json/);
+    assert.match(check.fix, /Do not write/);
+    assert.match(check.fix, /vercel env pull/);
     assert.match(check.fix, /LAVEGA_VERIFY_EMAIL/);
     assert.match(check.fix, /LAVEGA_VERIFY_PASSWORD/);
     assert.match(check.fix, /Do not ask for a personal password/);
     assert.match(check.fix, /Do not invent an account/);
+    assert.equal(result.json.page, `http://127.0.0.1:${port}/investing/`);
   });
 
   test("doctor on preview accepts the Vercel env pair without a credentials file", async () => {
@@ -735,6 +754,45 @@ describe("session", () => {
     assert.equal(fromFlags.code, 0, fromFlags.stderr);
     assert.equal(fromFlags.json.credentialsFrom, "--email/--password");
     assert.doesNotMatch(fromFlags.stdout, /flag-secret/);
+    assert.equal(fromFlags.json.page, `${base}/investing/`);
+  });
+
+  test("login pulls LAVEGA_VERIFY_* from vercel when no file is readable", async () => {
+    const base = `http://127.0.0.1:${port}`;
+    const pullFile = join(stateDir, "pull.env");
+    writeFileSync(
+      pullFile,
+      'LAVEGA_VERIFY_EMAIL="preview@x"\nLAVEGA_VERIFY_PASSWORD="pull-secret"\n',
+    );
+    route("POST", "/api/auth/sign-in/email", 200, { ok: true });
+    route("GET", "/api/auth/get-session", 200, { user: { id: "u1", email: "preview@x" } });
+    const result = await run(["login", "--base", base], { LAVEGA_TEST_ENV_PULL: pullFile });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.credentialsFrom, "vercel-env");
+    assert.equal(result.json.signedIn, true);
+    assert.equal(result.json.page, `${base}/investing/`);
+    assert.doesNotMatch(result.stdout, /pull-secret/);
+    assert.match(vercelCalls()[0], /^env pull /);
+    assert.match(vercelCalls()[0], /--environment preview/);
+  });
+
+  test("an unreadable auth.preview.json falls through to the vercel pull", async () => {
+    const base = `http://127.0.0.1:${port}`;
+    const hidden = join(stateDir, "auth.preview.json");
+    writeFileSync(hidden, JSON.stringify({ email: "hidden@x", password: "hidden-secret" }));
+    chmodSync(hidden, 0);
+    const pullFile = join(stateDir, "pull.env");
+    writeFileSync(
+      pullFile,
+      'LAVEGA_VERIFY_EMAIL="preview@x"\nLAVEGA_VERIFY_PASSWORD="pull-secret"\n',
+    );
+    route("POST", "/api/auth/sign-in/email", 200, { ok: true });
+    route("GET", "/api/auth/get-session", 200, { user: { id: "u1", email: "preview@x" } });
+    const result = await run(["login", "--base", base], { LAVEGA_TEST_ENV_PULL: pullFile });
+    chmodSync(hidden, 0o600);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.credentialsFrom, "vercel-env");
+    assert.doesNotMatch(result.stdout, /hidden-secret|pull-secret/);
   });
 
   test("login stores cookies per host and sends them back", async () => {
@@ -799,6 +857,7 @@ describe("preview lookup", () => {
     const result = await run(["preview", "--refresh"], previewEnv);
     assert.equal(result.code, 0);
     assert.equal(result.json.pinned.url, "https://lavega-newer.vercel.app");
+    assert.equal(result.json.page, "https://lavega-newer.vercel.app/investing/");
     assert.equal(result.json.previous, "https://lavega-newest.vercel.app");
     assert.match(result.json.next, /login --target preview/);
   });

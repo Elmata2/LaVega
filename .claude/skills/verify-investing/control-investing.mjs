@@ -22,12 +22,14 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -284,9 +286,16 @@ function latestPreview(branch) {
   };
 }
 
+/** The investing page on a preview host. This is the URL the user opens. */
+function previewPage(url) {
+  if (!url) return null;
+  return `${String(url).replace(/\/+$/, "")}/investing/`;
+}
+
 function commandPreview({ flags }) {
   const pinned = pinnedPreview();
   if (!flags.refresh && !flags.branch) {
+    const url = process.env.LAVEGA_PREVIEW_URL || pinned?.url || null;
     print({
       pinned,
       env: process.env.LAVEGA_PREVIEW_URL ?? null,
@@ -294,6 +303,7 @@ function commandPreview({ flags }) {
         process.env.LAVEGA_PREVIEW_URL ??
         pinned?.url ??
         "the newest preview, looked up on first use",
+      page: previewPage(url),
     });
     return 0;
   }
@@ -301,6 +311,7 @@ function commandPreview({ flags }) {
   pinPreview(deployment);
   print({
     pinned: deployment,
+    page: previewPage(deployment.url),
     previous: pinned?.url === deployment.url ? undefined : (pinned?.url ?? null),
     note: process.env.LAVEGA_PREVIEW_URL
       ? "LAVEGA_PREVIEW_URL is set and still wins over the pin"
@@ -338,6 +349,11 @@ function spaPath(flags) {
   return targetName(flags) === "local" ? "/" : "/investing/";
 }
 
+/** Page the user opens in a browser. No `?verify=1`. Always include this in the reply. */
+function pageUrl(flags) {
+  return `${baseUrl(flags).replace(/\/+$/, "")}${spaPath(flags)}`;
+}
+
 function hostSlug(base) {
   return new URL(base).host.replace(/[^a-z0-9.-]/gi, "_");
 }
@@ -359,22 +375,98 @@ function envCredentialsReady() {
   return Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD);
 }
 
+/** KEY=VALUE lines from `vercel env pull`. Values stay in memory. */
+function parseEnvAssignment(text) {
+  const values = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const body = line.startsWith("export ") ? line.slice(7).trim() : line;
+    const eq = body.indexOf("=");
+    if (eq <= 0) continue;
+    const key = body.slice(0, eq).trim();
+    let value = body.slice(eq + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      const quote = value[0];
+      value = value.slice(1, -1);
+      if (quote === '"')
+        value = value.replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+/* One pull per process. A /tmp auth.preview.json is not a handoff: the next
+ * agent sandbox often cannot read the file the previous agent wrote. */
+let pulledVerifyCredentials;
+
+function pullVercelVerifyCredentials() {
+  if (pulledVerifyCredentials) return pulledVerifyCredentials;
+  const bin = process.env.LAVEGA_VERCEL_BIN || "vercel";
+  const cwd = vercelCwd();
+  const dir = mkdtempSync(join(tmpdir(), "lavega-vercel-env-"));
+  const file = join(dir, "pull.env");
+  let failure = "vercel env pull did not return LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD";
+  try {
+    for (const environment of ["preview", "development", "production"]) {
+      rmSync(file, { force: true });
+      const result = spawnSync(
+        bin,
+        ["env", "pull", file, "--environment", environment, "--yes", "--cwd", cwd],
+        { encoding: "utf8", timeout: 60_000 },
+      );
+      if (result.error) {
+        failure = `could not run ${bin}: ${result.error.message}`;
+        break;
+      }
+      if (result.status !== 0 || !existsSync(file)) {
+        const detail = (result.stderr || result.stdout || `exit ${result.status}`).trim();
+        failure = detail.split("\n").slice(-2).join(" ").slice(0, 300);
+        continue;
+      }
+      const values = parseEnvAssignment(readFileSync(file, "utf8"));
+      const email = values.LAVEGA_VERIFY_EMAIL;
+      const password = values.LAVEGA_VERIFY_PASSWORD;
+      if (email && password) {
+        pulledVerifyCredentials = { email, password, from: "vercel-env", environment };
+        return pulledVerifyCredentials;
+      }
+      failure = `vercel env pull --environment ${environment} has no LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  pulledVerifyCredentials = { error: failure };
+  return pulledVerifyCredentials;
+}
+
 /**
- * `login` / `doctor` stop text. Names the preview file and the Vercel env vars
- * so an agent does not ask for a personal password or sign up a preview account.
+ * `login` / `doctor` stop text. Preview loads the Vercel env pair in-process.
+ * Do not tell an agent to write auth.preview.json for a later command.
  */
 function credentialsMissingFix(flags) {
   const target = targetName(flags);
+  const pullError =
+    target === "preview" && pulledVerifyCredentials?.error
+      ? ` vercel env pull failed: ${pulledVerifyCredentials.error}.`
+      : "";
   const previewRule =
     target === "preview"
-      ? `For preview, use the existing ${previewCredentialsFile} or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD. Do not ask for a personal password. `
+      ? `For preview, \`login\` runs \`vercel env pull --environment preview\` and reads LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD from that output. Those names are in the Vercel project Config for development, preview, and production. Do not write ${previewCredentialsFile}. A file under /tmp is not shared with the next agent. A readable file or --credentials-file still wins when this process can read it. Do not ask for a personal password. `
       : "";
   return (
-    `Credential order: ${credentialsFile} for prod, ${previewCredentialsFile} for preview ` +
-    `(chmod 600, {"email":"...","password":"..."}), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD ` +
-    `(those names are in the Vercel project Config for Dev, Preview, and Prod), then --email and --password. ` +
+    `Credential order: a readable ${credentialsFile} for prod, a readable ${previewCredentialsFile} for preview, ` +
+    `then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD in the process, then \`vercel env pull\` on preview, ` +
+    `then --email and --password. ` +
     previewRule +
-    `Do not invent an account or sign one up. Then run \`${SELF} login --target ${target}\`. ` +
+    pullError +
+    ` Do not invent an account or sign one up. Then run \`${SELF} login --target ${target}\`. ` +
+    `Print the JSON field \`page\` so the user can open the preview. ` +
     `A local doctor pass does not satisfy this check.`
   );
 }
@@ -744,9 +836,11 @@ function commandInfo({ flags }) {
         .map((name) => name.slice("cookies-".length, -".txt".length))
     : [];
   const browse = browseBin();
+  const baseInfo = tryBaseUrl(flags);
   print({
     target: targetName(flags),
-    ...tryBaseUrl(flags),
+    ...baseInfo,
+    page: baseInfo.base ? `${baseInfo.base.replace(/\/+$/, "")}${spaPath(flags)}` : null,
     spaPath: spaPath(flags),
     stateRoot,
     runDir,
@@ -760,8 +854,8 @@ function commandInfo({ flags }) {
     },
     sessions,
     credentials: {
-      prod: existsSync(credentialsFile) ? credentialsFile : null,
-      preview: existsSync(previewCredentialsFile) ? previewCredentialsFile : null,
+      prod: credentialsFileReadable(credentialsFile),
+      preview: credentialsFileReadable(previewCredentialsFile),
       env: Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD),
     },
     spaBuilt: existsSync(join(repoRoot, "apps/investing-web/dist")),
@@ -785,7 +879,7 @@ function commandInfo({ flags }) {
 // ---------------------------------------------------------------- commands: health
 
 async function commandDoctor({ flags }) {
-  const report = { base: baseUrl(flags), checks: [], verdict: "ok" };
+  const report = { base: baseUrl(flags), page: pageUrl(flags), checks: [], verdict: "ok" };
   const note = (name, ok, detail) => {
     report.checks.push({ name, ok, ...detail });
     if (!ok) report.verdict = "problem";
@@ -819,13 +913,20 @@ async function commandDoctor({ flags }) {
    * to invent a login or ask for a personal password. */
   if (targetName(flags) !== "local") {
     const file = credentialsFileFor(flags);
-    const present = existsSync(file);
-    const envReady = envCredentialsReady();
-    const satisfied = present || authed || envReady;
+    const stored = readStoredCredentials(file);
+    const fileReady = Boolean(stored?.email);
+    let source = fileReady ? "file" : envCredentialsReady() ? "environment" : null;
+    if (!source && !authed && targetName(flags) === "preview") {
+      const pulled = pullVercelVerifyCredentials();
+      if (pulled.email) source = "vercel-env";
+    }
+    const satisfied = Boolean(source) || authed;
     note("credentialsFile", satisfied, {
       path: file,
-      present,
-      env: envReady,
+      present: fileReady,
+      unreadable: stored?.unreadable || undefined,
+      env: source === "environment" || source === "vercel-env",
+      source: source ?? undefined,
       fix: satisfied ? undefined : credentialsMissingFix(flags),
     });
   }
@@ -1032,36 +1133,72 @@ async function commandPerf({ flags }) {
 // ---------------------------------------------------------------- commands: session
 
 /**
- * Where a password comes from, in order:
- *   1. auth.preview.json (preview) or auth.json (prod), or --credentials-file
- *   2. LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD (both)
- *   3. --email and --password (both)
- * A password passed as an argument is visible in shell history and in any
- * transcript of the run. Preview agents use the file or the env pair; they
- * do not ask for a personal password.
+ * Path when this process can read the file. An unreadable /tmp file is not a
+ * credential source — the next agent often cannot open what the last one wrote.
  */
+function credentialsFileReadable(path) {
+  if (!existsSync(path)) return null;
+  try {
+    readFileSync(path);
+    return path;
+  } catch (error) {
+    const code = error && typeof error === "object" ? error.code : undefined;
+    if (code === "EACCES" || code === "EPERM") return null;
+    return path;
+  }
+}
+
+/**
+ * Where a password comes from, in order:
+ *   1. a readable auth.preview.json (preview) or auth.json (prod), or --credentials-file
+ *   2. LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD already in the process
+ *   3. on preview, `vercel env pull` (those names live in the Vercel project)
+ *   4. --email and --password (both)
+ * A password passed as an argument is visible in shell history and in any
+ * transcript of the run. Do not write auth.preview.json for a later command.
+ */
+function readStoredCredentials(path) {
+  if (!existsSync(path)) return null;
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (error) {
+    const code = error && typeof error === "object" ? error.code : undefined;
+    if (code === "EACCES" || code === "EPERM") return { unreadable: true, path };
+    fail(`${path} is not readable (${code ?? "error"})`, credentialsMissingFix({}), {
+      code: "credentials-invalid",
+    });
+  }
+  let stored;
+  try {
+    stored = JSON.parse(text);
+  } catch {
+    fail(`${path} is not readable JSON`, 'write it as {"email":"...","password":"..."}', {
+      code: "credentials-invalid",
+    });
+  }
+  if (stored.email && stored.password)
+    return { email: String(stored.email), password: String(stored.password), from: path };
+  return null;
+}
+
 function resolveCredentials(flags) {
   const path = flags["credentials-file"]
     ? resolve(String(flags["credentials-file"]))
     : credentialsFileFor(flags);
-  if (existsSync(path)) {
-    let stored;
-    try {
-      stored = JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      fail(`${path} is not readable JSON`, 'write it as {"email":"...","password":"..."}', {
-        code: "credentials-invalid",
-      });
-    }
-    if (stored.email && stored.password)
-      return { email: String(stored.email), password: String(stored.password), from: path };
-  }
+  const stored = readStoredCredentials(path);
+  if (stored?.email) return stored;
   if (envCredentialsReady())
     return {
       email: String(process.env.LAVEGA_VERIFY_EMAIL),
       password: String(process.env.LAVEGA_VERIFY_PASSWORD),
       from: "environment",
     };
+  if (targetName(flags) === "preview") {
+    const pulled = pullVercelVerifyCredentials();
+    if (pulled.email)
+      return { email: pulled.email, password: pulled.password, from: "vercel-env" };
+  }
   if (flags.email && flags.password)
     return {
       email: String(flags.email),
@@ -1086,10 +1223,11 @@ async function commandLogin({ flags }) {
       status: response.status,
       body: response.json ?? response.text,
       credentialsFrom: credentials.from,
+      page: pageUrl(flags),
       fix:
         response.status === 0
           ? `the target is unreachable; run \`${SELF} doctor --target ${targetName(flags)}\``
-          : "the account or password was rejected; ask the user to check the credentials file",
+          : "the account or password was rejected. credentialsFrom names the source. Do not print the password. Do not write a new auth.preview.json.",
     });
     return 1;
   }
@@ -1099,6 +1237,7 @@ async function commandLogin({ flags }) {
     user: session.json?.user ?? null,
     cookieJar: cookieFileFor(flags),
     credentialsFrom: credentials.from,
+    page: pageUrl(flags),
   });
   return session.json?.user ? 0 : 1;
 }
@@ -1875,7 +2014,13 @@ function commandBrowserOpen({ flags }) {
     return 1;
   }
   if (!step(["wait", "--load"])) return 1;
-  print({ ok: true, url: redact(url), cookiesImported: imported, steps });
+  print({
+    ok: true,
+    url: redact(url),
+    page: pageUrl(flags),
+    cookiesImported: imported,
+    steps,
+  });
   return 0;
 }
 
@@ -2107,7 +2252,7 @@ const COMMANDS = [
     name: "login",
     group: "Session",
     summary: "Sign in on prod or preview; stores a cookie jar per host",
-    description: `Credential order: ${previewCredentialsFile} (preview) or ${credentialsFile} (prod), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD (Vercel project Config: Dev, Preview, Prod), then --email and --password. For preview, use the existing file or those env vars. Do not ask for a personal password. Do not invent an account or sign one up.`,
+    description: `Credential order: a readable ${previewCredentialsFile} (preview) or ${credentialsFile} (prod), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD already in the process, then on preview \`vercel env pull --environment preview\` (those names are in the Vercel project Config for development, preview, and production), then --email and --password. Do not write auth.preview.json under /tmp. A file there is not shared with the next agent. Do not ask for a personal password. Do not invent an account or sign one up. The JSON field page is the preview URL the user opens.`,
     flags: {
       "credentials-file": {
         type: "string",

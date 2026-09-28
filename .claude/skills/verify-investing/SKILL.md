@@ -17,7 +17,11 @@ The investing side is one API served two ways.
 
 **The API paths are identical on both.** Only the SPA path differs: `/` standalone,
 `/investing/` mounted. Most investing bugs are one of four things, and the CLI separates them
-in a single command:
+in a single command.
+
+The user checks the **preview**, not the local server. Every preview command prints `page`:
+`https://<deploy>/investing/` with no `?verify=1`. Put that URL in the reply so the user can
+open it. A local `up` does not replace that URL.
 
 | Symptom in `probe`                                             | What it is                                                                                                                                                                             |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,8 +62,9 @@ node .claude/skills/verify-investing/control-investing.mjs cleanup
 
 `cleanup` kills only the pid this CLI recorded — never by process name, which would take down
 a dev server the user started — removes `/tmp/lavega-verify-investing/run`, and keeps
-`/tmp/lavega-verify-investing/evidence`. Credential files sit above `run/`, so teardown
-leaves `auth.json` and `auth.preview.json` in place.
+`/tmp/lavega-verify-investing/evidence`. Do not write `auth.preview.json`. A file under `/tmp`
+is not shared with the next agent. Preview login loads `LAVEGA_VERIFY_EMAIL` and
+`LAVEGA_VERIFY_PASSWORD` with `vercel env pull`.
 
 ## CLI contract
 
@@ -89,8 +94,9 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
     for each new command or flag.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
-    page. It only reads; every write in it runs with `--dry-run`. It skips only when neither
-    `auth.preview.json` nor `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
+    page. It only reads; every write in it runs with `--dry-run`.     It skips only when neither a readable `auth.preview.json` nor
+    `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is already available.
+    `login` itself also runs `vercel env pull` for that pair.
     It uses its own state directory, so it does not move your pin or session.
 - **Files.** `browse` only reads and writes under `/tmp` or its working directory, so keep
   `VERIFY_INVESTING_DIR` and `--out` paths under `/tmp`.
@@ -105,11 +111,10 @@ node .claude/skills/verify-investing/control-investing.mjs doctor --target prod
 Read-only. Answers whether an instance is worth driving: `/health` responds and identifies
 itself as `investing-server`, a session exists or auth is unconfigured, the dashboard returns
 without a problems list, key status is known, the vault is `empty`/`locked`/`unlocked`, and
-the broker sync progress is readable. On `--target preview` and `--target prod` it also fails
-`credentialsFile` when the credentials file is missing, `LAVEGA_VERIFY_EMAIL` and
-`LAVEGA_VERIFY_PASSWORD` are not both set, and there is no session. The `fix` names
-`auth.preview.json` (preview) or `auth.json` (prod) and those env vars. It exits non-zero
-on any failed check. Run this first whenever anything looks off.
+the broker sync progress is readable. On `--target preview` it loads
+`LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the process or from
+`vercel env pull` before it fails `credentialsFile`. It prints `page`, the preview URL.
+It exits non-zero on any failed check. Run this first whenever anything looks off.
 
 ## Drive
 
@@ -126,12 +131,14 @@ node $C probe --target prod --out /tmp/lavega-verify-investing/evidence/prod-pro
 # the SPA shell plus every asset it references
 node $C assets --target prod
 
-# production needs a session before any /api call works.
-# Credential order: auth.preview.json (preview) or auth.json (prod),
-# then LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD, then --email/--password.
-# Prod file, written by the user:
-#   umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
-#     > /tmp/lavega-verify-investing/auth.json
+# Preview is the check the user opens. `page` in the JSON is the URL.
+node $C preview --refresh
+node $C login --target preview          # pulls LAVEGA_VERIFY_* from Vercel when unset
+node $C whoami --target preview
+# Put json.page in the reply: https://<deploy>/investing/
+
+# Prod still uses a readable auth.json, then the same env pair, then flags.
+# Do not write auth.preview.json under /tmp. The next agent cannot read it.
 node $C login --target prod
 node $C whoami --target prod
 
@@ -175,17 +182,25 @@ node $C watch --restart          # run in the background; one JSON line per up/d
 
 Credential resolution, in this order:
 
-1. **File.** `--target preview` reads `/tmp/lavega-verify-investing/auth.preview.json`.
-   `--target prod` reads `/tmp/lavega-verify-investing/auth.json`. `--credentials-file`
-   replaces that path.
-2. **Environment.** `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`, both set. Those two
-   names exist in the Vercel project Config for Dev, Preview, and Prod.
-3. **CLI flags.** `--email` and `--password`, both set. A password on the command line lands
+1. **Readable file.** `--target preview` reads
+   `/tmp/lavega-verify-investing/auth.preview.json` only when this process can open it.
+   `--target prod` reads `/tmp/lavega-verify-investing/auth.json` the same way.
+   `--credentials-file` replaces that path. An unreadable file is skipped.
+2. **Process environment.** `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`, both set.
+3. **Vercel, preview only.** `vercel env pull --environment preview` (then development, then
+   production). Those two names are in the Vercel project Config for development, preview,
+   and production. The CLI keeps the values in memory, deletes the pull file, and sets
+   `credentialsFrom` to `vercel-env`. It does not write `auth.preview.json`.
+4. **CLI flags.** `--email` and `--password`, both set. A password on the command line lands
    in shell history and in the transcript.
 
-For preview, use the existing `auth.preview.json` or pull those env vars. Do not ask for a
-personal password. Do not invent or sign up an account. For prod, the file is the user's;
-do not invent an account there either.
+Do not write `auth.preview.json` under `/tmp` for a later command. Claude and Codex do that
+to keep the password out of the repo, and the next sandbox cannot read the file. Do not ask
+for a personal password. Do not invent or sign up an account. Do not print the password.
+For prod, a readable `auth.json` is the user's; do not invent an account there either.
+
+After `login`, `doctor`, or `preview`, copy `page` into the reply. That is the preview the
+user opens.
 
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
 print what they would send. `prices purge` also refuses without `--yes`.
@@ -322,28 +337,29 @@ real tenant. Prefer it over prod for anything that writes.
   confirm it has every migration and the same `LAVEGA_ENCRYPTION_KEY` as Production.
   `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
   the symptom of either gap.
-- **Account.** Preview has its own test user, never a real person's login. Credential
-  resolution is the file, then the env vars, then CLI flags (see [Drive](#drive)):
-  `/tmp/lavega-verify-investing/auth.preview.json` on preview, `auth.json` on prod, then
-  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` (both). Those two names exist in the
-  Vercel project Config for Dev, Preview, and Prod. Then `--email` and `--password`.
-  Use the existing `auth.preview.json` or pull those env vars. Do not ask for a personal
-  password. Do not invent or sign up an account.
-  Each origin gets its own cookie jar, so a preview login never replaces the prod session.
-  `doctor --target preview` fails `credentialsFile` when the preview file is missing, those
-  env vars are unset, and there is no session. The `fix` names `auth.preview.json` and
-  `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD`. A local `doctor` pass does not satisfy
-  this check. `pnpm run test:verify-investing:live` skips only when neither
-  `auth.preview.json` nor `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
+- **Account.** Preview has its own test user, never a real person's login. `login
+  --target preview` loads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the
+  process, or runs `vercel env pull`. Those two names are in the Vercel project Config for
+  development, preview, and production. Do not write `auth.preview.json`. Do not ask for a
+  personal password. Do not invent or sign up an account. `credentialsFrom` is `vercel-env`
+  when the pull supplied the password. Each origin gets its own cookie jar, so a preview
+  login never replaces the prod session. `doctor --target preview` fails `credentialsFile`
+  only when the pull fails, the process env pair is unset, no readable file exists, and
+  there is no session. A local `doctor` pass does not satisfy this check.
+  `pnpm run test:verify-investing:live` skips only when neither a readable
+  `auth.preview.json` nor the process env pair is already available. `login` still pulls
+  when you run it yourself.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.
-- **URL.** Every deploy has its own URL, and the CLI finds it for you. With no `--base` and
-  no `LAVEGA_PREVIEW_URL`, the first `--target preview` command runs `vercel ls` in the main
-  checkout (worktrees are not Vercel-linked). It then pins the newest READY preview. Later
-  commands use the pin, so the login and the reads after it stay on one host. Run
-  `preview --refresh` to move the pin to the newest deploy, or `preview --branch <branch>` to
-  pin the newest deploy of your PR branch. After the pin moves, log in again.
+- **URL.** Every deploy has its own URL, and the CLI finds it for you. The user always
+  wants that URL in the reply. The JSON field is `page` (`https://<deploy>/investing/`).
+  With no `--base` and no `LAVEGA_PREVIEW_URL`, the first `--target preview` command runs
+  `vercel ls` in the main checkout (worktrees are not Vercel-linked). It then pins the
+  newest READY preview. Later commands use the pin, so the login and the reads after it
+  stay on one host. Run `preview --refresh` to move the pin to the newest deploy, or
+  `preview --branch <branch>` to pin the newest deploy of your PR branch. After the pin
+  moves, log in again. Say the new `page` URL.
 
 ```bash
 node $C preview --branch my-feature      # optional: verify this branch's deploy

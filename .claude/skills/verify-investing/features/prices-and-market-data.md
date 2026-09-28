@@ -103,8 +103,9 @@ There is no separate job id. `positionsRead` and `lastSyncedAt` are the refresh 
 
 ## Verified-unreachable
 
-- Preview or prod with no session: 401 on `/api/*`. Prerequisite: `auth.preview.json` or
-  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`. See [auth-session.md](auth-session.md).
+- Preview or prod with no session: 401 on `/api/*`. Prerequisite: `login --target preview`
+  exit 0 (`credentialsFrom` `vercel-env` or `environment`). See
+  [auth-session.md](auth-session.md). Report `page`.
 - A priced holding (`priceStatus` `priced` and `marketValue` not null): prerequisite is
   `positionsRead` > 0. Consent plus an empty book can still pass observable success 1 and 2
   via `No price symbols to synchronize` and `Price history` / `Up to date`. It cannot prove
