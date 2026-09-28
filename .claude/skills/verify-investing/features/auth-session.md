@@ -36,6 +36,12 @@ umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
   > /tmp/lavega-verify-investing/auth.json
 ```
 
+Preview uses `/tmp/lavega-verify-investing/auth.preview.json`, not `auth.json`.
+`doctor --target preview` and `doctor --target prod` fail `credentialsFile` until the file
+for that target exists and there is no session. Stop and ask the user. Do not invent an
+account. A local `doctor` pass does not satisfy this check.
+`pnpm run test:verify-investing:live` skips until `auth.preview.json` exists.
+
 Then:
 
 ```bash

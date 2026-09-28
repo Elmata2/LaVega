@@ -19,8 +19,17 @@ import { fileURLToPath } from "node:url";
 const cli = join(dirname(fileURLToPath(import.meta.url)), "control-investing.mjs");
 const sharedState = process.env.VERIFY_INVESTING_DIR || "/tmp/lavega-verify-investing";
 const credentials = join(sharedState, "auth.preview.json");
-const browse =
-  process.env.LAVEGA_BROWSE_BIN || `${process.env.HOME}/.codex/skills/gstack/browse/dist/browse`;
+function resolveBrowse() {
+  if (process.env.LAVEGA_BROWSE_BIN) return process.env.LAVEGA_BROWSE_BIN;
+  const home = process.env.HOME;
+  const candidates = [
+    join(home, ".claude/skills/gstack/browse/dist/browse"),
+    join(home, ".codex/skills/gstack/browse/dist/browse"),
+  ];
+  return candidates.find((path) => existsSync(path)) ?? candidates[0];
+}
+
+const browse = resolveBrowse();
 
 const skip = existsSync(credentials)
   ? false
@@ -120,29 +129,37 @@ describe("live preview", { skip, concurrency: false }, () => {
     assert.equal(result.json.dryRun, true);
   });
 
-  describe("browser", { skip: existsSync(browse) ? false : `no browse at ${browse}` }, () => {
-    test("opens the dashboard with the CLI session", async () => {
-      const result = await run(["browser", "open"]);
-      assert.equal(result.code, 0, result.stdout + result.stderr);
-      assert.equal(result.json.cookiesImported > 0, true);
-    });
+  describe(
+    "browser",
+    {
+      skip: existsSync(browse)
+        ? false
+        : `no browse at ${browse}; run: node .claude/skills/verify-investing/control-investing.mjs browser install`,
+    },
+    () => {
+      test("opens the dashboard with the CLI session", async () => {
+        const result = await run(["browser", "open"]);
+        assert.equal(result.code, 0, result.stdout + result.stderr);
+        assert.equal(result.json.cookiesImported > 0, true);
+      });
 
-    test("the page shows the overview with a portfolio value", async () => {
-      await run(["browser", "wait-settle"]);
-      const result = await run(["browser", "text"]);
-      assert.match(result.json.output, /Overview/);
-      assert.match(result.json.output, /€\s?[\d,]+\.\d{2}/);
-    });
+      test("the page shows the overview with a portfolio value", async () => {
+        await run(["browser", "wait-settle"]);
+        const result = await run(["browser", "text"]);
+        assert.match(result.json.output, /Overview/);
+        assert.match(result.json.output, /€\s?[\d,]+\.\d{2}/);
+      });
 
-    test("the page logs no console errors", async () => {
-      const result = await run(["browser", "console", "--errors"]);
-      assert.match(result.json.output, /no console errors/);
-    });
+      test("the page logs no console errors", async () => {
+        const result = await run(["browser", "console", "--errors"]);
+        assert.match(result.json.output, /no console errors/);
+      });
 
-    test("a screenshot lands in the evidence directory", async () => {
-      const result = await run(["browser", "screenshot", "--viewport"]);
-      assert.equal(result.code, 0);
-      assert.ok(existsSync(result.json.saved));
-    });
-  });
+      test("a screenshot lands in the evidence directory", async () => {
+        const result = await run(["browser", "screenshot", "--viewport"]);
+        assert.equal(result.code, 0);
+        assert.ok(existsSync(result.json.saved));
+      });
+    },
+  );
 });
