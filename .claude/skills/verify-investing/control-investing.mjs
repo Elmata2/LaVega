@@ -1394,7 +1394,13 @@ function runBrowse(args) {
       },
     );
   const result = spawnSync(bin, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (result.error)
+  if (result.error) {
+    const detail = [result.error.code, result.error.message].filter(Boolean).join(" ");
+    if (sandboxRefusedChromium(detail))
+      fail(`browse failed to start: ${result.error.message}`, SANDBOX_BROWSE_FIX, {
+        code: "browse-sandboxed",
+        exitCode: 1,
+      });
     fail(
       `browse failed to start: ${result.error.message}`,
       "check LAVEGA_BROWSE_BIN is executable",
@@ -1403,34 +1409,71 @@ function runBrowse(args) {
         exitCode: 1,
       },
     );
+  }
   // browse colours its own log lines; colour codes are noise inside JSON.
   const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
   const clean = (text) =>
     redact(text ?? "")
       .replace(ansi, "")
       .trimEnd();
+  const stderr = [clean(result.stderr), result.signal ? `signal ${result.signal}` : ""]
+    .filter(Boolean)
+    .join("\n");
   return {
     args: args.map(redact),
     exitCode: result.status ?? 1,
     output: clean(result.stdout),
-    stderr: clean(result.stderr) || undefined,
+    stderr: stderr || undefined,
   };
+}
+
+/**
+ * Workspace-write sandboxes refuse the Mach-port / process ops Chromium needs.
+ * The process then dies with EPERM, PortRendezvous, or a target closed on launch.
+ * That is the sandbox, so the fix is to re-run the browser step outside it.
+ */
+const SANDBOX_BROWSE_FIX =
+  "re-run this browser step escalated or unrestricted, outside the sandbox (Codex: escalate or disable the sandbox for this step). Doctor, probe, and API commands can stay sandboxed";
+
+function sandboxRefusedChromium(text) {
+  return /EPERM|PortRendezvous|Permission denied|SIGTRAP|Target page, context or browser has been closed/i.test(
+    text,
+  );
+}
+
+function browseOutputText(step) {
+  return `${step.output ?? ""}\n${step.stderr ?? ""}`;
 }
 
 /* Chromium not installed is the one failure every fresh machine hits. */
 function browseFix(step) {
-  const text = `${step.output}\n${step.stderr ?? ""}`;
+  const text = browseOutputText(step);
   if (/Path must be within/i.test(text))
     return "browse only reads and writes under /tmp or its working directory: keep VERIFY_INVESTING_DIR and --out under /tmp";
   if (/Executable doesn't exist|playwright install/i.test(text))
     return "install the pinned Chromium once: bunx playwright@1.58.2 install chromium";
+  if (sandboxRefusedChromium(text)) return SANDBOX_BROWSE_FIX;
   if (/no (element|match)|not found|timeout/i.test(text))
     return `take a fresh \`${SELF} browser snapshot --interactive\` and use an @e ref from it`;
   return undefined;
 }
 
+/** Sandbox deaths go through `error.fix`. A missing binary stays `browse-missing`. */
+function failIfSandboxRefused(step) {
+  if (step.exitCode === 0) return;
+  const text = browseOutputText(step);
+  if (/Path must be within|Executable doesn't exist|playwright install/i.test(text)) return;
+  if (!sandboxRefusedChromium(text)) return;
+  const detail = (step.stderr || step.output || "browse exited non-zero").trim().slice(0, 400);
+  fail(`browse failed: ${detail}`, SANDBOX_BROWSE_FIX, {
+    code: "browse-sandboxed",
+    exitCode: 1,
+  });
+}
+
 function browseAndPrint(args, extra = {}) {
   const step = runBrowse(args);
+  failIfSandboxRefused(step);
   const ok = step.exitCode === 0;
   print({
     ok,
@@ -1499,6 +1542,7 @@ function commandBrowserOpen({ flags }) {
       output: result.output || undefined,
     });
     if (result.exitCode !== 0) {
+      failIfSandboxRefused(result);
       print({ ok: false, url: redact(url), steps, stderr: result.stderr, fix: browseFix(result) });
       return false;
     }
