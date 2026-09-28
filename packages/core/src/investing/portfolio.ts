@@ -171,7 +171,7 @@ function anchoredAmountOnDate(
  *  gap states a figure the other contradicts. */
 const RECONCILIATION_TOLERANCE = 0.01;
 
-function reconciles(leg: CashLeg, date: string): boolean {
+function bracketsReconcile(leg: CashLeg, date: string): boolean {
   const sorted = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf));
   const before = sorted.filter((anchor) => anchor.asOf <= date).at(-1);
   const after = sorted.find((anchor) => anchor.asOf > date);
@@ -180,6 +180,33 @@ function reconciles(leg: CashLeg, date: string): boolean {
   return (
     Number.isFinite(implied) && Math.abs(implied - after.amount) <= RECONCILIATION_TOLERANCE
   );
+}
+
+/**
+ * Does the whole history close on an empty wallet?
+ *
+ *  A wallet begins empty. Walk every movement back off the earliest statement
+ *  and the day before the first of them must come to nothing, because there
+ *  was nothing there yet. Anything else is the size of what the history is
+ *  missing, and it is missing in a direction the number itself names: too
+ *  negative and the spending is recorded without the funding, too positive and
+ *  the funding is recorded without the spending.
+ *
+ *  This is the check that a declaration cannot stand in for. A broker naming
+ *  its trade-cash stream is the broker's word; this is the arithmetic. The two
+ *  came apart in production, where rows stored before that field existed read
+ *  as a broker that had named nothing, so trades were dropped and the walk put
+ *  a wallet 16,627 EUR overdrawn on the day it was opened, months before its
+ *  owner had spent anything. Nothing in the reported movements was wrong; the
+ *  set of them was incomplete, and only totalling them says so.
+ */
+function historyCloses(leg: CashLeg): boolean {
+  const earliest = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
+  if (!earliest) return false;
+  const movements = leg.events.filter((event) => event.date <= earliest.asOf);
+  if (movements.length === 0) return true;
+  const opening = earliest.amount - movements.reduce((sum, event) => sum + event.amount, 0);
+  return Number.isFinite(opening) && Math.abs(opening) <= RECONCILIATION_TOLERANCE;
 }
 
 /** What a leg held on a date, and whether the broker's history proves it.
@@ -231,7 +258,8 @@ function cashAmountOnDate(
     );
     if (!moved) return known(carried.amount);
   }
-  if (!leg.tradeCashDeclared || !reconciles(leg, date)) return known(null);
+  if (!leg.tradeCashDeclared || !bracketsReconcile(leg, date) || !historyCloses(leg))
+    return known(null);
   const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
   return estimate === null || !Number.isFinite(estimate)
     ? known(null)
@@ -241,9 +269,11 @@ function cashAmountOnDate(
 type CashLeg = {
   entity: string;
   broker: string;
-  /** The broker said which stream books the cash a trade moves. Without that
-   *  the walk cannot know whether trades are among these events, so what it
-   *  sums may be missing every purchase. */
+  /** The broker named the stream that books the cash a trade moves. A row
+   *  that carries no such name is not a broker that said "neither": it is a
+   *  row written before there was a field to say it in, and it reads the same
+   *  either way. Without the name the walk cannot know whether trades are
+   *  among these events, so what it sums may be missing every purchase. */
   tradeCashDeclared: boolean;
   currency: string;
   proven?: { from: string; to: string };
@@ -287,7 +317,6 @@ function cashLegs(
    * proven one dropped every trade out of the cash walk exactly when the walk
    * was already working without a window. */
   const coverage = new Map(cashCoverage.map((value) => [owner(value), value] as const));
-  const declared = new Set(cashCoverage.map((value) => owner(value)));
   const proven = new Map(
     cashCoverage.flatMap((value) =>
       value.status === "complete" ? [[owner(value), value] as const] : [],
@@ -299,13 +328,13 @@ function cashLegs(
     const key = cashKey(value);
     const existing = legs.get(key);
     if (existing) return existing;
-    const coverage = provenFor(value);
+    const window = provenFor(value);
     const created: CashLeg = {
       entity: value.entity,
       broker: value.broker,
       currency: value.currency,
-      tradeCashDeclared: declared.has(owner(value)),
-      ...(coverage ? { proven: { from: coverage.from, to: coverage.to } } : {}),
+      tradeCashDeclared: coverage.get(owner(value))?.tradeCash !== undefined,
+      ...(window ? { proven: { from: window.from, to: window.to } } : {}),
       anchors: [],
       events: [],
       tradeDates: [],

@@ -207,12 +207,20 @@ test("Trading 212 cash with unproven history is known only on its balance date",
     }),
   );
 
-  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+  /* This history is short a page, so its movements do not total back to an
+   * empty wallet and the walk is refused. Only the balance date stands. */
+  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    [],
+  ]);
   expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
-    ["trading212:EUR"],
-    ["trading212:EUR"],
-    ["trading212:EUR"],
-    ["trading212:EUR"],
+    [],
+    [],
+    [],
+    [],
     [],
   ]);
 });
@@ -304,19 +312,16 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
     const history = points.filter((point) => point.date < "2026-01-09");
 
     expect(history.map(({ date }) => date)).toEqual(DATES.slice(0, 4));
-    /* A transfer whose direction the broker did not state cannot be undone, so
-     * the walk stops at it: the date behind it stays unknown while the dates
-     * the closing statement does reach are estimated. */
-    expect(history[0]?.cashUnknown).toEqual(["trading212:EUR"]);
-    expect(history[0]?.cashValue).toBeNull();
-    expect(history.slice(1).every((point) => point.cashUnknown.length === 0)).toBe(true);
-    expect(history.slice(1).every((point) => point.cashEstimated?.length === 1)).toBe(true);
-    // The unknown date still breaks the chain, so no return spans it.
+    /* Short a page and holding a transfer whose direction was never stated:
+     * the movements cannot total back to an empty wallet, so no date is
+     * walked and none is estimated. */
+    expect(history.every((point) => point.cashUnknown.includes("trading212:EUR"))).toBe(true);
+    expect(history.every((point) => (point.cashEstimated ?? []).length === 0)).toBe(true);
     expect(
       buildIndexedSeries(history, [], dashboard.externalCashFlows).map(
         (point) => point.portfolioReturn,
-      )[0],
-    ).toBeNull();
+      ),
+    ).toEqual([null, null, null, null]);
     const { risk } = buildHistoricalRisk(dashboard, "All");
     expect(risk.status).toBe("unavailable");
     expect(risk.reasons).toContain("Cash history missing: trading212:EUR.");

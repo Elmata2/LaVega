@@ -641,6 +641,123 @@ test("an unproven broker folds a foreign trade into the one wallet it anchors", 
   expect(after?.cashValue).toBeGreaterThan(800);
 });
 
+test("a coverage row stored before tradeCash existed does not pass for a declaration", () => {
+  /* This shipped. Rows written before the field existed read exactly like a
+   * broker that named no trade-cash stream, so every trade was dropped and the
+   * walk summed deposits without the purchases they funded. It put the wallet
+   * 16,627 EUR overdrawn on the day the account opened and turned a real
+   * return of about 5 percent into 74.83 percent. */
+  const stale = {
+    entity: "personal",
+    broker: "trading212",
+    status: "unknown",
+    reason: "written before tradeCash existed",
+  } as unknown as CashHistoryCoverage;
+
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "X",
+      side: "buy",
+      quantity: 1,
+      price: 900,
+      amount: 900,
+      currency: "EUR",
+      commission: 0,
+      settlement: { currency: "EUR", amount: -900 },
+    },
+  ];
+  const deposit: CashFlow = {
+    id: "deposit",
+    entity: "personal",
+    broker: "trading212",
+    date: "2026-01-02",
+    currency: "EUR",
+    amount: 1000,
+    kind: "deposit",
+  };
+
+  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [deposit],
+    cashCoverage: [stale],
+    today: "2026-01-06",
+  });
+
+  // Walking 1000 of deposits back off a 100 balance without the 900 purchase
+  // would read -900 on the opening day. It must refuse instead.
+  expect(series.every((point) => (point.cashValue ?? 0) >= 0)).toBe(true);
+  expect(series[0]?.cashValue).toBeNull();
+  expect(series[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+});
+
+test("a history whose movements do not close on an empty wallet is refused", () => {
+  /* The same arithmetic with the stream named but the purchases never
+   * reported: the funding is in the history and the spending is not, so the
+   * total does not come back to nothing on the day before the first deposit. */
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [
+      {
+        id: "deposit",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-02",
+        currency: "EUR",
+        amount: 1000,
+        kind: "deposit",
+      },
+    ],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+
+  expect(series[0]?.cashValue).toBeNull();
+  expect(series[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+
+  /* Add the withdrawal that accounts for the difference and the history
+   * closes, so the same dates can be stated. */
+  const closed = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [
+      {
+        id: "deposit",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-02",
+        currency: "EUR",
+        amount: 1000,
+        kind: "deposit",
+      },
+      {
+        id: "withdrawal",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-05",
+        currency: "EUR",
+        amount: -900,
+        kind: "withdrawal",
+      },
+    ],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+
+  expect(closed[0]?.cashValue).toBe(1000);
+  expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+});
+
 test("keeps unreachable and unconvertible cash legs unknown", () => {
   const cashBalances: CashBalance[] = [
     { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
