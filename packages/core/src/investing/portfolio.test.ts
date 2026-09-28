@@ -761,6 +761,48 @@ test("a history whose movements do not close on an empty wallet is refused", () 
   expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
 });
 
+test("rounding across many movements is tolerated, a missing one is not", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const flows = (count: number): CashFlow[] =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `flow-${index}`,
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 10,
+      kind: "deposit" as const,
+    }));
+
+  /* 200 movements of 10 is 2000, and the balance is a euro under it. That is
+   * half a cent per movement, which is what rounding comes to. */
+  const drifted = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1999, "2026-01-06")],
+    cashFlows: flows(200),
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(drifted[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+  expect(drifted[0]?.cashShortfall).toBeUndefined();
+
+  /* The same 200 movements with a 500 withdrawal never reported. Far past what
+   * rounding could account for, however many rows there are. */
+  const missing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1500, "2026-01-06")],
+    cashFlows: flows(200),
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(missing[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+  expect(missing[0]?.cashShortfall).toEqual({ "trading212:EUR": -500 });
+});
+
 test("names how far a history is from closing, and on which side", () => {
   const declared: CashHistoryCoverage = {
     entity: "personal",
