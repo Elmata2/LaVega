@@ -72,7 +72,8 @@ whenever anything looks off.
 ## Drive
 
 Targets: `--target local` (default), `--target prod` (`https://www.lavega.dev`), or
-`--base <url>` for a preview deploy.
+`--target preview` with `--base <url>` or `LAVEGA_PREVIEW_URL` for a Vercel preview deploy.
+`--base` alone implies `--target preview`. See [Preview](#preview).
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
@@ -97,12 +98,12 @@ node $C summary --target prod
 
 # broker + price sync and the vault behind them
 node $C sync-status --target prod
-node $C sync --target prod --force --wait
-node $C unlock --target prod --passphrase <passphrase>
+node $C sync --target preview --force --wait
+node $C unlock --target preview --passphrase <passphrase>
 
 # anything not wrapped
 node $C api GET /api/investing/benchmarks --target prod
-node $C api PUT /api/investing/benchmarks --target prod --body '{"symbols":["^GSPC"]}'
+node $C api PUT /api/investing/benchmarks --target preview --body '{"symbols":["^GSPC"]}'
 
 # the local instance's stdout/stderr
 node $C logs --lines 40
@@ -148,6 +149,37 @@ Standards for the proof, not just the pass:
   `shape: "degraded (empty + problems)"` for it; treat that as a failure to explain.
 - Mock nothing the production boundary does not already isolate. Yahoo Finance and the broker
   APIs are real calls from the standalone server too.
+
+## Preview
+
+A preview deploy is where logic meets real auth and a real Neon database without touching a
+real tenant. Prefer it over prod for anything that writes.
+
+- **Database.** Previews use the Neon branch `preview`, not production. Before a run,
+  confirm it has every migration and the same `LAVEGA_ENCRYPTION_KEY` as Production.
+  `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
+  the symptom of either gap.
+- **Account.** Preview has its own test user, never a real person's login. Its credentials
+  live in `/tmp/lavega-verify-investing/auth.preview.json`, separate from prod's `auth.json`.
+  Each origin gets its own cookie jar, so a preview login never replaces the prod session.
+- **Deployment Protection.** Previews answer without protection today. If it is turned on,
+  export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
+  `browser-login.mjs` sets Vercel's bypass cookie. Neither sends it to prod.
+- **URL.** Every deploy has its own URL. Get the latest with
+  `vercel ls --environment preview --cwd /Users/jortwiebrens/Documents/LaVega`; worktrees
+  are not Vercel-linked.
+
+```bash
+export LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app
+node $C doctor --target preview
+node $C login --target preview
+node $C sync --target preview --force --wait
+node .claude/skills/verify-investing/browser-login.mjs --target preview
+```
+
+Write commands on `--target prod` (`sync`, `prices sync`, `prices purge`, `consent --accept`,
+`unlock`, and `api` with any method but `GET`) refuse to run without `--allow-prod-write`.
+Add it only when the user says so for that run.
 
 ## Isolate
 

@@ -34,10 +34,10 @@ const evidenceDir = join(stateRoot, "evidence"); // survives teardown
 const pidFile = join(runDir, "local.pid");
 const portFile = join(runDir, "local.port");
 const logFile = join(runDir, "local.log");
-const cookieFile = join(runDir, "cookies.txt");
 /* Kept outside runDir so `cleanup` does not delete it, and outside the repo so
  * it can never be committed. The user writes it; this CLI only reads it. */
 const credentialsFile = join(stateRoot, "auth.json");
+const previewCredentialsFile = join(stateRoot, "auth.preview.json");
 
 const PROD_BASE = "https://www.lavega.dev";
 const DEFAULT_LOCAL_PORT = 8799;
@@ -99,32 +99,72 @@ function localPort(flags) {
   return DEFAULT_LOCAL_PORT;
 }
 
-function baseUrl(flags) {
-  if (flags.base) return String(flags.base).replace(/\/+$/, "");
-  const target = flags.target || "local";
-  if (target === "prod") return PROD_BASE;
-  if (target === "local") return `http://127.0.0.1:${localPort(flags)}`;
-  fail(`unknown --target "${target}"`, "use --target local, --target prod, or --base <url>");
+/** `--base` alone means a preview deploy: the docs always used it that way. */
+function targetName(flags) {
+  if (flags.target) return String(flags.target);
+  return flags.base ? "preview" : "local";
 }
 
+function baseUrl(flags) {
+  if (flags.base) return String(flags.base).replace(/\/+$/, "");
+  const target = targetName(flags);
+  if (target === "prod") return PROD_BASE;
+  if (target === "local") return `http://127.0.0.1:${localPort(flags)}`;
+  if (target === "preview") {
+    const preview = process.env.LAVEGA_PREVIEW_URL;
+    if (preview) return preview.replace(/\/+$/, "");
+    fail(
+      "--target preview needs --base <url> or LAVEGA_PREVIEW_URL",
+      "latest preview: vercel ls --environment preview --cwd <main checkout>",
+    );
+  }
+  fail(`unknown --target "${target}"`, "use --target local, prod, preview, or --base <url>");
+}
+
+/* Only the standalone server serves the SPA at "/". Prod and every preview run
+ * the mounted app under /investing/. */
 function spaPath(flags) {
-  const target = flags.target || (flags.base ? "custom" : "local");
-  return target === "prod" ? "/investing/" : "/";
+  return targetName(flags) === "local" ? "/" : "/investing/";
+}
+
+/* One jar per host, so a preview login never overwrites the prod session and a
+ * prod cookie is never sent to a preview deploy. */
+function cookieFileFor(flags) {
+  const host = new URL(baseUrl(flags)).host.replace(/[^a-z0-9.-]/gi, "_");
+  return join(runDir, `cookies-${host}.txt`);
+}
+
+/* Prod and preview hold different accounts: preview uses the seeded test user
+ * on the Neon `preview` branch, never a real person's login. */
+function credentialsFileFor(flags) {
+  return targetName(flags) === "preview" ? previewCredentialsFile : credentialsFile;
+}
+
+/* Write commands reach a real broker, the shared price store, or a real
+ * tenant's vault. Prod has one set of tenant rows and nothing to restore them
+ * from, so refuse there unless the caller names the risk. */
+function guardProdWrite(flags, action) {
+  if (targetName(flags) !== "prod" || flags["allow-prod-write"]) return;
+  fail(
+    `${action} writes to production tenant data`,
+    "verify writes on --target local or --target preview; add --allow-prod-write only with the user's go-ahead",
+  );
 }
 
 // ---------------------------------------------------------------- cookies
 
-function loadCookies() {
-  if (!existsSync(cookieFile)) return "";
-  return readFileSync(cookieFile, "utf8").trim();
+function loadCookies(flags) {
+  const file = cookieFileFor(flags);
+  if (!existsSync(file)) return "";
+  return readFileSync(file, "utf8").trim();
 }
 
-function saveCookies(response) {
+function saveCookies(flags, response) {
   const raw =
     typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
   if (raw.length === 0) return;
   const jar = new Map();
-  for (const pair of loadCookies().split("; ").filter(Boolean)) {
+  for (const pair of loadCookies(flags).split("; ").filter(Boolean)) {
     const [name, ...rest] = pair.split("=");
     jar.set(name, rest.join("="));
   }
@@ -134,7 +174,10 @@ function saveCookies(response) {
     jar.set(name.trim(), rest.join("="));
   }
   ensureDirs();
-  writeFileSync(cookieFile, [...jar].map(([name, value]) => `${name}=${value}`).join("; "));
+  writeFileSync(
+    cookieFileFor(flags),
+    [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
+  );
 }
 
 // ---------------------------------------------------------------- requests
@@ -146,8 +189,12 @@ async function request(flags, method, path, body) {
    * (MISSING_OR_NULL_ORIGIN) — that check is what stops a browser on another
    * site from posting here. A non-browser client has to state its origin. */
   const headers = { accept: "application/json", origin, referer: `${origin}/` };
-  const cookies = loadCookies();
+  const cookies = loadCookies(flags);
   if (cookies) headers.cookie = cookies;
+  /* Vercel Deployment Protection answers 401 to every call without this
+   * header. Prod has no protection; send it only where a deploy might. */
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypass && targetName(flags) === "preview") headers["x-vercel-protection-bypass"] = bypass;
   if (body !== undefined) headers["content-type"] = "application/json";
   const started = Date.now();
   let response;
@@ -165,7 +212,7 @@ async function request(flags, method, path, body) {
       error: error instanceof Error ? error.message : String(error),
     };
   }
-  saveCookies(response);
+  saveCookies(flags, response);
   const text = await response.text();
   let json = null;
   try {
@@ -368,7 +415,7 @@ async function commandDoctor(flags) {
     note("dashboard", false, {
       status: 401,
       reason: "no session — the mount refuses to guess a tenant",
-      fix: "control-investing.mjs login --target prod --email <you> --password <pw>",
+      fix: `control-investing.mjs login --target ${targetName(flags)}`,
     });
   } else {
     note("dashboard", dashboard.ok, {
@@ -416,6 +463,25 @@ async function commandDoctor(flags) {
   const vault = await request(flags, "GET", "/api/brokers/credentials/status");
   note("credentials", vault.ok, { status: vault.status, body: vault.json });
 
+  /* A connected broker with zero positions on a mounted target is the preview
+   * false green: the Neon branch lacks a migration, or its
+   * LAVEGA_ENCRYPTION_KEY differs from the key that wrote the snapshots, so
+   * nothing decrypts and the dashboard still answers 200 with no problems. */
+  if (
+    targetName(flags) !== "local" &&
+    authed &&
+    dashboard.ok &&
+    positions.length === 0 &&
+    vault.json?.status &&
+    vault.json.status !== "empty"
+  ) {
+    note("positionsPresent", false, {
+      vault: vault.json.status,
+      positions: 0,
+      fix: "check the Neon branch has every migration and LAVEGA_ENCRYPTION_KEY matches Production",
+    });
+  }
+
   const sync = await request(flags, "GET", "/api/brokers/sync/status");
   note("brokerSync", sync.ok, { status: sync.status, body: sync.json });
 
@@ -431,7 +497,7 @@ async function commandDoctor(flags) {
 function resolveCredentials(flags) {
   const path = flags["credentials-file"]
     ? resolve(String(flags["credentials-file"]))
-    : credentialsFile;
+    : credentialsFileFor(flags);
   if (existsSync(path)) {
     try {
       const stored = JSON.parse(readFileSync(path, "utf8"));
@@ -457,7 +523,7 @@ async function commandLogin(flags) {
   if (!credentials) {
     fail(
       "no credentials found",
-      `write ${credentialsFile} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`,
+      `write ${credentialsFileFor(flags)} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`,
     );
   }
   const response = await request(flags, "POST", "/api/auth/sign-in/email", {
@@ -472,7 +538,7 @@ async function commandLogin(flags) {
   print({
     signedIn: Boolean(session.json?.user),
     user: session.json?.user ?? null,
-    cookieJar: cookieFile,
+    cookieJar: cookieFileFor(flags),
     credentialsFrom: credentials.from,
   });
   return session.json?.user ? 0 : 1;
@@ -491,9 +557,9 @@ async function commandWhoami(flags) {
   return 0;
 }
 
-function commandLogout() {
-  rmSync(cookieFile, { force: true });
-  print({ cookieJarCleared: cookieFile });
+function commandLogout(flags) {
+  rmSync(cookieFileFor(flags), { force: true });
+  print({ cookieJarCleared: cookieFileFor(flags) });
   return 0;
 }
 
@@ -558,6 +624,7 @@ async function commandSync(flags) {
     });
     return 0;
   }
+  guardProdWrite(flags, "sync");
   const response = await request(flags, "POST", `/api/brokers/sync${force}`);
   if (!flags.wait) {
     print({ status: response.status, body: response.json ?? response.text });
@@ -580,6 +647,7 @@ async function commandUnlock(flags) {
       "unlock needs --passphrase",
       "the vault key is derived from it; nothing else can open the vault",
     );
+  guardProdWrite(flags, "unlock");
   const response = await request(flags, "POST", "/api/brokers/credentials/unlock", {
     passphrase: String(flags.passphrase),
   });
@@ -601,6 +669,7 @@ async function commandConsent(flags) {
     });
     return 0;
   }
+  guardProdWrite(flags, "consent --accept");
   const response = await request(flags, "PUT", "/api/market-data/consent", {
     accepted: true,
     disclosureVersion: flags.version ? String(flags.version) : undefined,
@@ -620,6 +689,7 @@ async function commandPrices(flags, sub) {
       });
       return 0;
     }
+    guardProdWrite(flags, "prices sync");
     const response = await request(
       flags,
       "POST",
@@ -633,6 +703,7 @@ async function commandPrices(flags, sub) {
       print({ refused: true, reason: "purge deletes every cached price bar", rerunWith: "--yes" });
       return 1;
     }
+    guardProdWrite(flags, "prices purge");
     const response = await request(flags, "DELETE", "/api/prices/cache");
     print({ status: response.status, body: response.json ?? response.text });
     return response.ok ? 0 : 1;
@@ -732,6 +803,7 @@ async function commandApi(flags, positional) {
   if (!method || !path)
     fail("api needs a method and a path", "example: api GET /api/investing/benchmarks");
   const body = flags.body ? JSON.parse(String(flags.body)) : undefined;
+  if (method.toUpperCase() !== "GET") guardProdWrite(flags, `api ${method.toUpperCase()}`);
   const response = await request(flags, method.toUpperCase(), path, body);
   print({
     status: response.status,
@@ -758,8 +830,10 @@ Usage: node .claude/skills/verify-investing/control-investing.mjs <command> [opt
 
 Targets
   --target local        standalone investing-server this CLI starts (default)
-  --target prod         https://www.lavega.dev (needs \`login\`)
-  --base <url>          any other origin
+  --target prod         https://www.lavega.dev (needs \`login\`; writes need --allow-prod-write)
+  --target preview      Vercel preview, from --base or LAVEGA_PREVIEW_URL (needs \`login\`)
+  --base <url>          a preview deploy; implies --target preview
+                        VERCEL_AUTOMATION_BYPASS_SECRET is sent to preview if set
 
 Instance
   up [--port N] [--data DIR]   start the local server, wait for /health
@@ -773,8 +847,8 @@ Health
   probe [--verbose] [--out F]  sweep every read-only endpoint, one report
   assets [--path P]            shell + every asset it references
 
-Session (prod)
-  login                        reads ${credentialsFile}
+Session (prod, preview)
+  login                        reads ${credentialsFile} (prod) or ${previewCredentialsFile} (preview)
   login --credentials-file F   or LAVEGA_VERIFY_EMAIL / LAVEGA_VERIFY_PASSWORD
   whoami
   logout
@@ -824,7 +898,7 @@ async function main() {
     case "whoami":
       return commandWhoami(flags);
     case "logout":
-      return commandLogout();
+      return commandLogout(flags);
     case "dashboard":
       return commandDashboard(flags);
     case "summary":
