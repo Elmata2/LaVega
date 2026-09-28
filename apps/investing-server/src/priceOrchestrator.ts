@@ -39,6 +39,12 @@ export type PriceSyncProgressStore = {
   ): Promise<PriceSyncProgress | null>;
 };
 
+type ActiveRun = {
+  queue: PriceSyncTarget[];
+  currentIndex: number;
+  bumpTotal: (extra: number) => void;
+};
+
 export function createInMemoryPriceSyncProgressStore(): PriceSyncProgressStore {
   const rows = new Map<string, PriceSyncProgress>();
   return {
@@ -202,6 +208,7 @@ export function createPriceOrchestrator(input: {
   const store = input.progressStore ?? createInMemoryPriceSyncProgressStore();
   const local = new Map<string, PriceSyncProgress>();
   const inFlight = new Map<string, Promise<PriceSyncProgress>>();
+  const activeRuns = new Map<string, ActiveRun>();
   const paceMs = input.paceMs ?? 300;
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
@@ -304,7 +311,7 @@ export function createPriceOrchestrator(input: {
         ? targets.filter((target) => pending.has(target.symbol) || target.kind === "benchmark")
         : [];
       const queue = resumed.length > 0 ? resumed : targets;
-      const total = resumed.length > 0 ? paused!.completed + queue.length : queue.length;
+      let total = resumed.length > 0 ? paused!.completed + queue.length : queue.length;
       const done = total - queue.length;
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
 
@@ -356,104 +363,119 @@ export function createPriceOrchestrator(input: {
         },
         leaseId,
       );
-      for (let index = 0; index < queue.length; index += 1) {
-        if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
-          return pause(index);
-        const target = queue[index]!;
-        await update(
-          tenantId,
-          {
-            status: "running",
-            total,
-            completed: done + index,
-            remainingSymbols: remainingFrom(index),
-            currentSymbol: target.symbol,
-            waitUntil: null,
-            message: `Synchronizing ${target.symbol}`,
-            problems: [...problems],
-            leaseId,
-          },
-          leaseId,
-        );
-        let fetched = true;
-        let heartbeatError: unknown;
-        let heartbeat = Promise.resolve();
-        const renew = () => {
-          heartbeat = heartbeat.then(async () => {
-            if (heartbeatError) return;
-            const current = local.get(tenantId);
-            if (!current) return;
-            const value = { ...current, updatedAt: now().toISOString() };
-            try {
-              if (!(await store.put(tenantId, value, leaseId))) throw new PriceSyncLeaseLost();
-              local.set(tenantId, value);
-              lastPersistAt.set(tenantId, now().getTime());
-            } catch (error) {
-              heartbeatError = error;
-            }
-          });
-        };
-        const timer = setInterval(renew, heartbeatEveryMs);
-        try {
-          const result = await input.sync(target, tenantId);
-          fetched = result.fetched;
-          problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
-        } catch (error) {
-          problems.push(
-            `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
-          );
-        } finally {
-          clearInterval(timer);
-          await heartbeat;
-        }
-        if (heartbeatError) throw heartbeatError;
-        if (now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs) {
-          const current = local.get(tenantId)!;
-          if (!(await store.put(tenantId, { ...current, updatedAt: now().toISOString() }, leaseId)))
-            throw new PriceSyncLeaseLost();
-          lastPersistAt.set(tenantId, now().getTime());
-        }
-        /* Cache hit made no provider request, so there is nothing to pace
-         * for. An error stays paced: we can't tell whether it reached the
-         * provider, so pacing is the safe default when one errored. */
-        if (fetched && index < queue.length - 1) {
-          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
-            return pause(index + 1);
-          const waitUntil = new Date(now().getTime() + paceMs).toISOString();
+      const activeRun: ActiveRun = {
+        queue,
+        currentIndex: -1,
+        bumpTotal: (extra) => {
+          total += extra;
+        },
+      };
+      activeRuns.set(tenantId, activeRun);
+      try {
+        for (let index = 0; index < queue.length; index += 1) {
+          activeRun.currentIndex = index;
+          if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
+            return pause(index);
+          const target = queue[index]!;
           await update(
             tenantId,
             {
-              status: "waiting",
+              status: "running",
               total,
-              completed: done + index + 1,
-              remainingSymbols: remainingFrom(index + 1),
-              currentSymbol: null,
-              waitUntil,
-              message: "Waiting before next price request",
+              completed: done + index,
+              remainingSymbols: remainingFrom(index),
+              currentSymbol: target.symbol,
+              waitUntil: null,
+              message: `Synchronizing ${target.symbol}`,
               problems: [...problems],
               leaseId,
             },
             leaseId,
           );
-          await wait(paceMs);
+          let fetched = true;
+          let heartbeatError: unknown;
+          let heartbeat = Promise.resolve();
+          const renew = () => {
+            heartbeat = heartbeat.then(async () => {
+              if (heartbeatError) return;
+              const current = local.get(tenantId);
+              if (!current) return;
+              const value = { ...current, updatedAt: now().toISOString() };
+              try {
+                if (!(await store.put(tenantId, value, leaseId))) throw new PriceSyncLeaseLost();
+                local.set(tenantId, value);
+                lastPersistAt.set(tenantId, now().getTime());
+              } catch (error) {
+                heartbeatError = error;
+              }
+            });
+          };
+          const timer = setInterval(renew, heartbeatEveryMs);
+          try {
+            const result = await input.sync(target, tenantId);
+            fetched = result.fetched;
+            problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
+          } catch (error) {
+            problems.push(
+              `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+            );
+          } finally {
+            clearInterval(timer);
+            await heartbeat;
+          }
+          if (heartbeatError) throw heartbeatError;
+          if (now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs) {
+            const current = local.get(tenantId)!;
+            if (
+              !(await store.put(tenantId, { ...current, updatedAt: now().toISOString() }, leaseId))
+            )
+              throw new PriceSyncLeaseLost();
+            lastPersistAt.set(tenantId, now().getTime());
+          }
+          /* Cache hit made no provider request, so there is nothing to pace
+           * for. An error stays paced: we can't tell whether it reached the
+           * provider, so pacing is the safe default when one errored. */
+          if (fetched && index < queue.length - 1) {
+            if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
+              return pause(index + 1);
+            const waitUntil = new Date(now().getTime() + paceMs).toISOString();
+            await update(
+              tenantId,
+              {
+                status: "waiting",
+                total,
+                completed: done + index + 1,
+                remainingSymbols: remainingFrom(index + 1),
+                currentSymbol: null,
+                waitUntil,
+                message: "Waiting before next price request",
+                problems: [...problems],
+                leaseId,
+              },
+              leaseId,
+            );
+            await wait(paceMs);
+          }
         }
+        return update(
+          tenantId,
+          {
+            status: problems.length ? "problem" : "completed",
+            total,
+            completed: total,
+            remainingSymbols: [],
+            currentSymbol: null,
+            waitUntil: null,
+            message: problems.length
+              ? "Price synchronization completed with problems"
+              : "Price synchronization completed",
+            problems,
+          },
+          leaseId,
+        );
+      } finally {
+        if (activeRuns.get(tenantId) === activeRun) activeRuns.delete(tenantId);
       }
-      return update(
-        tenantId,
-        {
-          status: problems.length ? "problem" : "completed",
-          total,
-          completed: total,
-          remainingSymbols: [],
-          currentSymbol: null,
-          waitUntil: null,
-          message: problems.length
-            ? "Price synchronization completed with problems"
-            : "Price synchronization completed",
-          problems,
-        },
-        leaseId,
-      );
     };
     /* Cleared here rather than from a `.finally` on a derived promise: that one
      * runs a microtask later than the caller it hands the result to, so the
@@ -481,6 +503,37 @@ export function createPriceOrchestrator(input: {
       if (inFlight.has(tenantId)) return structuredClone(local.get(tenantId) ?? idleProgress());
       const stored = await store.get(tenantId).catch(() => null);
       return structuredClone(stored ?? local.get(tenantId) ?? idleProgress());
+    },
+    /** If `tenantId` has a run actively looping in this process, and a fresh
+     * discover() now returns `symbol` as a benchmark this run's queue does not
+     * yet contain, splice it in right after whichever symbol is currently in
+     * flight so it is fetched next instead of waiting for this run to pause or
+     * finish. Returns whether it did. No-op when no run is active for the
+     * tenant: a fresh run's own discover() already sorts every selected
+     * benchmark first, and a paused run's resume already re-includes every
+     * selected benchmark. Safe to call without awaiting; never touches a
+     * provider. */
+    prioritizeNext: async (tenantId: string, symbol: string): Promise<boolean> => {
+      const active = activeRuns.get(tenantId);
+      if (!active) return false;
+      const key = symbol.trim().toUpperCase();
+      if (!key) return false;
+      if (active.queue.some((target) => target.symbol.toUpperCase() === key)) return false;
+      let targets: PriceSyncTarget[];
+      try {
+        targets = await input.discover(tenantId);
+      } catch {
+        return false;
+      }
+      if (activeRuns.get(tenantId) !== active) return false;
+      if (active.queue.some((target) => target.symbol.toUpperCase() === key)) return false;
+      const target = targets.find(
+        (candidate) => candidate.symbol.toUpperCase() === key && candidate.kind === "benchmark",
+      );
+      if (!target) return false;
+      active.queue.splice(active.currentIndex + 1, 0, target);
+      active.bumpTotal(1);
+      return true;
     },
   };
 }

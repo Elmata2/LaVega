@@ -145,9 +145,9 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
 });
 
 test("PUT /api/investing/benchmarks gets a newly selected benchmark into an already-running sync", async () => {
-  const holdings = [
+  const holdings: PriceSyncTarget[] = [
     {
-      kind: "current" as const,
+      kind: "current",
       symbol: "ASML",
       ticker: "ASML",
       exchange: "AMS",
@@ -155,7 +155,7 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
       backfillFrom: "2024-01-01",
     },
     {
-      kind: "current" as const,
+      kind: "current",
       symbol: "ADYEN",
       ticker: "ADYEN",
       exchange: "AMS",
@@ -163,7 +163,7 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
       backfillFrom: "2024-01-01",
     },
   ];
-  let discovered = holdings;
+  let discovered: PriceSyncTarget[] = holdings;
   const priceSyncTargets = vi.fn(() => discovered);
   let releaseFirst!: () => void;
   const firstPending = new Promise<void>((resolve) => {
@@ -192,7 +192,7 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
   discovered = [
     ...holdings,
     {
-      kind: "benchmark" as const,
+      kind: "benchmark",
       symbol: "^AEX",
       ticker: "^AEX",
       exchange: "UNKNOWN",
