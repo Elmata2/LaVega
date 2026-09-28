@@ -26,6 +26,10 @@ export type PortfolioValuePoint = {
    *  prove complete. The figure is what the reported movements support, not a
    *  statement, and absent when no wallet on this date needed one. */
   cashEstimated?: string[];
+  /** For a wallet that could not be valued because its movements do not total
+   *  back to an empty account, what they total to instead, per wallet. The
+   *  amount is what the history is missing and the sign is which side of it. */
+  cashShortfall?: Record<string, number>;
   /** Holdings inferred from a later snapshot without dated ownership evidence. */
   holdingsUnknown?: string[];
   /** Value, in `presentationCurrency`, of the `unpriced`/`holdingsUnknown`/
@@ -200,13 +204,18 @@ function bracketsReconcile(leg: CashLeg, date: string): boolean {
  *  owner had spent anything. Nothing in the reported movements was wrong; the
  *  set of them was incomplete, and only totalling them says so.
  */
-function historyCloses(leg: CashLeg): boolean {
+function historyResidual(leg: CashLeg): number | null {
   const earliest = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
-  if (!earliest) return false;
+  if (!earliest) return null;
   const movements = leg.events.filter((event) => event.date <= earliest.asOf);
-  if (movements.length === 0) return true;
+  if (movements.length === 0) return 0;
   const opening = earliest.amount - movements.reduce((sum, event) => sum + event.amount, 0);
-  return Number.isFinite(opening) && Math.abs(opening) <= RECONCILIATION_TOLERANCE;
+  return Number.isFinite(opening) ? opening : null;
+}
+
+function historyCloses(leg: CashLeg): boolean {
+  const residual = historyResidual(leg);
+  return residual !== null && Math.abs(residual) <= RECONCILIATION_TOLERANCE;
 }
 
 /** What a leg held on a date, and whether the broker's history proves it.
@@ -612,10 +621,18 @@ export function computePortfolioValueSeries(
     let reachableCashLegs = 0;
     const cashUnknown = new Set<string>();
     const cashEstimated = new Set<string>();
+    const cashShortfall: Record<string, number> = {};
     for (const leg of legs) {
       const { amount, estimated } = cashAmountOnDate(date, leg);
       if (amount === null || !Number.isFinite(amount)) {
         cashUnknown.add(displayCashKey(leg));
+        /* What the movements come to when they do not come to nothing. This
+         * is the size of the history that is missing, and its sign says which
+         * side: below zero the spending is recorded without the funding,
+         * above it the funding without the spending. */
+        const residual = historyResidual(leg);
+        if (residual !== null && Math.abs(residual) > RECONCILIATION_TOLERANCE)
+          cashShortfall[displayCashKey(leg)] = residual;
         continue;
       }
       try {
@@ -644,6 +661,7 @@ export function computePortfolioValueSeries(
       forwardFilled: [...forwardFilled].sort(),
       cashUnknown: [...cashUnknown].sort(),
       ...(cashEstimated.size ? { cashEstimated: [...cashEstimated].sort() } : {}),
+      ...(Object.keys(cashShortfall).length ? { cashShortfall } : {}),
       ...(holdingsUnknown.size ? { holdingsUnknown: [...holdingsUnknown].sort() } : {}),
       ...(unpriced.size || holdingsUnknown.size || forwardFilled.size
         ? { unaccountedValue: unaccountedUnknown ? null : unaccountedValue }

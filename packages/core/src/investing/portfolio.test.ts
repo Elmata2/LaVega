@@ -761,6 +761,54 @@ test("a history whose movements do not close on an empty wallet is refused", () 
   expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
 });
 
+test("names how far a history is from closing, and on which side", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const deposit = (amount: number): CashFlow => ({
+    id: `flow-${amount}`,
+    entity: "personal",
+    broker: "trading212",
+    date: "2026-01-02",
+    currency: "EUR",
+    amount,
+    kind: amount > 0 ? "deposit" : "withdrawal",
+  });
+
+  /* 1000 went in and 100 is left, with nothing recorded taking 900 out. The
+   * funding is in the history and the spending is not. */
+  const spendingMissing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [deposit(1000)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(spendingMissing[0]?.cashShortfall).toEqual({ "trading212:EUR": -900 });
+
+  /* 100 went out and 1000 is left, with nothing recorded putting it there. */
+  const fundingMissing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1000, "2026-01-06")],
+    cashFlows: [deposit(-100)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(fundingMissing[0]?.cashShortfall).toEqual({ "trading212:EUR": 1100 });
+
+  /* A history that closes carries no shortfall at all. */
+  const closed = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1000, "2026-01-06")],
+    cashFlows: [deposit(1000)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(closed[0]?.cashShortfall).toBeUndefined();
+  expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+});
+
 test("keeps unreachable and unconvertible cash legs unknown", () => {
   const cashBalances: CashBalance[] = [
     { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
