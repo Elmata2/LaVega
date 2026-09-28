@@ -424,6 +424,12 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           )}
         </div>
       )}
+      {latest && (latest.cashEstimated?.length ?? 0) > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Estimated cash: {latest.cashEstimated?.join(", ")}. Walked from movements your broker
+          reported without proving the history complete.
+        </p>
+      )}
     </section>
   );
 }

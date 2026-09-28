@@ -60,16 +60,21 @@ function valueSeries(cache: ReturnType<typeof createBrokerDataCache>) {
     dividends: data.dividends,
     cashCoverage: data.cashCoverage,
     today: "2026-01-09",
-  }).map(({ date, value, cashUnknown }) => ({ date, value, cashUnknown }));
+  }).map(({ date, value, cashUnknown, cashEstimated }) => ({
+    date,
+    value,
+    cashUnknown,
+    cashEstimated: cashEstimated ?? [],
+  }));
 }
 
 describe("IBKR cash history from adapter to portfolio", () => {
   const settled = [
-    { date: "2026-01-05", value: 1200, cashUnknown: [] },
-    { date: "2026-01-06", value: 1200, cashUnknown: [] },
-    { date: "2026-01-07", value: 1199.2, cashUnknown: [] },
-    { date: "2026-01-08", value: 1199.2, cashUnknown: [] },
-    { date: "2026-01-09", value: 1199.2, cashUnknown: [] },
+    { date: "2026-01-05", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-08", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-09", value: 1199.2, cashUnknown: [], cashEstimated: [] },
   ];
 
   test("counts a USD execution and its commission once from the Statement of Funds", () => {
@@ -126,7 +131,11 @@ describe("IBKR cash history from adapter to portfolio", () => {
     expect(cache.read().cashCoverage).toEqual([
       expect.objectContaining({ broker: "ibkr", status: "unknown" }),
     ]);
-    expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
+    /* No Statement of Funds means no proven window, so the cash report's own
+     * balances anchor a walk instead of standing alone. Nothing is unknown;
+     * every date before the closing statement is an estimate and says so. */
+    expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+    expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
       ["ibkr:EUR", "ibkr:USD"],
       ["ibkr:EUR", "ibkr:USD"],
       ["ibkr:EUR", "ibkr:USD"],
@@ -198,7 +207,8 @@ test("Trading 212 cash with unproven history is known only on its balance date",
     }),
   );
 
-  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
+  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+  expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
     ["trading212:EUR"],
     ["trading212:EUR"],
     ["trading212:EUR"],
@@ -294,16 +304,21 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
     const history = points.filter((point) => point.date < "2026-01-09");
 
     expect(history.map(({ date }) => date)).toEqual(DATES.slice(0, 4));
-    expect(history.every((point) => point.cashUnknown.includes("trading212:EUR"))).toBe(true);
+    /* A transfer whose direction the broker did not state cannot be undone, so
+     * the walk stops at it: the date behind it stays unknown while the dates
+     * the closing statement does reach are estimated. */
+    expect(history[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+    expect(history[0]?.cashValue).toBeNull();
+    expect(history.slice(1).every((point) => point.cashUnknown.length === 0)).toBe(true);
+    expect(history.slice(1).every((point) => point.cashEstimated?.length === 1)).toBe(true);
+    // The unknown date still breaks the chain, so no return spans it.
     expect(
       buildIndexedSeries(history, [], dashboard.externalCashFlows).map(
         (point) => point.portfolioReturn,
-      ),
-    ).toEqual([null, null, null, null]);
-    const { metrics, risk } = buildHistoricalRisk(dashboard, "All");
+      )[0],
+    ).toBeNull();
+    const { risk } = buildHistoricalRisk(dashboard, "All");
     expect(risk.status).toBe("unavailable");
     expect(risk.reasons).toContain("Cash history missing: trading212:EUR.");
-    expect(metrics.annualizedVolatility).toBeNull();
-    expect(metrics.maxDrawdown).toBeNull();
   });
 });
