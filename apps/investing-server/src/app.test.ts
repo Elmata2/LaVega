@@ -148,7 +148,10 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
   expect(invalid.status).toBe(400);
 });
 
-test("PUT /api/investing/benchmarks gets a newly selected benchmark into an already-running sync", async () => {
+test("a benchmark added via PUT during an already-running sync is fetched next by that same sync", async () => {
+  // priceSyncTargets is wired to the real benchmark selection store, exactly as
+  // apps/investing-server/src/index.ts wires it in production: PUT only ever
+  // writes that store. Nothing here calls into the orchestrator that is running.
   const holdings: PriceSyncTarget[] = [
     {
       kind: "current",
@@ -167,8 +170,21 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
       backfillFrom: "2024-01-01",
     },
   ];
-  let discovered: PriceSyncTarget[] = holdings;
-  const priceSyncTargets = vi.fn(() => discovered);
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const priceSyncTargets = vi.fn(async (tenantId: string) => {
+    const { symbols } = await benchmarkSelectionStore.get(tenantId);
+    return [
+      ...symbols.map((symbol) => ({
+        kind: "benchmark" as const,
+        symbol,
+        ticker: symbol,
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      })),
+      ...holdings,
+    ];
+  });
   let releaseFirst!: () => void;
   const firstPending = new Promise<void>((resolve) => {
     releaseFirst = resolve;
@@ -183,6 +199,7 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
   };
   const investingApp = createApp({
     provider: provider as never,
+    benchmarkSelectionStore,
     priceSyncTargets,
     priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
@@ -193,24 +210,12 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
     expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML" })),
   );
 
-  discovered = [
-    ...holdings,
-    {
-      kind: "benchmark",
-      symbol: "^AEX",
-      ticker: "^AEX",
-      exchange: "UNKNOWN",
-      currency: "EUR",
-      backfillFrom: "2024-01-01",
-    },
-  ];
   const put = await investingApp.request("/api/investing/benchmarks", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ symbols: ["^AEX"] }),
   });
   expect(put.status).toBe(200);
-  await vi.waitFor(() => expect(priceSyncTargets).toHaveBeenCalledTimes(2));
 
   releaseFirst();
   await sync;
@@ -220,26 +225,6 @@ test("PUT /api/investing/benchmarks gets a newly selected benchmark into an alre
     "^AEX",
     "ADYEN",
   ]);
-});
-
-test("PUT /api/investing/benchmarks does not re-prioritize a benchmark that was already selected", async () => {
-  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
-  await benchmarkSelectionStore.set({ tenantId: "local", symbols: ["^AEX"] });
-  const priceSyncTargets = vi.fn(() => []);
-  const investingApp = createApp({
-    benchmarkSelectionStore,
-    priceSyncTargets,
-    priceSyncPaceMs: 0,
-  });
-
-  const put = await investingApp.request("/api/investing/benchmarks", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ symbols: ["^AEX"] }),
-  });
-
-  expect(put.status).toBe(200);
-  expect(priceSyncTargets).not.toHaveBeenCalled();
 });
 
 test("benchmark search route returns results after persisted consent", async () => {

@@ -400,9 +400,17 @@ test("a benchmark selected during a paused run joins its next slice", async () =
   ]);
 });
 
-test("a benchmark selected while a run is running is fetched next in that same run", async () => {
+test("a benchmark selected mid-run through the shared selection store is fetched next by the instance already running", async () => {
+  // Two orchestrator instances sharing only the durable stores, exactly like two
+  // separate Vercel invocations: no in-process object (an activeRuns registry,
+  // say) may be the thing that carries the new benchmark into the run.
   const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
-  let discovered = holdings;
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let selectedBenchmarks: string[] = [];
+  const discover = () => [
+    ...selectedBenchmarks.map((symbol) => ({ ...symbolTarget(symbol), kind: "benchmark" as const })),
+    ...holdings,
+  ];
   let releaseOne!: () => void;
   const firstPending = new Promise<void>((resolve) => {
     releaseOne = resolve;
@@ -411,15 +419,24 @@ test("a benchmark selected while a run is running is fetched next in that same r
     if (target.symbol === "ONE") await firstPending;
     return result();
   });
-  const orchestrator = createPriceOrchestrator({ discover: () => discovered, sync, paceMs: 0 });
+  const instanceRunningTheSync = createPriceOrchestrator({ discover, sync, paceMs: 0, progressStore });
+  // Never used to run anything: it stands in for the invocation that serves the
+  // PUT and a later status poll, and shares no JS object with the run above.
+  const anotherInstance = createPriceOrchestrator({
+    discover,
+    sync: async () => result(),
+    paceMs: 0,
+    progressStore,
+  });
 
-  const run = orchestrator.run("local");
+  const run = instanceRunningTheSync.run("local");
   await waitForAssertion(() =>
     expect(sync).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ONE" }), "local"),
   );
 
-  discovered = [...holdings, { ...symbolTarget("^AEX"), kind: "benchmark" }];
-  await expect(orchestrator.prioritizeNext("local", "^AEX")).resolves.toBe(true);
+  // The PUT handler only writes the selection store; it never calls into the
+  // orchestrator that happens to be running.
+  selectedBenchmarks = ["^AEX"];
 
   releaseOne();
   await run;
@@ -430,11 +447,11 @@ test("a benchmark selected while a run is running is fetched next in that same r
     "TWO",
     "THREE",
   ]);
-});
-
-test("prioritizing a benchmark is a no-op when no run is active for the tenant", async () => {
-  const orchestrator = createPriceOrchestrator({ discover: () => [], sync: async () => result() });
-  await expect(orchestrator.prioritizeNext("local", "^AEX")).resolves.toBe(false);
+  await expect(anotherInstance.status("local")).resolves.toMatchObject({
+    status: "completed",
+    total: 4,
+    completed: 4,
+  });
 });
 
 test("progress survives the process that produced it", async () => {
