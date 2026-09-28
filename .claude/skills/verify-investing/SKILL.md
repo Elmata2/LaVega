@@ -76,9 +76,19 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
   request or action and changes nothing. `help --json` lists each effect as `remote-write`,
   `local-destructive` or `browser-action`. A `remote-write` on `--target prod` also needs
   `--allow-prod-write`.
-- **Tests.** Run `pnpm run test:verify-investing`. This is a black-box `node:test` suite
-  against a stub HTTP server and a fake `browse` binary. Run it after any change to the CLI,
-  and add a test for each new command or flag.
+- **Tests.** There are two suites:
+  - `pnpm run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
+    the prod guard. It runs against a stub HTTP server and fake `browse` and `vercel`
+    binaries, so it is fast and offline, and it can exercise writes such as `prices purge
+    --yes` without deleting real data. Run it after any change to the CLI, and add a test
+    for each new command or flag.
+  - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
+    with the preview test user. It proves that real data reaches the API and the rendered
+    page. It only reads; every write in it runs with `--dry-run`. It skips when
+    `auth.preview.json` is missing, and it uses its own state directory, so it does not move
+    your pin or session.
+- **Files.** `browse` only reads and writes under `/tmp` or its working directory, so keep
+  `VERIFY_INVESTING_DIR` and `--out` paths under `/tmp`.
 
 ## Doctor
 
@@ -210,12 +220,15 @@ real tenant. Prefer it over prod for anything that writes.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.
-- **URL.** Every deploy has its own URL. Get the latest with
-  `vercel ls --environment preview --cwd /Users/jortwiebrens/Documents/LaVega`; worktrees
-  are not Vercel-linked.
+- **URL.** Every deploy has its own URL, and the CLI finds it for you. With no `--base` and
+  no `LAVEGA_PREVIEW_URL`, the first `--target preview` command runs `vercel ls` in the main
+  checkout (worktrees are not Vercel-linked). It then pins the newest READY preview. Later
+  commands use the pin, so the login and the reads after it stay on one host. Run
+  `preview --refresh` to move the pin to the newest deploy, or `preview --branch <branch>` to
+  pin the newest deploy of your PR branch. After the pin moves, log in again.
 
 ```bash
-export LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app
+node $C preview --branch my-feature      # optional: verify this branch's deploy
 node $C doctor --target preview
 node $C login --target preview
 node $C sync --target preview --force --wait

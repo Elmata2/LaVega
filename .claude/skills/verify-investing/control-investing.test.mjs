@@ -33,6 +33,9 @@ let received;
 let stateDir;
 let browseLog;
 let fakeBrowse;
+let fakeVercel;
+let vercelLog;
+let vercelReply;
 
 function route(method, path, status, body, headers = {}) {
   routes.set(`${method} ${path}`, { status, body, headers });
@@ -79,7 +82,30 @@ beforeEach(() => {
     `#!/bin/sh\necho "$@" >> "${browseLog}"\nif [ "$1" = "click" ] && [ "$2" = "@missing" ]; then echo "no element matches @missing" >&2; exit 1; fi\necho "browse-ok $1"\n`,
   );
   chmodSync(fakeBrowse, 0o755);
+  vercelLog = join(stateDir, "vercel.log");
+  vercelReply = join(stateDir, "vercel.json");
+  fakeVercel = join(stateDir, "vercel");
+  writeFileSync(fakeVercel, `#!/bin/sh\necho "$@" >> "${vercelLog}"\ncat "${vercelReply}"\n`);
+  chmodSync(fakeVercel, 0o755);
+  vercelDeployments([{ url: "lavega-newest.vercel.app", ref: "feature-a", sha: "abcdef123" }]);
 });
+
+function vercelDeployments(list) {
+  writeFileSync(
+    vercelReply,
+    JSON.stringify({
+      deployments: list.map((entry, index) => ({
+        url: entry.url,
+        state: "READY",
+        createdAt: 1_790_000_000_000 - index,
+        meta: { githubCommitRef: entry.ref, githubCommitSha: entry.sha },
+      })),
+    }),
+  );
+}
+
+const vercelCalls = () =>
+  existsSync(vercelLog) ? readFileSync(vercelLog, "utf8").trim().split("\n") : [];
 
 /** Run the CLI; resolves (never rejects) with exit code and parsed output. */
 function run(args, env = {}) {
@@ -93,6 +119,8 @@ function run(args, env = {}) {
           HOME: process.env.HOME,
           VERIFY_INVESTING_DIR: stateDir,
           LAVEGA_BROWSE_BIN: fakeBrowse,
+          LAVEGA_VERCEL_BIN: fakeVercel,
+          LAVEGA_VERCEL_CWD: stateDir,
           ...env,
         },
       },
@@ -261,13 +289,6 @@ describe("errors", () => {
     assert.equal(result.code, 2);
     assert.equal(result.error.error.code, "flag-missing");
     assert.equal(received.length, 0);
-  });
-
-  test("preview without a URL says how to find one", async () => {
-    const result = await run(["doctor", "--target", "preview"], { LAVEGA_PREVIEW_URL: "" });
-    assert.equal(result.code, 2);
-    assert.equal(result.error.error.code, "preview-url-missing");
-    assert.match(result.error.error.fix, /vercel ls/);
   });
 
   test("login without credentials tells the agent to ask the user", async () => {
@@ -525,6 +546,96 @@ describe("session", () => {
     assert.equal(result.json.env.VERCEL_AUTOMATION_BYPASS_SECRET, true);
     assert.doesNotMatch(result.stdout, /s3cret-value/);
     assert.equal(received.length, 0);
+  });
+});
+
+describe("preview lookup", () => {
+  const previewEnv = { LAVEGA_PREVIEW_URL: "" };
+
+  test("--target preview with no URL pins the newest READY deploy", async () => {
+    const result = await run(["sync", "--dry-run", "--target", "preview"], previewEnv);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.would.url, "https://lavega-newest.vercel.app/api/brokers/sync");
+    assert.match(vercelCalls()[0], /^ls --environment preview --status READY --format json --cwd /);
+  });
+
+  test("the pin holds even after a newer deploy lands", async () => {
+    await run(["sync", "--dry-run", "--target", "preview"], previewEnv);
+    vercelDeployments([{ url: "lavega-newer.vercel.app", ref: "feature-b" }]);
+    const result = await run(["sync", "--dry-run", "--target", "preview"], previewEnv);
+    assert.match(result.json.would.url, /lavega-newest/);
+    assert.equal(vercelCalls().length, 1);
+  });
+
+  test("preview --refresh moves the pin and says to log in again", async () => {
+    await run(["sync", "--dry-run", "--target", "preview"], previewEnv);
+    vercelDeployments([{ url: "lavega-newer.vercel.app", ref: "feature-b" }]);
+    const result = await run(["preview", "--refresh"], previewEnv);
+    assert.equal(result.code, 0);
+    assert.equal(result.json.pinned.url, "https://lavega-newer.vercel.app");
+    assert.equal(result.json.previous, "https://lavega-newest.vercel.app");
+    assert.match(result.json.next, /login --target preview/);
+  });
+
+  test("preview --branch filters on the branch", async () => {
+    const result = await run(["preview", "--branch", "feature-a"], previewEnv);
+    assert.equal(result.code, 0);
+    assert.equal(result.json.pinned.branch, "feature-a");
+    assert.equal(result.json.pinned.commit, "abcdef1");
+    assert.match(vercelCalls()[0], /--meta githubCommitRef=feature-a/);
+  });
+
+  test("no matching deploy says what to do", async () => {
+    vercelDeployments([]);
+    const result = await run(["preview", "--branch", "nope"], previewEnv);
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "preview-not-found");
+    assert.match(result.error.error.fix, /push the branch/);
+  });
+
+  test("vercel output that is not JSON names vercel login", async () => {
+    writeFileSync(vercelReply, "Error: not authorized");
+    const result = await run(["doctor", "--target", "preview"], previewEnv);
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "vercel-failed");
+    assert.match(result.error.error.fix, /vercel login/);
+  });
+
+  test("a missing vercel CLI says how to install it or pass a URL", async () => {
+    const result = await run(["doctor", "--target", "preview"], {
+      ...previewEnv,
+      LAVEGA_VERCEL_BIN: join(stateDir, "no-vercel"),
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "vercel-missing");
+    assert.match(result.error.error.fix, /--base/);
+  });
+
+  test("LAVEGA_PREVIEW_URL and --base win over the lookup", async () => {
+    const env = await run(["sync", "--dry-run", "--target", "preview"], {
+      LAVEGA_PREVIEW_URL: "https://from-env.vercel.app",
+    });
+    assert.match(env.json.would.url, /from-env/);
+    const base = await run(
+      ["sync", "--dry-run", "--base", "https://from-flag.vercel.app"],
+      previewEnv,
+    );
+    assert.match(base.json.would.url, /from-flag/);
+    assert.deepEqual(vercelCalls(), []);
+  });
+
+  test("info never runs the lookup", async () => {
+    const result = await run(["info", "--target", "preview"], previewEnv);
+    assert.equal(result.code, 0);
+    assert.equal(result.json.base, null);
+    assert.match(result.json.baseNote, /not pinned/);
+    assert.deepEqual(vercelCalls(), []);
+  });
+
+  test("preview with no flags shows the pin without a lookup", async () => {
+    const result = await run(["preview"], previewEnv);
+    assert.equal(result.json.pinned, null);
+    assert.deepEqual(vercelCalls(), []);
   });
 });
 

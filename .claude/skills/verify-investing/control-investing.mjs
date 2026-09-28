@@ -196,18 +196,135 @@ function baseUrl(flags) {
   if (target === "prod") return PROD_BASE;
   if (target === "local") return `http://127.0.0.1:${localPort(flags)}`;
   if (target === "preview") {
-    const preview = process.env.LAVEGA_PREVIEW_URL;
+    const preview = process.env.LAVEGA_PREVIEW_URL || pinnedPreview()?.url;
     if (preview) return preview.replace(/\/+$/, "");
-    fail(
-      "--target preview needs --base <url> or LAVEGA_PREVIEW_URL",
-      "find the latest preview with `vercel ls --environment preview --cwd <main checkout>`, then export LAVEGA_PREVIEW_URL=<url>",
-      { code: "preview-url-missing" },
-    );
+    return pinPreview(latestPreview()).url;
   }
   fail(`unknown --target "${target}"`, "use --target local, prod, preview, or --base <url>");
 }
 
+// ---------------------------------------------------------------- preview lookup
+
+/* Every deploy gets its own URL, and each host gets its own cookie jar. The
+ * first preview command pins the newest deploy, so a login and the commands
+ * after it keep talking to the same host even when a newer deploy lands
+ * between them. `preview --refresh` moves the pin. */
+const previewPinFile = join(runDir, "preview.json");
+
+function pinnedPreview() {
+  if (!existsSync(previewPinFile)) return null;
+  try {
+    return JSON.parse(readFileSync(previewPinFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function pinPreview(deployment) {
+  ensureDirs();
+  writeFileSync(previewPinFile, JSON.stringify(deployment, null, 2));
+  return deployment;
+}
+
+/* Worktrees are not Vercel-linked; the main checkout, which owns .vercel/, is
+ * the parent of the shared git directory. */
+function vercelCwd() {
+  if (process.env.LAVEGA_VERCEL_CWD) return process.env.LAVEGA_VERCEL_CWD;
+  if (existsSync(join(repoRoot, ".vercel/project.json"))) return repoRoot;
+  const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return common.status === 0 ? dirname(common.stdout.trim()) : repoRoot;
+}
+
+/** The newest READY preview deploy, optionally only for one git branch. */
+function latestPreview(branch) {
+  const bin = process.env.LAVEGA_VERCEL_BIN || "vercel";
+  const cwd = vercelCwd();
+  const args = ["ls", "--environment", "preview", "--status", "READY", "--format", "json"];
+  if (branch) args.push("--meta", `githubCommitRef=${branch}`);
+  args.push("--cwd", cwd);
+  const result = spawnSync(bin, args, { encoding: "utf8", timeout: 60_000 });
+  const manual = "or pass --base <url> / export LAVEGA_PREVIEW_URL=<url>";
+  if (result.error)
+    fail(
+      `could not run ${bin}: ${result.error.message}`,
+      `install the Vercel CLI (npm i -g vercel), ${manual}`,
+      {
+        code: "vercel-missing",
+        exitCode: 1,
+      },
+    );
+  let listing;
+  try {
+    listing = JSON.parse(result.stdout);
+  } catch {
+    const detail = (result.stderr || result.stdout || "").trim().split("\n").slice(-2).join(" ");
+    fail(
+      `vercel ls did not return JSON (exit ${result.status}): ${detail}`,
+      `run \`vercel login\` and check ${cwd} is Vercel-linked, ${manual}`,
+      { code: "vercel-failed", exitCode: 1 },
+    );
+  }
+  const deployment = listing.deployments?.[0];
+  if (!deployment)
+    fail(
+      branch ? `no READY preview deploy for branch "${branch}"` : "no READY preview deploy found",
+      branch
+        ? "push the branch and wait for its build, or drop --branch to take the newest preview"
+        : `push a branch to get a preview, ${manual}`,
+      { code: "preview-not-found", exitCode: 1 },
+    );
+  return {
+    url: `https://${deployment.url}`,
+    branch: deployment.meta?.githubCommitRef ?? null,
+    commit: deployment.meta?.githubCommitSha?.slice(0, 7) ?? null,
+    createdAt: new Date(deployment.createdAt).toISOString(),
+  };
+}
+
+function commandPreview({ flags }) {
+  const pinned = pinnedPreview();
+  if (!flags.refresh && !flags.branch) {
+    print({
+      pinned,
+      env: process.env.LAVEGA_PREVIEW_URL ?? null,
+      uses:
+        process.env.LAVEGA_PREVIEW_URL ??
+        pinned?.url ??
+        "the newest preview, looked up on first use",
+    });
+    return 0;
+  }
+  const deployment = latestPreview(flags.branch ? String(flags.branch) : undefined);
+  pinPreview(deployment);
+  print({
+    pinned: deployment,
+    previous: pinned?.url === deployment.url ? undefined : (pinned?.url ?? null),
+    note: process.env.LAVEGA_PREVIEW_URL
+      ? "LAVEGA_PREVIEW_URL is set and still wins over the pin"
+      : undefined,
+    next:
+      pinned?.url === deployment.url
+        ? undefined
+        : `new host: run \`${SELF} login --target preview\` before reading`,
+  });
+  return 0;
+}
+
+/** baseUrl without side effects: never runs the preview lookup. */
 function tryBaseUrl(flags) {
+  const unresolvedPreview =
+    targetName(flags) === "preview" &&
+    !flags.base &&
+    !process.env.LAVEGA_PREVIEW_URL &&
+    !pinnedPreview();
+  if (unresolvedPreview)
+    return {
+      base: null,
+      baseNote: "not pinned yet; the first preview command pins the newest deploy",
+    };
   try {
     return { base: baseUrl(flags) };
   } catch (error) {
@@ -1175,6 +1292,8 @@ function runBrowse(args) {
 /* Chromium not installed is the one failure every fresh machine hits. */
 function browseFix(step) {
   const text = `${step.output}\n${step.stderr ?? ""}`;
+  if (/Path must be within/i.test(text))
+    return "browse only reads and writes under /tmp or its working directory: keep VERIFY_INVESTING_DIR and --out under /tmp";
   if (/Executable doesn't exist|playwright install/i.test(text))
     return "install the pinned Chromium once: bunx playwright@1.58.2 install chromium";
   if (/no (element|match)|not found|timeout/i.test(text))
@@ -1336,7 +1455,8 @@ const TARGET_FLAGS = {
   target: {
     type: "string",
     values: ["local", "prod", "preview"],
-    description: "local (default), prod (https://www.lavega.dev), or preview",
+    description:
+      "local (default), prod (https://www.lavega.dev), or preview (newest deploy unless --base/LAVEGA_PREVIEW_URL)",
   },
   base: { type: "string", description: "a deploy URL; implies --target preview" },
   port: { type: "number", description: "local port (default: the port `up` recorded, else 8799)" },
@@ -1364,6 +1484,19 @@ const COMMANDS = [
     summary: "Show target, local instance, sessions and tool paths (no network)",
     run: commandInfo,
     examples: ["info", "info --target prod"],
+  },
+  {
+    name: "preview",
+    group: "Instance",
+    summary: "Show or move the pinned preview deploy (--refresh, --branch)",
+    description:
+      "--target preview with no --base and no LAVEGA_PREVIEW_URL uses the pinned deploy. Nothing pinned: the first preview command pins the newest READY preview (vercel ls). --refresh re-pins the newest; --branch pins the newest for that git branch. A new host needs a new login.",
+    flags: {
+      refresh: { type: "boolean", description: "pin the newest READY preview" },
+      branch: { type: "string", description: "pin the newest READY preview of this git branch" },
+    },
+    run: commandPreview,
+    examples: ["preview", "preview --refresh", "preview --branch my-feature"],
   },
   {
     name: "up",
@@ -1948,7 +2081,8 @@ Usage: ${SELF} <command> [args] [flags]
 ${sections}
 
 Targets (every command)
-  --target local|prod|preview   default local; preview reads --base or LAVEGA_PREVIEW_URL
+  --target local|prod|preview   default local; preview: --base, LAVEGA_PREVIEW_URL, else the
+                                pinned newest deploy (see \`preview --help\`)
   --base <url>                  a preview deploy; implies --target preview
   --port <n>                    local port
 
