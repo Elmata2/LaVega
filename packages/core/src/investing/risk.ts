@@ -48,9 +48,6 @@ export function buildHistoricalRisk(
     ...new Set(earlier.flatMap((point) => point.holdingsUnknown ?? [])),
   ].sort();
   const estimatedPrices = earlier.some((point) => point.forwardFilled.length > 0);
-  const estimatedCash = [
-    ...new Set(earlier.flatMap((point) => point.cashEstimated ?? [])),
-  ].sort();
   const coverage =
     window.length === 0
       ? null
@@ -92,10 +89,6 @@ export function buildHistoricalRisk(
   if (missingHoldings.length)
     reasons.push(`Ownership history incomplete for ${missingHoldings.length} holdings.`);
   if (estimatedPrices) reasons.push("Some dates use carried-forward prices.");
-  if (estimatedCash.length)
-    reasons.push(
-      `Cash for ${estimatedCash.join(", ")} is walked from history the broker could not prove complete.`,
-    );
   if (coverage !== null && coverage < 1)
     reasons.push(
       `Estimate covers ${(coverage * 100).toFixed(2)}% of portfolio value; the rest carries uncertain ownership or pricing but is too small to change the result.`,

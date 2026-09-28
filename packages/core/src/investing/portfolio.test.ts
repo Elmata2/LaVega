@@ -505,142 +505,6 @@ test("a single-wallet broker settles foreign trades and flows into its wallet", 
   expect(opening?.cashValue).toBeCloseTo(99.15, 9);
 });
 
-test("statements that the reported movements cannot reconcile are left unknown", () => {
-  /* 500 on the 2nd and 800 on the 6th with nothing between them saying where
-   * 300 came from. Walking forward from the first says 500, walking back from
-   * the second says 800, and the history is what is wrong. An estimate here
-   * would be picking one statement and ignoring the other. */
-  const declared: CashHistoryCoverage = {
-    entity: "personal",
-    broker: "trading212",
-    tradeCash: "trade-settlement",
-    status: "unknown",
-    reason: "window unproven",
-  };
-
-  expect(
-    cashSeries({
-      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
-      cashCoverage: [declared],
-      today: "2026-01-06",
-    }),
-  ).toEqual([
-    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-  ]);
-
-  /* Same two statements, now with the deposit that explains the difference.
-   * The gap reconciles, so the day between them can be stated. */
-  expect(
-    cashSeries({
-      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
-      cashFlows: [
-        {
-          id: "top-up",
-          entity: "personal",
-          broker: "trading212",
-          date: "2026-01-06",
-          currency: "EUR",
-          amount: 300,
-          kind: "deposit",
-        },
-      ],
-      cashCoverage: [declared],
-      today: "2026-01-06",
-    }),
-  ).toEqual([
-    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", cashValue: 500, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
-    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-  ]);
-});
-
-test("a trade with no broker balance behind it names the wallet it cannot value", () => {
-  /* A sync that read orders but lost the account summary leaves trades with no
-   * statement to walk from. The leg exists because the trade settled somewhere,
-   * and having no anchor it can only be reported as unknown rather than
-   * quietly left out of the cash figure. */
-  const trades: Trade[] = [
-    {
-      id: "buy",
-      entity: "personal",
-      broker: "trading212",
-      date: "2026-01-05",
-      symbol: "X",
-      side: "buy",
-      quantity: 1,
-      price: 200,
-      amount: 200,
-      currency: "EUR",
-      commission: 0,
-    },
-  ];
-
-  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
-    cashBalances: [],
-    cashCoverage: [
-      {
-        entity: "personal",
-        broker: "trading212",
-        tradeCash: "trade-settlement",
-        status: "unknown",
-        reason: "window unproven",
-      },
-    ],
-    today: "2026-01-06",
-  });
-
-  expect(series.at(-1)?.cashValue).toBeNull();
-  expect(series.at(-1)?.cashUnknown).toEqual(["trading212:EUR"]);
-  expect(series.at(-1)?.cashEstimated).toBeUndefined();
-});
-
-test("an unproven broker folds a foreign trade into the one wallet it anchors", () => {
-  /* Trading 212 anchors a single wallet, so a trade settling in another
-   * currency is money that left that wallet at the day's rate. The fold used
-   * to be reachable only through a proven window; now that trade cash is
-   * declared without one, this is the path an unproven account takes. */
-  const trades: Trade[] = [
-    {
-      id: "buy-usd",
-      entity: "personal",
-      broker: "trading212",
-      date: "2026-01-05",
-      symbol: "X",
-      side: "buy",
-      quantity: 1,
-      price: 100,
-      amount: 100,
-      currency: "USD",
-      commission: 0,
-      settlement: { currency: "USD", amount: -100 },
-    },
-  ];
-
-  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
-    cashBalances: [eurCash(1000, "2026-01-02")],
-    cashCoverage: [
-      {
-        entity: "personal",
-        broker: "trading212",
-        tradeCash: "trade-settlement",
-        status: "unknown",
-        reason: "window unproven",
-      },
-    ],
-    today: "2026-01-06",
-  });
-
-  const after = series.find((entry) => entry.date === "2026-01-06");
-  // One wallet, so no second leg is reported and nothing is left unknown.
-  expect(after?.cashUnknown).toEqual([]);
-  expect(after?.cashEstimated).toEqual(["trading212:EUR"]);
-  // 100 USD left the wallet, converted at the rate for the trade's own date.
-  expect(after?.cashValue).toBeLessThan(1000);
-  expect(after?.cashValue).toBeGreaterThan(800);
-});
-
 test("keeps unreachable and unconvertible cash legs unknown", () => {
   const cashBalances: CashBalance[] = [
     { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
@@ -729,12 +593,7 @@ function thousandEuroAccount(broker: string) {
       cashFlows,
       cashCoverage,
       today: "2026-01-06",
-    }).map(({ date, value, cashUnknown, cashEstimated }) => ({
-      date,
-      value,
-      cashUnknown,
-      cashEstimated: cashEstimated ?? [],
-    }));
+    }).map(({ date, value, cashUnknown }) => ({ date, value, cashUnknown }));
   return { deposit, purchaseCash, series };
 }
 
@@ -744,9 +603,9 @@ test("settles a purchase once from the trade when the broker proves its settleme
   expect(
     account.series([account.deposit], [complete("trading212", "2026-01-02", "trade-settlement")]),
   ).toEqual([
-    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-02", value: 1000, cashUnknown: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
   ]);
 });
 
@@ -759,56 +618,40 @@ test("settles a purchase once from the ledger row when the broker books trade ca
       [complete("ibkr", "2026-01-02", "cash-flows")],
     ),
   ).toEqual([
-    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-02", value: 1000, cashUnknown: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
   ]);
 });
 
-test("with no coverage only the dated broker balance says what cash was", () => {
-  /* Nothing says whether this broker books trade cash in its ledger or on the
-   * trade, so the walk cannot tell whether a purchase is among these events or
-   * missing from them. A balance summed from movements that may omit every
-   * trade is not an estimate, it is a guess. */
-  const account = thousandEuroAccount("trading212");
+test.each([
+  ["no coverage", []],
+  [
+    "unknown coverage",
+    [
+      {
+        entity: "personal",
+        broker: "trading212",
+        tradeCash: "trade-settlement",
+        status: "unknown",
+        reason: "trade settlement unverified",
+      },
+    ],
+  ],
+] satisfies [string, CashHistoryCoverage[]][])(
+  "with %s only the dated broker balance says what cash was",
+  (_, cashCoverage) => {
+    const account = thousandEuroAccount("trading212");
 
-  expect(account.series([account.deposit], [])).toEqual([
-    { date: "2026-01-02", value: 0, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-05", value: 200, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
-  ]);
-});
+    expect(account.series([account.deposit], cashCoverage)).toEqual([
+      { date: "2026-01-02", value: 0, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-05", value: 200, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-06", value: 1000, cashUnknown: [] },
+    ]);
+  },
+);
 
-test("an unproven window still values cash from the movements the broker reported", () => {
-  /* The window is unproven, but the broker named its trade-cash stream, so
-   * every movement in hand is accounted for and the walk back from the closing
-   * statement lands on the deposit. The account held 1000 throughout: 1000 in
-   * cash, then 800 in cash beside a 200 holding. Reporting 0 and 200 for the
-   * first two days, as refusing the walk did, understated a funded account by
-   * the whole of its cash. */
-  const account = thousandEuroAccount("trading212");
-
-  expect(
-    account.series(
-      [account.deposit],
-      [
-        {
-          entity: "personal",
-          broker: "trading212",
-          tradeCash: "trade-settlement",
-          status: "unknown",
-          reason: "trade settlement unverified",
-        },
-      ],
-    ),
-  ).toEqual([
-    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
-    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
-    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
-  ]);
-});
-
-test("cash before a proven window is estimated from the movements around it", () => {
+test("a proven window leaves cash before it unknown", () => {
   const account = thousandEuroAccount("ibkr");
 
   expect(
@@ -817,9 +660,9 @@ test("cash before a proven window is estimated from the movements around it", ()
       [complete("ibkr", "2026-01-05", "cash-flows")],
     ),
   ).toEqual([
-    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["ibkr:EUR"] },
-    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-02", value: 0, cashUnknown: ["ibkr:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [] },
   ]);
 });
 
@@ -829,12 +672,7 @@ function eurCash(amount: number, asOf: string): CashBalance {
 
 const cashSeries = (options: Parameters<typeof computePortfolioValueSeries>[5]) =>
   computePortfolioValueSeries([], [], [], "EUR", FX_RATES, options).map(
-    ({ date, cashValue, cashUnknown, cashEstimated }) => ({
-      date,
-      cashValue,
-      cashUnknown,
-      cashEstimated: cashEstimated ?? [],
-    }),
+    ({ date, cashValue, cashUnknown }) => ({ date, cashValue, cashUnknown }),
   );
 
 test("the latest broker balance carries to dates after it when history is unknown", () => {
@@ -844,11 +682,11 @@ test("the latest broker balance carries to dates after it when history is unknow
       today: "2026-01-08",
     }),
   ).toEqual([
-    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-07", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-08", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-02", cashValue: 500, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-08", cashValue: 800, cashUnknown: [] },
   ]);
 });
 
@@ -859,10 +697,10 @@ test("a weekend broker balance carries to the next business day", () => {
       today: "2026-01-13",
     }),
   ).toEqual([
-    { date: "2026-01-08", cashValue: 700, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-09", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
-    { date: "2026-01-12", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-13", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-08", cashValue: 700, cashUnknown: [] },
+    { date: "2026-01-09", cashValue: null, cashUnknown: ["trading212:EUR"] },
+    { date: "2026-01-12", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-13", cashValue: 800, cashUnknown: [] },
   ]);
 });
 
@@ -876,7 +714,7 @@ const ibkrFlow = (id: string, date: string, amount: number): CashFlow => ({
   kind: amount > 0 ? "deposit" : "other",
 });
 
-test("a flow after a proven window's end is walked onto the last proven balance", () => {
+test("a proven window ends at its last date and a later flow makes cash unknown", () => {
   expect(
     cashSeries({
       cashBalances: [{ ...eurCash(800, "2026-01-05"), broker: "ibkr" }],
@@ -889,10 +727,10 @@ test("a flow after a proven window's end is walked onto the last proven balance"
       today: "2026-01-07",
     }),
   ).toEqual([
-    { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-07", cashValue: 750, cashUnknown: [], cashEstimated: ["ibkr:EUR"] },
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: null, cashUnknown: ["ibkr:EUR"] },
   ]);
 });
 
@@ -936,7 +774,7 @@ test.each([
     },
   ],
 ] satisfies [string, { trades: Trade[]; cashFlows: CashFlow[] }][])(
-  "the latest balance is walked across %s after it when history is unknown",
+  "the latest balance stops carrying at %s after it when history is unknown",
   (_, { trades, cashFlows }) => {
     const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
       symbol: "X",
@@ -960,16 +798,11 @@ test.each([
     });
 
     expect(
-      series.map(({ date, cashValue, cashUnknown, cashEstimated }) => ({
-        date,
-        cashValue,
-        cashUnknown,
-        cashEstimated: cashEstimated ?? [],
-      })),
+      series.map(({ date, cashValue, cashUnknown }) => ({ date, cashValue, cashUnknown })),
     ).toEqual([
-      { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
-      { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
-      { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+      { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+      { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"] },
+      { date: "2026-01-06", cashValue: null, cashUnknown: ["trading212:EUR"] },
     ]);
   },
 );
@@ -983,10 +816,10 @@ test("the balance walked to a window's end carries past an earlier statement", (
       today: "2026-01-07",
     }),
   ).toEqual([
-    { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
-    { date: "2026-01-07", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [] },
   ]);
 });
 
