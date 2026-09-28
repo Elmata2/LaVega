@@ -24,6 +24,10 @@ compatibility_flags = []
 [observability]
 enabled = true
 
+# Non-production Workers Builds runs `npx wrangler preview`.
+# Wrangler requires this block. Empty: no preview-only bindings.
+[previews]
+
 # N8N_WEBHOOK_URL en N8N_SHARED_SECRET staan hier NIET. Het zijn secrets:
 #     pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL
 #     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET
