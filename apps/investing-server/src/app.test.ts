@@ -8,6 +8,7 @@ import {
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
+import type { PriceSyncTarget } from "./priceOrchestrator.js";
 
 const acceptedConsentStore = () => ({
   get: vi.fn(async () => ({
@@ -141,6 +142,100 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
     body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }),
   });
   expect(invalid.status).toBe(400);
+});
+
+test("PUT /api/investing/benchmarks gets a newly selected benchmark into an already-running sync", async () => {
+  const holdings = [
+    {
+      kind: "current" as const,
+      symbol: "ASML",
+      ticker: "ASML",
+      exchange: "AMS",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+    {
+      kind: "current" as const,
+      symbol: "ADYEN",
+      ticker: "ADYEN",
+      exchange: "AMS",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+  ];
+  let discovered = holdings;
+  const priceSyncTargets = vi.fn(() => discovered);
+  let releaseFirst!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn(async (request: { symbol: string }) => {
+      if (request.symbol === "ASML") await firstPending;
+      return { bars: [], problems: [] };
+    }),
+  };
+  const investingApp = createApp({
+    provider: provider as never,
+    priceSyncTargets,
+    priceSyncPaceMs: 0,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const sync = investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(() =>
+    expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML" })),
+  );
+
+  discovered = [
+    ...holdings,
+    {
+      kind: "benchmark" as const,
+      symbol: "^AEX",
+      ticker: "^AEX",
+      exchange: "UNKNOWN",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+  ];
+  const put = await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: ["^AEX"] }),
+  });
+  expect(put.status).toBe(200);
+  await vi.waitFor(() => expect(priceSyncTargets).toHaveBeenCalledTimes(2));
+
+  releaseFirst();
+  await sync;
+
+  expect(provider.get.mock.calls.map(([request]) => request.symbol)).toEqual([
+    "ASML",
+    "^AEX",
+    "ADYEN",
+  ]);
+});
+
+test("PUT /api/investing/benchmarks does not re-prioritize a benchmark that was already selected", async () => {
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  await benchmarkSelectionStore.set({ tenantId: "local", symbols: ["^AEX"] });
+  const priceSyncTargets = vi.fn(() => []);
+  const investingApp = createApp({
+    benchmarkSelectionStore,
+    priceSyncTargets,
+    priceSyncPaceMs: 0,
+  });
+
+  const put = await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: ["^AEX"] }),
+  });
+
+  expect(put.status).toBe(200);
+  expect(priceSyncTargets).not.toHaveBeenCalled();
 });
 
 test("benchmark search route returns results after persisted consent", async () => {

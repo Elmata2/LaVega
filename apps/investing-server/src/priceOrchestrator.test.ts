@@ -400,6 +400,43 @@ test("a benchmark selected during a paused run joins its next slice", async () =
   ]);
 });
 
+test("a benchmark selected while a run is running is fetched next in that same run", async () => {
+  const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  let discovered = holdings;
+  let releaseOne!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseOne = resolve;
+  });
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "ONE") await firstPending;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({ discover: () => discovered, sync, paceMs: 0 });
+
+  const run = orchestrator.run("local");
+  await waitForAssertion(() =>
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ONE" }), "local"),
+  );
+
+  discovered = [...holdings, { ...symbolTarget("^AEX"), kind: "benchmark" }];
+  await expect(orchestrator.prioritizeNext("local", "^AEX")).resolves.toBe(true);
+
+  releaseOne();
+  await run;
+
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual([
+    "ONE",
+    "^AEX",
+    "TWO",
+    "THREE",
+  ]);
+});
+
+test("prioritizing a benchmark is a no-op when no run is active for the tenant", async () => {
+  const orchestrator = createPriceOrchestrator({ discover: () => [], sync: async () => result() });
+  await expect(orchestrator.prioritizeNext("local", "^AEX")).resolves.toBe(false);
+});
+
 test("progress survives the process that produced it", async () => {
   const progressStore = createInMemoryPriceSyncProgressStore();
   const shared = {
