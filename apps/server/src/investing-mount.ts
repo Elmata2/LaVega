@@ -15,12 +15,17 @@ import {
   runtimeMarketDataConsentFile,
 } from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
 import {
+  createFileInvestingLayoutStore,
+  runtimeInvestingLayoutFile,
+} from "@lavega/investing-server/src/fileInvestingLayoutStore.js";
+import {
   createFilePriceStore,
   runtimePriceStoreFile,
 } from "@lavega/investing-server/src/filePriceStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import {
   createNeonBenchmarkSelectionStore,
+  createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
   createNeonPriceStore,
 } from "@lavega/investing-server/src/neonStores.js";
@@ -117,6 +122,9 @@ async function getInvestingFetch(): Promise<{
     marketDataConsentStore: database
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    investingLayoutStore: database
+      ? createNeonInvestingLayoutStore(database)
+      : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
     dashboardCache,
   });
   const apiNamespaces = new Set(
