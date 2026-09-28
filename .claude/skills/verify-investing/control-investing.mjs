@@ -354,6 +354,31 @@ function credentialsFileFor(flags) {
   return targetName(flags) === "preview" ? previewCredentialsFile : credentialsFile;
 }
 
+/** Both env vars, as named in the Vercel project Config (Dev, Preview, Prod). */
+function envCredentialsReady() {
+  return Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD);
+}
+
+/**
+ * `login` / `doctor` stop text. Names the preview file and the Vercel env vars
+ * so an agent does not ask for a personal password or sign up a preview account.
+ */
+function credentialsMissingFix(flags) {
+  const target = targetName(flags);
+  const previewRule =
+    target === "preview"
+      ? `For preview, use the existing ${previewCredentialsFile} or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD. Do not ask for a personal password. `
+      : "";
+  return (
+    `Credential order: ${credentialsFile} for prod, ${previewCredentialsFile} for preview ` +
+    `(chmod 600, {"email":"...","password":"..."}), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD ` +
+    `(those names are in the Vercel project Config for Dev, Preview, and Prod), then --email and --password. ` +
+    previewRule +
+    `Do not invent an account or sign one up. Then run \`${SELF} login --target ${target}\`. ` +
+    `A local doctor pass does not satisfy this check.`
+  );
+}
+
 /* Write commands reach a real broker, the shared price store, or a real
  * tenant's vault. Prod has one set of tenant rows and nothing to restore them
  * from, so refuse there unless the caller names the risk. */
@@ -787,18 +812,19 @@ async function commandDoctor({ flags }) {
       ? `authenticated:${session.json.user.email ?? session.json.user.id}`
       : "anonymous";
 
-  /* Local has no accounts. Preview and prod do, and the credentials belong to
-   * the user. A missing file is a stop, not a prompt to invent a login. */
+  /* Local has no accounts. Preview and prod do. A missing file is a stop when
+   * the Vercel env pair is also unset and there is no session — not a prompt
+   * to invent a login or ask for a personal password. */
   if (targetName(flags) !== "local") {
     const file = credentialsFileFor(flags);
     const present = existsSync(file);
-    note("credentialsFile", present || authed, {
+    const envReady = envCredentialsReady();
+    const satisfied = present || authed || envReady;
+    note("credentialsFile", satisfied, {
       path: file,
       present,
-      fix:
-        present || authed
-          ? undefined
-          : `ask the user to write ${file} as {"email":"...","password":"..."} with chmod 600. Do not invent an account. Then run \`${SELF} login --target ${targetName(flags)}\`. A local doctor pass does not satisfy this check.`,
+      env: envReady,
+      fix: satisfied ? undefined : credentialsMissingFix(flags),
     });
   }
 
@@ -1000,9 +1026,13 @@ async function commandPerf({ flags }) {
 // ---------------------------------------------------------------- commands: session
 
 /**
- * Where a password comes from, in order: a credentials file, the environment,
- * then a flag. The file is the intended path — a password passed as an argument
- * is visible in shell history and in any transcript of the run.
+ * Where a password comes from, in order:
+ *   1. auth.preview.json (preview) or auth.json (prod), or --credentials-file
+ *   2. LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD (both)
+ *   3. --email and --password (both)
+ * A password passed as an argument is visible in shell history and in any
+ * transcript of the run. Preview agents use the file or the env pair; they
+ * do not ask for a personal password.
  */
 function resolveCredentials(flags) {
   const path = flags["credentials-file"]
@@ -1020,13 +1050,17 @@ function resolveCredentials(flags) {
     if (stored.email && stored.password)
       return { email: String(stored.email), password: String(stored.password), from: path };
   }
-  const email = flags.email ?? process.env.LAVEGA_VERIFY_EMAIL;
-  const password = flags.password ?? process.env.LAVEGA_VERIFY_PASSWORD;
-  if (email && password)
+  if (envCredentialsReady())
     return {
-      email: String(email),
-      password: String(password),
-      from: flags.password ? "--password flag" : "environment",
+      email: String(process.env.LAVEGA_VERIFY_EMAIL),
+      password: String(process.env.LAVEGA_VERIFY_PASSWORD),
+      from: "environment",
+    };
+  if (flags.email && flags.password)
+    return {
+      email: String(flags.email),
+      password: String(flags.password),
+      from: "--email/--password",
     };
   return null;
 }
@@ -1034,11 +1068,7 @@ function resolveCredentials(flags) {
 async function commandLogin({ flags }) {
   const credentials = resolveCredentials(flags);
   if (!credentials) {
-    fail(
-      "no credentials found",
-      `ask the user to write ${credentialsFileFor(flags)} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD. Never sign up an account yourself.`,
-      { code: "credentials-missing" },
-    );
+    fail("no credentials found", credentialsMissingFix(flags), { code: "credentials-missing" });
   }
   const response = await request(flags, "POST", "/api/auth/sign-in/email", {
     email: credentials.email,
@@ -1297,13 +1327,41 @@ function browseBin() {
   return browseCanonical();
 }
 
+/** A browse binary that already works. The Codex path alone is enough. */
+function existingBrowseBin() {
+  const override = process.env.LAVEGA_BROWSE_BIN;
+  if (override) return existsSync(override) ? override : null;
+  return [browseCanonical(), browseLegacy()].find((path) => existsSync(path)) ?? null;
+}
+
+/** Pinned installer. The agent runs this; it does not invent a browse path. */
+const BUN_INSTALL = 'curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"';
+
+const BUN_MISSING_FIX = `bun is not on PATH. Install bun 1.3.10 and verify the checksum before you run it: ${BUN_INSTALL}; then put "$HOME/.bun/bin" on PATH and rerun \`${SELF} browser install\`. Or set LAVEGA_BROWSE_BIN to an existing browse binary. Or use ${browseLegacy()} when that file exists (the Codex path alone is enough). Do not invent a path.`;
+
 function browseInstallPlan() {
+  const existing = existingBrowseBin();
+  if (existing) return { already: true, bin: existing, steps: [] };
   const root = gstackRoot();
+  const bun = bunAvailable();
   const steps = [];
+  if (!bun)
+    steps.push(
+      `${BUN_INSTALL}  # then export PATH="$HOME/.bun/bin:$PATH". Do not invent a browse path.`,
+    );
   if (!existsSync(join(root, "setup")))
     steps.push(`git clone --depth 1 https://github.com/garrytan/gstack.git ${root}`);
   steps.push(`${join(root, "setup")}`);
-  return { bin: browseCanonical(), steps };
+  return {
+    already: false,
+    bin: browseCanonical(),
+    bun,
+    codex: browseLegacy(),
+    steps,
+    note: bun
+      ? undefined
+      : `Prefer the bun install step. If ${browseLegacy()} already exists, that path alone is enough and no build is required.`,
+  };
 }
 
 function bunAvailable() {
@@ -1312,22 +1370,16 @@ function bunAvailable() {
 }
 
 function commandBrowserInstall() {
-  const override = process.env.LAVEGA_BROWSE_BIN;
-  const existing = override
-    ? existsSync(override)
-      ? override
-      : null
-    : [browseCanonical(), browseLegacy()].find((path) => existsSync(path));
+  const existing = existingBrowseBin();
   if (existing) {
     print({ installed: true, already: true, bin: existing });
     return 0;
   }
   if (!bunAvailable())
-    fail(
-      "bun is required to build the browse binary",
-      "install bun 1.3.10 from https://bun.sh/install (verify the checksum before running it), then rerun `browser install`",
-      { code: "bun-missing", exitCode: 1 },
-    );
+    fail("bun is required to build the browse binary", BUN_MISSING_FIX, {
+      code: "bun-missing",
+      exitCode: 1,
+    });
 
   const root = gstackRoot();
   const setup = join(root, "setup");
@@ -1387,7 +1439,7 @@ function runBrowse(args) {
       `browse is not installed at ${bin}`,
       process.env.LAVEGA_BROWSE_BIN
         ? `LAVEGA_BROWSE_BIN points at a missing file. Unset it, or run \`${SELF} browser install\``
-        : `run \`${SELF} browser install\` (builds ${browseCanonical()})`,
+        : `run \`${SELF} browser install\` to build ${browseCanonical()}, or use the Codex binary at ${browseLegacy()} (that path alone is enough)`,
       {
         code: "browse-missing",
         exitCode: 1,
@@ -1433,7 +1485,11 @@ function runBrowse(args) {
  * That is the sandbox, so the fix is to re-run the browser step outside it.
  */
 const SANDBOX_BROWSE_FIX =
-  "re-run this browser step escalated or unrestricted, outside the sandbox (Codex: escalate or disable the sandbox for this step). Doctor, probe, and API commands can stay sandboxed";
+  "re-run this browser step escalated or unrestricted, outside the sandbox (Codex: escalate or disable the sandbox for this step). Doctor, probe, and API commands can stay sandboxed. Do not reinstall Chromium.";
+
+/** Printed by `browser --help` and every browser subcommand `--help`. */
+const BROWSER_SANDBOX_HELP =
+  'Under a Codex workspace-write sandbox, or any shell sandbox, escalate or unrestrict before `browser install`, `browser open`, `browser snapshot`, `browser click`, `browser screenshot`, and every other browser subcommand. On PortRendezvous, EPERM, SIGTRAP, Permission denied, or target-closed ("Target page, context or browser has been closed"), that is `browse-sandboxed`: escalate and retry. Do not reinstall Chromium.';
 
 function sandboxRefusedChromium(text) {
   return /EPERM|PortRendezvous|Permission denied|SIGTRAP|Target page, context or browser has been closed/i.test(
@@ -1591,14 +1647,21 @@ function commandBrowserSnapshot({ flags }) {
   return browseAndPrint(args);
 }
 
+/** PNG path. Global `--out` is the JSON dump and must not be this file. */
 function screenshotPath(flags) {
-  if (flags.out) return resolve(String(flags.out));
+  if (flags.png) return resolve(String(flags.png));
   return join(evidenceDir, `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
 }
 
 function commandBrowserScreenshot({ flags }) {
   ensureDirs();
   const out = screenshotPath(flags);
+  if (outputPath && resolve(out) === outputPath)
+    fail(
+      "--png and --out point at the same file",
+      "pass --png for the PNG and --out for the JSON dump, as two different paths under /tmp",
+      { code: "flag-invalid" },
+    );
   const args = ["screenshot"];
   if (flags.viewport) args.push("--viewport");
   if (flags.selector) args.push(String(flags.selector));
@@ -1796,7 +1859,7 @@ const COMMANDS = [
     name: "login",
     group: "Session",
     summary: "Sign in on prod or preview; stores a cookie jar per host",
-    description: `Reads ${credentialsFile} (prod) or ${previewCredentialsFile} (preview), then LAVEGA_VERIFY_EMAIL/LAVEGA_VERIFY_PASSWORD. The credentials are the user's: ask for them, never sign up an account.`,
+    description: `Credential order: ${previewCredentialsFile} (preview) or ${credentialsFile} (prod), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD (Vercel project Config: Dev, Preview, Prod), then --email and --password. For preview, use the existing file or those env vars. Do not ask for a personal password. Do not invent an account or sign one up.`,
     flags: {
       "credentials-file": {
         type: "string",
@@ -1983,9 +2046,9 @@ const COMMANDS = [
   {
     name: "browser install",
     group: "Browser",
-    summary: "Clone gstack and build ~/.claude/skills/gstack/browse/dist/browse",
+    summary: "Use an existing browse binary, or build the Claude one",
     description:
-      "One command, one path. Clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack (unless that checkout already has ./setup) and runs ./setup, which builds browse/dist/browse and installs Playwright Chromium. Needs bun on PATH. An existing binary at that path, at ~/.codex/skills/gstack/browse/dist/browse, or in LAVEGA_BROWSE_BIN is left in place.",
+      'If LAVEGA_BROWSE_BIN, ~/.claude/skills/gstack/browse/dist/browse, or ~/.codex/skills/gstack/browse/dist/browse already exists, returns already:true and leaves it in place. The Codex path alone is enough; install does not create the Claude path in that case. Otherwise clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack and runs ./setup, which builds the canonical browse binary and installs Playwright Chromium. Needs bun on PATH only when it builds. If bun is missing, --dry-run prints `curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"` first (verify the checksum, then put ~/.bun/bin on PATH). Or set LAVEGA_BROWSE_BIN to an existing browse binary. Do not invent a path. A missing Chromium is `bunx playwright@1.58.2 install chromium`. A sandbox refusal is browse-sandboxed: escalate and retry. Do not reinstall Chromium for that.',
     effect: "local-install",
     plan: browseInstallPlan,
     run: commandBrowserInstall,
@@ -2027,14 +2090,27 @@ const COMMANDS = [
   {
     name: "browser screenshot",
     group: "Browser",
-    summary: "Save a PNG to evidence (or --out)",
+    summary: "Save a PNG under evidence (or --png). --out is the JSON dump",
+    description:
+      "The PNG defaults to evidence/screenshot-<time>.png. --png sets the image path. --out writes this command's JSON and must be a different path; it does not replace the PNG. browser raw -- screenshot <path> writes the PNG at <path> and does not use --out.",
     flags: {
-      out: { type: "string", description: "file path (default: evidence/screenshot-<time>.png)" },
+      png: {
+        type: "string",
+        description: "PNG path (default: evidence/screenshot-<time>.png). Not --out",
+      },
+      out: {
+        type: "string",
+        description:
+          "write this command's JSON here. Must differ from --png. Does not set the PNG path",
+      },
       selector: { type: "string", description: "element or @ref to capture" },
       viewport: { type: "boolean", description: "viewport only, not the full page" },
     },
     run: commandBrowserScreenshot,
-    examples: ["browser screenshot", "browser screenshot --selector @e4 --out /tmp/chart.png"],
+    examples: [
+      "browser screenshot",
+      "browser screenshot --selector @e4 --png /tmp/lavega-verify-investing/evidence/chart.png",
+    ],
   },
   {
     name: "browser text",
@@ -2287,8 +2363,9 @@ Evidence lives in ${evidenceDir}; run state in ${runDir}.`;
 function groupText(prefix) {
   const members = COMMANDS.filter((command) => command.name.startsWith(`${prefix} `));
   const width = Math.max(...members.map((command) => command.name.length)) + 2;
+  const sandbox = prefix === "browser" ? `\n${BROWSER_SANDBOX_HELP}\n` : "";
   return `Usage: ${SELF} ${prefix} <subcommand> [args] [flags]
-
+${sandbox}
 ${members.map((command) => `  ${command.name.padEnd(width)}${command.summary}`).join("\n")}
 
 Run \`${prefix} <subcommand> --help\` for its flags.`;
@@ -2303,6 +2380,7 @@ function commandText(command) {
     `Usage: ${SELF} ${usageLine(command)}`,
   ];
   if (command.description) lines.push("", command.description);
+  if (command.group === "Browser") lines.push("", BROWSER_SANDBOX_HELP);
   if (command.args?.length) {
     lines.push("", "Arguments");
     for (const arg of command.args)

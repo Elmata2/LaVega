@@ -46,15 +46,20 @@ Needs `apps/investing-web/dist` to exist. If it does not:
 pnpm --filter @lavega/investing-web build
 ```
 
-Teardown, at the end of every run including failed ones:
+Teardown, at the end of every run including failed ones: [Cleanup](#cleanup).
+
+## Cleanup
+
+Run this at the end of every run, including failed ones:
 
 ```bash
 node .claude/skills/verify-investing/control-investing.mjs cleanup
 ```
 
 `cleanup` kills only the pid this CLI recorded — never by process name, which would take down
-a dev server the user started — removes the run directory, and keeps
-`/tmp/lavega-verify-investing/evidence`.
+a dev server the user started — removes `/tmp/lavega-verify-investing/run`, and keeps
+`/tmp/lavega-verify-investing/evidence`. Credential files sit above `run/`, so teardown
+leaves `auth.json` and `auth.preview.json` in place.
 
 ## CLI contract
 
@@ -84,9 +89,9 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
     for each new command or flag.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
-    page. It only reads; every write in it runs with `--dry-run`. It skips when
-    `auth.preview.json` is missing, and it uses its own state directory, so it does not move
-    your pin or session.
+    page. It only reads; every write in it runs with `--dry-run`. It skips only when neither
+    `auth.preview.json` nor `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
+    It uses its own state directory, so it does not move your pin or session.
 - **Files.** `browse` only reads and writes under `/tmp` or its working directory, so keep
   `VERIFY_INVESTING_DIR` and `--out` paths under `/tmp`.
 
@@ -101,8 +106,10 @@ Read-only. Answers whether an instance is worth driving: `/health` responds and 
 itself as `investing-server`, a session exists or auth is unconfigured, the dashboard returns
 without a problems list, key status is known, the vault is `empty`/`locked`/`unlocked`, and
 the broker sync progress is readable. On `--target preview` and `--target prod` it also fails
-`credentialsFile` when the credentials file is missing and there is no session. It exits
-non-zero on any failed check. Run this first whenever anything looks off.
+`credentialsFile` when the credentials file is missing, `LAVEGA_VERIFY_EMAIL` and
+`LAVEGA_VERIFY_PASSWORD` are not both set, and there is no session. The `fix` names
+`auth.preview.json` (preview) or `auth.json` (prod) and those env vars. It exits non-zero
+on any failed check. Run this first whenever anything looks off.
 
 ## Drive
 
@@ -120,7 +127,9 @@ node $C probe --target prod --out /tmp/lavega-verify-investing/evidence/prod-pro
 node $C assets --target prod
 
 # production needs a session before any /api call works.
-# login reads /tmp/lavega-verify-investing/auth.json, which the user writes:
+# Credential order: auth.preview.json (preview) or auth.json (prod),
+# then LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD, then --email/--password.
+# Prod file, written by the user:
 #   umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
 #     > /tmp/lavega-verify-investing/auth.json
 node $C login --target prod
@@ -153,46 +162,47 @@ node $C restart
 node $C watch --restart          # run in the background; one JSON line per up/down
 ```
 
-Credentials are the user's. Ask for them, and take them through the credentials file rather
-than a `--password` argument, which would land in shell history and in the run's transcript.
-Never invent an account or sign one up.
+Credential resolution, in this order:
+
+1. **File.** `--target preview` reads `/tmp/lavega-verify-investing/auth.preview.json`.
+   `--target prod` reads `/tmp/lavega-verify-investing/auth.json`. `--credentials-file`
+   replaces that path.
+2. **Environment.** `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`, both set. Those two
+   names exist in the Vercel project Config for Dev, Preview, and Prod.
+3. **CLI flags.** `--email` and `--password`, both set. A password on the command line lands
+   in shell history and in the transcript.
+
+For preview, use the existing `auth.preview.json` or pull those env vars. Do not ask for a
+personal password. Do not invent or sign up an account. For prod, the file is the user's;
+do not invent an account there either.
 
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
 print what they would send. `prices purge` also refuses without `--yes`.
 
 For the visual side, use `browser`. Examples are a blank page, a stuck spinner, or a chart
 that does not render. It drives shared gstack Chromium through `browse`, works for any agent,
-and does not need Computer Use.
-
-The binary path is `~/.claude/skills/gstack/browse/dist/browse`. If that file is missing and
-`~/.codex/skills/gstack/browse/dist/browse` exists, the CLI uses the Codex copy.
-`LAVEGA_BROWSE_BIN` overrides both. Install or rebuild with one command:
-
-```bash
-node $C browser install    # clone gstack, run ./setup; --dry-run prints the steps
-```
-
-`browser install` needs `bun` on `PATH`. gstack's `./setup` builds `browse/dist/browse` and
-installs Playwright Chromium. If browse then reports a missing Chromium, install the pinned
-build once with `bunx playwright@1.58.2 install chromium`.
+and does not need Computer Use. Install, the browse binary, bun, and evidence paths are in
+[Helpers](#helpers).
 
 `doctor`, `probe`, and the API commands can stay inside a sandbox. Any `browser *` step
-(`open`, `snapshot`, `click`, `screenshot`, and every other browser subcommand) must run
-escalated, unrestricted, and outside the sandbox. On Codex, escalate or disable the sandbox
-for that step. Chromium needs process and Mach-port operations that a workspace-write
-sandbox refuses. When `browser open` or a browse spawn fails with `EPERM`, `PortRendezvous`,
-`Permission denied`, `SIGTRAP`, or `Target page, context or browser has been closed` right
-after launch, that is the sandbox. Treat it as the sandbox until something else is proven.
-Re-run the same browser step outside the sandbox. Run `browser install` only when the browse
-binary is missing (`browse-missing`). Run `bunx playwright@1.58.2 install chromium` only when
-the headless shell is missing.
+(`install`, `open`, `snapshot`, `click`, `screenshot`, and every other browser subcommand)
+must run escalated, unrestricted, and outside the sandbox. On Codex, escalate or disable the
+sandbox for that step. Chromium needs process and Mach-port operations that a workspace-write
+sandbox refuses. When `browser install`, `browser open`, or a browse spawn fails with
+`EPERM`, `PortRendezvous`, `Permission denied`, `SIGTRAP`, or target-closed
+(`Target page, context or browser has been closed`) right after launch, that is
+`browse-sandboxed`. Treat it as the sandbox until something else is proven. Re-run the same
+browser step outside the sandbox. Do not reinstall Chromium for that failure. Run
+`browser install` only when the browse binary is missing (`browse-missing`). Run
+`bunx playwright@1.58.2 install chromium` only when the headless shell is missing. The same
+rule is in `browser --help`.
 
 ```bash
 node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
 node $C browser snapshot --interactive      # accessibility tree with @e refs
 node $C browser click @e3                   # --dry-run prints the action instead
 node $C browser wait-settle                 # network idle
-node $C browser screenshot                  # PNG into the evidence directory
+node $C browser screenshot                  # PNG under evidence; --png sets the image path
 node $C browser console --errors
 node $C browser network
 node $C browser perf
@@ -206,19 +216,62 @@ value. On local it needs no session. `?verify=1` puts the app in verification mo
 app-open effect does not start a broker or price sync. Normal users keep the automatic sync.
 `browser-login.mjs` remains as a shim for `browser open --target prod`.
 
+`browser screenshot --out` is the JSON dump, not the PNG. `--png <file>` is the image. The
+two paths must differ. Bare `browser screenshot` writes a PNG under the evidence directory.
+`browser raw -- screenshot <path>` writes a PNG at `<path>` and does not use `--out`.
+
 Use the browser when the question is "what does the user see", not "what does the API return".
 
-## Evidence
+## Helpers
 
-Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`.
+Browse binary, first match wins: `LAVEGA_BROWSE_BIN`, then
+`~/.claude/skills/gstack/browse/dist/browse`, then
+`~/.codex/skills/gstack/browse/dist/browse`. Any one of those is enough. The Codex path
+alone is enough. Do not invent a path.
+
+```bash
+C=".claude/skills/verify-investing/control-investing.mjs"
+node $C browser install    # already:true if any browse binary exists; otherwise clone and ./setup
+node $C browser install --dry-run
+```
+
+`browser install` returns `already: true` and does not create the Claude path when the Codex
+binary or `LAVEGA_BROWSE_BIN` already works. It clones gstack and runs `./setup` only when
+no browse binary exists. `./setup` builds `browse/dist/browse` and installs Playwright
+Chromium. That build needs `bun` on `PATH`.
+
+If `bun` is missing, install bun 1.3.10, verify the checksum, put `~/.bun/bin` on `PATH`,
+and rerun `browser install`. `browser install --dry-run` prints this step and does not clone.
+`bun-missing` `error.fix` names the same command, `LAVEGA_BROWSE_BIN`, and the Codex path:
+
+```bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+export PATH="$HOME/.bun/bin:$PATH"
+node $C browser install
+```
+
+If browse then reports a missing Chromium, install the pinned build once with
+`bunx playwright@1.58.2 install chromium`. Do that only when the headless shell is missing.
+A `browse-sandboxed` failure is not a missing browser. Escalate and retry. Do not reinstall
+Chromium.
+
+Evidence paths. `cleanup` keeps `/tmp/lavega-verify-investing/evidence` and deletes `run/`.
 
 - A remote write that actually runs (`consent --accept`, `sync`, `prices sync`,
   `prices purge`, `unlock`, and `api` with any method but `GET`) saves its JSON there. The
   printed object includes `evidence` with that path. `--dry-run` does not save a file.
-- `--out <file>` writes the same JSON to a path you choose. Keep it under `/tmp`.
+- `--out <file>` writes the command JSON to a path you choose. Keep it under `/tmp`.
+  On `browser screenshot`, `--out` is still that JSON dump. The PNG is `--png`, or the
+  default file under evidence. `--out` must not be the PNG path.
 - `probe --out <file>` saves the sweep and each response body, so the payload is still in
   the file after `cleanup` deletes the run directory.
-- Browser screenshots land in the same directory.
+- Browser screenshots land in the same directory unless `--png` names another path under
+  `/tmp`. `browser raw -- screenshot <path>` writes a PNG at `<path>` and does not use `--out`.
+
+## Evidence
+
+Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`. The path rules
+are in [Helpers](#helpers).
 
 Standards for the proof, not just the pass:
 
@@ -243,13 +296,19 @@ real tenant. Prefer it over prod for anything that writes.
   confirm it has every migration and the same `LAVEGA_ENCRYPTION_KEY` as Production.
   `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
   the symptom of either gap.
-- **Account.** Preview has its own test user, never a real person's login. Its credentials
-  live in `/tmp/lavega-verify-investing/auth.preview.json`, separate from prod's `auth.json`.
+- **Account.** Preview has its own test user, never a real person's login. Credential
+  resolution is the file, then the env vars, then CLI flags (see [Drive](#drive)):
+  `/tmp/lavega-verify-investing/auth.preview.json` on preview, `auth.json` on prod, then
+  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` (both). Those two names exist in the
+  Vercel project Config for Dev, Preview, and Prod. Then `--email` and `--password`.
+  Use the existing `auth.preview.json` or pull those env vars. Do not ask for a personal
+  password. Do not invent or sign up an account.
   Each origin gets its own cookie jar, so a preview login never replaces the prod session.
-  `doctor --target preview` and `doctor --target prod` fail `credentialsFile` when that file
-  is missing and there is no session. Stop. Ask the user to write the file. Do not invent an
-  account. A local `doctor` pass does not satisfy this check, and
-  `pnpm run test:verify-investing:live` skips until `auth.preview.json` exists.
+  `doctor --target preview` fails `credentialsFile` when the preview file is missing, those
+  env vars are unset, and there is no session. The `fix` names `auth.preview.json` and
+  `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD`. A local `doctor` pass does not satisfy
+  this check. `pnpm run test:verify-investing:live` skips only when neither
+  `auth.preview.json` nor `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.
