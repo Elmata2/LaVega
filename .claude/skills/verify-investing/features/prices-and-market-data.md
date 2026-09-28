@@ -3,103 +3,123 @@
 Everything that turns synced holdings into valued ones: the price backfill, the benchmark
 overlay, and the consent gate in front of Yahoo Finance.
 
-## Sub-features
+## Reach
 
-- market-data consent (`Allow Yahoo Finance`) — asked before the server makes any Yahoo
-  request; the disclosure has a version (`yahoo-finance-v1`) and a re-ask when it changes.
-- price sync and backfill, with its own progress (`In progress`, `API pause`).
-- price cache purge (`Cache`, confirmed with `Yes, delete everything`, then
-  `Price data deleted`; `Failed to clear` on error).
-- benchmark selection and search for the chart overlay.
-- selected benchmarks are first in the price-sync queue. New selections enter a paused run on its next slice. A page that joins an active server run waits for it, then starts a fresh discovery.
-- FX rates and ISIN → ticker mapping used while pricing.
+Overview, before the first market-data call. The section heading is `Yahoo Finance consent`.
+The button label is `Allow Yahoo Finance` (`Saving…` while the PUT is in flight). The
+disclosure says LaVega sends tickers and search terms to Yahoo Finance. Without consent,
+cached data remains visible.
 
-## How to get to it (user POV)
+After accept, the button unmounts. Operational status (`aria-label` `Operational status`)
+shows the chip `Price history`. Idle value is `Ready`. A running or paused run shows
+`<completed> of <total> loaded`. Other values, verbatim: `Waiting`, `Up to date`, `Problem`,
+`Incomplete`, `Unknown`. Completed is `Up to date`. The broker chip uses `In progress` for a
+running broker sync. The price chip does not.
 
-On the overview, before the first market-data call, the page shows `Yahoo Finance consent`
-and the button `Allow Yahoo Finance` (`Saving…` while the PUT is in flight). The disclosure
-says LaVega sends tickers and search terms to Yahoo Finance. Without consent, cached data
-remains visible. The `Cache` and `Operational status` panels hold the purge and the progress
-readouts. Benchmarks are chosen from the portfolio chart. Search calls
-`/api/investing/benchmarks/search?q=`.
+`Cache` holds purge (`Yes, delete everything`, then `Price data deleted`, or `Failed to clear`).
+Benchmark search calls `/api/investing/benchmarks/search?q=`.
 
-## After Allow Yahoo Finance
+## Drive
 
-Accepting consent does not fetch a price. The button then runs broker sync and continues
-price sync. `consent --accept` only stores the decision (evidence JSON includes `next` with
-the same commands). Run this path. Do not stop on the PUT.
+`Allow Yahoo Finance` PUTs `/api/market-data/consent` with `{accepted:true}`, then calls
+`startBrokerSync`, which POSTs `/api/brokers/sync` (not `?force=true`). On a non-OK broker
+response it throws. The catch sets the visible string `Broker sync failed.` and does not call
+price sync. An empty local vault does that: broker `status` becomes `problem`, `message` is
+`credential vault is locked`, `updatedAt` is set, `positionsRead` stays `0`. The price chip
+stays `Ready`. After that failure, dry-run then one `prices sync --wait`. That POST is the
+price continuation the button would have reached. The PUT alone fetches nothing.
+
+`?verify=1` skips the automatic sync only when consent is already accepted. The click still
+runs the broker POST. `browser open` adds `?verify=1`.
+
+Save pre-state, dry-run, then one live accept. Do not accept twice.
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C consent                          # accepted false, or disclosureVersion yahoo-finance-v1
-node $C consent --accept --dry-run       # PUT /api/market-data/consent, no write
-node $C consent --accept                 # stores {accepted:true}; Yahoo is not called
-node $C sync --wait                      # POST /api/brokers/sync (not --force), same as the button
-node $C prices sync --wait               # POST /api/prices/sync until completed or problem
-node $C wait-settle --timeout 300000     # broker and price status leave running/waiting
-node $C dashboard                        # priced rows, or doctor positionsPriced
+E="/tmp/lavega-verify-investing/evidence"
+node $C consent --out "$E/pre-consent.json"                 # body.accepted false
+node $C sync-status --out "$E/pre-sync-status.json"         # broker + prices + vault
+node $C dashboard --out "$E/pre-dashboard.json"
+node $C consent --accept --dry-run --out "$E/consent-dry-run.json"
+node $C sync --dry-run --out "$E/sync-dry-run.json"         # POST /api/brokers/sync
+node $C browser install
+node $C browser open
+node $C browser wait-settle
+node $C browser snapshot --interactive --out "$E/pre-allow-snapshot.json"
+# click the @e ref whose name is Allow Yahoo Finance. Dry-run, then the live click.
+node $C browser click --dry-run @eN
+node $C browser click @eN
+node $C browser wait-settle
+node $C browser snapshot --interactive --out "$E/post-allow-snapshot.json"
+node $C browser screenshot --png "$E/after-allow.png"
+node $C consent --out "$E/post-consent.json"
+node $C sync-status --out "$E/post-sync-status.json"
+# When the broker POST failed, the button did not start price sync. Dry-run, then one live wait.
+node $C prices sync --dry-run --out "$E/prices-dry-run.json"
+node $C prices sync --wait --out "$E/post-prices-sync.json"
+node $C browser goto '/?verify=1'
+node $C browser wait-settle
+node $C browser text --out "$E/post-price-text.json"
+node $C dashboard --out "$E/post-dashboard.json"
 ```
 
-`prices sync` without `--wait` is one slice. HTTP 202 or body status `paused`, `running`, or
-`waiting` means symbols remain. The printed `next` says to run `prices sync --wait`. That
-command posts again, up to 40 rounds, which is the SPA cap. A `paused` run resumes on the
-next POST. `sync` without `--force` matches the button. `--force` is a separate refetch.
-
-Opening the SPA with `?verify=1` skips the automatic sync when consent is already accepted.
-Clicking `Allow Yahoo Finance` still runs the sync path above. `browser open` adds
-`verify=1`, so a visual session does not replace these commands.
-
-## Driving it with control-investing
+API-only accept, when the button is not on screen, is the same POST the button's
+`acceptYahoo` starts. Still dry-run first. One live PUT, then the live broker POST:
 
 ```bash
-node $C consent
 node $C consent --accept --dry-run
-node $C consent --accept
-node $C sync --wait
-node $C prices sync --wait
-node $C prices status
-node $C prices purge --yes                        # deletes every cached bar
-node $C api GET /api/investing/benchmarks
-node $C api GET '/api/investing/benchmarks/search?q=S%26P'
-node $C api GET '/api/market-data/fx?from=USD&to=EUR'
-node $C api GET '/api/market-data/identifier?isin=US0378331005'
+node $C consent --accept          # evidence JSON includes next
+node $C sync --dry-run
+node $C sync --wait               # POST /api/brokers/sync, then poll status
+node $C prices sync --wait        # POST /api/prices/sync until completed or problem
 ```
 
-## What proves it works
+`prices sync` without `--wait` is one slice. HTTP 202 or body `status` `paused`, `running`,
+or `waiting` means symbols remain. `--wait` posts again, up to 40 rounds.
 
-- Consent stored: `consent` body has `accepted: true` and `disclosureVersion` is
-  `yahoo-finance-v1`. The PUT response is that decision. It is not proof that prices moved.
-- Prices followed: after `prices sync --wait`, the last body `status` is `completed`
-  (`settled: true`). `prices status` shows the same terminal status. Where positions exist,
-  `doctor` check `positionsPriced` is ok and a dashboard row is `priced` or `forward-filled`
-  with `marketValue` not null. The value cell is not `Value unknown`.
-- Gate holds: before accept, `prices sync` and `benchmarks/search?q=` exit non-zero with
-  HTTP 428, `consentRequired: true`, and `Yahoo Finance consent required`. FX
-  (`/api/market-data/fx`) does not use that gate.
-- Purge: `prices purge --yes` returns `deleted: true`. The Cache control then reads
-  `Price data deleted` (`Failed to clear` on error).
+## Observable success
+
+Both of these. A loaded page is not success.
+
+1. **Consent.** `post-consent.json` `body.accepted` is `true` and `body.disclosureVersion` is
+   `yahoo-finance-v1`. Pre-state `body.accepted` was `false`.
+2. **Price signal.** `post-allow-snapshot.json` contains the string `Allow Yahoo Finance`
+   zero times. `post-prices-sync.json` `body.status` is `completed` and `body.message` is a
+   string. Empty book message, verbatim: `No price symbols to synchronize`. With symbols,
+   `body.completed` equals `body.total` and `body.remainingSymbols` is `[]`. After the reload
+   in Drive, browser text contains `Price history` and `Up to date`.
+   An empty vault's click also shows `Broker sync failed.` and broker `message`
+   `credential vault is locked`. That broker post-state is success for "the button POSTed
+   sync". It is not the price signal. The price signal is the `prices sync --wait` body.
+
+Before accept, `prices sync` and `GET /api/investing/benchmarks/search?q=AAPL` exit non-zero
+with HTTP 428, `consentRequired: true`, and problem `Yahoo Finance consent required`.
+
+Sync proof is the trio in `$E`: `pre-sync-status.json`, the live `sync` or the click's POST
+`/api/brokers/sync`, then `post-sync-status.json`. Assert `broker.body.status`,
+`broker.body.positionsRead`, and `broker.body.history.trading212.lastSyncedAt` (and `ibkr`).
+There is no separate job id. `positionsRead` and `lastSyncedAt` are the refresh fields.
+`dashboard` `positions` is the positions refresh.
 
 ## Verified-unreachable
 
-- Preview or prod without a session: 401 on `/api/*`. Prerequisite is the credentials file
-  or `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`. See
-  [auth-session.md](auth-session.md). Do not invent an account.
-- No holdings to price: `prices sync --wait` can complete with nothing to value. Bars for a
-  position stay verified-unreachable until [positions.md](positions.md) has rows
-  (`positionsRead` > 0). Consent plus an empty book is not a priced portfolio.
-- `browser install` did not reach `installed: true`: the consent screen in the SPA is
-  verified-unreachable. Use the API path above. The visual prerequisite is in the skill
-  Helpers section (`bun-missing`, `chromium-missing`, or `browse-sandboxed`).
+- Preview or prod with no session: 401 on `/api/*`. Prerequisite: `auth.preview.json` or
+  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`. See [auth-session.md](auth-session.md).
+- A priced holding (`priceStatus` `priced` and `marketValue` not null): prerequisite is
+  `positionsRead` > 0. Consent plus an empty book can still pass observable success 1 and 2
+  via `No price symbols to synchronize` and `Price history` / `Up to date`. It cannot prove
+  a quote for a symbol.
+- `browser install` not `installed: true`: the Allow button is verified-unreachable.
+  Prerequisite: `browser install` exit 0, or `browse-sandboxed` escalated and retried.
+  Do not invent a Chromium path.
 
 ## Gotchas
 
 - Without accepted consent the server makes no Yahoo request for prices or benchmark search.
-  Positions stay unpriced and the dashboard looks broken while behaving exactly as designed.
-  `consent` first. A 428 `fix` names `consent --accept` and `prices sync --wait`.
+  Positions stay unpriced. A 428 `fix` names `consent --accept` and `prices sync --wait`.
 - `/api/market-data/fx` and `/api/market-data/identifier` answer `503` when every provider
-  fails, and `400` on a malformed query. The two are easy to confuse in a log.
+  fails, and `400` on a malformed query. FX does not use the Yahoo consent gate.
 - `prices purge` is destructive and per tenant. It refuses without `--yes`, and on
-  `--target prod` it throws away the real cache — the next dashboard load is slow and
-  entirely dependent on Yahoo being up.
+  `--target prod` it throws away the real cache.
 - Missing `MARKET_DATA_API_KEY` degrades to a clear status rather than an error. Yahoo and
   Frankfurter need no key, so a missing key is not by itself a fault.

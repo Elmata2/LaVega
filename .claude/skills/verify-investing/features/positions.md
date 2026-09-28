@@ -2,69 +2,74 @@
 
 The holdings table and the per-instrument page behind it.
 
-## Sub-features
+## Reach
 
-- positions table (`Positions`) — column headers `Instrument`, `Value`, `% portfolio`,
-  `Total return`. The instrument cell shows the symbol, the broker entity, and
-  `<quantity> shares`.
-- open and closed positions (`Open position`, `Closed position`, `Open`, `Closed`).
-- position detail (`Position detail` / heading `Position`) at `/positions/:symbol` — price
-  chart, position activity (`Position activity`), buys, sells and dividends (`Buy`, `Sell`,
-  `Dividend`).
-- quantity history toggle (`Show quantity history` / `Hide history`).
-- empty and missing states: `No positions loaded`, `Position not found`,
-  `No position selected`.
-- unpriced value cell: `Value unknown`. Missing FX: `FX rate missing`. Missing return:
-  `Return unavailable`. Forward-filled price: visible `est.` and screen-reader
-  `Estimated price`.
+Standalone server: `http://127.0.0.1:8799/positions` (eyebrow `Positions`, heading `Positions`).
+Mounted app: `https://www.lavega.dev/investing/positions` after sign-in. Main navigation link
+text is `Positions`. A row links to `/positions/<symbol>` (mounted: `/investing/positions/<symbol>`).
+Deep link `AAPL` is `/investing/positions/AAPL`. Detail back link: `← Back to positions`.
 
-## How to get to it (user POV)
+Column headers, verbatim: `Instrument`, `Value`, `% portfolio`, `Total return`. The instrument
+cell ends with `<quantity> shares`. Detail eyebrow is `Position detail`, heading `Position`.
+Activity table accessible name: `Position activity`. Kinds: `Buy`, `Sell`, `Dividend`.
+Quantity toggle: `Show quantity history` / `Hide history`. Open/closed: `Open position`,
+`Closed position`, `Open`, `Closed`.
 
-Main navigation link `Positions` (eyebrow `Positions`, heading `Positions`). A row links to
-`/positions/<symbol>` on the standalone server and `/investing/positions/<symbol>` when
-mounted. Deep link: `/investing/positions/AAPL`. Back link on the detail page:
-`← Back to positions`.
+Empty and missing copy, verbatim:
 
-## Driving it with control-investing
+- no rows: `No positions loaded`
+- description under that title: `Connect a broker or import a statement to see your investments.`
+- unknown symbol: `Position not found`
+- URL without a symbol: `No position selected`
+- unpriced value cell: `Value unknown`
+- missing FX: `FX rate missing`
+- missing return: `Return unavailable`
+
+## Drive
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C dashboard --raw                         # positions[] is the table source
-node $C dashboard --symbol AAPL --raw           # same endpoint the detail page uses
-node $C assets --path /positions/AAPL           # local shell; mounted path is below
-node $C assets --target preview --path /investing/positions/AAPL
-node $C doctor                                  # positionsPriced / positionsCosted when rows exist
+E="/tmp/lavega-verify-investing/evidence"
+node $C dashboard --out "$E/positions-dashboard.json"
+node $C dashboard --raw --out "$E/positions-dashboard-raw.json"
+node $C dashboard --symbol AAPL --raw --out "$E/positions-aapl.json"
+node $C browser open
+node $C browser wait-settle
+node $C browser snapshot --interactive --out "$E/positions-snapshot.json"
+node $C browser goto /positions
+node $C browser text --out "$E/positions-text.json"
 ```
 
-The detail page adds `?symbol=` to `/api/investing/dashboard`, so a broken detail page and a
-broken overview usually share one cause. Symbol match is case-insensitive.
+Mounted paths need `--target preview` or `--target prod` and a session. Detail uses the same
+dashboard endpoint with `?symbol=`. Symbol match is case-insensitive.
 
-## What proves it works
+## Observable success
 
-- Table has rows: `dashboard` exits 0, `positions` > 0, and `problems` is empty. `--raw`
-  shows each row's `symbol` and `quantity`. A priced row has `marketValue` not null and
-  `priceStatus` `priced` or `forward-filled`. `doctor` check `positionsPriced` is ok.
-- Detail exists: `dashboard --symbol AAPL --raw` returns `position.symbol` equal to `AAPL`
-  ignoring case. In the browser the eyebrow is `Position detail` and the activity table's
-  accessible name is `Position activity`.
-- Empty book, stated honestly: `positions` is 0, `problems` is empty, and the page title is
-  `No positions loaded` with `Connect a broker or import a statement to see your investments.`
-  That proves the empty state. It does not prove the table.
-- Unknown symbol: page title `Position not found`. No symbol segment: `No position selected`.
+Exit 0, and one of these is true. Assert the field. Do not treat a loaded page as success.
+
+1. **Rows.** `positions-dashboard.json` field `positions` is a number ≥ 1, and `problems` is
+   `[]`. `--raw` field `positions` is an array of that length. Each element has `symbol` and
+   `quantity`. A priced row has `marketValue` not null and `priceStatus` `priced` or
+   `forward-filled`. `doctor` check `positionsPriced` is `ok: true`.
+2. **Empty state.** `positions` is `0`, `problems` is `[]`, and browser text contains the
+   verbatim string `No positions loaded`. That is success for an empty book. It is not success
+   for a filled table.
+3. **Missing detail.** `dashboard --symbol <missing> --raw` has no `position.symbol` equal to
+   that symbol, and the page title is `Position not found`.
 
 ## Verified-unreachable
 
 - Preview or prod with no session: every `/api/*` is 401. `doctor` fails `credentialsFile`
   when `auth.preview.json` (preview) or `auth.json` (prod) is missing and
-  `LAVEGA_VERIFY_EMAIL` plus `LAVEGA_VERIFY_PASSWORD` are unset. Stop. Prerequisite is that
-  file or those env vars. Do not invent an account. The positions table is
-  verified-unreachable until `login` then `whoami` reports `authenticated`.
-- Zero positions after a truthful sync: the holdings table cannot be proven. Prerequisite:
-  `sync --wait` with `positionsRead` > 0, or a vault that already holds holdings. The title
-  `No positions loaded` is the empty state, not a failed render.
-- Rows with `marketValue: null` (`Value unknown`): the table rendered and pricing did not.
-  Prerequisite: accepted Yahoo consent, then `sync --wait` and `prices sync --wait`, until
-  `positionsPriced` passes. See [prices-and-market-data.md](prices-and-market-data.md).
+  `LAVEGA_VERIFY_EMAIL` plus `LAVEGA_VERIFY_PASSWORD` are unset. Prerequisite: that file or
+  those two env vars, then `login` exit 0 and `whoami` `state` `authenticated`. Do not invent
+  an account.
+- Row count ≥ 1 with no broker holdings: prerequisite is `sync-status` `positionsRead` > 0
+  after `sync --wait`, or a vault that already holds holdings. Until then only observable
+  success 2 (the verbatim empty copy) can pass.
+- `Value unknown` on a row that exists: the table rendered. Pricing did not. Prerequisite:
+  consent `accepted: true`, then `sync --wait` and `prices sync --wait`, until
+  `positionsPriced` is ok. See [prices-and-market-data.md](prices-and-market-data.md).
 
 ## Gotchas
 

@@ -213,7 +213,9 @@ code `browse-sandboxed`). Text help and JSON help say the same thing.
 ```bash
 node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
 node $C browser snapshot --interactive      # accessibility tree with @e refs
-node $C browser click @e3                   # --dry-run prints the action instead
+node $C browser click --dry-run @e3         # print the action
+node $C browser click @e3                   # live click; Allow Yahoo Finance is the consent button
+# full Allow click, PNG, and post-click count: features/prices-and-market-data.md Drive
 node $C browser wait-settle                 # network idle
 node $C browser screenshot                  # PNG under evidence; --png sets the image path
 node $C browser console --errors

@@ -1,97 +1,82 @@
 # Account and session
 
 Sign-in gate in front of every investing route. Backed by better-auth in
-`apps/server/src/auth.ts`, mounted at `/api/auth/*`.
+`apps/server/src/auth.ts`, mounted at `/api/auth/*`. There is no `/me` route. The session
+read is `GET /api/auth/get-session`, which `whoami` calls.
 
-## Sub-features
+## Reach
 
-- sign-in: email and password form (`AuthForm` with `LoginForm`), route `/sign-in`. Fields
-  `Email address` and `Password`, plus a `Forgot password?` link.
-- sign-up: `AuthForm` in sign-up mode, route `/sign-up`. On success it goes to
-  `/check-email`.
-- check-email: `/check-email` shows `Check your email` and `Resend confirmation email`.
-- email-confirmed: `/email-confirmed` is where the confirmation link lands. It sends a
-  confirmed user on to `/sign-in?verified=1` (or `/` with a session). With `?error=` it shows
-  `Confirmation link did not work`.
-- forgot-password: `/forgot-password` shows `Reset your password` and `Send reset link`.
-- reset-password: `/reset-password?token=…` sets a new password through
-  `/api/auth/reset-password`. Without a valid token it offers `Request another link`.
-- require-auth: `RequireAuth` redirects every other route to `/sign-in` without a session.
-- unconfigured mode: with no `DATABASE_URL`/`BETTER_AUTH_SECRET`, `get-session` answers 503
-  and the gate opens — that is local and self-hosted dev, not production.
+Mounted origin `https://www.lavega.dev`. Investing shell is `/investing/`. Without a session
+the app lands on `/investing/sign-in`.
 
-## How to get to it (user POV)
+| Route | Heading an agent can read |
+| --- | --- |
+| `/sign-in` | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`. |
+| `/sign-up` | `Create your account`. Success navigates to `/check-email`. |
+| `/check-email` | `Check your email`. Button `Resend confirmation email`. |
+| `/email-confirmed` | With `?error=`, heading `Confirmation link did not work` and link `Request another link`. Without an error, a session goes to `/` and no session goes to `/sign-in?verified=1`. |
+| `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending). |
+| `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token: `Request another link`. |
 
-Open `https://www.lavega.dev/investing`. Without a session the app lands on `/sign-in`.
-Sign in, and the overview loads. A new user signs up at `/sign-up`, then follows the link in
-the confirmation mail. A user who forgot the password uses `Forgot password?` on the sign-in
-form and follows the link in the reset mail.
+`RequireAuth` sends every other route to `/sign-in` when there is no session.
+Local standalone has no auth routes. `whoami` there is `state: "unconfigured"`. That is not
+a logged-in marker.
 
-## Driving it with control-investing
+## Drive
 
-Credential resolution, in this order:
-
-1. **File.** `/tmp/lavega-verify-investing/auth.preview.json` on `--target preview`.
-   `/tmp/lavega-verify-investing/auth.json` on `--target prod`. `--credentials-file`
-   replaces that path. Prod file, written outside the repo:
-
-```bash
-umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
-  > /tmp/lavega-verify-investing/auth.json
-```
-
-2. **Environment.** `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`, both set. Those two
-   names exist in the Vercel project Config for Dev, Preview, and Prod.
-3. **CLI flags.** `--email` and `--password`, both set. A password on the command line lands
-   in shell history and in the transcript.
-
-For preview, use the existing `auth.preview.json` or pull those env vars. Do not ask for a
-personal password. Do not invent or sign up an account. For prod, do not invent an account
-either.
-
-`doctor --target preview` fails `credentialsFile` when `auth.preview.json` is missing, those
-env vars are unset, and there is no session. The same check on prod uses `auth.json`. The
-`fix` names the preview file path and `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD`. A
-local `doctor` pass does not satisfy this check.
-`pnpm run test:verify-investing:live` skips only when neither `auth.preview.json` nor
-`LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
-
-Then:
+Credential order: `auth.preview.json` on `--target preview`, `auth.json` on `--target prod`,
+then `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` (both), then `--email` and
+`--password`. Do not invent an account. Do not put the password on the command line when the
+file or the env pair exists.
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C login --target preview      # file, else env, else flags
-node $C whoami --target preview
-node $C logout
+E="/tmp/lavega-verify-investing/evidence"
+node $C doctor --target preview --out "$E/auth-doctor.json"
+node $C login --target preview --out "$E/auth-login.json"
+node $C whoami --target preview --out "$E/auth-whoami.json"
+node $C dashboard --target preview --out "$E/auth-dashboard.json"
 ```
 
-The cookie jar is per host under `/tmp/lavega-verify-investing/run/`; `cleanup` removes the
-run directory, and the credential files sit above it so teardown leaves them alone.
+Prod uses `--target prod` and `auth.json`. Logout: `node $C logout --target preview`.
 
-## What proves it works
+Recovery routes, public, no session required. Drive each with `browser goto` on the mounted
+origin and assert the heading in the table above. Example:
+`node $C browser goto /investing/forgot-password --target preview`.
 
-- Preview or prod with credentials: `login` exits 0, `whoami` prints `state: "authenticated"`
-  and a `user`, and `doctor` reports `auth` as `authenticated:<email>` with `credentialsFile`
-  ok. A following `dashboard` is not 401.
-- Browser, after that login: `browser open --target preview` (or prod) loads
-  `/investing/?verify=1`. The address is not `/sign-in`. Snapshot shows `Overview` in
-  `Main navigation`, not the sign-in form as the only screen.
-- The sign-in form itself, on `/sign-in`: labels `Email address` and `Password`, and the
-  link `Forgot password?`. Sign-up success lands on `/check-email` with `Check your email`.
-  A bad confirmation link shows `Confirmation link did not work`.
-- Local standalone: `whoami` prints `state: "unconfigured"`. Routes answer without a session.
-  That is success for local. It is not a signed-in user.
+## Observable success
+
+Login is success only when all of these hold. Password text must not appear in stdout or in
+the evidence JSON.
+
+- `login` exit 0.
+- `auth-login.json` `signedIn` is `true` and `user` is an object.
+- `credentialsFrom` is `environment` when `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`
+  supplied the password, or a path ending in `auth.preview.json` or `auth.json` when the file
+  supplied it.
+- `whoami` exit 0, `state` is `authenticated`, `status` is 200, `user` is an object.
+- `dashboard` status is not 401.
+- The cookie jar path in `cookieJar` exists and is non-empty. `cleanup` deletes that jar
+  with `run/`. The credentials file stays.
+
+Each recovery route succeeds on its own heading from the Reach table, read from
+`browser snapshot` or `browser text`. A 200 shell that is still `/sign-in` after `login` is
+not success.
+
+Local `whoami` `state: "unconfigured"` is success only for the claim "this server has no
+auth". It does not satisfy the logged-in marker.
 
 ## Verified-unreachable
 
-- No preview file, no `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD`, and no session:
-  `doctor --target preview` fails `credentialsFile`. The `fix` names `auth.preview.json` and
-  those env vars. Stop. Session-backed pages are verified-unreachable. Do not invent an
+- No `auth.preview.json`, no `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD`, and no
+  session: `doctor --target preview` fails `credentialsFile`. Stop. Logged-in success is
+  verified-unreachable. Prerequisite: that file or those two env vars. Do not invent an
   account and do not ask for a personal password. Prod is the same check against `auth.json`.
-- Sign-in, sign-up, check-email, email-confirmed, forgot-password, and reset-password are
-  mounted routes. The standalone server has none of them. Those forms are
-  verified-unreachable on `--target local`. Prerequisite: `--target preview` or
-  `--target prod`.
+- `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, and
+  `/reset-password` are mounted routes. They are verified-unreachable on `--target local`.
+  Prerequisite: `--target preview` or `--target prod`.
+- A missing `vercel` CLI blocks preview URL discovery. Pass `--base` or `LAVEGA_PREVIEW_URL`
+  when the deploy URL is already known. That does not replace the credentials prerequisite.
 
 ## Gotchas
 
