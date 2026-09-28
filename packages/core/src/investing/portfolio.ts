@@ -232,13 +232,19 @@ function cashLegs(
   cashCoverage: readonly CashHistoryCoverage[],
   fxRates: FxRates,
 ): CashLeg[] {
+  const owner = (value: { entity: string; broker: string }) =>
+    `${value.entity}\u0000${value.broker}`;
+  /* Where a broker books trade cash is true of the broker, so it is read from
+   * any coverage it reported, proven window or not. Reading it only from a
+   * proven one dropped every trade out of the cash walk exactly when the walk
+   * was already working without a window. */
+  const coverage = new Map(cashCoverage.map((value) => [owner(value), value] as const));
   const proven = new Map(
     cashCoverage.flatMap((value) =>
-      value.status === "complete" ? [[`${value.entity}\u0000${value.broker}`, value] as const] : [],
+      value.status === "complete" ? [[owner(value), value] as const] : [],
     ),
   );
-  const provenFor = (value: { entity: string; broker: string }) =>
-    proven.get(`${value.entity}\u0000${value.broker}`);
+  const provenFor = (value: { entity: string; broker: string }) => proven.get(owner(value));
   const legs = new Map<string, CashLeg>();
   const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
     const key = cashKey(value);
@@ -262,7 +268,7 @@ function cashLegs(
     leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
   for (const trade of trades) {
     if (!trade.broker) continue;
-    if (provenFor({ entity: trade.entity, broker: trade.broker })?.tradeCash !== "trade-settlement")
+    if (coverage.get(`${trade.entity}\u0000${trade.broker}`)?.tradeCash !== "trade-settlement")
       continue;
     const settlement = tradeSettlement(trade);
     leg({ entity: trade.entity, broker: trade.broker, currency: settlement.currency }).events.push({

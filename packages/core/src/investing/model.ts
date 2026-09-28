@@ -64,21 +64,27 @@ export type CashFlow = {
 
 /** What a broker proved about one account's cash history.
  *
- *  Complete means every cash movement from `from` through `to` is in the
- *  reported events, and `tradeCash` names the one stream that records what a
- *  trade moved: the trade's own settlement, or ledger rows among the cash
- *  flows. Counting both would double a purchase. Unknown means only a dated
- *  broker balance says what cash was; the first retained event proves nothing
- *  about movements before or between. */
-export type CashHistoryCoverage = { entity: string; broker: string } & (
-  | {
-      status: "complete";
-      from: string;
-      to: string;
-      tradeCash: "trade-settlement" | "cash-flows";
-    }
-  | { status: "unknown"; reason: string }
-);
+ *  Two separate claims, because they are answerable separately and were not
+ *  when they shared a branch.
+ *
+ *  `tradeCash` names the one stream that records what a trade moved: the
+ *  trade's own settlement, or ledger rows among the cash flows. Counting both
+ *  would double a purchase. Which one it is follows from the shape of the
+ *  broker's API, so it holds for every account there and is known even when
+ *  nothing about this account's history is. Keeping it inside `complete` made
+ *  a broker unable to say where trade cash lives without also claiming a
+ *  window it could not prove, and a reader that does not know where trade
+ *  cash lives cannot count trades at all.
+ *
+ *  `status` is the claim about this account. Complete means every cash
+ *  movement from `from` through `to` is in the reported events. Unknown means
+ *  only a dated broker balance says what cash was; the first retained event
+ *  proves nothing about movements before or between. */
+export type CashHistoryCoverage = {
+  entity: string;
+  broker: string;
+  tradeCash: "trade-settlement" | "cash-flows";
+} & ({ status: "complete"; from: string; to: string } | { status: "unknown"; reason: string });
 
 export type TradeSide = "buy" | "sell" | "other";
 

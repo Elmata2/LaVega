@@ -80,6 +80,14 @@ const RATE_LIMIT_MESSAGE =
  *  books execution cash that fills report as walletImpact, or how far back
  *  either stream is retained. Walking cash through both could count a trade
  *  twice, so historical cash stays unknown until that evidence exists. */
+/* Live account, 2026-09-28: all 626 transactions were a DEPOSIT or a WITHDRAW,
+ * and only 4 of 1228 executions had a same-day transaction of equal magnitude,
+ * the rate coincidence produces. Transactions do not book execution cash, so
+ * settlement is the one trade-cash stream. That is a fact about the endpoints,
+ * not about any one account's history, so it holds while the window below
+ * stays unproven. */
+const TRADE_CASH_STREAM = "trade-settlement" as const;
+
 const CASH_HISTORY_UNPROVEN =
   "Trading 212 cash history is unproven: trade settlement and transaction retention are unverified";
 
@@ -993,6 +1001,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         cashHistory: {
           entity,
           broker: "trading212",
+          tradeCash: TRADE_CASH_STREAM,
           status: "unknown",
           reason: CASH_HISTORY_UNPROVEN,
         },
