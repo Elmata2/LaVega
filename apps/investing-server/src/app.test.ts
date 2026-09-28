@@ -755,7 +755,9 @@ test("summary route negotiates the Yahoo crumb at most once across positions and
       if (url.includes("/v10/finance/quoteSummary/")) {
         return new Response(
           JSON.stringify({
-            quoteSummary: { result: [{ assetProfile: { sector: "Technology", industry: "Software" } }] },
+            quoteSummary: {
+              result: [{ assetProfile: { sector: "Technology", industry: "Software" } }],
+            },
           }),
           { status: 200 },
         );

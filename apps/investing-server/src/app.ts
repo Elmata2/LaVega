@@ -348,17 +348,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["symbols must be a string array"] }, 400);
     try {
       const tenantId = await resolveTenantId();
-      const previous = await benchmarkSelectionStore.get(tenantId);
       const selection = { tenantId, symbols: validateBenchmarkSymbols(symbols as string[]) };
       await benchmarkSelectionStore.set(selection);
-      /* Best-effort: if a sync is already looping for this tenant, get the newly
-       * chosen benchmark into it next. Never awaited past the point where it
-       * could block this response — a fresh or resumed run already sorts every
-       * selected benchmark first on its own. */
-      for (const symbol of selection.symbols) {
-        if (!previous.symbols.includes(symbol))
-          void priceOrchestrator.prioritizeNext(tenantId, symbol).catch(() => undefined);
-      }
       return c.json(selection);
     } catch (error) {
       return c.json(

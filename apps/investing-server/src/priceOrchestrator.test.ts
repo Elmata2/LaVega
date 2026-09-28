@@ -392,12 +392,7 @@ test("a benchmark selected during a paused run joins its next slice", async () =
     status: "completed",
     total: 4,
   });
-  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual([
-    "ONE",
-    "^AEX",
-    "TWO",
-    "THREE",
-  ]);
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
 });
 
 test("a benchmark selected mid-run through the shared selection store is fetched next by the instance already running", async () => {
@@ -408,7 +403,10 @@ test("a benchmark selected mid-run through the shared selection store is fetched
   const progressStore = createInMemoryPriceSyncProgressStore();
   let selectedBenchmarks: string[] = [];
   const discover = () => [
-    ...selectedBenchmarks.map((symbol) => ({ ...symbolTarget(symbol), kind: "benchmark" as const })),
+    ...selectedBenchmarks.map((symbol) => ({
+      ...symbolTarget(symbol),
+      kind: "benchmark" as const,
+    })),
     ...holdings,
   ];
   let releaseOne!: () => void;
@@ -419,7 +417,12 @@ test("a benchmark selected mid-run through the shared selection store is fetched
     if (target.symbol === "ONE") await firstPending;
     return result();
   });
-  const instanceRunningTheSync = createPriceOrchestrator({ discover, sync, paceMs: 0, progressStore });
+  const instanceRunningTheSync = createPriceOrchestrator({
+    discover,
+    sync,
+    paceMs: 0,
+    progressStore,
+  });
   // Never used to run anything: it stands in for the invocation that serves the
   // PUT and a later status poll, and shares no JS object with the run above.
   const anotherInstance = createPriceOrchestrator({
@@ -441,12 +444,7 @@ test("a benchmark selected mid-run through the shared selection store is fetched
   releaseOne();
   await run;
 
-  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual([
-    "ONE",
-    "^AEX",
-    "TWO",
-    "THREE",
-  ]);
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
   await expect(anotherInstance.status("local")).resolves.toMatchObject({
     status: "completed",
     total: 4,
