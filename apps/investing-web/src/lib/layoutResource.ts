@@ -71,9 +71,9 @@ export function useInvestingLayout(): InvestingLayoutResource {
     saveError: null,
   });
 
-  /* The three refs below exist because closures over `state` go stale the
-   * instant a second call — the initial GET, or a second toggle — lands
-   * before the first setState has re-rendered:
+  /* The refs below exist because closures over `state` go stale the instant
+   * a second call — the initial GET, or a second toggle — lands before the
+   * first setState has re-rendered:
    *  - layoutRef mirrors the optimistic layout the reader is looking at, so
    *    a PUT body always reflects every edit made so far, not just the one
    *    that triggered it.
@@ -81,15 +81,32 @@ export function useInvestingLayout(): InvestingLayoutResource {
    *    save has something honest to revert to.
    *  - localEditsRef is only the reader's own explicit choices (never the
    *    server's), so a slow initial GET can merge underneath them instead
-   *    of overwriting a toggle made while it was still in flight. */
+   *    of overwriting a toggle made while it was still in flight.
+   *  - saveSeqRef numbers every PUT this hook sends. Two toggles in a row
+   *    fire two independent requests that can land in either order (or one
+   *    can fail while the other succeeds); only the response matching the
+   *    highest number in flight is allowed to touch confirmedRef/saveError
+   *    — an older response, success or failure, is stale news and is
+   *    dropped rather than regressing state a newer request already moved
+   *    past.
+   *  - mountedRef guards every async continuation against running after
+   *    unmount, for both the initial GET and every PUT. */
   const layoutRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
   const confirmedRef = useRef<InvestingLayout>(EMPTY_LAYOUT);
   const localEditsRef = useRef<InvestingLayout>({ modules: {}, widgets: {} });
+  const saveSeqRef = useRef(0);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let current = true;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     void fetchLayout().then((serverLayout) => {
-      if (!current) return;
+      if (!mountedRef.current) return;
       const merged: InvestingLayout = {
         modules: { ...serverLayout.modules, ...localEditsRef.current.modules },
         widgets: { ...serverLayout.widgets, ...localEditsRef.current.widgets },
@@ -98,9 +115,6 @@ export function useInvestingLayout(): InvestingLayoutResource {
       layoutRef.current = merged;
       setState((previous) => ({ status: "ready", layout: merged, saveError: previous.saveError }));
     });
-    return () => {
-      current = false;
-    };
   }, []);
 
   function applyChange<K extends "modules" | "widgets">(kind: K, next: InvestingLayout[K]) {
@@ -108,7 +122,11 @@ export function useInvestingLayout(): InvestingLayoutResource {
     layoutRef.current = nextLayout;
     localEditsRef.current = { ...localEditsRef.current, [kind]: next };
     setState((previous) => ({ status: "ready", layout: nextLayout, saveError: previous.saveError }));
+
+    const mySeq = ++saveSeqRef.current;
     void putLayout(nextLayout).then((ok) => {
+      if (!mountedRef.current) return;
+      if (mySeq !== saveSeqRef.current) return; // superseded by a later toggle
       if (ok) {
         confirmedRef.current = nextLayout;
         setState((previous) => ({ ...previous, saveError: null }));
