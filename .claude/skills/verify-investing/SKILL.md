@@ -107,9 +107,30 @@ whenever anything looks off.
 
 ## Drive
 
-Targets: `--target local` (default), `--target prod` (`https://www.lavega.dev`), or
+Targets: `--target local` (default for the CLI), `--target prod` (`https://www.lavega.dev`), or
 `--target preview` with `--base <url>` or `LAVEGA_PREVIEW_URL` for a Vercel preview deploy.
 `--base` alone implies `--target preview`. See [Preview](#preview).
+
+**Which target to use.** Proving the investing app with the dev portfolio means
+`--target preview`, signed in as the preview test user. The empty local server has no
+session and no broker, so it cannot show those positions. Use `up` only for a change that
+is not deployed yet, or for a screen that must work with an empty vault.
+
+Sign in before any preview read:
+
+```bash
+C=".claude/skills/verify-investing/control-investing.mjs"
+node $C doctor --target preview
+node $C login --target preview
+node $C whoami --target preview
+node $C dashboard --target preview
+```
+
+`login` reads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the agent
+environment, or `/tmp/lavega-verify-investing/auth.preview.json`. A password stored as a
+Vercel project env var is not visible here. If both are missing, stop and say so. Do not
+invent an account, and do not fall back to the empty local server and call that a pass for
+the portfolio.
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
@@ -195,8 +216,8 @@ Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`. `p
 
 Standards for the proof, not just the pass:
 
-- Exercise the real path. `sync --force` posts to the same route the **Nu synchroniseren**
-  button posts to. Do not reach into a store or call a test-only helper to fake the state.
+- Exercise the real path. `sync --force` posts to the same route the **Start sync** button
+  posts to. Do not reach into a store or call a test-only helper to fake the state.
 - Capture the action and the resulting state, not only the end screen. For a sync: the status
   before, the POST response, the settled progress, and the dashboard afterwards.
 - Verify the side effect alongside what is visible. A sync that "worked" should move
@@ -216,9 +237,12 @@ real tenant. Prefer it over prod for anything that writes.
   confirm it has every migration and the same `LAVEGA_ENCRYPTION_KEY` as Production.
   `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
   the symptom of either gap.
-- **Account.** Preview has its own test user, never a real person's login. Its credentials
-  live in `/tmp/lavega-verify-investing/auth.preview.json`, separate from prod's `auth.json`.
-  Each origin gets its own cookie jar, so a preview login never replaces the prod session.
+- **Account.** Preview has its own test user, never a real person's login. That user is the
+  one verification signs in as. Credentials are `LAVEGA_VERIFY_EMAIL` and
+  `LAVEGA_VERIFY_PASSWORD` in the agent environment, or
+  `/tmp/lavega-verify-investing/auth.preview.json`. They are separate from prod's
+  `auth.json`. Setting them on the Vercel project does not sign an agent in. Each origin
+  gets its own cookie jar, so a preview login never replaces the prod session.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.

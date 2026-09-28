@@ -4,6 +4,10 @@ What a user can do on the investing side, how they reach it, and how to drive it
 `control-investing.mjs`. This map is the maintained source for verification: when a run
 finds it wrong, fix the map in the same change.
 
+Prove the dev portfolio on `--target preview` after `login`, not on the empty local
+server. The login is `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD` in the agent
+environment, or `auth.preview.json`. A Vercel env var is not that login.
+
 The SPA lives at `/investing/` in production (`/` on the standalone server). The interface
 is English. Public routes: `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`,
 `/forgot-password`, `/reset-password`. Every other route sits behind `RequireAuth`: `/`,

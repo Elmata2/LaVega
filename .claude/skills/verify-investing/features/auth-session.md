@@ -53,8 +53,10 @@ node $C whoami --target prod
 node $C logout
 ```
 
-On `--target local`, `whoami` is the check. It must report `status: 503` and
-`state: "unconfigured"`. `login` cannot succeed there.
+Verification of the real portfolio uses `--target preview` and this login. On
+`--target local`, `whoami` is only the empty-server check. It must report `status: 503`
+and `state: "unconfigured"`. `login` cannot succeed there, and that empty server is not a
+pass for the dev account.
 
 `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD` work too, and `--email`/`--password` still
 exist for a throwaway account. Prefer the file: a password passed as an argument ends up in
