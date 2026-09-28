@@ -1334,15 +1334,34 @@ function existingBrowseBin() {
   return [browseCanonical(), browseLegacy()].find((path) => existsSync(path)) ?? null;
 }
 
+/** Pinned installer. The agent runs this; it does not invent a browse path. */
+const BUN_INSTALL = 'curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"';
+
+const BUN_MISSING_FIX = `bun is not on PATH. Install bun 1.3.10 and verify the checksum before you run it: ${BUN_INSTALL}; then put "$HOME/.bun/bin" on PATH and rerun \`${SELF} browser install\`. Or set LAVEGA_BROWSE_BIN to an existing browse binary. Or use ${browseLegacy()} when that file exists (the Codex path alone is enough). Do not invent a path.`;
+
 function browseInstallPlan() {
   const existing = existingBrowseBin();
   if (existing) return { already: true, bin: existing, steps: [] };
   const root = gstackRoot();
+  const bun = bunAvailable();
   const steps = [];
+  if (!bun)
+    steps.push(
+      `${BUN_INSTALL}  # then export PATH="$HOME/.bun/bin:$PATH". Do not invent a browse path.`,
+    );
   if (!existsSync(join(root, "setup")))
     steps.push(`git clone --depth 1 https://github.com/garrytan/gstack.git ${root}`);
   steps.push(`${join(root, "setup")}`);
-  return { already: false, bin: browseCanonical(), steps };
+  return {
+    already: false,
+    bin: browseCanonical(),
+    bun,
+    codex: browseLegacy(),
+    steps,
+    note: bun
+      ? undefined
+      : `Prefer the bun install step. If ${browseLegacy()} already exists, that path alone is enough and no build is required.`,
+  };
 }
 
 function bunAvailable() {
@@ -1357,11 +1376,10 @@ function commandBrowserInstall() {
     return 0;
   }
   if (!bunAvailable())
-    fail(
-      "bun is required to build the browse binary",
-      "install bun 1.3.10 from https://bun.sh/install (verify the checksum before running it), then rerun `browser install`",
-      { code: "bun-missing", exitCode: 1 },
-    );
+    fail("bun is required to build the browse binary", BUN_MISSING_FIX, {
+      code: "bun-missing",
+      exitCode: 1,
+    });
 
   const root = gstackRoot();
   const setup = join(root, "setup");
@@ -1467,7 +1485,11 @@ function runBrowse(args) {
  * That is the sandbox, so the fix is to re-run the browser step outside it.
  */
 const SANDBOX_BROWSE_FIX =
-  "re-run this browser step escalated or unrestricted, outside the sandbox (Codex: escalate or disable the sandbox for this step). Doctor, probe, and API commands can stay sandboxed";
+  "re-run this browser step escalated or unrestricted, outside the sandbox (Codex: escalate or disable the sandbox for this step). Doctor, probe, and API commands can stay sandboxed. Do not reinstall Chromium.";
+
+/** Printed by `browser --help` and every browser subcommand `--help`. */
+const BROWSER_SANDBOX_HELP =
+  'Under a Codex workspace-write sandbox, or any shell sandbox, escalate or unrestrict before `browser install`, `browser open`, `browser snapshot`, `browser click`, `browser screenshot`, and every other browser subcommand. On PortRendezvous, EPERM, SIGTRAP, Permission denied, or target-closed ("Target page, context or browser has been closed"), that is `browse-sandboxed`: escalate and retry. Do not reinstall Chromium.';
 
 function sandboxRefusedChromium(text) {
   return /EPERM|PortRendezvous|Permission denied|SIGTRAP|Target page, context or browser has been closed/i.test(
@@ -2026,7 +2048,7 @@ const COMMANDS = [
     group: "Browser",
     summary: "Use an existing browse binary, or build the Claude one",
     description:
-      "If LAVEGA_BROWSE_BIN, ~/.claude/skills/gstack/browse/dist/browse, or ~/.codex/skills/gstack/browse/dist/browse already exists, returns already:true and leaves it in place. The Codex path alone is enough; install does not create the Claude path in that case. Otherwise clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack and runs ./setup, which builds the canonical browse binary and installs Playwright Chromium. Needs bun on PATH only when it builds.",
+      'If LAVEGA_BROWSE_BIN, ~/.claude/skills/gstack/browse/dist/browse, or ~/.codex/skills/gstack/browse/dist/browse already exists, returns already:true and leaves it in place. The Codex path alone is enough; install does not create the Claude path in that case. Otherwise clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack and runs ./setup, which builds the canonical browse binary and installs Playwright Chromium. Needs bun on PATH only when it builds. If bun is missing, --dry-run prints `curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"` first (verify the checksum, then put ~/.bun/bin on PATH). Or set LAVEGA_BROWSE_BIN to an existing browse binary. Do not invent a path. A missing Chromium is `bunx playwright@1.58.2 install chromium`. A sandbox refusal is browse-sandboxed: escalate and retry. Do not reinstall Chromium for that.',
     effect: "local-install",
     plan: browseInstallPlan,
     run: commandBrowserInstall,
@@ -2341,8 +2363,9 @@ Evidence lives in ${evidenceDir}; run state in ${runDir}.`;
 function groupText(prefix) {
   const members = COMMANDS.filter((command) => command.name.startsWith(`${prefix} `));
   const width = Math.max(...members.map((command) => command.name.length)) + 2;
+  const sandbox = prefix === "browser" ? `\n${BROWSER_SANDBOX_HELP}\n` : "";
   return `Usage: ${SELF} ${prefix} <subcommand> [args] [flags]
-
+${sandbox}
 ${members.map((command) => `  ${command.name.padEnd(width)}${command.summary}`).join("\n")}
 
 Run \`${prefix} <subcommand> --help\` for its flags.`;
@@ -2357,6 +2380,7 @@ function commandText(command) {
     `Usage: ${SELF} ${usageLine(command)}`,
   ];
   if (command.description) lines.push("", command.description);
+  if (command.group === "Browser") lines.push("", BROWSER_SANDBOX_HELP);
   if (command.args?.length) {
     lines.push("", "Arguments");
     for (const arg of command.args)

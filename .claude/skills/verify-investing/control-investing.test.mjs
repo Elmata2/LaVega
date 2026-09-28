@@ -213,6 +213,22 @@ describe("help", () => {
     assert.match(result.stdout, /browser install/);
   });
 
+  test("browser --help says to escalate outside the sandbox", async () => {
+    const result = await run(["browser", "--help"]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /escalat/);
+    assert.match(result.stdout, /unrestrict/);
+    assert.match(result.stdout, /workspace-write/);
+    assert.match(result.stdout, /PortRendezvous/);
+    assert.match(result.stdout, /EPERM/);
+    assert.match(result.stdout, /SIGTRAP/);
+    assert.match(result.stdout, /target-closed/);
+    assert.match(result.stdout, /browse-sandboxed/);
+    assert.match(result.stdout, /Do not reinstall Chromium/);
+    for (const name of ["install", "open", "snapshot", "click", "screenshot"])
+      assert.match(result.stdout, new RegExp(`browser ${name}`));
+  });
+
   test("help <command> --json returns one command", async () => {
     const result = await run(["help", "sync", "--json"]);
     assert.equal(result.json.name, "sync");
@@ -848,6 +864,15 @@ echo "browse-ok $1"
     chmodSync(fakeBrowse, 0o755);
   }
 
+  test("browser screenshot --help repeats the sandbox rule", async () => {
+    const result = await run(["browser", "screenshot", "--help"]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /browse-sandboxed/);
+    assert.match(result.stdout, /escalat/);
+    assert.match(result.stdout, /Do not reinstall Chromium/);
+    assert.match(result.stdout, /target-closed/);
+  });
+
   test("screenshot defaults into the evidence directory", async () => {
     const result = await run(["browser", "screenshot"]);
     assert.equal(result.code, 0);
@@ -966,10 +991,13 @@ echo "browse-ok $1"
     assert.equal(result.json.dryRun, true);
     assert.equal(result.json.effect, "local-install");
     assert.match(result.json.would.bin, /[/]browse[/]dist[/]browse$/);
-    assert.match(
-      result.json.would.steps[0],
-      /git clone --depth 1 https:\/\/github.com\/garrytan\/gstack\.git/,
-    );
+    const clone = result.json.would.steps.find((step) => step.startsWith("git clone"));
+    assert.match(clone, /git clone --depth 1 https:\/\/github.com\/garrytan\/gstack\.git/);
+    if (result.json.would.bun === false) {
+      assert.match(result.json.would.steps[0], /bun\.sh\/install/);
+      assert.match(result.json.would.steps[0], /bun-v1\.3\.10/);
+      assert.match(result.json.would.note, /Codex path alone is enough|that path alone is enough/);
+    }
     assert.equal(existsSync(join(stateDir, ".claude")), false);
   });
 
@@ -981,7 +1009,11 @@ echo "browse-ok $1"
     });
     assert.equal(result.code, 1);
     assert.equal(result.error.error.code, "bun-missing");
-    assert.match(result.error.error.fix, /bun/);
+    assert.match(result.error.error.fix, /bun\.sh\/install/);
+    assert.match(result.error.error.fix, /bun-v1\.3\.10/);
+    assert.match(result.error.error.fix, /LAVEGA_BROWSE_BIN/);
+    assert.match(result.error.error.fix, /\.codex\/skills\/gstack\/browse\/dist\/browse/);
+    assert.match(result.error.error.fix, /Do not invent a path/);
     assert.equal(existsSync(join(stateDir, ".claude")), false);
   });
 

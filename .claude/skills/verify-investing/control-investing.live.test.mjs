@@ -3,8 +3,10 @@
  * Neon `preview` branch and the preview test user. Read-only — every write is
  * run with --dry-run, so no broker, price store or tenant row changes.
  *
- * Skips when the preview credentials file is missing. Uses its own state
- * directory, so it never moves the pin or cookie jar an agent is using.
+ * Skips only when neither auth.preview.json nor LAVEGA_VERIFY_EMAIL +
+ * LAVEGA_VERIFY_PASSWORD is set. Same order as login: file, then the env pair.
+ * Uses its own state directory, so it never moves the pin or cookie jar an
+ * agent is using.
  *
  *   pnpm run test:verify-investing:live
  *   LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app pnpm run test:verify-investing:live
@@ -31,9 +33,16 @@ function resolveBrowse() {
 
 const browse = resolveBrowse();
 
-const skip = existsSync(credentials)
-  ? false
-  : `no ${credentials}; write it as {"email":"...","password":"..."} for the preview test user`;
+function envCredentialsReady() {
+  return Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD);
+}
+
+const hasCredentialsFile = existsSync(credentials);
+const hasEnvCredentials = envCredentialsReady();
+const skip =
+  hasCredentialsFile || hasEnvCredentials
+    ? false
+    : `no ${credentials} and no LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD; set the preview file or that env pair`;
 
 let stateDir;
 
@@ -64,7 +73,7 @@ describe("live preview", { skip, concurrency: false }, () => {
   before(() => {
     // Under /tmp, not os.tmpdir(): browse refuses files outside /tmp and its cwd.
     stateDir = mkdtempSync("/tmp/control-investing-live-");
-    copyFileSync(credentials, join(stateDir, "auth.preview.json"));
+    if (hasCredentialsFile) copyFileSync(credentials, join(stateDir, "auth.preview.json"));
   });
 
   after(() => rmSync(stateDir, { recursive: true, force: true }));

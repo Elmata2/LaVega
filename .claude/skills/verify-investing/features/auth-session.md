@@ -53,7 +53,8 @@ either.
 env vars are unset, and there is no session. The same check on prod uses `auth.json`. The
 `fix` names the preview file path and `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD`. A
 local `doctor` pass does not satisfy this check.
-`pnpm run test:verify-investing:live` skips until `auth.preview.json` exists.
+`pnpm run test:verify-investing:live` skips only when neither `auth.preview.json` nor
+`LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is available.
 
 Then:
 
