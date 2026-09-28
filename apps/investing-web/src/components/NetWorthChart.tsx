@@ -80,7 +80,6 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
     () => ({
       unpriced: [...new Set(points.flatMap((point) => point.unpriced))],
       cashUnknown: [...new Set(points.flatMap((point) => point.cashUnknown))],
-      cashEstimated: [...new Set(points.flatMap((point) => point.cashEstimated ?? []))],
       forwardFilled: [...new Set(points.flatMap((point) => point.forwardFilled))],
     }),
     [points],
@@ -347,9 +346,6 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 {warnings.cashUnknown.length > 0 && (
                   <p>Cash value unknown: {warnings.cashUnknown.join(", ")}</p>
                 )}
-                {warnings.cashEstimated.length > 0 && (
-                  <p>Cash estimated from unproven history: {warnings.cashEstimated.join(", ")}</p>
-                )}
               </div>
             )}
           </>
@@ -392,15 +388,10 @@ function NetWorthTooltip({
       {point.cashUnknown.length > 0 && (
         <p className="mt-1 text-warning">Cash value unknown: {point.cashUnknown.join(", ")}</p>
       )}
-      {(point.cashEstimated?.length ?? 0) > 0 && (
-        <p className="mt-1 text-muted-foreground">
-          Cash estimated: {point.cashEstimated?.join(", ")}
-        </p>
-      )}
     </div>
   );
 }
 
 function accessiblePoint(point: PortfolioValuePoint, currency: string): string {
-  return `${dateLabel(point.date)}: total ${displayValue(point.value, currency)}, investments ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.forwardFilled.length ? `, estimated price: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, excluded due to stale price: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cash value unknown: ${point.cashUnknown.join(", ")}` : ""}${point.cashEstimated?.length ? `, cash estimated: ${point.cashEstimated.join(", ")}` : ""}`;
+  return `${dateLabel(point.date)}: total ${displayValue(point.value, currency)}, investments ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.forwardFilled.length ? `, estimated price: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, excluded due to stale price: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cash value unknown: ${point.cashUnknown.join(", ")}` : ""}`;
 }
