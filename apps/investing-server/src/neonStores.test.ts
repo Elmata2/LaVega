@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
   createNeonBenchmarkSelectionStore,
+  createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
   createNeonPriceStore,
 } from "./neonStores.js";
@@ -22,6 +23,13 @@ function fakeDatabase(rows: Record<string, unknown>[] = []) {
 
 const identities = (calls: Array<{ sql: string; values?: unknown[] }>) =>
   calls.filter((call) => call.sql.startsWith("SELECT set_config")).map((call) => call.values?.[0]);
+
+const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
+  calls.filter(
+    (call) =>
+      !["BEGIN", "COMMIT", "ROLLBACK"].includes(call.sql) &&
+      !call.sql.startsWith("SELECT set_config"),
+  );
 
 afterEach(() => vi.clearAllMocks());
 
@@ -62,6 +70,26 @@ test("benchmark selection is validated on the way in and out", async () => {
 
   await expect(store.set({ tenantId: "user-a", symbols: ["A", "B", "C", "D"] })).rejects.toThrow();
   expect(calls.some((call) => call.sql.includes("INSERT INTO investing.preferences"))).toBe(false);
+});
+
+test("investing layout is validated on the way in and out", async () => {
+  const { db, calls } = fakeDatabase([{ layout: { modules: { positions: false }, widgets: {} } }]);
+  const store = createNeonInvestingLayoutStore(db);
+
+  await expect(store.get("user-123")).resolves.toEqual({
+    modules: { positions: false },
+    widgets: {},
+  });
+
+  await store.set({ tenantId: "user-123", modules: {}, widgets: { sectors: false } });
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("layout");
+  expect(write.values).toEqual([JSON.stringify({ modules: {}, widgets: { sectors: false } })]);
+});
+
+test("a tenant with no preferences row reads an empty layout from Neon", async () => {
+  const store = createNeonInvestingLayoutStore(fakeDatabase().db);
+  await expect(store.get("user-123")).resolves.toEqual({ modules: {}, widgets: {} });
 });
 
 test("consent given to an older disclosure does not count as consent to this one", async () => {

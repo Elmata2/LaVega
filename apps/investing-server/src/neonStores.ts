@@ -7,7 +7,12 @@ import {
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
-import { validateBenchmarkSymbols, type BenchmarkSelectionStore } from "@lavega/core";
+import {
+  validateBenchmarkSymbols,
+  validateInvestingLayout,
+  type BenchmarkSelectionStore,
+  type InvestingLayoutStore,
+} from "@lavega/core";
 import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentDecision,
@@ -67,6 +72,20 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
     async set(selection) {
       await createPreferencesRepository(db, selection.tenantId).setBenchmarkSymbols(
         validateBenchmarkSymbols(selection.symbols),
+      );
+    },
+  };
+}
+
+export function createNeonInvestingLayoutStore(db: Database): InvestingLayoutStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getLayout();
+      return validateInvestingLayout(stored);
+    },
+    async set(selection) {
+      await createPreferencesRepository(db, selection.tenantId).setLayout(
+        validateInvestingLayout(selection),
       );
     },
   };
