@@ -37,7 +37,7 @@ import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
-import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
+import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
@@ -150,7 +150,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
-  const sectorProfile = dependencies.sectorProfile ?? fetchYahooSectorProfile;
+  /* One client per running server process, not per symbol: its crumb and
+   * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
+   * instead of every cache-miss symbol paying its own crumb negotiation. */
+  const sectorHttpClient = new YahooHttpClient();
+  const sectorProfile =
+    dependencies.sectorProfile ??
+    ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   /* Who the request belongs to. Standalone and local runs have a single tenant;
    * mounted behind the personal server this resolves to the signed-in user. */
