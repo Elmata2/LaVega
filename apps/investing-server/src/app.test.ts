@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
 import {
   createFrankfurterFxProvider,
@@ -18,6 +18,10 @@ const acceptedConsentStore = () => ({
     disclosureVersion: "yahoo-finance-v1",
   })),
   set: vi.fn(async () => undefined),
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 test("GET /health reports investing server health through Hono app.request", async () => {
@@ -748,6 +752,82 @@ test("summary route includes a position's description in top positions when set"
 
   expect(response.status).toBe(200);
   expect(payload.topPositions).toEqual([{ symbol: "AAPL", weight: 1, description: "Apple Inc." }]);
+});
+
+test("summary route negotiates the Yahoo crumb at most once across positions and requests", async () => {
+  const crumbRequests = vi.fn();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("https://fc.yahoo.com/")) {
+        return new Response(null, { status: 200, headers: { "set-cookie": "A=1; Path=/" } });
+      }
+      if (url.startsWith("https://query2.finance.yahoo.com/v1/test/getcrumb")) {
+        crumbRequests();
+        return new Response("test-crumb", { status: 200 });
+      }
+      if (url.includes("/v10/finance/quoteSummary/")) {
+        return new Response(
+          JSON.stringify({
+            quoteSummary: { result: [{ assetProfile: { sector: "Technology", industry: "Software" } }] },
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected fetch in test: ${url}`);
+    }),
+  );
+
+  const dashboard = emptyInvestingDashboard();
+  const returns = {
+    status: "unpriced" as const,
+    remainingCostBasis: 0,
+    realizedCostBasisRemoved: 0,
+    unrealizedGain: 0,
+    realizedGain: 0,
+    dividendsReceived: 0,
+    totalReturn: 0,
+    totalReturnPercentage: null,
+    sinceFirstBuyPercentage: null,
+    firstBuyDate: null,
+  };
+  dashboard.positions.push(
+    {
+      symbol: "AAPL",
+      entity: "personal",
+      quantity: 1,
+      marketValue: 300,
+      portfolioWeight: null,
+      priceStatus: "priced",
+      currency: "EUR",
+      asOf: "2026-08-18",
+      returns,
+    },
+    {
+      symbol: "MSFT",
+      entity: "personal",
+      quantity: 1,
+      marketValue: 100,
+      portfolioWeight: null,
+      priceStatus: "priced",
+      currency: "EUR",
+      asOf: "2026-08-18",
+      returns,
+    },
+  );
+  // No sectorProfile / sectorHttpClient override: this exercises the actual
+  // default wiring in createApp, not a test double standing in for it.
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+  });
+
+  const first = await investingApp.request("/api/investing/summary");
+  const second = await investingApp.request("/api/investing/summary");
+
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(crumbRequests.mock.calls.length).toBeLessThanOrEqual(1);
 });
 
 test("summary route reports failures as 503 problem payload", async () => {
