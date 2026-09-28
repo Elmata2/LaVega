@@ -106,6 +106,11 @@ export function Profile() {
                 layout.setModules(record);
               }}
             />
+            {layout.saveError && (
+              <p role="alert" className="mt-3 text-sm text-negative">
+                {layout.saveError}
+              </p>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -136,6 +141,11 @@ export function Profile() {
                 layout.setWidgets(record);
               }}
             />
+            {layout.saveError && (
+              <p role="alert" className="mt-3 text-sm text-negative">
+                {layout.saveError}
+              </p>
+            )}
           </CardContent>
         </Card>
       </section>
