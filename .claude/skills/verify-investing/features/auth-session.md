@@ -68,6 +68,31 @@ node $C logout
 The cookie jar is per host under `/tmp/lavega-verify-investing/run/`; `cleanup` removes the
 run directory, and the credential files sit above it so teardown leaves them alone.
 
+## What proves it works
+
+- Preview or prod with credentials: `login` exits 0, `whoami` prints `state: "authenticated"`
+  and a `user`, and `doctor` reports `auth` as `authenticated:<email>` with `credentialsFile`
+  ok. A following `dashboard` is not 401.
+- Browser, after that login: `browser open --target preview` (or prod) loads
+  `/investing/?verify=1`. The address is not `/sign-in`. Snapshot shows `Overview` in
+  `Main navigation`, not the sign-in form as the only screen.
+- The sign-in form itself, on `/sign-in`: labels `Email address` and `Password`, and the
+  link `Forgot password?`. Sign-up success lands on `/check-email` with `Check your email`.
+  A bad confirmation link shows `Confirmation link did not work`.
+- Local standalone: `whoami` prints `state: "unconfigured"`. Routes answer without a session.
+  That is success for local. It is not a signed-in user.
+
+## Verified-unreachable
+
+- No preview file, no `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD`, and no session:
+  `doctor --target preview` fails `credentialsFile`. The `fix` names `auth.preview.json` and
+  those env vars. Stop. Session-backed pages are verified-unreachable. Do not invent an
+  account and do not ask for a personal password. Prod is the same check against `auth.json`.
+- Sign-in, sign-up, check-email, email-confirmed, forgot-password, and reset-password are
+  mounted routes. The standalone server has none of them. Those forms are
+  verified-unreachable on `--target local`. Prerequisite: `--target preview` or
+  `--target prod`.
+
 ## Gotchas
 
 - The SPA shell is public, its data is not. A blank-looking dashboard with `401` on every

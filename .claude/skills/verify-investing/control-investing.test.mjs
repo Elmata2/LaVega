@@ -55,9 +55,10 @@ before(async () => {
       res.end(JSON.stringify({ problems: ["not found"] }));
       return;
     }
+    const status = typeof hit.status === "function" ? hit.status() : hit.status;
     const body = typeof hit.body === "function" ? hit.body() : hit.body;
     const isText = typeof body === "string";
-    res.writeHead(hit.status, {
+    res.writeHead(status, {
       "content-type": isText ? "text/html" : "application/json",
       ...hit.headers,
     });
@@ -88,6 +89,9 @@ beforeEach(() => {
   writeFileSync(fakeVercel, `#!/bin/sh\necho "$@" >> "${vercelLog}"\ncat "${vercelReply}"\n`);
   chmodSync(fakeVercel, 0o755);
   vercelDeployments([{ url: "lavega-newest.vercel.app", ref: "feature-a", sha: "abcdef123" }]);
+  const shell = join(stateDir, "ms-playwright", "chromium_headless_shell-1208", "chrome-linux");
+  mkdirSync(shell, { recursive: true });
+  writeFileSync(join(shell, "headless_shell"), "");
 });
 
 function vercelDeployments(list) {
@@ -119,6 +123,7 @@ function run(args, env = {}) {
           HOME: process.env.HOME,
           VERIFY_INVESTING_DIR: stateDir,
           LAVEGA_BROWSE_BIN: fakeBrowse,
+          PLAYWRIGHT_BROWSERS_PATH: join(stateDir, "ms-playwright"),
           LAVEGA_VERCEL_BIN: fakeVercel,
           LAVEGA_VERCEL_CWD: stateDir,
           ...env,
@@ -211,6 +216,30 @@ describe("help", () => {
     assert.match(result.stdout, /browser snapshot/);
     assert.match(result.stdout, /browser click/);
     assert.match(result.stdout, /browser install/);
+  });
+
+  test("browser <cmd> --help --json carries the escalate rule", async () => {
+    for (const name of ["install", "open", "snapshot", "click", "screenshot"]) {
+      const result = await run(["browser", name, "--help", "--json"]);
+      assert.equal(result.code, 0, `${name} ${result.stderr}`);
+      assert.equal(result.json.sandbox.code, "browse-sandboxed");
+      assert.equal(result.json.sandbox.escalate, true);
+      assert.match(result.json.sandbox.rule, /escalat/);
+      assert.match(result.json.sandbox.rule, /unrestrict/);
+      assert.match(result.json.sandbox.rule, /PortRendezvous/);
+      assert.match(result.json.sandbox.rule, /EPERM/);
+      assert.match(result.json.sandbox.rule, /SIGTRAP/);
+      assert.match(result.json.sandbox.rule, /target-closed/);
+      assert.match(result.json.sandbox.rule, /Do not reinstall Chromium/);
+    }
+    const group = await run(["browser", "--help", "--json"]);
+    assert.equal(group.code, 0, group.stderr);
+    assert.equal(group.json.sandbox.escalate, true);
+    assert.match(group.json.sandbox.rule, /browse-sandboxed/);
+    const viaHelp = await run(["help", "browser", "screenshot", "--json"]);
+    assert.equal(viaHelp.json.sandbox.code, "browse-sandboxed");
+    const sync = await run(["sync", "--help", "--json"]);
+    assert.equal(sync.json.sandbox, undefined);
   });
 
   test("browser --help says to escalate outside the sandbox", async () => {
@@ -371,6 +400,52 @@ describe("dry-run and the prod guard", () => {
     const result = await run(["consent", ...local()]);
     assert.equal(result.code, 0);
     assert.deepEqual(result.json.body, { accepted: false });
+    assert.match(result.json.next.commands.join("\n"), /consent --accept/);
+    assert.match(result.json.next.commands.join("\n"), /prices sync --wait/);
+  });
+
+  test("consent read when already accepted still names the price continuation", async () => {
+    route("GET", "/api/market-data/consent", 200, {
+      accepted: true,
+      disclosureVersion: "yahoo-finance-v1",
+    });
+    const result = await run(["consent", ...local()]);
+    assert.equal(result.code, 0);
+    assert.doesNotMatch(result.json.next.commands.join("\n"), /consent --accept/);
+    assert.match(result.json.next.commands[0], /sync --wait$/);
+    assert.match(result.json.next.commands.join("\n"), /prices sync --wait/);
+  });
+
+  test("prices sync 428 names consent then the continuation", async () => {
+    route("POST", "/api/prices/sync", 428, {
+      consentRequired: true,
+      problems: ["Yahoo Finance consent required"],
+    });
+    const result = await run(["prices", "sync", ...local()]);
+    assert.equal(result.code, 1);
+    assert.match(result.json.fix, /consent --accept/);
+    assert.match(result.json.fix, /prices sync --wait/);
+    assert.equal(received.length, 1);
+  });
+
+  test("prices sync --wait posts again while the run is paused", async () => {
+    let posts = 0;
+    route(
+      "POST",
+      "/api/prices/sync",
+      () => (posts === 0 ? 202 : 200),
+      () => {
+        posts += 1;
+        return posts === 1
+          ? { status: "paused", remainingSymbols: ["AAPL"] }
+          : { status: "completed", problems: [] };
+      },
+    );
+    const result = await run(["prices", "sync", "--wait", ...local()]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.settled, true);
+    assert.equal(posts, 2);
+    assert.equal(result.json.body.status, "completed");
   });
 
   test("prices purge refuses without --yes", async () => {
@@ -410,6 +485,7 @@ describe("dry-run and the prod guard", () => {
     assert.equal(result.code, 0);
     assert.equal(result.json.evidence, undefined);
     assert.equal(existsSync(join(stateDir, "evidence")), false);
+    assert.match(result.json.would.next.commands.join("\n"), /prices sync --wait/);
   });
 
   test("a remote write saves its JSON under evidence, and cleanup keeps it", async () => {
@@ -420,6 +496,9 @@ describe("dry-run and the prod guard", () => {
     const result = await run(["consent", "--accept", ...local()]);
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.json.body.accepted, true);
+    assert.match(result.json.next.why, /does not fetch bars/);
+    assert.match(result.json.next.commands.join("\n"), /sync --wait/);
+    assert.match(result.json.next.commands.join("\n"), /prices sync --wait/);
     assert.equal(result.json.evidence.length, 1);
     const saved = JSON.parse(readFileSync(result.json.evidence[0], "utf8"));
     assert.equal(saved.body.accepted, true);
@@ -487,6 +566,9 @@ describe("reads", () => {
     const priced = result.json.checks.find((check) => check.name === "positionsPriced");
     assert.equal(priced.ok, false);
     assert.deepEqual(priced.unpricedSample, ["AAPL"]);
+    assert.match(priced.fix, /consent --accept/);
+    assert.match(priced.fix, /prices sync --wait/);
+    assert.match(priced.fix, /Consent alone fetches nothing/);
   });
 
   test("doctor on a dead local server says to run up", async () => {
@@ -1014,7 +1096,75 @@ echo "browse-ok $1"
     assert.match(result.error.error.fix, /LAVEGA_BROWSE_BIN/);
     assert.match(result.error.error.fix, /\.codex\/skills\/gstack\/browse\/dist\/browse/);
     assert.match(result.error.error.fix, /Do not invent a path/);
+    assert.match(result.error.error.message, /installer did not produce/);
     assert.equal(existsSync(join(stateDir, ".claude")), false);
+  });
+
+  test("browser install runs the pinned bun installer, then clone", async () => {
+    const home = join(stateDir, "home-bun");
+    const binDir = join(stateDir, "bin-bun");
+    mkdirSync(home);
+    mkdirSync(binDir);
+    const log = join(stateDir, "bun-install.log");
+    writeFileSync(
+      join(binDir, "bash"),
+      `#!/bin/sh
+echo "$@" >> "${log}"
+mkdir -p "$HOME/.bun/bin"
+cat > "$HOME/.bun/bin/bun" << 'END'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo 1.3.10
+  exit 0
+fi
+exit 1
+END
+chmod +x "$HOME/.bun/bin/bun"
+exit 0
+`,
+    );
+    writeFileSync(
+      join(binDir, "git"),
+      `#!/bin/sh
+echo "git $*" >> "${log}"
+exit 1
+`,
+    );
+    chmodSync(join(binDir, "bash"), 0o755);
+    chmodSync(join(binDir, "git"), 0o755);
+    const result = await run(["browser", "install"], {
+      HOME: home,
+      PATH: `${binDir}:/usr/bin:/bin`,
+      LAVEGA_BROWSE_BIN: "",
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "browse-install-failed");
+    const text = readFileSync(log, "utf8");
+    assert.match(text, /curl -fsSL https:\/\/bun\.sh\/install \| bash -s "bun-v1\.3\.10"/);
+    assert.match(text, /git clone --depth 1 https:\/\/github.com\/garrytan\/gstack\.git/);
+    assert.equal(existsSync(join(home, ".claude/skills/gstack/browse/dist/browse")), false);
+  });
+
+  test("browser install treats an EPERM bun installer as the sandbox", async () => {
+    const home = join(stateDir, "home-eperm");
+    const binDir = join(stateDir, "bin-eperm");
+    mkdirSync(home);
+    mkdirSync(binDir);
+    writeFileSync(
+      join(binDir, "bash"),
+      "#!/bin/sh\necho 'Permission denied (EPERM)' >&2\nexit 1\n",
+    );
+    chmodSync(join(binDir, "bash"), 0o755);
+    const result = await run(["browser", "install"], {
+      HOME: home,
+      PATH: binDir,
+      LAVEGA_BROWSE_BIN: "",
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "browse-sandboxed");
+    assert.match(result.error.error.fix, /escalat/);
+    assert.match(result.error.error.fix, /Do not reinstall Chromium/);
+    assert.equal(existsSync(join(home, ".claude")), false);
   });
 
   test("browser install leaves an existing binary in place", async () => {
@@ -1022,6 +1172,8 @@ echo "browse-ok $1"
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.json.already, true);
     assert.equal(result.json.bin, fakeBrowse);
+    assert.equal(result.json.chromium.present, true);
+    assert.equal(result.json.chromium.installed, false);
   });
 
   test("browser install treats a Codex browse binary as enough", async () => {
@@ -1055,6 +1207,53 @@ echo "browse-ok $1"
     assert.equal(result.json.would.bin, codex);
     assert.deepEqual(result.json.would.steps, []);
     assert.equal(existsSync(join(home, ".claude")), false);
+  });
+
+  test("browser install --dry-run lists pinned chromium when the shell is missing", async () => {
+    const empty = join(stateDir, "no-browsers");
+    mkdirSync(empty);
+    const result = await run(["browser", "install", "--dry-run"], {
+      HOME: stateDir,
+      LAVEGA_BROWSE_BIN: "",
+      PLAYWRIGHT_BROWSERS_PATH: empty,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.would.chromium, false);
+    const chromium = result.json.would.steps.find((step) => step.startsWith("bunx playwright@"));
+    assert.match(chromium, /bunx playwright@1\.58\.2 install chromium/);
+  });
+
+  test("browser install runs pinned chromium when the headless shell is missing", async () => {
+    const browsers = join(stateDir, "empty-browsers");
+    mkdirSync(browsers);
+    const binDir = join(stateDir, "bin-chromium");
+    mkdirSync(binDir);
+    const log = join(stateDir, "chromium.log");
+    writeFileSync(
+      join(binDir, "bun"),
+      `#!/bin/sh
+echo "bun $*" >> "${log}"
+if [ "$1" = "--version" ]; then
+  echo 1.3.10
+  exit 0
+fi
+if [ "$1" = "x" ]; then
+  mkdir -p "${browsers}/chromium_headless_shell-1208/chrome-linux"
+  exit 0
+fi
+exit 1
+`,
+    );
+    chmodSync(join(binDir, "bun"), 0o755);
+    const result = await run(["browser", "install"], {
+      PATH: `${binDir}:${process.env.PATH}`,
+      PLAYWRIGHT_BROWSERS_PATH: browsers,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.already, true);
+    assert.equal(result.json.bin, fakeBrowse);
+    assert.equal(result.json.chromium.installed, true);
+    assert.match(readFileSync(log, "utf8"), /x playwright@1\.58\.2 install chromium/);
   });
 
   test("browser-login.mjs still opens prod by default", async () => {

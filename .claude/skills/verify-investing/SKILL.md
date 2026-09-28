@@ -145,6 +145,17 @@ node $C sync-status --target prod
 node $C sync --target preview --force --wait
 node $C unlock --target preview --passphrase <passphrase>
 
+# market-data consent stores a decision and fetches nothing.
+# Allow Yahoo Finance in the SPA then POSTs /api/brokers/sync (not --force)
+# and continues POST /api/prices/sync while the price run is paused, running,
+# or waiting. The CLI field `next` lists this path. Do not stop after accept.
+node $C consent --accept --dry-run
+node $C consent --accept
+node $C sync --wait
+node $C prices sync --wait          # repeats the POST until completed or problem
+node $C wait-settle --timeout 300000
+node $C dashboard                   # doctor positionsPriced is the priced check
+
 # anything not wrapped
 node $C api GET /api/investing/benchmarks --target prod
 node $C api PUT /api/investing/benchmarks --target preview --body '{"symbols":["^GSPC"]}'
@@ -194,8 +205,10 @@ sandbox refuses. When `browser install`, `browser open`, or a browse spawn fails
 `browse-sandboxed`. Treat it as the sandbox until something else is proven. Re-run the same
 browser step outside the sandbox. Do not reinstall Chromium for that failure. Run
 `browser install` only when the browse binary is missing (`browse-missing`). Run
-`bunx playwright@1.58.2 install chromium` only when the headless shell is missing. The same
-rule is in `browser --help`.
+`bunx playwright@1.58.2 install chromium` only when the headless shell is missing.
+`browser install` does that itself when the shell is missing. The same rule is in
+`browser --help` and in `browser <cmd> --help --json` as `sandbox` (`escalate: true`,
+code `browse-sandboxed`). Text help and JSON help say the same thing.
 
 ```bash
 node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
@@ -235,14 +248,20 @@ node $C browser install    # already:true if any browse binary exists; otherwise
 node $C browser install --dry-run
 ```
 
-`browser install` returns `already: true` and does not create the Claude path when the Codex
-binary or `LAVEGA_BROWSE_BIN` already works. It clones gstack and runs `./setup` only when
-no browse binary exists. `./setup` builds `browse/dist/browse` and installs Playwright
-Chromium. That build needs `bun` on `PATH`.
+`browser install` is idempotent and does not ask you to invent a path.
 
-If `bun` is missing, install bun 1.3.10, verify the checksum, put `~/.bun/bin` on `PATH`,
-and rerun `browser install`. `browser install --dry-run` prints this step and does not clone.
-`bun-missing` `error.fix` names the same command, `LAVEGA_BROWSE_BIN`, and the Codex path:
+1. An existing browse binary (`LAVEGA_BROWSE_BIN`, the Claude path, or the Codex path)
+   returns `already: true` and is left in place. The Codex path alone is enough. Install
+   does not create the Claude path in that case.
+2. With no binary, the real command installs bun when `bun` is not on `PATH` and
+   `~/.bun/bin/bun` is absent. It runs the pinned installer below. That installer checks
+   the bun 1.3.10 checksum. It then puts `~/.bun/bin` on `PATH` for the rest of the
+   command. `--dry-run` prints this step and does not run it.
+3. It clones `https://github.com/garrytan/gstack` into `~/.claude/skills/gstack` when
+   `./setup` is missing, then runs `./setup`, which builds `browse/dist/browse`.
+4. When the Playwright headless shell is missing, it runs
+   `bunx playwright@1.58.2 install chromium`. A shell that is already on disk is left
+   alone. `info` reports `browse.chromium` as true or false before you install.
 
 ```bash
 curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
@@ -250,10 +269,15 @@ export PATH="$HOME/.bun/bin:$PATH"
 node $C browser install
 ```
 
-If browse then reports a missing Chromium, install the pinned build once with
-`bunx playwright@1.58.2 install chromium`. Do that only when the headless shell is missing.
-A `browse-sandboxed` failure is not a missing browser. Escalate and retry. Do not reinstall
-Chromium.
+`bun-missing` means that installer failed. `error.message` names the blocker (no `bash`,
+`curl` failed, network, or checksum). `error.fix` names the same curl command,
+`LAVEGA_BROWSE_BIN`, and the Codex path. `chromium-missing` means the pinned Playwright
+command failed. `error.message` has its output. Visual checks stay **verified-unreachable**
+until `browser install` prints `installed: true` and a later `browser open` exits 0. Do not
+invent a binary path or a Chromium path.
+
+A `browse-sandboxed` failure is not a missing browser and not a missing bun. Escalate and
+retry the same command. Do not reinstall Chromium.
 
 Evidence paths. `cleanup` keeps `/tmp/lavega-verify-investing/evidence` and deletes `run/`.
 
