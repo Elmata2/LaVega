@@ -210,6 +210,7 @@ describe("help", () => {
     assert.equal(result.code, 0);
     assert.match(result.stdout, /browser snapshot/);
     assert.match(result.stdout, /browser click/);
+    assert.match(result.stdout, /browser install/);
   });
 
   test("help <command> --json returns one command", async () => {
@@ -382,6 +383,48 @@ describe("dry-run and the prod guard", () => {
     assert.equal(result.code, 0);
     assert.equal(received[0].origin, `http://127.0.0.1:${port}`);
   });
+
+  test("consent --accept --dry-run does not write evidence", async () => {
+    const result = await run(["consent", "--accept", "--dry-run", ...local()]);
+    assert.equal(result.code, 0);
+    assert.equal(result.json.evidence, undefined);
+    assert.equal(existsSync(join(stateDir, "evidence")), false);
+  });
+
+  test("a remote write saves its JSON under evidence, and cleanup keeps it", async () => {
+    route("PUT", "/api/market-data/consent", 200, {
+      accepted: true,
+      disclosureVersion: "yahoo-finance-v1",
+    });
+    const result = await run(["consent", "--accept", ...local()]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.body.accepted, true);
+    assert.equal(result.json.evidence.length, 1);
+    const saved = JSON.parse(readFileSync(result.json.evidence[0], "utf8"));
+    assert.equal(saved.body.accepted, true);
+    const cleanup = await run(["cleanup", ...local()]);
+    assert.equal(cleanup.code, 0, cleanup.stderr);
+    assert.equal(existsSync(result.json.evidence[0]), true);
+    assert.equal(existsSync(join(stateDir, "run")), false);
+  });
+
+  test("--out saves a read, and probe --out includes response bodies", async () => {
+    route("GET", "/api/market-data/consent", 200, { accepted: false });
+    const before = join(stateDir, "evidence", "before.json");
+    const read = await run(["consent", "--out", before, ...local()]);
+    assert.equal(read.code, 0, read.stderr);
+    assert.deepEqual(read.json.evidence, [before]);
+    assert.deepEqual(JSON.parse(readFileSync(before, "utf8")).body, { accepted: false });
+
+    route("GET", "/api/market-data/consent", 200, { accepted: true });
+    const probeOut = join(stateDir, "evidence", "probe.json");
+    const probe = await run(["probe", "--out", probeOut, ...local()]);
+    const saved = JSON.parse(readFileSync(probeOut, "utf8"));
+    const consent = saved.results.find((entry) => entry.path === "/api/market-data/consent");
+    assert.deepEqual(consent.body, { accepted: true });
+    assert.equal(saved.savedTo, probeOut);
+    assert.deepEqual(probe.json.evidence, [probeOut]);
+  });
 });
 
 describe("reads", () => {
@@ -416,6 +459,10 @@ describe("reads", () => {
     route("GET", "/api/brokers/sync/status", 200, { status: "idle" });
     const result = await run(["doctor", ...local()]);
     assert.equal(result.code, 1);
+    assert.equal(
+      result.json.checks.find((check) => check.name === "credentialsFile"),
+      undefined,
+    );
     const priced = result.json.checks.find((check) => check.name === "positionsPriced");
     assert.equal(priced.ok, false);
     assert.deepEqual(priced.unpricedSample, ["AAPL"]);
@@ -425,6 +472,21 @@ describe("reads", () => {
     const result = await run(["doctor", "--port", "1"]);
     assert.equal(result.code, 1);
     assert.match(result.json.checks[0].fix, /up/);
+  });
+
+  test("doctor on preview fails when the credentials file is missing", async () => {
+    route("GET", "/api/investing/health", 200, { service: "investing-server" });
+    route("GET", "/api/auth/get-session", 200, {});
+    route("GET", "/api/investing/dashboard", 401, {});
+    route("GET", "/api/config/status", 200, { keys: {} });
+    route("GET", "/api/brokers/credentials/status", 200, { status: "empty" });
+    route("GET", "/api/brokers/sync/status", 200, { status: "idle" });
+    const result = await run(["doctor", "--base", `http://127.0.0.1:${port}`]);
+    assert.equal(result.code, 1);
+    const check = result.json.checks.find((item) => item.name === "credentialsFile");
+    assert.equal(check.ok, false);
+    assert.match(check.path, /auth\.preview\.json$/);
+    assert.match(check.fix, /Do not invent an account/);
   });
 
   test("dashboard names the degraded shape and a 401 fix", async () => {
@@ -732,6 +794,42 @@ describe("browser", () => {
     const result = await run(["browser", "text"], { LAVEGA_BROWSE_BIN: join(stateDir, "nope") });
     assert.equal(result.code, 1);
     assert.equal(result.error.error.code, "browse-missing");
+    assert.match(result.error.error.fix, /browser install/);
+  });
+
+  test("browser install --dry-run prints the clone and does not run it", async () => {
+    const result = await run(["browser", "install", "--dry-run"], {
+      HOME: stateDir,
+      LAVEGA_BROWSE_BIN: "",
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.dryRun, true);
+    assert.equal(result.json.effect, "local-install");
+    assert.match(result.json.would.bin, /[/]browse[/]dist[/]browse$/);
+    assert.match(
+      result.json.would.steps[0],
+      /git clone --depth 1 https:\/\/github.com\/garrytan\/gstack\.git/,
+    );
+    assert.equal(existsSync(join(stateDir, ".claude")), false);
+  });
+
+  test("browser install without bun does not clone", async () => {
+    const result = await run(["browser", "install"], {
+      HOME: stateDir,
+      PATH: join(stateDir, "no-such-path"),
+      LAVEGA_BROWSE_BIN: "",
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "bun-missing");
+    assert.match(result.error.error.fix, /bun/);
+    assert.equal(existsSync(join(stateDir, ".claude")), false);
+  });
+
+  test("browser install leaves an existing binary in place", async () => {
+    const result = await run(["browser", "install"]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.already, true);
+    assert.equal(result.json.bin, fakeBrowse);
   });
 
   test("browser-login.mjs still opens prod by default", async () => {

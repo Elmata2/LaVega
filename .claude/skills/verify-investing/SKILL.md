@@ -74,8 +74,8 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
 - **Exit codes.** `0` ok, `1` a check or request failed, `2` usage error or refused.
 - **Side effects.** Every command with a side effect takes `--dry-run`, which prints the
   request or action and changes nothing. `help --json` lists each effect as `remote-write`,
-  `local-destructive` or `browser-action`. A `remote-write` on `--target prod` also needs
-  `--allow-prod-write`.
+  `local-destructive`, `local-install` or `browser-action`. A `remote-write` on `--target prod`
+  also needs `--allow-prod-write`.
 - **Tests.** There are two suites:
   - `pnpm run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
     the prod guard. It runs against a stub HTTP server and fake `browse` and `vercel`
@@ -100,8 +100,9 @@ node .claude/skills/verify-investing/control-investing.mjs doctor --target prod
 Read-only. Answers whether an instance is worth driving: `/health` responds and identifies
 itself as `investing-server`, a session exists or auth is unconfigured, the dashboard returns
 without a problems list, key status is known, the vault is `empty`/`locked`/`unlocked`, and
-the broker sync progress is readable. Exits non-zero on any failed check. Run this first
-whenever anything looks off.
+the broker sync progress is readable. On `--target preview` and `--target prod` it also fails
+`credentialsFile` when the credentials file is missing and there is no session. It exits
+non-zero on any failed check. Run this first whenever anything looks off.
 
 ## Drive
 
@@ -163,6 +164,18 @@ For the visual side, use `browser`. Examples are a blank page, a stuck spinner, 
 that does not render. It drives shared gstack Chromium through `browse`, works for any agent,
 and does not need Computer Use.
 
+The binary path is `~/.claude/skills/gstack/browse/dist/browse`. If that file is missing and
+`~/.codex/skills/gstack/browse/dist/browse` exists, the CLI uses the Codex copy.
+`LAVEGA_BROWSE_BIN` overrides both. Install or rebuild with one command:
+
+```bash
+node $C browser install    # clone gstack, run ./setup; --dry-run prints the steps
+```
+
+`browser install` needs `bun` on `PATH`. gstack's `./setup` builds `browse/dist/browse` and
+installs Playwright Chromium. If browse then reports a missing Chromium, install the pinned
+build once with `bunx playwright@1.58.2 install chromium`.
+
 ```bash
 node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
 node $C browser snapshot --interactive      # accessibility tree with @e refs
@@ -180,16 +193,21 @@ node $C browser stop
 `browser open` imports the CLI session for the target's host and never prints a cookie
 value. On local it needs no session. `?verify=1` puts the app in verification mode, so the
 app-open effect does not start a broker or price sync. Normal users keep the automatic sync.
-`browser-login.mjs` remains as a shim for `browser open --target prod`. If `browse` reports
-missing Chromium, install the pinned build once with
-`bunx playwright@1.58.2 install chromium`.
+`browser-login.mjs` remains as a shim for `browser open --target prod`.
 
 Use the browser when the question is "what does the user see", not "what does the API return".
 
 ## Evidence
 
-Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`. `probe --out
-<file>` writes a timestamped JSON report there; browser screenshots belong there too.
+Proof goes in `/tmp/lavega-verify-investing/evidence` and survives `cleanup`.
+
+- A remote write that actually runs (`consent --accept`, `sync`, `prices sync`,
+  `prices purge`, `unlock`, and `api` with any method but `GET`) saves its JSON there. The
+  printed object includes `evidence` with that path. `--dry-run` does not save a file.
+- `--out <file>` writes the same JSON to a path you choose. Keep it under `/tmp`.
+- `probe --out <file>` saves the sweep and each response body, so the payload is still in
+  the file after `cleanup` deletes the run directory.
+- Browser screenshots land in the same directory.
 
 Standards for the proof, not just the pass:
 
@@ -217,6 +235,10 @@ real tenant. Prefer it over prod for anything that writes.
 - **Account.** Preview has its own test user, never a real person's login. Its credentials
   live in `/tmp/lavega-verify-investing/auth.preview.json`, separate from prod's `auth.json`.
   Each origin gets its own cookie jar, so a preview login never replaces the prod session.
+  `doctor --target preview` and `doctor --target prod` fail `credentialsFile` when that file
+  is missing and there is no session. Stop. Ask the user to write the file. Do not invent an
+  account. A local `doctor` pass does not satisfy this check, and
+  `pnpm run test:verify-investing:live` skips until `auth.preview.json` exists.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.

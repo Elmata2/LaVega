@@ -448,8 +448,28 @@ async function request(flags, method, path, body) {
   };
 }
 
+/** Set by `main` for this process. A remote write records itself; `--out` copies any command. */
+let outputPath = null;
+let recordEvidence = null;
+
+function evidenceStamp(command) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return join(evidenceDir, `${command.replace(/\s+/g, "-")}-${stamp}.json`);
+}
+
 function print(value) {
-  console.log(JSON.stringify(value, null, 2));
+  const copies = [];
+  if (outputPath) copies.push(outputPath);
+  if (recordEvidence) copies.push(evidenceStamp(recordEvidence));
+  const payload = copies.length === 0 ? value : { ...value, evidence: copies };
+  const text = JSON.stringify(payload, null, 2);
+  if (copies.length > 0) {
+    for (const file of copies) {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, `${text}\n`);
+    }
+  }
+  console.log(text);
 }
 
 /** Problem lists are how this backend reports trouble inside a 200 response. */
@@ -720,7 +740,12 @@ function commandInfo({ flags }) {
       env: Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD),
     },
     spaBuilt: existsSync(join(repoRoot, "apps/investing-web/dist")),
-    browse: { bin: browse, present: existsSync(browse) },
+    browse: {
+      bin: browse,
+      present: existsSync(browse),
+      canonical: browseCanonical(),
+      install: `${SELF} browser install`,
+    },
     // Presence only: a secret's value never belongs in a transcript.
     env: {
       LAVEGA_PREVIEW_URL: process.env.LAVEGA_PREVIEW_URL ?? null,
@@ -761,6 +786,21 @@ async function commandDoctor({ flags }) {
     : authed
       ? `authenticated:${session.json.user.email ?? session.json.user.id}`
       : "anonymous";
+
+  /* Local has no accounts. Preview and prod do, and the credentials belong to
+   * the user. A missing file is a stop, not a prompt to invent a login. */
+  if (targetName(flags) !== "local") {
+    const file = credentialsFileFor(flags);
+    const present = existsSync(file);
+    note("credentialsFile", present || authed, {
+      path: file,
+      present,
+      fix:
+        present || authed
+          ? undefined
+          : `ask the user to write ${file} as {"email":"...","password":"..."} with chmod 600. Do not invent an account. Then run \`${SELF} login --target ${targetName(flags)}\`. A local doctor pass does not satisfy this check.`,
+    });
+  }
 
   const dashboard = await request(flags, "GET", "/api/investing/dashboard");
   if (dashboard.status === 401) {
@@ -857,7 +897,7 @@ async function commandProbe({ flags }) {
       ms: response.ms,
       ok: response.ok,
       problems: problemsOf(response.json),
-      body: flags.verbose ? (response.json ?? response.text) : undefined,
+      body: flags.verbose || flags.out ? (response.json ?? response.text) : undefined,
       error: response.error,
     });
   }
@@ -872,12 +912,7 @@ async function commandProbe({ flags }) {
       .map((entry) => ({ path: entry.path, problems: entry.problems })),
     results,
   };
-  if (flags.out) {
-    ensureDirs();
-    const out = resolve(String(flags.out));
-    writeFileSync(out, JSON.stringify(report, null, 2));
-    report.savedTo = out;
-  }
+  if (flags.out) report.savedTo = resolve(String(flags.out));
   print(report);
   const healthy = report.unreachable.length === 0 && report.serverErrors.length === 0;
   return healthy ? 0 : 1;
@@ -1242,10 +1277,101 @@ async function commandPricesPurge({ flags }) {
 
 // ---------------------------------------------------------------- browser (gstack browse)
 
+/** One install path. `./setup` in that clone writes `browse/dist/browse`. */
+function gstackRoot() {
+  return join(process.env.HOME, ".claude/skills/gstack");
+}
+
+function browseCanonical() {
+  return join(gstackRoot(), "browse/dist/browse");
+}
+
+function browseLegacy() {
+  return join(process.env.HOME, ".codex/skills/gstack/browse/dist/browse");
+}
+
 function browseBin() {
-  return (
-    process.env.LAVEGA_BROWSE_BIN || `${process.env.HOME}/.codex/skills/gstack/browse/dist/browse`
-  );
+  if (process.env.LAVEGA_BROWSE_BIN) return process.env.LAVEGA_BROWSE_BIN;
+  if (existsSync(browseCanonical())) return browseCanonical();
+  if (existsSync(browseLegacy())) return browseLegacy();
+  return browseCanonical();
+}
+
+function browseInstallPlan() {
+  const root = gstackRoot();
+  const steps = [];
+  if (!existsSync(join(root, "setup")))
+    steps.push(`git clone --depth 1 https://github.com/garrytan/gstack.git ${root}`);
+  steps.push(`${join(root, "setup")}`);
+  return { bin: browseCanonical(), steps };
+}
+
+function bunAvailable() {
+  const result = spawnSync("bun", ["--version"], { encoding: "utf8" });
+  return result.status === 0;
+}
+
+function commandBrowserInstall() {
+  const override = process.env.LAVEGA_BROWSE_BIN;
+  const existing = override
+    ? existsSync(override)
+      ? override
+      : null
+    : [browseCanonical(), browseLegacy()].find((path) => existsSync(path));
+  if (existing) {
+    print({ installed: true, already: true, bin: existing });
+    return 0;
+  }
+  if (!bunAvailable())
+    fail(
+      "bun is required to build the browse binary",
+      "install bun 1.3.10 from https://bun.sh/install (verify the checksum before running it), then rerun `browser install`",
+      { code: "bun-missing", exitCode: 1 },
+    );
+
+  const root = gstackRoot();
+  const setup = join(root, "setup");
+  if (!existsSync(setup)) {
+    if (existsSync(root))
+      fail(
+        `${root} exists but has no setup script`,
+        `remove ${root} and rerun \`${SELF} browser install\``,
+        { code: "browse-install-failed", exitCode: 1 },
+      );
+    mkdirSync(dirname(root), { recursive: true });
+    const clone = spawnSync(
+      "git",
+      ["clone", "--depth", "1", "https://github.com/garrytan/gstack.git", root],
+      { encoding: "utf8", timeout: 180_000 },
+    );
+    if (clone.status !== 0) {
+      const detail = (clone.stderr || clone.stdout || clone.error?.message || "")
+        .trim()
+        .split("\n")
+        .slice(-3)
+        .join(" ");
+      fail(`git clone of gstack failed: ${detail}`, `rerun \`${SELF} browser install\``, {
+        code: "browse-install-failed",
+        exitCode: 1,
+      });
+    }
+  }
+
+  const built = spawnSync(setup, [], { cwd: root, encoding: "utf8", timeout: 600_000 });
+  if (built.status !== 0 || !existsSync(browseCanonical())) {
+    const detail = (built.stderr || built.stdout || built.error?.message || "")
+      .trim()
+      .split("\n")
+      .slice(-4)
+      .join(" ");
+    fail(
+      `gstack setup did not produce ${browseCanonical()}: ${detail}`,
+      `read the message above and rerun \`${SELF} browser install\``,
+      { code: "browse-install-failed", exitCode: 1 },
+    );
+  }
+  print({ installed: true, already: false, bin: browseCanonical() });
+  return 0;
 }
 
 /** A preview bypass secret rides in the URL; never let it reach output. */
@@ -1259,7 +1385,9 @@ function runBrowse(args) {
   if (!existsSync(bin))
     fail(
       `browse is not installed at ${bin}`,
-      "install gstack browse, or set LAVEGA_BROWSE_BIN to its binary",
+      process.env.LAVEGA_BROWSE_BIN
+        ? `LAVEGA_BROWSE_BIN points at a missing file. Unset it, or run \`${SELF} browser install\``
+        : `run \`${SELF} browser install\` (builds ${browseCanonical()})`,
       {
         code: "browse-missing",
         exitCode: 1,
@@ -1473,6 +1601,7 @@ const GLOBAL_FLAGS = {
 const EFFECTS = {
   "remote-write": "writes on the target (broker, vault, price store, or tenant rows)",
   "local-destructive": "stops a process or deletes local state",
+  "local-install": "clones gstack and builds the browse binary under the home directory",
   "browser-action": "acts in the page; the app may send writes the way a user click would",
 };
 
@@ -1585,7 +1714,10 @@ const COMMANDS = [
     summary: "Sweep every read-only endpoint; sort failures by kind",
     flags: {
       verbose: { type: "boolean", description: "include every response body" },
-      out: { type: "string", description: "also save the report to this file" },
+      out: {
+        type: "string",
+        description: "save the report, including each response body, to this file",
+      },
     },
     run: commandProbe,
     examples: ["probe --target prod --out /tmp/lavega-verify-investing/evidence/prod-probe.json"],
@@ -1805,6 +1937,17 @@ const COMMANDS = [
 
   // Browser
   {
+    name: "browser install",
+    group: "Browser",
+    summary: "Clone gstack and build ~/.claude/skills/gstack/browse/dist/browse",
+    description:
+      "One command, one path. Clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack (unless that checkout already has ./setup) and runs ./setup, which builds browse/dist/browse and installs Playwright Chromium. Needs bun on PATH. An existing binary at that path, at ~/.codex/skills/gstack/browse/dist/browse, or in LAVEGA_BROWSE_BIN is left in place.",
+    effect: "local-install",
+    plan: browseInstallPlan,
+    run: commandBrowserInstall,
+    examples: ["browser install", "browser install --dry-run"],
+  },
+  {
     name: "browser open",
     group: "Browser",
     summary: "Open the SPA in gstack Chromium with the CLI session, in verify mode",
@@ -1973,6 +2116,11 @@ const GROUP_PREFIXES = [
 
 function flagsOf(command) {
   const flags = { ...GLOBAL_FLAGS, ...command.flags };
+  if (!flags.out)
+    flags.out = {
+      type: "string",
+      description: "write this command's JSON to this file as well as stdout",
+    };
   if (command.effect)
     flags["dry-run"] = { type: "boolean", description: "print what would happen; change nothing" };
   if (command.effect === "remote-write")
@@ -2064,7 +2212,7 @@ function overviewText() {
   groups.set("Browser", [
     [
       "browser <subcommand>",
-      "drive gstack Chromium: open, snapshot, click, screenshot, console, ...",
+      "drive gstack Chromium: install, open, snapshot, click, screenshot, console, ...",
     ],
   ]);
   const width = Math.max(...[...groups.values()].flat().map(([name]) => name.length)) + 2;
@@ -2270,6 +2418,7 @@ async function main(argv) {
   }
   validate(command, flags, args);
   const context = { flags, args };
+  if (flags.out) outputPath = resolve(String(flags.out));
 
   const effective = command.effect && (!command.effectWhen || command.effectWhen(context));
   if (effective && flags["dry-run"]) {
@@ -2287,7 +2436,10 @@ async function main(argv) {
     });
     return 0;
   }
-  if (effective && command.effect === "remote-write") guardProdWrite(flags, command.name);
+  if (effective && command.effect === "remote-write") {
+    guardProdWrite(flags, command.name);
+    recordEvidence = command.name;
+  }
   return command.run(context);
 }
 
