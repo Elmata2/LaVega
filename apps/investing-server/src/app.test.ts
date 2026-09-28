@@ -1063,6 +1063,44 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
   expect(body.sectors).toBeDefined();
 });
 
+test("summary route does not fetch sector profiles without market data consent", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({
+    symbol: "AAPL",
+    entity: "personal",
+    quantity: 1,
+    marketValue: 100,
+    portfolioWeight: null,
+    priceStatus: "priced",
+    currency: "EUR",
+    asOf: "2026-08-18",
+    returns: {
+      status: "unpriced",
+      remainingCostBasis: 0,
+      realizedCostBasisRemoved: 0,
+      unrealizedGain: 0,
+      realizedGain: 0,
+      dividendsReceived: 0,
+      totalReturn: 0,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate: null,
+    },
+  });
+  const sectorProfile = vi.fn(async () => ({ sector: "Technology", industry: "Hardware" }));
+  // No marketDataConsentStore override: the default starts unaccepted, exactly
+  // like a tenant who has never seen the Yahoo Finance disclosure.
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    sectorProfile,
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+
+  expect(response.status).toBe(200);
+  expect(sectorProfile).not.toHaveBeenCalled();
+});
+
 /* TRADING 212 GEBRUIKT EEN SLEUTELPAAR — sleutel als gebruikersnaam, geheim als
  * wachtwoord, samen Basic-gecodeerd. Hun eigen documentatie zegt het met zoveel
  * woorden, en dit is hier één ronde lang verkeerd gelezen: de eis is toen
