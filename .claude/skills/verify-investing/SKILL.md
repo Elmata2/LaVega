@@ -176,6 +176,17 @@ node $C browser install    # clone gstack, run ./setup; --dry-run prints the ste
 installs Playwright Chromium. If browse then reports a missing Chromium, install the pinned
 build once with `bunx playwright@1.58.2 install chromium`.
 
+`doctor`, `probe`, and the API commands can stay inside a sandbox. Any `browser *` step
+(`open`, `snapshot`, `click`, `screenshot`, and every other browser subcommand) must run
+escalated, unrestricted, and outside the sandbox. On Codex, escalate or disable the sandbox
+for that step. Chromium needs process and Mach-port operations that a workspace-write
+sandbox refuses. When `browser open` or a browse spawn fails with `EPERM`, `PortRendezvous`,
+`Permission denied`, `SIGTRAP`, or `Target page, context or browser has been closed` right
+after launch, that is the sandbox. Treat it as the sandbox until something else is proven.
+Re-run the same browser step outside the sandbox. Run `browser install` only when the browse
+binary is missing (`browse-missing`). Run `bunx playwright@1.58.2 install chromium` only when
+the headless shell is missing.
+
 ```bash
 node $C browser open --target prod          # import the CLI session, open /investing/?verify=1
 node $C browser snapshot --interactive      # accessibility tree with @e refs

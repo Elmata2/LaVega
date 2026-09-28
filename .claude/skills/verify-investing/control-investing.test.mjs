@@ -797,6 +797,39 @@ describe("browser", () => {
     assert.match(result.error.error.fix, /browser install/);
   });
 
+  /** Codex workspace-write sandbox: Chromium dies on Mach ports, browse exits. */
+  function sandboxBrowse() {
+    writeFileSync(
+      fakeBrowse,
+      `#!/bin/sh\necho "$@" >> "${browseLog}"\necho "PortRendezvousServer: Permission denied (EPERM)" >&2\necho "Target page, context or browser has been closed" >&2\nexit 1\n`,
+    );
+    chmodSync(fakeBrowse, 0o755);
+  }
+
+  test("browser open sandbox refusal says to escalate, not to install", async () => {
+    sandboxBrowse();
+    const result = await run(["browser", "open", ...local()]);
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "browse-sandboxed");
+    assert.match(result.error.error.fix, /escalat/);
+    assert.match(result.error.error.fix, /unrestricted|outside the sandbox/);
+    assert.doesNotMatch(result.error.error.fix, /browser install/);
+    assert.doesNotMatch(
+      `${result.error.error.message}\n${result.error.error.fix}`,
+      /macOS|System Settings|Chromium permission/i,
+    );
+    assert.notEqual(result.error.error.code, "browse-missing");
+  });
+
+  test("a later browser step with the same refusal also says to escalate", async () => {
+    sandboxBrowse();
+    const result = await run(["browser", "screenshot"]);
+    assert.equal(result.code, 1);
+    assert.equal(result.error.error.code, "browse-sandboxed");
+    assert.match(result.error.error.fix, /escalat/);
+    assert.doesNotMatch(result.error.error.fix, /browser install/);
+  });
+
   test("browser install --dry-run prints the clone and does not run it", async () => {
     const result = await run(["browser", "install", "--dry-run"], {
       HOME: stateDir,
