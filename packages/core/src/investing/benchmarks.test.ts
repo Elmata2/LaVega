@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   alignBenchmarkValues,
+  benchmarkDisplayName,
   buildIndexedSeries,
   computeBenchmarkXirrSeries,
   computeReturnSeries,
@@ -12,6 +13,12 @@ import {
 } from "./benchmarks.js";
 
 describe("benchmark chart domain", () => {
+  test("known benchmark names win over Yahoo's own name and the raw symbol", () => {
+    expect(benchmarkDisplayName("^gdaxi")).toBe("DAX");
+    expect(benchmarkDisplayName("^UNKNOWN", "Yahoo Name")).toBe("Yahoo Name");
+    expect(benchmarkDisplayName("^UNKNOWN")).toBe("^UNKNOWN");
+  });
+
   test("derives mode and rejects duplicate or fourth symbols", () => {
     expect(deriveChartMode([])).toBe("euros");
     expect(deriveChartMode(["^AEX"])).toBe("indexed");

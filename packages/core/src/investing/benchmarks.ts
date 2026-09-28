@@ -39,6 +39,26 @@ export type IndexedSeriesPoint = {
   cashUnknown: string[];
 };
 
+/** Yahoo's own names are inconsistent and often truncated ("DAX P", "EURO
+ *  STOXX 50 I"). This is the one place a major index's display name is
+ *  decided; every caller falls back to Yahoo's own name, then the symbol. */
+export const KNOWN_BENCHMARK_NAMES: Readonly<Record<string, string>> = {
+  "^GSPC": "S&P 500",
+  "^GDAXI": "DAX",
+  "^STOXX50E": "Euro Stoxx 50",
+  "^AEX": "AEX",
+  "^IXIC": "Nasdaq Composite",
+  "^NDX": "Nasdaq 100",
+  "^DJI": "Dow Jones",
+  "^FTSE": "FTSE 100",
+  "^N225": "Nikkei 225",
+  "^FCHI": "CAC 40",
+};
+
+export function benchmarkDisplayName(symbol: string, fallback?: string): string {
+  return KNOWN_BENCHMARK_NAMES[symbol.trim().toUpperCase()] ?? fallback ?? symbol;
+}
+
 export function validateBenchmarkSymbols(symbols: readonly string[]): string[] {
   const normalized = symbols.map((symbol) => symbol.trim().toUpperCase());
   if (normalized.some((symbol) => !symbol)) throw new Error("Benchmark symbol is required");

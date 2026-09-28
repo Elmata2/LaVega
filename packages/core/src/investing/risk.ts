@@ -38,42 +38,61 @@ export function buildHistoricalRisk(
   };
   const known = (point: (typeof points)[number]) =>
     point.cashUnknown.length === 0 && isImmaterial(point);
+
+  // Max drawdown needs a genuinely continuous, fully priced series: one
+  // unknown date makes the compounded path unobservable, so it still uses
+  // only the most recent unbroken run of complete dates.
   let start = points.length;
   while (start > 0 && known(points[start - 1]!)) start -= 1;
   const window = points.slice(start);
-  const earlier = points.slice(0, start);
-  const missingPrices = [...new Set(earlier.flatMap((point) => point.unpriced))].sort();
-  const missingCash = [...new Set(earlier.flatMap((point) => point.cashUnknown))].sort();
+
+  // Volatility, beta and alpha are each built from independent daily
+  // intervals, so one unknown date should drop only the interval(s) that
+  // touch it, not every earlier date. Mark every point's usability and let
+  // computePortfolioMetrics exclude just the bad intervals, keeping the real
+  // history around them.
+  const unknownPoints = points.filter((point) => !known(point));
+  const missingPrices = [...new Set(unknownPoints.flatMap((point) => point.unpriced))].sort();
+  const missingCash = [...new Set(unknownPoints.flatMap((point) => point.cashUnknown))].sort();
   const missingHoldings = [
-    ...new Set(earlier.flatMap((point) => point.holdingsUnknown ?? [])),
+    ...new Set(unknownPoints.flatMap((point) => point.holdingsUnknown ?? [])),
   ].sort();
-  const estimatedPrices = earlier.some((point) => point.forwardFilled.length > 0);
+  const estimatedPrices = unknownPoints.some((point) => point.forwardFilled.length > 0);
   const estimatedCash = [
-    ...new Set(earlier.flatMap((point) => point.cashEstimated ?? [])),
+    ...new Set(points.flatMap((point) => point.cashEstimated ?? [])),
   ].sort();
+  const knownPoints = points.filter(known);
   const coverage =
-    window.length === 0
+    knownPoints.length === 0
       ? null
       : Math.min(
-          ...window.map((point) => {
+          ...knownPoints.map((point) => {
             if (!point.value) return 1;
             return 1 - Math.abs(point.unaccountedValue ?? 0) / Math.abs(point.value);
           }),
         );
-  const negativeCashDays = window.filter(
+  const negativeCashDays = knownPoints.filter(
     (point) => point.cashValue !== null && point.cashValue < -0.01,
   ).length;
   const comparable = benchmark?.currency === data.presentationCurrency;
   const computed = computePortfolioMetrics({
-    valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
+    valuePoints: points.map((point) => ({
+      date: point.date,
+      value: point.value,
+      usable: known(point),
+    })),
     externalCashFlows: data.externalCashFlows,
     benchmarkPoints: comparable ? benchmark?.points : undefined,
     minObservations: RISK_MINIMUM_OBSERVATIONS,
   });
-  const complete = window.length > 0 && computed.excludedIntervals === 0;
-  const available = complete && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
+  const drawdown = computePortfolioMetrics({
+    valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
+    externalCashFlows: data.externalCashFlows,
+  }).maxDrawdown;
+  const lastKnown = points.length > 0 && known(points.at(-1)!);
+  const available = lastKnown && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
   const metrics = available
-    ? computed
+    ? { ...computed, maxDrawdown: drawdown }
     : {
         ...computed,
         dailyVolatility: null,
@@ -100,13 +119,17 @@ export function buildHistoricalRisk(
     reasons.push(
       `Estimate covers ${(coverage * 100).toFixed(2)}% of portfolio value; the rest carries uncertain ownership or pricing but is too small to change the result.`,
     );
-  if (window.length === 0) reasons.push("No recent date has complete data.");
+  if (window.length === 0)
+    reasons.push("No recent date has a continuous, fully priced history for maximum drawdown.");
   else if (start > 0)
     reasons.push(
-      `Measured from ${window[0]!.date}; earlier dates in this range lack complete data.`,
+      `Maximum drawdown is measured from ${window[0]!.date}; earlier dates lack a continuous, fully priced history.`,
     );
-  if (window.length > 0 && computed.excludedIntervals > 0)
-    reasons.push("Some return intervals could not be measured and are excluded.");
+  if (computed.excludedIntervals > 0)
+    reasons.push(
+      "Return intervals that touch an incomplete date are excluded from volatility and beta.",
+    );
+  if (!lastKnown) reasons.push("Today's data is not yet complete, so the estimate is not shown.");
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
   if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
@@ -121,8 +144,9 @@ export function buildHistoricalRisk(
     risk: {
       status: available ? ("estimate" as const) : ("unavailable" as const),
       range,
-      from: window[0]?.date ?? null,
-      to: window.at(-1)?.date ?? null,
+      from: computed.startDate,
+      to: computed.endDate,
+      drawdownFrom: (window[0]?.date ?? null) as string | null,
       minimumObservations: RISK_MINIMUM_OBSERVATIONS,
       benchmark: benchmark
         ? { symbol: benchmark.symbol, name: benchmark.name, currency: benchmark.currency }

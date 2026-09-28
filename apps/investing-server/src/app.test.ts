@@ -616,6 +616,45 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
   ]);
 });
 
+test("summary route includes a position's description in top positions when set", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({
+    symbol: "AAPL",
+    entity: "personal",
+    description: "Apple Inc.",
+    quantity: 1,
+    marketValue: 100,
+    portfolioWeight: null,
+    priceStatus: "priced",
+    currency: "EUR",
+    asOf: "2026-08-18",
+    returns: {
+      status: "unpriced",
+      remainingCostBasis: 0,
+      realizedCostBasisRemoved: 0,
+      unrealizedGain: 0,
+      realizedGain: 0,
+      dividendsReceived: 0,
+      totalReturn: 0,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate: null,
+    },
+  });
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    sectorProfile: vi.fn(async () => ({ sector: "Technology", industry: "Hardware" })),
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+  const payload = (await response.json()) as {
+    topPositions: Array<{ symbol: string; weight: number; description?: string }>;
+  };
+
+  expect(response.status).toBe(200);
+  expect(payload.topPositions).toEqual([{ symbol: "AAPL", weight: 1, description: "Apple Inc." }]);
+});
+
 test("summary route reports failures as 503 problem payload", async () => {
   const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("down")) });
   const response = await investingApp.request("/api/investing/summary");
@@ -858,7 +897,7 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
   const body = (await response.json()) as { topPositions: { symbol: string }[]; sectors: unknown };
 
   expect(response.status).toBe(200);
-  expect(body.topPositions).toEqual([{ symbol: "AAPL", weight: 1 }]);
+  expect(body.topPositions).toEqual([{ symbol: "AAPL", weight: 1, description: "Apple" }]);
   expect(body.sectors).toBeDefined();
 });
 

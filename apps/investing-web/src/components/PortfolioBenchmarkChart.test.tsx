@@ -83,6 +83,33 @@ test("stale chart tooltip point does not crash when a benchmark is selected", as
   await act(async () => root.unmount());
 });
 
+test("XIRR row shows percent-for-percent, not a pp spread", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const point = {
+    ...points[0],
+    portfolioReturn: 0.118,
+    portfolioXirr: 0.118,
+    benchmarkReturns: { "^AEX": 0.294 },
+    benchmarkXirr: { "^AEX": 0.294 },
+  };
+  await act(async () => {
+    root.render(
+      <PerformanceTooltip
+        active
+        payload={[{ payload: point as never }]}
+        mode="indexed"
+        benchmarks={[benchmarks[0]!]}
+        currency="EUR"
+      />,
+    );
+  });
+  expect(container.textContent).toContain("XIRR p.j. Portfolio +11.8% · AEX +29.4%");
+  expect(container.textContent).not.toContain("pp");
+  await act(async () => root.unmount());
+});
+
 function mockSelectionFetch() {
   vi.stubGlobal(
     "fetch",
@@ -188,6 +215,11 @@ test("uses one custom window for typed dates and clears it with Escape", async (
     );
     await Promise.resolve();
   });
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Custom")!
+      .click();
+  });
   const from = container.querySelector<HTMLInputElement>('input[aria-label="From date"]')!;
   const to = container.querySelector<HTMLInputElement>('input[aria-label="To date"]')!;
   await act(async () => {
@@ -207,6 +239,43 @@ test("uses one custom window for typed dates and clears it with Escape", async (
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   expect(container.querySelector('button[aria-label="Clear zoom"]')).toBeNull();
+  await act(async () => root.unmount());
+});
+
+test("Custom tab reveals date inputs and a preset tab hides them again", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart
+        data={{ "1M": longPoints, All: longPoints }}
+        benchmarks={benchmarks}
+      />,
+    );
+    await Promise.resolve();
+  });
+  expect(container.querySelector('input[aria-label="From date"]')).toBeNull();
+  const customButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Custom",
+  )!;
+  await act(async () => {
+    customButton.click();
+  });
+  expect(container.querySelector('input[aria-label="From date"]')).not.toBeNull();
+  expect(container.querySelector('input[aria-label="To date"]')).not.toBeNull();
+  expect(container.querySelector('button[type="submit"]')?.textContent).toBe("Apply");
+  expect(customButton.getAttribute("aria-pressed")).toBe("true");
+  const oneMonthButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "1 month",
+  )!;
+  await act(async () => {
+    oneMonthButton.click();
+  });
+  expect(container.querySelector('input[aria-label="From date"]')).toBeNull();
+  expect(container.querySelector('button[type="submit"]')).toBeNull();
+  expect(customButton.getAttribute("aria-pressed")).toBe("false");
   await act(async () => root.unmount());
 });
 
@@ -293,6 +362,56 @@ test("wheel and pointer drag write custom zoom without brush", async () => {
   expect(container.querySelector('button[aria-label="Clear zoom"]')?.textContent).not.toBe(
     wheelWindow,
   );
+  await act(async () => root.unmount());
+});
+
+test("a wheel zoom marks the Custom tab pressed, and a preset click un-presses it and hides the inputs", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart
+        data={{ "1M": longPoints, All: longPoints }}
+        benchmarks={benchmarks}
+      />,
+    );
+    await Promise.resolve();
+  });
+  const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  Object.defineProperty(chart, "clientWidth", { configurable: true, value: 400 });
+  chart.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 400,
+    bottom: 320,
+    width: 400,
+    height: 320,
+    toJSON: () => ({}),
+  });
+  const customButton = () =>
+    Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Custom",
+    )!;
+  expect(customButton().getAttribute("aria-pressed")).toBe("false");
+  await act(async () => {
+    chart.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 200, deltaY: -100 }),
+    );
+  });
+  expect(customButton().getAttribute("aria-pressed")).toBe("true");
+  expect(container.querySelector('input[aria-label="From date"]')).not.toBeNull();
+  const oneMonthButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "1 month",
+  )!;
+  await act(async () => {
+    oneMonthButton.click();
+  });
+  expect(customButton().getAttribute("aria-pressed")).toBe("false");
+  expect(container.querySelector('input[aria-label="From date"]')).toBeNull();
   await act(async () => root.unmount());
 });
 
@@ -481,6 +600,119 @@ test("search results mark an instrument whose currency differs from the portfoli
   expect(resultButton.textContent).toContain("Converted to EUR at each day's ECB rate.");
   expect(resultButton.textContent).not.toContain("Beta and alpha need a");
   expect(resultButton.disabled).toBe(false);
+  await act(async () => root.unmount());
+});
+
+test("a failed search clears the previous search's results instead of leaving them clickable", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("q=GSPC"))
+        return new Response(
+          JSON.stringify({ results: [{ symbol: "^GSPC", name: "S&P 500", exchange: "SNP", currency: "USD" }] }),
+        );
+      if (url.includes("/benchmarks/search")) return new Response(null, { status: 428 });
+      return new Response(JSON.stringify({ tenantId: "local", symbols: [] }));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} />);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "+ Compare")!
+      .click();
+  });
+  const input = container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  await act(async () => {
+    changeInput(input, "GSPC");
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 260));
+  });
+  expect(container.querySelector("#benchmark-results")!.textContent).toContain("S&P 500");
+
+  await act(async () => {
+    changeInput(input, "DAX");
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 260));
+  });
+  expect(container.querySelector('[role="status"]')!.textContent).toBe("Search unavailable");
+  expect(container.querySelector("#benchmark-results")!.textContent).not.toContain("S&P 500");
+  await act(async () => root.unmount());
+});
+
+const risingPoints = [50, 60, 70, 80, 90, 100, 150, 180, 220, 300].map((value, index) => ({
+  date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+  positionsValue: value,
+  cashValue: 0,
+  value,
+  unpriced: [],
+  forwardFilled: [],
+  cashUnknown: [],
+}));
+const flatBenchmark = {
+  symbol: "^BENCH",
+  name: "Bench",
+  exchange: "Test",
+  currency: "EUR",
+  points: risingPoints.map((point) => ({ date: point.date, value: 1000 })),
+};
+
+test("headline return is anchored on the selected window's start, not full history", async () => {
+  mockSelectionFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "PUT"
+        ? new Response(JSON.stringify({ tenantId: "local", symbols: ["^BENCH"] }))
+        : new Response(JSON.stringify({ tenantId: "local", symbols: ["^BENCH"] })),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <PortfolioBenchmarkChart
+        data={{ "1M": risingPoints, All: risingPoints }}
+        benchmarks={[flatBenchmark]}
+      />,
+    );
+    await Promise.resolve();
+  });
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Custom")!
+      .click();
+  });
+  const from = container.querySelector<HTMLInputElement>('input[aria-label="From date"]')!;
+  const to = container.querySelector<HTMLInputElement>('input[aria-label="To date"]')!;
+  await act(async () => {
+    changeInput(from, "2026-01-06");
+    changeInput(to, "2026-01-10");
+  });
+  await act(async () => {
+    container
+      .querySelector<HTMLFormElement>('form[aria-label="Choose date range"]')!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  // Window start (day 6, value 100) to window end (day 10, value 300): +200%.
+  // A regression that fed `buildIndexedSeries` the full series (day 1, value
+  // 50) instead of the windowed points would report +500% here instead.
+  const windowedReturn = 300 / 100 - 1;
+  const fullHistoryReturn = 300 / 50 - 1;
+  expect(windowedReturn).toBe(2);
+  expect(fullHistoryReturn).toBe(5);
+  const summary = container.querySelector('[aria-label="Return on selected date"]')!;
+  expect(summary.textContent).toContain("Portfolio +200.0%");
+  expect(summary.textContent).not.toContain("500.0%");
   await act(async () => root.unmount());
 });
 

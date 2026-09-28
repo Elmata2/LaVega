@@ -1,4 +1,4 @@
-import { normalizeCurrencyCode, type BenchmarkInstrument } from "@lavega/core";
+import { benchmarkDisplayName, normalizeCurrencyCode, type BenchmarkInstrument } from "@lavega/core";
 import { YahooHttpClient } from "./http.js";
 import type { YahooChartResponse } from "./types.js";
 
@@ -14,10 +14,10 @@ type SearchQuote = {
 type SearchResponse = { quotes?: SearchQuote[] };
 
 export const CURATED_EUROPEAN_BENCHMARKS: BenchmarkInstrument[] = [
-  { symbol: "^STOXX50E", name: "EURO STOXX 50", exchange: "STOXX", currency: "EUR" },
-  { symbol: "^AEX", name: "AEX", exchange: "Amsterdam", currency: "EUR" },
-  { symbol: "^GDAXI", name: "DAX", exchange: "Frankfurt", currency: "EUR" },
-  { symbol: "^FCHI", name: "CAC 40", exchange: "Paris", currency: "EUR" },
+  { symbol: "^STOXX50E", name: benchmarkDisplayName("^STOXX50E"), exchange: "STOXX", currency: "EUR" },
+  { symbol: "^AEX", name: benchmarkDisplayName("^AEX"), exchange: "Amsterdam", currency: "EUR" },
+  { symbol: "^GDAXI", name: benchmarkDisplayName("^GDAXI"), exchange: "Frankfurt", currency: "EUR" },
+  { symbol: "^FCHI", name: benchmarkDisplayName("^FCHI"), exchange: "Paris", currency: "EUR" },
 ];
 
 async function confirmedCurrency(
@@ -84,7 +84,7 @@ export async function searchYahooBenchmarks(
         : [
             {
               symbol: quote.symbol!.toUpperCase(),
-              name: quote.longname ?? quote.shortname ?? quote.symbol!,
+              name: benchmarkDisplayName(quote.symbol!, quote.longname ?? quote.shortname ?? quote.symbol!),
               exchange: quote.exchDisp ?? quote.exchange ?? "Yahoo Finance",
               currency,
             },

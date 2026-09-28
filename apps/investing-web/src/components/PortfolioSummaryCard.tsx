@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RiskRange } from "@lavega/core";
 import { usePortfolioSummary } from "../lib/summaryResource";
+import { shortDate } from "../lib/dates.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 const barColors = [
@@ -58,13 +59,17 @@ export function PortfolioSummaryCard({
       </Card>
     );
   const { metrics, sectors, topPositions, risk, composition } = state.data;
-  const stats: Array<[string, string]> = [
-    ["Annual volatility", percent(metrics.annualizedVolatility)],
-    ["Beta", decimal(metrics.beta)],
-    ["Regression alpha (annual)", percent(metrics.alpha)],
-    ["Maximum drawdown", percent(metrics.maxDrawdown)],
-    ["Valid daily returns", `${metrics.observationDays}`],
-    ["Benchmark pairs", `${metrics.pairedObservationDays}`],
+  const drawdownCaption =
+    risk.drawdownFrom && risk.drawdownFrom !== risk.from
+      ? `since ${shortDate(risk.drawdownFrom)}`
+      : null;
+  const stats: Array<[string, string, string | null]> = [
+    ["Annual volatility", percent(metrics.annualizedVolatility), null],
+    ["Beta", decimal(metrics.beta), null],
+    ["Regression alpha (annual)", percent(metrics.alpha), null],
+    ["Maximum drawdown", percent(metrics.maxDrawdown), drawdownCaption],
+    ["Valid daily returns", `${metrics.observationDays}`, null],
+    ["Benchmark pairs", `${metrics.pairedObservationDays}`, null],
   ];
   return (
     <Card aria-label="Portfolio summary" data-dashboard-section="summary">
@@ -159,10 +164,11 @@ export function PortfolioSummaryCard({
           )}
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          {stats.map(([label, value]) => (
+          {stats.map(([label, value, caption]) => (
             <div key={label}>
               <dt className="text-xs text-muted-foreground">{label}</dt>
               <dd className="font-semibold tabular-nums">{value}</dd>
+              {caption && <dd className="text-xs text-muted-foreground">{caption}</dd>}
             </div>
           ))}
         </dl>
@@ -194,9 +200,11 @@ export function PortfolioSummaryCard({
             <p>
               Currency conversion uses fixed latest exchange rates. Historical currency gains and
               losses are excluded. Complete dates and at least 60 valid daily returns are required.
-              Risk uses the most recent stretch of complete dates in the range. A date with a
-              missing price, unknown cash or unknown ownership ends that stretch. A day the market
-              was closed keeps its last close. Today is left out until its closes are in.
+              Volatility, beta, alpha and the observation counts use every day in the selected
+              range, skipping only the daily intervals that touch a missing price, unknown cash or
+              unknown ownership. Maximum drawdown still uses only the most recent unbroken stretch
+              of complete dates. A day the market was closed keeps its last close. Today is left
+              out until its closes are in.
             </p>
           </div>
         </details>
@@ -214,8 +222,17 @@ export function PortfolioSummaryCard({
             )}
             {topPositions.map((position) => (
               <li key={position.symbol} className="flex items-center justify-between gap-3">
-                <span className="truncate">{position.symbol}</span>
-                <span className="font-semibold tabular-nums">{percent(position.weight)}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="block truncate">{position.description ?? position.symbol}</span>
+                  {position.description && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {position.symbol}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums">
+                  {percent(position.weight)}
+                </span>
               </li>
             ))}
           </ul>

@@ -26,6 +26,7 @@ import {
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
 import {
+  benchmarkDisplayName,
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
@@ -558,7 +559,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             benchmarkBars: benches.bars,
             benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
               symbol: benchmark,
-              name: benchmark,
+              name: benchmarkDisplayName(benchmark),
               exchange: "Yahoo Finance",
               currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
             })),

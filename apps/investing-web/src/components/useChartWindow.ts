@@ -76,6 +76,7 @@ export type ChartWindowAction =
     }
   | { type: "dateInput"; field: "from" | "to"; value: string }
   | { type: "typedDates"; all: readonly Dated[] }
+  | { type: "openCustom"; from: string; to: string }
   | { type: "focus"; index: number | null }
   | { type: "focusStep"; delta: 1 | -1; count: number }
   | { type: "hoverEnd" }
@@ -158,6 +159,17 @@ export function chartWindowReducer(
       return action.field === "from"
         ? { ...state, dateFrom: action.value }
         : { ...state, dateTo: action.value };
+    case "openCustom":
+      return {
+        ...showWindow(state, {
+          kind: "custom",
+          from: action.from,
+          to: action.to,
+          baseRange: baseRangeOf(state.window),
+        }),
+        dateFrom: action.from,
+        dateTo: action.to,
+      };
     case "typedDates": {
       const minDate = action.all[0]?.date;
       const maxDate = action.all.at(-1)?.date;
@@ -374,6 +386,10 @@ export function useChartWindow<T extends Dated>(options: {
     applyTypedDates: useCallback(
       () => dispatch({ type: "typedDates", all: allPoints }),
       [allPoints],
+    ),
+    openCustom: useCallback(
+      (from: string, to: string) => dispatch({ type: "openCustom", from, to }),
+      [],
     ),
     focus: useCallback((index: number | null) => dispatch({ type: "focus", index }), []),
   };
