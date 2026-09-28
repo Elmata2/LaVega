@@ -3,6 +3,7 @@ import { app, createApp } from "./app.js";
 import {
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
+  createInMemoryInvestingLayoutStore,
   createInMemoryPriceStore,
   createYahooPriceProvider,
 } from "@lavega/adapters";
@@ -141,6 +142,42 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
     body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }),
   });
   expect(invalid.status).toBe(400);
+});
+
+test("layout route persists per-tenant choices and drops unknown ids", async () => {
+  const investingLayoutStore = createInMemoryInvestingLayoutStore();
+  const investingApp = createApp({ investingLayoutStore });
+
+  expect(await (await investingApp.request("/api/investing/layout")).json()).toEqual({
+    modules: {},
+    widgets: {},
+  });
+
+  const saved = await investingApp.request("/api/investing/layout", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      modules: { positions: false, "unknown-module": true },
+      widgets: { sectors: false },
+    }),
+  });
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toEqual({ modules: { positions: false }, widgets: { sectors: false } });
+  expect(await (await investingApp.request("/api/investing/layout")).json()).toEqual({
+    modules: { positions: false },
+    widgets: { sectors: false },
+  });
+});
+
+test("layout route sanitizes a malformed body instead of rejecting it", async () => {
+  const investingApp = createApp({ investingLayoutStore: createInMemoryInvestingLayoutStore() });
+  const response = await investingApp.request("/api/investing/layout", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: "not json",
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ modules: {}, widgets: {} });
 });
 
 test("benchmark search route returns results after persisted consent", async () => {
