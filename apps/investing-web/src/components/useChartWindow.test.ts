@@ -212,3 +212,22 @@ test("keyboard steps ignore a focus index past the visible points", () => {
   const stale = chartWindowReducer(initialChartWindowState, { type: "focus", index: 10 });
   expect(chartWindowReducer(stale, { type: "focusStep", delta: -1, count: 3 }).focusIndex).toBe(2);
 });
+
+test("openCustom opens a custom window prefilled with the given dates and keeps the base range", () => {
+  const zoomed = chartWindowReducer(initialChartWindowState, { type: "preset", range: "6M" });
+  const opened = chartWindowReducer(zoomed, {
+    type: "openCustom",
+    from: all[10]!.date,
+    to: all[20]!.date,
+  });
+  expect(opened.window).toEqual({
+    kind: "custom",
+    from: all[10]!.date,
+    to: all[20]!.date,
+    baseRange: "6M",
+  });
+  expect(opened.dateFrom).toBe(all[10]!.date);
+  expect(opened.dateTo).toBe(all[20]!.date);
+  expect(opened.focusIndex).toBeNull();
+  expect(opened.dateError).toBeNull();
+});

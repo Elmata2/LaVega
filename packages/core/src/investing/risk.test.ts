@@ -153,9 +153,9 @@ test.each(incompleteQualityCases)(
       alpha: null,
       maxDrawdown: null,
     });
-    expect(report.risk.from).toBe(points[31]!.date);
+    expect(report.risk.from).toBe(points[0]!.date);
     expect(report.risk.reasons).toContain(
-      `Measured from ${points[31]!.date}; earlier dates in this range lack complete data.`,
+      `At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`,
     );
   },
 );
@@ -168,9 +168,61 @@ test("measures the complete window after an incomplete stretch", () => {
   const report = buildHistoricalRisk(dashboard(points));
 
   expect(report.risk.status).toBe("estimate");
-  expect(report.risk.from).toBe(points[11]!.date);
-  expect(report.metrics.observationDays).toBe(points.length - 12);
+  expect(report.risk.from).toBe(points[0]!.date);
+  expect(report.metrics.observationDays).toBe(points.length - 3);
   expect(report.risk.missingPrices).toEqual(["MASI"]);
+});
+
+test("keeps daily returns from before an isolated incomplete date instead of discarding all earlier history", () => {
+  // ~14 months of business days, one broker cash-history gap about a third
+  // of the way back. Only the interval touching that date is unmeasurable;
+  // the roughly 200 clean days before and after it are real, knowable
+  // returns and must still count.
+  const points = pointsFromReturns(Array.from({ length: 300 }, () => 0.0005));
+  const gapIndex = 100;
+  points[gapIndex] = { ...points[gapIndex]!, cashUnknown: ["trading212:EUR"] };
+  const report = buildHistoricalRisk(dashboard(points, { flows: [] }), "All");
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.observationDays).toBe(points.length - 3);
+  expect(report.risk.from).toBe(points[0]!.date);
+  expect(report.risk.to).toBe(points.at(-1)!.date);
+  expect(report.risk.drawdownFrom).toBe(points[gapIndex + 1]!.date);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+});
+
+test("benchmark pairs also survive an isolated incomplete portfolio date", () => {
+  const returns = Array.from({ length: 300 }, (_, index) =>
+    index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002,
+  );
+  const points = pointsFromReturns(returns);
+  const gapIndex = 100;
+  points[gapIndex] = { ...points[gapIndex]!, cashUnknown: ["trading212:EUR"] };
+  const report = buildHistoricalRisk(
+    dashboard(points, { benchmarks: [benchmarkFromReturns(returns)] }),
+    "All",
+  );
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.pairedObservationDays).toBe(points.length - 3);
+  expect(report.metrics.beta).not.toBeNull();
+});
+
+test("max drawdown still removes an owner withdrawal even after an isolated incomplete date shrinks its window", () => {
+  const points = pointsFromReturns(Array.from({ length: 90 }, () => 0.001));
+  points[10] = { ...points[10]!, cashUnknown: ["trading212:EUR"] };
+  const withdrawalIndex = 50;
+  const withdrawalDate = points[withdrawalIndex]!.date;
+  points[withdrawalIndex] = {
+    ...points[withdrawalIndex]!,
+    value: points[withdrawalIndex]!.value! - 40,
+  };
+  const report = buildHistoricalRisk(
+    dashboard(points, { flows: [{ date: withdrawalDate, amount: -40 }] }),
+  );
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.maxDrawdown).toBeCloseTo(0, 6);
 });
 
 test("includes a last day whose close is still settling when the position is immaterial", () => {

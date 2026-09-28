@@ -997,6 +997,18 @@ test("price history is read with dates Postgres accepts", async () => {
   expect(body.problems).toEqual([]);
 });
 
+test("a known benchmark symbol gets its curated display name in the dashboard", async () => {
+  const runtimeApp = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    benchmarkSymbols: () => ["^GDAXI"],
+  });
+
+  const response = await runtimeApp.request("/api/investing/dashboard");
+  const body = (await response.json()) as { benchmarks: Array<{ name: string }> };
+
+  expect(body.benchmarks[0]?.name).toBe("DAX");
+});
+
 test("IBKR missing plus a paused T212 result still keeps T212 positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({

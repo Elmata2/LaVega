@@ -23,6 +23,7 @@ const summary: PortfolioSummary = {
     range: "1Y",
     from: "2025-09-10",
     to: "2026-09-10",
+    drawdownFrom: null,
     minimumObservations: 60,
     benchmark: null,
     benchmarks: [],
@@ -68,6 +69,85 @@ test("renders metrics, top positions, and sector bars", async () => {
   expect(container.textContent).toContain("excluding cash");
   expect(container.textContent).not.toContain("+60");
   expect(container.querySelectorAll('[aria-label="Sector allocation"] li')).toHaveLength(2);
+});
+
+test("shows the drawdown's own start date when it differs from the risk range's start", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ...summary, risk: { ...summary.risk, drawdownFrom: "2026-05-05" } }),
+          { status: 200 },
+        ),
+    ),
+  );
+  const { container, root } = render();
+  act(() => {
+    root.render(<PortfolioSummaryCard />);
+  });
+  await act(async () => {});
+  expect(container.textContent).toContain("since 5 May 2026");
+});
+
+test("hides the drawdown start date when it matches the risk range's start or is absent", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ...summary, risk: { ...summary.risk, drawdownFrom: summary.risk.from } }),
+          { status: 200 },
+        ),
+    ),
+  );
+  const { container, root } = render();
+  act(() => {
+    root.render(<PortfolioSummaryCard />);
+  });
+  await act(async () => {});
+  expect(container.textContent).not.toContain("since");
+
+  document.body.replaceChildren();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 })),
+  );
+  const second = render();
+  act(() => {
+    second.root.render(<PortfolioSummaryCard />);
+  });
+  await act(async () => {});
+  expect(second.container.textContent).not.toContain("since");
+});
+
+test("shows a position's name above its ticker, and just the ticker when there is no name", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...summary,
+            topPositions: [
+              { symbol: "AAPL", weight: 0.6, description: "Apple Inc." },
+              { symbol: "MYST", weight: 0.4 },
+            ],
+          }),
+          { status: 200 },
+        ),
+    ),
+  );
+  const { container, root } = render();
+  act(() => {
+    root.render(<PortfolioSummaryCard />);
+  });
+  await act(async () => {});
+  const list = container.querySelector('[aria-label="Largest positions"]');
+  const text = list?.textContent ?? "";
+  expect(text).toContain("Apple Inc.");
+  expect(text.indexOf("Apple Inc.")).toBeLessThan(text.indexOf("AAPL"));
+  expect(text).toContain("MYST");
 });
 
 test("shows incomplete-data reasons and requests a new risk period", async () => {

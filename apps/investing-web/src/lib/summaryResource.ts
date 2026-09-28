@@ -4,7 +4,7 @@ import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from
 export type PortfolioSummary = {
   metrics: PortfolioMetrics;
   sectors: SectorExposure[];
-  topPositions: Array<{ symbol: string; weight: number }>;
+  topPositions: Array<{ symbol: string; weight: number; description?: string }>;
   risk: HistoricalRisk;
   composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
 };
@@ -37,6 +37,7 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
     hasStrings(risk, "status", "currency") &&
     isDateOrNull(risk.from) &&
     isDateOrNull(risk.to) &&
+    isDateOrNull(risk.drawdownFrom) &&
     isArrayOf(risk.reasons, isString) &&
     isArrayOf(risk.missingPrices, isString) &&
     isArrayOf(risk.missingHoldings, isString) &&

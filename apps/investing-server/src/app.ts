@@ -265,6 +265,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         .map((position) => ({
           symbol: position.symbol,
           weight: totalValue > 0 ? position.marketValue / totalValue : 0,
+          ...(position.description ? { description: position.description } : {}),
         }));
       /* Same classification rule as the portfolio-agent snapshot, which
        * passes no fetchProfile. This route keeps the fetch-and-persist

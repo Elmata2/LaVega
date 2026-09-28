@@ -125,6 +125,38 @@ const dashboard: InvestingDashboardData = {
 };
 
 const emptyDashboard = emptyInvestingDashboard();
+const portfolioSummary = {
+  metrics: {
+    dailyVolatility: 0.01,
+    annualizedVolatility: 0.1587,
+    beta: 1.1,
+    alpha: 0.02,
+    maxDrawdown: -0.25,
+    observationDays: 252,
+    excludedIntervals: 0,
+    pairedObservationDays: 252,
+    startDate: "2025-09-10",
+    endDate: "2026-09-10",
+  },
+  risk: {
+    status: "estimate",
+    range: "1Y",
+    from: "2025-09-10",
+    to: "2026-09-10",
+    drawdownFrom: null,
+    minimumObservations: 60,
+    benchmark: null,
+    benchmarks: [],
+    reasons: [],
+    missingHoldings: [],
+    missingPrices: [],
+    coverage: 1,
+    currency: "EUR",
+  },
+  sectors: [{ sector: "Technology", weight: 1 }],
+  topPositions: [{ symbol: "ASML", weight: 1 }],
+  composition: { pricedHoldings: 1, missingHoldings: 0, estimatedHoldings: 0 },
+};
 const portfolioAgents = [
   {
     id: "warren_buffett",
@@ -193,6 +225,8 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
+    if (url.startsWith("/api/investing/summary"))
+      return new Response(JSON.stringify(portfolioSummary));
     return new Response(JSON.stringify({}));
   });
 }
@@ -642,20 +676,30 @@ test("overview preserves responsive reading order and independent chart ranges",
     );
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 
   const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
     (element) => element.dataset.dashboardSection,
   );
+  /* Key figures lead the right column, then the risk-and-composition card
+   * ("summary" bundles both), so a reorder of either would show up here. */
   expect(order).toEqual([
     "performance",
     "allocation",
     "kpis",
+    "summary",
     "agent",
     "status",
-    "positions",
     "net-worth",
+    "positions",
   ]);
+  const summaryCard = container.querySelector<HTMLElement>('[data-dashboard-section="summary"]')!;
+  expect(summaryCard.textContent).toContain("Historical account risk");
+  expect(summaryCard.textContent?.indexOf("Historical account risk")).toBeLessThan(
+    summaryCard.textContent!.indexOf("Largest positions"),
+  );
   const performanceRange = container.querySelector<HTMLElement>(
     '[role="group"][aria-label="Choose period"]',
   )!;

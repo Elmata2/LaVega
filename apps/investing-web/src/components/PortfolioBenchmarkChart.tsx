@@ -38,10 +38,13 @@ const benchmarkLabel = (benchmark: { name: string; converted?: boolean }): strin
   benchmark.converted ? `${benchmark.name} (converted)` : benchmark.name;
 const valueOrUnknown = (value: number | null, formatter: (value: number) => string) =>
   value === null ? "Unknown" : formatter(value);
-const pp = (value: number) =>
-  `${value >= 0 ? "+" : ""}${(value * 100).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pp`;
+const signedPercent = (value: number) => `${value >= 0 ? "+" : ""}${percent(value)}`;
+const cappedXirrText = (value: number, format: (value: number) => string) =>
+  value > 9.99 ? "> +999%" : value < -0.99 ? "< -99%" : format(value);
 const cappedXirr = (value: number | null) =>
-  value === null ? "Unknown" : value > 9.99 ? "> +999%" : value < -0.99 ? "< -99%" : percent(value);
+  value === null ? "Unknown" : cappedXirrText(value, percent);
+const signedCappedXirr = (value: number | null) =>
+  value === null ? "Unknown" : cappedXirrText(value, signedPercent);
 
 function allPoints(data: Props["data"]): PortfolioValuePoint[] {
   if (data.All) return data.All;
@@ -133,8 +136,13 @@ export function PortfolioBenchmarkChart({
           setSearchStatus(payload.fallback ? "European suggestions" : null);
         })
         .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError"))
-            setSearchStatus("Search unavailable");
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          /* A result list left over from an earlier, different query is not a
+           * suggestion for this one. It is stale and would still be clickable,
+           * silently adding whatever the last successful search happened to
+           * return instead of what the visible "Search unavailable" implies. */
+          setResults([]);
+          setSearchStatus("Search unavailable");
         });
     }, 250);
     return () => {
@@ -254,6 +262,17 @@ export function PortfolioBenchmarkChart({
               {item.label}
             </button>
           ))}
+          <button
+            type="button"
+            aria-pressed={chart.window.kind === "custom"}
+            onClick={() => {
+              if (points.length === 0) return;
+              chart.openCustom(points[0]!.date, points.at(-1)!.date);
+            }}
+            className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "custom" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Custom
+          </button>
         </div>
       </CardHeader>
       <CardContent>
@@ -374,36 +393,40 @@ export function PortfolioBenchmarkChart({
               aria-label="Choose date range"
               className="mb-3 flex flex-wrap items-end gap-2 text-xs"
             >
-              <label className="font-semibold text-muted-foreground">
-                From
-                <input
-                  type="date"
-                  aria-label="From date"
-                  min={minDate}
-                  max={maxDate}
-                  value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
-                />
-              </label>
-              <label className="font-semibold text-muted-foreground">
-                To
-                <input
-                  type="date"
-                  aria-label="To date"
-                  min={minDate}
-                  max={maxDate}
-                  value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
-                />
-              </label>
-              <button
-                type="submit"
-                className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold"
-              >
-                Apply
-              </button>
+              {chart.window.kind === "custom" && (
+                <>
+                  <label className="font-semibold text-muted-foreground">
+                    From
+                    <input
+                      type="date"
+                      aria-label="From date"
+                      min={minDate}
+                      max={maxDate}
+                      value={dateFrom}
+                      onChange={(event) => setDateFrom(event.target.value)}
+                      className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                    />
+                  </label>
+                  <label className="font-semibold text-muted-foreground">
+                    To
+                    <input
+                      type="date"
+                      aria-label="To date"
+                      min={minDate}
+                      max={maxDate}
+                      value={dateTo}
+                      onChange={(event) => setDateTo(event.target.value)}
+                      className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold"
+                  >
+                    Apply
+                  </button>
+                </>
+              )}
               {chart.window.kind === "custom" && (
                 <button
                   type="button"
@@ -590,14 +613,6 @@ function PerformanceSummary({
           const hasHistory = benchmark.points.length > 0;
           const benchmarkTwr = point.benchmarkReturns[benchmark.symbol] ?? null;
           const benchmarkMwr = point.benchmarkXirr[benchmark.symbol] ?? null;
-          const twrSpread =
-            point.portfolioReturn === null || benchmarkTwr === null
-              ? null
-              : point.portfolioReturn - benchmarkTwr;
-          const mwrSpread =
-            point.portfolioXirr === null || benchmarkMwr === null
-              ? null
-              : point.portfolioXirr - benchmarkMwr;
           return (
             <div
               key={benchmark.symbol}
@@ -610,15 +625,15 @@ function PerformanceSummary({
                 </p>
               ) : (
                 <>
-                  <MetricSpread label="TWR" value={twrSpread} tone="blue" />
-                  <MetricSpread label="XIRR p.j." value={mwrSpread} tone="amber" />
+                  <p className="mb-2 text-sm font-semibold">
+                    Portfolio {valueOrUnknown(point.portfolioReturn, signedPercent)} ·{" "}
+                    {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
+                  </p>
+                  <p className="mb-2 text-sm font-semibold">
+                    XIRR p.j. Portfolio {signedCappedXirr(point.portfolioXirr)} ·{" "}
+                    {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
+                  </p>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                    <span>Portfolio {valueOrUnknown(point.portfolioReturn, percent)}</span>
-                    <span>
-                      {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, percent)}
-                    </span>
-                    <span>XIRR {cappedXirr(point.portfolioXirr)}</span>
-                    <span>XIRR {cappedXirr(benchmarkMwr)}</span>
                     <span>
                       {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
                     </span>
@@ -642,31 +657,6 @@ function PerformanceSummary({
         })}
       </div>
     </section>
-  );
-}
-
-function MetricSpread({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | null;
-  tone: "blue" | "amber";
-}) {
-  return (
-    <p className="mb-1 flex items-baseline justify-between gap-3">
-      <span
-        className={`rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${tone === "blue" ? "bg-[hsl(var(--chart-blue)/.12)] text-[hsl(var(--chart-blue))]" : "bg-[hsl(var(--chart-amber)/.14)] text-[hsl(var(--chart-amber))]"}`}
-      >
-        {label}
-      </span>
-      <span
-        className={`font-semibold tabular-nums ${value === null ? "text-muted-foreground" : value >= 0 ? "text-positive" : "text-negative"}`}
-      >
-        {value === null ? "Unknown" : pp(value)}
-      </span>
-    </p>
   );
 }
 
@@ -702,30 +692,13 @@ export function PerformanceTooltip({
             return (
               <div key={benchmark.symbol} className="min-w-[180px] flex-1">
                 <p className="mb-1 font-semibold">vs. {benchmarkLabel(benchmark)}</p>
-                <MetricSpread
-                  label="TWR"
-                  value={
-                    portfolioTwr === null || benchmarkTwr === null
-                      ? null
-                      : portfolioTwr - benchmarkTwr
-                  }
-                  tone="blue"
-                />
-                <MetricSpread
-                  label="XIRR p.j."
-                  value={
-                    portfolioMwr === null || benchmarkMwr === null
-                      ? null
-                      : portfolioMwr - benchmarkMwr
-                  }
-                  tone="amber"
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Portfolio {valueOrUnknown(portfolioTwr, percent)} · {benchmarkLabel(benchmark)}{" "}
-                  {valueOrUnknown(benchmarkTwr, percent)}
+                <p className="mb-1 text-sm font-semibold">
+                  Portfolio {valueOrUnknown(portfolioTwr, signedPercent)} ·{" "}
+                  {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  XIRR {cappedXirr(portfolioMwr)} · {cappedXirr(benchmarkMwr)}
+                <p className="text-sm font-semibold">
+                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
+                  {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );
