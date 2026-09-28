@@ -22,12 +22,14 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -284,9 +286,16 @@ function latestPreview(branch) {
   };
 }
 
+/** The investing page on a preview host. This is the URL the user opens. */
+function previewPage(url) {
+  if (!url) return null;
+  return `${String(url).replace(/\/+$/, "")}/investing/`;
+}
+
 function commandPreview({ flags }) {
   const pinned = pinnedPreview();
   if (!flags.refresh && !flags.branch) {
+    const url = process.env.LAVEGA_PREVIEW_URL || pinned?.url || null;
     print({
       pinned,
       env: process.env.LAVEGA_PREVIEW_URL ?? null,
@@ -294,6 +303,7 @@ function commandPreview({ flags }) {
         process.env.LAVEGA_PREVIEW_URL ??
         pinned?.url ??
         "the newest preview, looked up on first use",
+      page: previewPage(url),
     });
     return 0;
   }
@@ -301,6 +311,7 @@ function commandPreview({ flags }) {
   pinPreview(deployment);
   print({
     pinned: deployment,
+    page: previewPage(deployment.url),
     previous: pinned?.url === deployment.url ? undefined : (pinned?.url ?? null),
     note: process.env.LAVEGA_PREVIEW_URL
       ? "LAVEGA_PREVIEW_URL is set and still wins over the pin"
@@ -338,6 +349,11 @@ function spaPath(flags) {
   return targetName(flags) === "local" ? "/" : "/investing/";
 }
 
+/** Page the user opens in a browser. No `?verify=1`. Always include this in the reply. */
+function pageUrl(flags) {
+  return `${baseUrl(flags).replace(/\/+$/, "")}${spaPath(flags)}`;
+}
+
 function hostSlug(base) {
   return new URL(base).host.replace(/[^a-z0-9.-]/gi, "_");
 }
@@ -359,22 +375,98 @@ function envCredentialsReady() {
   return Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD);
 }
 
+/** KEY=VALUE lines from `vercel env pull`. Values stay in memory. */
+function parseEnvAssignment(text) {
+  const values = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const body = line.startsWith("export ") ? line.slice(7).trim() : line;
+    const eq = body.indexOf("=");
+    if (eq <= 0) continue;
+    const key = body.slice(0, eq).trim();
+    let value = body.slice(eq + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      const quote = value[0];
+      value = value.slice(1, -1);
+      if (quote === '"')
+        value = value.replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+/* One pull per process. A /tmp auth.preview.json is not a handoff: the next
+ * agent sandbox often cannot read the file the previous agent wrote. */
+let pulledVerifyCredentials;
+
+function pullVercelVerifyCredentials() {
+  if (pulledVerifyCredentials) return pulledVerifyCredentials;
+  const bin = process.env.LAVEGA_VERCEL_BIN || "vercel";
+  const cwd = vercelCwd();
+  const dir = mkdtempSync(join(tmpdir(), "lavega-vercel-env-"));
+  const file = join(dir, "pull.env");
+  let failure = "vercel env pull did not return LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD";
+  try {
+    for (const environment of ["preview", "development", "production"]) {
+      rmSync(file, { force: true });
+      const result = spawnSync(
+        bin,
+        ["env", "pull", file, "--environment", environment, "--yes", "--cwd", cwd],
+        { encoding: "utf8", timeout: 60_000 },
+      );
+      if (result.error) {
+        failure = `could not run ${bin}: ${result.error.message}`;
+        break;
+      }
+      if (result.status !== 0 || !existsSync(file)) {
+        const detail = (result.stderr || result.stdout || `exit ${result.status}`).trim();
+        failure = detail.split("\n").slice(-2).join(" ").slice(0, 300);
+        continue;
+      }
+      const values = parseEnvAssignment(readFileSync(file, "utf8"));
+      const email = values.LAVEGA_VERIFY_EMAIL;
+      const password = values.LAVEGA_VERIFY_PASSWORD;
+      if (email && password) {
+        pulledVerifyCredentials = { email, password, from: "vercel-env", environment };
+        return pulledVerifyCredentials;
+      }
+      failure = `vercel env pull --environment ${environment} has no LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  pulledVerifyCredentials = { error: failure };
+  return pulledVerifyCredentials;
+}
+
 /**
- * `login` / `doctor` stop text. Names the preview file and the Vercel env vars
- * so an agent does not ask for a personal password or sign up a preview account.
+ * `login` / `doctor` stop text. Preview loads the Vercel env pair in-process.
+ * Do not tell an agent to write auth.preview.json for a later command.
  */
 function credentialsMissingFix(flags) {
   const target = targetName(flags);
+  const pullError =
+    target === "preview" && pulledVerifyCredentials?.error
+      ? ` vercel env pull failed: ${pulledVerifyCredentials.error}.`
+      : "";
   const previewRule =
     target === "preview"
-      ? `For preview, use the existing ${previewCredentialsFile} or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD. Do not ask for a personal password. `
+      ? `For preview, \`login\` runs \`vercel env pull --environment preview\` and reads LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD from that output. Those names are in the Vercel project Config for development, preview, and production. Do not write ${previewCredentialsFile}. A file under /tmp is not shared with the next agent. A readable file or --credentials-file still wins when this process can read it. Do not ask for a personal password. `
       : "";
   return (
-    `Credential order: ${credentialsFile} for prod, ${previewCredentialsFile} for preview ` +
-    `(chmod 600, {"email":"...","password":"..."}), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD ` +
-    `(those names are in the Vercel project Config for Dev, Preview, and Prod), then --email and --password. ` +
+    `Credential order: a readable ${credentialsFile} for prod, a readable ${previewCredentialsFile} for preview, ` +
+    `then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD in the process, then \`vercel env pull\` on preview, ` +
+    `then --email and --password. ` +
     previewRule +
-    `Do not invent an account or sign one up. Then run \`${SELF} login --target ${target}\`. ` +
+    pullError +
+    ` Do not invent an account or sign one up. Then run \`${SELF} login --target ${target}\`. ` +
+    `Print the JSON field \`page\` so the user can open the preview. ` +
     `A local doctor pass does not satisfy this check.`
   );
 }
@@ -744,9 +836,11 @@ function commandInfo({ flags }) {
         .map((name) => name.slice("cookies-".length, -".txt".length))
     : [];
   const browse = browseBin();
+  const baseInfo = tryBaseUrl(flags);
   print({
     target: targetName(flags),
-    ...tryBaseUrl(flags),
+    ...baseInfo,
+    page: baseInfo.base ? `${baseInfo.base.replace(/\/+$/, "")}${spaPath(flags)}` : null,
     spaPath: spaPath(flags),
     stateRoot,
     runDir,
@@ -760,8 +854,8 @@ function commandInfo({ flags }) {
     },
     sessions,
     credentials: {
-      prod: existsSync(credentialsFile) ? credentialsFile : null,
-      preview: existsSync(previewCredentialsFile) ? previewCredentialsFile : null,
+      prod: credentialsFileReadable(credentialsFile),
+      preview: credentialsFileReadable(previewCredentialsFile),
       env: Boolean(process.env.LAVEGA_VERIFY_EMAIL && process.env.LAVEGA_VERIFY_PASSWORD),
     },
     spaBuilt: existsSync(join(repoRoot, "apps/investing-web/dist")),
@@ -769,6 +863,8 @@ function commandInfo({ flags }) {
       bin: browse,
       present: existsSync(browse),
       canonical: browseCanonical(),
+      codex: browseLegacy(),
+      chromium: chromiumHeadlessPresent(),
       install: `${SELF} browser install`,
     },
     // Presence only: a secret's value never belongs in a transcript.
@@ -783,7 +879,7 @@ function commandInfo({ flags }) {
 // ---------------------------------------------------------------- commands: health
 
 async function commandDoctor({ flags }) {
-  const report = { base: baseUrl(flags), checks: [], verdict: "ok" };
+  const report = { base: baseUrl(flags), page: pageUrl(flags), checks: [], verdict: "ok" };
   const note = (name, ok, detail) => {
     report.checks.push({ name, ok, ...detail });
     if (!ok) report.verdict = "problem";
@@ -817,13 +913,20 @@ async function commandDoctor({ flags }) {
    * to invent a login or ask for a personal password. */
   if (targetName(flags) !== "local") {
     const file = credentialsFileFor(flags);
-    const present = existsSync(file);
-    const envReady = envCredentialsReady();
-    const satisfied = present || authed || envReady;
+    const stored = readStoredCredentials(file);
+    const fileReady = Boolean(stored?.email);
+    let source = fileReady ? "file" : envCredentialsReady() ? "environment" : null;
+    if (!source && !authed && targetName(flags) === "preview") {
+      const pulled = pullVercelVerifyCredentials();
+      if (pulled.email) source = "vercel-env";
+    }
+    const satisfied = Boolean(source) || authed;
     note("credentialsFile", satisfied, {
       path: file,
-      present,
-      env: envReady,
+      present: fileReady,
+      unreadable: stored?.unreadable || undefined,
+      env: source === "environment" || source === "vercel-env",
+      source: source ?? undefined,
       fix: satisfied ? undefined : credentialsMissingFix(flags),
     });
   }
@@ -861,6 +964,10 @@ async function commandDoctor({ flags }) {
         .filter((position) => position.priceStatus === "unpriced")
         .slice(0, 5)
         .map((position) => position.symbol),
+      fix:
+        priced > 0
+          ? undefined
+          : `unpriced holdings. \`${SELF} consent\`. If accepted is false, \`${SELF} consent --accept\` then \`${SELF} sync --wait\` and \`${SELF} prices sync --wait\`. If accepted is true, skip accept and run those two sync commands. Consent alone fetches nothing.`,
     });
     note("positionsCosted", withCost > 0, {
       withCostBasis: withCost,
@@ -1026,36 +1133,72 @@ async function commandPerf({ flags }) {
 // ---------------------------------------------------------------- commands: session
 
 /**
- * Where a password comes from, in order:
- *   1. auth.preview.json (preview) or auth.json (prod), or --credentials-file
- *   2. LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD (both)
- *   3. --email and --password (both)
- * A password passed as an argument is visible in shell history and in any
- * transcript of the run. Preview agents use the file or the env pair; they
- * do not ask for a personal password.
+ * Path when this process can read the file. An unreadable /tmp file is not a
+ * credential source — the next agent often cannot open what the last one wrote.
  */
+function credentialsFileReadable(path) {
+  if (!existsSync(path)) return null;
+  try {
+    readFileSync(path);
+    return path;
+  } catch (error) {
+    const code = error && typeof error === "object" ? error.code : undefined;
+    if (code === "EACCES" || code === "EPERM") return null;
+    return path;
+  }
+}
+
+/**
+ * Where a password comes from, in order:
+ *   1. a readable auth.preview.json (preview) or auth.json (prod), or --credentials-file
+ *   2. LAVEGA_VERIFY_EMAIL + LAVEGA_VERIFY_PASSWORD already in the process
+ *   3. on preview, `vercel env pull` (those names live in the Vercel project)
+ *   4. --email and --password (both)
+ * A password passed as an argument is visible in shell history and in any
+ * transcript of the run. Do not write auth.preview.json for a later command.
+ */
+function readStoredCredentials(path) {
+  if (!existsSync(path)) return null;
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (error) {
+    const code = error && typeof error === "object" ? error.code : undefined;
+    if (code === "EACCES" || code === "EPERM") return { unreadable: true, path };
+    fail(`${path} is not readable (${code ?? "error"})`, credentialsMissingFix({}), {
+      code: "credentials-invalid",
+    });
+  }
+  let stored;
+  try {
+    stored = JSON.parse(text);
+  } catch {
+    fail(`${path} is not readable JSON`, 'write it as {"email":"...","password":"..."}', {
+      code: "credentials-invalid",
+    });
+  }
+  if (stored.email && stored.password)
+    return { email: String(stored.email), password: String(stored.password), from: path };
+  return null;
+}
+
 function resolveCredentials(flags) {
   const path = flags["credentials-file"]
     ? resolve(String(flags["credentials-file"]))
     : credentialsFileFor(flags);
-  if (existsSync(path)) {
-    let stored;
-    try {
-      stored = JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      fail(`${path} is not readable JSON`, 'write it as {"email":"...","password":"..."}', {
-        code: "credentials-invalid",
-      });
-    }
-    if (stored.email && stored.password)
-      return { email: String(stored.email), password: String(stored.password), from: path };
-  }
+  const stored = readStoredCredentials(path);
+  if (stored?.email) return stored;
   if (envCredentialsReady())
     return {
       email: String(process.env.LAVEGA_VERIFY_EMAIL),
       password: String(process.env.LAVEGA_VERIFY_PASSWORD),
       from: "environment",
     };
+  if (targetName(flags) === "preview") {
+    const pulled = pullVercelVerifyCredentials();
+    if (pulled.email)
+      return { email: pulled.email, password: pulled.password, from: "vercel-env" };
+  }
   if (flags.email && flags.password)
     return {
       email: String(flags.email),
@@ -1080,10 +1223,11 @@ async function commandLogin({ flags }) {
       status: response.status,
       body: response.json ?? response.text,
       credentialsFrom: credentials.from,
+      page: pageUrl(flags),
       fix:
         response.status === 0
           ? `the target is unreachable; run \`${SELF} doctor --target ${targetName(flags)}\``
-          : "the account or password was rejected; ask the user to check the credentials file",
+          : "the account or password was rejected. credentialsFrom names the source. Do not print the password. Do not write a new auth.preview.json.",
     });
     return 1;
   }
@@ -1093,6 +1237,7 @@ async function commandLogin({ flags }) {
     user: session.json?.user ?? null,
     cookieJar: cookieFileFor(flags),
     credentialsFrom: credentials.from,
+    page: pageUrl(flags),
   });
   return session.json?.user ? 0 : 1;
 }
@@ -1216,17 +1361,52 @@ async function commandWaitSettle({ flags }) {
   return result.settled && !problem ? 0 : 1;
 }
 
+/**
+ * Allow Yahoo Finance stores consent, then the SPA POSTs /api/brokers/sync
+ * and keeps posting /api/prices/sync while the price run is paused or active.
+ * The PUT itself fetches nothing. `next` is that continuation, so a successful
+ * accept does not end the drive.
+ */
+function postAllowNext(accepted) {
+  const follow = [
+    `${SELF} sync --wait`,
+    `${SELF} prices sync --wait`,
+    `${SELF} wait-settle --timeout 300000`,
+    `${SELF} dashboard`,
+  ];
+  if (accepted)
+    return {
+      why: "Consent is stored. Allow Yahoo Finance then POSTs /api/brokers/sync (not --force) and continues POST /api/prices/sync while price status is paused, running, or waiting. The PUT does not fetch bars.",
+      commands: follow,
+    };
+  return {
+    why: "Yahoo Finance consent is not accepted. Price sync and benchmark search answer 428 and fetch nothing until it is. Accept, then run the same path the Allow Yahoo Finance button runs.",
+    commands: [`${SELF} consent --accept --dry-run`, `${SELF} consent --accept`, ...follow],
+  };
+}
+
+const CONSENT_REQUIRED_FIX = `Yahoo Finance consent is not accepted. Run \`${SELF} consent\`, then \`${SELF} consent --accept --dry-run\` and \`${SELF} consent --accept\`, then \`${SELF} sync --wait\` and \`${SELF} prices sync --wait\`. Consent alone fetches nothing.`;
+
 async function commandConsent({ flags }) {
   if (!flags.accept) {
     const response = await request(flags, "GET", "/api/market-data/consent");
-    print({ status: response.status, body: response.json ?? response.text });
+    const accepted = response.json?.accepted === true;
+    print({
+      status: response.status,
+      body: response.json ?? response.text,
+      next: response.ok ? postAllowNext(accepted) : undefined,
+    });
     return response.ok ? 0 : 1;
   }
   const response = await request(flags, "PUT", "/api/market-data/consent", {
     accepted: true,
     disclosureVersion: flags.version ? String(flags.version) : undefined,
   });
-  print({ status: response.status, body: response.json ?? response.text });
+  print({
+    status: response.status,
+    body: response.json ?? response.text,
+    next: response.ok ? postAllowNext(true) : undefined,
+  });
   return response.ok ? 0 : 1;
 }
 
@@ -1285,14 +1465,105 @@ async function commandUnlock({ flags }) {
   return response.ok ? 0 : 1;
 }
 
+const PRICE_SYNC_ACTIVE = new Set(["running", "waiting"]);
+const PRICE_SYNC_DONE = new Set(["completed", "problem"]);
+
+function priceSyncPath(flags) {
+  return `/api/prices/sync${flags.force ? "?force=true" : ""}`;
+}
+
+function priceSliceNeedsAnotherPost(response) {
+  const status = response.json?.status;
+  return response.status === 202 || status === "paused" || PRICE_SYNC_ACTIVE.has(status);
+}
+
+function consentRequiredResult(response) {
+  print({
+    status: response.status,
+    body: response.json ?? response.text,
+    fix: CONSENT_REQUIRED_FIX,
+  });
+  return 1;
+}
+
 async function commandPricesSync({ flags }) {
-  const response = await request(
-    flags,
-    "POST",
-    `/api/prices/sync${flags.force ? "?force=true" : ""}`,
-  );
-  print({ status: response.status, body: response.json ?? response.text });
-  return response.ok ? 0 : 1;
+  const path = priceSyncPath(flags);
+  if (!flags.wait) {
+    const response = await request(flags, "POST", path);
+    if (response.status === 428) return consentRequiredResult(response);
+    print({
+      status: response.status,
+      body: response.json ?? response.text,
+      next: priceSliceNeedsAnotherPost(response)
+        ? {
+            why: "This slice stopped before every symbol was priced. Allow Yahoo Finance posts /api/prices/sync again while status is paused, running, or waiting.",
+            commands: [`${SELF} prices sync --wait`],
+          }
+        : undefined,
+    });
+    return response.ok ? 0 : 1;
+  }
+
+  const deadline = Date.now() + Number(flags.timeout ?? 300_000);
+  const maxRounds = Number(flags.rounds ?? 40);
+  const rounds = [];
+  let last = null;
+  for (let round = 1; round <= maxRounds; round += 1) {
+    if (Date.now() >= deadline) break;
+    const response = await request(flags, "POST", path);
+    last = response;
+    const progress = response.json ?? null;
+    rounds.push({ round, http: response.status, status: progress?.status ?? null });
+    if (response.status === 428) return consentRequiredResult(response);
+    if (!response.ok && response.status !== 202) {
+      print({
+        status: response.status,
+        rounds,
+        body: progress ?? response.text,
+        fix:
+          response.status === 0 ? `the target did not answer; run \`${SELF} doctor\`` : undefined,
+      });
+      return 1;
+    }
+    const state = progress?.status;
+    if (PRICE_SYNC_DONE.has(state)) {
+      print({
+        status: response.status,
+        settled: state === "completed",
+        rounds,
+        body: progress,
+      });
+      return state === "problem" ? 1 : 0;
+    }
+    if (PRICE_SYNC_ACTIVE.has(state)) {
+      const remaining = Math.max(1_000, deadline - Date.now());
+      const polled = await pollSettled(flags, ["/api/prices/sync/status"], remaining, 1_000);
+      const polledBody = polled.last["/api/prices/sync/status"] ?? null;
+      rounds.push({ round, http: "poll", status: polledBody?.status ?? null });
+      if (PRICE_SYNC_DONE.has(polledBody?.status)) {
+        print({
+          status: response.status,
+          settled: polledBody.status === "completed",
+          rounds,
+          body: polledBody,
+        });
+        return polledBody.status === "problem" ? 1 : 0;
+      }
+      if (polledBody?.status === "paused") continue;
+      break;
+    }
+    if (state === "paused") continue;
+    print({ status: response.status, settled: true, rounds, body: progress });
+    return response.ok ? 0 : 1;
+  }
+  const lastRound = rounds[rounds.length - 1];
+  print({
+    settled: false,
+    rounds,
+    body: last?.json ?? last?.text,
+    fix: `price sync is still ${lastRound?.status ?? "unfinished"}. Rerun \`${SELF} prices sync --wait\` or raise --timeout. A paused run resumes on the next POST.`,
+  });
+  return 1;
 }
 
 async function commandPricesPurge({ flags }) {
@@ -1334,34 +1605,22 @@ function existingBrowseBin() {
   return [browseCanonical(), browseLegacy()].find((path) => existsSync(path)) ?? null;
 }
 
-/** Pinned installer. The agent runs this; it does not invent a browse path. */
+/** Pinned installer. The real `browser install` runs this; dry-run prints it. */
 const BUN_INSTALL = 'curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"';
 
-const BUN_MISSING_FIX = `bun is not on PATH. Install bun 1.3.10 and verify the checksum before you run it: ${BUN_INSTALL}; then put "$HOME/.bun/bin" on PATH and rerun \`${SELF} browser install\`. Or set LAVEGA_BROWSE_BIN to an existing browse binary. Or use ${browseLegacy()} when that file exists (the Codex path alone is enough). Do not invent a path.`;
+/** Same command an agent copies. `bun x` is how the CLI runs it after ensuring bun. */
+const PLAYWRIGHT_CHROMIUM = "bunx playwright@1.58.2 install chromium";
 
-function browseInstallPlan() {
-  const existing = existingBrowseBin();
-  if (existing) return { already: true, bin: existing, steps: [] };
-  const root = gstackRoot();
-  const bun = bunAvailable();
-  const steps = [];
-  if (!bun)
-    steps.push(
-      `${BUN_INSTALL}  # then export PATH="$HOME/.bun/bin:$PATH". Do not invent a browse path.`,
-    );
-  if (!existsSync(join(root, "setup")))
-    steps.push(`git clone --depth 1 https://github.com/garrytan/gstack.git ${root}`);
-  steps.push(`${join(root, "setup")}`);
-  return {
-    already: false,
-    bin: browseCanonical(),
-    bun,
-    codex: browseLegacy(),
-    steps,
-    note: bun
-      ? undefined
-      : `Prefer the bun install step. If ${browseLegacy()} already exists, that path alone is enough and no build is required.`,
-  };
+const BUN_MISSING_FIX = `The pinned installer did not put bun on PATH. Run it yourself (it checks the bun-v1.3.10 checksum): ${BUN_INSTALL}; then \`export PATH="$HOME/.bun/bin:$PATH"\` and rerun \`${SELF} browser install\`. Or set LAVEGA_BROWSE_BIN to an existing browse binary. Or use ${browseLegacy()} when that file exists (the Codex path alone is enough). Do not invent a path. If the installer failed with EPERM or a sandbox refusal, escalate and rerun \`${SELF} browser install\` outside the sandbox.`;
+
+const CHROMIUM_MISSING_FIX = `Playwright's headless shell is still missing. Rerun \`${SELF} browser install\` outside the sandbox so it can run \`${PLAYWRIGHT_CHROMIUM}\`. Visual checks stay verified-unreachable until that command exits 0 and the headless shell is on disk. Do not invent a Chromium path. A browse-sandboxed failure is not this error: escalate and retry, do not reinstall for that.`;
+
+function spawnDetail(result) {
+  const raw = result?.error?.message || result?.stderr || result?.stdout || "";
+  const text = String(raw).trim();
+  if (text) return text.split("\n").slice(-4).join(" ");
+  if (result?.status != null) return `exit ${result.status}`;
+  return "no output";
 }
 
 function bunAvailable() {
@@ -1369,18 +1628,114 @@ function bunAvailable() {
   return result.status === 0;
 }
 
-function commandBrowserInstall() {
-  const existing = existingBrowseBin();
-  if (existing) {
-    print({ installed: true, already: true, bin: existing });
-    return 0;
+function bunHomeBin() {
+  if (!process.env.HOME) return null;
+  const bin = join(process.env.HOME, ".bun", "bin", "bun");
+  return existsSync(bin) ? bin : null;
+}
+
+function prependBunPath() {
+  const homeBun = bunHomeBin();
+  if (!homeBun) return false;
+  const dir = dirname(homeBun);
+  const current = process.env.PATH ?? "";
+  if (!current.split(":").includes(dir)) process.env.PATH = `${dir}:${current}`;
+  return true;
+}
+
+/** PATH bun, else ~/.bun/bin/bun, else the pinned installer. Does not clone. */
+function ensureBun() {
+  if (bunAvailable()) return "bun";
+  if (prependBunPath() && bunAvailable()) return bunHomeBin();
+  const installer = spawnSync("bash", ["-c", BUN_INSTALL], {
+    encoding: "utf8",
+    timeout: 180_000,
+  });
+  const ready = prependBunPath() && bunAvailable();
+  if (!ready) {
+    const detail = spawnDetail(installer);
+    if (sandboxRefusedChromium(detail))
+      fail(`bun install was refused: ${detail}`, SANDBOX_BROWSE_FIX, {
+        code: "browse-sandboxed",
+        exitCode: 1,
+      });
+    fail(
+      `bun is required to build the browse binary, and the installer did not produce ${join(process.env.HOME ?? "", ".bun/bin/bun")}: ${detail}`,
+      BUN_MISSING_FIX,
+      { code: "bun-missing", exitCode: 1 },
+    );
   }
-  if (!bunAvailable())
-    fail("bun is required to build the browse binary", BUN_MISSING_FIX, {
-      code: "bun-missing",
+  return bunHomeBin() ?? "bun";
+}
+
+function playwrightCacheDir() {
+  const override = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (override && override !== "0") return override;
+  const home = process.env.HOME;
+  if (!home) return null;
+  if (process.platform === "darwin") return join(home, "Library/Caches/ms-playwright");
+  if (process.platform === "win32") return join(home, "AppData/Local/ms-playwright");
+  return join(home, ".cache/ms-playwright");
+}
+
+/** True when a Playwright chromium headless shell directory has a browser build in it. */
+function chromiumHeadlessPresent() {
+  const root = playwrightCacheDir();
+  if (!root || !existsSync(root)) return false;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => {
+    if (!entry.isDirectory() || !entry.name.startsWith("chromium_headless_shell-")) return false;
+    let nested;
+    try {
+      nested = readdirSync(join(root, entry.name));
+    } catch {
+      return false;
+    }
+    return nested.some((name) => name === "headless_shell" || name.startsWith("chrome-"));
+  });
+}
+
+function installPlaywrightChromium() {
+  if (chromiumHeadlessPresent()) return { present: true, installed: false };
+  const bun = ensureBun();
+  const result = spawnSync(bun, ["x", "playwright@1.58.2", "install", "chromium"], {
+    encoding: "utf8",
+    timeout: 600_000,
+  });
+  const detail = spawnDetail(result);
+  if (sandboxRefusedChromium(detail))
+    fail(`Playwright Chromium install was refused: ${detail}`, SANDBOX_BROWSE_FIX, {
+      code: "browse-sandboxed",
       exitCode: 1,
     });
+  if (result.status !== 0 || !chromiumHeadlessPresent())
+    fail(
+      `Playwright Chromium headless shell is missing after \`${PLAYWRIGHT_CHROMIUM}\`: ${detail}`,
+      CHROMIUM_MISSING_FIX,
+      { code: "chromium-missing", exitCode: 1 },
+    );
+  return { present: true, installed: true };
+}
 
+function failInstall(detail, fallback) {
+  if (sandboxRefusedChromium(detail))
+    fail(`browse install was refused: ${detail}`, SANDBOX_BROWSE_FIX, {
+      code: "browse-sandboxed",
+      exitCode: 1,
+    });
+  fail(fallback, `read the message above and rerun \`${SELF} browser install\``, {
+    code: "browse-install-failed",
+    exitCode: 1,
+  });
+}
+
+/** Clone gstack when needed and run ./setup. Caller has already ensured bun. */
+function buildBrowse() {
   const root = gstackRoot();
   const setup = join(root, "setup");
   if (!existsSync(setup)) {
@@ -1396,33 +1751,64 @@ function commandBrowserInstall() {
       ["clone", "--depth", "1", "https://github.com/garrytan/gstack.git", root],
       { encoding: "utf8", timeout: 180_000 },
     );
-    if (clone.status !== 0) {
-      const detail = (clone.stderr || clone.stdout || clone.error?.message || "")
-        .trim()
-        .split("\n")
-        .slice(-3)
-        .join(" ");
-      fail(`git clone of gstack failed: ${detail}`, `rerun \`${SELF} browser install\``, {
-        code: "browse-install-failed",
-        exitCode: 1,
-      });
-    }
+    if (clone.status !== 0)
+      failInstall(spawnDetail(clone), `git clone of gstack failed: ${spawnDetail(clone)}`);
   }
 
   const built = spawnSync(setup, [], { cwd: root, encoding: "utf8", timeout: 600_000 });
-  if (built.status !== 0 || !existsSync(browseCanonical())) {
-    const detail = (built.stderr || built.stdout || built.error?.message || "")
-      .trim()
-      .split("\n")
-      .slice(-4)
-      .join(" ");
-    fail(
-      `gstack setup did not produce ${browseCanonical()}: ${detail}`,
-      `read the message above and rerun \`${SELF} browser install\``,
-      { code: "browse-install-failed", exitCode: 1 },
+  if (built.status !== 0 || !existsSync(browseCanonical()))
+    failInstall(
+      spawnDetail(built),
+      `gstack setup did not produce ${browseCanonical()}: ${spawnDetail(built)}`,
     );
+  return browseCanonical();
+}
+
+function browseInstallPlan() {
+  const existing = existingBrowseBin();
+  const bun = bunAvailable() || Boolean(bunHomeBin());
+  const chromium = chromiumHeadlessPresent();
+  if (existing && chromium) return { already: true, bin: existing, bun, chromium: true, steps: [] };
+  const steps = [];
+  if (!existing) {
+    if (!bun)
+      steps.push(
+        `${BUN_INSTALL}  # the installer checks the bun-v1.3.10 checksum. Then export PATH="$HOME/.bun/bin:$PATH". The real install runs this. Do not invent a browse path.`,
+      );
+    const root = gstackRoot();
+    if (!existsSync(join(root, "setup")))
+      steps.push(`git clone --depth 1 https://github.com/garrytan/gstack.git ${root}`);
+    steps.push(`${join(root, "setup")}`);
   }
-  print({ installed: true, already: false, bin: browseCanonical() });
+  if (!chromium)
+    steps.push(
+      `${PLAYWRIGHT_CHROMIUM}  # only when the Playwright headless shell is missing. Skip on browse-sandboxed.`,
+    );
+  return {
+    already: Boolean(existing),
+    bin: existing ?? browseCanonical(),
+    bun,
+    chromium,
+    codex: browseLegacy(),
+    steps,
+    note:
+      !existing && !bun
+        ? `The real install runs the bun step, then the clone. If ${browseLegacy()} already exists, that path alone is enough and no build is required.`
+        : !chromium
+          ? "The real install runs the pinned Playwright command when the headless shell is missing. A browse-sandboxed failure is not a missing browser."
+          : undefined,
+  };
+}
+
+function commandBrowserInstall() {
+  const existing = existingBrowseBin();
+  let bin = existing;
+  if (!bin) {
+    ensureBun();
+    bin = buildBrowse();
+  }
+  const chromium = installPlaywrightChromium();
+  print({ installed: true, already: Boolean(existing), bin, chromium });
   return 0;
 }
 
@@ -1628,7 +2014,13 @@ function commandBrowserOpen({ flags }) {
     return 1;
   }
   if (!step(["wait", "--load"])) return 1;
-  print({ ok: true, url: redact(url), cookiesImported: imported, steps });
+  print({
+    ok: true,
+    url: redact(url),
+    page: pageUrl(flags),
+    cookiesImported: imported,
+    steps,
+  });
   return 0;
 }
 
@@ -1708,7 +2100,8 @@ const GLOBAL_FLAGS = {
 const EFFECTS = {
   "remote-write": "writes on the target (broker, vault, price store, or tenant rows)",
   "local-destructive": "stops a process or deletes local state",
-  "local-install": "clones gstack and builds the browse binary under the home directory",
+  "local-install":
+    "installs pinned bun when it is missing, builds the browse binary under the home directory, and installs pinned Playwright Chromium when the headless shell is missing",
   "browser-action": "acts in the page; the app may send writes the way a user click would",
 };
 
@@ -1859,7 +2252,7 @@ const COMMANDS = [
     name: "login",
     group: "Session",
     summary: "Sign in on prod or preview; stores a cookie jar per host",
-    description: `Credential order: ${previewCredentialsFile} (preview) or ${credentialsFile} (prod), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD (Vercel project Config: Dev, Preview, Prod), then --email and --password. For preview, use the existing file or those env vars. Do not ask for a personal password. Do not invent an account or sign one up.`,
+    description: `Credential order: a readable ${previewCredentialsFile} (preview) or ${credentialsFile} (prod), then LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD already in the process, then on preview \`vercel env pull --environment preview\` (those names are in the Vercel project Config for development, preview, and production), then --email and --password. Do not write auth.preview.json under /tmp. A file there is not shared with the next agent. Do not ask for a personal password. Do not invent an account or sign one up. The JSON field page is the preview URL the user opens.`,
     flags: {
       "credentials-file": {
         type: "string",
@@ -1931,6 +2324,8 @@ const COMMANDS = [
     name: "consent",
     group: "Read",
     summary: "Read market-data consent; --accept writes it",
+    description:
+      "GET reads the decision. --accept PUTs {accepted:true} and stores it. That write does not call Yahoo. The JSON field next is the path the Allow Yahoo Finance button runs after a successful accept: sync --wait, then prices sync --wait, then wait-settle, then dashboard. A 428 from prices sync or benchmark search means consent is still missing.",
     flags: {
       accept: {
         type: "boolean",
@@ -1940,9 +2335,14 @@ const COMMANDS = [
     },
     effect: "remote-write",
     effectWhen: ({ flags }) => Boolean(flags.accept),
-    plan: ({ flags }) => ({ method: "PUT", url: `${baseUrl(flags)}/api/market-data/consent` }),
+    plan: ({ flags }) => ({
+      method: "PUT",
+      url: `${baseUrl(flags)}/api/market-data/consent`,
+      body: { accepted: true },
+      next: postAllowNext(true),
+    }),
     run: commandConsent,
-    examples: ["consent", "consent --accept --dry-run"],
+    examples: ["consent", "consent --accept --dry-run", "consent --accept"],
   },
   {
     name: "api",
@@ -2021,15 +2421,35 @@ const COMMANDS = [
     name: "prices sync",
     group: "Write",
     summary: "Fetch prices from Yahoo Finance into the price store",
-    flags: { force: { type: "boolean", description: "refetch even recent bars" } },
+    description:
+      "One POST is one slice. 202 or status paused/running/waiting means symbols remain: run --wait. --wait keeps posting /api/prices/sync until completed or problem (40 rounds, the SPA cap). This is the continuation after consent --accept. 428 means consent is missing; the fix names consent --accept. --force refetches recent bars.",
+    flags: {
+      force: { type: "boolean", description: "refetch even recent bars" },
+      wait: {
+        type: "boolean",
+        description:
+          "keep posting /api/prices/sync while status is paused, running, or waiting (the post-allow continuation)",
+      },
+      timeout: {
+        type: "number",
+        description: "with --wait: give up after this many ms (default 300000)",
+      },
+      rounds: {
+        type: "number",
+        description: "with --wait: maximum POSTs (default 40, same cap as the SPA)",
+      },
+    },
     effect: "remote-write",
     plan: ({ flags }) => ({
       method: "POST",
       url: `${baseUrl(flags)}/api/prices/sync${flags.force ? "?force=true" : ""}`,
-      note: "a real price sync calls Yahoo Finance and writes the price store",
+      repeat: Boolean(flags.wait),
+      note: flags.wait
+        ? "repeats POST /api/prices/sync while status is paused, running, or waiting. This is the continuation Allow Yahoo Finance starts after consent."
+        : "one slice. 202 or paused means run prices sync --wait. 428 means consent is missing.",
     }),
     run: commandPricesSync,
-    examples: ["prices sync --dry-run", "prices sync --force"],
+    examples: ["prices sync --dry-run", "prices sync --wait", "prices sync --force"],
   },
   {
     name: "prices purge",
@@ -2046,9 +2466,9 @@ const COMMANDS = [
   {
     name: "browser install",
     group: "Browser",
-    summary: "Use an existing browse binary, or build the Claude one",
+    summary: "Install bun if needed, ensure a browse binary, then pinned Chromium",
     description:
-      'If LAVEGA_BROWSE_BIN, ~/.claude/skills/gstack/browse/dist/browse, or ~/.codex/skills/gstack/browse/dist/browse already exists, returns already:true and leaves it in place. The Codex path alone is enough; install does not create the Claude path in that case. Otherwise clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack and runs ./setup, which builds the canonical browse binary and installs Playwright Chromium. Needs bun on PATH only when it builds. If bun is missing, --dry-run prints `curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"` first (verify the checksum, then put ~/.bun/bin on PATH). Or set LAVEGA_BROWSE_BIN to an existing browse binary. Do not invent a path. A missing Chromium is `bunx playwright@1.58.2 install chromium`. A sandbox refusal is browse-sandboxed: escalate and retry. Do not reinstall Chromium for that.',
+      'Idempotent. If LAVEGA_BROWSE_BIN, ~/.claude/skills/gstack/browse/dist/browse, or ~/.codex/skills/gstack/browse/dist/browse already exists, already:true and the binary stays. The Codex path alone is enough; install does not create the Claude path in that case. Otherwise it installs bun when bun is missing by running `curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"` (that installer checks the checksum), puts ~/.bun/bin on PATH, clones https://github.com/garrytan/gstack into ~/.claude/skills/gstack, and runs ./setup. Then, only when the Playwright headless shell is missing, it runs `bunx playwright@1.58.2 install chromium`. --dry-run prints those steps and changes nothing. bun-missing means the installer failed (message has the blocker: curl, network, or checksum). chromium-missing means the pinned Playwright command failed. browse-sandboxed means escalate and rerun this command; do not reinstall Chromium for that. Do not invent a path. Visual checks stay verified-unreachable until installed:true and browser open exits 0.',
     effect: "local-install",
     plan: browseInstallPlan,
     run: commandBrowserInstall,
@@ -2285,6 +2705,14 @@ function usageLine(command) {
   return [command.name, args, flags].filter(Boolean).join(" ") + effectFlags;
 }
 
+function browserSandboxJson() {
+  return {
+    code: "browse-sandboxed",
+    escalate: true,
+    rule: BROWSER_SANDBOX_HELP,
+  };
+}
+
 function commandJson(command) {
   return {
     name: command.name,
@@ -2304,6 +2732,7 @@ function commandJson(command) {
         }
       : null,
     examples: (command.examples ?? []).map((example) => `${SELF} ${example}`),
+    ...(command.group === "Browser" ? { sandbox: browserSandboxJson() } : {}),
   };
 }
 
@@ -2364,11 +2793,25 @@ function groupText(prefix) {
   const members = COMMANDS.filter((command) => command.name.startsWith(`${prefix} `));
   const width = Math.max(...members.map((command) => command.name.length)) + 2;
   const sandbox = prefix === "browser" ? `\n${BROWSER_SANDBOX_HELP}\n` : "";
+  const jsonHint =
+    prefix === "browser"
+      ? ` \`${prefix} <subcommand> --help --json\` prints that escalate rule as \`sandbox\`.`
+      : "";
   return `Usage: ${SELF} ${prefix} <subcommand> [args] [flags]
 ${sandbox}
 ${members.map((command) => `  ${command.name.padEnd(width)}${command.summary}`).join("\n")}
 
-Run \`${prefix} <subcommand> --help\` for its flags.`;
+Run \`${prefix} <subcommand> --help\` for its flags.${jsonHint}`;
+}
+
+function groupJson(prefix) {
+  const members = COMMANDS.filter((command) => command.name.startsWith(`${prefix} `));
+  return {
+    group: prefix,
+    usage: `${SELF} ${prefix} <subcommand> [args] [flags]`,
+    ...(prefix === "browser" ? { sandbox: browserSandboxJson() } : {}),
+    commands: members.map(commandJson),
+  };
 }
 
 function commandText(command) {
@@ -2511,8 +2954,10 @@ async function main(argv) {
     const topic = positional.slice(1);
     if (topic.length > 0) {
       const resolved = resolveCommand(topic);
-      if (resolved.group) console.log(groupText(resolved.group));
-      else if (flags.json) print(commandJson(resolved.command));
+      if (resolved.group) {
+        if (flags.json) print(groupJson(resolved.group));
+        else console.log(groupText(resolved.group));
+      } else if (flags.json) print(commandJson(resolved.command));
       else console.log(commandText(resolved.command));
       return 0;
     }
@@ -2524,7 +2969,8 @@ async function main(argv) {
   const resolved = resolveCommand(positional);
   if (resolved.group) {
     if (flags.help) {
-      console.log(groupText(resolved.group));
+      if (flags.json) print(groupJson(resolved.group));
+      else console.log(groupText(resolved.group));
       return 0;
     }
     fail(`${resolved.group} needs a subcommand`, `\`${resolved.group} --help\` lists them`, {

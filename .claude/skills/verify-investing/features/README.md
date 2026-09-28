@@ -2,7 +2,9 @@
 
 What a user can do on the investing side, how they reach it, and how to drive it from
 `control-investing.mjs`. This map is the maintained source for verification: when a run
-finds it wrong, fix the map in the same change.
+finds it wrong, fix the map in the same change. Each feature file states the English
+labels a user sees, the CLI drive, what proves success, and when the check is
+verified-unreachable (no credentials, no positions, or no Yahoo consent).
 
 The SPA lives at `/investing/` in production (`/` on the standalone server). The public
 routes are `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password` and
