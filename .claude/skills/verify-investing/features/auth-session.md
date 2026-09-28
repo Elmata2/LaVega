@@ -29,35 +29,43 @@ form and follows the link in the reset mail.
 
 ## Driving it with control-investing
 
-The user writes their credentials once, in their own terminal, to a file outside the repo:
+Credential resolution, in this order:
+
+1. **File.** `/tmp/lavega-verify-investing/auth.preview.json` on `--target preview`.
+   `/tmp/lavega-verify-investing/auth.json` on `--target prod`. `--credentials-file`
+   replaces that path. Prod file, written outside the repo:
 
 ```bash
 umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
   > /tmp/lavega-verify-investing/auth.json
 ```
 
-Preview uses `/tmp/lavega-verify-investing/auth.preview.json`, not `auth.json`.
-`doctor --target preview` and `doctor --target prod` fail `credentialsFile` until the file
-for that target exists and there is no session. Stop and ask the user. Do not invent an
-account. A local `doctor` pass does not satisfy this check.
+2. **Environment.** `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD`, both set. Those two
+   names exist in the Vercel project Config for Dev, Preview, and Prod.
+3. **CLI flags.** `--email` and `--password`, both set. A password on the command line lands
+   in shell history and in the transcript.
+
+For preview, use the existing `auth.preview.json` or pull those env vars. Do not ask for a
+personal password. Do not invent or sign up an account. For prod, do not invent an account
+either.
+
+`doctor --target preview` fails `credentialsFile` when `auth.preview.json` is missing, those
+env vars are unset, and there is no session. The same check on prod uses `auth.json`. The
+`fix` names the preview file path and `LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD`. A
+local `doctor` pass does not satisfy this check.
 `pnpm run test:verify-investing:live` skips until `auth.preview.json` exists.
 
 Then:
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C login --target prod          # reads the file
-node $C whoami --target prod
+node $C login --target preview      # file, else env, else flags
+node $C whoami --target preview
 node $C logout
 ```
 
-`LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD` work too, and `--email`/`--password` still
-exist for a throwaway account. Prefer the file: a password passed as an argument ends up in
-shell history and in any transcript of the run.
-
-The cookie jar is `/tmp/lavega-verify-investing/run/cookies.txt`; `cleanup` removes it, and
-`auth.json` sits above it so teardown leaves it alone. Credentials belong to the user — ask,
-do not invent an account.
+The cookie jar is per host under `/tmp/lavega-verify-investing/run/`; `cleanup` removes the
+run directory, and the credential files sit above it so teardown leaves them alone.
 
 ## Gotchas
 

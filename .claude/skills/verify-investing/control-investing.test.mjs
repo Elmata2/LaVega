@@ -292,11 +292,16 @@ describe("errors", () => {
     assert.equal(received.length, 0);
   });
 
-  test("login without credentials tells the agent to ask the user", async () => {
+  test("login without credentials names the preview file and the env vars", async () => {
     const result = await run(["login", "--base", `http://127.0.0.1:${port}`]);
     assert.equal(result.code, 2);
     assert.equal(result.error.error.code, "credentials-missing");
-    assert.match(result.error.error.fix, /Never sign up/);
+    assert.match(result.error.error.fix, /auth\.preview\.json/);
+    assert.match(result.error.error.fix, /LAVEGA_VERIFY_EMAIL/);
+    assert.match(result.error.error.fix, /LAVEGA_VERIFY_PASSWORD/);
+    assert.match(result.error.error.fix, /Do not ask for a personal password/);
+    assert.match(result.error.error.fix, /Do not invent an account/);
+    assert.match(result.error.error.fix, /Vercel project Config/);
   });
 });
 
@@ -485,8 +490,32 @@ describe("reads", () => {
     assert.equal(result.code, 1);
     const check = result.json.checks.find((item) => item.name === "credentialsFile");
     assert.equal(check.ok, false);
+    assert.equal(check.env, false);
     assert.match(check.path, /auth\.preview\.json$/);
+    assert.match(check.fix, /auth\.preview\.json/);
+    assert.match(check.fix, /LAVEGA_VERIFY_EMAIL/);
+    assert.match(check.fix, /LAVEGA_VERIFY_PASSWORD/);
+    assert.match(check.fix, /Do not ask for a personal password/);
     assert.match(check.fix, /Do not invent an account/);
+  });
+
+  test("doctor on preview accepts the Vercel env pair without a credentials file", async () => {
+    route("GET", "/api/investing/health", 200, { service: "investing-server" });
+    route("GET", "/api/auth/get-session", 200, {});
+    route("GET", "/api/investing/dashboard", 401, {});
+    route("GET", "/api/config/status", 200, { keys: {} });
+    route("GET", "/api/brokers/credentials/status", 200, { status: "empty" });
+    route("GET", "/api/brokers/sync/status", 200, { status: "idle" });
+    const result = await run(["doctor", "--base", `http://127.0.0.1:${port}`], {
+      LAVEGA_VERIFY_EMAIL: "preview@x",
+      LAVEGA_VERIFY_PASSWORD: "env-secret",
+    });
+    const check = result.json.checks.find((item) => item.name === "credentialsFile");
+    assert.equal(check.ok, true);
+    assert.equal(check.present, false);
+    assert.equal(check.env, true);
+    assert.equal(check.fix, undefined);
+    assert.doesNotMatch(result.stdout, /env-secret/);
   });
 
   test("dashboard names the degraded shape and a 401 fix", async () => {
@@ -573,6 +602,43 @@ describe("reads", () => {
 });
 
 describe("session", () => {
+  test("login resolves the file, then the env pair, then the flags", async () => {
+    const base = `http://127.0.0.1:${port}`;
+    const file = join(stateDir, "auth.preview.json");
+    route("POST", "/api/auth/sign-in/email", 200, { ok: true });
+    route("GET", "/api/auth/get-session", 200, { user: { id: "u1", email: "file@x" } });
+    writeFileSync(file, JSON.stringify({ email: "file@x", password: "file-secret" }));
+    const fromFile = await run(
+      ["login", "--base", base, "--email", "flag@x", "--password", "flag-secret"],
+      { LAVEGA_VERIFY_EMAIL: "env@x", LAVEGA_VERIFY_PASSWORD: "env-secret" },
+    );
+    assert.equal(fromFile.code, 0, fromFile.stderr);
+    assert.equal(fromFile.json.credentialsFrom, file);
+    assert.doesNotMatch(fromFile.stdout, /file-secret|env-secret|flag-secret/);
+
+    rmSync(file);
+    const fromEnv = await run(
+      ["login", "--base", base, "--email", "flag@x", "--password", "flag-secret"],
+      { LAVEGA_VERIFY_EMAIL: "env@x", LAVEGA_VERIFY_PASSWORD: "env-secret" },
+    );
+    assert.equal(fromEnv.code, 0, fromEnv.stderr);
+    assert.equal(fromEnv.json.credentialsFrom, "environment");
+    assert.doesNotMatch(fromEnv.stdout, /env-secret|flag-secret/);
+
+    const fromFlags = await run([
+      "login",
+      "--base",
+      base,
+      "--email",
+      "flag@x",
+      "--password",
+      "flag-secret",
+    ]);
+    assert.equal(fromFlags.code, 0, fromFlags.stderr);
+    assert.equal(fromFlags.json.credentialsFrom, "--email/--password");
+    assert.doesNotMatch(fromFlags.stdout, /flag-secret/);
+  });
+
   test("login stores cookies per host and sends them back", async () => {
     const base = `http://127.0.0.1:${port}`;
     writeFileSync(
@@ -765,10 +831,71 @@ describe("browser", () => {
     assert.deepEqual(browseCalls(), ["snapshot -i -D -s main"]);
   });
 
+  /** Writes a real PNG at the path browse was given, so a JSON --out cannot hide a clobber. */
+  function pngBrowse() {
+    writeFileSync(
+      fakeBrowse,
+      `#!/bin/sh
+echo "$@" >> "${browseLog}"
+out=""
+for arg in "$@"; do out="$arg"; done
+if [ "$1" = "screenshot" ]; then
+  printf '\\211PNG\\r\\n\\032\\n' > "$out"
+fi
+echo "browse-ok $1"
+`,
+    );
+    chmodSync(fakeBrowse, 0o755);
+  }
+
   test("screenshot defaults into the evidence directory", async () => {
     const result = await run(["browser", "screenshot"]);
     assert.equal(result.code, 0);
     assert.ok(result.json.saved.startsWith(join(stateDir, "evidence")));
+    assert.ok(result.json.saved.endsWith(".png"));
+  });
+
+  test("screenshot --png is a PNG and --out is JSON on a different path", async () => {
+    pngBrowse();
+    const png = join(stateDir, "shot.png");
+    const jsonOut = join(stateDir, "shot.json");
+    const result = await run(["browser", "screenshot", "--png", png, "--out", jsonOut]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.saved, png);
+    const pngBytes = readFileSync(png);
+    assert.equal(pngBytes[0], 0x89);
+    assert.equal(pngBytes.subarray(1, 4).toString(), "PNG");
+    const dumped = JSON.parse(readFileSync(jsonOut, "utf8"));
+    assert.equal(dumped.saved, png);
+    assert.deepEqual(dumped.evidence, [jsonOut]);
+    assert.equal(readFileSync(jsonOut)[0], 0x7b);
+    assert.ok(browseCalls()[0].endsWith(png));
+    assert.equal(browseCalls()[0].includes(jsonOut), false);
+  });
+
+  test("screenshot --out alone does not use that path as the PNG", async () => {
+    pngBrowse();
+    const jsonOut = join(stateDir, "clobber.png");
+    const result = await run(["browser", "screenshot", "--out", jsonOut]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.ok(result.json.saved.endsWith(".png"));
+    assert.notEqual(result.json.saved, jsonOut);
+    const pngBytes = readFileSync(result.json.saved);
+    assert.equal(pngBytes[0], 0x89);
+    assert.equal(pngBytes.subarray(1, 4).toString(), "PNG");
+    const dumped = JSON.parse(readFileSync(jsonOut, "utf8"));
+    assert.equal(dumped.saved, result.json.saved);
+    assert.equal(browseCalls()[0].includes(jsonOut), false);
+  });
+
+  test("screenshot refuses when --png and --out are the same path", async () => {
+    const same = join(stateDir, "same.png");
+    const result = await run(["browser", "screenshot", "--png", same, "--out", same]);
+    assert.equal(result.code, 2);
+    assert.equal(result.error.error.code, "flag-invalid");
+    assert.match(result.error.error.fix, /--png/);
+    assert.equal(existsSync(same), false);
+    assert.deepEqual(browseCalls(), []);
   });
 
   test("click --dry-run does not call browse", async () => {
@@ -863,6 +990,39 @@ describe("browser", () => {
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.json.already, true);
     assert.equal(result.json.bin, fakeBrowse);
+  });
+
+  test("browser install treats a Codex browse binary as enough", async () => {
+    const home = join(stateDir, "home");
+    const codex = join(home, ".codex/skills/gstack/browse/dist/browse");
+    const canonical = join(home, ".claude/skills/gstack/browse/dist/browse");
+    mkdirSync(dirname(codex), { recursive: true });
+    writeFileSync(codex, "#!/bin/sh\nexit 0\n");
+    chmodSync(codex, 0o755);
+    const result = await run(["browser", "install"], { HOME: home, LAVEGA_BROWSE_BIN: "" });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.already, true);
+    assert.equal(result.json.bin, codex);
+    assert.equal(existsSync(canonical), false);
+    const help = await run(["browser", "install", "--help"]);
+    assert.match(help.stdout, /Codex path alone is enough/);
+  });
+
+  test("browser install --dry-run with a Codex binary does not plan a clone", async () => {
+    const home = join(stateDir, "home");
+    const codex = join(home, ".codex/skills/gstack/browse/dist/browse");
+    mkdirSync(dirname(codex), { recursive: true });
+    writeFileSync(codex, "#!/bin/sh\nexit 0\n");
+    chmodSync(codex, 0o755);
+    const result = await run(["browser", "install", "--dry-run"], {
+      HOME: home,
+      LAVEGA_BROWSE_BIN: "",
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.would.already, true);
+    assert.equal(result.json.would.bin, codex);
+    assert.deepEqual(result.json.would.steps, []);
+    assert.equal(existsSync(join(home, ".claude")), false);
   });
 
   test("browser-login.mjs still opens prod by default", async () => {
