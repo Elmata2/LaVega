@@ -196,6 +196,11 @@ export function createPriceOrchestrator(input: {
   takeoverAfterMs?: number;
   /** Maximum time between durable heartbeats while provider work is in flight. */
   heartbeatEveryMs?: number;
+  /** How often the run loop re-reads discover() to notice a benchmark selected
+   *  after it started. This is a store round trip (the benchmark selection
+   *  table), not free: it is time-throttled, not called once per symbol, so a
+   *  long sync does not multiply it by its symbol count. */
+  benchmarkRecheckEveryMs?: number;
   now?: () => Date;
   wait?: (milliseconds: number) => Promise<void>;
 }) {
@@ -206,6 +211,7 @@ export function createPriceOrchestrator(input: {
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
   const heartbeatEveryMs = Math.min(input.heartbeatEveryMs ?? 10_000, takeoverAfterMs / 3);
+  const benchmarkRecheckEveryMs = input.benchmarkRecheckEveryMs ?? 5_000;
   const persistEverySymbols = 5;
   const now = input.now ?? (() => new Date());
   const wait =
@@ -356,6 +362,7 @@ export function createPriceOrchestrator(input: {
         },
         leaseId,
       );
+      let lastBenchmarkCheckAt = now().getTime();
       for (let index = 0; index < queue.length; index += 1) {
         if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
           return pause(index);
@@ -364,10 +371,14 @@ export function createPriceOrchestrator(input: {
          * and the benchmark selection store fresh each call) rather than an
          * in-process registry the instance serving the PUT could not reach
          * on Vercel. Skipped right after start: the queue was just built
-         * from this same discover(). Best-effort: a failed re-discovery
-         * (for instance a broker sync holding the read) just retries at the
-         * next symbol boundary instead of failing the run. */
-        if (index > 0) {
+         * from this same discover(). Time-throttled, not once per symbol:
+         * discover() is a store round trip (the benchmark selection table),
+         * and a long sync must not multiply that by its symbol count. Best-
+         * effort: a failed re-discovery (for instance a broker sync holding
+         * the read) just retries at the next due check instead of failing
+         * the run. */
+        if (index > 0 && now().getTime() - lastBenchmarkCheckAt >= benchmarkRecheckEveryMs) {
+          lastBenchmarkCheckAt = now().getTime();
           let discovered: PriceSyncTarget[] = [];
           try {
             discovered = await input.discover(tenantId);
