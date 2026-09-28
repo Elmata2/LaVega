@@ -1034,8 +1034,9 @@ async function commandLogin({ flags }) {
 
 async function commandWhoami({ flags }) {
   const session = await request(flags, "GET", "/api/auth/get-session");
-  /* 503 is better-auth without a DATABASE_URL; 404 is the standalone local
-   * server, which has no auth routes at all. Neither is a signed-out user. */
+  /* 503 is auth unconfigured: better-auth without a DATABASE_URL, and the
+   * standalone server, which answers /api/auth/* with 503 on purpose.
+   * 404 is a server that has no auth routes. Neither is a signed-out user. */
   const unconfigured = session.status === 503 || session.status === 404;
   print({
     status: session.status,

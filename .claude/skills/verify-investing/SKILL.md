@@ -8,8 +8,10 @@ description: Drive the LaVega investing dashboard (https://www.lavega.dev/invest
 The investing side is one API served two ways.
 
 - **Standalone** — `apps/investing-server/src/docker.ts` serves `/health`, `/api/*` and the
-  built SPA from `apps/investing-web/dist`. Single tenant (`local`), no auth, state in JSON
-  files. This is what `control-investing.mjs up` starts, and it is where you verify logic.
+  built SPA from `apps/investing-web/dist`. Single tenant (`local`), state in JSON files.
+  Auth is unconfigured: `/api/auth/*` answers `503` with `Authentication is not configured`,
+  and the SPA gate opens. This is what `control-investing.mjs up` starts, and it is where
+  you verify logic.
 - **Mounted** — `apps/server/src/index.ts` forwards `/api/investing/*`, `/api/brokers/*`,
   `/api/prices/*`, `/api/market-data/*` and `/api/config/status` into the same app, with the
   tenant taken from a better-auth session. This is `https://www.lavega.dev/investing`, and it
