@@ -119,6 +119,7 @@ type PriceDependencies = {
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
   priceSyncPaceMs: number;
+  priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
@@ -178,6 +179,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
+    benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
     sync: async (target, tenantId) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
@@ -275,10 +277,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         }));
       /* Same classification rule as the portfolio-agent snapshot, which
        * passes no fetchProfile. This route keeps the fetch-and-persist
-       * fallback; only the resolution itself is shared. */
+       * fallback; only the resolution itself is shared. Without consent,
+       * omit fetchProfile entirely: resolvePortfolioSectors still answers
+       * from cached profiles, it just never calls Yahoo for a fresh one. */
+      const consented = await hasYahooConsent(await resolveTenantId());
       const { exposure } = await resolvePortfolioSectors(data.positions, {
         store: sectorStore,
-        fetchProfile: sectorProfile,
+        ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
         ...buildHistoricalRisk(data, range, benchmark),

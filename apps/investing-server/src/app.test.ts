@@ -202,6 +202,9 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
     benchmarkSelectionStore,
     priceSyncTargets,
     priceSyncPaceMs: 0,
+    // The default 5 s throttle on the mid-sync re-check (see priceOrchestrator's
+    // benchmarkRecheckEveryMs) would outlast this test's real-time window.
+    priceSyncBenchmarkRecheckEveryMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
@@ -675,6 +678,7 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
           void map.set(symbol, profile),
       };
     })(),
+    marketDataConsentStore: acceptedConsentStore(),
   });
 
   const response = await investingApp.request("/api/investing/summary");
@@ -805,8 +809,10 @@ test("summary route negotiates the Yahoo crumb at most once across positions and
   );
   // No sectorProfile / sectorHttpClient override: this exercises the actual
   // default wiring in createApp, not a test double standing in for it.
+  // Consent must be accepted, or the route never calls Yahoo at all.
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    marketDataConsentStore: acceptedConsentStore(),
   });
 
   const first = await investingApp.request("/api/investing/summary");
