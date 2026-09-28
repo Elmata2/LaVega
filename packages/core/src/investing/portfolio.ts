@@ -22,6 +22,10 @@ export type PortfolioValuePoint = {
    *  session has not settled, so the value can still move. */
   forwardFilled: string[];
   cashUnknown: string[];
+  /** Wallets whose balance here was walked from a history the broker could not
+   *  prove complete. The figure is what the reported movements support, not a
+   *  statement, and absent when no wallet on this date needed one. */
+  cashEstimated?: string[];
   /** Holdings inferred from a later snapshot without dated ownership evidence. */
   holdingsUnknown?: string[];
   /** Value, in `presentationCurrency`, of the `unpriced`/`holdingsUnknown`/
@@ -160,13 +164,47 @@ function anchoredAmountOnDate(
   return after.amount - sumBetween(events, date, after.asOf);
 }
 
-/** A walk may only cross the proven window. Outside it the balance is known on
+/** A balance a broker's own statements disagree with is not a balance.
+ *
+ *  Two statements with no movement between them that explains the difference
+ *  mean the history is missing something, and walking either one across the
+ *  gap states a figure the other contradicts. */
+const RECONCILIATION_TOLERANCE = 0.01;
+
+function reconciles(leg: CashLeg, date: string): boolean {
+  const sorted = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf));
+  const before = sorted.filter((anchor) => anchor.asOf <= date).at(-1);
+  const after = sorted.find((anchor) => anchor.asOf > date);
+  if (!before || !after) return true;
+  const implied = before.amount + sumBetween(leg.events, before.asOf, after.asOf);
+  return (
+    Number.isFinite(implied) && Math.abs(implied - after.amount) <= RECONCILIATION_TOLERANCE
+  );
+}
+
+/** What a leg held on a date, and whether the broker's history proves it.
+ *
+ *  A walk may only cross the proven window. Outside it the balance is known on
  *  the broker's own statement dates, and the last known balance (the latest
  *  statement, or the window's end when that is later) stands for later dates
  *  until the wallet's next cash flow, dividend or trade: unknown history must
  *  not hide the current balance, and an unwalked movement must not hide behind
- *  it. */
-function cashAmountOnDate(date: string, leg: CashLeg): number | null {
+ *  it.
+ *
+ *  Past those the walk still runs, and what it returns is marked an estimate.
+ *  A history we cannot prove complete is not a history we lack: every movement
+ *  the broker did report is dated, so walking them back from a live balance is
+ *  the best the evidence supports. Refusing to state it is not the cautious
+ *  choice it resembles, because cash is one part of a portfolio and withholding
+ *  it withholds the whole value and every return drawn from it. A wallet
+ *  holding a rounding error would erase the reported performance of everything
+ *  beside it. The estimate is only offered where the statements it sits between
+ *  agree with the movements reported between them. */
+function cashAmountOnDate(
+  date: string,
+  leg: CashLeg,
+): { amount: number | null; estimated: boolean } {
+  const known = (amount: number | null) => ({ amount, estimated: false });
   const { proven } = leg;
   const walk = (day: string) =>
     proven
@@ -176,9 +214,9 @@ function cashAmountOnDate(date: string, leg: CashLeg): number | null {
           leg.events,
         )
       : null;
-  if (proven && date >= proven.from && date <= proven.to) return walk(date);
+  if (proven && date >= proven.from && date <= proven.to) return known(walk(date));
   const statement = leg.anchors.find((anchor) => anchor.asOf === date);
-  if (statement) return statement.amount;
+  if (statement) return known(statement.amount);
   const latest = leg.anchors.reduce<CashBalance | undefined>(
     (last, anchor) => (last && last.asOf >= anchor.asOf ? last : anchor),
     undefined,
@@ -187,16 +225,26 @@ function cashAmountOnDate(date: string, leg: CashLeg): number | null {
     proven && proven.to >= (latest?.asOf ?? "")
       ? { asOf: proven.to, amount: walk(proven.to) }
       : latest;
-  if (!carried || date <= carried.asOf) return null;
-  const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
-    (day) => day > carried.asOf && day <= date,
-  );
-  return moved ? null : carried.amount;
+  if (carried && date > carried.asOf) {
+    const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+      (day) => day > carried.asOf && day <= date,
+    );
+    if (!moved) return known(carried.amount);
+  }
+  if (!leg.tradeCashDeclared || !reconciles(leg, date)) return known(null);
+  const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
+  return estimate === null || !Number.isFinite(estimate)
+    ? known(null)
+    : { amount: estimate, estimated: true };
 }
 
 type CashLeg = {
   entity: string;
   broker: string;
+  /** The broker said which stream books the cash a trade moves. Without that
+   *  the walk cannot know whether trades are among these events, so what it
+   *  sums may be missing every purchase. */
+  tradeCashDeclared: boolean;
   currency: string;
   proven?: { from: string; to: string };
   anchors: CashBalance[];
@@ -239,6 +287,7 @@ function cashLegs(
    * proven one dropped every trade out of the cash walk exactly when the walk
    * was already working without a window. */
   const coverage = new Map(cashCoverage.map((value) => [owner(value), value] as const));
+  const declared = new Set(cashCoverage.map((value) => owner(value)));
   const proven = new Map(
     cashCoverage.flatMap((value) =>
       value.status === "complete" ? [[owner(value), value] as const] : [],
@@ -255,6 +304,7 @@ function cashLegs(
       entity: value.entity,
       broker: value.broker,
       currency: value.currency,
+      tradeCashDeclared: declared.has(owner(value)),
       ...(coverage ? { proven: { from: coverage.from, to: coverage.to } } : {}),
       anchors: [],
       events: [],
@@ -494,8 +544,9 @@ export function computePortfolioValueSeries(
     let cashValue = 0;
     let reachableCashLegs = 0;
     const cashUnknown = new Set<string>();
+    const cashEstimated = new Set<string>();
     for (const leg of legs) {
-      const amount = cashAmountOnDate(date, leg);
+      const { amount, estimated } = cashAmountOnDate(date, leg);
       if (amount === null || !Number.isFinite(amount)) {
         cashUnknown.add(displayCashKey(leg));
         continue;
@@ -503,6 +554,7 @@ export function computePortfolioValueSeries(
       try {
         cashValue += convertCurrency(amount, leg.currency, presentationCurrency, date, fxRates);
         reachableCashLegs += 1;
+        if (estimated) cashEstimated.add(displayCashKey(leg));
       } catch {
         cashUnknown.add(displayCashKey(leg));
       }
@@ -524,6 +576,7 @@ export function computePortfolioValueSeries(
       unpriced: [...unpriced].sort(),
       forwardFilled: [...forwardFilled].sort(),
       cashUnknown: [...cashUnknown].sort(),
+      ...(cashEstimated.size ? { cashEstimated: [...cashEstimated].sort() } : {}),
       ...(holdingsUnknown.size ? { holdingsUnknown: [...holdingsUnknown].sort() } : {}),
       ...(unpriced.size || holdingsUnknown.size || forwardFilled.size
         ? { unaccountedValue: unaccountedUnknown ? null : unaccountedValue }
