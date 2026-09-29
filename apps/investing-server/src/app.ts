@@ -67,6 +67,10 @@ import { createServerTiming, type ServerTiming } from "./serverTiming.js";
  *  serverless deadline — the client re-calls for what's left. */
 const SECTOR_INFERENCE_BATCH_SIZE = 10;
 
+/** Bounds the `exclude` list a caller may send: a page session's own
+ *  accumulated failed symbols, never an unbounded client-supplied array. */
+const MAX_SECTOR_INFERENCE_EXCLUDE = 200;
+
 export type InvestingDashboardReader = (input: {
   symbol?: string;
   timing?: ServerTiming;
@@ -316,9 +320,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
        * critical path, only from POST /api/investing/sectors/infer. */
       const tenantId = await resolveTenantId();
       const consented = await hasYahooConsent(tenantId);
+      /* A cached inferred profile is a global fact (no tenantId on
+       * sector_profiles), so it's visible here only when this tenant has
+       * both consented to Yahoo/AI data use and turned inference on —
+       * otherwise it displays as Unknown, same as never having been
+       * classified (I1, #135 final review). Two cheap reads, no network. */
+      const inferenceEnabled = await sectorInferenceSettingStore.get(tenantId);
+      const corrections = await sectorCorrectionStore.getAll(tenantId);
       const { exposure, coverage } = await resolvePortfolioSectors(data.positions, {
         store: sectorStore,
-        correction: (symbol) => sectorCorrectionStore.get(tenantId, symbol),
+        correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
+        showInferred: consented && inferenceEnabled,
         ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
@@ -351,7 +363,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const corrected = await sectorCorrectionStore.get(tenantId, symbol);
     if (corrected) return c.json({ kind: "stock" as const, sector: corrected, source: "correction" as const });
     if (!profile) return c.json({ kind: "unknown" as const, sector: UNKNOWN_SECTOR, source: "unknown" as const });
-    const resolved = resolvedStockSector(profile);
+    /* Same visibility rule as the summary route (I1, #135 final review): an
+     * inferred profile this tenant isn't allowed to see reads as Unknown. */
+    const consented = await hasYahooConsent(tenantId);
+    const inferenceEnabled = await sectorInferenceSettingStore.get(tenantId);
+    const resolved = resolvedStockSector(profile, { showInferred: consented && inferenceEnabled });
     return c.json({
       kind: "stock" as const,
       sector: resolved.sector,
@@ -378,7 +394,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     return c.body(null, 204);
   });
   investingApp.get("/api/investing/sector-inference", async (c) =>
-    c.json({ enabled: await sectorInferenceSettingStore.get(await resolveTenantId()) }),
+    c.json({
+      enabled: await sectorInferenceSettingStore.get(await resolveTenantId()),
+      /* The switch is per-tenant, but a classifier is per-deployment (a
+       * configured TypeSafe key). Without this the Profile page could let
+       * an owner turn inference "on" on a server that can never run it. */
+      available: dependencies.sectorClassifier !== undefined,
+    }),
   );
   investingApp.put("/api/investing/sector-inference", async (c) => {
     const body: { enabled?: unknown } = await c.req.json().catch(() => ({}));
@@ -393,28 +415,64 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["Yahoo Finance consent required"] }, 428);
     if (!(await sectorInferenceSettingStore.get(tenantId)))
       return c.json({ problems: ["Sector inference is not enabled"] }, 428);
-    if (!dependencies.sectorClassifier) return c.json({ classified: 0, remaining: 0 });
+    if (!dependencies.sectorClassifier)
+      return c.json({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
+    const body: { exclude?: unknown } = await c.req.json().catch(() => ({}));
+    let excluded = new Set<string>();
+    if (body.exclude !== undefined) {
+      if (!Array.isArray(body.exclude) || !body.exclude.every((symbol) => typeof symbol === "string"))
+        return c.json({ problems: ["exclude must be a string array"] }, 400);
+      excluded = new Set(
+        body.exclude.slice(0, MAX_SECTOR_INFERENCE_EXCLUDE).map((symbol) => symbol.toUpperCase()),
+      );
+    }
     const data = await dashboardReader({});
     const priced = data.positions.filter(
       (position): position is typeof position & { marketValue: number } =>
         position.marketValue !== null && position.marketValue > 0,
     );
+    const corrections = await sectorCorrectionStore.getAll(tenantId);
     const seen = new Set<string>();
     const candidates: typeof priced = [];
     for (const position of priced) {
       const key = position.symbol.toUpperCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      if (await sectorCorrectionStore.get(tenantId, position.symbol)) continue;
+      /* A symbol the caller already saw fail this page session (the client
+       * fills `exclude` with it) is skipped so the same head-of-line
+       * candidates aren't retried forever ahead of ones that might succeed. */
+      if (excluded.has(key)) continue;
+      if (corrections[key]) continue;
       if (await sectorStore.get(position.symbol)) continue;
       candidates.push(position);
     }
     const batch = candidates.slice(0, SECTOR_INFERENCE_BATCH_SIZE);
+    /* classified counts symbols actually cached this round (classified or
+     * no-match), never batch.length — a classifier failure leaves the
+     * symbol uncached, and reporting it as classified anyway is what let
+     * the client refresh forever on the same always-failing symbols
+     * (#135 final review, C1). */
+    const cachedThisRound = new Set<string>();
+    const trackingStore: SectorProfileStore = {
+      get: (symbol) => sectorStore.get(symbol),
+      async set(symbol, profile) {
+        cachedThisRound.add(symbol.toUpperCase());
+        await sectorStore.set(symbol, profile);
+      },
+    };
     await resolvePortfolioSectors(batch, {
-      store: sectorStore,
+      store: trackingStore,
       classifier: dependencies.sectorClassifier,
     });
-    return c.json({ classified: batch.length, remaining: candidates.length - batch.length });
+    const failedSymbols = batch
+      .map((position) => position.symbol.toUpperCase())
+      .filter((symbol) => !cachedThisRound.has(symbol));
+    return c.json({
+      classified: cachedThisRound.size,
+      failed: failedSymbols.length,
+      failedSymbols,
+      remaining: candidates.length - batch.length,
+    });
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     const timing = createServerTiming();
