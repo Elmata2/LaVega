@@ -124,8 +124,8 @@ function DataSection() {
             <div className="min-w-0">
               <p className="font-semibold">Sector inference</p>
               <p className="text-sm text-muted-foreground">
-                Sends only instrument names, never holdings or values, to an AI model to classify
-                positions with no sector data. Needs market-data consent.
+                Sends each holding's ticker and name, never quantities or values, to an AI model
+                to classify positions with no sector data. Needs market-data consent.
               </p>
               {consentAccepted === false && (
                 <p className="mt-1 text-xs text-warning">

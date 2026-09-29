@@ -795,6 +795,39 @@ test("the sector-inference switch is disabled without market-data consent", asyn
   root.unmount();
 });
 
+test("the sector-inference privacy copy names what the classifier actually sends", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/sector-inference"
+            ? new Response(JSON.stringify({ enabled: false }))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain(
+    "Sends each holding's ticker and name, never quantities or values",
+  );
+  expect(container.textContent).not.toMatch(/instrument names/i);
+  root.unmount();
+});
+
 test("the sector-inference switch turns on and persists once consent is granted", async () => {
   const puts: unknown[] = [];
   vi.stubGlobal(
