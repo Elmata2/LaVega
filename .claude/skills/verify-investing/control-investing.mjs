@@ -1819,6 +1819,10 @@ function redact(value) {
 }
 
 function runBrowse(args) {
+  // The browse binary starts its server by spawning `bun` from PATH. Install
+  // puts ~/.bun/bin on PATH only for that process; later browser commands
+  // must do it again or open fails with ENOENT even after a successful install.
+  prependBunPath();
   const bin = browseBin();
   if (!existsSync(bin))
     fail(
@@ -1894,6 +1898,8 @@ function browseFix(step) {
     return "browse only reads and writes under /tmp or its working directory: keep VERIFY_INVESTING_DIR and --out under /tmp";
   if (/Executable doesn't exist|playwright install/i.test(text))
     return "install the pinned Chromium once: bunx playwright@1.58.2 install chromium";
+  if (/Executable not found in \$PATH:\s*"bun"|ENOENT[\s\S]*spawn bun/i.test(text))
+    return `browse starts its server with bun from PATH. This CLI prepends ~/.bun/bin when that file exists. If it is absent, run \`${SELF} browser install\`.`;
   if (sandboxRefusedChromium(text)) return SANDBOX_BROWSE_FIX;
   if (/no (element|match)|not found|timeout/i.test(text))
     return `take a fresh \`${SELF} browser snapshot --interactive\` and use an @e ref from it`;

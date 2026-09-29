@@ -4,11 +4,22 @@ The landing view: portfolio value over time, KPIs, allocation, and the operation
 
 ## Sub-features
 
-- headline figures: `Portfolio value`, `Daily change`, `Total return`; `Value partly
-unknown` when some positions are unpriced.
-- portfolio chart (aside `Portfolio overview`) with window modes and a benchmark overlay.
-- KPI block (`Portfolio KPIs`) — volatility, beta, alpha, max drawdown, from
-  `/api/investing/summary`.
+- headline figures in the aside section `Portfolio KPIs` (eyebrow `Key figures`):
+  `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when some
+  positions are unpriced. A missing amount reads `Value unknown`. A missing percent reads
+  `Return unknown`.
+- portfolio chart in the main column (`data-dashboard-section="performance"`), not in the
+  aside. With no benchmark selected the title is `Portfolio` and the axis is `Portfolio
+  value` (euros). With a benchmark selected the title is `Comparison` and the axis is
+  `Indexed return`; portfolio and benchmark are percents (`packages/core` `deriveChartMode`).
+  Period group `Choose period`: `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`.
+  `+ Compare` opens benchmark search.
+- summary card in the same aside (`aria-label="Portfolio overview"` holds KPIs, this card,
+  the agent card, and operational status). Card `aria-label="Portfolio summary"`, title
+  `Summary`, eyebrow `Risk & composition`. Metrics: `Annual volatility`, `Beta`,
+  `Regression alpha (annual)`, `Maximum drawdown`, from `GET /api/investing/summary`.
+  Controls: `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`),
+  `Risk benchmark`.
 - allocation donut (`Allocation`, `Allocation details`) and `Sector allocation`.
 - net-worth chart (`Net worth`, `Net worth partly unknown`).
 - portfolio agents card (`Choose agent`) — see [portfolio-agents.md](portfolio-agents.md).
@@ -28,7 +39,7 @@ the main navigation returns to it.
 C=".claude/skills/verify-investing/control-investing.mjs"
 node $C dashboard --target prod                 # summarized: problems, counts, shape
 node $C dashboard --target prod --raw           # the exact payload the SPA receives
-node $C summary --target prod                   # the KPI block
+node $C summary --target prod                   # the Summary card (risk metrics)
 node $C api GET /api/investing/dashboard --target prod
 ```
 

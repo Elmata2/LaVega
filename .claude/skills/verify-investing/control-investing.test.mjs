@@ -1099,6 +1099,25 @@ echo "browse-ok $1"
     chmodSync(fakeBrowse, 0o755);
   }
 
+  test("browser commands prepend ~/.bun/bin so browse can spawn bun", async () => {
+    const home = join(stateDir, "home-browse-bun");
+    const bunDir = join(home, ".bun/bin");
+    mkdirSync(bunDir, { recursive: true });
+    writeFileSync(join(bunDir, "bun"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(bunDir, "bun"), 0o755);
+    const pathLog = join(stateDir, "browse-path.log");
+    const bin = join(stateDir, "path-browse");
+    writeFileSync(bin, `#!/bin/sh\necho "$PATH" > "${pathLog}"\nexit 0\n`);
+    chmodSync(bin, 0o755);
+    const result = await run(["browser", "open", ...local()], {
+      HOME: home,
+      PATH: "/usr/bin:/bin",
+      LAVEGA_BROWSE_BIN: bin,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(readFileSync(pathLog, "utf8"), new RegExp(bunDir));
+  });
+
   test("browser open sandbox refusal says to escalate, not to install", async () => {
     sandboxBrowse();
     const result = await run(["browser", "open", ...local()]);

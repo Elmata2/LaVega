@@ -273,7 +273,10 @@ node $C browser install --dry-run
 2. With no binary, the real command installs bun when `bun` is not on `PATH` and
    `~/.bun/bin/bun` is absent. It runs the pinned installer below. That installer checks
    the bun 1.3.10 checksum. It then puts `~/.bun/bin` on `PATH` for the rest of the
-   command. `--dry-run` prints this step and does not run it.
+   command. `--dry-run` prints this step and does not run it. Every later `browser`
+   command prepends `~/.bun/bin` again before it spawns browse. The browse binary
+   starts its server with `bun` from `PATH`. A shell that never exported that
+   directory still works after `browser install`.
 3. It clones `https://github.com/garrytan/gstack` into `~/.claude/skills/gstack` when
    `./setup` is missing, then runs `./setup`, which builds `browse/dist/browse`.
 4. When the Playwright headless shell is missing, it runs

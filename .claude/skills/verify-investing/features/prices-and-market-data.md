@@ -38,7 +38,7 @@ Save pre-state, dry-run, then one live accept. Do not accept twice.
 C=".claude/skills/verify-investing/control-investing.mjs"
 E="/tmp/lavega-verify-investing/evidence"
 node $C consent --out "$E/pre-consent.json"                 # body.accepted false
-node $C sync-status --out "$E/pre-sync-status.json"         # broker + prices + vault
+node $C sync-status --out "$E/pre-sync-status.json"         # broker + prices + credentials
 node $C dashboard --out "$E/pre-dashboard.json"
 node $C consent --accept --dry-run --out "$E/consent-dry-run.json"
 node $C sync --dry-run --out "$E/sync-dry-run.json"         # POST /api/brokers/sync
@@ -57,7 +57,7 @@ node $C sync-status --out "$E/post-sync-status.json"
 # When the broker POST failed, the button did not start price sync. Dry-run, then one live wait.
 node $C prices sync --dry-run --out "$E/prices-dry-run.json"
 node $C prices sync --wait --out "$E/post-prices-sync.json"
-node $C browser goto '/?verify=1'
+node $C browser goto '/?verify=1'          # local SPA root. Mounted: /investing/?verify=1
 node $C browser wait-settle
 node $C browser text --out "$E/post-price-text.json"
 node $C dashboard --out "$E/post-dashboard.json"
