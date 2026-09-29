@@ -16,7 +16,7 @@
     "db:migrate:status": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts status",
     "db:migrate:baseline": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts baseline",
     "db:migrate:adopt": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts adopt",
-    "lint": "oxlint . --max-warnings 101",
+    "lint": "oxlint . --max-warnings 0",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --check",
     "format:fix": "oxfmt .",

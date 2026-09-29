@@ -189,7 +189,7 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   const daxDotBefore = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.backgroundColor;
+    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="^AEX remove"]')?.click();
     await Promise.resolve();
@@ -200,7 +200,7 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   );
   const daxDotAfter = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.backgroundColor;
+    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
   expect(daxDotAfter).not.toBe(daxDotBefore);
   await act(async () => root.unmount());
 });
