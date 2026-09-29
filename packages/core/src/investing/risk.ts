@@ -1,3 +1,4 @@
+import { businessDaysAfter } from "./calendar.js";
 import type { InvestingDashboardData } from "./dashboard.js";
 import { computePortfolioMetrics } from "./summary.js";
 
@@ -7,6 +8,17 @@ export const RISK_MINIMUM_OBSERVATIONS = 60;
  *  cannot meaningfully change a volatility or drawdown estimate; anything
  *  larger can, so the date stays disqualified. */
 export const RISK_MATERIALITY_THRESHOLD = 0.005;
+/** Business days (see businessDaysAfter) a trailing run of unknown dates may
+ *  span before the last known date is too stale to report as the measured
+ *  range; beyond this the estimate is unavailable rather than quietly dated.
+ *  Business days, not calendar days: the series only has weekday points, so
+ *  an ordinary Friday-to-Monday gap is one missed session, not a three-day
+ *  one, and counting calendar days misreads every Monday as stale. */
+export const RISK_MAX_STALE_DAYS = 7;
+/** Business days of trailing incompleteness still read as a session still
+ *  settling; beyond this and up to RISK_MAX_STALE_DAYS it reads as incomplete
+ *  instead, since it is no longer plausibly still today. */
+export const RISK_SETTLING_DAYS = 2;
 export type RiskRange = "6M" | "1Y" | "All";
 
 export function benchmarkCurrencyMismatchReason(
@@ -42,10 +54,16 @@ export function buildHistoricalRisk(
   // A trailing run of unknown dates (today's close still settling, usually)
   // is not a return yet, so the whole account is measured through the last
   // known date instead of demanding the series' raw last point be complete.
+  // A gap that has run past RISK_MAX_STALE_DAYS is no longer a settling
+  // session, so it disqualifies the estimate instead of quietly dating it.
   let lastKnownIndex = points.length - 1;
   while (lastKnownIndex >= 0 && !known(points[lastKnownIndex]!)) lastKnownIndex -= 1;
   const measured = points.slice(0, lastKnownIndex + 1);
   const trailingDropped = lastKnownIndex >= 0 && lastKnownIndex < points.length - 1;
+  const staleDays = trailingDropped
+    ? businessDaysAfter(points[lastKnownIndex]!.date, points.at(-1)!.date)
+    : 0;
+  const isStale = trailingDropped && staleDays > RISK_MAX_STALE_DAYS;
 
   // Max drawdown needs a genuinely continuous, fully priced series: one
   // unknown date makes the compounded path unobservable, so it still uses
@@ -98,7 +116,8 @@ export function buildHistoricalRisk(
     valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
     externalCashFlows: data.externalCashFlows,
   }).maxDrawdown;
-  const available = lastKnownIndex >= 0 && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
+  const available =
+    lastKnownIndex >= 0 && !isStale && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
   const metrics = available
     ? { ...computed, maxDrawdown: drawdown }
     : {
@@ -137,8 +156,14 @@ export function buildHistoricalRisk(
     reasons.push(
       "Return intervals that touch an incomplete date are excluded from volatility and beta.",
     );
-  if (trailingDropped)
-    reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`);
+  if (isStale)
+    reasons.push(`Risk data has been incomplete since ${points[lastKnownIndex + 1]!.date}.`);
+  else if (trailingDropped)
+    reasons.push(
+      staleDays <= RISK_SETTLING_DAYS
+        ? `Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`
+        : `Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`,
+    );
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
   if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
