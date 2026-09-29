@@ -225,6 +225,47 @@ test("max drawdown still removes an owner withdrawal even after an isolated inco
   expect(report.metrics.maxDrawdown).toBeCloseTo(0, 6);
 });
 
+test("measures risk through the last known date instead of hiding it when today is still settling", () => {
+  // Mirrors production evidence: 275 clean days of history, but the latest
+  // date has a price that has not resolved yet (a close still settling).
+  // risk.ts:92-93 used to gate the whole card on that raw last point instead
+  // of the last KNOWN one, hiding 275 real observations behind "unavailable".
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const priorDate = points.at(-2)!.date;
+  points[points.length - 1] = { ...points.at(-1)!, unpriced: ["AAPL"] };
+
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.metrics.observationDays).toBeGreaterThanOrEqual(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.drawdownFrom).toBe(points[0]!.date);
+  expect(report.risk.missingPrices).toEqual(["AAPL"]);
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
+});
+
+test("an interior gap plus an incomplete last day still measures through the last known date", () => {
+  const points = pointsFromReturns(Array.from({ length: 300 }, () => 0.0005));
+  const gapIndex = 100;
+  points[gapIndex] = { ...points[gapIndex]!, cashUnknown: ["trading212:EUR"] };
+  const priorDate = points.at(-2)!.date;
+  points[points.length - 1] = { ...points.at(-1)!, unpriced: ["AAPL"] };
+
+  const report = buildHistoricalRisk(dashboard(points, { flows: [] }), "All");
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.risk.drawdownFrom).toBe(points[gapIndex + 1]!.date);
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
+});
+
 test("includes a last day whose close is still settling when the position is immaterial", () => {
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
@@ -247,11 +288,12 @@ test("includes a last day whose close is still settling when the position is imm
   ]);
 });
 
-test("still disqualifies a last day whose carried-forward position is too large to bound", () => {
+test("measures through the prior day when the last day's carried-forward position is too large to bound", () => {
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
   );
   const last = points.at(-1)!;
+  const priorDate = points.at(-2)!.date;
   points[points.length - 1] = {
     ...last,
     forwardFilled: ["AAPL"],
@@ -259,7 +301,12 @@ test("still disqualifies a last day whose carried-forward position is too large 
   };
   const report = buildHistoricalRisk(dashboard(points));
 
-  expect(report.risk.status).toBe("unavailable");
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
 });
 
 test("keeps beta and alpha null when no benchmark is selected", () => {
@@ -406,15 +453,23 @@ test.each([
     ...point,
     forwardFilled: ["TWND_US_EQ"],
   })],
-])("a holding at 20%% of value still disqualifies via %s on the latest date", (_route, apply) => {
-  const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
-  const last = points.at(-1)!;
-  points[points.length - 1] = { ...apply(last), unaccountedValue: last.value! * 0.2 };
+])(
+  "a holding at 20%% of value on the latest date via %s is dropped, not shown as valid",
+  (_route, apply) => {
+    const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
+    const last = points.at(-1)!;
+    const priorDate = points.at(-2)!.date;
+    points[points.length - 1] = { ...apply(last), unaccountedValue: last.value! * 0.2 };
 
-  const report = buildHistoricalRisk(dashboard(points));
+    const report = buildHistoricalRisk(dashboard(points));
 
-  expect(report.risk.status).toBe("unavailable");
-});
+    expect(report.risk.status).toBe("estimate");
+    expect(report.risk.to).toBe(priorDate);
+    expect(report.risk.reasons).toContain(
+      `Measured through ${priorDate}; later dates are still settling.`,
+    );
+  },
+);
 
 test("requires 60 valid daily return observations", () => {
   const short = buildHistoricalRisk(
