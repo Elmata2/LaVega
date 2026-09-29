@@ -1396,7 +1396,10 @@ function Overview() {
   const { broker, price } = useSyncSession();
   const layout = useInvestingLayout();
   const gate = historyGate(broker?.history);
-  const widgets = new Set(layout.widgets);
+  /* Until the layout loads, the registry defaults would flash widgets the
+   * reader switched off and start their reads, so none render yet. */
+  const layoutReady = layout.status === "ready";
+  const widgets = new Set(layoutReady ? layout.widgets : []);
   const showRisk = widgets.has("risk");
   const showSectors = widgets.has("sectors");
   /* Overview owns the range/benchmark selection and the one summary read
@@ -1435,7 +1438,7 @@ function Overview() {
           {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
           <DashboardProblems problems={state.data.problems} />
           <OverviewStatusRail dataVersion={state.data.dataVersion} />
-          {widgets.size === 0 ? (
+          {!layoutReady ? null : widgets.size === 0 ? (
             <OverviewEmptyState />
           ) : (
             <>

@@ -1940,6 +1940,43 @@ test("switching a module off on /profile removes its top-bar tab without a reloa
   act(() => root.unmount());
 });
 
+test("Overview renders no widgets and starts no summary read until the layout says which widgets are on", async () => {
+  const layout = deferredLayoutFetch();
+  const summaryReads: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/investing/layout") return layout.fetch();
+      if (url.startsWith("/api/investing/summary")) summaryReads.push(url);
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await settle();
+  });
+  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section]:not([data-dashboard-section="status"])')).toBeNull();
+  expect(summaryReads).toEqual([]);
+
+  await act(async () => {
+    layout.resolve({ modules: {}, widgets: { sectors: false, risk: false } });
+    await settle();
+  });
+  expect(container.querySelector('[data-dashboard-section="performance"]')).not.toBeNull();
+  expect(summaryReads).toEqual([]);
+  act(() => root.unmount());
+});
+
 test("/brokers/connect redirects to the profile page's brokers section", async () => {
   vi.stubGlobal(
     "fetch",
