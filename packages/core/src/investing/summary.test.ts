@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { buildSectorExposure, computePortfolioMetrics, type MetricPoint } from "./summary.js";
+import {
+  buildSectorCoverage,
+  buildSectorExposure,
+  computePortfolioMetrics,
+  type MetricPoint,
+} from "./summary.js";
 
 function seriesFromReturns(start: number, returns: readonly number[]): MetricPoint[] {
   const points: MetricPoint[] = [{ date: "2026-01-01", value: start }];
@@ -234,6 +239,56 @@ test("near-tied weights sort deterministically by sector name, not float noise",
   ]);
   const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
   expect(exposure.map((entry) => entry.sector)).toEqual(["Alpha", "Zeta"]);
+});
+
+test("coverage splits priced value by source and sums to 1", () => {
+  const weights = new Map([
+    ["AAPL", [{ sector: "Technology", weight: 1, source: "provider" as const }]],
+    ["MYST", [{ sector: "Industrials", weight: 1, source: "inferred" as const }]],
+    ["ACME", [{ sector: "Healthcare", weight: 1, source: "correction" as const }]],
+  ]);
+  const coverage = buildSectorCoverage(
+    [
+      { symbol: "AAPL", marketValue: 500 },
+      { symbol: "MYST", marketValue: 300 },
+      { symbol: "ACME", marketValue: 200 },
+    ],
+    weights,
+  );
+  expect(coverage).toEqual({ provider: 0.5, inferred: 0.3, correction: 0.2, unknown: 0 });
+  expect(coverage.provider + coverage.inferred + coverage.correction + coverage.unknown).toBeCloseTo(
+    1,
+    12,
+  );
+});
+
+test("a position with no resolved weight vector at all is entirely unknown coverage", () => {
+  const coverage = buildSectorCoverage([{ symbol: "MYST", marketValue: 100 }], new Map());
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("a fund's uncovered residual counts as unknown coverage, not as its provider source", () => {
+  const weights = new Map([
+    ["FUND", [{ sector: "Technology", weight: 0.4, source: "provider" as const }]],
+  ]);
+  const coverage = buildSectorCoverage([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(coverage.provider).toBeCloseTo(0.4, 12);
+  expect(coverage.unknown).toBeCloseTo(0.6, 12);
+});
+
+test("a weight with no source tag reads as unknown coverage", () => {
+  const weights = new Map([["ACME", [{ sector: "Technology", weight: 1 }]]]);
+  const coverage = buildSectorCoverage([{ symbol: "ACME", marketValue: 100 }], weights);
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("an unpriced portfolio has zero coverage in every bucket", () => {
+  expect(buildSectorCoverage([{ symbol: "ACME", marketValue: null }], new Map())).toEqual({
+    provider: 0,
+    inferred: 0,
+    correction: 0,
+    unknown: 0,
+  });
 });
 
 test("owner deposit is removed from daily return", () => {
