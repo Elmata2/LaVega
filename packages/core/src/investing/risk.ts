@@ -8,17 +8,8 @@ export const RISK_MINIMUM_OBSERVATIONS = 60;
  *  cannot meaningfully change a volatility or drawdown estimate; anything
  *  larger can, so the date stays disqualified. */
 export const RISK_MATERIALITY_THRESHOLD = 0.005;
-/** Business days (see businessDaysAfter) a trailing run of unknown dates may
- *  span before the last known date is too stale to report as the measured
- *  range; beyond this the estimate is unavailable rather than quietly dated.
- *  Business days, not calendar days: the series only has weekday points, so
- *  an ordinary Friday-to-Monday gap is one missed session, not a three-day
- *  one, and counting calendar days misreads every Monday as stale. */
-export const RISK_MAX_STALE_DAYS = 7;
-/** Business days of trailing incompleteness still read as a session still
- *  settling; beyond this and up to RISK_MAX_STALE_DAYS it reads as incomplete
- *  instead, since it is no longer plausibly still today. */
-export const RISK_SETTLING_DAYS = 2;
+export const RISK_MAX_STALE_BUSINESS_DAYS = 7;
+export const RISK_SETTLING_BUSINESS_DAYS = 2;
 export type RiskRange = "6M" | "1Y" | "All";
 
 export function benchmarkCurrencyMismatchReason(
@@ -26,6 +17,19 @@ export function benchmarkCurrencyMismatchReason(
   benchmark: { symbol: string; currency: string },
 ): string {
   return `Beta and alpha need a ${presentationCurrency}-quoted benchmark; ${benchmark.symbol} is quoted in ${benchmark.currency}.`;
+}
+
+export type TrailingGap = "none" | "settling" | "incomplete" | "stale";
+
+/** How far behind the range's last date the last known date sits, in
+ *  business days (a Friday-to-Monday gap is one missed session, not three
+ *  calendar days). "none" measures through the raw last point; "stale" past
+ *  RISK_MAX_STALE_BUSINESS_DAYS disqualifies the estimate outright. */
+export function classifyTrailingGap(businessDaysBehind: number, hasGap: boolean): TrailingGap {
+  if (!hasGap) return "none";
+  if (businessDaysBehind > RISK_MAX_STALE_BUSINESS_DAYS) return "stale";
+  if (businessDaysBehind <= RISK_SETTLING_BUSINESS_DAYS) return "settling";
+  return "incomplete";
 }
 
 /** Historical account risk. Partial valuations are never market returns. */
@@ -54,8 +58,6 @@ export function buildHistoricalRisk(
   // A trailing run of unknown dates (today's close still settling, usually)
   // is not a return yet, so the whole account is measured through the last
   // known date instead of demanding the series' raw last point be complete.
-  // A gap that has run past RISK_MAX_STALE_DAYS is no longer a settling
-  // session, so it disqualifies the estimate instead of quietly dating it.
   let lastKnownIndex = points.length - 1;
   while (lastKnownIndex >= 0 && !known(points[lastKnownIndex]!)) lastKnownIndex -= 1;
   const measured = points.slice(0, lastKnownIndex + 1);
@@ -63,7 +65,8 @@ export function buildHistoricalRisk(
   const staleDays = trailingDropped
     ? businessDaysAfter(points[lastKnownIndex]!.date, points.at(-1)!.date)
     : 0;
-  const isStale = trailingDropped && staleDays > RISK_MAX_STALE_DAYS;
+  const trailingGap = classifyTrailingGap(staleDays, trailingDropped);
+  const isStale = trailingGap === "stale";
 
   // Max drawdown needs a genuinely continuous, fully priced series: one
   // unknown date makes the compounded path unobservable, so it still uses
@@ -156,14 +159,12 @@ export function buildHistoricalRisk(
     reasons.push(
       "Return intervals that touch an incomplete date are excluded from volatility and beta.",
     );
-  if (isStale)
+  if (trailingGap === "stale")
     reasons.push(`Risk data has been incomplete since ${points[lastKnownIndex + 1]!.date}.`);
-  else if (trailingDropped)
-    reasons.push(
-      staleDays <= RISK_SETTLING_DAYS
-        ? `Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`
-        : `Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`,
-    );
+  else if (trailingGap === "settling")
+    reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`);
+  else if (trailingGap === "incomplete")
+    reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`);
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
   if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
