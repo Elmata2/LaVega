@@ -1,5 +1,6 @@
 import { withCurrentBalances, type Account, type ConversionMode, type Tx } from "@lavega/core";
 import { positionSeries, POSITION_WINDOW_DAYS } from "./totalePositie.js";
+import { getShareNetWorthEnabled, getShareNetWorthPendingDelete } from "./settings.js";
 
 /**
  * The owner's opt-in share of Personal's own "Totale positie" into LaVega
@@ -82,13 +83,33 @@ export function resetNetWorthShareStateForTests(): void {
 /** PUTs exactly `{ date, totalCents, currency: "EUR" }` — no other field ever
  *  goes in this body. Serialized after any earlier PUT/DELETE via the module
  *  queue, and skipped outright when it would just repeat the last successful
- *  send. */
+ *  send.
+ *
+ *  Both checks below run INSIDE the queued task, not before it, for two
+ *  separate reasons:
+ *  1. The enabled/pending-delete re-read is this call's only defence against
+ *     another browser tab switching sharing off in the meantime. React state
+ *     in the tab that scheduled this PUT can be stale (it only learns of
+ *     another tab's change via the `storage` event, a separate best-effort
+ *     sync in App.tsx) — localStorage, read fresh at the moment this task
+ *     actually runs, is the one source every tab agrees on. Checking it here
+ *     rather than by the caller means a PUT already queued when another tab's
+ *     DELETE lands still gets cancelled before it reaches the network,
+ *     instead of resurrecting a total that tab just removed.
+ *  2. The lastSent dedupe must also wait its turn in the queue: checking it
+ *     before enqueueing compared it against whatever the last DELETE cleared
+ *     it to at THAT DELETE's call time, not its settle time. A DELETE
+ *     enqueued just ahead of this PUT has not run yet when a pre-queue check
+ *     would look — so a same-values PUT immediately after a toggle off/on
+ *     was wrongly skipped as "unchanged", while the DELETE still queued
+ *     behind it went on to remove the total the switch shows as shared. */
 export async function putNetWorthTotal(
   date: string,
   totalCents: number,
 ): Promise<NetWorthShareOutcome> {
-  if (lastSent && lastSent.date === date && lastSent.totalCents === totalCents) return "skipped";
   return enqueue(async () => {
+    if (!getShareNetWorthEnabled() || getShareNetWorthPendingDelete()) return "skipped";
+    if (lastSent && lastSent.date === date && lastSent.totalCents === totalCents) return "skipped";
     try {
       const response = await fetch("/api/personal/net-worth-total", {
         method: "PUT",

@@ -179,3 +179,40 @@ test("a tab left open past midnight shares under the new day, not the day it mou
   const lastPut = puts().at(-1)!;
   expect(bodyOf(lastPut).date).toBe("2026-09-30");
 });
+
+test("another tab switching sharing off is picked up via the storage event — no PUT on this tab's next trigger", async () => {
+  mockAccounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 1234.56 },
+  ];
+  localStorage.setItem("lavega.shareNetWorth", "1");
+  const el = await renderApp();
+  await act(async () => {});
+
+  const puts = () =>
+    shareTotalCalls().filter((c) => (c[1] as RequestInit | undefined)?.method === "PUT");
+  expect(puts()).toHaveLength(1); // the initial mount PUT
+
+  // Tab B writes storage directly and its own DELETE succeeds — this tab
+  // never called any of its own handlers. Real browsers fire `storage` only
+  // in OTHER tabs; jsdom has no real second tab, so the test dispatches that
+  // event itself to simulate this tab receiving it.
+  localStorage.setItem("lavega.shareNetWorth", "0");
+  await act(async () => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.shareNetWorth", newValue: "0" }));
+  });
+
+  // This tab's own next trigger — an FX-mode change sits in the PUT effect's
+  // dependency list exactly like a sync's accounts/txs update — must not
+  // resurrect the total tab B just removed: the storage event already
+  // turned shareNetWorthEnabled off here too, before this trigger fires.
+  openProfiel(el);
+  const fxToggle = el.querySelector<HTMLInputElement>(
+    '[aria-label="Vreemde valuta omrekenen naar euro"]',
+  )!;
+  await act(async () => {
+    fxToggle.click();
+  });
+  await act(async () => {});
+
+  expect(puts()).toHaveLength(1); // unchanged
+});

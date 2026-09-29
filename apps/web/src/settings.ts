@@ -139,7 +139,11 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
   }
 }
 
-const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
+/** Exported so callers that need to recognize this preference's own storage
+ *  events (the cross-tab sync in App.tsx) or read it directly at send time
+ *  (netWorthShare.ts, immediately before a PUT) don't hardcode the string a
+ *  second time. */
+export const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
 
 /** Opt-in toggle for sharing today's "Totale positie" with LaVega Investing's
  *  net worth (see apps/web/src/netWorthShare.ts). Defaults false: no number
@@ -164,7 +168,8 @@ export function setShareNetWorthEnabled(on: boolean): void {
   }
 }
 
-const SHARE_NET_WORTH_PENDING_DELETE_KEY = "lavega.shareNetWorthPendingDelete";
+/** Exported for the same reason as SHARE_NET_WORTH_KEY above. */
+export const SHARE_NET_WORTH_PENDING_DELETE_KEY = "lavega.shareNetWorthPendingDelete";
 
 /** Set the moment the owner switches sharing off, before the DELETE that is
  *  supposed to remove every total this account ever sent is known to have

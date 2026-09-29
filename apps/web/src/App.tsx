@@ -84,6 +84,8 @@ import {
   setShareNetWorthEnabled,
   getShareNetWorthPendingDelete,
   setShareNetWorthPendingDelete,
+  SHARE_NET_WORTH_KEY,
+  SHARE_NET_WORTH_PENDING_DELETE_KEY,
   clearLegacyN8nLocalStorage,
   type OwnerName,
   type ConversionMode,
@@ -331,6 +333,27 @@ export default function App() {
       cancelled = true;
     };
   }, [gate, shareNetWorthPendingDelete]);
+  // Cross-tab sync. Another tab can switch sharing off — and have its DELETE
+  // succeed — while THIS tab's React state still holds the old value; without
+  // this, this tab's own next sync/import/FX-mode change would read a stale
+  // "enabled" and PUT again, resurrecting the total the other tab just
+  // removed. `storage` fires in every OTHER tab/window when localStorage
+  // changes (never the tab that wrote it), so a matching key here re-reads
+  // both flags and syncs this tab's state to match. This is a UI/effect-level
+  // safety net, not the only guard: putNetWorthTotal itself re-reads both
+  // flags from storage immediately before sending, inside its queued task
+  // (netWorthShare.ts), so a PUT already queued when the other tab's DELETE
+  // lands is stopped there even before this effect gets a chance to run.
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== SHARE_NET_WORTH_KEY && event.key !== SHARE_NET_WORTH_PENDING_DELETE_KEY)
+        return;
+      setShareNetWorthEnabledStoredState(getShareNetWorthEnabled());
+      setShareNetWorthPendingDeleteState(getShareNetWorthPendingDelete());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   // ECB daily rates, keyed by currency then by date — the vault's own copy,
   // refreshed in the background (see the "Load persisted data" effect below).
   // Empty until the vault loads it; `toEur` returns null on a lookup miss, so

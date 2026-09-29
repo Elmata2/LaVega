@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { withCurrentBalances } from "@lavega/core";
 import { positionSeries, POSITION_WINDOW_DAYS } from "./totalePositie";
@@ -8,6 +9,7 @@ import {
   resetNetWorthShareStateForTests,
   todayIso,
 } from "./netWorthShare";
+import { setShareNetWorthEnabled, setShareNetWorthPendingDelete } from "./settings";
 
 const account = (overrides: Partial<Record<string, unknown>> = {}) => ({
   key: "A",
@@ -142,6 +144,14 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   globalThis.fetch = vi.fn();
   resetNetWorthShareStateForTests();
+  // Every test below exercises what happens while the caller has already
+  // decided to send — same as App.tsx, which only ever calls putNetWorthTotal
+  // while its own shareNetWorthEnabled is true. A test for the OTHER case (the
+  // fresh re-read this module does on its own, immediately before sending)
+  // sets these explicitly.
+  localStorage.clear();
+  setShareNetWorthEnabled(true);
+  setShareNetWorthPendingDelete(false);
 });
 
 afterEach(() => {
@@ -267,4 +277,52 @@ test("once switched off, no further PUT reaches the network even if one was queu
   await deleteNetWorthTotal();
 
   expect(calls).toEqual(["PUT", "DELETE"]);
+});
+
+test("a PUT queued while enabled is skipped once its turn comes if another tab switches sharing off in the meantime — the enabled/pending-delete flags are re-read fresh at send time, not at call time", async () => {
+  let resolveFirst!: (value: Response) => void;
+  const firstPromise = new Promise<Response>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const fetchMock = vi.mocked(globalThis.fetch);
+  const calls: string[] = [];
+  fetchMock.mockImplementation((_url, init) => {
+    calls.push((init as RequestInit | undefined)?.method ?? "GET");
+    return calls.length === 1 ? firstPromise : Promise.resolve(new Response(null, { status: 200 }));
+  });
+
+  const first = putNetWorthTotal("2026-09-29", 100); // occupies the queue
+  const second = putNetWorthTotal("2026-09-30", 200); // queued behind it, different value so dedupe can't be the reason it skips
+
+  // Another tab's own DELETE effect writes storage directly — this tab never
+  // called setShareNetWorthEnabled itself.
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(calls).toEqual(["PUT"]); // first's own check already ran, it's now waiting on the network
+  setShareNetWorthEnabled(false);
+
+  resolveFirst(new Response(null, { status: 200 }));
+  expect(await first).toBe("stored"); // already past its own check before the flag flipped
+  expect(await second).toBe("skipped"); // its turn came after the flag flipped
+
+  expect(calls).toEqual(["PUT"]); // the second PUT never reached the network
+});
+
+test("pending-delete then switched back on: a same-value PUT queued behind an outstanding DELETE is not wrongly skipped as a stale duplicate", async () => {
+  const fetchMock = vi.mocked(globalThis.fetch);
+  fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+  expect(await putNetWorthTotal("2026-09-29", 100)).toBe("stored");
+
+  // The owner switches off (a DELETE is enqueued) and immediately back on (a
+  // same-value PUT follows) before that DELETE has actually run — the
+  // sequence App.tsx's own effects produce on a fast off/on toggle.
+  const del = deleteNetWorthTotal();
+  const put = putNetWorthTotal("2026-09-29", 100);
+
+  expect(await del).toBe("deleted");
+  // Not "skipped": checking the dedupe cache before the DELETE's turn would
+  // have compared against the value it was about to clear, not the value it
+  // actually left behind.
+  expect(await put).toBe("stored");
 });
