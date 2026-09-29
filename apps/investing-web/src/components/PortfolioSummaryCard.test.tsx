@@ -2,8 +2,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import type { PortfolioSummary } from "../lib/summaryResource";
+import type { PortfolioSummary, SummaryState } from "../lib/summaryResource";
 import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const summary: PortfolioSummary = {
   metrics: {
@@ -33,12 +36,11 @@ const summary: PortfolioSummary = {
     coverage: 1,
     currency: "EUR",
   },
-  sectors: [
-    { sector: "Technology", weight: 0.6 },
-    { sector: "Unknown", weight: 0.4 },
-  ],
+  sectors: [{ sector: "Technology", weight: 0.6 }],
   topPositions: [{ symbol: "AAPL", weight: 0.6 }],
 };
+
+const readyState: SummaryState = { status: "ready", data: summary };
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -52,97 +54,87 @@ function render() {
   return { container, root };
 }
 
-test("renders metrics, top positions, and sector bars", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 })),
+function noop() {}
+
+function card(overrides: Partial<React.ComponentProps<typeof PortfolioSummaryCard>> = {}) {
+  return (
+    <PortfolioSummaryCard
+      state={readyState}
+      refresh={noop}
+      range="1Y"
+      onRangeChange={noop}
+      benchmark=""
+      onBenchmarkChange={noop}
+      {...overrides}
+    />
   );
+}
+
+test("renders metrics and top positions, and excludes sector content", async () => {
   const { container, root } = render();
-  act(() => {
-    root.render(<PortfolioSummaryCard />);
-  });
-  await act(async () => {});
+  act(() => root.render(card()));
   expect(container.textContent).toContain("Annual volatility");
   expect(container.textContent).toContain("AAPL");
-  expect(container.textContent).toContain("Technology");
   expect(container.textContent).toContain("currency moves excluded");
   expect(container.textContent).toContain("excluding cash");
   expect(container.textContent).not.toContain("+60");
-  expect(container.querySelectorAll('[aria-label="Sector allocation"] li')).toHaveLength(2);
+  expect(container.textContent).not.toContain("Sector allocation");
+  expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
 });
 
-test("shows the drawdown's own start date when it differs from the risk range's start", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ ...summary, risk: { ...summary.risk, drawdownFrom: "2026-05-05" } }),
-          { status: 200 },
-        ),
+test("shows the drawdown's own start date when it differs from the risk range's start", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: { ...summary, risk: { ...summary.risk, drawdownFrom: "2026-05-05" } },
+        },
+      }),
     ),
   );
-  const { container, root } = render();
-  act(() => {
-    root.render(<PortfolioSummaryCard />);
-  });
-  await act(async () => {});
   expect(container.textContent).toContain("since 5 May 2026");
 });
 
-test("hides the drawdown start date when it matches the risk range's start or is absent", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ ...summary, risk: { ...summary.risk, drawdownFrom: summary.risk.from } }),
-          { status: 200 },
-        ),
+test("hides the drawdown start date when it matches the risk range's start or is absent", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: { ...summary, risk: { ...summary.risk, drawdownFrom: summary.risk.from } },
+        },
+      }),
     ),
   );
-  const { container, root } = render();
-  act(() => {
-    root.render(<PortfolioSummaryCard />);
-  });
-  await act(async () => {});
   expect(container.textContent).not.toContain("since");
 
   document.body.replaceChildren();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 })),
-  );
   const second = render();
-  act(() => {
-    second.root.render(<PortfolioSummaryCard />);
-  });
-  await act(async () => {});
+  act(() => second.root.render(card()));
   expect(second.container.textContent).not.toContain("since");
 });
 
-test("shows a position's name above its ticker, and just the ticker when there is no name", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
+test("shows a position's name above its ticker, and just the ticker when there is no name", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: {
             ...summary,
             topPositions: [
               { symbol: "AAPL", weight: 0.6, description: "Apple Inc." },
               { symbol: "MYST", weight: 0.4 },
             ],
-          }),
-          { status: 200 },
-        ),
+          },
+        },
+      }),
     ),
   );
-  const { container, root } = render();
-  act(() => {
-    root.render(<PortfolioSummaryCard />);
-  });
-  await act(async () => {});
   const list = container.querySelector('[aria-label="Largest positions"]');
   const text = list?.textContent ?? "";
   expect(text).toContain("Apple Inc.");
@@ -150,140 +142,98 @@ test("shows a position's name above its ticker, and just the ticker when there i
   expect(text).toContain("MYST");
 });
 
-test("shows incomplete-data reasons and requests a new risk period", async () => {
-  const fetcher = vi.fn(
-    async () =>
-      new Response(
-        JSON.stringify({
-          ...summary,
-          metrics: {
-            ...summary.metrics,
-            annualizedVolatility: null,
-            beta: null,
-            alpha: null,
-            maxDrawdown: null,
-            observationDays: 0,
-          },
-          risk: {
-            ...summary.risk,
-            status: "unavailable",
-            reasons: ["Cash history missing: trading212:USD."],
-          },
-        }),
-        { status: 200 },
-      ),
-  );
-  vi.stubGlobal("fetch", fetcher);
+test("shows incomplete-data reasons and asks for a new risk period through onRangeChange", () => {
+  const onRangeChange = vi.fn();
   const { container, root } = render();
-  act(() => root.render(<PortfolioSummaryCard />));
-  await act(async () => {});
+  act(() =>
+    root.render(
+      card({
+        onRangeChange,
+        state: {
+          status: "ready",
+          data: {
+            ...summary,
+            metrics: {
+              ...summary.metrics,
+              annualizedVolatility: null,
+              beta: null,
+              alpha: null,
+              maxDrawdown: null,
+              observationDays: 0,
+            },
+            risk: {
+              ...summary.risk,
+              status: "unavailable",
+              reasons: ["Cash history missing: trading212:USD."],
+            },
+          },
+        },
+      }),
+    ),
+  );
   expect(container.textContent).toContain("Cash history missing: trading212:USD.");
   expect(container.textContent).toContain("Unavailable");
   const select = container.querySelector('select[aria-label="Risk period"]') as HTMLSelectElement;
-  await act(async () => {
+  act(() => {
     select.value = "6M";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(fetcher).toHaveBeenLastCalledWith("/api/investing/summary?range=6M", {
-    signal: expect.any(AbortSignal),
-  });
+  expect(onRangeChange).toHaveBeenCalledWith("6M");
 });
 
-test("renders error state when the API fails", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response("boom", { status: 503 })),
-  );
+test("choosing a risk benchmark calls onBenchmarkChange", () => {
+  const onBenchmarkChange = vi.fn();
   const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        onBenchmarkChange,
+        state: {
+          status: "ready",
+          data: {
+            ...summary,
+            risk: {
+              ...summary.risk,
+              benchmarks: [{ symbol: "URTH", name: "MSCI World", currency: "USD" }],
+            },
+          },
+        },
+      }),
+    ),
+  );
+  const select = container.querySelector(
+    'select[aria-label="Risk benchmark"]',
+  ) as HTMLSelectElement;
   act(() => {
-    root.render(<PortfolioSummaryCard />);
+    select.value = "URTH";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await act(async () => {});
+  expect(onBenchmarkChange).toHaveBeenCalledWith("URTH");
+});
+
+test("clicking Refresh risk calls refresh", () => {
+  const refresh = vi.fn();
+  const { container, root } = render();
+  act(() => root.render(card({ refresh })));
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (element) => element.textContent === "Refresh risk",
+  );
+  act(() => button!.click());
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test("renders a loading placeholder while the shared summary is in flight", () => {
+  const { container, root } = render();
+  act(() => root.render(card({ state: { status: "loading" } })));
+  expect(container.querySelector('[data-dashboard-section="risk"]')?.getAttribute("aria-busy")).toBe(
+    "true",
+  );
+});
+
+test("renders the shared summary's error", () => {
+  const { container, root } = render();
+  act(() => root.render(card({ state: { status: "error", message: "503" } })));
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("503");
-});
-
-test("shows a stable message when the network request fails", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => {
-      throw new TypeError("Failed to fetch");
-    }),
-  );
-  const { container, root } = render();
-  await act(async () => root.render(<PortfolioSummaryCard />));
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-    "Failed to load summary: network error.",
-  );
-});
-
-test("reports a body that is not JSON as an invalid format", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response("<!doctype html>", { status: 200 })),
-  );
-  const { container, root } = render();
-  await act(async () => root.render(<PortfolioSummaryCard />));
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-    "Summary has an invalid format.",
-  );
-});
-
-test("a newer request wins when an older response arrives last", async () => {
-  const pending: Array<(response: Response) => void> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
-  );
-  const withPosition = (symbol: string) =>
-    new Response(JSON.stringify({ ...summary, topPositions: [{ symbol, weight: 1 }] }));
-  const { container, root } = render();
-  await act(async () => root.render(<PortfolioSummaryCard revision="old" />));
-  await act(async () => root.render(<PortfolioSummaryCard revision="new" />));
-  expect(pending).toHaveLength(2);
-  await act(async () => pending[1]!(withPosition("NEWER")));
-  await act(async () => pending[0]!(withPosition("OLDER")));
-  const positions = container.querySelector('[aria-label="Largest positions"]')?.textContent;
-  expect(positions).toContain("NEWER");
-  expect(positions).not.toContain("OLDER");
-});
-
-test.each([
-  ["risk benchmarks", { ...summary, risk: { ...summary.risk, benchmarks: undefined } }],
-  ["missing prices", { ...summary, risk: { ...summary.risk, missingPrices: null } }],
-  ["missing holdings", { ...summary, risk: { ...summary.risk, missingHoldings: "AAPL" } }],
-  ["a benchmark entry", { ...summary, risk: { ...summary.risk, benchmarks: [null] } }],
-  ["a sector entry", { ...summary, sectors: [null] }],
-  ["a top position", { ...summary, topPositions: [7] }],
-  ["a sector name", { ...summary, sectors: [{ sector: {}, weight: 1 }] }],
-  ["a benchmark name", { ...summary, risk: { ...summary.risk, benchmarks: [{ symbol: "X" }] } }],
-  ["a risk date", { ...summary, risk: { ...summary.risk, from: 20250910 } }],
-  ["a return count", { ...summary, metrics: { ...summary.metrics, observationDays: "252" } }],
-])("rejects a summary with malformed %s before rendering", async (_field, payload) => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 })),
-  );
-  const { container, root } = render();
-  await act(async () => root.render(<PortfolioSummaryCard />));
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-    "Summary has an invalid format.",
-  );
-});
-
-test("keeps controls during parent renders and refreshes only on request", async () => {
-  const fetcher = vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 }));
-  vi.stubGlobal("fetch", fetcher);
-  const { container, root } = render();
-  await act(async () => root.render(<PortfolioSummaryCard revision="BENCH" currency="EUR" />));
-  await act(async () => root.render(<PortfolioSummaryCard revision="BENCH" currency="EUR" />));
-  expect(fetcher).toHaveBeenCalledTimes(1);
-  expect(container.querySelector('select[aria-label="Risk period"]')).not.toBeNull();
-  const refresh = Array.from(container.querySelectorAll("button")).find(
-    (button) => button.textContent === "Refresh risk",
-  );
-  await act(async () => refresh!.click());
-  expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('select[aria-label="Risk period"]')).not.toBeNull();
 });
 
 /* "UNAVAILABLE" TERWIJL DE DATA NOG BINNENKOMT LEEST ALS EEN OORDEEL.
@@ -308,36 +258,26 @@ const loadingSummary: PortfolioSummary = {
   },
 };
 
-async function renderCard(stillLoading: boolean) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(loadingSummary), { status: 200 })),
-  );
+test("a sync in flight reads as still loading, not as unavailable", () => {
   const { container, root } = render();
-  await act(async () => {
-    root.render(<PortfolioSummaryCard stillLoading={stillLoading} />);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  return { container, root };
-}
-
-test("a sync in flight reads as still loading, not as unavailable", async () => {
-  const { container, root } = await renderCard(true);
+  act(() =>
+    root.render(card({ stillLoading: true, state: { status: "ready", data: loadingSummary } })),
+  );
   const text = container.textContent ?? "";
   expect(text).toContain("Still loading");
   expect(text).toContain("nothing here needs fixing");
   expect(text).not.toContain("Use Refresh risk after broker or price updates.");
-  root.unmount();
 });
 
 /* En met alles binnen blijft "Unavailable" gewoon staan — een blok dat altijd
  * "nog even wachten" zegt is net zo nutteloos als een dat altijd afkeurt. */
-test("with nothing syncing it still says unavailable, and what to do", async () => {
-  const { container, root } = await renderCard(false);
+test("with nothing syncing it still says unavailable, and what to do", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(card({ stillLoading: false, state: { status: "ready", data: loadingSummary } })),
+  );
   const text = container.textContent ?? "";
   expect(text).toContain("Unavailable");
   expect(text).toContain("Use Refresh risk after broker or price updates.");
   expect(text).not.toContain("Still loading");
-  root.unmount();
 });
