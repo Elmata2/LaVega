@@ -56,3 +56,33 @@ test("an unpriced portfolio has no exposure at all", async () => {
     }),
   ).toMatchObject({ exposure: [] });
 });
+
+test("resolves sector misses concurrently instead of one at a time", async () => {
+  const store = createInMemorySectorProfileStore();
+  const missSymbols = ["AAA", "BBB", "CCC", "DDD", "EEE"];
+  const missPositions = missSymbols.map((symbol, index) => ({
+    symbol,
+    marketValue: 100 + index,
+  }));
+
+  let inFlight = 0;
+  let peakInFlight = 0;
+  let started = 0;
+  let releaseAll: () => void = () => {};
+  const allStarted = new Promise<void>((resolve) => {
+    releaseAll = resolve;
+  });
+  const fetchProfile = vi.fn(async (symbol: string) => {
+    inFlight += 1;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    started += 1;
+    if (started === missSymbols.length) releaseAll();
+    await allStarted;
+    inFlight -= 1;
+    return { sector: "Technology", industry: symbol };
+  });
+
+  await resolvePortfolioSectors(missPositions, { store, fetchProfile });
+
+  expect(peakInFlight).toBeGreaterThan(1);
+}, 2000);

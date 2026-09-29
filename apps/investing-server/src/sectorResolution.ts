@@ -23,6 +23,12 @@ export type PortfolioSectors = {
   exposure: SectorExposure[];
 };
 
+/** Bounded fan-out to the sector-profile provider (a single upstream host,
+ *  fc.yahoo.com / query2.finance.yahoo.com): high enough that ~200 distinct
+ *  portfolio symbols don't serialize their latency, low enough not to
+ *  hammer one host with a request burst. */
+const SECTOR_RESOLUTION_CONCURRENCY = 8;
+
 /** The single sector-classification rule in the product. The risk-summary
  *  route and the portfolio agent both go through here, so a symbol can never
  *  be classified two ways — they differ only in whether a missing profile may
@@ -32,12 +38,24 @@ export async function resolvePortfolioSectors(
   options: SectorResolutionOptions,
 ): Promise<PortfolioSectors> {
   const sectorBySymbol = new Map<string, string>();
+  const seen = new Set<string>();
+  const pending: { key: string; symbol: string }[] = [];
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
     const key = position.symbol.toUpperCase();
-    if (sectorBySymbol.has(key)) continue;
-    sectorBySymbol.set(key, await resolveSector(position.symbol, options));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pending.push({ key, symbol: position.symbol });
   }
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(SECTOR_RESOLUTION_CONCURRENCY, pending.length) }, async () => {
+      while (next < pending.length) {
+        const item = pending[next++]!;
+        sectorBySymbol.set(item.key, await resolveSector(item.symbol, options));
+      }
+    }),
+  );
   return { sectorBySymbol, exposure: buildSectorExposure(positions, sectorBySymbol) };
 }
 

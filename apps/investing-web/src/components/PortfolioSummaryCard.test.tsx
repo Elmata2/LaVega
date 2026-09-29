@@ -281,3 +281,15 @@ test("with nothing syncing it still says unavailable, and what to do", () => {
   expect(text).toContain("Use Refresh risk after broker or price updates.");
   expect(text).not.toContain("Still loading");
 });
+
+test("a sync elsewhere does not contradict an already-populated risk estimate", async () => {
+  const { container, root } = render();
+  act(() => root.render(card({ stillLoading: true, state: { status: "ready", data: summary } })));
+  const text = container.textContent ?? "";
+  expect(text).not.toContain("still downloading");
+  expect(text).not.toContain("nothing here needs fixing");
+  expect(text).toContain("Use Refresh risk after broker or price updates.");
+  expect(text).toContain("15.9%");
+  expect(text).toContain("1.1");
+  root.unmount();
+});
