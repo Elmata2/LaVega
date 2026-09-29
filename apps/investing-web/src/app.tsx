@@ -1,3 +1,4 @@
+import { useChat } from "@ai-sdk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
@@ -43,8 +44,9 @@ import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegist
 import { useInvestingLayout } from "./lib/layoutResource.js";
 import { usePortfolioSummary } from "./lib/summaryResource.js";
 import {
+  chatErrorMessage,
+  portfolioChat,
   runPortfolioAgent,
-  sendPortfolioAgentMessage,
   useAgentCatalog,
   useAgentRequests,
   type PortfolioAgentDefinition,
@@ -254,8 +256,12 @@ function PositionList({
                       {money(position.marketValue).replace(/^\+/, "")}
                     </span>
                     {position.priceStatus === "forward-filled" && (
-                      <span className="ml-2 text-xs font-medium text-warning" title="Price is estimated from latest available market data">
-                        · <span aria-hidden="true">est.</span><span className="sr-only">Estimated price</span>
+                      <span
+                        className="ml-2 text-xs font-medium text-warning"
+                        title="Price is estimated from latest available market data"
+                      >
+                        · <span aria-hidden="true">est.</span>
+                        <span className="sr-only">Estimated price</span>
                       </span>
                     )}
                   </>
@@ -409,8 +415,13 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
       </dl>
       {latest && latest.forwardFilled.length > 0 && (
         <details className="mt-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Estimated prices ({latest.forwardFilled.length})</summary>
-          <p className="mt-1 break-words"><span className="sr-only">Estimated price: </span>{latest.forwardFilled.join(", ")}</p>
+          <summary className="cursor-pointer">
+            Estimated prices ({latest.forwardFilled.length})
+          </summary>
+          <p className="mt-1 break-words">
+            <span className="sr-only">Estimated price: </span>
+            {latest.forwardFilled.join(", ")}
+          </p>
         </details>
       )}
       {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
@@ -625,62 +636,34 @@ function PortfolioAgentCard() {
   );
 }
 
-type AgentMessage = { role: "user" | "assistant"; content: string };
-
 function AgentView() {
   const { agentId } = useParams();
   const dashboard = useDashboard();
   const { catalog, reload } = useAgentCatalog();
-  const { requestFor, start, settle } = useAgentRequests();
-  const [conversations, setConversations] = useState<Record<string, AgentMessage[]>>({});
   const [input, setInput] = useState("");
 
   const agents = catalog.status === "ready" ? catalog.agents : [];
   const agent = agents.find((item) => item.id === agentId);
-  const request = requestFor(agent?.id ?? "");
-  const sending = request.pending;
-  const error = request.error;
+  const { messages, sendMessage, status, error } = useChat({
+    chat: portfolioChat(agent?.id ?? ""),
+  });
+  const sending = status === "submitted" || status === "streaming";
+  /* A reply that is still in tool steps has no text yet; the status line
+   * stands in for it rather than an empty bubble. */
+  const bubbles = messages
+    .map((message) => ({
+      id: message.id,
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }))
+    .filter((message) => message.text.length > 0);
 
-  const initialMessage: AgentMessage | null = agent
-    ? {
-        role: "assistant",
-        content: `I am ${agent.displayName}. I look at your positions through this lens. Ask a question about concentration, return or risk.`,
-      }
-    : null;
-  const messages = agent ? (conversations[agent.id] ?? [initialMessage!]) : [];
-
-  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+  function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = input.trim();
     if (!agent || !question || sending) return;
-    /* The reader can navigate to another persona while this runs, so the
-     * reply, the failure and the pending flag all travel with the id that
-     * started the request rather than with whatever is on screen later. */
-    const personaId = agent.id;
-    const opening = initialMessage!;
     setInput("");
-    setConversations((current) => ({
-      ...current,
-      [personaId]: [...(current[personaId] ?? [opening]), { role: "user", content: question }],
-    }));
-    start(personaId);
-    try {
-      const reply = await sendPortfolioAgentMessage(
-        personaId,
-        question,
-        currentConversation(conversations[personaId] ?? [opening]),
-      );
-      setConversations((current) => ({
-        ...current,
-        [personaId]: [
-          ...(current[personaId] ?? [opening]),
-          { role: "assistant", content: reply.text },
-        ],
-      }));
-      settle(personaId, null);
-    } catch (reason) {
-      settle(personaId, reason instanceof Error ? reason.message : "Agent reply failed.");
-    }
+    void sendMessage({ text: question });
   }
 
   if (dashboard.status === "loading" || catalog.status === "loading") return <DashboardLoading />;
@@ -725,25 +708,31 @@ function AgentView() {
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
-          {messages.map((message, index) => (
+          <div className="flex justify-start">
+            <p className="max-w-[86%] whitespace-pre-line rounded-[18px] bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+              I am {agent.displayName}. I look at your positions through this lens. Ask a question
+              about a holding, concentration, return or risk.
+            </p>
+          </div>
+          {bubbles.map((message) => (
             <div
-              key={`${message.role}-${index}`}
+              key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <p
                 className={`max-w-[86%] whitespace-pre-line rounded-[18px] px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
               >
-                {message.content}
+                {message.text}
               </p>
             </div>
           ))}
-          {sending && (
+          {sending && bubbles.at(-1)?.role !== "assistant" && (
             <p role="status" className="text-sm text-muted-foreground">
               {agent.displayName} is reading positions…
             </p>
           )}
         </div>
-        <form onSubmit={sendMessage} className="border-t border-border p-4 sm:p-5">
+        <form onSubmit={submit} className="border-t border-border p-4 sm:p-5">
           <label htmlFor="agent-message" className="sr-only">
             Ask {agent.displayName}
           </label>
@@ -762,7 +751,7 @@ function AgentView() {
           </div>
           {error && (
             <p role="alert" className="mt-3 text-sm text-negative">
-              {error}
+              {chatErrorMessage(error)}
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
@@ -823,10 +812,6 @@ function AgentView() {
       </aside>
     </div>
   );
-}
-
-function currentConversation(messages: readonly AgentMessage[]) {
-  return messages.filter((message) => !message.content.startsWith("I am ")).slice(-12);
 }
 
 type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
