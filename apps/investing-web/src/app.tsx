@@ -1499,6 +1499,7 @@ function Overview() {
                 <SectorAllocationCard
                   currency={state.data.presentationCurrency}
                   state={summaryState}
+                  refresh={refreshSummary}
                 />
               )}
               {widgets.has("agent") && <PortfolioAgentCard />}

@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
-import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from "@lavega/core";
+import type {
+  HistoricalRisk,
+  PortfolioMetrics,
+  RiskRange,
+  SectorCoverage,
+  SectorExposure,
+} from "@lavega/core";
 
 export type PortfolioSummary = {
   metrics: PortfolioMetrics;
   sectors: SectorExposure[];
+  /** Absent from responses recorded before Task 10; SectorAllocationCard
+   *  treats that the same as "nothing to report" and omits its coverage line. */
+  sectorCoverage?: SectorCoverage;
   topPositions: Array<{ symbol: string; weight: number; description?: string }>;
   risk: HistoricalRisk;
   composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
@@ -46,6 +55,7 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
       risk.benchmark === undefined ||
       hasStrings(risk.benchmark, "symbol")) &&
     isArrayOf(value.sectors, (entry) => hasStrings(entry, "sector")) &&
+    (value.sectorCoverage === undefined || isRecord(value.sectorCoverage)) &&
     isArrayOf(value.topPositions, (entry) => hasStrings(entry, "symbol"))
   );
 }
