@@ -6,6 +6,10 @@ finds it wrong, fix the map in the same change. Each feature file states the Eng
 labels a user sees, the CLI drive, what proves success, and when the check is
 verified-unreachable (no credentials, no positions, or no Yahoo consent).
 
+Screenshots: `browser screenshot --png /tmp/lavega-verify-investing/evidence/<name>.png`.
+The CLI creates that directory. A repo path or `$TMPDIR` is `path-rejected`. Do not retry
+a different folder.
+
 The SPA lives at `/investing/` in production (`/` on the standalone server). The public
 routes are `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password` and
 `/reset-password`. The interface is in English.
@@ -15,15 +19,15 @@ Every other route (`/`, `/positions`, `/positions/:symbol`, `/net-worth`, `/agen
 `/profile#brokers`. The top bar's tabs are exactly the modules the tenant's stored layout
 enables, plus the always-on Overview tab.
 
-| Feature                                    | Route                                                                                             | File                                                   |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------| ------------------------------------------------------- |
-| Account and session                        | `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, `/reset-password` | [auth-session.md](auth-session.md)                     |
-| Dashboard overview                         | `/`                                                                                               | [dashboard-overview.md](dashboard-overview.md)         |
-| Portfolio agents                           | `/`, `/agents`, `/agents/:agentId`                                                                 | [portfolio-agents.md](portfolio-agents.md)             |
-| Profile (brokers, modules, widgets, account)| `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
-| Positions and position detail              | `/positions`, `/positions/:symbol`                                                                 | [positions.md](positions.md)                           |
-| Net worth                                  | `/net-worth`                                                                                       | [dashboard-overview.md](dashboard-overview.md)         |
-| Prices, benchmarks and market-data consent | `/` (Vault / Cache panels)                                                                          | [prices-and-market-data.md](prices-and-market-data.md) |
+| Feature                                      | Route                                                                                             | File                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Account and session                          | `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, `/reset-password` | [auth-session.md](auth-session.md)                     |
+| Dashboard overview                           | `/`                                                                                               | [dashboard-overview.md](dashboard-overview.md)         |
+| Portfolio agents                             | `/`, `/agents`, `/agents/:agentId`                                                                | [portfolio-agents.md](portfolio-agents.md)             |
+| Profile (brokers, modules, widgets, account) | `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
+| Positions and position detail                | `/positions`, `/positions/:symbol`                                                                | [positions.md](positions.md)                           |
+| Net worth                                    | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
+| Prices, benchmarks and market-data consent   | `/` (Vault / Cache panels)                                                                        | [prices-and-market-data.md](prices-and-market-data.md) |
 
 Backing docs: `docs/investing/DASHBOARD.md` (layout, return definitions, chart modes),
 `docs/investing/CONNECTORS.md` (broker adapters, credentials, disclosure gates),

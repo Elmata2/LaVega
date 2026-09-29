@@ -94,12 +94,18 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
     for each new command or flag.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
-    page. It only reads; every write in it runs with `--dry-run`.     It skips only when neither a readable `auth.preview.json` nor
+    page. It only reads; every write in it runs with `--dry-run`. It skips only when neither a readable `auth.preview.json` nor
     `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is already available.
     `login` itself also runs `vercel env pull` for that pair.
     It uses its own state directory, so it does not move your pin or session.
-- **Files.** `browse` only reads and writes under `/tmp` or its working directory, so keep
-  `VERIFY_INVESTING_DIR` and `--out` paths under `/tmp`.
+- **Files.** `browse` writes a PNG only under `/tmp` (after `realpath`), or under the
+  git root of the browse daemon from when that daemon started. That root is not this
+  shell's cwd. `$TMPDIR` and `os.tmpdir()` are rejected when they sit outside `/tmp`
+  (macOS `/var/folders`, many sandboxes). A path under `/tmp` is also rejected when its
+  parent directory does not exist: browse realpaths the parent, then one level up, and
+  stops. Use `/tmp/lavega-verify-investing/evidence/<name>.png`. `browser screenshot`
+  creates that directory before it calls browse. Do not pass a repo path and do not
+  retry a different folder after `screenshot path rejected`.
 
 ## Doctor
 
@@ -232,7 +238,7 @@ node $C browser click --dry-run @e3         # print the action
 node $C browser click @e3                   # live click; Allow Yahoo Finance is the consent button
 # full Allow click, PNG, and post-click count: features/prices-and-market-data.md Drive
 node $C browser wait-settle                 # network idle
-node $C browser screenshot                  # PNG under evidence; --png sets the image path
+node $C browser screenshot --png /tmp/lavega-verify-investing/evidence/page.png
 node $C browser console --errors
 node $C browser network
 node $C browser perf
@@ -247,8 +253,13 @@ app-open effect does not start a broker or price sync. Normal users keep the aut
 `browser-login.mjs` remains as a shim for `browser open --target prod`.
 
 `browser screenshot --out` is the JSON dump, not the PNG. `--png <file>` is the image. The
-two paths must differ. Bare `browser screenshot` writes a PNG under the evidence directory.
-`browser raw -- screenshot <path>` writes a PNG at `<path>` and does not use `--out`.
+two paths must differ, and `--png` must be under `/tmp`. Bare `browser screenshot` writes
+`/tmp/lavega-verify-investing/evidence/screenshot-<time>.png` when `VERIFY_INVESTING_DIR`
+is outside `/tmp`, and `<state>/evidence/screenshot-<time>.png` when that state directory
+is already under `/tmp`. The command creates the directory first. A repo path, `$TMPDIR`,
+or `os.tmpdir()` outside `/tmp` fails as `path-rejected` before browse runs. The `fix`
+names `/tmp/lavega-verify-investing/evidence/<name>.png`. Do not retry a different folder.
+`browser raw -- screenshot <path>` uses the same rule.
 
 Use the browser when the question is "what does the user see", not "what does the API return".
 
@@ -273,7 +284,10 @@ node $C browser install --dry-run
 2. With no binary, the real command installs bun when `bun` is not on `PATH` and
    `~/.bun/bin/bun` is absent. It runs the pinned installer below. That installer checks
    the bun 1.3.10 checksum. It then puts `~/.bun/bin` on `PATH` for the rest of the
-   command. `--dry-run` prints this step and does not run it.
+   command. `--dry-run` prints this step and does not run it. Every later `browser`
+   command prepends `~/.bun/bin` again before it spawns browse. The browse binary
+   starts its server with `bun` from `PATH`. A shell that never exported that
+   directory still works after `browser install`.
 3. It clones `https://github.com/garrytan/gstack` into `~/.claude/skills/gstack` when
    `./setup` is missing, then runs `./setup`, which builds `browse/dist/browse`.
 4. When the Playwright headless shell is missing, it runs
@@ -303,11 +317,14 @@ Evidence paths. `cleanup` keeps `/tmp/lavega-verify-investing/evidence` and dele
   printed object includes `evidence` with that path. `--dry-run` does not save a file.
 - `--out <file>` writes the command JSON to a path you choose. Keep it under `/tmp`.
   On `browser screenshot`, `--out` is still that JSON dump. The PNG is `--png`, or the
-  default file under evidence. `--out` must not be the PNG path.
+  default file under `/tmp/lavega-verify-investing/evidence`. `--out` must not be the PNG
+  path. A PNG outside `/tmp` is `path-rejected`.
 - `probe --out <file>` saves the sweep and each response body, so the payload is still in
   the file after `cleanup` deletes the run directory.
-- Browser screenshots land in the same directory unless `--png` names another path under
-  `/tmp`. `browser raw -- screenshot <path>` writes a PNG at `<path>` and does not use `--out`.
+- Browser screenshots use `/tmp/lavega-verify-investing/evidence/<name>.png`. The CLI
+  creates that directory, so the first `browser screenshot` is a path browse accepts.
+  Do not pass the repo, the shell cwd, or `$TMPDIR`. `browser raw -- screenshot <path>`
+  writes a PNG at `<path>` only when `<path>` is under `/tmp`, and it does not use `--out`.
 
 ## Evidence
 
@@ -338,7 +355,7 @@ real tenant. Prefer it over prod for anything that writes.
   `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
   the symptom of either gap.
 - **Account.** Preview has its own test user, never a real person's login. `login
-  --target preview` loads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the
+--target preview` loads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the
   process, or runs `vercel env pull`. Those two names are in the Vercel project Config for
   development, preview, and production. Do not write `auth.preview.json`. Do not ask for a
   personal password. Do not invent or sign up an account. `credentialsFrom` is `vercel-env`

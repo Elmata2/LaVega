@@ -6,11 +6,14 @@ dividends. This is where most investing reports originate.
 ## Sub-features
 
 - credential form (`Save credentials`, broker radio group `Broker`) for Trading 212
-  (`API key`) and Interactive Brokers (`Flex-token`, `Numeric Query ID`), plus the vault
-  passphrase.
+  (`API key` and `API secret`, both required) and Interactive Brokers (`Flex-token`,
+  field label `Query ID`; the setup card also says `Numeric Query ID`). Local file vault
+  also asks for `Vault password`.
 - vault (`Vault` chip): `Not set up` / `Locked` / `Open`, from the API states `empty` /
-  `locked` / `unlocked`. Credentials are AES-GCM encrypted; after a restart the vault is
-  locked and only the passphrase reopens it.
+  `locked` / `unlocked`. The local file vault is AES-GCM with that password; after a
+  restart it is locked and only the password reopens it. A hosted Neon vault encrypts
+  with the server key (`passphrase: unused` on credential status) and stays unlocked.
+  Do not expect `Unlock vault` on preview or prod.
 - `Save and sync` (`Saving and syncing…` while pending) — save credentials, then force a sync.
 - `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
   vault, then force a sync. Success reads `Vault unlocked. Sync completed.`
@@ -22,21 +25,23 @@ capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync pr
 ## How to get to it (user POV)
 
 Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#brokers`), or the
-profile button in the top bar. `/brokers/connect` is a redirect kept for old bookmarks.
+profile button in the top bar. `/brokers/connect` redirects to `/profile#brokers`.
 
-Pick a broker, paste the credentials, enter the vault passphrase, and press `Save and sync`. On
-a later visit the vault is already populated and the form is `Unlock vault` with `Unlock and
-sync`.
+Pick a broker, paste the credentials, and press `Save and sync`. Trading 212 needs both
+`API key` and `API secret`. On the local file vault, also enter `Vault password`. On a later
+local visit the form is `Unlock vault` with `Unlock and sync`. Hosted preview and prod keep
+the Neon vault unlocked (`passphrase: unused`), so that unlock form is not the later-visit
+path there.
 
 ## Driving it with control-investing
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C sync-status --target prod                       # vault + broker + price progress
+node $C sync-status --target prod                       # broker + prices + credentials
 node $C unlock --target prod --passphrase <passphrase>
 node $C sync --target prod --force --wait               # posts the same route the button does
 node $C dashboard --target prod                         # did the data actually land?
-node $C api POST /api/brokers/credentials --body '{"broker":"trading212","token":"...","passphrase":"..."}'
+node $C api POST /api/brokers/credentials --body '{"broker":"trading212","token":"...","secret":"...","passphrase":"..."}'
 ```
 
 Proof that it works, in order: `credentials.status` moves `empty` → `unlocked`, the sync
@@ -46,9 +51,9 @@ failure — the read model did not pick up the write.
 
 ## Gotchas
 
-- Credential rows existing in the database does not mean a sync has landed. A `sync_state`
-  of `0` means no completed sync has ever persisted for that tenant, whatever the credential
-  table shows.
+- Credential rows existing in the database does not mean a sync has landed. Never-synced
+  is `history.<broker>.lastSyncedAt: null` on `/api/brokers/sync/status`.
+  `investing.sync_state.state` is jsonb, not a numeric `0`.
 - `sync` without `--wait` returns as soon as the run is accepted. Progress lives at
   `/api/brokers/sync/status`, and the UI polls it only while a sync is in flight.
 - Trading 212 rate-limits hard. `waitUntil` in the progress payload is a real pause, not a
