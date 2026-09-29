@@ -439,7 +439,7 @@ test("overview renders widgets in registry order and excludes positions and net 
   const order = Array.from(
     container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
   ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["status", "performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  expect(order).toEqual(["performance", "allocation", "kpis", "risk", "sectors", "agent"]);
   expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
   expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
 
@@ -481,7 +481,7 @@ test("hiding a widget closes its gap instead of leaving a blank card", async () 
   const order = Array.from(
     container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
   ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["status", "performance", "kpis", "risk", "sectors", "agent"]);
+  expect(order).toEqual(["performance", "kpis", "risk", "sectors", "agent"]);
   root.unmount();
 });
 
@@ -523,7 +523,7 @@ test("switching off every widget shows one line and an Add widget button, not a 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section="status"]')).toBeNull();
   expect(container.querySelector('[data-dashboard-section="performance"]')).toBeNull();
   const addWidget = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes("Add widget"),
@@ -822,6 +822,103 @@ test("agent route opens focused chat with the account positions", async () => {
   root.unmount();
 });
 
+test("Overview shows an alert linking to /profile#status when a broker sync has a problem", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/sync/status")
+        return new Response(
+          JSON.stringify({
+            status: "problem",
+            pages: 1,
+            ordersRead: 0,
+            positionsRead: 0,
+            waitUntil: null,
+            remaining: null,
+            updatedAt: "2026-08-21T10:00:00Z",
+            message: "IBKR: credentials are not configured",
+          }),
+        );
+      return responseFor(input, init);
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Status needs attention");
+  const link = alert?.querySelector<HTMLAnchorElement>('a[href="/profile#status"]');
+  expect(link).not.toBeNull();
+  root.unmount();
+});
+
+test("Overview shows no status alert with the healthy default fixture", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "idle",
+              pages: 0,
+              ordersRead: 0,
+              positionsRead: 0,
+              waitUntil: null,
+              remaining: null,
+              updatedAt: null,
+              message: null,
+            }),
+          ),
+        );
+      if (url === "/api/prices/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "idle",
+              total: 0,
+              completed: 0,
+              remainingSymbols: [],
+              currentSymbol: null,
+              waitUntil: null,
+              updatedAt: null,
+              message: null,
+              problems: [],
+            }),
+          ),
+        );
+      if (url === "/api/brokers/credentials/status")
+        return Promise.resolve(new Response(JSON.stringify({ status: "empty" })));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/profile#status"]')).toBeNull();
+  root.unmount();
+});
+
 test("overview makes KPIs and all operational status chips visible", async () => {
   vi.stubGlobal(
     "fetch",
@@ -874,11 +971,19 @@ test("overview makes KPIs and all operational status chips visible", async () =>
   expect(container.textContent).toContain("Portfolio value");
   expect(container.textContent).toContain("Daily change");
   expect(container.textContent).toContain("Total return");
+  expect(container.textContent).toContain("ASML");
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Status needs attention");
+  expect(alert?.querySelector('a[href="/profile#status"]')).not.toBeNull();
+
+  const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
+  await act(async () => {
+    profileLink.click();
+  });
   expect(container.textContent).toContain("BrokersWaiting");
   expect(container.textContent).toContain("Price historyProblem");
   expect(container.textContent).toContain("VaultLocked");
   expect(container.textContent).toContain("CacheVersion");
-  expect(container.textContent).toContain("ASML");
   root.unmount();
 });
 
@@ -918,6 +1023,14 @@ test("overview shows when sync status cannot be read", async () => {
     );
     await Promise.resolve();
     await Promise.resolve();
+  });
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Status needs attention");
+  expect(alert?.querySelector('a[href="/profile#status"]')).not.toBeNull();
+
+  const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
+  await act(async () => {
+    profileLink.click();
   });
   // The sync session is module state, so an earlier test's active run can make this Reconnecting.
   expect(container.textContent).toMatch(/Connection(Offline|Reconnecting)/);
@@ -1350,7 +1463,7 @@ test("requests and persists Yahoo consent before broker-triggered price sync", a
   root.unmount();
 });
 
-test("overview reports independent price-sync progress", async () => {
+test("profile status section reports independent price-sync progress", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1386,13 +1499,17 @@ test("overview reports independent price-sync progress", async () => {
     await Promise.resolve();
   });
 
+  const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
+  await act(async () => {
+    profileLink.click();
+  });
   expect(container.textContent).toContain("Price history");
   expect(container.textContent).toContain("2 of 4 loaded");
   expect(container.textContent).toContain("CLOSED is loading");
   root.unmount();
 });
 
-test("shows broker sync problems and asks before deleting cached prices", async () => {
+test("overview shows broker sync problems; profile status asks before deleting cached prices", async () => {
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal(
     "fetch",
@@ -1424,6 +1541,10 @@ test("shows broker sync problems and asks before deleting cached prices", async 
     await Promise.resolve();
   });
   expect(container.textContent).toContain("Sync problems");
+  const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
+  await act(async () => {
+    profileLink.click();
+  });
   await act(async () => {
     Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Clear price data"))
@@ -1964,8 +2085,7 @@ test("Overview renders no widgets and starts no summary read until the layout sa
     );
     await settle();
   });
-  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
-  expect(container.querySelector('[data-dashboard-section]:not([data-dashboard-section="status"])')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section]')).toBeNull();
   expect(summaryReads).toEqual([]);
 
   await act(async () => {

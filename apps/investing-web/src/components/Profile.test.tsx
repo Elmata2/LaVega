@@ -37,6 +37,37 @@ test("profile page lists brokers, modules, widgets and account sections", async 
   root.unmount();
 });
 
+test("profile status section lists brokers, price history, vault and cache with a clear-cache control", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const status = container.querySelector("#status");
+  expect(status).not.toBeNull();
+  expect(status?.textContent).toContain("Brokers");
+  expect(status?.textContent).toContain("Price history");
+  expect(status?.textContent).toContain("Vault");
+  expect(status?.textContent).toContain("Cache");
+  expect(
+    Array.from(status?.querySelectorAll("button") ?? []).some((button) =>
+      button.textContent?.includes("Clear price data"),
+    ),
+  ).toBe(true);
+  root.unmount();
+});
+
 test("connect broker opens setup guide with IBKR instructions", async () => {
   vi.stubGlobal(
     "fetch",
