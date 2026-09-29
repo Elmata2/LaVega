@@ -87,8 +87,8 @@ test("a fund's headline sectorBySymbol label is its single largest weight", asyn
   );
   expect(sectorBySymbol.get("VFEM.L")).toBe("Healthcare");
   expect(weightsBySymbol.get("VFEM.L")).toEqual([
-    { sector: "Healthcare", weight: 0.5 },
-    { sector: "Technology", weight: 0.4 },
+    { sector: "Healthcare", weight: 0.5, source: "provider" },
+    { sector: "Technology", weight: 0.4, source: "provider" },
   ]);
 });
 
@@ -496,4 +496,83 @@ test("a division label on a provider-sourced profile is not trusted and resolves
   const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "ACME", marketValue: 100 }], { store });
 
   expect(sectorBySymbol.get("ACME")).toBe(UNKNOWN_SECTOR);
+});
+
+test("coverage attributes a provider-sourced position to provider and sums to 1", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store });
+
+  expect(coverage).toEqual({ provider: 1, inferred: 0, correction: 0, unknown: 0 });
+});
+
+test("coverage attributes an inferred position to inferred", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Technology",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
+
+  expect(coverage).toEqual({ provider: 0, inferred: 1, correction: 0, unknown: 0 });
+});
+
+test("coverage attributes a corrected position to correction, outranking a stored provider profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
+
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    correction,
+  });
+
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 1, unknown: 0 });
+});
+
+test("coverage attributes an unresolved position to unknown", async () => {
+  const store = createInMemorySectorProfileStore();
+
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store });
+
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("coverage splits across a mixed portfolio and sums to 1", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const classifier = vi.fn(async ({ symbol }: { symbol: string }) =>
+    symbol === "MYST"
+      ? {
+          kind: "classified" as const,
+          sector: "Healthcare",
+          specificity: "sector" as const,
+          confidence: 0.9,
+        }
+      : { kind: "no-match" as const },
+  );
+
+  const { coverage } = await resolvePortfolioSectors(
+    [
+      { symbol: "AAPL", marketValue: 500 },
+      { symbol: "MYST", marketValue: 300 },
+      { symbol: "ACME", marketValue: 200 },
+    ],
+    { store, classifier },
+  );
+
+  expect(coverage.provider).toBeCloseTo(0.5, 12);
+  expect(coverage.inferred).toBeCloseTo(0.3, 12);
+  expect(coverage.unknown).toBeCloseTo(0.2, 12);
+  expect(coverage.provider + coverage.inferred + coverage.correction + coverage.unknown).toBeCloseTo(
+    1,
+    12,
+  );
 });

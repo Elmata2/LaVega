@@ -1,9 +1,12 @@
 import {
+  buildSectorCoverage,
   buildSectorExposure,
   GICS_SECTOR_LABELS,
   SECTOR_DIVISION_LABELS,
+  type SectorCoverage,
   type SectorExposure,
   type SectorWeight,
+  type SectorWeightSource,
 } from "@lavega/core";
 import type { FundSectorProfile, SectorProfile, StockSectorProfile } from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
@@ -52,6 +55,9 @@ export type PortfolioSectors = {
   weightsBySymbol: Map<string, SectorWeight[]>;
   /** Value-weighted sector exposure over the same positions. */
   exposure: SectorExposure[];
+  /** Share of priced value that is provider-sourced, inferred, owner-corrected,
+   *  or unknown, over the same positions. */
+  coverage: SectorCoverage;
 };
 
 /** Bounded fan-out to the sector-profile provider (a single upstream host,
@@ -90,7 +96,12 @@ export async function resolvePortfolioSectors(
       }
     }),
   );
-  return { sectorBySymbol, weightsBySymbol, exposure: buildSectorExposure(positions, weightsBySymbol) };
+  return {
+    sectorBySymbol,
+    weightsBySymbol,
+    exposure: buildSectorExposure(positions, weightsBySymbol),
+    coverage: buildSectorCoverage(positions, weightsBySymbol),
+  };
 }
 
 function isStaleFundProfile(profile: FundSectorProfile): boolean {
@@ -112,7 +123,7 @@ async function resolveWeights(
 ): Promise<SectorWeight[]> {
   const { symbol } = position;
   const corrected = correction ? await correction(symbol) : null;
-  if (corrected) return [{ sector: corrected, weight: 1 }];
+  if (corrected) return [{ sector: corrected, weight: 1, source: "correction" }];
 
   let profile = await store.get(symbol);
   const fresh = profile && profile.source === "provider" && !(profile.kind === "fund" && isStaleFundProfile(profile));
@@ -179,10 +190,14 @@ function classificationToProfile(
 function profileToWeights(profile: SectorProfile | null): SectorWeight[] {
   if (!profile) return [];
   if (profile.kind === "stock") {
-    const sector = isDisplayableStockSector(profile) ? profile.sector : UNKNOWN_SECTOR;
-    return [{ sector, weight: 1 }];
+    const displayable = isDisplayableStockSector(profile);
+    const sector = displayable ? profile.sector : UNKNOWN_SECTOR;
+    const source: SectorWeightSource = displayable ? profile.source : "unknown";
+    return [{ sector, weight: 1, source }];
   }
-  return [...profile.weights].sort((left, right) => right.weight - left.weight);
+  return [...profile.weights]
+    .sort((left, right) => right.weight - left.weight)
+    .map((weight) => ({ ...weight, source: "provider" as const }));
 }
 
 /** A stock's sector is only ever a GICS label or, when the profile is
