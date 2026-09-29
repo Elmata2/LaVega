@@ -1275,6 +1275,24 @@ test("GET position sector reports an inferred profile's confidence", async () =>
   expect(await response.json()).toEqual({ sector: "Healthcare", source: "inferred", confidence: 0.82 });
 });
 
+test("GET position sector reports a cached no-match inference as unknown, not as a confident inference", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("MYST", {
+    kind: "stock",
+    sector: "Unknown",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+  const investingApp = createApp({ sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/MYST/sector");
+
+  expect(await response.json()).toEqual({ sector: "Unknown", source: "unknown" });
+});
+
 test("GET position sector reports a fund's single largest weight", async () => {
   const sectorStore = createInMemorySectorProfileStore();
   await sectorStore.set("VFEM.L", {

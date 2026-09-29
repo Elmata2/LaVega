@@ -36,9 +36,17 @@ export type SectorResolutionOptions = {
    *  and no store write, and no re-fetch of a stale fund profile either. */
   fetchProfile?: SectorProfileLookup;
   /** The owner's own override for this symbol — a preferences read, cheap
-   *  and side-effect-free. Always safe to pass, including on read-only
-   *  paths: it never calls a provider and never writes to the sector store.
-   *  Outranks a provider profile and a classifier inference alike. */
+   *  and side-effect-free on its own. Safe to pass on a read-only path that
+   *  also omits fetchProfile: with no provider call available, resolveWeights
+   *  can only ever apply the correction directly, never fetch. When
+   *  fetchProfile IS passed and the symbol has no cached profile yet,
+   *  honoring an uncached correction still costs exactly one provider fetch
+   *  first — a correction is the owner's word on a stock, never on a fund's
+   *  whole look-through vector, so without a cached profile to tell the two
+   *  apart, the fetch is what stops a fund from being masked by a stale
+   *  correction forever. Outranks a provider or inferred profile once that
+   *  check confirms the symbol isn't a fund; a cached fund always wins over
+   *  the correction, fetch or not. */
   correction?: SectorCorrectionLookup;
   /** System One classification, persisted with source "inferred". Omit it
    *  on read-only paths and wherever consent or the enable setting say no —
@@ -122,10 +130,12 @@ async function resolveWeights(
   { store, fetchProfile, correction, classifier }: SectorResolutionOptions,
 ): Promise<SectorWeight[]> {
   const { symbol } = position;
-  const corrected = correction ? await correction(symbol) : null;
-  if (corrected) return [{ sector: corrected, weight: 1, source: "correction" }];
-
+  /* Read the cache, and ask for the correction, before deciding anything —
+   * store.get is a local/DB read, not a provider call, so this costs nothing
+   * a read-only path couldn't already afford. */
   let profile = await store.get(symbol);
+  const corrected = correction ? await correction(symbol) : null;
+
   const fresh = profile && profile.source === "provider" && !(profile.kind === "fund" && isStaleFundProfile(profile));
   if (!fresh && fetchProfile) {
     try {
@@ -138,6 +148,14 @@ async function resolveWeights(
       /* keep whatever was already stored, if anything */
     }
   }
+  /* A correction is only ever the owner's word on a stock. Applying it
+   * before the cache could confirm the symbol isn't a fund is what let a
+   * correction saved while the profile was still uncached mask a fund's
+   * real weight vector forever (the fetch above never happens if this check
+   * comes first). A cached-or-freshly-fetched fund always wins instead. */
+  if (corrected && (!profile || profile.kind === "stock"))
+    return [{ sector: corrected, weight: 1, source: "correction" }];
+
   if (!profile && classifier) {
     let classification: Awaited<ReturnType<SectorClassifier>> | undefined;
     try {
@@ -190,10 +208,8 @@ function classificationToProfile(
 function profileToWeights(profile: SectorProfile | null): SectorWeight[] {
   if (!profile) return [];
   if (profile.kind === "stock") {
-    const displayable = isDisplayableStockSector(profile);
-    const sector = displayable ? profile.sector : UNKNOWN_SECTOR;
-    const source: SectorWeightSource = displayable ? profile.source : "unknown";
-    return [{ sector, weight: 1, source }];
+    const resolved = resolvedStockSector(profile);
+    return [{ sector: resolved.sector, weight: 1, source: resolved.source }];
   }
   return [...profile.weights]
     .sort((left, right) => right.weight - left.weight)
@@ -208,4 +224,19 @@ function profileToWeights(profile: SectorProfile | null): SectorWeight[] {
 function isDisplayableStockSector(profile: StockSectorProfile): boolean {
   if (GICS_SECTOR_LABEL_SET.has(profile.sector)) return true;
   return profile.source === "inferred" && SECTOR_DIVISION_LABEL_SET.has(profile.sector);
+}
+
+/** What a stored stock profile resolves to, for both the coverage/exposure
+ *  pipeline above and a direct per-position read (app.ts's GET
+ *  .../sector). A cached no-match inference is stored with source
+ *  "inferred" but sector UNKNOWN_SECTOR — not displayable — so both callers
+ *  report it the same way: source "unknown", never a confident-looking
+ *  "inferred" with nothing behind it. */
+export function resolvedStockSector(
+  profile: StockSectorProfile,
+): { sector: string; source: SectorWeightSource; confidence?: number } {
+  if (!isDisplayableStockSector(profile)) return { sector: UNKNOWN_SECTOR, source: "unknown" };
+  return profile.source === "inferred"
+    ? { sector: profile.sector, source: "inferred", confidence: profile.confidence }
+    : { sector: profile.sector, source: "provider" };
 }

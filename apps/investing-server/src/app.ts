@@ -46,7 +46,11 @@ import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
 } from "./inMemorySectorProfileStore.js";
-import { resolvePortfolioSectors, UNKNOWN_SECTOR } from "./sectorResolution.js";
+import {
+  resolvePortfolioSectors,
+  resolvedStockSector,
+  UNKNOWN_SECTOR,
+} from "./sectorResolution.js";
 import type { SectorClassifier } from "./sectorClassifier.js";
 import {
   createInMemorySectorCorrectionStore,
@@ -346,10 +350,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       const largest = [...profile.weights].sort((left, right) => right.weight - left.weight)[0];
       return c.json({ sector: largest?.sector ?? UNKNOWN_SECTOR, source: "provider" as const });
     }
+    const resolved = resolvedStockSector(profile);
     return c.json({
-      sector: profile.sector,
-      source: profile.source,
-      ...(profile.source === "inferred" ? { confidence: profile.confidence } : {}),
+      sector: resolved.sector,
+      source: resolved.source,
+      ...(resolved.confidence !== undefined ? { confidence: resolved.confidence } : {}),
     });
   });
   investingApp.put("/api/investing/positions/:symbol/sector", async (c) => {

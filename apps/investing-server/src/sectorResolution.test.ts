@@ -270,9 +270,13 @@ test("a stock profile is never re-fetched for staleness even when very old", asy
   expect(fetchProfile).not.toHaveBeenCalled();
 });
 
-test("an owner correction outranks everything and triggers no fetch or classification", async () => {
+test("an owner correction outranks a freshly-fetched stock and never invokes the classifier", async () => {
   const store = createInMemorySectorProfileStore();
-  const fetchProfile = vi.fn();
+  const fetchProfile = vi.fn(async (symbol: string) =>
+    symbol === "AAPL"
+      ? { kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const }
+      : null,
+  );
   const classifier = vi.fn();
   const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
 
@@ -284,8 +288,89 @@ test("an owner correction outranks everything and triggers no fetch or classific
   });
 
   expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
-  expect(fetchProfile).not.toHaveBeenCalledWith("AAPL");
+  // Uncached, so resolveWeights still fetches once — the only way to learn
+  // AAPL isn't a fund before trusting the correction — but the correction,
+  // not the fetched stock's own sector, is what gets displayed and the
+  // classifier is never reached for it.
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
   expect(classifier).not.toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL" }));
+});
+
+test("a correction for a symbol with no cached profile is applied directly when no fetch is available", async () => {
+  const store = createInMemorySectorProfileStore();
+  const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
+});
+
+test("a correction for a cached stock short-circuits with zero fetch or classifier calls", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const fetchProfile = vi.fn();
+  const classifier = vi.fn();
+  const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    classifier,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
+  expect(fetchProfile).not.toHaveBeenCalled();
+  expect(classifier).not.toHaveBeenCalled();
+});
+
+test("a correction saved for an uncached symbol that later resolves as a fund shows the fund's weights, correction ignored", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn(async () => ({
+    kind: "fund" as const,
+    weights: [
+      { sector: "Technology", weight: 0.4 },
+      { sector: "Healthcare", weight: 0.5 },
+    ],
+    source: "provider" as const,
+  }));
+  const correction = vi.fn(async () => "Energy");
+
+  const { sectorBySymbol, weightsBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    { store, fetchProfile, correction },
+  );
+
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Healthcare");
+  expect(weightsBySymbol.get("VFEM.L")).toEqual([
+    { sector: "Healthcare", weight: 0.5, source: "provider" },
+    { sector: "Technology", weight: 0.4, source: "provider" },
+  ]);
+  expect(await store.get("VFEM.L")).toMatchObject({ kind: "fund" });
+});
+
+test("a correction against an already-cached fund is ignored on every later resolution, without re-fetching a fresh fund", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+    fetchedAt: new Date().toISOString(),
+  });
+  const fetchProfile = vi.fn();
+  const correction = vi.fn(async () => "Energy");
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Technology");
+  expect(fetchProfile).not.toHaveBeenCalled();
 });
 
 test("a correction is re-checked on the very next resolution, not just the first", async () => {
