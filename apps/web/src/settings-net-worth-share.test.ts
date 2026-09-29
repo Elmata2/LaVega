@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
-import { getShareNetWorthEnabled, setShareNetWorthEnabled } from "./settings";
+import {
+  getShareNetWorthEnabled,
+  getShareNetWorthPendingDelete,
+  setShareNetWorthEnabled,
+  setShareNetWorthPendingDelete,
+} from "./settings";
 
 beforeEach(() => localStorage.clear());
 
@@ -19,4 +24,13 @@ test("turning it on and off round-trips", () => {
 test("garbage in storage counts as off, not on", () => {
   localStorage.setItem("lavega.shareNetWorth", "yes");
   expect(getShareNetWorthEnabled()).toBe(false);
+});
+
+test("pending delete is never set means false, round-trips true and back to false", () => {
+  expect(getShareNetWorthPendingDelete()).toBe(false);
+  setShareNetWorthPendingDelete(true);
+  expect(getShareNetWorthPendingDelete()).toBe(true);
+  setShareNetWorthPendingDelete(false);
+  expect(getShareNetWorthPendingDelete()).toBe(false);
+  expect(localStorage.getItem("lavega.shareNetWorthPendingDelete")).toBeNull();
 });

@@ -76,9 +76,15 @@ type ProfielProps = {
   onFxConversionModeChange: (mode: ConversionMode) => void;
   /** Opt-in share of Totale positie into LaVega Investing's net worth. Owned by
    *  App: turning it off must fire the DELETE exactly once, from the same
-   *  place the preference itself changes. */
+   *  place the preference itself changes. `shareNetWorthEnabled` is the
+   *  EFFECTIVE state the checkbox shows (App keeps the underlying preference
+   *  on internally until the delete that turning it off triggers actually
+   *  succeeds, so the checkbox itself must not wait for that to uncheck). */
   shareNetWorthEnabled: boolean;
   onShareNetWorthEnabledChange: (on: boolean) => void;
+  /** True while a delete triggered by turning the switch off has not yet
+   *  succeeded — shows the retry note; App keeps retrying on its own. */
+  shareNetWorthPendingDelete: boolean;
   /** The owner's own name. A local preference; it never leaves this browser. */
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
@@ -433,6 +439,7 @@ export default function Profiel({
   onFxConversionModeChange,
   shareNetWorthEnabled,
   onShareNetWorthEnabledChange,
+  shareNetWorthPendingDelete,
   ownerName,
   onOwnerNameChange,
   onLock,
@@ -704,6 +711,7 @@ export default function Profiel({
         </CardHeader>
         <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
         <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
+        <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
         <label>
           <input
             type="checkbox"
@@ -716,6 +724,11 @@ export default function Profiel({
         <p className="cell-sub">
           {shareNetWorthEnabled ? c.profiel.netWorthShare.onStatus : c.profiel.netWorthShare.offStatus}
         </p>
+        {shareNetWorthPendingDelete && (
+          <p role="alert" className="text-warn">
+            {c.profiel.netWorthShare.pendingDeleteStatus}
+          </p>
+        )}
       </Card>
 
       <Import

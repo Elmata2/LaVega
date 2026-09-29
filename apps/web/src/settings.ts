@@ -164,6 +164,36 @@ export function setShareNetWorthEnabled(on: boolean): void {
   }
 }
 
+const SHARE_NET_WORTH_PENDING_DELETE_KEY = "lavega.shareNetWorthPendingDelete";
+
+/** Set the moment the owner switches sharing off, before the DELETE that is
+ *  supposed to remove every total this account ever sent is known to have
+ *  succeeded. Cleared only once that DELETE actually lands — a failed or
+ *  interrupted attempt (closed tab, lost connection) leaves this set, so the
+ *  next unlock retries instead of quietly leaving rows behind on the server.
+ *  Per device, like the switch itself: this browser's pending delete says
+ *  nothing about whether another device is still sharing. */
+export function getShareNetWorthPendingDelete(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(SHARE_NET_WORTH_PENDING_DELETE_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setShareNetWorthPendingDelete(pending: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (pending) localStorage.setItem(SHARE_NET_WORTH_PENDING_DELETE_KEY, "1");
+    else localStorage.removeItem(SHARE_NET_WORTH_PENDING_DELETE_KEY);
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 export type { ConversionMode };
 
 const FX_CONVERSION_MODE_KEY = "lavega.fxConversionMode";

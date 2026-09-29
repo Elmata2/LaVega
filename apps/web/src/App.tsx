@@ -82,6 +82,8 @@ import {
   setFxConversionMode,
   getShareNetWorthEnabled,
   setShareNetWorthEnabled,
+  getShareNetWorthPendingDelete,
+  setShareNetWorthPendingDelete,
   clearLegacyN8nLocalStorage,
   type OwnerName,
   type ConversionMode,
@@ -90,6 +92,7 @@ import {
   computeShareableTotalCents,
   deleteNetWorthTotal,
   putNetWorthTotal,
+  todayIso,
 } from "./netWorthShare.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import {
@@ -279,20 +282,55 @@ export default function App() {
     setFxConversionMode(mode);
     setFxConversionModeState(mode);
   }
-  // Opt-in share of Totale positie into LaVega Investing's net worth. Off is
-  // the default and the local preference is the switch; the effect below
-  // (once accounts/txs/gate exist) is what actually sends a total while it is
-  // on. Turning it OFF fires the DELETE right here, once, the same way
-  // "Vergrendel" or "erase my data" act directly from their own handler
-  // rather than from an effect watching a flag.
-  const [shareNetWorthEnabled, setShareNetWorthEnabledState] = useState<boolean>(() =>
+  /* Opt-in share of Totale positie into LaVega Investing's net worth. Off is
+   * the default. Two flags, not one, because turning it off must not leave
+   * data behind: `shareNetWorthEnabledStored` is the underlying preference
+   * and stays "on" until the DELETE it triggers actually succeeds;
+   * `shareNetWorthPendingDelete` is set the instant the owner switches off
+   * and is the sole trigger for the retry effect below, which is also what
+   * runs the very first attempt — so "toggle off" and "retry on next
+   * unlock/app start" are the same code path, never two.
+   *
+   * The EFFECTIVE state everything else reads is `shareNetWorthEnabled`
+   * (derived): pending delete always means "not sharing", even while the
+   * stored preference technically remains on as the retry's memory. */
+  const [shareNetWorthEnabledStored, setShareNetWorthEnabledStoredState] = useState<boolean>(() =>
     getShareNetWorthEnabled(),
   );
+  const [shareNetWorthPendingDelete, setShareNetWorthPendingDeleteState] = useState<boolean>(() =>
+    getShareNetWorthPendingDelete(),
+  );
+  const shareNetWorthEnabled = shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
   function handleShareNetWorthEnabledChange(on: boolean) {
-    setShareNetWorthEnabled(on);
-    setShareNetWorthEnabledState(on);
-    if (!on) void deleteNetWorthTotal().catch(() => {});
+    if (on) {
+      setShareNetWorthEnabled(true);
+      setShareNetWorthEnabledStoredState(true);
+      setShareNetWorthPendingDelete(false);
+      setShareNetWorthPendingDeleteState(false);
+      return;
+    }
+    setShareNetWorthPendingDelete(true);
+    setShareNetWorthPendingDeleteState(true);
   }
+  // The one place a DELETE for this feature is ever sent. Runs once when
+  // pendingDelete first becomes true (the owner just switched off) and again
+  // on every later unlock while it is still true (a previous attempt
+  // failed) — until it succeeds, at which point the stored preference is
+  // finally allowed to flip off too.
+  useEffect(() => {
+    if (gate !== "ready" || !shareNetWorthPendingDelete) return;
+    let cancelled = false;
+    void deleteNetWorthTotal().then((outcome) => {
+      if (cancelled || outcome !== "deleted") return;
+      setShareNetWorthEnabled(false);
+      setShareNetWorthEnabledStoredState(false);
+      setShareNetWorthPendingDelete(false);
+      setShareNetWorthPendingDeleteState(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [gate, shareNetWorthPendingDelete]);
   // ECB daily rates, keyed by currency then by date — the vault's own copy,
   // refreshed in the background (see the "Load persisted data" effect below).
   // Empty until the vault loads it; `toEur` returns null on a lookup miss, so
@@ -553,18 +591,24 @@ export default function App() {
    * DASHBOARD.md). `accounts`/`txs`/`fxHistory` all change on every sync and
    * import, and `gate` becomes "ready" on unlock — so depending on them here
    * is what gives "after each sync/import, and on unlock" without a second
-   * copy of this call at every import/sync/unlock site. A null total (any
-   * balance still unknown) sends nothing, exactly like the day is simply
-   * skipped rather than sent as a partial sum. */
+   * copy of this call at every import/sync/unlock site. A null total (no
+   * balance known at all) sends nothing; a PARTIAL total (at least one
+   * balance known) still sends, exactly like Overzicht's own figure.
+   *
+   * `shareNetWorthEnabled` already folds in pendingDelete (see above), so no
+   * PUT is ever sent while a delete is outstanding. `todayIso()` is read here
+   * rather than from the mount-time `asOf`, so a tab left open past midnight
+   * shares under the day this effect actually runs. */
   useEffect(() => {
     if (gate !== "ready" || !shareNetWorthEnabled) return;
-    const totalCents = computeShareableTotalCents(accounts, txs, asOf, {
+    const today = todayIso();
+    const totalCents = computeShareableTotalCents(accounts, txs, today, {
       fxHistory,
       mode: fxConversionMode,
     });
     if (totalCents === null) return;
-    void putNetWorthTotal(asOf, totalCents).catch(() => {});
-  }, [gate, shareNetWorthEnabled, accounts, txs, asOf, fxHistory, fxConversionMode]);
+    void putNetWorthTotal(today, totalCents).catch(() => {});
+  }, [gate, shareNetWorthEnabled, accounts, txs, fxHistory, fxConversionMode]);
 
   // Public savings-rate benchmark for the travel block's "where to keep it"
   // step. Public data, not user data; failing is harmless (bundled snapshot).
@@ -1704,6 +1748,7 @@ export default function App() {
               onFxConversionModeChange={handleFxConversionModeChange}
               shareNetWorthEnabled={shareNetWorthEnabled}
               onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
+              shareNetWorthPendingDelete={shareNetWorthPendingDelete}
               ownerName={ownerName}
               onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}
