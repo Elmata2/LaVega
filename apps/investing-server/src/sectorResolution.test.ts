@@ -388,6 +388,27 @@ test("a failed classification is never cached, so it is retried on the next pass
   expect(classifier).toHaveBeenCalledTimes(2);
 });
 
+test("a classifier that throws for one symbol doesn't fail the whole batch, and nothing is cached for it", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async (instrument: { symbol: string }) => {
+    if (instrument.symbol === "BOOM") throw new Error("System One timed out");
+    return { kind: "classified" as const, sector: "Technology", specificity: "sector" as const, confidence: 0.9 };
+  });
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [
+      { symbol: "BOOM", marketValue: 100 },
+      { symbol: "MYST", marketValue: 100 },
+    ],
+    { store, classifier },
+  );
+
+  expect(sectorBySymbol.get("BOOM")).toBe(UNKNOWN_SECTOR);
+  expect(sectorBySymbol.get("MYST")).toBe("Technology");
+  expect(await store.get("BOOM")).toBeNull();
+  expect(await store.get("MYST")).toMatchObject({ source: "inferred" });
+});
+
 test("a cached inferred profile is reused without re-invoking the classifier, but the provider is still retried", async () => {
   const store = createInMemorySectorProfileStore();
   await store.set("MYST", {

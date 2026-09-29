@@ -128,7 +128,12 @@ async function resolveWeights(
     }
   }
   if (!profile && classifier) {
-    const classification = await classifier({ symbol, description: position.description });
+    let classification: Awaited<ReturnType<SectorClassifier>> | undefined;
+    try {
+      classification = await classifier({ symbol, description: position.description });
+    } catch {
+      /* treated the same as { kind: "failed" }: cache nothing, retry later */
+    }
     const inferred = classificationToProfile(classification);
     if (inferred) {
       profile = inferred;
