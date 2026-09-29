@@ -73,10 +73,12 @@ export function SectorAllocationCard({
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Fund holdings are looked through to their published sector weights; a small residual may
-          still show as Unknown.
-        </p>
+        {sectors.length > 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Fund holdings are looked through to their published sector weights; a small residual
+            may still show as Unknown.
+          </p>
+        )}
         {currency && <p className="mt-3 text-xs text-muted-foreground">Amounts in {currency}.</p>}
       </CardContent>
     </Card>
