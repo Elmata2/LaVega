@@ -72,5 +72,6 @@ async function resolveSector(
       profile = null;
     }
   }
-  return profile?.sector ?? UNKNOWN_SECTOR;
+  // TASK 5: fund profiles resolve via weight-vector look-through instead of Unknown.
+  return profile?.kind === "stock" ? profile.sector : UNKNOWN_SECTOR;
 }
