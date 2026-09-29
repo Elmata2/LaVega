@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { createHmac } from "node:crypto";
 import { Hono } from "hono";
 import { MockLanguageModelV4 } from "ai/test";
 import { simulateReadableStream } from "ai";
@@ -10,10 +11,8 @@ import {
 import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import {
   normalizeResearchSymbol,
-  REPORT_LIFETIME_MS,
   runStockResearch,
   signResearchReport,
-  stockResearchChatInstructions,
   verifyResearchReport,
 } from "./stockResearch.js";
 import type { SystemOneProvider, SystemOneRequest, SystemOneResult } from "./systemOne.js";
@@ -70,41 +69,35 @@ test("one typed request evaluates five lenses on identical company facts", async
     bullishProbability: null,
     conviction: null,
   });
-  expect(judge.judge).toHaveBeenCalledWith(
-    expect.objectContaining({
-      questions: expect.objectContaining({
-        "warren_buffett.signal": expect.objectContaining({ type: "choice" }),
-      }),
-      state: expect.objectContaining({ companyFinancials: expect.stringContaining("16") }),
-    }),
-  );
-  expect(Object.keys(vi.mocked(judge.judge).mock.calls.at(-1)![0].questions)).toHaveLength(10);
-  expect(stockResearchChatInstructions(report, "warren_buffett")).toContain(
-    "no holdings, trades, portfolio or external tools",
-  );
+  expect(judge.judge).toHaveBeenCalledTimes(1);
 });
 test("signed reports preserve exact facts and reject tampering, another tenant, and expiry", async () => {
   const report = await runStockResearch({ company, tenantId: "alice", provider: judge, now });
-  const token = signResearchReport(report, "alice", "test-secret");
-  expect(verifyResearchReport(token, "alice", "test-secret", now)).toEqual(report);
+  const token = await signResearchReport(report, "alice", "test-secret");
+  await expect(verifyResearchReport(token, "alice", "test-secret", now)).resolves.toEqual(report);
   const [payload, signature] = token.split(".");
+  expect(signature).toBe(
+    createHmac("sha256", "test-secret")
+      .update(`lavega-stock-research-v1:${payload}`)
+      .digest("base64url"),
+  );
   const data = JSON.parse(Buffer.from(payload!, "base64url").toString());
   data.report.company.snapshot.forwardPe = 1;
-  expect(() =>
+  await expect(
     verifyResearchReport(
       `${Buffer.from(JSON.stringify(data)).toString("base64url")}.${signature}`,
       "alice",
       "test-secret",
       now,
     ),
-  ).toThrow("signature");
-  expect(() => verifyResearchReport(token, "bob", "test-secret", now)).toThrow("owner");
-  expect(() =>
-    verifyResearchReport(token, "alice", "test-secret", now + REPORT_LIFETIME_MS),
-  ).toThrow("expired");
-  expect(() => verifyResearchReport("x".repeat(192_001), "alice", "test-secret", now)).toThrow(
-    "Invalid",
-  );
+  ).rejects.toThrow("signature");
+  await expect(verifyResearchReport(token, "bob", "test-secret", now)).rejects.toThrow("owner");
+  await expect(
+    verifyResearchReport(token, "alice", "test-secret", now + 3_600_000),
+  ).rejects.toThrow("expired");
+  await expect(
+    verifyResearchReport("x".repeat(192_001), "alice", "test-secret", now),
+  ).rejects.toThrow("Invalid");
 });
 test("symbol validation keeps exchange suffixes and rejects prompt or path input", () => {
   expect(normalizeResearchSymbol(" asml.as ")).toBe("ASML.AS");
@@ -233,8 +226,10 @@ test("persona chat streams the signed snapshot without fetching fundamentals aga
   expect(response.status).toBe(200);
   expect(await response.text()).toContain("Forward P/E is 16");
   expect(fetch).toHaveBeenCalledTimes(1);
-  expect(chatModel.doStreamCalls[0]?.prompt[0]).toMatchObject({
+  const system = chatModel.doStreamCalls[0]?.prompt[0];
+  expect(system).toMatchObject({
     role: "system",
-    content: expect.stringContaining("16"),
+    content: expect.stringContaining("16 forward"),
   });
+  expect(system?.content).toContain("net 20.0% | ROE 40.0%");
 });

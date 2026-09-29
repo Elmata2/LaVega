@@ -92,7 +92,7 @@ export function attachStockResearchRoutes<T extends Hono>(
       });
       return c.json({
         report,
-        reportToken: signResearchReport(report, tenantId, deps.tokenSecret),
+        reportToken: await signResearchReport(report, tenantId, deps.tokenSecret),
       });
     } catch (error) {
       return c.json(
@@ -116,7 +116,12 @@ export function attachStockResearchRoutes<T extends Hono>(
       let report;
       let messages;
       try {
-        report = verifyResearchReport(body.reportToken, tenantId, deps.tokenSecret, deps.now?.());
+        report = await verifyResearchReport(
+          body.reportToken,
+          tenantId,
+          deps.tokenSecret,
+          deps.now?.(),
+        );
         messages = validatedMessages(body.messages);
       } catch (error) {
         return c.json(

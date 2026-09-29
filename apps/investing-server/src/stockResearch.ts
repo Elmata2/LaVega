@@ -1,4 +1,3 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { renderFundamentalsBrief, type CompanyFundamentals } from "@lavega/core";
 import { getPortfolioAgent, type PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
@@ -42,9 +41,23 @@ const SIGNAL_CRITERIA = {
   neutral: "Reported strengths and risks are balanced or inconclusive through this investing lens.",
   no_view: "Reported facts do not contain the evidence this investing lens requires.",
 };
-export const REPORT_LIFETIME_MS = 60 * 60 * 1000;
+const REPORT_LIFETIME_MS = 60 * 60 * 1000;
 const MAX_TOKEN_BYTES = 192_000;
-const localSecret = randomBytes(32).toString("hex");
+const localSecret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
+  byte.toString(16).padStart(2, "0"),
+).join("");
+const encoder = new TextEncoder();
+function encodeBase64Url(bytes: Uint8Array): string {
+  return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+function decodeBase64Url(value: string): Uint8Array {
+  return Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (char) =>
+    char.charCodeAt(0),
+  );
+}
 
 export function normalizeResearchSymbol(value: unknown): string {
   if (typeof value !== "string") throw new Error("Ticker is required");
@@ -58,7 +71,7 @@ export function isStockResearchAgentId(value: unknown): value is StockResearchAg
     typeof value === "string" && STOCK_RESEARCH_AGENT_IDS.includes(value as StockResearchAgentId)
   );
 }
-export function stockResearchQuestions(): Record<string, SystemOneQuestion> {
+function stockResearchQuestions(): Record<string, SystemOneQuestion> {
   return Object.fromEntries(
     STOCK_RESEARCH_AGENT_IDS.flatMap((agentId) => {
       const instructions = `${PORTFOLIO_CHAT_PROFILES[agentId]}\nThis is a single-company research report, not a portfolio. No portfolio, holdings, trades or macro data are supplied. Judge only the supplied company financials. Missing evidence must remain missing. Educational lens simulation, not the real person's opinion.`;
@@ -152,39 +165,49 @@ function resolveSecret(secret?: string): string {
 export function assertResearchSigningConfigured(secret?: string): void {
   resolveSecret(secret);
 }
-function signature(payload: string, secret?: string): Buffer {
-  return createHmac("sha256", resolveSecret(secret))
-    .update(`lavega-stock-research-v1:${payload}`)
-    .digest();
+function signingKey(secret?: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(resolveSecret(secret)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
 }
-export function signResearchReport(
+export async function signResearchReport(
   report: StockResearchReport,
   tenantId: string,
   secret?: string,
-): string {
-  const payload = Buffer.from(JSON.stringify({ version: 1, tenantId, report })).toString(
-    "base64url",
+): Promise<string> {
+  const payload = encodeBase64Url(encoder.encode(JSON.stringify({ version: 1, tenantId, report })));
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await signingKey(secret),
+    encoder.encode(`lavega-stock-research-v1:${payload}`),
   );
-  const token = `${payload}.${signature(payload, secret).toString("base64url")}`;
+  const token = `${payload}.${encodeBase64Url(new Uint8Array(signature))}`;
   if (token.length > MAX_TOKEN_BYTES) throw new Error("Research report exceeds size limit");
   return token;
 }
-export function verifyResearchReport(
+export async function verifyResearchReport(
   token: unknown,
   tenantId: string,
   secret?: string,
   now = Date.now(),
-): StockResearchReport {
+): Promise<StockResearchReport> {
   if (typeof token !== "string" || token.length > MAX_TOKEN_BYTES)
     throw new Error("Invalid research report token");
   const parts = token.split(".");
   if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part)))
     throw new Error("Invalid research report token");
-  const supplied = Buffer.from(parts[1]!, "base64url");
-  const expected = signature(parts[0]!, secret);
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
-    throw new Error("Invalid research report signature");
-  const data = JSON.parse(Buffer.from(parts[0]!, "base64url").toString("utf8"));
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await signingKey(secret),
+    decodeBase64Url(parts[1]!) as Uint8Array<ArrayBuffer>,
+    encoder.encode(`lavega-stock-research-v1:${parts[0]!}`),
+  );
+  if (!valid) throw new Error("Invalid research report signature");
+  const data = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0]!)));
   const report = data.report as StockResearchReport | undefined;
   if (
     data.version !== 1 ||
