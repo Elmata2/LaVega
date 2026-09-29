@@ -41,6 +41,10 @@ import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
+import {
+  createInMemoryPersonalNetWorthStore,
+  type PersonalNetWorthStore,
+} from "./personalNetWorthStore.js";
 import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
@@ -157,6 +161,7 @@ type PriceDependencies = {
   dashboardReader: InvestingDashboardReader;
   onPriceDataChanged: () => void;
   marketDataConsentStore: MarketDataConsentStore;
+  personalNetWorthStore: PersonalNetWorthStore;
   sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
   sectorStore: SectorProfileStore;
   sectorCorrectionStore: SectorCorrectionStore;
@@ -183,6 +188,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
+  const personalNetWorthStore =
+    dependencies.personalNetWorthStore ?? createInMemoryPersonalNetWorthStore();
   /* One client per running server process, not per symbol: its crumb and
    * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
    * instead of every cache-miss symbol paying its own crumb negotiation. */
@@ -553,6 +560,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     await investingLayoutStore.set({ tenantId, ...layout });
     return c.json(layout);
   });
+  /* The owner's opt-in Personal totals, read-only here — Personal owns the
+   * only write, through apps/server's PUT/DELETE /api/personal/net-worth-total.
+   * Deliberately outside the cached dashboard: it is one small per-user table,
+   * cheap to read fresh on every request, and folding it into the dashboard's
+   * cache/version machinery would risk a stale total surviving a new one. */
+  investingApp.get("/api/investing/personal-net-worth", async (c) =>
+    c.json({ totals: await personalNetWorthStore.list(await resolveTenantId()) }),
+  );
   investingApp.get("/api/market-data/consent", async (c) =>
     c.json(await marketDataConsentStore.get(await resolveTenantId())),
   );

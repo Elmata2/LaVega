@@ -3,6 +3,7 @@ import {
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
+  createNeonPersonalNetWorthStore,
   createNeonPriceStore,
   createNeonSectorCorrectionStore,
   createNeonSectorInferenceSettingStore,
@@ -200,4 +201,24 @@ test("a tenant with no preferences row has no benchmarks and no consent", async 
   expect(await createNeonMarketDataConsentStore(db).get("user-a")).toMatchObject({
     accepted: false,
   });
+});
+
+test("personal net worth totals are read under the caller's own tenant", async () => {
+  const { db, calls } = fakeDatabase([
+    { date: "2026-01-02", total_cents: "150000" },
+    { date: "2026-01-03", total_cents: "-500" },
+  ]);
+
+  const totals = await createNeonPersonalNetWorthStore(db).list("user-a");
+
+  expect(totals).toEqual([
+    { date: "2026-01-02", totalCents: 150_000 },
+    { date: "2026-01-03", totalCents: -500 },
+  ]);
+  expect(identities(calls)).toEqual(["user-a"]);
+});
+
+test("a tenant who has never shared a total reads an empty list, not an error", async () => {
+  const { db } = fakeDatabase();
+  expect(await createNeonPersonalNetWorthStore(db).list("user-a")).toEqual([]);
 });

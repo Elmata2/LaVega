@@ -27,10 +27,12 @@ import {
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
+  createNeonPersonalNetWorthStore,
   createNeonPriceStore,
   createNeonSectorCorrectionStore,
   createNeonSectorInferenceSettingStore,
 } from "@lavega/investing-server/src/neonStores.js";
+import { createInMemoryPersonalNetWorthStore } from "@lavega/investing-server/src/personalNetWorthStore.js";
 import { createNeonSectorProfileStore } from "@lavega/investing-server/src/neonSectorProfileStore.js";
 import {
   createFileSectorCorrectionStore,
@@ -137,6 +139,13 @@ async function getInvestingFetch(): Promise<{
     marketDataConsentStore: database
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    // No file fallback: without a database, Personal's own PUT/DELETE route is
+    // not mounted either (net-worth-routes.ts), so there is never anything to
+    // read locally — an empty in-memory store answers exactly the same as a
+    // real one with nothing shared yet.
+    personalNetWorthStore: database
+      ? createNeonPersonalNetWorthStore(database)
+      : createInMemoryPersonalNetWorthStore(),
     investingLayoutStore: database
       ? createNeonInvestingLayoutStore(database)
       : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
