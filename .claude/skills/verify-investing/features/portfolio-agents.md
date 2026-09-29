@@ -34,7 +34,12 @@ node $C assets --target prod --path /investing/agents/warren_buffett
 node $C api POST /api/agents/portfolio/conversation --target preview \
   --body '{"agentId":"warren_buffett","prompt":"What is my biggest risk?"}'
 node $C browser open --target prod                          # then snapshot, click the card
+node $C browser screenshot --png /tmp/lavega-verify-investing/evidence/munger-chat.png
 ```
+
+The PNG path is `/tmp/lavega-verify-investing/evidence/<name>.png`. `browser screenshot`
+creates that directory. A repo path or `$TMPDIR` is `path-rejected`. Do not retry under a
+different folder.
 
 Proof it works: the catalog returns six agents, a run returns `result` with a `signal`, and a
 conversation returns `result.text` plus `judgment`.

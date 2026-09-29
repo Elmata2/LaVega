@@ -51,7 +51,7 @@ node $C browser click --dry-run @eN
 node $C browser click @eN
 node $C browser wait-settle
 node $C browser snapshot --interactive --out "$E/post-allow-snapshot.json"
-node $C browser screenshot --png "$E/after-allow.png"
+node $C browser screenshot --png "$E/after-allow.png"   # $E is under /tmp; the CLI creates it
 node $C consent --out "$E/post-consent.json"
 node $C sync-status --out "$E/post-sync-status.json"
 # When the broker POST failed, the button did not start price sync. Dry-run, then one live wait.
