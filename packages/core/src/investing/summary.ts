@@ -223,20 +223,29 @@ function maxDrawdown(values: readonly number[]): number {
   return worst;
 }
 
+export type SectorWeight = { sector: string; weight: number };
+
 export function buildSectorExposure(
   positions: readonly { symbol: string; marketValue: number | null }[],
-  sectorBySymbol: ReadonlyMap<string, string>,
+  weightsBySymbol: ReadonlyMap<string, readonly SectorWeight[]>,
 ): SectorExposure[] {
   const totalsBySector = new Map<string, number>();
   let total = 0;
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
-    const sector = sectorBySymbol.get(position.symbol.toUpperCase()) ?? "Unknown";
-    totalsBySector.set(sector, (totalsBySector.get(sector) ?? 0) + position.marketValue);
+    const vector = weightsBySymbol.get(position.symbol.toUpperCase()) ?? [];
+    let covered = 0;
+    for (const { sector, weight } of vector) {
+      totalsBySector.set(sector, (totalsBySector.get(sector) ?? 0) + position.marketValue * weight);
+      covered += weight;
+    }
+    const residual = Math.max(0, 1 - covered);
+    if (residual > 0)
+      totalsBySector.set("Unknown", (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual);
     total += position.marketValue;
   }
   if (total <= 0) return [];
   return [...totalsBySector.entries()]
-    .map(([sector, value]) => ({ sector: sector, weight: value / total }))
+    .map(([sector, value]) => ({ sector, weight: value / total }))
     .sort((left, right) => right.weight - left.weight || left.sector.localeCompare(right.sector));
 }

@@ -1,4 +1,4 @@
-import { buildSectorExposure, type SectorExposure } from "@lavega/core";
+import { buildSectorExposure, type SectorExposure, type SectorWeight } from "@lavega/core";
 import type { SectorProfile } from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
@@ -56,7 +56,12 @@ export async function resolvePortfolioSectors(
       }
     }),
   );
-  return { sectorBySymbol, exposure: buildSectorExposure(positions, sectorBySymbol) };
+  // TASK 5: replace with the resolved fund weight vectors; every symbol here
+  // is either a stock's single sector or the interim Unknown placeholder.
+  const weightsBySymbol = new Map<string, SectorWeight[]>();
+  for (const [key, sector] of sectorBySymbol)
+    if (sector !== UNKNOWN_SECTOR) weightsBySymbol.set(key, [{ sector, weight: 1 }]);
+  return { sectorBySymbol, exposure: buildSectorExposure(positions, weightsBySymbol) };
 }
 
 async function resolveSector(

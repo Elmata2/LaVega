@@ -89,20 +89,20 @@ test("null value gaps are skipped and dates align portfolio to benchmark", () =>
   expect(metrics.beta).not.toBeNull();
 });
 
-test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc", () => {
-  const sectors = new Map([
-    ["ACME", "Technology"],
-    ["BLOK", "Industrials"],
+test("sector exposure accumulates a weight vector per position, residual folds into Unknown", () => {
+  const weights = new Map([
+    ["ACME", [{ sector: "Technology", weight: 1 }]],
+    ["BLOK", [{ sector: "Industrials", weight: 1 }]],
   ]);
   const exposure = buildSectorExposure(
     [
       { symbol: "ACME", marketValue: 300 },
       { symbol: "blok", marketValue: 100 },
-      { symbol: "MYST", marketValue: 100 },
+      { symbol: "MYST", marketValue: 100 }, // no entry in weights at all
       { symbol: "ZERO", marketValue: null },
       { symbol: "NEG", marketValue: -50 },
     ],
-    sectors,
+    weights,
   );
   expect(exposure).toEqual([
     { sector: "Technology", weight: 0.6 },
@@ -111,8 +111,35 @@ test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc
   ]);
 });
 
-test("sector exposure is empty without priced positions", () => {
+test("an unpriced portfolio has no exposure at all", () => {
   expect(buildSectorExposure([{ symbol: "ACME", marketValue: null }], new Map())).toEqual([]);
+});
+
+test("a fund position splits its market value across its own weight vector", () => {
+  const weights = new Map([
+    [
+      "VFEM.L",
+      [
+        { sector: "Technology", weight: 0.4 },
+        { sector: "Financial Services", weight: 0.3 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure).toEqual([
+    { sector: "Technology", weight: 0.4 },
+    // 1 - (0.4+0.3) computes as 0.30000000000000004 (double rounding), so the
+    // residual edges out the covered 0.3 bucket for weight-desc placement.
+    { sector: "Unknown", weight: 0.30000000000000004 },
+    { sector: "Financial Services", weight: 0.3 },
+  ]);
+});
+
+test("a fund with an empty weight vector (bond fund) is entirely Unknown, not an error", () => {
+  const weights = new Map([["AGGG.L", []]]);
+  expect(buildSectorExposure([{ symbol: "AGGG.L", marketValue: 500 }], weights)).toEqual([
+    { sector: "Unknown", weight: 1 },
+  ]);
 });
 
 test("owner deposit is removed from daily return", () => {
