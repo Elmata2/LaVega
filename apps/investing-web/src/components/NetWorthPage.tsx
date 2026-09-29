@@ -24,17 +24,24 @@ export function NetWorthPage() {
    * makes every range's merge a no-op and the chart render unchanged. */
   const personalTotals = usePersonalNetWorthTotals();
   const portfolio = state.status === "ready" ? state.data.portfolio : undefined;
+  /* Personal always sends its total in EUR (netWorthShare.ts's PUT body is
+   * hardcoded `currency: "EUR"`). Folding it in while the dashboard presents
+   * in a different currency would silently add EUR cents onto a converted
+   * total, so a non-EUR presentation currency skips the merge entirely —
+   * exactly the same no-op path an owner who never shared anything gets. */
+  const totalsInPresentationCurrency =
+    state.status === "ready" && state.data.presentationCurrency === "EUR" ? personalTotals : [];
   const netWorthData = useMemo(() => {
     if (!portfolio) return undefined;
     const merged: Partial<Record<PortfolioRange, ReturnType<typeof mergeInPersonalNetWorth>["points"]>> =
       {};
     for (const range of PORTFOLIO_RANGES)
-      merged[range] = mergeInPersonalNetWorth(portfolio[range], personalTotals).points;
+      merged[range] = mergeInPersonalNetWorth(portfolio[range], totalsInPresentationCurrency).points;
     return merged;
-  }, [portfolio, personalTotals]);
+  }, [portfolio, totalsInPresentationCurrency]);
   const latestPersonalDate = useMemo(
-    () => mergeInPersonalNetWorth([], personalTotals).latestPersonalDate,
-    [personalTotals],
+    () => mergeInPersonalNetWorth([], totalsInPresentationCurrency).latestPersonalDate,
+    [totalsInPresentationCurrency],
   );
 
   if (state.status === "loading") return <Loading />;
