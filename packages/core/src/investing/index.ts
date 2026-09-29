@@ -17,3 +17,5 @@ export * from "./summary.js";
 export * from "./splits.js";
 export * from "./layout.js";
 export * from "./sectorTaxonomy.js";
+export * from "./fundamentals.js";
+export * from "./portfolioBrief.js";
