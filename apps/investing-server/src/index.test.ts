@@ -493,7 +493,7 @@ test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", 
   const response = await runtimeApp.request("/api/investing/sectors/infer", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ classified: 0, remaining: 0 });
+  expect(await response.json()).toEqual({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
 });
 
 test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
