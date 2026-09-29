@@ -229,6 +229,21 @@ export function deferredLayoutFetch(): {
   return { fetch: () => response, resolve };
 }
 
+/* A dashboard GET this test resolves by hand, instead of `responseFor`'s
+ * immediate answer — for watching what the page renders while the dashboard
+ * is still in flight (e.g. a cold visit to /profile before any data has
+ * ever loaded). */
+export function deferredDashboardFetch(): {
+  fetch: () => Promise<Response>;
+  resolve: (body: unknown) => void;
+} {
+  let resolve: (body: unknown) => void = () => {};
+  const response = new Promise<Response>((settle) => {
+    resolve = (body) => settle(new Response(JSON.stringify(body)));
+  });
+  return { fetch: () => response, resolve };
+}
+
 export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   return withAuthUnconfigured(input, () => {

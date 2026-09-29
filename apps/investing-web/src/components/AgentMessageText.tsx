@@ -9,11 +9,11 @@ import type { ReactNode } from "react";
 
 type Block =
   | { type: "heading"; text: string }
-  | { type: "paragraph"; text: string }
+  | { type: "paragraph"; lines: string[] }
   | { type: "ul"; items: string[] }
   | { type: "ol"; items: string[] };
 
-const HEADING = /^(#{1,3})\s+(.*)$/;
+const HEADING = /^#+\s+(.*)$/;
 const BULLET = /^[-*]\s+(.*)$/;
 const ORDERED = /^\d+\.\s+(.*)$/;
 
@@ -22,8 +22,7 @@ function parseBlocks(text: string): Block[] {
   let paragraphLines: string[] = [];
 
   const flushParagraph = () => {
-    const joined = paragraphLines.join(" ").trim();
-    if (joined) blocks.push({ type: "paragraph", text: joined });
+    if (paragraphLines.length > 0) blocks.push({ type: "paragraph", lines: paragraphLines });
     paragraphLines = [];
   };
 
@@ -37,7 +36,7 @@ function parseBlocks(text: string): Block[] {
     const heading = HEADING.exec(line);
     if (heading) {
       flushParagraph();
-      blocks.push({ type: "heading", text: heading[2] });
+      blocks.push({ type: "heading", text: heading[1] });
       continue;
     }
 
@@ -65,13 +64,25 @@ function parseBlocks(text: string): Block[] {
   return blocks;
 }
 
+/* An emphasis delimiter only counts when it isn't touching whitespace on
+ * its inner side (the standard "no space inside the delimiter" rule) —
+ * without it, "shares * price" reads the lone asterisk as the start of an
+ * italic span search instead of a literal character. */
+function touchesWhitespace(ch: string | undefined): boolean {
+  return ch === undefined || /\s/.test(ch);
+}
+
 /* Scans inline text for bold/italic/bold-italic/code spans, recursing into
  * each span's own contents so nesting (e.g. bold containing code) works.
- * Any asterisk or backtick run that never finds its closing pair is dropped
- * rather than echoed, so stray markdown punctuation never reaches the
- * reader. A stray `#` is left alone: it is legitimate text far more often
- * than it is broken heading syntax (only a line-leading `#`/`##`/`###`
- * followed by a space is treated as heading markup, at the block level). */
+ * A backtick run with no closing pair is dropped, since a stray backtick
+ * is rare and never load-bearing punctuation. An asterisk run that never
+ * finds a valid closing pair (no partner, or the only candidate touches
+ * whitespace) is kept as literal asterisk characters instead of being
+ * silently deleted, so a real "3 * 4" or a trailing footnote marker still
+ * reaches the reader. A stray `#` is left alone: it is legitimate text far
+ * more often than it is broken heading syntax (only a line-leading run of
+ * `#` followed by a space is treated as heading markup, at the block
+ * level). */
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let plain = "";
@@ -104,9 +115,9 @@ function renderInline(text: string): ReactNode[] {
       let run = 1;
       while (text[i + run] === "*") run += 1;
 
-      if (run >= 3) {
+      if (run >= 3 && !touchesWhitespace(text[i + 3])) {
         const close = text.indexOf("***", i + 3);
-        if (close !== -1) {
+        if (close !== -1 && !touchesWhitespace(text[close - 1])) {
           flushPlain();
           nodes.push(
             <strong key={`bi${key++}`}>
@@ -118,9 +129,9 @@ function renderInline(text: string): ReactNode[] {
         }
       }
 
-      if (run >= 2) {
+      if (run >= 2 && !touchesWhitespace(text[i + 2])) {
         const close = text.indexOf("**", i + 2);
-        if (close !== -1) {
+        if (close !== -1 && !touchesWhitespace(text[close - 1])) {
           flushPlain();
           nodes.push(<strong key={`b${key++}`}>{renderInline(text.slice(i + 2, close))}</strong>);
           i = close + 2;
@@ -128,9 +139,9 @@ function renderInline(text: string): ReactNode[] {
         }
       }
 
-      if (run === 1) {
+      if (run === 1 && !touchesWhitespace(text[i + 1])) {
         const close = text.indexOf("*", i + 1);
-        if (close !== -1) {
+        if (close !== -1 && !touchesWhitespace(text[close - 1])) {
           flushPlain();
           nodes.push(<em key={`i${key++}`}>{renderInline(text.slice(i + 1, close))}</em>);
           i = close + 1;
@@ -138,7 +149,9 @@ function renderInline(text: string): ReactNode[] {
         }
       }
 
-      /* No closing marker at any length: the whole run is stray, drop it. */
+      /* No valid closing marker at any length: keep the run as literal
+       * asterisk characters instead of dropping it. */
+      plain += "*".repeat(run);
       i += run;
       continue;
     }
@@ -177,7 +190,16 @@ export function AgentMessageText({ text }: { text: string }) {
               ))}
             </ol>
           );
-        return <p key={index}>{renderInline(block.text)}</p>;
+        return (
+          <p key={index}>
+            {block.lines.map((line, lineIndex) => (
+              <span key={lineIndex}>
+                {renderInline(line)}
+                {lineIndex < block.lines.length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        );
       })}
     </div>
   );

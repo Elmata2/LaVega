@@ -42,6 +42,16 @@ test("renders a *italic* line as an em element", () => {
   root.unmount();
 });
 
+test("renders a run of 4+ hashes as a heading, not literal punctuation", () => {
+  const { container, root } = render("#### Deep heading");
+  expect(container.querySelector("h1, h2, h3")).toBeNull();
+  const bold =
+    container.querySelector("strong") ?? container.querySelector('[class*="font-semibold"]');
+  expect(bold?.textContent).toBe("Deep heading");
+  expect(container.textContent).not.toContain("#");
+  root.unmount();
+});
+
 test("renders a heading line as visually bold, not an h1/h2/h3, with the hashes stripped", () => {
   const { container, root } = render("### Heading");
   expect(container.querySelector("h1, h2, h3")).toBeNull();
@@ -49,6 +59,25 @@ test("renders a heading line as visually bold, not an h1/h2/h3, with the hashes 
     container.querySelector("strong") ?? container.querySelector('[class*="font-semibold"]');
   expect(bold?.textContent).toBe("Heading");
   expect(container.textContent).not.toContain("#");
+  root.unmount();
+});
+
+test("preserves a single line break inside a paragraph as a <br/>, not a run-on line", () => {
+  const { container, root } = render("Line one.\nLine two.");
+  expect(container.querySelectorAll("p").length).toBe(1);
+  expect(container.querySelectorAll("br").length).toBeGreaterThanOrEqual(1);
+  expect(container.textContent).toContain("Line one.");
+  expect(container.textContent).toContain("Line two.");
+  root.unmount();
+});
+
+test("a blank line still starts a new paragraph rather than just a line break", () => {
+  const { container, root } = render("Para one.\n\nPara two.");
+  const paragraphs = container.querySelectorAll("p");
+  expect(paragraphs.length).toBe(2);
+  expect(paragraphs[0]?.textContent).toBe("Para one.");
+  expect(paragraphs[1]?.textContent).toBe("Para two.");
+  expect(container.querySelectorAll("br").length).toBe(0);
   root.unmount();
 });
 
@@ -76,19 +105,36 @@ test("renders inline `code` as a code element", () => {
   root.unmount();
 });
 
-test("a lone unmatched asterisk renders as plain visible text without crashing", () => {
+/* A stray asterisk with no closing partner used to be silently deleted,
+ * which meant "3 * 4 and a footnote*" lost its multiplication sign and its
+ * footnote marker with no trace. It must survive as a literal character. */
+test("a lone unmatched asterisk renders as literal visible text without crashing", () => {
   expect(() => render("This has a * lone star in it.")).not.toThrow();
   const { container, root } = render("This has a * lone star in it.");
-  expect(container.textContent).not.toContain("*");
+  expect(container.textContent).toContain("*");
   expect(container.textContent).toContain("lone star");
   root.unmount();
 });
 
-test("unmatched ** with no closing pair renders as plain visible text without crashing", () => {
+test("unmatched ** with no closing pair renders as literal visible text without crashing", () => {
   expect(() => render("This is **broken markdown with no close")).not.toThrow();
   const { container, root } = render("This is **broken markdown with no close");
-  expect(container.textContent).not.toContain("**");
+  expect(container.textContent).toContain("**");
   expect(container.textContent).toContain("broken markdown");
+  root.unmount();
+});
+
+test("a trailing unmatched asterisk is kept as literal text, not dropped", () => {
+  const { container, root } = render("a footnote*");
+  expect(container.textContent).toBe("a footnote*");
+  root.unmount();
+});
+
+test("an asterisk touching whitespace on both sides is not read as emphasis", () => {
+  const { container, root } = render("shares * price");
+  expect(container.textContent).toBe("shares * price");
+  expect(container.querySelector("em")).toBeNull();
+  expect(container.querySelector("strong")).toBeNull();
   root.unmount();
 });
 

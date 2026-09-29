@@ -375,8 +375,8 @@ function StatusSection() {
             />
             <StatusChip
               label="Cache"
-              value={`Version ${dataVersion}`}
-              tone={dataVersion > 0 ? "success" : "neutral"}
+              value={state.status === "ready" ? `Version ${dataVersion}` : "Loading…"}
+              tone={state.status === "ready" && dataVersion > 0 ? "success" : "neutral"}
             >
               <div className="mt-2 flex justify-end">
                 <ClearPriceCache />
