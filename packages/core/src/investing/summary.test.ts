@@ -111,6 +111,20 @@ test("sector exposure accumulates a weight vector per position, residual folds i
   ]);
 });
 
+test("duplicate sectors inside one position's weight vector merge instead of appearing twice", () => {
+  const weights = new Map([
+    ["VFEM.L", [
+      { sector: "Technology", weight: 0.2 },
+      { sector: "Technology", weight: 0.3 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure).toEqual([
+    { sector: "Technology", weight: 0.5 },
+    { sector: "Unknown", weight: 0.5 },
+  ]);
+});
+
 test("an unpriced portfolio has no exposure at all", () => {
   expect(buildSectorExposure([{ symbol: "ACME", marketValue: null }], new Map())).toEqual([]);
 });

@@ -15,6 +15,11 @@ export type FundSectorProfile = {
   kind: "fund";
   weights: { sector: string; weight: number }[];
   source: "provider";
+  /** ISO date the weights were last fetched from the provider. A fund
+   *  rebalances quarterly, so sectorResolution.ts re-fetches a profile older
+   *  than its refresh window instead of trusting it indefinitely. Absent on
+   *  a stock profile and on any record written before this field existed. */
+  fetchedAt?: string;
 };
 export type SectorProfile = StockSectorProfile | FundSectorProfile;
 

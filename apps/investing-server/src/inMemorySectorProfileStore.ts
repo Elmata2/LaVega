@@ -1,7 +1,11 @@
-import type { SectorProfile } from "@lavega/adapters";
+import type { FundSectorProfile, SectorProfile } from "@lavega/adapters";
 import { GICS_SECTOR_LABELS, type GicsSectorLabel } from "@lavega/core";
 
 const GICS_SECTOR_LABEL_SET = new Set<string>(GICS_SECTOR_LABELS);
+
+function isValidFetchedAt(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
 
 /** The taxonomy invariant (sectorTaxonomy.ts): every stored sector is a
  *  GICS_SECTOR_LABELS member or UNKNOWN_SECTOR. A fund weight fails this by
@@ -23,13 +27,17 @@ export function isValidFundWeight(
 
 /** Drops a fund's out-of-taxonomy or out-of-range weights instead of
  *  rejecting the whole profile — the dropped share falls into the residual,
- *  reported as Unknown. A stock profile passes through unchanged. Every
- *  store applies this at its write boundary so no implementation can persist
- *  a sector outside the taxonomy. */
+ *  reported as Unknown. A malformed fetchedAt is dropped the same way, which
+ *  is indistinguishable from a legacy record that never had one: both read
+ *  back as stale and get re-fetched. A stock profile passes through
+ *  unchanged. Every store applies this at its write boundary so no
+ *  implementation can persist a sector outside the taxonomy. */
 export function sanitizeSectorProfile(profile: SectorProfile): SectorProfile {
-  return profile.kind === "fund"
-    ? { ...profile, weights: profile.weights.filter(isValidFundWeight) }
-    : profile;
+  if (profile.kind !== "fund") return profile;
+  const sanitized: FundSectorProfile = { ...profile, weights: profile.weights.filter(isValidFundWeight) };
+  if (sanitized.fetchedAt !== undefined && !isValidFetchedAt(sanitized.fetchedAt))
+    delete sanitized.fetchedAt;
+  return sanitized;
 }
 
 /** The contract both the Node file-backed store (fileSectorProfileStore.ts)

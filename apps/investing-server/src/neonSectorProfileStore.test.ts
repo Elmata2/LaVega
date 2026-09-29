@@ -53,6 +53,23 @@ test("set overwrites the same symbol rather than erroring on conflict", async ()
   });
 });
 
+test("a fund profile's fetchedAt round-trips through the Neon-backed store", async () => {
+  const store = createNeonSectorProfileStore(db);
+  const fetchedAt = "2026-01-01T00:00:00.000Z";
+  await store.set("VWRL.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.5 }],
+    source: "provider",
+    fetchedAt,
+  });
+  expect(await store.get("VWRL.L")).toEqual({
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.5 }],
+    source: "provider",
+    fetchedAt,
+  });
+});
+
 test("a fund weight outside the GICS taxonomy is dropped on write, not the whole profile", async () => {
   const store = createNeonSectorProfileStore(db);
   await store.set("BOGUS.L", {

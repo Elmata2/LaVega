@@ -45,6 +45,46 @@ test("a fund profile round-trips through the file store", async () => {
   expect(await store.get("VFEM.L")).toEqual(fund);
 });
 
+test("a fund profile's fetchedAt persists to disk and survives a fresh store instance", async () => {
+  const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
+  const store = createFileSectorProfileStore(filePath);
+  const fetchedAt = "2026-01-01T00:00:00.000Z";
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.4 }],
+    source: "provider",
+    fetchedAt,
+  });
+  expect(await createFileSectorProfileStore(filePath).get("VFEM.L")).toEqual({
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.4 }],
+    source: "provider",
+    fetchedAt,
+  });
+});
+
+test("a legacy fund record with no fetchedAt field still loads (pre-refresh-window records)", async () => {
+  const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
+  await writeFile(
+    filePath,
+    JSON.stringify({
+      "VFEM.L": {
+        kind: "fund",
+        weights: [{ sector: "Technology", weight: 0.6 }],
+        source: "provider",
+      },
+    }),
+  );
+  const store = createFileSectorProfileStore(filePath);
+  const loaded = await store.get("VFEM.L");
+  expect(loaded).toEqual({
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.6 }],
+    source: "provider",
+  });
+  expect(loaded).not.toHaveProperty("fetchedAt");
+});
+
 test("a fund record's non-GICS weight is dropped on read; a valid weight in the same record survives", async () => {
   const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
   await writeFile(

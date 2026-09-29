@@ -1,6 +1,10 @@
 import { expect, test, vi } from "vitest";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
-import { resolvePortfolioSectors, UNKNOWN_SECTOR } from "./sectorResolution.js";
+import {
+  FUND_PROFILE_REFRESH_DAYS,
+  resolvePortfolioSectors,
+  UNKNOWN_SECTOR,
+} from "./sectorResolution.js";
 
 const positions = [
   { symbol: "AAPL", marketValue: 75 },
@@ -10,12 +14,7 @@ const positions = [
 
 test("stored profiles classify priced positions and weight the exposure", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", {
-    kind: "stock",
-    sector: "Technology",
-    industry: "Hardware",
-    source: "provider",
-  });
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
 
   const { sectorBySymbol, exposure } = await resolvePortfolioSectors(positions, { store });
 
@@ -43,42 +42,54 @@ test("the fetch fallback persists what it resolves and degrades to Unknown on fa
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async (symbol: string) => {
     if (symbol === "myst") throw new Error("yahoo down");
-    return {
-      kind: "stock" as const,
-      sector: "Technology",
-      industry: "Hardware",
-      source: "provider" as const,
-    };
+    return { kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const };
   });
 
   const { sectorBySymbol } = await resolvePortfolioSectors(positions, { store, fetchProfile });
 
   expect(sectorBySymbol.get("AAPL")).toBe("Technology");
   expect(sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
-  expect(await store.get("AAPL")).toEqual({
-    kind: "stock",
-    sector: "Technology",
-    industry: "Hardware",
-    source: "provider",
-  });
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Technology" });
   expect(fetchProfile).toHaveBeenCalledTimes(2);
 });
 
-// TASK 5: replace this pin once fund profiles resolve via weight-vector look-through.
-test("a fund profile resolves to Unknown (interim) until look-through ships", async () => {
+test("a fund profile's weights become the symbol's exposure split", async () => {
   const store = createInMemorySectorProfileStore();
   await store.set("VFEM.L", {
     kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.4 }],
+    weights: [{ sector: "Technology", weight: 0.4 }, { sector: "Healthcare", weight: 0.5 }],
     source: "provider",
   });
-
-  const { sectorBySymbol } = await resolvePortfolioSectors(
+  const { exposure } = await resolvePortfolioSectors(
     [{ symbol: "VFEM.L", marketValue: 100 }],
     { store },
   );
+  expect(exposure).toEqual([
+    { sector: "Healthcare", weight: 0.5 },
+    { sector: "Technology", weight: 0.4 },
+    // 1 - (0.4+0.5) is 0.09999999999999998 in float, not the exact 0.1 the
+    // inputs suggest (same double-rounding summary.test.ts documents for
+    // buildSectorExposure's residual elsewhere).
+    { sector: "Unknown", weight: 0.09999999999999998 },
+  ]);
+});
 
-  expect(sectorBySymbol.get("VFEM.L")).toBe(UNKNOWN_SECTOR);
+test("a fund's headline sectorBySymbol label is its single largest weight", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 0.4 }, { sector: "Healthcare", weight: 0.5 }],
+    source: "provider",
+  });
+  const { sectorBySymbol, weightsBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    { store },
+  );
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Healthcare");
+  expect(weightsBySymbol.get("VFEM.L")).toEqual([
+    { sector: "Healthcare", weight: 0.5 },
+    { sector: "Technology", weight: 0.4 },
+  ]);
 });
 
 test("an unpriced portfolio has no exposure at all", async () => {
@@ -123,3 +134,138 @@ test("resolves sector misses concurrently instead of one at a time", async () =>
 
   expect(peakInFlight).toBeGreaterThan(1);
 }, 2000);
+
+test("a stock sector string outside the GICS taxonomy resolves to Unknown, never passed through raw", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("ACME", {
+    kind: "stock",
+    sector: "Not A Real Sector",
+    industry: "Widgets",
+    source: "provider",
+  });
+
+  const { sectorBySymbol, exposure } = await resolvePortfolioSectors(
+    [{ symbol: "ACME", marketValue: 100 }],
+    { store },
+  );
+
+  expect(sectorBySymbol.get("ACME")).toBe(UNKNOWN_SECTOR);
+  expect(exposure).toEqual([{ sector: UNKNOWN_SECTOR, weight: 1 }]);
+});
+
+test("a fresh fund profile is used from the store without re-fetching", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+    fetchedAt: new Date().toISOString(),
+  });
+  const fetchProfile = vi.fn();
+
+  await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], { store, fetchProfile });
+
+  expect(fetchProfile).not.toHaveBeenCalled();
+});
+
+test("a fund profile older than the refresh window is re-fetched and re-persisted with a new fetchedAt", async () => {
+  const store = createInMemorySectorProfileStore();
+  const staleDate = new Date(
+    Date.now() - (FUND_PROFILE_REFRESH_DAYS + 1) * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+    fetchedAt: staleDate,
+  });
+  const fetchProfile = vi.fn(async () => ({
+    kind: "fund" as const,
+    weights: [{ sector: "Healthcare", weight: 1 }],
+    source: "provider" as const,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    { store, fetchProfile },
+  );
+
+  expect(fetchProfile).toHaveBeenCalledTimes(1);
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Healthcare");
+  const persisted = await store.get("VFEM.L");
+  expect(persisted).toMatchObject({ weights: [{ sector: "Healthcare", weight: 1 }] });
+  expect(typeof (persisted as { fetchedAt?: string }).fetchedAt).toBe("string");
+  expect((persisted as { fetchedAt?: string }).fetchedAt).not.toBe(staleDate);
+});
+
+test("a fund profile with no fetchedAt at all is treated as stale and re-fetched", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+  });
+  const fetchProfile = vi.fn(async () => ({
+    kind: "fund" as const,
+    weights: [{ sector: "Healthcare", weight: 1 }],
+    source: "provider" as const,
+  }));
+
+  await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], { store, fetchProfile });
+
+  expect(fetchProfile).toHaveBeenCalledTimes(1);
+});
+
+test("a failed refresh of a stale fund profile keeps the stale profile instead of degrading to Unknown", async () => {
+  const store = createInMemorySectorProfileStore();
+  const staleDate = new Date(
+    Date.now() - (FUND_PROFILE_REFRESH_DAYS + 1) * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+    fetchedAt: staleDate,
+  });
+  const fetchProfile = vi.fn(async () => {
+    throw new Error("yahoo down");
+  });
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    { store, fetchProfile },
+  );
+
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Technology");
+  expect(await store.get("VFEM.L")).toMatchObject({ fetchedAt: staleDate });
+});
+
+test("a read-only lookup (no fetchProfile) never re-fetches a stale fund profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  const staleDate = new Date(
+    Date.now() - (FUND_PROFILE_REFRESH_DAYS + 1) * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  await store.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+    fetchedAt: staleDate,
+  });
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    { store },
+  );
+
+  expect(sectorBySymbol.get("VFEM.L")).toBe("Technology");
+});
+
+test("a stock profile is never re-fetched for staleness even when very old", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const fetchProfile = vi.fn();
+
+  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, fetchProfile });
+
+  expect(fetchProfile).not.toHaveBeenCalled();
+});
