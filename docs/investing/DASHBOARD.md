@@ -422,18 +422,25 @@ Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega
 ### Personal's opt-in share (owner's own bank money)
 
 The owner may opt in, from Personal's (`apps/web`) own profile settings, to
-share their Personal "Totale positie" (the consolidated EUR total Overzicht
-shows — `consolidate()` in `packages/core/src/ingest.ts`) into this chart. Off
-by default; nothing crosses the network until the owner turns the switch on.
+share their Personal "Totale positie" (the same EUR total Overzicht's
+SaldoBlock shows — `positionSeries` in `apps/web/src/totalePositie.ts`) into
+this chart. Off by default; nothing crosses the network until the owner turns
+the switch on. The switch is **per device**: turning it on only shares totals
+from visits on that browser, and a total already shared stays with Investing
+until the switch is turned off again on a device where it is on.
 
 What crosses the boundary, and nothing else: while the switch is on and the
 Personal vault is unlocked, after every sync/import and on unlock, Personal
-computes today's total in EUR and sends `PUT /api/personal/net-worth-total`
-with exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
-balance breakdown or entity name ever leaves the browser, and a day with any
-unknown balance sends nothing at all — never a partial sum. Turning the switch
-off sends `DELETE /api/personal/net-worth-total`, which removes every total
-the account ever shared.
+computes the current day's total (read fresh at send time, not memoized from
+when the tab loaded) in EUR and sends `PUT /api/personal/net-worth-total` with
+exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
+balance breakdown or entity name ever leaves the browser. A day with at least
+one known balance still sends the partial sum, exactly like the card; only a
+day with zero known balances sends nothing. Turning the switch off queues a
+`DELETE /api/personal/net-worth-total`, which removes every total the account
+ever shared; the underlying preference only flips off once that delete
+actually succeeds, retrying on the next unlock or app start otherwise, so a
+failed delete never leaves stale totals behind silently.
 
 The number is stored server-side, in the clear (not end-to-end encrypted like
 the vault backup), in `personal.net_worth_totals` — Personal owns every write;
@@ -449,6 +456,12 @@ a date before the owner's first shared total gets no Personal part, and the
 chart's own "Total" line and headline figure become portfolio value plus
 Personal value. Returns, risk, and allocation elsewhere keep reading the
 unmerged, portfolio-only series and never include Personal money.
+
+Personal's total always arrives in EUR (the PUT body is hardcoded
+`currency: "EUR"`), so `NetWorthPage.tsx` only performs this merge while
+`presentationCurrency` is `"EUR"`; any other presentation currency skips it,
+the same no-op path an owner who has never shared anything gets — adding raw
+EUR cents onto a converted total would be silently wrong.
 
 When a total exists, the chart adds a third stacked band, "Bank accounts
 (Personal, as of {latest shared date})", alongside Investments and Cash. When
