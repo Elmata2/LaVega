@@ -760,3 +760,185 @@ test("a switch flipped after a failed load saves only that choice, so a module t
   ).toBeNull();
   act(() => root.unmount());
 });
+
+test("the sector-inference switch is disabled without market-data consent", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/market-data/consent"
+            ? new Response(JSON.stringify({ accepted: false }))
+            : String(input) === "/api/investing/sector-inference"
+              ? new Response(JSON.stringify({ enabled: false }))
+              : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).toBe("true");
+  expect(container.textContent).toContain("Grant market-data consent");
+  root.unmount();
+});
+
+test("the sector-inference privacy copy names what the classifier actually sends", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/sector-inference"
+            ? new Response(JSON.stringify({ enabled: false }))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain(
+    "Sends each holding's ticker and name, never quantities or values",
+  );
+  expect(container.textContent).not.toMatch(/instrument names/i);
+  root.unmount();
+});
+
+test("the sector-inference switch turns on and persists once consent is granted", async () => {
+  const puts: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () => {
+          const url = String(input);
+          if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+          if (url === "/api/investing/sector-inference" && init?.method === "PUT") {
+            puts.push(JSON.parse(String(init.body)));
+            return new Response(JSON.stringify({ enabled: true }));
+          }
+          if (url === "/api/investing/sector-inference")
+            return new Response(JSON.stringify({ enabled: false }));
+          return responseFor(input, init);
+        }),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).not.toBe("true");
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  await act(async () => {
+    toggle.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(puts).toEqual([{ enabled: true }]);
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  root.unmount();
+});
+
+test("the sector-inference switch is disabled with a hint when the server has no classifier configured", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/market-data/consent"
+            ? new Response(JSON.stringify({ accepted: true }))
+            : String(input) === "/api/investing/sector-inference"
+              ? new Response(JSON.stringify({ enabled: false, available: false }))
+              : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).toBe("true");
+  expect(container.textContent).toContain("Sector inference is not available on this server.");
+  expect(container.textContent).not.toContain("Grant market-data consent");
+  root.unmount();
+});
+
+test("the sector-inference switch stays enabled when the server omits availability", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/market-data/consent"
+            ? new Response(JSON.stringify({ accepted: true }))
+            : String(input) === "/api/investing/sector-inference"
+              ? new Response(JSON.stringify({ enabled: false }))
+              : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).not.toBe("true");
+  root.unmount();
+});

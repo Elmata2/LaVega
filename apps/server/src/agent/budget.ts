@@ -93,7 +93,10 @@ export async function spentCents(
 
 /** The most a single call on each route can cost, in euro cents, derived from
  *  that route's own input bounds: OCR is capped at a 20-page window, categorize
- *  at 200 short items, and the two search-backed routes now send a max_tokens.
+ *  at 200 short items, the two search-backed routes now send a max_tokens, and
+ *  sector-inference sends one System One choice over 11 sector criteria with
+ *  only a symbol and a short instrument description as input, so it is priced
+ *  like portfolio-persona's own single System One call.
  *  Rounded generously upward — this is a ceiling, not an estimate.
  *
  *  These exist so the gate can refuse a call it cannot afford BEFORE making it.
@@ -106,6 +109,7 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   chat: 25,
   travel: 20,
   "portfolio-persona": 1,
+  "sector-inference": 1,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost —

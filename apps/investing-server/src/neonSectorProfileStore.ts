@@ -26,10 +26,17 @@ export function createNeonSectorProfileStore(db: Database): SectorProfileStore {
       const sanitized = sanitizeSectorProfile(profile);
       const client = await db.connect();
       try {
+        /* A provider row is never displaced by an inferred one written after
+         * it — the provider fetch may simply have lost a race with an
+         * in-flight classification for the same symbol. An inferred row, or
+         * a provider row replacing an existing provider row (a re-fetch),
+         * still writes normally. */
         await client.query(
           `INSERT INTO investing.sector_profiles (symbol, profile, updated_at)
            VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
-           ON CONFLICT (symbol) DO UPDATE SET profile = EXCLUDED.profile, updated_at = CURRENT_TIMESTAMP`,
+           ON CONFLICT (symbol) DO UPDATE SET profile = EXCLUDED.profile, updated_at = CURRENT_TIMESTAMP
+           WHERE sector_profiles.profile->>'source' IS DISTINCT FROM 'provider'
+              OR EXCLUDED.profile->>'source' = 'provider'`,
           [symbol.toUpperCase(), JSON.stringify(sanitized)],
         );
       } finally {

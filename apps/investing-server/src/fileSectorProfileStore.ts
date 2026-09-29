@@ -59,10 +59,15 @@ export function createFileSectorProfileStore(filePath: string): SectorProfileSto
       return (await store.read())[key(symbol)] ?? null;
     },
     async set(symbol, profile) {
-      await store.update((current) => ({
-        ...current,
-        [key(symbol)]: sanitizeSectorProfile(profile),
-      }));
+      await store.update((current) => {
+        const k = key(symbol);
+        const sanitized = sanitizeSectorProfile(profile);
+        /* Same non-overwrite guard as the Neon store: a provider row is
+         * never displaced by an inferred one written after it. */
+        const existing = current[k];
+        if (existing?.source === "provider" && sanitized.source !== "provider") return current;
+        return { ...current, [k]: sanitized };
+      });
     },
   };
 }

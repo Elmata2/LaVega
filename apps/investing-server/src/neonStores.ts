@@ -18,6 +18,8 @@ import {
   type MarketDataConsentDecision,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
+import type { SectorCorrectionStore } from "./sectorCorrectionStore.js";
+import type { SectorInferenceSettingStore } from "./sectorInferenceSetting.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
@@ -118,6 +120,29 @@ export function createNeonMarketDataConsentStore(db: Database): MarketDataConsen
     async set(decision) {
       await createPreferencesRepository(db, decision.tenantId).setMarketDataConsent(decision);
     },
+  };
+}
+
+export function createNeonSectorCorrectionStore(db: Database): SectorCorrectionStore {
+  const key = (symbol: string) => symbol.toUpperCase();
+  return {
+    async get(tenantId, symbol) {
+      const corrections = await createPreferencesRepository(db, tenantId).getSectorCorrections();
+      return corrections[key(symbol)] ?? null;
+    },
+    getAll: (tenantId) => createPreferencesRepository(db, tenantId).getSectorCorrections(),
+    set: (tenantId, symbol, sector) =>
+      createPreferencesRepository(db, tenantId).setSectorCorrection(symbol, sector),
+    clear: (tenantId, symbol) =>
+      createPreferencesRepository(db, tenantId).clearSectorCorrection(symbol),
+  };
+}
+
+export function createNeonSectorInferenceSettingStore(db: Database): SectorInferenceSettingStore {
+  return {
+    get: (tenantId) => createPreferencesRepository(db, tenantId).getSectorInferenceEnabled(),
+    set: (tenantId, enabled) =>
+      createPreferencesRepository(db, tenantId).setSectorInferenceEnabled(enabled),
   };
 }
 

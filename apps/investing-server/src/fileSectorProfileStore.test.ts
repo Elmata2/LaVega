@@ -132,6 +132,24 @@ test("a fund record's out-of-range weight is dropped on read; a valid weight in 
   });
 });
 
+test("an inferred write never overwrites an existing provider profile on disk", async () => {
+  const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
+  const store = createFileSectorProfileStore(filePath);
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Technology", source: "provider" });
+});
+
 test("set() strips a fund profile's invalid weights before persisting", async () => {
   const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
   const store = createFileSectorProfileStore(filePath);

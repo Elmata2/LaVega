@@ -70,6 +70,32 @@ test("a fund profile's fetchedAt round-trips through the Neon-backed store", asy
   });
 });
 
+test("an inferred write never overwrites an existing provider profile", async () => {
+  const store = createNeonSectorProfileStore(db);
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Technology", source: "provider" });
+});
+
+test("a provider write still replaces an existing provider profile", async () => {
+  const store = createNeonSectorProfileStore(db);
+  await store.set("MSFT", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  await store.set("MSFT", { kind: "stock", sector: "Healthcare", industry: "Biotech", source: "provider" });
+
+  expect(await store.get("MSFT")).toMatchObject({ sector: "Healthcare", source: "provider" });
+});
+
 test("a fund weight outside the GICS taxonomy is dropped on write, not the whole profile", async () => {
   const store = createNeonSectorProfileStore(db);
   await store.set("BOGUS.L", {

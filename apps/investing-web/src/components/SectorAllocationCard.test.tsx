@@ -1,16 +1,27 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { SectorCoverage } from "@lavega/core";
 import type { SummaryState } from "../lib/summaryResource.js";
 import { SectorAllocationCard } from "./SectorAllocationCard.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ enabled: false }))),
+  );
+});
+
 afterEach(() => {
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
+
+const noRefresh = () => {};
 
 function render() {
   const container = document.createElement("div");
@@ -59,7 +70,7 @@ const readyState: SummaryState = {
 
 test("renders sector bars from the shared summary state", () => {
   const { container, root } = render();
-  act(() => root.render(<SectorAllocationCard state={readyState} />));
+  act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));
   expect(container.textContent).toContain("Technology");
   expect(container.querySelector('[data-dashboard-section="sectors"]')).not.toBeNull();
   expect(container.querySelectorAll('[aria-label="Sector allocation"] li')).toHaveLength(2);
@@ -69,7 +80,10 @@ test("no sector data yet reads as an honest empty state, not a broken card", () 
   const { container, root } = render();
   act(() =>
     root.render(
-      <SectorAllocationCard state={{ ...readyState, data: { ...readyState.data, sectors: [] } }} />,
+      <SectorAllocationCard
+        state={{ ...readyState, data: { ...readyState.data, sectors: [] } }}
+        refresh={noRefresh}
+      />,
     ),
   );
   expect(container.textContent).toContain("No sector data yet.");
@@ -77,7 +91,7 @@ test("no sector data yet reads as an honest empty state, not a broken card", () 
 
 test("renders a loading placeholder without claiming an outcome", () => {
   const { container, root } = render();
-  act(() => root.render(<SectorAllocationCard state={{ status: "loading" }} />));
+  act(() => root.render(<SectorAllocationCard state={{ status: "loading" }} refresh={noRefresh} />));
   expect(container.querySelector('[data-dashboard-section="sectors"]')?.getAttribute("aria-busy")).toBe(
     "true",
   );
@@ -86,7 +100,7 @@ test("renders a loading placeholder without claiming an outcome", () => {
 test("renders the shared summary error instead of a second one", () => {
   const { container, root } = render();
   act(() =>
-    root.render(<SectorAllocationCard state={{ status: "error", message: "boom" }} />),
+    root.render(<SectorAllocationCard state={{ status: "error", message: "boom" }} refresh={noRefresh} />),
   );
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("boom");
@@ -94,7 +108,7 @@ test("renders the shared summary error instead of a second one", () => {
 
 test("caption describes look-through instead of claiming holdings are excluded", () => {
   const { container, root } = render();
-  act(() => root.render(<SectorAllocationCard state={readyState} />));
+  act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));
   expect(container.textContent).not.toMatch(/underlying holdings are not included/i);
   expect(container.textContent).toMatch(/look(ed)?[\s-]*through/i);
 });
@@ -103,8 +117,342 @@ test("look-through caption is absent when there is no sector data", () => {
   const { container, root } = render();
   act(() =>
     root.render(
-      <SectorAllocationCard state={{ ...readyState, data: { ...readyState.data, sectors: [] } }} />,
+      <SectorAllocationCard
+        state={{ ...readyState, data: { ...readyState.data, sectors: [] } }}
+        refresh={noRefresh}
+      />,
     ),
   );
   expect(container.textContent).not.toMatch(/look(ed)?[\s-]*through/i);
+});
+
+const coverage = (overrides: Partial<SectorCoverage>): SectorCoverage => ({
+  provider: 0,
+  inferred: 0,
+  correction: 0,
+  unknown: 0,
+  ...overrides,
+});
+
+test("shows the coverage line with each nonzero source, omitting the rest", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: {
+            ...readyState.data,
+            sectorCoverage: coverage({ provider: 0.82, inferred: 0.1, correction: 0.03, unknown: 0.05 }),
+          },
+        }}
+        refresh={noRefresh}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain(
+    "82% from provider data · 10% inferred · 3% your corrections · 5% unknown",
+  );
+});
+
+test("omits a coverage source that rounds to zero", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      <SectorAllocationCard
+        state={{ ...readyState, data: { ...readyState.data, sectorCoverage: coverage({ provider: 1 }) } }}
+        refresh={noRefresh}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("100% from provider data");
+  expect(container.textContent).not.toMatch(/inferred|your corrections|unknown/);
+});
+
+test("three equal thirds round to sum to 100 instead of dropping a point", () => {
+  const { container, root } = render();
+  const third = 1 / 3;
+  act(() =>
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: {
+            ...readyState.data,
+            sectorCoverage: coverage({ provider: third, inferred: third, correction: third }),
+          },
+        }}
+        refresh={noRefresh}
+      />,
+    ),
+  );
+  const match = container.textContent?.match(
+    /(\d+)% from provider data · (\d+)% inferred · (\d+)% your corrections/,
+  );
+  expect(match).not.toBeNull();
+  const [, provider, inferred, correction] = match!;
+  expect(Number(provider) + Number(inferred) + Number(correction)).toBe(100);
+  expect(container.textContent).toContain("34% from provider data · 33% inferred · 33% your corrections");
+});
+
+test("shows no coverage line when the summary predates sectorCoverage", () => {
+  const { container, root } = render();
+  act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));
+  expect(container.textContent).not.toMatch(/from provider data/);
+});
+
+test("classifies unknown positions once inference is enabled, then refreshes", async () => {
+  const requests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer")
+        return new Response(JSON.stringify({ classified: 2, remaining: 0 }));
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+        }}
+        refresh={refresh}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test("never calls infer when inference is disabled, even with unknown coverage", async () => {
+  const requests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: false }));
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+        }}
+        refresh={refresh}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(requests).not.toContain("/api/investing/sectors/infer");
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test("stops the bounded infer loop instead of looping forever when classification keeps finding more", async () => {
+  let calls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer") {
+        calls += 1;
+        return new Response(JSON.stringify({ classified: 10, remaining: 40 }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.1, unknown: 0.9 }) },
+        }}
+        refresh={refresh}
+      />,
+    );
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+  expect(calls).toBe(3);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test("an unrelated re-render mid-run, handing a new refresh closure, doesn't cancel the run", async () => {
+  const requests: string[] = [];
+  let resolveInfer: (response: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer")
+        return new Promise<Response>((resolve) => {
+          resolveInfer = resolve;
+        });
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const state: SummaryState = {
+    ...readyState,
+    data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+  };
+  const { root } = render();
+  await act(async () => {
+    root.render(<SectorAllocationCard state={state} refresh={() => {}} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+
+  const refresh = vi.fn();
+  act(() => {
+    // Same state by identity, brand-new refresh closure — simulates the
+    // parent (Overview) re-rendering for an unrelated reason mid-run.
+    root.render(<SectorAllocationCard state={state} refresh={refresh} />);
+  });
+
+  await act(async () => {
+    resolveInfer(new Response(JSON.stringify({ classified: 2, remaining: 0 })));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test("stops the infer loop on 428 without refreshing when nothing was classified", async () => {
+  const requests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer")
+        return new Response(JSON.stringify({ problems: ["Sector inference is not enabled"] }), {
+          status: 428,
+        });
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+        }}
+        refresh={refresh}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test("a classifier that always fails triggers at most the capped number of POSTs across many summary refreshes, and never refreshes", async () => {
+  let calls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer") {
+        calls += 1;
+        return new Response(
+          JSON.stringify({ classified: 0, failed: 1, failedSymbols: ["BOOM"], remaining: 0 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  // Simulates something outside this hook's control handing back a brand-new
+  // summary object on every render, each still reporting unknown coverage —
+  // the shape of the pre-fix endless loop, minus this hook's own refresh.
+  for (let round = 0; round < 6; round += 1) {
+    await act(async () => {
+      root.render(
+        <SectorAllocationCard
+          state={{
+            ...readyState,
+            data: {
+              ...readyState.data,
+              sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }),
+              topPositions: [{ symbol: `ROUND${round}`, weight: 0 }],
+            },
+          }}
+          refresh={refresh}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  expect(calls).toBe(3);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test("sends symbols the server reported as failed back as exclude on the next attempt", async () => {
+  const bodies: Array<{ exclude?: unknown }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer") {
+        bodies.push(init?.body ? (JSON.parse(String(init.body)) as { exclude?: unknown }) : {});
+        return new Response(
+          JSON.stringify({ classified: 1, failed: 1, failedSymbols: ["BOOM"], remaining: 5 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+        }}
+        refresh={() => {}}
+      />,
+    );
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+  });
+
+  expect(bodies).toHaveLength(3);
+  expect(bodies[0]?.exclude).toEqual([]);
+  expect(bodies[1]?.exclude).toEqual(["BOOM"]);
+  expect(bodies[2]?.exclude).toEqual(["BOOM"]);
 });

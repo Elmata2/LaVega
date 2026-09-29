@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
-import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from "@lavega/core";
+import { useCallback, useEffect, useState } from "react";
+import type {
+  HistoricalRisk,
+  PortfolioMetrics,
+  RiskRange,
+  SectorCoverage,
+  SectorExposure,
+} from "@lavega/core";
 
 export type PortfolioSummary = {
   metrics: PortfolioMetrics;
   sectors: SectorExposure[];
+  /** Absent from responses recorded before Task 10; SectorAllocationCard
+   *  treats that the same as "nothing to report" and omits its coverage line. */
+  sectorCoverage?: SectorCoverage;
   topPositions: Array<{ symbol: string; weight: number; description?: string }>;
   risk: HistoricalRisk;
   composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
@@ -46,6 +55,7 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
       risk.benchmark === undefined ||
       hasStrings(risk.benchmark, "symbol")) &&
     isArrayOf(value.sectors, (entry) => hasStrings(entry, "sector")) &&
+    (value.sectorCoverage === undefined || isRecord(value.sectorCoverage)) &&
     isArrayOf(value.topPositions, (entry) => hasStrings(entry, "symbol"))
   );
 }
@@ -115,8 +125,12 @@ export function usePortfolioSummary(
       });
     return () => controller.abort();
   }, [range, benchmark, requestKey, enabled]);
+  /* Stable across re-renders: a caller (SectorAllocationCard's background
+   * inference effect) depends on this identity to avoid restarting a
+   * pending run on every unrelated parent re-render. */
+  const refresh = useCallback(() => setRefreshes((value) => value + 1), []);
   return {
     state: state.key === requestKey ? state.result : { status: "loading" },
-    refresh: () => setRefreshes((value) => value + 1),
+    refresh,
   };
 }

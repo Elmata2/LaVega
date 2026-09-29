@@ -60,7 +60,13 @@ export function createInMemorySectorProfileStore(): SectorProfileStore {
       return profiles.get(symbol.toUpperCase()) ?? null;
     },
     async set(symbol, profile) {
-      profiles.set(symbol.toUpperCase(), sanitizeSectorProfile(profile));
+      const key = symbol.toUpperCase();
+      const sanitized = sanitizeSectorProfile(profile);
+      /* Same non-overwrite guard as the Neon store: a provider row is never
+       * displaced by an inferred one written after it. */
+      const existing = profiles.get(key);
+      if (existing?.source === "provider" && sanitized.source !== "provider") return;
+      profiles.set(key, sanitized);
     },
   };
 }

@@ -501,9 +501,18 @@ export type PreferencesRepository = {
   setMarketDataConsent(decision: unknown): Promise<void>;
   getLayout(): Promise<unknown | null>;
   setLayout(layout: unknown): Promise<void>;
+  getSectorCorrections(): Promise<Record<string, string>>;
+  setSectorCorrection(symbol: string, sector: string): Promise<void>;
+  clearSectorCorrection(symbol: string): Promise<void>;
+  /** Owner-facing switch for sector inference (#135), default off — a
+   *  per-account preference, not a server env flag, because inference sends
+   *  an instrument's name and description to an external model. */
+  getSectorInferenceEnabled(): Promise<boolean>;
+  setSectorInferenceEnabled(enabled: boolean): Promise<void>;
 };
 
-/** Benchmarks, market-data consent and layout share one row, so each write names its own column. */
+/** Benchmarks, market-data consent, layout, sector corrections and the sector-inference switch
+ *  share one row, so each write names its own column. */
 export function createPreferencesRepository(
   db: Database,
   userId: string | undefined | null,
@@ -525,6 +534,16 @@ export function createPreferencesRepository(
       );
     });
   };
+  const writeBoolean = async (column: string, value: boolean) => {
+    await withTenantStatement(db, tenantId, async (client) => {
+      await client.query(
+        `INSERT INTO investing.preferences (user_id, ${column}) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET ${column} = EXCLUDED.${column}, updated_at = CURRENT_TIMESTAMP`,
+        [value],
+      );
+    });
+  };
+  const readCorrections = () => read<Record<string, string>>("sector_corrections", {});
+  const writeCorrections = (value: Record<string, string>) => write("sector_corrections", value);
   return {
     getBenchmarkSymbols: () => read<string[]>("benchmark_symbols", []),
     setBenchmarkSymbols: (symbols) => write("benchmark_symbols", [...symbols]),
@@ -532,6 +551,18 @@ export function createPreferencesRepository(
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
     getLayout: () => read<unknown | null>("layout", null),
     setLayout: (layout) => write("layout", layout),
+    getSectorCorrections: readCorrections,
+    async setSectorCorrection(symbol, sector) {
+      const current = await readCorrections();
+      await writeCorrections({ ...current, [symbol.toUpperCase()]: sector });
+    },
+    async clearSectorCorrection(symbol) {
+      const current = await readCorrections();
+      const { [symbol.toUpperCase()]: _removed, ...rest } = current;
+      await writeCorrections(rest);
+    },
+    getSectorInferenceEnabled: () => read<boolean>("sector_inference_enabled", false),
+    setSectorInferenceEnabled: (enabled) => writeBoolean("sector_inference_enabled", enabled),
   };
 }
 
@@ -1282,7 +1313,13 @@ export function createEbFlowRepository(db: Database) {
 
 export type AiUsage = {
   day: string; // "YYYY-MM-DD"
-  route: "categorize" | "extract-invoice" | "chat" | "travel" | "portfolio-persona";
+  route:
+    | "categorize"
+    | "extract-invoice"
+    | "chat"
+    | "travel"
+    | "portfolio-persona"
+    | "sector-inference";
   model: string;
   inputTokens: number;
   outputTokens: number;

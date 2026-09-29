@@ -76,3 +76,54 @@ test("set() strips a fund profile's non-GICS and out-of-range weights, keeping t
     source: "provider",
   });
 });
+
+test("an inferred write never overwrites an existing provider profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Technology", source: "provider" });
+});
+
+test("a provider write still replaces an existing provider profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  await store.set("AAPL", { kind: "stock", sector: "Healthcare", industry: "Biotech", source: "provider" });
+
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Healthcare", source: "provider" });
+});
+
+test("an inferred write still replaces an existing inferred profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.5,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: "2026-09-02T00:00:00.000Z",
+  });
+
+  expect(await store.get("MYST")).toMatchObject({ sector: "Healthcare", confidence: 0.9 });
+});

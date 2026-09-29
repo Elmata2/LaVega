@@ -41,3 +41,38 @@ const SNAKE_KEY_TO_LABEL: Record<string, GicsSectorLabel> = {
 export function formatSectorWeightKey(key: string): GicsSectorLabel | null {
   return SNAKE_KEY_TO_LABEL[key] ?? null;
 }
+
+/** The 11 GICS sectors grouped into the classic three economic-sensitivity
+ *  super-sectors (Cyclical / Defensive / Sensitive). Used only as the
+ *  System One classifier's fallback label when its confidence in a specific
+ *  sector is low — reported instead of discarding the answer, per issue #135
+ *  ("the broad label is derivable from the narrow answer with no extra
+ *  request"). This 3-way split isn't the only one in use across the industry
+ *  (Fidelity's own public materials group Real Estate and Communication
+ *  Services inconsistently across sources); it is a defensible first cut,
+ *  not a verified-authoritative one — the confidence threshold below it is
+ *  explicitly a placeholder to measure and tune, not a final number. */
+export type SectorDivisionLabel = "Cyclical" | "Defensive" | "Sensitive";
+
+export const SECTOR_TO_DIVISION: Record<GicsSectorLabel, SectorDivisionLabel> = {
+  "Consumer Cyclical": "Cyclical",
+  "Financial Services": "Cyclical",
+  "Real Estate": "Cyclical",
+  "Basic Materials": "Cyclical",
+  "Consumer Defensive": "Defensive",
+  Healthcare: "Defensive",
+  Utilities: "Defensive",
+  "Communication Services": "Sensitive",
+  Energy: "Sensitive",
+  Industrials: "Sensitive",
+  Technology: "Sensitive",
+};
+
+/** The three division labels, derived from SECTOR_TO_DIVISION's own values
+ *  so the set can never drift out of sync with it. An inferred stock
+ *  profile (sectorResolution.ts) may carry one of these instead of a GICS
+ *  sector when the classifier's confidence was below its threshold; a
+ *  provider-sourced profile never may. */
+export const SECTOR_DIVISION_LABELS: readonly SectorDivisionLabel[] = Array.from(
+  new Set(Object.values(SECTOR_TO_DIVISION)),
+);

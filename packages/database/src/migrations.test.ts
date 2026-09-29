@@ -109,6 +109,34 @@ test("personal.ai_usage deliberately has neither RLS nor FORCE — aggregate own
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
+test("investing.preferences gains sector_corrections and sector_inference_enabled columns with the documented defaults", async () => {
+  const rows = await db.query<{
+    column_name: string;
+    data_type: string;
+    column_default: string | null;
+    is_nullable: string;
+  }>(
+    `SELECT column_name, data_type, column_default, is_nullable FROM information_schema.columns
+     WHERE table_schema = 'investing' AND table_name = 'preferences'
+       AND column_name IN ('sector_corrections', 'sector_inference_enabled')
+     ORDER BY column_name`,
+  );
+  expect(rows.rows).toEqual([
+    {
+      column_name: "sector_corrections",
+      data_type: "jsonb",
+      column_default: "'{}'::jsonb",
+      is_nullable: "NO",
+    },
+    {
+      column_name: "sector_inference_enabled",
+      data_type: "boolean",
+      column_default: "false",
+      is_nullable: "NO",
+    },
+  ]);
+});
+
 test("investing.sector_profiles deliberately has neither RLS nor FORCE — a symbol's sector is not tenant data", async () => {
   const rows = await db.query<{ enabled: boolean; forced: boolean }>(
     `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced

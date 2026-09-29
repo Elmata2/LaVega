@@ -33,6 +33,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
+import { PositionSectorControl } from "./components/PositionSectorControl.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
@@ -1498,6 +1499,7 @@ function Overview() {
                 <SectorAllocationCard
                   currency={state.data.presentationCurrency}
                   state={summaryState}
+                  refresh={refreshSummary}
                 />
               )}
               {widgets.has("agent") && <PortfolioAgentCard />}
@@ -1740,6 +1742,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           )}
         </ol>
       )}
+      <PositionSectorControl symbol={position.symbol} />
     </section>
   );
 }
