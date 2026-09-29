@@ -15,15 +15,35 @@ import {
   runtimeMarketDataConsentFile,
 } from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
 import {
+  createFileInvestingLayoutStore,
+  runtimeInvestingLayoutFile,
+} from "@lavega/investing-server/src/fileInvestingLayoutStore.js";
+import {
   createFilePriceStore,
   runtimePriceStoreFile,
 } from "@lavega/investing-server/src/filePriceStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import {
   createNeonBenchmarkSelectionStore,
+  createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
   createNeonPriceStore,
+  createNeonSectorCorrectionStore,
+  createNeonSectorInferenceSettingStore,
 } from "@lavega/investing-server/src/neonStores.js";
+import { createNeonSectorProfileStore } from "@lavega/investing-server/src/neonSectorProfileStore.js";
+import {
+  createFileSectorCorrectionStore,
+  runtimeSectorCorrectionFile,
+} from "@lavega/investing-server/src/fileSectorCorrectionStore.js";
+import {
+  createFileSectorInferenceSettingStore,
+  runtimeSectorInferenceSettingFile,
+} from "@lavega/investing-server/src/fileSectorInferenceSettingStore.js";
+import {
+  createFileSectorProfileStore,
+  runtimeSectorStoreFile,
+} from "@lavega/investing-server/src/fileSectorProfileStore.js";
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
@@ -117,6 +137,18 @@ async function getInvestingFetch(): Promise<{
     marketDataConsentStore: database
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    investingLayoutStore: database
+      ? createNeonInvestingLayoutStore(database)
+      : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    sectorStore: database
+      ? createNeonSectorProfileStore(database)
+      : createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorCorrectionStore: database
+      ? createNeonSectorCorrectionStore(database)
+      : createFileSectorCorrectionStore(runtimeSectorCorrectionFile()),
+    sectorInferenceSettingStore: database
+      ? createNeonSectorInferenceSettingStore(database)
+      : createFileSectorInferenceSettingStore(runtimeSectorInferenceSettingFile()),
     dashboardCache,
   });
   const apiNamespaces = new Set(

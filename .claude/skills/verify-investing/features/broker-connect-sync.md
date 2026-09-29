@@ -24,10 +24,14 @@ capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync pr
 
 ## How to get to it (user POV)
 
-`Connect broker` in the header, or `/investing/brokers/connect`. Pick a broker, paste the
-credentials, and press `Save and sync`. On the local file vault, also enter `Vault password`.
-On a later local visit the form is `Unlock vault` with `Unlock and sync`. Hosted preview and
-prod keep the vault unlocked, so that unlock form is not the later-visit path there.
+Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#brokers`), or the
+profile button in the top bar. `/brokers/connect` redirects to `/profile#brokers`.
+
+Pick a broker, paste the credentials, and press `Save and sync`. Trading 212 needs both
+`API key` and `API secret`. On the local file vault, also enter `Vault password`. On a later
+local visit the form is `Unlock vault` with `Unlock and sync`. Hosted preview and prod keep
+the Neon vault unlocked (`passphrase: unused`), so that unlock form is not the later-visit
+path there.
 
 ## Driving it with control-investing
 

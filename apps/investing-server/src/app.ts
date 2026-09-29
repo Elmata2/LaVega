@@ -1,17 +1,21 @@
 import { Hono } from "hono";
 import {
   emptyInvestingDashboard,
+  GICS_SECTOR_LABELS,
   LOCAL_TENANT_ID,
   buildHistoricalRisk,
   validateBenchmarkSymbols,
+  validateInvestingLayout,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
+  type InvestingLayoutStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
+  createInMemoryInvestingLayoutStore,
   createInMemoryPriceStore,
   createYahooPriceProvider,
   createFrankfurterFxProvider,
@@ -37,13 +41,35 @@ import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
-import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
+import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
 } from "./inMemorySectorProfileStore.js";
-import { resolvePortfolioSectors } from "./sectorResolution.js";
+import {
+  resolvePortfolioSectors,
+  resolvedStockSector,
+  UNKNOWN_SECTOR,
+} from "./sectorResolution.js";
+import type { SectorClassifier } from "./sectorClassifier.js";
+import {
+  createInMemorySectorCorrectionStore,
+  type SectorCorrectionStore,
+} from "./sectorCorrectionStore.js";
+import {
+  createInMemorySectorInferenceSettingStore,
+  type SectorInferenceSettingStore,
+} from "./sectorInferenceSetting.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
+
+/** Bounds one /sectors/infer call to this many classifier invocations, so a
+ *  portfolio with many unknown symbols can't run one request past a
+ *  serverless deadline — the client re-calls for what's left. */
+const SECTOR_INFERENCE_BATCH_SIZE = 10;
+
+/** Bounds the `exclude` list a caller may send: a page session's own
+ *  accumulated failed symbols, never an unbounded client-supplied array. */
+const MAX_SECTOR_INFERENCE_EXCLUDE = 200;
 
 export type InvestingDashboardReader = (input: {
   symbol?: string;
@@ -108,6 +134,7 @@ type PriceDependencies = {
   fxProvider: ReturnType<typeof createFrankfurterFxProvider>;
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
   benchmarkSelectionStore: BenchmarkSelectionStore;
+  investingLayoutStore: InvestingLayoutStore;
   benchmarkSearch: (
     query: string,
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
@@ -119,6 +146,7 @@ type PriceDependencies = {
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
   priceSyncPaceMs: number;
+  priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
@@ -131,6 +159,9 @@ type PriceDependencies = {
   marketDataConsentStore: MarketDataConsentStore;
   sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
   sectorStore: SectorProfileStore;
+  sectorCorrectionStore: SectorCorrectionStore;
+  sectorInferenceSettingStore: SectorInferenceSettingStore;
+  sectorClassifier?: SectorClassifier;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
   healthCheck: () => Promise<InvestingHealth>;
@@ -146,12 +177,24 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const dashboardReader = dependencies.dashboardReader ?? (async () => emptyInvestingDashboard());
   const benchmarkSelectionStore =
     dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const investingLayoutStore =
+    dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const benchmarkSearch =
     dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
-  const sectorProfile = dependencies.sectorProfile ?? fetchYahooSectorProfile;
+  /* One client per running server process, not per symbol: its crumb and
+   * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
+   * instead of every cache-miss symbol paying its own crumb negotiation. */
+  const sectorHttpClient = new YahooHttpClient();
+  const sectorProfile =
+    dependencies.sectorProfile ??
+    ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
+  const sectorCorrectionStore =
+    dependencies.sectorCorrectionStore ?? createInMemorySectorCorrectionStore();
+  const sectorInferenceSettingStore =
+    dependencies.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore();
   /* Who the request belongs to. Standalone and local runs have a single tenant;
    * mounted behind the personal server this resolves to the signed-in user. */
   const resolveTenantId = dependencies.resolveTenantId ?? (() => LOCAL_TENANT_ID);
@@ -172,6 +215,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
+    benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
     sync: async (target, tenantId) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
@@ -269,14 +313,30 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         }));
       /* Same classification rule as the portfolio-agent snapshot, which
        * passes no fetchProfile. This route keeps the fetch-and-persist
-       * fallback; only the resolution itself is shared. */
-      const { exposure } = await resolvePortfolioSectors(data.positions, {
+       * fallback; only the resolution itself is shared. Without consent,
+       * omit fetchProfile entirely: resolvePortfolioSectors still answers
+       * from cached profiles, it just never calls Yahoo for a fresh one.
+       * classifier is never passed here: classification runs off this
+       * critical path, only from POST /api/investing/sectors/infer. */
+      const tenantId = await resolveTenantId();
+      const consented = await hasYahooConsent(tenantId);
+      /* A cached inferred profile is a global fact (no tenantId on
+       * sector_profiles), so it's visible here only when this tenant has
+       * both consented to Yahoo/AI data use and turned inference on —
+       * otherwise it displays as Unknown, same as never having been
+       * classified (I1, #135 final review). Two cheap reads, no network. */
+      const inferenceEnabled = await sectorInferenceSettingStore.get(tenantId);
+      const corrections = await sectorCorrectionStore.getAll(tenantId);
+      const { exposure, coverage } = await resolvePortfolioSectors(data.positions, {
         store: sectorStore,
-        fetchProfile: sectorProfile,
+        correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
+        showInferred: consented && inferenceEnabled,
+        ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
         ...buildHistoricalRisk(data, range, benchmark),
         sectors: exposure,
+        sectorCoverage: coverage,
         topPositions,
         composition: {
           pricedHoldings: priced.length,
@@ -290,6 +350,129 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     } catch {
       return c.json({ problems: ["Portfolio summary could not be assembled"] }, 503);
     }
+  });
+  investingApp.get("/api/investing/positions/:symbol/sector", async (c) => {
+    const symbol = c.req.param("symbol");
+    const tenantId = await resolveTenantId();
+    /* Same precedence as resolveWeights: read the cached profile before the
+     * correction, so a fund always wins. Read-only — no fetchProfile, no
+     * classifier, no store write. */
+    const profile = await sectorStore.get(symbol);
+    if (profile?.kind === "fund")
+      return c.json({ kind: "fund" as const, sector: null, source: "provider" as const });
+    const corrected = await sectorCorrectionStore.get(tenantId, symbol);
+    if (corrected) return c.json({ kind: "stock" as const, sector: corrected, source: "correction" as const });
+    if (!profile) return c.json({ kind: "unknown" as const, sector: UNKNOWN_SECTOR, source: "unknown" as const });
+    /* Same visibility rule as the summary route (I1, #135 final review): an
+     * inferred profile this tenant isn't allowed to see reads as Unknown. */
+    const consented = await hasYahooConsent(tenantId);
+    const inferenceEnabled = await sectorInferenceSettingStore.get(tenantId);
+    const resolved = resolvedStockSector(profile, { showInferred: consented && inferenceEnabled });
+    return c.json({
+      kind: "stock" as const,
+      sector: resolved.sector,
+      source: resolved.source,
+      ...(resolved.confidence !== undefined ? { confidence: resolved.confidence } : {}),
+    });
+  });
+  investingApp.put("/api/investing/positions/:symbol/sector", async (c) => {
+    const symbol = c.req.param("symbol");
+    const body: { sector?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.sector !== "string" || !GICS_SECTOR_LABELS.includes(body.sector as never))
+      return c.json({ message: "sector must be one of the GICS sector labels" }, 400);
+    const profile = await sectorStore.get(symbol);
+    if (profile?.kind === "fund")
+      return c.json(
+        { message: "A fund's sector is its look-through weight vector, not a single correction" },
+        422,
+      );
+    await sectorCorrectionStore.set(await resolveTenantId(), symbol, body.sector);
+    return c.body(null, 204);
+  });
+  investingApp.delete("/api/investing/positions/:symbol/sector", async (c) => {
+    await sectorCorrectionStore.clear(await resolveTenantId(), c.req.param("symbol"));
+    return c.body(null, 204);
+  });
+  investingApp.get("/api/investing/sector-inference", async (c) =>
+    c.json({
+      enabled: await sectorInferenceSettingStore.get(await resolveTenantId()),
+      /* The switch is per-tenant, but a classifier is per-deployment (a
+       * configured TypeSafe key). Without this the Profile page could let
+       * an owner turn inference "on" on a server that can never run it. */
+      available: dependencies.sectorClassifier !== undefined,
+    }),
+  );
+  investingApp.put("/api/investing/sector-inference", async (c) => {
+    const body: { enabled?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.enabled !== "boolean")
+      return c.json({ message: "enabled must be boolean" }, 400);
+    await sectorInferenceSettingStore.set(await resolveTenantId(), body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+  investingApp.post("/api/investing/sectors/infer", async (c) => {
+    const tenantId = await resolveTenantId();
+    if (!(await hasYahooConsent(tenantId)))
+      return c.json({ problems: ["Yahoo Finance consent required"] }, 428);
+    if (!(await sectorInferenceSettingStore.get(tenantId)))
+      return c.json({ problems: ["Sector inference is not enabled"] }, 428);
+    if (!dependencies.sectorClassifier)
+      return c.json({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
+    const body: { exclude?: unknown } = await c.req.json().catch(() => ({}));
+    let excluded = new Set<string>();
+    if (body.exclude !== undefined) {
+      if (!Array.isArray(body.exclude) || !body.exclude.every((symbol) => typeof symbol === "string"))
+        return c.json({ problems: ["exclude must be a string array"] }, 400);
+      excluded = new Set(
+        body.exclude.slice(0, MAX_SECTOR_INFERENCE_EXCLUDE).map((symbol) => symbol.toUpperCase()),
+      );
+    }
+    const data = await dashboardReader({});
+    const priced = data.positions.filter(
+      (position): position is typeof position & { marketValue: number } =>
+        position.marketValue !== null && position.marketValue > 0,
+    );
+    const corrections = await sectorCorrectionStore.getAll(tenantId);
+    const seen = new Set<string>();
+    const candidates: typeof priced = [];
+    for (const position of priced) {
+      const key = position.symbol.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      /* A symbol the caller already saw fail this page session (the client
+       * fills `exclude` with it) is skipped so the same head-of-line
+       * candidates aren't retried forever ahead of ones that might succeed. */
+      if (excluded.has(key)) continue;
+      if (corrections[key]) continue;
+      if (await sectorStore.get(position.symbol)) continue;
+      candidates.push(position);
+    }
+    const batch = candidates.slice(0, SECTOR_INFERENCE_BATCH_SIZE);
+    /* classified counts symbols actually cached this round (classified or
+     * no-match), never batch.length — a classifier failure leaves the
+     * symbol uncached, and reporting it as classified anyway is what let
+     * the client refresh forever on the same always-failing symbols
+     * (#135 final review, C1). */
+    const cachedThisRound = new Set<string>();
+    const trackingStore: SectorProfileStore = {
+      get: (symbol) => sectorStore.get(symbol),
+      async set(symbol, profile) {
+        cachedThisRound.add(symbol.toUpperCase());
+        await sectorStore.set(symbol, profile);
+      },
+    };
+    await resolvePortfolioSectors(batch, {
+      store: trackingStore,
+      classifier: dependencies.sectorClassifier,
+    });
+    const failedSymbols = batch
+      .map((position) => position.symbol.toUpperCase())
+      .filter((symbol) => !cachedThisRound.has(symbol));
+    return c.json({
+      classified: cachedThisRound.size,
+      failed: failedSymbols.length,
+      failedSymbols,
+      remaining: candidates.length - batch.length,
+    });
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     const timing = createServerTiming();
@@ -357,6 +540,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (!(await hasYahooConsent(await resolveTenantId())))
       return c.json({ consentRequired: true, problems: ["Yahoo Finance consent required"] }, 428);
     return c.json(await benchmarkSearch(query));
+  });
+  investingApp.get("/api/investing/layout", async (c) =>
+    c.json(await investingLayoutStore.get(await resolveTenantId())),
+  );
+  investingApp.put("/api/investing/layout", async (c) => {
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return c.json({ problems: ["layout must be a JSON object"] }, 400);
+    const layout = validateInvestingLayout(body);
+    const tenantId = await resolveTenantId();
+    await investingLayoutStore.set({ tenantId, ...layout });
+    return c.json(layout);
   });
   investingApp.get("/api/market-data/consent", async (c) =>
     c.json(await marketDataConsentStore.get(await resolveTenantId())),

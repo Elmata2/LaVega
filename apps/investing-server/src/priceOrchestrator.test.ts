@@ -392,12 +392,94 @@ test("a benchmark selected during a paused run joins its next slice", async () =
     status: "completed",
     total: 4,
   });
-  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual([
-    "ONE",
-    "^AEX",
-    "TWO",
-    "THREE",
-  ]);
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
+});
+
+test("a benchmark selected mid-run through the shared selection store is fetched next by the instance already running", async () => {
+  // Two orchestrator instances sharing only the durable stores, exactly like two
+  // separate Vercel invocations: no in-process object (an activeRuns registry,
+  // say) may be the thing that carries the new benchmark into the run.
+  const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let selectedBenchmarks: string[] = [];
+  const discover = () => [
+    ...selectedBenchmarks.map((symbol) => ({
+      ...symbolTarget(symbol),
+      kind: "benchmark" as const,
+    })),
+    ...holdings,
+  ];
+  let releaseOne!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseOne = resolve;
+  });
+  // Past the default 5 s re-check throttle, so the periodic recheck before TWO
+  // is due once ONE finishes, instead of being skipped for arriving too soon.
+  let clock = 0;
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "ONE") await firstPending;
+    clock += 6_000;
+    return result();
+  });
+  const instanceRunningTheSync = createPriceOrchestrator({
+    discover,
+    sync,
+    paceMs: 0,
+    progressStore,
+    now: () => new Date(clock),
+  });
+  // Never used to run anything: it stands in for the invocation that serves the
+  // PUT and a later status poll, and shares no JS object with the run above.
+  const anotherInstance = createPriceOrchestrator({
+    discover,
+    sync: async () => result(),
+    paceMs: 0,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  const run = instanceRunningTheSync.run("local");
+  await waitForAssertion(() =>
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ONE" }), "local"),
+  );
+
+  // The PUT handler only writes the selection store; it never calls into the
+  // orchestrator that happens to be running.
+  selectedBenchmarks = ["^AEX"];
+
+  releaseOne();
+  await run;
+
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
+  await expect(anotherInstance.status("local")).resolves.toMatchObject({
+    status: "completed",
+    total: 4,
+    completed: 4,
+  });
+});
+
+test("re-checking for a new benchmark is throttled by the clock, not called once per symbol", async () => {
+  // In production this re-check is an uncached Neon round trip (the benchmark
+  // selection store), so it must not scale with symbol count: a 200-symbol
+  // sync would otherwise cost 200 extra round trips. Freeze the clock so no
+  // amount of real time passes between symbols; only the initial discover()
+  // at run start should ever fire.
+  const targets = Array.from({ length: 20 }, (_, index) => symbolTarget(`SYM${index}`));
+  const discover = vi.fn(() => targets);
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({
+    discover,
+    sync,
+    paceMs: 0,
+    now: () => new Date(0),
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 20,
+  });
+
+  expect(discover).toHaveBeenCalledTimes(1);
 });
 
 test("progress survives the process that produced it", async () => {

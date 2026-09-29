@@ -79,6 +79,20 @@ test("System One does not call provider after its budget gate refuses", async ()
   expect(systemOne).not.toHaveBeenCalled();
 });
 
+test("a caller-supplied route and failed-request ceiling are recorded instead of the portfolio-persona defaults", async () => {
+  const recordUsage = vi.fn();
+  const provider = createSystemOneProvider({
+    config: { apiKey: "test-key", model: DEFAULT_SYSTEM_ONE_MODEL },
+    client: { systemOne: vi.fn().mockRejectedValue(new Error("down")) } as never,
+    checkBudget: async () => ({ ok: true }),
+    recordUsage,
+    route: "sector-inference",
+    failedRequestInputTokens: 500,
+  });
+  await expect(provider.judge({ state: "x", questions: {} })).rejects.toThrow("down");
+  expect(recordUsage).toHaveBeenCalledWith(expect.any(String), 500, 0);
+});
+
 test("System One refuses state above its byte limit", async () => {
   const provider = createSystemOneProvider({
     config: { apiKey: "test-key", model: DEFAULT_SYSTEM_ONE_MODEL },

@@ -7,12 +7,19 @@ import {
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
-import { validateBenchmarkSymbols, type BenchmarkSelectionStore } from "@lavega/core";
+import {
+  validateBenchmarkSymbols,
+  validateInvestingLayout,
+  type BenchmarkSelectionStore,
+  type InvestingLayoutStore,
+} from "@lavega/core";
 import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentDecision,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
+import type { SectorCorrectionStore } from "./sectorCorrectionStore.js";
+import type { SectorInferenceSettingStore } from "./sectorInferenceSetting.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
@@ -72,6 +79,20 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
   };
 }
 
+export function createNeonInvestingLayoutStore(db: Database): InvestingLayoutStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getLayout();
+      return validateInvestingLayout(stored);
+    },
+    async set(selection) {
+      await createPreferencesRepository(db, selection.tenantId).setLayout(
+        validateInvestingLayout(selection),
+      );
+    },
+  };
+}
+
 export function createNeonMarketDataConsentStore(db: Database): MarketDataConsentStore {
   return {
     async get(tenantId) {
@@ -99,6 +120,29 @@ export function createNeonMarketDataConsentStore(db: Database): MarketDataConsen
     async set(decision) {
       await createPreferencesRepository(db, decision.tenantId).setMarketDataConsent(decision);
     },
+  };
+}
+
+export function createNeonSectorCorrectionStore(db: Database): SectorCorrectionStore {
+  const key = (symbol: string) => symbol.toUpperCase();
+  return {
+    async get(tenantId, symbol) {
+      const corrections = await createPreferencesRepository(db, tenantId).getSectorCorrections();
+      return corrections[key(symbol)] ?? null;
+    },
+    getAll: (tenantId) => createPreferencesRepository(db, tenantId).getSectorCorrections(),
+    set: (tenantId, symbol, sector) =>
+      createPreferencesRepository(db, tenantId).setSectorCorrection(symbol, sector),
+    clear: (tenantId, symbol) =>
+      createPreferencesRepository(db, tenantId).clearSectorCorrection(symbol),
+  };
+}
+
+export function createNeonSectorInferenceSettingStore(db: Database): SectorInferenceSettingStore {
+  return {
+    get: (tenantId) => createPreferencesRepository(db, tenantId).getSectorInferenceEnabled(),
+    set: (tenantId, enabled) =>
+      createPreferencesRepository(db, tenantId).setSectorInferenceEnabled(enabled),
   };
 }
 

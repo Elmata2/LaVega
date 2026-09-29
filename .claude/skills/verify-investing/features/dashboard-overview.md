@@ -4,29 +4,36 @@ The landing view: portfolio value over time, KPIs, allocation, and the operation
 
 ## Sub-features
 
-- headline figures in the aside section `Portfolio KPIs` (eyebrow `Key figures`):
+- headline figures widget (`Key figures`, section `aria-label="Portfolio KPIs"`,
+  `data-dashboard-section="kpis"`) in the aside (`aria-label="Portfolio overview"`):
   `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when some
   positions are unpriced. A missing amount reads `Value unknown`. A missing percent reads
   `Return unknown`.
-- portfolio chart in the main column (`data-dashboard-section="performance"`), not in the
-  aside. With no benchmark selected the title is `Portfolio` and the axis is `Portfolio
-  value` (euros). With a benchmark selected the title is `Comparison` and the axis is
-  `Indexed return`; portfolio and benchmark are percents (`packages/core` `deriveChartMode`).
-  Period group `Choose period`: `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`.
-  `+ Compare` opens benchmark search.
-- summary card in the same aside (`aria-label="Portfolio overview"` holds KPIs, this card,
-  the agent card, and operational status). Card `aria-label="Portfolio summary"`, title
-  `Summary`, eyebrow `Risk & composition`. Metrics: `Annual volatility`, `Beta`,
-  `Regression alpha (annual)`, `Maximum drawdown`, from `GET /api/investing/summary`.
-  Controls: `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`),
-  `Risk benchmark`.
-- allocation donut (`Allocation`, `Allocation details`) and `Sector allocation`.
-- net-worth chart (`Net worth`, `Net worth partly unknown`).
-- portfolio agents card (`Choose agent`) — see [portfolio-agents.md](portfolio-agents.md).
+- portfolio chart widget (`Performance`) in the main column
+  (`data-dashboard-section="performance"`), not in the aside. With no benchmark selected
+  the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
+  selected the title is `Comparison` and the axis is `Indexed return`; portfolio and
+  benchmark are percents (`packages/core` `deriveChartMode`). Period group `Choose period`:
+  `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
+  search.
+- allocation donut widget (`Allocation`, `data-dashboard-section="allocation"`) in that
+  same main column.
+- summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
+  Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
+  Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
+  from `GET /api/investing/summary`. Controls: `Refresh risk`, `Risk period` (`6 months`,
+  `1 year`, `Account history`), `Risk benchmark`.
+- `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
+  `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
+- portfolio agents card (`Choose agent` widget) — see [portfolio-agents.md](portfolio-agents.md).
 - operational status (`Operational status`) — chips `Connection`, `Brokers`,
-  `Price history`, `Vault`, `Cache`.
+  `Price history`, `Vault`, `Cache`. Always rendered; not a switchable widget.
+- every card above can be switched off from `/profile#widgets`; switching off every
+  card replaces the grid with one line and an `Add widget` button.
 - degraded and empty states: `Dashboard unavailable`, `Refresh failed`, `Reading problems`,
-  `No positions loaded`, `Cached data remains visible`, `Still loading your history`.
+  `Cached data remains visible`, `Still loading your history`.
+- the positions table and the net-worth chart are their own tabs (`/positions`, `/net-worth`),
+  not part of this view.
 
 ## How to get to it (user POV)
 

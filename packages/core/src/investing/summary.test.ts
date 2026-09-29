@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { buildSectorExposure, computePortfolioMetrics, type MetricPoint } from "./summary.js";
+import {
+  buildSectorCoverage,
+  buildSectorExposure,
+  computePortfolioMetrics,
+  type MetricPoint,
+} from "./summary.js";
 
 function seriesFromReturns(start: number, returns: readonly number[]): MetricPoint[] {
   const points: MetricPoint[] = [{ date: "2026-01-01", value: start }];
@@ -89,20 +94,20 @@ test("null value gaps are skipped and dates align portfolio to benchmark", () =>
   expect(metrics.beta).not.toBeNull();
 });
 
-test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc", () => {
-  const sectors = new Map([
-    ["ACME", "Technology"],
-    ["BLOK", "Industrials"],
+test("sector exposure accumulates a weight vector per position, residual folds into Unknown", () => {
+  const weights = new Map([
+    ["ACME", [{ sector: "Technology", weight: 1 }]],
+    ["BLOK", [{ sector: "Industrials", weight: 1 }]],
   ]);
   const exposure = buildSectorExposure(
     [
       { symbol: "ACME", marketValue: 300 },
       { symbol: "blok", marketValue: 100 },
-      { symbol: "MYST", marketValue: 100 },
+      { symbol: "MYST", marketValue: 100 }, // no entry in weights at all
       { symbol: "ZERO", marketValue: null },
       { symbol: "NEG", marketValue: -50 },
     ],
-    sectors,
+    weights,
   );
   expect(exposure).toEqual([
     { sector: "Technology", weight: 0.6 },
@@ -111,8 +116,179 @@ test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc
   ]);
 });
 
-test("sector exposure is empty without priced positions", () => {
+test("duplicate sectors inside one position's weight vector merge instead of appearing twice", () => {
+  const weights = new Map([
+    ["VFEM.L", [
+      { sector: "Technology", weight: 0.2 },
+      { sector: "Technology", weight: 0.3 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure).toEqual([
+    { sector: "Technology", weight: 0.5 },
+    { sector: "Unknown", weight: 0.5 },
+  ]);
+});
+
+test("an unpriced portfolio has no exposure at all", () => {
   expect(buildSectorExposure([{ symbol: "ACME", marketValue: null }], new Map())).toEqual([]);
+});
+
+test("a fund position splits its market value across its own weight vector", () => {
+  const weights = new Map([
+    [
+      "VFEM.L",
+      [
+        { sector: "Technology", weight: 0.4 },
+        { sector: "Financial Services", weight: 0.3 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure).toEqual([
+    { sector: "Technology", weight: 0.4 },
+    // 1 - (0.4+0.3) computes as 0.30000000000000004 (double rounding), a
+    // near-tie with the exact 0.3 covered bucket at sort precision — resolved
+    // by sector name, not the float dust in the raw residual.
+    { sector: "Financial Services", weight: 0.3 },
+    { sector: "Unknown", weight: 0.30000000000000004 },
+  ]);
+});
+
+test("a VFEM-like fund whose 11 published sector weights round to 0.9998 has no Unknown row", () => {
+  const weights = new Map([
+    [
+      "VFEM.L",
+      [
+        { sector: "Sector0", weight: 0.0909 },
+        { sector: "Sector1", weight: 0.0909 },
+        { sector: "Sector2", weight: 0.0909 },
+        { sector: "Sector3", weight: 0.0909 },
+        { sector: "Sector4", weight: 0.0909 },
+        { sector: "Sector5", weight: 0.0909 },
+        { sector: "Sector6", weight: 0.0909 },
+        { sector: "Sector7", weight: 0.0909 },
+        { sector: "Sector8", weight: 0.0909 },
+        { sector: "Sector9", weight: 0.0909 },
+        { sector: "Sector10", weight: 0.0908 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+});
+
+test("a real 0.5% unclassified residual still shows as Unknown", () => {
+  const weights = new Map([
+    [
+      "FUND",
+      [
+        { sector: "Sector0", weight: 0.0905 },
+        { sector: "Sector1", weight: 0.0905 },
+        { sector: "Sector2", weight: 0.0905 },
+        { sector: "Sector3", weight: 0.0905 },
+        { sector: "Sector4", weight: 0.0905 },
+        { sector: "Sector5", weight: 0.0905 },
+        { sector: "Sector6", weight: 0.0905 },
+        { sector: "Sector7", weight: 0.0905 },
+        { sector: "Sector8", weight: 0.0905 },
+        { sector: "Sector9", weight: 0.0905 },
+        { sector: "Sector10", weight: 0.09 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  const unknown = exposure.find((entry) => entry.sector === "Unknown");
+  expect(unknown?.weight).toBeCloseTo(0.005, 6);
+});
+
+test("a fund with an empty weight vector (bond fund) is entirely Unknown, not an error", () => {
+  const weights = new Map([["AGGG.L", []]]);
+  expect(buildSectorExposure([{ symbol: "AGGG.L", marketValue: 500 }], weights)).toEqual([
+    { sector: "Unknown", weight: 1 },
+  ]);
+});
+
+test("weights overshooting 1 scale down instead of inflating total exposure past 100%", () => {
+  const weights = new Map([
+    ["ACME", [
+      { sector: "Technology", weight: 0.5001 },
+      { sector: "Health Care", weight: 0.5 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "ACME", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+  const total = exposure.reduce((sum, entry) => sum + entry.weight, 0);
+  expect(total).toBeCloseTo(1, 12);
+});
+
+test("ten weights summing just under 1 by float error don't create a phantom Unknown row", () => {
+  const sectors = Array.from({ length: 10 }, (_, index) => `Sector${index}`);
+  const weights = new Map([["FUND", sectors.map((sector) => ({ sector, weight: 0.1 }))]]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(exposure).toHaveLength(10);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+});
+
+test("near-tied weights sort deterministically by sector name, not float noise", () => {
+  const weights = new Map([
+    ["FUND", [
+      { sector: "Zeta", weight: 0.5 },
+      { sector: "Alpha", weight: 0.5 - 1e-10 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).toEqual(["Alpha", "Zeta"]);
+});
+
+test("coverage splits priced value by source and sums to 1", () => {
+  const weights = new Map([
+    ["AAPL", [{ sector: "Technology", weight: 1, source: "provider" as const }]],
+    ["MYST", [{ sector: "Industrials", weight: 1, source: "inferred" as const }]],
+    ["ACME", [{ sector: "Healthcare", weight: 1, source: "correction" as const }]],
+  ]);
+  const coverage = buildSectorCoverage(
+    [
+      { symbol: "AAPL", marketValue: 500 },
+      { symbol: "MYST", marketValue: 300 },
+      { symbol: "ACME", marketValue: 200 },
+    ],
+    weights,
+  );
+  expect(coverage).toEqual({ provider: 0.5, inferred: 0.3, correction: 0.2, unknown: 0 });
+  expect(coverage.provider + coverage.inferred + coverage.correction + coverage.unknown).toBeCloseTo(
+    1,
+    12,
+  );
+});
+
+test("a position with no resolved weight vector at all is entirely unknown coverage", () => {
+  const coverage = buildSectorCoverage([{ symbol: "MYST", marketValue: 100 }], new Map());
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("a fund's uncovered residual counts as unknown coverage, not as its provider source", () => {
+  const weights = new Map([
+    ["FUND", [{ sector: "Technology", weight: 0.4, source: "provider" as const }]],
+  ]);
+  const coverage = buildSectorCoverage([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(coverage.provider).toBeCloseTo(0.4, 12);
+  expect(coverage.unknown).toBeCloseTo(0.6, 12);
+});
+
+test("a weight with no source tag reads as unknown coverage", () => {
+  const weights = new Map([["ACME", [{ sector: "Technology", weight: 1 }]]]);
+  const coverage = buildSectorCoverage([{ symbol: "ACME", marketValue: 100 }], weights);
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("an unpriced portfolio has zero coverage in every bucket", () => {
+  expect(buildSectorCoverage([{ symbol: "ACME", marketValue: null }], new Map())).toEqual({
+    provider: 0,
+    inferred: 0,
+    correction: 0,
+    unknown: 0,
+  });
 });
 
 test("owner deposit is removed from daily return", () => {

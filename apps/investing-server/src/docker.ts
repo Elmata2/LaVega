@@ -12,6 +12,10 @@ import {
   createFileMarketDataConsentStore,
   runtimeMarketDataConsentFile,
 } from "./fileMarketDataConsentStore.js";
+import {
+  createFileInvestingLayoutStore,
+  runtimeInvestingLayoutFile,
+} from "./fileInvestingLayoutStore.js";
 
 const port = Number(process.env.PORT) || 8788;
 const staticRoot =
@@ -70,6 +74,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     priceStore: createFilePriceStore(runtimePriceStoreFile()),
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
   });
   serve(
     { fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" },

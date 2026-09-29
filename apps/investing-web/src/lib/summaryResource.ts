@@ -1,15 +1,24 @@
-import { useEffect, useState } from "react";
-import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from "@lavega/core";
+import { useCallback, useEffect, useState } from "react";
+import type {
+  HistoricalRisk,
+  PortfolioMetrics,
+  RiskRange,
+  SectorCoverage,
+  SectorExposure,
+} from "@lavega/core";
 
 export type PortfolioSummary = {
   metrics: PortfolioMetrics;
   sectors: SectorExposure[];
+  /** Absent from responses recorded before Task 10; SectorAllocationCard
+   *  treats that the same as "nothing to report" and omits its coverage line. */
+  sectorCoverage?: SectorCoverage;
   topPositions: Array<{ symbol: string; weight: number; description?: string }>;
   risk: HistoricalRisk;
   composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
 };
 
-type SummaryState =
+export type SummaryState =
   | { status: "loading" }
   | { status: "ready"; data: PortfolioSummary }
   | { status: "error"; message: string };
@@ -46,6 +55,7 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
       risk.benchmark === undefined ||
       hasStrings(risk.benchmark, "symbol")) &&
     isArrayOf(value.sectors, (entry) => hasStrings(entry, "sector")) &&
+    (value.sectorCoverage === undefined || isRecord(value.sectorCoverage)) &&
     isArrayOf(value.topPositions, (entry) => hasStrings(entry, "symbol"))
   );
 }
@@ -76,19 +86,27 @@ async function fetchPortfolioSummary(
 
 /** Owns the summary request for one range and benchmark. It loads again only
  * when those, the benchmark revision or an explicit refresh change: broker and
- * price updates are left to the user's Refresh risk, by design. */
+ * price updates are left to the user's Refresh risk, by design.
+ *
+ * `/api/investing/summary` is the slowest call on the page (over 40s observed
+ * in production), so callers with more than one summary-driven widget (risk,
+ * sectors) call this once and share the result — never mount it twice. `enabled`
+ * lets a caller skip the request entirely while nothing on screen needs it,
+ * without breaking the rules of hooks. */
 export function usePortfolioSummary(
   range: RiskRange,
   benchmark: string,
   revision: string,
+  enabled = true,
 ): { state: SummaryState; refresh: () => void } {
   const [refreshes, setRefreshes] = useState(0);
-  const requestKey = JSON.stringify([range, benchmark, revision, refreshes]);
+  const requestKey = JSON.stringify([range, benchmark, revision, refreshes, enabled]);
   const [state, setState] = useState<{ key: string; result: SummaryState }>({
     key: "",
     result: { status: "loading" },
   });
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     void fetchPortfolioSummary(range, benchmark, controller.signal)
       .then((data) => {
@@ -106,9 +124,13 @@ export function usePortfolioSummary(
         });
       });
     return () => controller.abort();
-  }, [range, benchmark, requestKey]);
+  }, [range, benchmark, requestKey, enabled]);
+  /* Stable across re-renders: a caller (SectorAllocationCard's background
+   * inference effect) depends on this identity to avoid restarting a
+   * pending run on every unrelated parent re-render. */
+  const refresh = useCallback(() => setRefreshes((value) => value + 1), []);
   return {
     state: state.key === requestKey ? state.result : { status: "loading" },
-    refresh: () => setRefreshes((value) => value + 1),
+    refresh,
   };
 }

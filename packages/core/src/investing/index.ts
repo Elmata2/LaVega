@@ -15,3 +15,5 @@ export * from "./valuation.js";
 export * from "./benchmarks.js";
 export * from "./summary.js";
 export * from "./splits.js";
+export * from "./layout.js";
+export * from "./sectorTaxonomy.js";

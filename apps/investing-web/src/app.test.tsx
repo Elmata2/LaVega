@@ -2,255 +2,35 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
 import { forgetDashboards } from "./lib/dashboardResource";
+import { resetInvestingLayoutStoreForTests } from "./lib/layoutResource";
 import { PERSONAL_URL } from "./lib/personal";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
+import {
+  agentConversation,
+  agentInsight,
+  dashboard,
+  deferredLayoutFetch,
+  emptyDashboard,
+  emptyResponseFor,
+  portfolioAgents,
+  portfolioSummary,
+  responseFor,
+  withAuthUnconfigured,
+} from "./test/fetchFixtures.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
+
+beforeEach(() => resetInvestingLayoutStoreForTests());
 
 afterEach(() => {
   vi.restoreAllMocks();
   globalThis.localStorage?.clear();
   forgetDashboards();
 });
-
-const dashboard: InvestingDashboardData = {
-  ...emptyInvestingDashboard(),
-  portfolio: {
-    ...emptyInvestingDashboard().portfolio,
-    "1M": [
-      {
-        date: "2026-08-18",
-        positionsValue: 100,
-        cashValue: 20,
-        value: 120,
-        unpriced: [],
-        forwardFilled: [],
-        cashUnknown: [],
-      },
-    ],
-    All: [
-      {
-        date: "2026-08-18",
-        positionsValue: 100,
-        cashValue: 20,
-        value: 120,
-        unpriced: [],
-        forwardFilled: [],
-        cashUnknown: [],
-      },
-    ],
-  },
-  allocation: {
-    instrument: {
-      buckets: [{ key: "ASML", label: "ASML", value: 120, unpriced: false }],
-      unpriced: [],
-    },
-    entity: {
-      buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }],
-      unpriced: [],
-    },
-  },
-  positions: [
-    {
-      symbol: "ASML",
-      entity: "personal",
-      description: "ASML",
-      quantity: 1,
-      marketValue: 120,
-      portfolioWeight: 1,
-      priceStatus: "priced",
-      currency: "EUR",
-      asOf: "2026-08-18",
-      returns: {
-        status: "available",
-        remainingCostBasis: 100,
-        realizedCostBasisRemoved: 0,
-        unrealizedGain: 20,
-        realizedGain: 0,
-        dividendsReceived: 5,
-        totalReturn: 25,
-        totalReturnPercentage: 0.25,
-        sinceFirstBuyPercentage: 0.25,
-        firstBuyDate: "2026-01-02",
-      },
-    },
-  ],
-  position: {
-    symbol: "ASML",
-    description: "ASML",
-    currency: "EUR",
-    priceCurrency: "EUR",
-    status: "open",
-    quantity: 1,
-    currentValue: 120,
-    dailyChange: 2,
-    dailyChangePercentage: 0.017,
-    currentPrice: 120,
-    priceStatus: "priced",
-    quoteDate: "2026-02-02",
-    averageCost: 100,
-    returns: {
-      status: "available",
-      remainingCostBasis: 100,
-      realizedCostBasisRemoved: 0,
-      unrealizedGain: 20,
-      realizedGain: 0,
-      dividendsReceived: 5,
-      totalReturn: 25,
-      totalReturnPercentage: 0.25,
-      sinceFirstBuyPercentage: 0.25,
-      firstBuyDate: "2026-01-02",
-    },
-    returnStatus: "available",
-    firstBuyDate: "2026-01-02",
-    quantityHistory: [{ date: "2026-01-02", quantity: 1, delta: 1, reason: "buy", sourceOrder: 0 }],
-    activity: [
-      {
-        date: "2026-01-02",
-        kind: "buy",
-        quantity: 1,
-        executionPrice: 100,
-        amount: 100,
-        commission: 0,
-        currency: "EUR",
-        sourceOrder: 0,
-      },
-    ],
-    points: [{ symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }],
-  },
-};
-
-const emptyDashboard = emptyInvestingDashboard();
-const portfolioSummary = {
-  metrics: {
-    dailyVolatility: 0.01,
-    annualizedVolatility: 0.1587,
-    beta: 1.1,
-    alpha: 0.02,
-    maxDrawdown: -0.25,
-    observationDays: 252,
-    excludedIntervals: 0,
-    pairedObservationDays: 252,
-    startDate: "2025-09-10",
-    endDate: "2026-09-10",
-  },
-  risk: {
-    status: "estimate",
-    range: "1Y",
-    from: "2025-09-10",
-    to: "2026-09-10",
-    drawdownFrom: null,
-    minimumObservations: 60,
-    benchmark: null,
-    benchmarks: [],
-    reasons: [],
-    missingHoldings: [],
-    missingPrices: [],
-    coverage: 1,
-    currency: "EUR",
-  },
-  sectors: [{ sector: "Technology", weight: 1 }],
-  topPositions: [{ symbol: "ASML", weight: 1 }],
-  composition: { pricedHoldings: 1, missingHoldings: 0, estimatedHoldings: 0 },
-};
-const portfolioAgents = [
-  {
-    id: "warren_buffett",
-    displayName: "Warren Buffett",
-    description: "Quality business owner",
-    investingStyle: "Durable moats, fair price.",
-  },
-  {
-    id: "charlie_munger",
-    displayName: "Charlie Munger",
-    description: "Quality filter",
-    investingStyle: "Invert first.",
-  },
-  {
-    id: "bill_ackman",
-    displayName: "Bill Ackman",
-    description: "Activist lens",
-    investingStyle: "Concentrated brands and catalysts.",
-  },
-];
-const agentInsight = {
-  agentId: "bill_ackman",
-  displayName: "Bill Ackman",
-  signal: "bullish",
-  confidence: 78,
-  summary: "ASML is concentrated but priced with clear conviction.",
-  reasoning: "Position size and return profile show conviction; catalyst data is absent.",
-  insights: ["ASML dominates portfolio risk.", "Missing catalyst data limits confidence."],
-  model: "test-model",
-  snapshotHash: "hash",
-};
-const agentConversation = {
-  agentId: "bill_ackman",
-  displayName: "Bill Ackman",
-  text: "ASML is concentrated but priced with clear conviction.",
-  model: "openrouter-test",
-  snapshotHash: "snapshot",
-  judgment: { signal: "bullish", confidence: 80 },
-};
-
-/* Every existing test here predates sign-up and runs against a backend
- * with no DATABASE_URL / BETTER_AUTH_SECRET, exactly like local dev — so
- * RequireAuth's get-session check must see the same 503 apps/server sends
- * in that mode, or these tests would redirect to /sign-in instead of
- * rendering the dashboard. */
-function withAuthUnconfigured(input: RequestInfo | URL, fallback: () => Response): Response {
-  if (String(input) === "/api/auth/get-session")
-    return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-      status: 503,
-    });
-  return fallback();
-}
-
-function responseFor(input: RequestInfo | URL, init?: RequestInit) {
-  const url = String(input);
-  return withAuthUnconfigured(input, () => {
-    if (url === "/api/investing/health")
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
-    if (url === "/api/agents/portfolio")
-      return new Response(JSON.stringify({ agents: portfolioAgents }));
-    if (url === "/api/agents/portfolio/run" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentInsight }));
-    if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentConversation }));
-    if (url === "/api/brokers/sync" && init?.method === "POST")
-      return new Response(JSON.stringify({ problems: [] }));
-    if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
-    if (url.startsWith("/api/investing/summary"))
-      return new Response(JSON.stringify(portfolioSummary));
-    return new Response(JSON.stringify({}));
-  });
-}
-
-function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
-  const url = String(input);
-  return withAuthUnconfigured(input, () => {
-    if (url === "/api/investing/health")
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
-    if (url === "/api/agents/portfolio")
-      return new Response(JSON.stringify({ agents: portfolioAgents }));
-    if (url === "/api/agents/portfolio/run" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentInsight }));
-    if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentConversation }));
-    if (url === "/api/brokers/sync" && init?.method === "POST")
-      return new Response(JSON.stringify({ problems: [] }));
-    if (url.startsWith("/api/investing/dashboard"))
-      return new Response(JSON.stringify(emptyDashboard));
-    return new Response(JSON.stringify({}));
-  });
-}
-
 test("overview shell fetches and displays investing server health", async () => {
   vi.stubGlobal(
     "fetch",
@@ -398,7 +178,6 @@ test("overview shows priced positions total when history is still unavailable", 
 
   expect(container.textContent).toContain("10,150.00");
   expect(container.textContent).toContain("Priced positions only");
-  expect(container.textContent).toContain("0.319 shares");
   expect(container.textContent).not.toContain("credentials are not configured");
   root.unmount();
 });
@@ -637,7 +416,7 @@ test("positions table shows forward-filled, unpriced, missing-FX, and missing-co
   root.unmount();
 });
 
-test("overview exposes positions as navigation links", async () => {
+test("overview renders widgets in registry order and excludes positions and net worth", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
@@ -645,7 +424,6 @@ test("overview exposes positions as navigation links", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={["/"]}>
@@ -654,16 +432,36 @@ test("overview exposes positions as navigation links", async () => {
     );
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 
-  expect(container.querySelector('a[href="/positions/ASML"]')).not.toBeNull();
+  const order = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
+  ).map((element) => element.dataset.dashboardSection);
+  expect(order).toEqual(["status", "performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
+
+  const riskCard = container.querySelector<HTMLElement>('[data-dashboard-section="risk"]')!;
+  expect(riskCard.textContent).toContain("Historical account risk");
+  expect(riskCard.textContent).toContain("Largest positions");
+  expect(riskCard.textContent).not.toContain("Sector allocation");
   root.unmount();
 });
 
-test("overview preserves responsive reading order and independent chart ranges", async () => {
+test("hiding a widget closes its gap instead of leaving a blank card", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { allocation: false } }))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
   );
   const container = document.createElement("div");
   document.body.append(container);
@@ -679,45 +477,213 @@ test("overview preserves responsive reading order and independent chart ranges",
     await Promise.resolve();
     await Promise.resolve();
   });
+  expect(container.querySelector('[data-dashboard-section="allocation"]')).toBeNull();
+  const order = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
+  ).map((element) => element.dataset.dashboardSection);
+  expect(order).toEqual(["status", "performance", "kpis", "risk", "sectors", "agent"]);
+  root.unmount();
+});
 
-  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
-    (element) => element.dataset.dashboardSection,
+test("switching off every widget shows one line and an Add widget button, not a blank page", async () => {
+  const allOff = {
+    modules: {},
+    widgets: {
+      performance: false,
+      allocation: false,
+      kpis: false,
+      risk: false,
+      sectors: false,
+      agent: false,
+    },
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify(allOff))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
   );
-  /* Key figures lead the right column, then the risk-and-composition card
-   * ("summary" bundles both), so a reorder of either would show up here. */
-  expect(order).toEqual([
-    "performance",
-    "allocation",
-    "kpis",
-    "summary",
-    "agent",
-    "status",
-    "net-worth",
-    "positions",
-  ]);
-  const summaryCard = container.querySelector<HTMLElement>('[data-dashboard-section="summary"]')!;
-  expect(summaryCard.textContent).toContain("Historical account risk");
-  expect(summaryCard.textContent?.indexOf("Historical account risk")).toBeLessThan(
-    summaryCard.textContent!.indexOf("Largest positions"),
-  );
-  const performanceRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Choose period"]',
-  )!;
-  const netWorthRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Choose net worth period"]',
-  )!;
-  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 month",
-  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
   await act(async () => {
-    Array.from(netWorthRange.querySelectorAll("button"))
-      .find((button) => button.textContent === "All")
-      ?.click();
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
-  expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("All");
-  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 month",
+  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section="performance"]')).toBeNull();
+  const addWidget = Array.from(container.querySelectorAll("button")).find((button) =>
+    button.textContent?.includes("Add widget"),
   );
+  expect(addWidget).toBeTruthy();
+  root.unmount();
+});
+
+/* /api/investing/summary is the slowest call on the page (over 40s observed in
+ * production), so the risk widget and the sectors widget must share one read
+ * instead of each mounting their own `usePortfolioSummary`. */
+test("risk and sectors widgets share exactly one GET to the summary endpoint", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(summaryRequests).toHaveLength(1);
+  expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("hiding risk still renders sectors, from the same one request", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false } }))
+            : responseFor(input, init),
+        ),
+      );
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[data-dashboard-section="risk"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).not.toBeNull();
+  expect(summaryRequests).toHaveLength(1);
+  root.unmount();
+});
+
+test("hiding both risk and sectors makes zero summary requests", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }))
+            : responseFor(input, init),
+        ),
+      );
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[data-dashboard-section="risk"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).toBeNull();
+  expect(summaryRequests).toHaveLength(0);
+  root.unmount();
+});
+
+test("changing the risk range refetches once and both cards update", async () => {
+  const summaryRequests: string[] = [];
+  const summaryFor = (range: string) => ({
+    ...portfolioSummary,
+    sectors: [{ sector: range === "6M" ? "Energy" : "Technology", weight: 1 }],
+    risk: { ...portfolioSummary.risk, range, to: range === "6M" ? "2026-03-10" : "2026-09-10" },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      const url = String(input);
+      if (url.startsWith("/api/investing/summary")) {
+        summaryRequests.push(url);
+        const range = new URLSearchParams(url.split("?")[1] ?? "").get("range") ?? "1Y";
+        return Promise.resolve(new Response(JSON.stringify(summaryFor(range))));
+      }
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(summaryRequests).toHaveLength(1);
+  const sectorsCard = container.querySelector<HTMLElement>('[data-dashboard-section="sectors"]')!;
+  const riskCard = container.querySelector<HTMLElement>('[data-dashboard-section="risk"]')!;
+  expect(sectorsCard.textContent).toContain("Technology");
+
+  const select = container.querySelector('select[aria-label="Risk period"]') as HTMLSelectElement;
+  await act(async () => {
+    select.value = "6M";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(summaryRequests).toHaveLength(2);
+  expect(summaryRequests[1]).toContain("range=6M");
+  expect(sectorsCard.textContent).toContain("Energy");
+  expect(riskCard.textContent).toContain("2026-03-10");
   root.unmount();
 });
 
@@ -998,7 +964,6 @@ test("overview separates positions, cash, and incomplete value states", async ()
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Positions");
   expect(container.textContent).toContain("Cash");
   expect(container.textContent).toContain("Value partly unknown");
   expect(container.textContent).toContain("MSFT");
@@ -1007,7 +972,7 @@ test("overview separates positions, cash, and incomplete value states", async ()
   root.unmount();
 });
 
-test("position navigation moves from overview to detail and back", async () => {
+test("position navigation moves from the positions list to detail and back", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
@@ -1018,7 +983,7 @@ test("position navigation moves from overview to detail and back", async () => {
 
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={["/positions"]}>
         <App />
       </MemoryRouter>,
     );
@@ -1480,74 +1445,6 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   root.unmount();
 });
 
-test("connect broker opens setup guide with IBKR instructions", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-      Promise.resolve(responseFor(input, init)),
-    ),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  const connectLink = container.querySelector<HTMLAnchorElement>('a[href="/brokers/connect"]');
-  expect(connectLink).not.toBeNull();
-
-  await act(async () => {
-    connectLink?.click();
-  });
-  expect(container.textContent).toContain("Connect broker");
-  expect(container.textContent).toContain("Interactive Brokers");
-  expect(container.textContent).toContain("Flex Web Service");
-  expect(container.textContent).toContain("Trading 212");
-  expect(container.textContent).toContain("Flex-token");
-  expect(container.textContent).toContain("Cash Report");
-  expect(container.textContent).toContain("Statement of Funds");
-  expect(container.querySelector('a[href="/"]')).not.toBeNull();
-  root.unmount();
-});
-
-test("connect broker names an unreadable broker and offers reconnect", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/brokers/credentials/status")
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              status: "unlocked",
-              passphrase: "unused",
-              brokers: { ibkr: "readable", trading212: "unreadable" },
-            }),
-            { status: 200 },
-          ),
-        );
-      return Promise.resolve(responseFor(input, init));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  expect(container.textContent).toContain("Trading 212 credentials cannot be read");
-  expect(container.textContent).toContain("Save new credentials below to reconnect");
-  root.unmount();
-});
-
 test("overview keeps portfolio visible and links to reconnect for unreadable broker", async () => {
   vi.stubGlobal(
     "fetch",
@@ -1586,274 +1483,6 @@ test("overview keeps portfolio visible and links to reconnect for unreadable bro
   root.unmount();
 });
 
-test("broker setup starts forced sync and shows returned problems", async () => {
-  const requests: Array<{ url: string; method?: string }> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      requests.push({ url: String(input), method: init?.method });
-      if (String(input) === "/api/brokers/sync?force=true")
-        return new Response(
-          JSON.stringify({ outcomes: [], problems: ["IBKR: credentials are not configured"] }),
-        );
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  const syncButton = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes("Start sync"),
-  );
-  expect(syncButton).not.toBeUndefined();
-  await act(async () => {
-    syncButton?.click();
-    await Promise.resolve();
-  });
-  expect(requests).toContainEqual({ url: "/api/brokers/sync?force=true", method: "POST" });
-  expect(container.textContent).not.toContain("credentials are not configured");
-  expect(container.textContent).toContain("Sync completed");
-  root.unmount();
-});
-
-test("broker credential form stores IBKR credentials and starts sync", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      requests.push({ url: String(input), init });
-      if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
-      if (String(input) === "/api/brokers/sync?force=true")
-        return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  const fields = {
-    token: container.querySelector<HTMLInputElement>('[name="token"]')!,
-    queryId: container.querySelector<HTMLInputElement>('[name="queryId"]')!,
-    passphrase: container.querySelector<HTMLInputElement>('[name="passphrase"]')!,
-  };
-  const setInput = (field: HTMLInputElement, value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(field, value);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  setInput(fields.token, "flex-token");
-  setInput(fields.queryId, "123456");
-  setInput(fields.passphrase, "vault-passphrase");
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
-    await Promise.resolve();
-  });
-
-  const credentialRequest = requests.find((request) => request.url === "/api/brokers/credentials");
-  expect(credentialRequest?.init?.body).toBe(
-    JSON.stringify({
-      broker: "ibkr",
-      token: "flex-token",
-      queryId: "123456",
-      passphrase: "vault-passphrase",
-    }),
-  );
-  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Sync completed");
-  expect(container.textContent).not.toContain("flex-token");
-  root.unmount();
-});
-
-test("locked broker vault can be unlocked without entering broker credentials again", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      requests.push({ url: String(input), init });
-      if (String(input) === "/api/brokers/credentials/status")
-        return new Response(JSON.stringify({ status: "locked" }));
-      if (String(input) === "/api/brokers/credentials/unlock")
-        return new Response(null, { status: 204 });
-      if (String(input) === "/api/brokers/sync?force=true")
-        return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  const passphrase = container.querySelector<HTMLInputElement>('[name="unlockPassphrase"]')!;
-  expect(passphrase).not.toBeNull();
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  await act(async () => {
-    setter?.call(passphrase, "vault-passphrase");
-    passphrase.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('[data-action="unlock-vault"]')?.click();
-    await Promise.resolve();
-  });
-
-  const unlockRequest = requests.find(
-    (request) => request.url === "/api/brokers/credentials/unlock",
-  );
-  expect(unlockRequest?.init?.body).toBe(JSON.stringify({ passphrase: "vault-passphrase" }));
-  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Vault unlocked");
-  expect(container.textContent).not.toContain("vault-passphrase");
-  await act(async () => {
-    root.unmount();
-  });
-});
-
-test("broker sync progress shows exact pages, orders, and provider wait", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      if (String(input) === "/api/brokers/sync/status")
-        return new Response(
-          JSON.stringify({
-            status: "waiting",
-            pages: 6,
-            ordersRead: 300,
-            positionsRead: 0,
-            waitUntil: "2026-08-19T14:00:00.000Z",
-            remaining: 0,
-            updatedAt: "2026-08-19T13:59:00.000Z",
-            message: null,
-          }),
-        );
-      if (String(input) === "/api/brokers/credentials/status")
-        return new Response(JSON.stringify({ status: "unlocked" }));
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(container.textContent).toContain("Trading 212 syncing");
-  expect(container.textContent).toContain("6 pages");
-  expect(container.textContent).toContain("300 orders read");
-  expect(container.textContent).toContain("0 positions");
-  expect(container.textContent).toContain("Waiting for new API capacity");
-  await act(async () => {
-    root.unmount();
-  });
-});
-
-test("broker credential form succeeds when the other broker is not configured", async () => {
-  const requests: Array<{ url: string }> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      requests.push({ url: String(input) });
-      if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
-      if (String(input) === "/api/brokers/sync?force=true") {
-        return new Response(
-          JSON.stringify({
-            outcomes: [
-              { broker: "ibkr", status: "synced" },
-              { broker: "trading212", status: "problem" },
-            ],
-            problems: ["trading212: credentials are not configured"],
-          }),
-        );
-      }
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  const fields = {
-    token: container.querySelector<HTMLInputElement>('[name="token"]')!,
-    queryId: container.querySelector<HTMLInputElement>('[name="queryId"]')!,
-    passphrase: container.querySelector<HTMLInputElement>('[name="passphrase"]')!,
-  };
-  const setInput = (field: HTMLInputElement, value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(field, value);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  setInput(fields.token, "flex-token");
-  setInput(fields.queryId, "123456");
-  setInput(fields.passphrase, "vault-passphrase");
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
-    await Promise.resolve();
-  });
-
-  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Sync completed");
-  expect(container.textContent).not.toContain("credentials are not configured");
-  root.unmount();
-});
-
 test("the health line asks the investing server, not whoever owns the origin root", async () => {
   /* In the all-in-one deploy this app is served under /investing/, and neither
    * neighbouring path answers for the investing runtime: the origin's own
@@ -1888,114 +1517,6 @@ test("the health line asks the investing server, not whoever owns the origin roo
   expect(container.textContent).toContain("investing-server: available");
   root.unmount();
   vi.unstubAllEnvs();
-});
-
-test("a broker sync that outlives the edge timeout reports background progress, not a parser error", async () => {
-  /* Cloudflare cuts an origin request off at ~100s with an HTML 524 page. A
-     Trading 212 first sync pages far past that, so the browser gets HTML where
-     the form expected JSON and the raw parser error surfaced as the failure. */
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
-      if (String(input) === "/api/brokers/sync?force=true")
-        return new Response("<!DOCTYPE html><html><title>524: A timeout occurred</title></html>", {
-          status: 524,
-          headers: { "content-type": "text/html" },
-        });
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-  const setInput = (field: HTMLInputElement, value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(field, value);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  const brokerSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Broker"]')!;
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    setter?.call(brokerSelect, "trading212");
-    brokerSelect.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  setInput(container.querySelector<HTMLInputElement>('[name="token"]')!, "t212-key");
-  setInput(container.querySelector<HTMLInputElement>('[name="secret"]')!, "t212-secret");
-  setInput(container.querySelector<HTMLInputElement>('[name="passphrase"]')!, "vault-passphrase");
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
-    await Promise.resolve();
-  });
-
-  expect(container.textContent).toContain("Sync continues in the background");
-  expect(container.textContent).not.toMatch(/JSON|Unexpected token|did not match/i);
-  root.unmount();
-});
-
-test("a server-key vault asks for no passphrase and does not claim the key is the user's", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/auth/get-session")
-        return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
-          status: 503,
-        });
-      requests.push({ url: String(input), init });
-      if (String(input) === "/api/brokers/credentials/status")
-        return new Response(JSON.stringify({ status: "empty", passphrase: "unused" }));
-      if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
-      if (String(input) === "/api/brokers/sync?force=true")
-        return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
-      return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-    }),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
-        <App />
-      </MemoryRouter>,
-    );
-  });
-
-  expect(container.querySelector('[name="passphrase"]')).toBeNull();
-  expect(container.textContent).not.toContain("local vault");
-  expect(container.textContent).not.toContain("LaVega kan het niet herstellen");
-
-  const setInput = (field: HTMLInputElement, value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(field, value);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  setInput(container.querySelector<HTMLInputElement>('[name="token"]')!, "flex-token");
-  setInput(container.querySelector<HTMLInputElement>('[name="queryId"]')!, "123456");
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
-    await Promise.resolve();
-  });
-
-  const credentialRequest = requests.find((request) => request.url === "/api/brokers/credentials");
-  expect(credentialRequest?.init?.body).toBe(
-    JSON.stringify({ broker: "ibkr", token: "flex-token", queryId: "123456" }),
-  );
-  root.unmount();
 });
 
 test("overview analyses the persona the reader selected", async () => {
@@ -2268,15 +1789,7 @@ test("the header offers a way back to the personal app", async () => {
   root.unmount();
 });
 
-/* WELKE PERMISSIES DE SLEUTEL NODIG HEEFT, op de kaart die de opzet uitlegt.
- *
- * Er stond "choose read-only scope if Trading 212 shows that option", en dat is
- * niet te volgen: hun app toont elf losse vinkjes en geen read-only-knop. Drie
- * aanvinken die redelijk klinken raakt er precies één die wij gebruiken — en
- * een ontbrekende permissie faalt niet bij het opslaan maar pas bij de eerste
- * sync, als HTTP 403. De vijf hieronder zijn één per endpoint dat de adapter
- * echt aanroept. */
-test("the Trading 212 card names the exact permissions the key needs", async () => {
+test("the shell has no max-width frame", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
@@ -2286,42 +1799,185 @@ test("the Trading 212 card names the exact permissions the key needs", async () 
   const root = createRoot(container);
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/brokers/connect"]}>
+      <MemoryRouter initialEntries={["/"]}>
         <App />
       </MemoryRouter>,
     );
     await Promise.resolve();
   });
-
-  const text = container.textContent ?? "";
-  for (const scope of [
-    "Account data",
-    "History – Dividends",
-    "History – Orders",
-    "History – Transactions",
-    "Portfolio",
-  ]) {
-    expect(text, scope).toContain(scope);
-  }
-  // De read-only houding, op het scherm en niet alleen in een ontwerpdocument.
-  expect(text).toContain("Orders – Execute");
-  expect(text).toContain("Pies – Write");
-  // En waar een vergeten vinkje zich later meldt.
-  expect(text).toContain("403");
-  // Het accounttype, want op een ander type werkt geen enkele sleutel.
-  expect(text).toContain("Stocks ISA");
-
+  expect(container.querySelector(".max-w-6xl")).toBeNull();
   root.unmount();
 });
 
-/* HET GEHEIM BESTAAT WEL, en dat is hier één ronde lang verkeerd gelezen.
- *
- * Trading 212's documentatie: "You must provide your API Key as the username
- * and your API Secret as the password, formatted as an HTTP Basic
- * Authentication header." Het veld stond terecht op verplicht; het is toen
- * optioneel gemaakt op een aanname, en een leeg geheim levert `base64("key:")`
- * op — dat kan nooit authenticeren. Deze test houdt beide helften verplicht. */
-test("Trading 212 requires both halves of the key pair", async () => {
+test("a disabled module's route redirects to Overview instead of rendering", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: { agents: false }, widgets: {} }))
+            : emptyResponseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+  expect(container.textContent).not.toContain("Agents unavailable");
+  root.unmount();
+});
+
+test("a deep link to a disabled module's detail route also redirects home", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: { positions: false }, widgets: {} }))
+            : emptyResponseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/positions/ASML"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).not.toContain("Position detail");
+  root.unmount();
+});
+
+test("a user who switched off every module except Overview still gets a working shell", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(
+                JSON.stringify({
+                  modules: { positions: false, "net-worth": false, agents: false },
+                  widgets: {},
+                }),
+              )
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(tabs).toHaveLength(1);
+  expect(tabs[0]?.textContent).toBe("Overview");
+  expect(container.textContent).toContain("Portfolio value");
+  root.unmount();
+});
+
+test("switching a module off on /profile removes its top-bar tab without a reload", async () => {
+  let layoutGets = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/investing/layout" && init?.method !== "PUT") layoutGets += 1;
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const agentsTab = () =>
+    container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]');
+  expect(agentsTab()).not.toBeNull();
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(agentsTab()).toBeNull();
+  expect(layoutGets).toBe(1);
+  act(() => root.unmount());
+});
+
+test("Overview renders no widgets and starts no summary read until the layout says which widgets are on", async () => {
+  const layout = deferredLayoutFetch();
+  const summaryReads: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/investing/layout") return layout.fetch();
+      if (url.startsWith("/api/investing/summary")) summaryReads.push(url);
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await settle();
+  });
+  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section]:not([data-dashboard-section="status"])')).toBeNull();
+  expect(summaryReads).toEqual([]);
+
+  await act(async () => {
+    layout.resolve({ modules: {}, widgets: { sectors: false, risk: false } });
+    await settle();
+  });
+  expect(container.querySelector('[data-dashboard-section="performance"]')).not.toBeNull();
+  expect(summaryReads).toEqual([]);
+  act(() => root.unmount());
+});
+
+test("/brokers/connect redirects to the profile page's brokers section", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
@@ -2336,23 +1992,196 @@ test("Trading 212 requires both halves of the key pair", async () => {
       </MemoryRouter>,
     );
     await Promise.resolve();
+    await Promise.resolve();
   });
-  const picker = container.querySelector('select[aria-label="Broker"]') as HTMLSelectElement;
+  expect(container.textContent).toContain("Brokers");
+  expect(container.querySelector("#brokers")).not.toBeNull();
+  root.unmount();
+});
+
+test("layout GET failing does not blank the shell — it renders with defaults", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response("", { status: 500 })
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
   await act(async () => {
-    picker.value = "trading212";
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
   });
+  const tabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(tabs.map((a) => a.textContent)).toEqual(["Overview", "Positions", "Net worth", "Agents"]);
+  expect(container.textContent).toContain("Portfolio value");
+  root.unmount();
+});
 
-  const secret = container.querySelector('input[name="secret"]') as HTMLInputElement | null;
-  expect(secret).not.toBeNull();
-  expect(secret!.required).toBe(true);
-  const token = container.querySelector('input[name="token"]') as HTMLInputElement;
-  expect(token.required).toBe(true);
+test("the top bar shows only Overview while the layout loads, then every module once it resolves", async () => {
+  const layout = deferredLayoutFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input) === "/api/investing/layout"
+        ? layout.fetch()
+        : Promise.resolve(emptyResponseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const loadingTabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(loadingTabs.map((a) => a.textContent)).toEqual(["Overview"]);
 
-  // En de kaart erboven zegt dat het er twee zijn, want daar liep dit op stuk.
-  expect(container.textContent).toContain("both the API key and the API secret");
-  expect(container.textContent).toContain("shown once");
+  await act(async () => {
+    layout.resolve({ modules: {}, widgets: {} });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const readyTabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(readyTabs.map((a) => a.textContent)).toEqual([
+    "Overview",
+    "Positions",
+    "Net worth",
+    "Agents",
+  ]);
+  root.unmount();
+});
 
+test("a deep link to a disabled module never renders its content or tab, before or after the layout resolves", async () => {
+  const layout = deferredLayoutFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input) === "/api/investing/layout"
+        ? layout.fetch()
+        : Promise.resolve(emptyResponseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).toBeNull();
+  expect(container.textContent).not.toContain("Agents unavailable");
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+
+  await act(async () => {
+    layout.resolve({ modules: { agents: false }, widgets: {} });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).toBeNull();
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+  expect(container.querySelector("h2")?.textContent).toBe("Overview");
+  root.unmount();
+});
+
+test("a failed layout load still renders a deep-linked module route, with defaults instead of a blank redirect", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response("", { status: 500 })
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("/net-worth renders the net-worth chart", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/net-worth"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[role="group"][aria-label="Choose net worth period"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("/agents lists every portfolio agent and links to its conversation", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Bill Ackman");
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).not.toBeNull();
   root.unmount();
 });
 

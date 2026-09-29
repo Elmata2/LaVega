@@ -223,20 +223,116 @@ function maxDrawdown(values: readonly number[]): number {
   return worst;
 }
 
+/** Where one sector weight came from: a provider's own reported sector or
+ *  fund look-through, a System One classifier inference, the owner's manual
+ *  correction, or no data at all. Optional and defaulted to "unknown" by the
+ *  coverage reader (buildSectorCoverage) so a vector built before this field
+ *  existed — or a test literal that omits it — still counts as uncovered
+ *  rather than silently misattributed to "provider". */
+export type SectorWeightSource = "provider" | "inferred" | "correction" | "unknown";
+export type SectorWeight = { sector: string; weight: number; source?: SectorWeightSource };
+
+/** Share of priced portfolio value attributable to each SectorWeightSource,
+ *  including the residual buildSectorExposure folds into "Unknown" — that
+ *  residual is uncovered by definition, so it always counts as "unknown"
+ *  coverage. Sums to 1 for a fully-priced portfolio, modulo the same
+ *  publisher-rounding tolerance buildSectorExposure applies (see
+ *  SECTOR_RESIDUAL_EPSILON). */
+export type SectorCoverage = Record<SectorWeightSource, number>;
+
+/** A resolved weight vector rarely sums to exactly 1: Yahoo rounds each of
+ *  up to 11 published sector weights to 4 decimals, so a normal equity
+ *  ETF's vector sums to 0.9995-0.9998 and leaves a 0.0002-0.0005 residual
+ *  before any float arithmetic even runs. This is a rounding tolerance, not
+ *  float-noise sizing — below it, a shortfall is publisher rounding, not a
+ *  real unclassified share, so it is dropped instead of manufacturing a
+ *  phantom Unknown row. */
+export const SECTOR_RESIDUAL_EPSILON = 1e-3;
+
+/** Sort-order rounding: two bucket weights within this distance are
+ *  indistinguishable, so sector name — not float dust — decides their order. */
+const SECTOR_SORT_PRECISION = 1e-9;
+
+function roundForSort(weight: number): number {
+  return Math.round(weight / SECTOR_SORT_PRECISION) * SECTOR_SORT_PRECISION;
+}
+
+type PricedPosition = { symbol: string; marketValue: number };
+
+function pricedPositions(
+  positions: readonly { symbol: string; marketValue: number | null }[],
+): PricedPosition[] {
+  return positions.filter(
+    (position): position is PricedPosition =>
+      position.marketValue !== null && position.marketValue > 0,
+  );
+}
+
+// Only ever scale an overshoot down. A vector that sums below 1 keeps its
+// true residual — it is never normalized up into full coverage.
+function weightScale(vector: readonly SectorWeight[]): { covered: number; scale: number } {
+  const covered = vector.reduce((sum, { weight }) => sum + weight, 0);
+  return { covered, scale: covered > 1 ? 1 / covered : 1 };
+}
+
 export function buildSectorExposure(
   positions: readonly { symbol: string; marketValue: number | null }[],
-  sectorBySymbol: ReadonlyMap<string, string>,
+  weightsBySymbol: ReadonlyMap<string, readonly SectorWeight[]>,
 ): SectorExposure[] {
   const totalsBySector = new Map<string, number>();
   let total = 0;
-  for (const position of positions) {
-    if (position.marketValue === null || position.marketValue <= 0) continue;
-    const sector = sectorBySymbol.get(position.symbol.toUpperCase()) ?? "Unknown";
-    totalsBySector.set(sector, (totalsBySector.get(sector) ?? 0) + position.marketValue);
+  for (const position of pricedPositions(positions)) {
+    const vector = weightsBySymbol.get(position.symbol.toUpperCase()) ?? [];
+    const { covered, scale } = weightScale(vector);
+    for (const { sector, weight } of vector) {
+      totalsBySector.set(
+        sector,
+        (totalsBySector.get(sector) ?? 0) + position.marketValue * weight * scale,
+      );
+    }
+    const residual = Math.max(0, 1 - covered * scale);
+    if (residual > SECTOR_RESIDUAL_EPSILON)
+      totalsBySector.set("Unknown", (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual);
     total += position.marketValue;
   }
   if (total <= 0) return [];
   return [...totalsBySector.entries()]
-    .map(([sector, value]) => ({ sector: sector, weight: value / total }))
-    .sort((left, right) => right.weight - left.weight || left.sector.localeCompare(right.sector));
+    .map(([sector, value]) => ({ sector, weight: value / total }))
+    .sort((left, right) => {
+      const byWeight = roundForSort(right.weight) - roundForSort(left.weight);
+      return byWeight !== 0 ? byWeight : left.sector.localeCompare(right.sector);
+    });
+}
+
+/** The same value-weighting as buildSectorExposure, bucketed by source
+ *  instead of by sector — how much of the portfolio's priced value rests on
+ *  a provider's own data versus an inference versus the owner's own word,
+ *  versus nothing at all. */
+export function buildSectorCoverage(
+  positions: readonly { symbol: string; marketValue: number | null }[],
+  weightsBySymbol: ReadonlyMap<string, readonly SectorWeight[]>,
+): SectorCoverage {
+  const totals: Record<SectorWeightSource, number> = {
+    provider: 0,
+    inferred: 0,
+    correction: 0,
+    unknown: 0,
+  };
+  let total = 0;
+  for (const position of pricedPositions(positions)) {
+    const vector = weightsBySymbol.get(position.symbol.toUpperCase()) ?? [];
+    const { covered, scale } = weightScale(vector);
+    for (const { weight, source } of vector)
+      totals[source ?? "unknown"] += position.marketValue * weight * scale;
+    const residual = Math.max(0, 1 - covered * scale);
+    if (residual > SECTOR_RESIDUAL_EPSILON) totals.unknown += position.marketValue * residual;
+    total += position.marketValue;
+  }
+  if (total <= 0) return { provider: 0, inferred: 0, correction: 0, unknown: 0 };
+  return {
+    provider: totals.provider / total,
+    inferred: totals.inferred / total,
+    correction: totals.correction / total,
+    unknown: totals.unknown / total,
+  };
 }

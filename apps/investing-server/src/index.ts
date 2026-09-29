@@ -30,12 +30,14 @@ import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
+  type InvestingLayoutStore,
 } from "@lavega/core";
 import {
   createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
+  createInMemoryInvestingLayoutStore,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
@@ -64,6 +66,17 @@ import {
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
+import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
+import {
+  createInMemorySectorCorrectionStore,
+  type SectorCorrectionStore,
+} from "./sectorCorrectionStore.js";
+import {
+  createInMemorySectorInferenceSettingStore,
+  type SectorInferenceSettingStore,
+} from "./sectorInferenceSetting.js";
+import { createSystemOneSectorClassifier } from "./sectorClassifier.js";
+import { createSystemOneProvider } from "./systemOne.js";
 import { useDatabaseSource } from "./systemOneUsage.js";
 import {
   createDevFixtureBrokerData,
@@ -183,8 +196,12 @@ export type RuntimeAppOptions = {
   priceStore: PriceStore;
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
+  investingLayoutStore?: InvestingLayoutStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
+  sectorStore?: SectorProfileStore;
+  sectorCorrectionStore?: SectorCorrectionStore;
+  sectorInferenceSettingStore?: SectorInferenceSettingStore;
   /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
@@ -211,6 +228,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const priceStore = options.priceStore;
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const investingLayoutStore =
+    options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
@@ -866,7 +885,31 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce, answerPortfolioConversation });
   };
   const sectorDependencies = {
-    sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorCorrectionStore:
+      options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
+    sectorInferenceSettingStore:
+      options.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore(),
+    /* Gated only on whether a System One client is configured — never on a
+     * per-account setting, since that's checked per request at the route
+     * (POST /api/investing/sectors/infer). resolveSystemOneConfig() throws
+     * when TYPESAFE_API_KEY is unset, so this must stay lazy: a set
+     * TYPESAFE_API_KEY builds a classifier, an unset one leaves inference
+     * dark instead of crashing the runtime at startup — the same mistake
+     * this app already made once with ANTHROPIC_API_KEY. userId is resolved
+     * fresh per call so System One usage is billed to the tenant asking. */
+    ...(process.env.TYPESAFE_API_KEY?.trim()
+      ? {
+          sectorClassifier: async (instrument: { symbol: string; description?: string }) =>
+            createSystemOneSectorClassifier(
+              createSystemOneProvider({
+                userId: await resolveTenantId(),
+                route: "sector-inference",
+                failedRequestInputTokens: 500,
+              }),
+            )(instrument),
+        }
+      : {}),
   };
   if (!dsn)
     return withPortfolioAgentRoute(
@@ -878,6 +921,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         store: priceStore,
         fxProvider,
         benchmarkSelectionStore,
+        investingLayoutStore,
         marketDataConsentStore,
         dashboardReader,
         onPriceDataChanged,
@@ -895,6 +939,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       store: priceStore,
       fxProvider,
       benchmarkSelectionStore,
+      investingLayoutStore,
       marketDataConsentStore,
       dashboardReader,
       onPriceDataChanged,

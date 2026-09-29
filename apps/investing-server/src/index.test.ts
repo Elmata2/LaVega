@@ -467,6 +467,35 @@ test("runtime dashboard recomputes only after data version changes", async () =>
   expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
 });
 
+test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  vi.stubEnv("TYPESAFE_API_KEY", "");
+  const marketDataConsentStore = {
+    get: vi.fn(async () => ({
+      tenantId: "local",
+      accepted: true,
+      decidedAt: null,
+      disclosureVersion: "yahoo-finance-v1",
+    })),
+    set: vi.fn(async () => undefined),
+  };
+  const sectorInferenceSettingStore = {
+    get: vi.fn(async () => true),
+    set: vi.fn(async () => undefined),
+  };
+  const runtimeApp = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    marketDataConsentStore,
+    sectorInferenceSettingStore,
+  });
+
+  const response = await runtimeApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
+});
+
 test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
   vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
   vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
