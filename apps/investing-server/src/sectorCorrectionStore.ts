@@ -17,10 +17,10 @@ export function createInMemorySectorCorrectionStore(): SectorCorrectionStore {
       return corrections.get(tenantId)?.[key(symbol)] ?? null;
     },
     async set(tenantId, symbol, sector) {
-      corrections.set(tenantId, { ...(corrections.get(tenantId) ?? {}), [key(symbol)]: sector });
+      corrections.set(tenantId, { ...corrections.get(tenantId), [key(symbol)]: sector });
     },
     async clear(tenantId, symbol) {
-      const current = { ...(corrections.get(tenantId) ?? {}) };
+      const current = { ...corrections.get(tenantId) };
       delete current[key(symbol)];
       corrections.set(tenantId, current);
     },

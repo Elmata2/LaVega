@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   emptyInvestingDashboard,
+  GICS_SECTOR_LABELS,
   LOCAL_TENANT_ID,
   buildHistoricalRisk,
   validateBenchmarkSymbols,
@@ -45,8 +46,22 @@ import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
 } from "./inMemorySectorProfileStore.js";
-import { resolvePortfolioSectors } from "./sectorResolution.js";
+import { resolvePortfolioSectors, UNKNOWN_SECTOR } from "./sectorResolution.js";
+import type { SectorClassifier } from "./sectorClassifier.js";
+import {
+  createInMemorySectorCorrectionStore,
+  type SectorCorrectionStore,
+} from "./sectorCorrectionStore.js";
+import {
+  createInMemorySectorInferenceSettingStore,
+  type SectorInferenceSettingStore,
+} from "./sectorInferenceSetting.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
+
+/** Bounds one /sectors/infer call to this many classifier invocations, so a
+ *  portfolio with many unknown symbols can't run one request past a
+ *  serverless deadline — the client re-calls for what's left. */
+const SECTOR_INFERENCE_BATCH_SIZE = 10;
 
 export type InvestingDashboardReader = (input: {
   symbol?: string;
@@ -136,6 +151,9 @@ type PriceDependencies = {
   marketDataConsentStore: MarketDataConsentStore;
   sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
   sectorStore: SectorProfileStore;
+  sectorCorrectionStore: SectorCorrectionStore;
+  sectorInferenceSettingStore: SectorInferenceSettingStore;
+  sectorClassifier?: SectorClassifier;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
   healthCheck: () => Promise<InvestingHealth>;
@@ -165,6 +183,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.sectorProfile ??
     ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
+  const sectorCorrectionStore =
+    dependencies.sectorCorrectionStore ?? createInMemorySectorCorrectionStore();
+  const sectorInferenceSettingStore =
+    dependencies.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore();
   /* Who the request belongs to. Standalone and local runs have a single tenant;
    * mounted behind the personal server this resolves to the signed-in user. */
   const resolveTenantId = dependencies.resolveTenantId ?? (() => LOCAL_TENANT_ID);
@@ -285,15 +307,20 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
        * passes no fetchProfile. This route keeps the fetch-and-persist
        * fallback; only the resolution itself is shared. Without consent,
        * omit fetchProfile entirely: resolvePortfolioSectors still answers
-       * from cached profiles, it just never calls Yahoo for a fresh one. */
-      const consented = await hasYahooConsent(await resolveTenantId());
-      const { exposure } = await resolvePortfolioSectors(data.positions, {
+       * from cached profiles, it just never calls Yahoo for a fresh one.
+       * classifier is never passed here: classification runs off this
+       * critical path, only from POST /api/investing/sectors/infer. */
+      const tenantId = await resolveTenantId();
+      const consented = await hasYahooConsent(tenantId);
+      const { exposure, coverage } = await resolvePortfolioSectors(data.positions, {
         store: sectorStore,
+        correction: (symbol) => sectorCorrectionStore.get(tenantId, symbol),
         ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
         ...buildHistoricalRisk(data, range, benchmark),
         sectors: exposure,
+        sectorCoverage: coverage,
         topPositions,
         composition: {
           pricedHoldings: priced.length,
@@ -307,6 +334,80 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     } catch {
       return c.json({ problems: ["Portfolio summary could not be assembled"] }, 503);
     }
+  });
+  investingApp.get("/api/investing/positions/:symbol/sector", async (c) => {
+    const symbol = c.req.param("symbol");
+    const tenantId = await resolveTenantId();
+    const corrected = await sectorCorrectionStore.get(tenantId, symbol);
+    if (corrected) return c.json({ sector: corrected, source: "correction" as const });
+    const profile = await sectorStore.get(symbol);
+    if (!profile) return c.json({ sector: UNKNOWN_SECTOR, source: "unknown" as const });
+    if (profile.kind === "fund") {
+      const largest = [...profile.weights].sort((left, right) => right.weight - left.weight)[0];
+      return c.json({ sector: largest?.sector ?? UNKNOWN_SECTOR, source: "provider" as const });
+    }
+    return c.json({
+      sector: profile.sector,
+      source: profile.source,
+      ...(profile.source === "inferred" ? { confidence: profile.confidence } : {}),
+    });
+  });
+  investingApp.put("/api/investing/positions/:symbol/sector", async (c) => {
+    const symbol = c.req.param("symbol");
+    const body: { sector?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.sector !== "string" || !GICS_SECTOR_LABELS.includes(body.sector as never))
+      return c.json({ message: "sector must be one of the GICS sector labels" }, 400);
+    const profile = await sectorStore.get(symbol);
+    if (profile?.kind === "fund")
+      return c.json(
+        { message: "A fund's sector is its look-through weight vector, not a single correction" },
+        422,
+      );
+    await sectorCorrectionStore.set(await resolveTenantId(), symbol, body.sector);
+    return c.body(null, 204);
+  });
+  investingApp.delete("/api/investing/positions/:symbol/sector", async (c) => {
+    await sectorCorrectionStore.clear(await resolveTenantId(), c.req.param("symbol"));
+    return c.body(null, 204);
+  });
+  investingApp.get("/api/investing/sector-inference", async (c) =>
+    c.json({ enabled: await sectorInferenceSettingStore.get(await resolveTenantId()) }),
+  );
+  investingApp.put("/api/investing/sector-inference", async (c) => {
+    const body: { enabled?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.enabled !== "boolean")
+      return c.json({ message: "enabled must be boolean" }, 400);
+    await sectorInferenceSettingStore.set(await resolveTenantId(), body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+  investingApp.post("/api/investing/sectors/infer", async (c) => {
+    const tenantId = await resolveTenantId();
+    if (!(await hasYahooConsent(tenantId)))
+      return c.json({ problems: ["Yahoo Finance consent required"] }, 428);
+    if (!(await sectorInferenceSettingStore.get(tenantId)))
+      return c.json({ problems: ["Sector inference is not enabled"] }, 428);
+    if (!dependencies.sectorClassifier) return c.json({ classified: 0, remaining: 0 });
+    const data = await dashboardReader({});
+    const priced = data.positions.filter(
+      (position): position is typeof position & { marketValue: number } =>
+        position.marketValue !== null && position.marketValue > 0,
+    );
+    const seen = new Set<string>();
+    const candidates: typeof priced = [];
+    for (const position of priced) {
+      const key = position.symbol.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (await sectorCorrectionStore.get(tenantId, position.symbol)) continue;
+      if (await sectorStore.get(position.symbol)) continue;
+      candidates.push(position);
+    }
+    const batch = candidates.slice(0, SECTOR_INFERENCE_BATCH_SIZE);
+    await resolvePortfolioSectors(batch, {
+      store: sectorStore,
+      classifier: dependencies.sectorClassifier,
+    });
+    return c.json({ classified: batch.length, remaining: candidates.length - batch.length });
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     const timing = createServerTiming();

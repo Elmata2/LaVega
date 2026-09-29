@@ -11,6 +11,35 @@ import {
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
+import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
+import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
+import { createInMemorySectorInferenceSettingStore } from "./sectorInferenceSetting.js";
+
+function pricedPosition(symbol: string, marketValue: number, description?: string) {
+  return {
+    symbol,
+    entity: "personal" as const,
+    ...(description ? { description } : {}),
+    quantity: 1,
+    marketValue,
+    portfolioWeight: null,
+    priceStatus: "priced" as const,
+    currency: "EUR",
+    asOf: "2026-08-18",
+    returns: {
+      status: "unpriced" as const,
+      remainingCostBasis: 0,
+      realizedCostBasisRemoved: 0,
+      unrealizedGain: 0,
+      realizedGain: 0,
+      dividendsReceived: 0,
+      totalReturn: 0,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate: null,
+    },
+  };
+}
 
 const acceptedConsentStore = () => ({
   get: vi.fn(async () => ({
@@ -1208,4 +1237,353 @@ test("a Trading 212 connection still demands the key itself", async () => {
   });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ problems: ["token is required"] });
+});
+
+test("GET position sector reads the resolved sector for that symbol", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const investingApp = createApp({ sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/AAPL/sector");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ sector: "Technology", source: "provider" });
+});
+
+test("GET position sector reports Unknown for a symbol with no profile and no correction", async () => {
+  const investingApp = createApp({});
+  const response = await investingApp.request("/api/investing/positions/MYST/sector");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ sector: "Unknown", source: "unknown" });
+});
+
+test("GET position sector reports an inferred profile's confidence", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("MYST", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.82,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+  const investingApp = createApp({ sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/MYST/sector");
+
+  expect(await response.json()).toEqual({ sector: "Healthcare", source: "inferred", confidence: 0.82 });
+});
+
+test("GET position sector reports a fund's single largest weight", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("VFEM.L", {
+    kind: "fund",
+    weights: [
+      { sector: "Technology", weight: 0.3 },
+      { sector: "Healthcare", weight: 0.5 },
+    ],
+    source: "provider",
+  });
+  const investingApp = createApp({ sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/VFEM.L/sector");
+
+  expect(await response.json()).toEqual({ sector: "Healthcare", source: "provider" });
+});
+
+test("PUT position sector rejects a label outside the GICS set", async () => {
+  const investingApp = createApp({});
+  const response = await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Not A Sector" }),
+    headers: { "content-type": "application/json" },
+  });
+  expect(response.status).toBe(400);
+});
+
+test("PUT position sector then GET reflects the correction immediately, no provider call", async () => {
+  const sectorProfile = vi.fn();
+  const investingApp = createApp({ sectorProfile });
+
+  const put = await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+  expect(put.status).toBe(204);
+
+  const response = await investingApp.request("/api/investing/positions/AAPL/sector");
+  expect(await response.json()).toMatchObject({ sector: "Healthcare", source: "correction" });
+  expect(sectorProfile).not.toHaveBeenCalled();
+});
+
+test("PUT position sector rejects a fund symbol, since a fund's sector is its weight vector", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+  });
+  const investingApp = createApp({ sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/VFEM.L/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+
+  expect(response.status).toBe(422);
+});
+
+test("PUT position sector is accepted for a symbol with no stored profile yet", async () => {
+  const investingApp = createApp({});
+  const response = await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+  expect(response.status).toBe(204);
+});
+
+test("DELETE position sector clears the correction and reverts to automatic resolution", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const investingApp = createApp({ sectorStore });
+
+  await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+  const cleared = await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "DELETE",
+  });
+  expect(cleared.status).toBe(204);
+
+  const response = await investingApp.request("/api/investing/positions/AAPL/sector");
+  expect(await response.json()).toEqual({ sector: "Technology", source: "provider" });
+});
+
+test("sector-correction routes read and write under the resolved tenant", async () => {
+  const sectorCorrectionStore = createInMemorySectorCorrectionStore();
+  const investingApp = createApp({ resolveTenantId: () => "user-123", sectorCorrectionStore });
+
+  await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+
+  expect(await sectorCorrectionStore.get("user-123", "AAPL")).toBe("Healthcare");
+  expect(await sectorCorrectionStore.get("local", "AAPL")).toBeNull();
+});
+
+test("the sector-inference setting defaults to disabled and can be turned on", async () => {
+  const investingApp = createApp({});
+
+  const before = await investingApp.request("/api/investing/sector-inference");
+  expect(await before.json()).toEqual({ enabled: false });
+
+  const put = await investingApp.request("/api/investing/sector-inference", {
+    method: "PUT",
+    body: JSON.stringify({ enabled: true }),
+    headers: { "content-type": "application/json" },
+  });
+  expect(put.status).toBe(200);
+
+  const after = await investingApp.request("/api/investing/sector-inference");
+  expect(await after.json()).toEqual({ enabled: true });
+});
+
+test("the sector-inference setting is isolated per tenant", async () => {
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  const investingApp = createApp({ resolveTenantId: () => "user-123", sectorInferenceSettingStore });
+
+  await investingApp.request("/api/investing/sector-inference", {
+    method: "PUT",
+    body: JSON.stringify({ enabled: true }),
+    headers: { "content-type": "application/json" },
+  });
+
+  expect(await sectorInferenceSettingStore.get("user-123")).toBe(true);
+  expect(await sectorInferenceSettingStore.get("local")).toBe(false);
+});
+
+test("sector inference rejects a non-boolean enabled value", async () => {
+  const investingApp = createApp({});
+  const response = await investingApp.request("/api/investing/sector-inference", {
+    method: "PUT",
+    body: JSON.stringify({ enabled: "yes" }),
+    headers: { "content-type": "application/json" },
+  });
+  expect(response.status).toBe(400);
+});
+
+test("infer requires market-data consent before it will classify anything", async () => {
+  const sectorClassifier = vi.fn();
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const investingApp = createApp({ sectorClassifier, sectorInferenceSettingStore });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(428);
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("infer requires the owner's inference setting to be on, even with consent given", async () => {
+  const sectorClassifier = vi.fn();
+  const investingApp = createApp({ sectorClassifier, marketDataConsentStore: acceptedConsentStore() });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(428);
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("infer is a no-op, not an error, when no classifier is configured", async () => {
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const investingApp = createApp({
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ classified: 0, remaining: 0 });
+});
+
+test("infer classifies unknown priced symbols and caches the result", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("MYST", 100, "Myst Robotics"));
+  const sectorClassifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Industrials",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorStore,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ classified: 1, remaining: 0 });
+  expect(sectorClassifier).toHaveBeenCalledWith({ symbol: "MYST", description: "Myst Robotics" });
+  expect(await sectorStore.get("MYST")).toMatchObject({ sector: "Industrials", source: "inferred" });
+});
+
+test("infer skips a symbol that already has a stored profile or an owner correction", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const sectorCorrectionStore = createInMemorySectorCorrectionStore();
+  await sectorCorrectionStore.set("local", "MSFT", "Healthcare");
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("AAPL", 100), pricedPosition("MSFT", 100));
+  const sectorClassifier = vi.fn();
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorStore,
+    sectorCorrectionStore,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(await response.json()).toEqual({ classified: 0, remaining: 0 });
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("infer bounds how many unknown symbols it classifies in one call", async () => {
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  for (let index = 0; index < 15; index += 1)
+    dashboard.positions.push(pricedPosition(`SYM${index}`, 100));
+  const sectorClassifier = vi.fn(async () => ({ kind: "no-match" as const }));
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  const body = (await response.json()) as { classified: number; remaining: number };
+  expect(body.classified).toBeLessThanOrEqual(10);
+  expect(body.classified + body.remaining).toBe(15);
+  expect(sectorClassifier).toHaveBeenCalledTimes(body.classified);
+});
+
+test("summary route reports a sector-coverage breakdown alongside the sector exposure", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("AAPL", 100));
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    sectorStore,
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+  const body = (await response.json()) as { sectorCoverage: Record<string, number> };
+
+  expect(body.sectorCoverage).toEqual({ provider: 1, inferred: 0, correction: 0, unknown: 0 });
+});
+
+test("summary route never calls the classifier, even when one is configured and inference is enabled", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("MYST", 100, "Myst Robotics"));
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const sectorClassifier = vi.fn();
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+
+  expect(response.status).toBe(200);
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("a correction wins immediately in the very next summary", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("AAPL", 100));
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    sectorStore,
+  });
+
+  await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+  const body = (await response.json()) as { sectors: Array<{ sector: string; weight: number }> };
+
+  expect(body.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
 });
