@@ -9,7 +9,7 @@ export type PortfolioSummary = {
   composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
 };
 
-type SummaryState =
+export type SummaryState =
   | { status: "loading" }
   | { status: "ready"; data: PortfolioSummary }
   | { status: "error"; message: string };
@@ -76,19 +76,27 @@ async function fetchPortfolioSummary(
 
 /** Owns the summary request for one range and benchmark. It loads again only
  * when those, the benchmark revision or an explicit refresh change: broker and
- * price updates are left to the user's Refresh risk, by design. */
+ * price updates are left to the user's Refresh risk, by design.
+ *
+ * `/api/investing/summary` is the slowest call on the page (over 40s observed
+ * in production), so callers with more than one summary-driven widget (risk,
+ * sectors) call this once and share the result — never mount it twice. `enabled`
+ * lets a caller skip the request entirely while nothing on screen needs it,
+ * without breaking the rules of hooks. */
 export function usePortfolioSummary(
   range: RiskRange,
   benchmark: string,
   revision: string,
+  enabled = true,
 ): { state: SummaryState; refresh: () => void } {
   const [refreshes, setRefreshes] = useState(0);
-  const requestKey = JSON.stringify([range, benchmark, revision, refreshes]);
+  const requestKey = JSON.stringify([range, benchmark, revision, refreshes, enabled]);
   const [state, setState] = useState<{ key: string; result: SummaryState }>({
     key: "",
     result: { status: "loading" },
   });
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     void fetchPortfolioSummary(range, benchmark, controller.signal)
       .then((data) => {
@@ -106,7 +114,7 @@ export function usePortfolioSummary(
         });
       });
     return () => controller.abort();
-  }, [range, benchmark, requestKey]);
+  }, [range, benchmark, requestKey, enabled]);
   return {
     state: state.key === requestKey ? state.result : { status: "loading" },
     refresh: () => setRefreshes((value) => value + 1),
