@@ -74,6 +74,11 @@ type ProfielProps = {
    *  by App (see homeCountry above) so every view sees the same flip. */
   fxConversionMode: ConversionMode;
   onFxConversionModeChange: (mode: ConversionMode) => void;
+  /** Opt-in share of Totale positie into LaVega Investing's net worth. Owned by
+   *  App: turning it off must fire the DELETE exactly once, from the same
+   *  place the preference itself changes. */
+  shareNetWorthEnabled: boolean;
+  onShareNetWorthEnabledChange: (on: boolean) => void;
   /** The owner's own name. A local preference; it never leaves this browser. */
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
@@ -426,6 +431,8 @@ export default function Profiel({
   onHomeRegionChange,
   fxConversionMode,
   onFxConversionModeChange,
+  shareNetWorthEnabled,
+  onShareNetWorthEnabledChange,
   ownerName,
   onOwnerNameChange,
   onLock,
@@ -689,6 +696,26 @@ export default function Profiel({
           {c.profiel.fx.convertLabel}
         </label>
         <p className="cell-sub">{c.profiel.fx.description}</p>
+      </Card>
+
+      <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
+        <CardHeader>
+          <h2>{c.profiel.netWorthShare.heading}</h2>
+        </CardHeader>
+        <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
+        <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
+        <label>
+          <input
+            type="checkbox"
+            checked={shareNetWorthEnabled}
+            aria-label={c.profiel.netWorthShare.toggleLabel}
+            onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
+          />{" "}
+          {c.profiel.netWorthShare.toggleLabel}
+        </label>
+        <p className="cell-sub">
+          {shareNetWorthEnabled ? c.profiel.netWorthShare.onStatus : c.profiel.netWorthShare.offStatus}
+        </p>
       </Card>
 
       <Import

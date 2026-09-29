@@ -76,6 +76,8 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeRegionChange: () => {},
     fxConversionMode: "convert",
     onFxConversionModeChange: () => {},
+    shareNetWorthEnabled: false,
+    onShareNetWorthEnabledChange: () => {},
     ownerName: { first: "", last: "" },
     onOwnerNameChange: () => {},
     onLock: () => {},
@@ -687,6 +689,25 @@ test("de omreken-checkbox volgt de fxConversionMode prop", async () => {
     '[aria-label="Vreemde valuta omrekenen naar euro"]',
   ) as HTMLInputElement;
   expect(toggle.checked).toBe(false);
+});
+
+test("de net-worth-share schakelaar staat standaard uit en meldt de verandering naar boven", async () => {
+  const onChange = vi.fn();
+  await render({ shareNetWorthEnabled: false, onShareNetWorthEnabledChange: onChange });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
+  act(() => toggle.click());
+  expect(onChange).toHaveBeenCalledWith(true);
+});
+
+test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async () => {
+  await render({ shareNetWorthEnabled: true });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(true);
 });
 
 test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async () => {

@@ -234,6 +234,15 @@ export type ShellCopy = {
       clearFailedPrefix: string;
       savedPrefix: string;
     };
+    netWorthShare: {
+      ariaLabel: string;
+      heading: string;
+      description: string;
+      privacyNote: string;
+      toggleLabel: string;
+      onStatus: string;
+      offStatus: string;
+    };
   };
 };
 
@@ -552,6 +561,18 @@ const nl: ShellCopy = {
       clearFailedPrefix: "Wissen lukte niet: ",
       savedPrefix: "Opgeslagen voor ",
     },
+    netWorthShare: {
+      ariaLabel: "Delen met LaVega Investing",
+      heading: "Delen met LaVega Investing",
+      description:
+        "Deelt elke dag je Totale positie (het bedrag bovenaan Overzicht) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
+      privacyNote:
+        "Er gaat nooit een transactie, rekening of bedrijfsnaam mee — alleen dit ene bedrag, per dag, en alleen op een dag dat elk saldo bekend is.",
+      toggleLabel: "Deel mijn Totale positie met LaVega Investing",
+      onStatus:
+        "Staat aan. Elke dag dat je kluis open is en alle saldo's bekend zijn, gaat het bedrag naar Investing.",
+      offStatus: "Staat uit. Zet hem aan om je Totale positie in Investing's nettowaarde te zien.",
+    },
   },
 };
 
@@ -867,6 +888,18 @@ const en: ShellCopy = {
       saveFailedPrefix: "Saving to the vault didn't work: ",
       clearFailedPrefix: "Clearing didn't work: ",
       savedPrefix: "Saved for ",
+    },
+    netWorthShare: {
+      ariaLabel: "Share with LaVega Investing",
+      heading: "Share with LaVega Investing",
+      description:
+        "Shares your Totale positie (the figure at the top of Overzicht) with LaVega Investing every day, so its net worth counts your bank money alongside your investments.",
+      privacyNote:
+        "No transaction, account or company name ever goes with it — only this one figure, per day, and only on a day every balance is known.",
+      toggleLabel: "Share my Totale positie with LaVega Investing",
+      onStatus:
+        "On. Every day your vault is open and every balance is known, the figure goes to Investing.",
+      offStatus: "Off. Turn it on to see your Totale positie inside Investing's net worth.",
     },
   },
 };

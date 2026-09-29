@@ -80,10 +80,17 @@ import {
   setEnabledModules,
   getFxConversionMode,
   setFxConversionMode,
+  getShareNetWorthEnabled,
+  setShareNetWorthEnabled,
   clearLegacyN8nLocalStorage,
   type OwnerName,
   type ConversionMode,
 } from "./settings.js";
+import {
+  computeShareableTotalCents,
+  deleteNetWorthTotal,
+  putNetWorthTotal,
+} from "./netWorthShare.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import {
   txsForAccounts,
@@ -271,6 +278,20 @@ export default function App() {
   function handleFxConversionModeChange(mode: ConversionMode) {
     setFxConversionMode(mode);
     setFxConversionModeState(mode);
+  }
+  // Opt-in share of Totale positie into LaVega Investing's net worth. Off is
+  // the default and the local preference is the switch; the effect below
+  // (once accounts/txs/gate exist) is what actually sends a total while it is
+  // on. Turning it OFF fires the DELETE right here, once, the same way
+  // "Vergrendel" or "erase my data" act directly from their own handler
+  // rather than from an effect watching a flag.
+  const [shareNetWorthEnabled, setShareNetWorthEnabledState] = useState<boolean>(() =>
+    getShareNetWorthEnabled(),
+  );
+  function handleShareNetWorthEnabledChange(on: boolean) {
+    setShareNetWorthEnabled(on);
+    setShareNetWorthEnabledState(on);
+    if (!on) void deleteNetWorthTotal().catch(() => {});
   }
   // ECB daily rates, keyed by currency then by date — the vault's own copy,
   // refreshed in the background (see the "Load persisted data" effect below).
@@ -527,6 +548,23 @@ export default function App() {
     // unrelated row would hammer the ECB route for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate, fxNeed]);
+
+  /* THE PERSONAL-TO-INVESTING NET WORTH SHARE, opt-in (docs/investing/
+   * DASHBOARD.md). `accounts`/`txs`/`fxHistory` all change on every sync and
+   * import, and `gate` becomes "ready" on unlock — so depending on them here
+   * is what gives "after each sync/import, and on unlock" without a second
+   * copy of this call at every import/sync/unlock site. A null total (any
+   * balance still unknown) sends nothing, exactly like the day is simply
+   * skipped rather than sent as a partial sum. */
+  useEffect(() => {
+    if (gate !== "ready" || !shareNetWorthEnabled) return;
+    const totalCents = computeShareableTotalCents(accounts, txs, asOf, {
+      fxHistory,
+      mode: fxConversionMode,
+    });
+    if (totalCents === null) return;
+    void putNetWorthTotal(asOf, totalCents).catch(() => {});
+  }, [gate, shareNetWorthEnabled, accounts, txs, asOf, fxHistory, fxConversionMode]);
 
   // Public savings-rate benchmark for the travel block's "where to keep it"
   // step. Public data, not user data; failing is harmless (bundled snapshot).
@@ -1664,6 +1702,8 @@ export default function App() {
               onHomeRegionChange={handleHomeRegionChange}
               fxConversionMode={fxConversionMode}
               onFxConversionModeChange={handleFxConversionModeChange}
+              shareNetWorthEnabled={shareNetWorthEnabled}
+              onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
               ownerName={ownerName}
               onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}

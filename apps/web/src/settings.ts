@@ -139,6 +139,31 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
   }
 }
 
+const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
+
+/** Opt-in toggle for sharing today's "Totale positie" with LaVega Investing's
+ *  net worth (see apps/web/src/netWorthShare.ts). Defaults false: no number
+ *  leaves this browser until the owner turns this on, exactly like AI
+ *  extraction, chat and AI-categorisation above — the switch itself is a
+ *  preference, so it lives in localStorage; the totals it sends are the truth
+ *  Investing reads, and live on the server instead. */
+export function getShareNetWorthEnabled(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(SHARE_NET_WORTH_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setShareNetWorthEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(SHARE_NET_WORTH_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 export type { ConversionMode };
 
 const FX_CONVERSION_MODE_KEY = "lavega.fxConversionMode";
