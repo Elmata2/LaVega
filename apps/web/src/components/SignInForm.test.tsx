@@ -74,9 +74,7 @@ test("submitting calls signIn with the typed email and password", async () => {
   vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
   const el = render();
   act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
-  act(() =>
-    setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"),
-  );
+  act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
   expect(signIn).toHaveBeenCalledWith("x@y.nl", "secret");
 });
@@ -99,9 +97,7 @@ test("an ok result calls onSuccess once", async () => {
   const onSuccess = vi.fn();
   const el = render(onSuccess);
   act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
-  act(() =>
-    setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"),
-  );
+  act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
   expect(onSuccess).toHaveBeenCalledTimes(1);
 });

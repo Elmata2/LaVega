@@ -23,7 +23,7 @@ A fund runs two kinds of pods, like a real shop. **Discretionary** strategies
 are staffed by **agents** — LLM investor personas (Warren Buffett, Charlie
 Munger, Benjamin Graham, Peter Lynch, Stanley Druckenmiller) whose judgment
 is the edge; blend them long-biased or market-neutral. **Systematic**
-strategies are powered by quant models (post-earnings drift) — the model *is*
+strategies are powered by quant models (post-earnings drift) — the model _is_
 the strategy, no persona attached. Both kinds implement one interface and
 plug into the same engine unchanged.
 
@@ -69,22 +69,22 @@ free, and work offline once warmed.
 Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → Ledger
 ```
 
-| Module | What | Status |
-|--------|------|--------|
-| `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
-| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas | ✅ |
-| `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
-| `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
-| `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
-| `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
-| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
-| `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
-| `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
-| `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |
-| `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine | ✅ |
-| `event_study/` | Market-model abnormal returns (CARs) | ✅ |
-| `validation/` | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO) | ⬜ |
-| `tui/` | The interactive app (Textual): fund builder + live backtest board | ✅ |
+| Module         | What                                                                                             | Status |
+| -------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| `data/`        | `DataClient` protocol, Financial Datasets client, disk cache                                     | ✅     |
+| `signals/`     | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas                                   | ✅     |
+| `llm/`         | LLM provider protocol, Anthropic client, prompt cache                                            | ✅     |
+| `features/`    | Point-in-time fundamentals snapshot (more features planned)                                      | ◐      |
+| `fund/`        | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object                        | ✅     |
+| `strategies/`  | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅     |
+| `portfolio/`   | View blending → target weights (conviction-weighted, optional market-neutral)                    | ✅     |
+| `risk/`        | Hard limits — per-position and gross-exposure clamps                                             | ✅     |
+| `brokers/`     | `Broker` protocol + `SimBroker` (paper/live brokers planned)                                     | ◐      |
+| `pipeline/`    | `run_cycle` — one code path for backtest/paper/live; `CycleRecord`                               | ✅     |
+| `backtesting/` | `backtest_fund` — the whole fund over history on `run_cycle` — plus the per-model engine         | ✅     |
+| `event_study/` | Market-model abnormal returns (CARs)                                                             | ✅     |
+| `validation/`  | Combinatorial purged CV (CPCV), backtest-overfitting prob (PBO)                                  | ⬜     |
+| `tui/`         | The interactive app (Textual): fund builder + live backtest board                                | ✅     |
 
 ✅ built · ◐ partial · ⬜ planned
 
@@ -95,10 +95,10 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
   period. No lookahead, ever.
 - **Fail loud.** Infrastructure failures raise; only genuine "no data" returns
   empty. A silent empty would poison a backtest as a fake "no signal."
-- **The LLM never touches the trade.** Agents form *views* and *narrate*;
+- **The LLM never touches the trade.** Agents form _views_ and _narrate_;
   deterministic code sizes and places orders; risk limits are hard gates.
 - **One interface for every analyst.** Implement `AlphaModel.predict(ticker,
-  date, data_client) -> Signal` and it plugs into the engine unchanged.
+date, data_client) -> Signal` and it plugs into the engine unchanged.
 
 ## Data contracts (`models.py`)
 

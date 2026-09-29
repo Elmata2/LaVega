@@ -11,6 +11,7 @@ import { continuePriceSync } from "../lib/syncSession";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
+import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
@@ -230,7 +231,7 @@ export function PortfolioBenchmarkChart({
 
   return (
     <Card>
-      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="grid h-5 text-sm font-medium text-muted-foreground">
             <span
@@ -284,17 +285,15 @@ export function PortfolioBenchmarkChart({
                 key={symbol}
                 className="inline-flex items-center gap-2 rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold"
               >
-                <span
-                  aria-hidden="true"
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: `hsl(var(--${colors[index]}))` }}
-                />
+                <Swatch className="size-2 rounded-full" color={`hsl(var(--${colors[index]}))`} />
                 {item ? benchmarkLabel(item) : symbol}
                 <button
                   type="button"
                   disabled={busy}
                   aria-label={`${symbol} remove`}
-                  onClick={() => void replaceSelection(selected.filter((entry) => entry !== symbol))}
+                  onClick={() =>
+                    void replaceSelection(selected.filter((entry) => entry !== symbol))
+                  }
                   className="pressable -mr-1 rounded-full px-1 text-muted-foreground hover:text-foreground"
                 >
                   ×
@@ -330,13 +329,13 @@ export function PortfolioBenchmarkChart({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="AEX, DAX, ETF…"
-                  className="mt-1.5 w-full rounded-[12px] border border-input bg-background px-3 py-2 text-sm font-normal"
+                  className="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-normal"
                 />
               </label>
               <button
                 type="button"
                 onClick={() => setComparing(false)}
-                className="pressable self-end rounded-[12px] px-3 py-2 text-sm font-semibold"
+                className="pressable self-end rounded-xl px-3 py-2 text-sm font-semibold"
               >
                 Close
               </button>
@@ -357,7 +356,7 @@ export function PortfolioBenchmarkChart({
                       setComparing(false);
                       setQuery("");
                     }}
-                    className="pressable w-full rounded-[12px] px-3 py-2 text-left hover:bg-background"
+                    className="pressable w-full rounded-xl px-3 py-2 text-left hover:bg-background"
                   >
                     <span className="block text-sm font-semibold">{result.name}</span>
                     <span className="block text-xs text-muted-foreground">
@@ -404,7 +403,7 @@ export function PortfolioBenchmarkChart({
                       max={maxDate}
                       value={dateFrom}
                       onChange={(event) => setDateFrom(event.target.value)}
-                      className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                      className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                     />
                   </label>
                   <label className="font-semibold text-muted-foreground">
@@ -416,7 +415,7 @@ export function PortfolioBenchmarkChart({
                       max={maxDate}
                       value={dateTo}
                       onChange={(event) => setDateTo(event.target.value)}
-                      className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                      className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                     />
                   </label>
                   <button
@@ -448,7 +447,7 @@ export function PortfolioBenchmarkChart({
               role="img"
               tabIndex={0}
               aria-label={`${label}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-[12px]"
+              className="touch-pan-y select-none rounded-xl"
               {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
@@ -559,10 +558,9 @@ export function PortfolioBenchmarkChart({
                 onClick={() => setVisible(toggle(visible, "portfolio"))}
                 className="pressable inline-flex items-center gap-1.5 rounded-pill px-2 py-1 text-muted-foreground"
               >
-                <span
-                  aria-hidden="true"
+                <Swatch
                   className="size-2 rounded-full"
-                  style={{ backgroundColor: `hsl(var(--${mode === "euros" ? direction : "pos"}))` }}
+                  color={`hsl(var(--${mode === "euros" ? direction : "pos"}))`}
                 />
                 Portfolio
               </button>
@@ -574,11 +572,7 @@ export function PortfolioBenchmarkChart({
                   onClick={() => setVisible(toggle(visible, benchmark.symbol))}
                   className="pressable inline-flex items-center gap-1.5 rounded-pill px-2 py-1 text-muted-foreground"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: `hsl(var(--${colors[index]}))` }}
-                  />
+                  <Swatch className="size-2 rounded-full" color={`hsl(var(--${colors[index]}))`} />
                   {benchmarkLabel(benchmark)}
                 </button>
               ))}
@@ -602,7 +596,7 @@ function PerformanceSummary({
   return (
     <section
       aria-label="Return on selected date"
-      className="mb-4 rounded-[14px] border border-border bg-secondary/30 p-3"
+      className="mb-4 rounded-tile border border-border bg-secondary/30 p-3"
     >
       <p className="mb-2 text-xs font-semibold text-muted-foreground">
         {dateLabel(point.date)} · Portfolio{" "}
@@ -616,7 +610,7 @@ function PerformanceSummary({
           return (
             <div
               key={benchmark.symbol}
-              className="min-w-[220px] flex-1 rounded-[12px] bg-card p-3 shadow-soft"
+              className="min-w-[220px] flex-1 rounded-xl bg-card p-3 shadow-md"
             >
               <p className="mb-2 text-xs font-semibold">vs. {benchmarkLabel(benchmark)}</p>
               {!hasHistory ? (
@@ -633,7 +627,7 @@ function PerformanceSummary({
                     XIRR p.j. Portfolio {signedCappedXirr(point.portfolioXirr)} ·{" "}
                     {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
                   </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-2xs text-muted-foreground">
                     <span>
                       {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
                     </span>
@@ -676,7 +670,7 @@ export function PerformanceTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(420px,80vw)] rounded-[12px] border border-border bg-card px-3 py-2 text-xs shadow-soft">
+    <div className="max-w-[min(420px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
       <p className="mb-2 text-muted-foreground">{dateLabel(point.date)}</p>
       {mode === "euros" ? (
         <p className="font-semibold">
@@ -697,8 +691,8 @@ export function PerformanceTooltip({
                   {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                 </p>
                 <p className="text-sm font-semibold">
-                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
-                  {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
+                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} · {benchmarkLabel(benchmark)}{" "}
+                  {signedCappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );

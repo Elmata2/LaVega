@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Cell, Pie, PieChart } from "recharts";
 import type { Allocation } from "@lavega/core";
 import { EmptyState } from "./EmptyState";
+import { Swatch } from "./Swatch";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
@@ -92,7 +93,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-4">
+      <CardHeader gap="wide" className="flex-row items-start justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Allocation</p>
           <CardTitle>Portfolio</CardTitle>
@@ -104,7 +105,6 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
         >
           <Button
             aria-pressed={group === "instrument"}
-            className="rounded-pill"
             onClick={() => {
               setGroup("instrument");
               setShowOverige(false);
@@ -116,7 +116,6 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
           </Button>
           <Button
             aria-pressed={group === "entity"}
-            className="rounded-pill"
             onClick={() => {
               setGroup("entity");
               setShowOverige(false);
@@ -178,11 +177,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                 <li key={bucket.key}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: bucket.color }}
-                      />
+                      <Swatch className="size-2 shrink-0 rounded-full" color={bucket.color} />
                       {bucket.members ? (
                         <button
                           aria-expanded={showOverige}

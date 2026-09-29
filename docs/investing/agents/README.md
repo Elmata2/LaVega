@@ -4,21 +4,21 @@ These files are copied unchanged from [`virattt/ai-hedge-fund`](https://github.c
 
 ## Map
 
-| File | What it is | Use in LaVega |
-| --- | --- | --- |
-| `munger.py`, `buffett.py`, `graham.py`, `lynch.py`, `druckenmiller.py` | Persona system prompts: mental models and signal rules per investor. | Seed for the chat profiles in #177. |
-| `llm_agent.py` | Persona base class: build snapshot, call LLM, parse JSON, abstain on LLM failure, prompt cache. | Pattern for the #177 prefetch and cache. |
-| `signals/base.py`, `models.py` | `AlphaModel` interface and the `Signal` shape (conviction in [-1, +1], thesis, metadata). | Shape for typed agent views. |
-| `features/snapshot.py`, `features/test_snapshot.py` | Point-in-time fundamentals snapshot, `render()` for the prompt, `content_hash`. | Model for the #177 fundamentals brief. |
-| `data/models.py` | Vendor data models: prices, financial metrics, earnings, news, insider trades. | Field list for the Yahoo mapping. |
-| `data/protocol.py` | `DataClient` protocol that every data source implements. | Model for the `FundamentalsProvider` seam. |
-| `data/cached.py` | Disk cache wrapper that knows when a trading day's data is complete. | Freshness rules for the fundamentals cache. |
-| `llm/cache.py` | Prompt cache keyed on a hash of agent, model, system and user prompt, with an audit record. | Audit trail for agent answers. |
-| `llm/watch.py` | Reads `signal`, `confidence` and `reasoning` out of a JSON stream before it completes. | Only if a typed view needs to stream. |
-| `pipeline/models.py` | `DecisionRecord` and `CycleRecord`: every signal, weight and clamp of one run, serialized. | Model for stored letters (#179) and agent memory (#178). |
-| `risk/limits.py` | Hard position and gross caps that log a `ClampEvent` with before, after and reason. | Model for explainable concentration insights. |
-| `strategies/*.yaml` | Configs that blend personas into pods (fundamental long/short, deep value, earnings drift, inflections). | Shows which personas combine. |
-| `VISION.md`, `ROADMAP.md`, `ARCHITECTURE.md`, `UPSTREAM-README.md` | Source project vision, roadmap, `hedge_fund/README.md`, and root README. | Principles and planned personas. |
+| File                                                                   | What it is                                                                                               | Use in LaVega                                            |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `munger.py`, `buffett.py`, `graham.py`, `lynch.py`, `druckenmiller.py` | Persona system prompts: mental models and signal rules per investor.                                     | Seed for the chat profiles in #177.                      |
+| `llm_agent.py`                                                         | Persona base class: build snapshot, call LLM, parse JSON, abstain on LLM failure, prompt cache.          | Pattern for the #177 prefetch and cache.                 |
+| `signals/base.py`, `models.py`                                         | `AlphaModel` interface and the `Signal` shape (conviction in [-1, +1], thesis, metadata).                | Shape for typed agent views.                             |
+| `features/snapshot.py`, `features/test_snapshot.py`                    | Point-in-time fundamentals snapshot, `render()` for the prompt, `content_hash`.                          | Model for the #177 fundamentals brief.                   |
+| `data/models.py`                                                       | Vendor data models: prices, financial metrics, earnings, news, insider trades.                           | Field list for the Yahoo mapping.                        |
+| `data/protocol.py`                                                     | `DataClient` protocol that every data source implements.                                                 | Model for the `FundamentalsProvider` seam.               |
+| `data/cached.py`                                                       | Disk cache wrapper that knows when a trading day's data is complete.                                     | Freshness rules for the fundamentals cache.              |
+| `llm/cache.py`                                                         | Prompt cache keyed on a hash of agent, model, system and user prompt, with an audit record.              | Audit trail for agent answers.                           |
+| `llm/watch.py`                                                         | Reads `signal`, `confidence` and `reasoning` out of a JSON stream before it completes.                   | Only if a typed view needs to stream.                    |
+| `pipeline/models.py`                                                   | `DecisionRecord` and `CycleRecord`: every signal, weight and clamp of one run, serialized.               | Model for stored letters (#179) and agent memory (#178). |
+| `risk/limits.py`                                                       | Hard position and gross caps that log a `ClampEvent` with before, after and reason.                      | Model for explainable concentration insights.            |
+| `strategies/*.yaml`                                                    | Configs that blend personas into pods (fundamental long/short, deep value, earnings drift, inflections). | Shows which personas combine.                            |
+| `VISION.md`, `ROADMAP.md`, `ARCHITECTURE.md`, `UPSTREAM-README.md`     | Source project vision, roadmap, `hedge_fund/README.md`, and root README.                                 | Principles and planned personas.                         |
 
 ## The snapshot the personas see
 

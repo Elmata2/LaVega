@@ -161,9 +161,7 @@ describe("IBKR cash history from adapter to portfolio", () => {
      * walked rather than proven. */
     expect(valueSeries(restored)).toEqual(
       settled.map((point) =>
-        point.date === "2026-01-09"
-          ? point
-          : { ...point, cashEstimated: ["ibkr:EUR", "ibkr:USD"] },
+        point.date === "2026-01-09" ? point : { ...point, cashEstimated: ["ibkr:EUR", "ibkr:USD"] },
       ),
     );
   });

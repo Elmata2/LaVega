@@ -64,10 +64,16 @@ test("tries Yahoo listing candidates for Trading 212-style symbols before giving
 });
 
 const vfem = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "__fixtures__", "top-holdings-vfem.json"), "utf8"),
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "__fixtures__", "top-holdings-vfem.json"),
+    "utf8",
+  ),
 );
 const aggg = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "__fixtures__", "top-holdings-aggg.json"), "utf8"),
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "__fixtures__", "top-holdings-aggg.json"),
+    "utf8",
+  ),
 );
 
 test("an equity ETF returns a fund profile with Title-Cased weights", async () => {

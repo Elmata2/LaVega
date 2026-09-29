@@ -76,9 +76,9 @@ export function PortfolioSummaryCard({
     <Card aria-label="Portfolio summary" data-dashboard-section="risk">
       <CardHeader>
         <p className="text-sm font-medium text-muted-foreground">Risk &amp; composition</p>
-        <CardTitle className="text-xl">Summary</CardTitle>
+        <CardTitle size="md">Summary</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent spacing="loose">
         <div className="flex flex-wrap gap-3 text-sm">
           <button type="button" className="self-end rounded-md border px-2 py-1" onClick={refresh}>
             Refresh risk
@@ -204,8 +204,8 @@ export function PortfolioSummaryCard({
               Volatility, beta, alpha and the observation counts use every day in the selected
               range, skipping only the daily intervals that touch a missing price, unknown cash or
               unknown ownership. Maximum drawdown still uses only the most recent unbroken stretch
-              of complete dates. A day the market was closed keeps its last close. Today is left
-              out until its closes are in.
+              of complete dates. A day the market was closed keeps its last close. Today is left out
+              until its closes are in.
             </p>
           </div>
         </details>

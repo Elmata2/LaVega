@@ -240,7 +240,12 @@ test("accountGaps names what is missing, worst first, and stays silent when noth
       ...over,
     }) as Account;
 
-  const compleet = a({ key: "vol", iban: "NL02ABNA0123456789", type: "Betaalrekening", bank: "ABN" });
+  const compleet = a({
+    key: "vol",
+    iban: "NL02ABNA0123456789",
+    type: "Betaalrekening",
+    bank: "ABN",
+  });
   const geenType = a({ key: "b", iban: "NL02ABNA0123456789", bank: "ING" });
   const geenIban = a({ key: "a", type: "Spaarrekening", bank: "Knab" });
   const niets = a({ key: "c", bank: "Revolut" });

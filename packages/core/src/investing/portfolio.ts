@@ -94,8 +94,7 @@ function rateFor(rates: FxRates, from: string, to: string, date: string): FxRate
   }
   const rate = sorted[low - 1];
   const age = rate ? daysSince(rate.date, date) : null;
-  if (age === null || age < 0 || age > FX_CARRY_DAYS)
-    throw new MissingFxRateError(from, to, date);
+  if (age === null || age < 0 || age > FX_CARRY_DAYS) throw new MissingFxRateError(from, to, date);
   return rate;
 }
 
@@ -199,9 +198,7 @@ function bracketsReconcile(leg: CashLeg, date: string): boolean {
   const after = sorted.find((anchor) => anchor.asOf > date);
   if (!before || !after) return true;
   const implied = before.amount + sumBetween(leg.events, before.asOf, after.asOf);
-  return (
-    Number.isFinite(implied) && Math.abs(implied - after.amount) <= RECONCILIATION_TOLERANCE
-  );
+  return Number.isFinite(implied) && Math.abs(implied - after.amount) <= RECONCILIATION_TOLERANCE;
 }
 
 /**
@@ -452,8 +449,7 @@ function cashLegs(
           : countedCloses && uncountedCloses
             ? withoutTrades
             : withTrades;
-    for (const candidate of picked)
-      candidate.tradeCashResolved = countedCloses !== uncountedCloses;
+    for (const candidate of picked) candidate.tradeCashResolved = countedCloses !== uncountedCloses;
     chosen.push(...picked);
   }
   return chosen;
@@ -652,8 +648,7 @@ export function computePortfolioValueSeries(
          * side: below zero the spending is recorded without the funding,
          * above it the funding without the spending. */
         const residual = historyResidual(leg);
-        if (residual !== null && !historyCloses(leg))
-          cashShortfall[displayCashKey(leg)] = residual;
+        if (residual !== null && !historyCloses(leg)) cashShortfall[displayCashKey(leg)] = residual;
         continue;
       }
       try {

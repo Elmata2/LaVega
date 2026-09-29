@@ -118,10 +118,13 @@ test("sector exposure accumulates a weight vector per position, residual folds i
 
 test("duplicate sectors inside one position's weight vector merge instead of appearing twice", () => {
   const weights = new Map([
-    ["VFEM.L", [
-      { sector: "Technology", weight: 0.2 },
-      { sector: "Technology", weight: 0.3 },
-    ]],
+    [
+      "VFEM.L",
+      [
+        { sector: "Technology", weight: 0.2 },
+        { sector: "Technology", weight: 0.3 },
+      ],
+    ],
   ]);
   const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
   expect(exposure).toEqual([
@@ -211,10 +214,13 @@ test("a fund with an empty weight vector (bond fund) is entirely Unknown, not an
 
 test("weights overshooting 1 scale down instead of inflating total exposure past 100%", () => {
   const weights = new Map([
-    ["ACME", [
-      { sector: "Technology", weight: 0.5001 },
-      { sector: "Health Care", weight: 0.5 },
-    ]],
+    [
+      "ACME",
+      [
+        { sector: "Technology", weight: 0.5001 },
+        { sector: "Health Care", weight: 0.5 },
+      ],
+    ],
   ]);
   const exposure = buildSectorExposure([{ symbol: "ACME", marketValue: 1000 }], weights);
   expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
@@ -232,10 +238,13 @@ test("ten weights summing just under 1 by float error don't create a phantom Unk
 
 test("near-tied weights sort deterministically by sector name, not float noise", () => {
   const weights = new Map([
-    ["FUND", [
-      { sector: "Zeta", weight: 0.5 },
-      { sector: "Alpha", weight: 0.5 - 1e-10 },
-    ]],
+    [
+      "FUND",
+      [
+        { sector: "Zeta", weight: 0.5 },
+        { sector: "Alpha", weight: 0.5 - 1e-10 },
+      ],
+    ],
   ]);
   const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
   expect(exposure.map((entry) => entry.sector)).toEqual(["Alpha", "Zeta"]);
@@ -256,10 +265,9 @@ test("coverage splits priced value by source and sums to 1", () => {
     weights,
   );
   expect(coverage).toEqual({ provider: 0.5, inferred: 0.3, correction: 0.2, unknown: 0 });
-  expect(coverage.provider + coverage.inferred + coverage.correction + coverage.unknown).toBeCloseTo(
-    1,
-    12,
-  );
+  expect(
+    coverage.provider + coverage.inferred + coverage.correction + coverage.unknown,
+  ).toBeCloseTo(1, 12);
 });
 
 test("a position with no resolved weight vector at all is entirely unknown coverage", () => {

@@ -385,8 +385,6 @@ test("refresh is scoped to the caller, and never touches another user's bank", a
   expect(sessions.has("sess-1")).toBe(true); // en niets van hem is opgeruimd
 });
 
-
-
 /* ── Wat de securityreview van 22 september blootlegde ───────────────────── */
 
 test("reconnecting the same bank supersedes the old consent instead of stacking", async () => {

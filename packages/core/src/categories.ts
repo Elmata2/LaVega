@@ -1283,7 +1283,8 @@ const isCompanyWord = (token: string): boolean => {
    * only, so the form would never be seen on its own. Each hyphenated piece is
    * tested as a word in its own right; the whole token is still tested first,
    * so nothing that already matched stops matching. */
-  if (w.includes("-") && w.split("-").some((piece) => piece && COMPANY_WORDS.has(piece))) return true;
+  if (w.includes("-") && w.split("-").some((piece) => piece && COMPANY_WORDS.has(piece)))
+    return true;
   return COMPANY_SUFFIXES.some((s) => w.length > s.length && w.endsWith(s));
 };
 

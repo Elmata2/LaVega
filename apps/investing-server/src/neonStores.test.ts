@@ -151,7 +151,9 @@ test("setting a sector correction writes to the preferences row under the caller
 });
 
 test("getAll reads every correction for the tenant in one call", async () => {
-  const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } }]);
+  const { db, calls } = fakeDatabase([
+    { sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } },
+  ]);
   const store = createNeonSectorCorrectionStore(db);
 
   expect(await store.getAll("user-a")).toEqual({ AAPL: "Healthcare", MSFT: "Technology" });
@@ -159,7 +161,9 @@ test("getAll reads every correction for the tenant in one call", async () => {
 });
 
 test("clearing a sector correction writes the row without that symbol", async () => {
-  const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } }]);
+  const { db, calls } = fakeDatabase([
+    { sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } },
+  ]);
   const store = createNeonSectorCorrectionStore(db);
 
   await store.clear("user-a", "AAPL");

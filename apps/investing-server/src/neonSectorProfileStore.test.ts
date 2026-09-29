@@ -28,7 +28,12 @@ afterAll(async () => {
 
 test("round-trips a stock and a fund profile, keyed case-insensitively", async () => {
   const store = createNeonSectorProfileStore(db);
-  await store.set("aapl", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("aapl", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   expect(await store.get("AAPL")).toEqual({
     kind: "stock",
     sector: "Technology",
@@ -72,7 +77,12 @@ test("a fund profile's fetchedAt round-trips through the Neon-backed store", asy
 
 test("an inferred write never overwrites an existing provider profile", async () => {
   const store = createNeonSectorProfileStore(db);
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
   await store.set("AAPL", {
     kind: "stock",
@@ -89,9 +99,19 @@ test("an inferred write never overwrites an existing provider profile", async ()
 
 test("a provider write still replaces an existing provider profile", async () => {
   const store = createNeonSectorProfileStore(db);
-  await store.set("MSFT", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("MSFT", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
-  await store.set("MSFT", { kind: "stock", sector: "Healthcare", industry: "Biotech", source: "provider" });
+  await store.set("MSFT", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Biotech",
+    source: "provider",
+  });
 
   expect(await store.get("MSFT")).toMatchObject({ sector: "Healthcare", source: "provider" });
 });

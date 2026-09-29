@@ -292,7 +292,10 @@ export function buildSectorExposure(
     }
     const residual = Math.max(0, 1 - covered * scale);
     if (residual > SECTOR_RESIDUAL_EPSILON)
-      totalsBySector.set("Unknown", (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual);
+      totalsBySector.set(
+        "Unknown",
+        (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual,
+      );
     total += position.marketValue;
   }
   if (total <= 0) return [];

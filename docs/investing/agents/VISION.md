@@ -36,15 +36,15 @@ The org chart is unchanged from a real fund. We just swapped the humans for AI.
    MASTER RISK  →  EXECUTION (broker)  →  THE BOOKS (persistent ledger)
 ```
 
-| Real fund | Here |
-|-----------|------|
-| Research analysts | **Alpha models** — LLM investor agents *and* quant models |
-| A strategy / pod | **Strategy** — a bundle of analysts + a portfolio policy + capital |
-| Portfolio manager | **Portfolio construction** — turns views into target positions |
-| CIO / capital allocation | **Allocator** — distributes capital across strategies |
-| Chief risk officer | **Risk model** — hard limits the analysts cannot override |
-| Trading desk | **Execution** — places orders through a broker |
-| Back office / books | **Ledger** — positions, P&L, and every decision, forever |
+| Real fund                | Here                                                               |
+| ------------------------ | ------------------------------------------------------------------ |
+| Research analysts        | **Alpha models** — LLM investor agents _and_ quant models          |
+| A strategy / pod         | **Strategy** — a bundle of analysts + a portfolio policy + capital |
+| Portfolio manager        | **Portfolio construction** — turns views into target positions     |
+| CIO / capital allocation | **Allocator** — distributes capital across strategies              |
+| Chief risk officer       | **Risk model** — hard limits the analysts cannot override          |
+| Trading desk             | **Execution** — places orders through a broker                     |
+| Back office / books      | **Ledger** — positions, P&L, and every decision, forever           |
 
 ## Everything is pluggable
 
@@ -61,11 +61,11 @@ mix and match at every one:
   (Warren Buffett, Charlie Munger, Peter Lynch, Stanley Druckenmiller, …) that reason
   in a famous investor's voice, and **quant models** (post-earnings drift, regime
   detection, momentum, …) that are pure math. Both output the same thing: a
-  conviction in `[-1, +1]` plus a thesis. (The investor agents are *stylized
-  approximations* of these investors' public philosophies — not the actual
+  conviction in `[-1, +1]` plus a thesis. (The investor agents are _stylized
+  approximations_ of these investors' public philosophies — not the actual
   individuals, and not endorsements.)
 - **Strategies** bundle analysts together with a policy for blending their views.
-- **The allocator (CIO)** is *also* pluggable — start with a human-set dial, then
+- **The allocator (CIO)** is _also_ pluggable — start with a human-set dial, then
   drop in a dynamic allocator (risk-parity, a Millennium-style "feed the winners /
   cut the drawdowns" model, or even an LLM CIO that reasons about market regime and
   each pod's track record).
@@ -116,7 +116,7 @@ A "cycle" is one tick — one trading day in a backtest, or one scheduled run wh
 
 ## A fund and a research lab, side by side
 
-A real shop trades its book *and* researches new ideas at the same time. So does this:
+A real shop trades its book _and_ researches new ideas at the same time. So does this:
 
 ```
  PRODUCTION  (always-on)              RESEARCH LAB  (anytime)
@@ -138,7 +138,7 @@ get promoted into the running fund. The lab operates at two levels:
 - **Level 1 — you run the lab.** You propose the candidates ("add Munger, drop PEAD,
   tilt the allocator 70/30"), backtest them over history, and promote the winners
   yourself. This is the loop the system is built around today.
-- **Level 2 — the fund runs its own lab** *(aspirational)*. Give it a mandate → it
+- **Level 2 — the fund runs its own lab** _(aspirational)_. Give it a mandate → it
   finds strategies → backtests them → promotes the winners. A research agent composes
   candidate strategies from the building blocks the community contributes — analysts
   × portfolio policies × parameters — tests them in the same lab, and graduates
@@ -155,7 +155,7 @@ reason about:
   something.
 - **The backtest is the live system.** Same pipeline, same code. If it can't be
   expressed honestly in a backtest, it doesn't ship.
-- **The LLM never touches the trade.** Language models form *views* and *narrate*
+- **The LLM never touches the trade.** Language models form _views_ and _narrate_
   decisions. Deterministic code sizes positions and places orders, and risk limits are
   hard gates an agent cannot exceed.
 - **Self-improvement is gated.** The fund may invent and test its own strategies, but

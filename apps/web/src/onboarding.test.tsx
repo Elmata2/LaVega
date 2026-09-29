@@ -4,12 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test } from "vitest";
 import Onboarding from "./components/Onboarding";
-import {
-  isFreshVault,
-  markOnboardingSeen,
-  onboardingSeen,
-  showOnboarding,
-} from "./onboarding.js";
+import { isFreshVault, markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
 import {
   getDefaultScope,
   getHomeCountry,

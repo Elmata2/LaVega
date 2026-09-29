@@ -173,7 +173,8 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
   });
   const positionProblems: string[] = [];
   for (const position of positions) {
-    if (position.returns.problem) positionProblems.push(`${position.symbol}: ${position.returns.problem}`);
+    if (position.returns.problem)
+      positionProblems.push(`${position.symbol}: ${position.returns.problem}`);
   }
   const unpricedCount = positions.filter((position) => position.marketValue === null).length;
   // Only when SOME positions are priced does a null-for-the-rest weight look

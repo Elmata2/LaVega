@@ -146,7 +146,10 @@ async function resolveWeights(
   let profile = await store.get(symbol);
   const corrected = correction ? await correction(symbol) : null;
 
-  const fresh = profile && profile.source === "provider" && !(profile.kind === "fund" && isStaleFundProfile(profile));
+  const fresh =
+    profile &&
+    profile.source === "provider" &&
+    !(profile.kind === "fund" && isStaleFundProfile(profile));
   if (!fresh && fetchProfile) {
     try {
       const fetched = await fetchProfile(symbol);

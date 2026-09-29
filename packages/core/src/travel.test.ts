@@ -511,10 +511,7 @@ test("a fact still stored under the old key transferFreeViaIdeal is read as topU
     // key as a WRITE. A real vault holding an old-key fact behaves exactly
     // this way: nobody re-validates what is already stored.
     [fact("Revolut betaalpas", "transferFreeViaIdeal", "1")],
-    [
-      fact("Revolut betaalpas", "fxFeePct", "0"),
-      fact("Revolut betaalpas", "convertFeePct", "0"),
-    ],
+    [fact("Revolut betaalpas", "fxFeePct", "0"), fact("Revolut betaalpas", "convertFeePct", "0")],
   );
   const js = rankJourneys(ROUTE_ACCOUNTS, facts);
   const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
