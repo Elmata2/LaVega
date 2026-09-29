@@ -75,10 +75,6 @@ test("profile status section lists brokers, price history, vault and cache with 
   root.unmount();
 });
 
-/* A cold visit to /profile has nothing cached yet, so useDashboard() briefly
- * sits in "loading". The Cache chip used to compute dataVersion as 0 for
- * that state and render "Version 0" in neutral tone, which reads as "the
- * cache is empty" even though the real dashboard just hasn't arrived. */
 test("profile Cache chip shows a loading state, not Version 0, before the dashboard resolves", async () => {
   forgetDashboards();
   const dashboardFetch = deferredDashboardFetch();

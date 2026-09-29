@@ -105,9 +105,6 @@ test("renders inline `code` as a code element", () => {
   root.unmount();
 });
 
-/* A stray asterisk with no closing partner used to be silently deleted,
- * which meant "3 * 4 and a footnote*" lost its multiplication sign and its
- * footnote marker with no trace. It must survive as a literal character. */
 test("a lone unmatched asterisk renders as literal visible text without crashing", () => {
   expect(() => render("This has a * lone star in it.")).not.toThrow();
   const { container, root } = render("This has a * lone star in it.");

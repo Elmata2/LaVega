@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 
-/* A deliberately small markdown subset for agent chat replies: paragraphs,
- * headings-as-bold, bullet/numbered lists, bold/italic/bold-italic, and
- * inline code. Never uses dangerouslySetInnerHTML — every node below is a
- * React element or a plain text child, so a message can never inject real
- * markup, and any markdown punctuation that doesn't form a valid pair is
- * dropped rather than shown literally. */
+/* Every node below must be a real React element or text child — never
+ * dangerouslySetInnerHTML — so an agent reply can never inject markup. */
 
 type Block =
   | { type: "heading"; text: string }
@@ -64,25 +60,16 @@ function parseBlocks(text: string): Block[] {
   return blocks;
 }
 
-/* An emphasis delimiter only counts when it isn't touching whitespace on
- * its inner side (the standard "no space inside the delimiter" rule) —
- * without it, "shares * price" reads the lone asterisk as the start of an
- * italic span search instead of a literal character. */
+/* "shares * price" must stay plain text, not read as an italic span, so a
+ * delimiter only counts when its inner side isn't whitespace. */
 function touchesWhitespace(ch: string | undefined): boolean {
   return ch === undefined || /\s/.test(ch);
 }
 
-/* Scans inline text for bold/italic/bold-italic/code spans, recursing into
- * each span's own contents so nesting (e.g. bold containing code) works.
- * A backtick run with no closing pair is dropped, since a stray backtick
- * is rare and never load-bearing punctuation. An asterisk run that never
- * finds a valid closing pair (no partner, or the only candidate touches
- * whitespace) is kept as literal asterisk characters instead of being
- * silently deleted, so a real "3 * 4" or a trailing footnote marker still
- * reaches the reader. A stray `#` is left alone: it is legitimate text far
- * more often than it is broken heading syntax (only a line-leading run of
- * `#` followed by a space is treated as heading markup, at the block
- * level). */
+/* Recurses into each matched span's own contents so nesting (e.g. bold
+ * containing code) works. An asterisk run with no valid closing pair is
+ * kept as literal characters, not dropped, so "3 * 4" and a trailing
+ * footnote marker still reach the reader. */
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let plain = "";
@@ -149,8 +136,6 @@ function renderInline(text: string): ReactNode[] {
         }
       }
 
-      /* No valid closing marker at any length: keep the run as literal
-       * asterisk characters instead of dropping it. */
       plain += "*".repeat(run);
       i += run;
       continue;
