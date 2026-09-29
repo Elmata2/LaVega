@@ -17,9 +17,7 @@ test("a known benchmark's curated name wins over Yahoo's own truncated name", as
   const fetchJsonWithCrumb = vi
     .fn()
     .mockResolvedValueOnce({
-      quotes: [
-        { symbol: "^GDAXI", shortname: "DAX P", exchDisp: "Frankfurt", quoteType: "INDEX" },
-      ],
+      quotes: [{ symbol: "^GDAXI", shortname: "DAX P", exchDisp: "Frankfurt", quoteType: "INDEX" }],
     })
     .mockResolvedValueOnce({ chart: { result: [{ meta: { currency: "EUR" } }] } });
   const result = await searchYahooBenchmarks("DAX", { client: { fetchJsonWithCrumb } as never });

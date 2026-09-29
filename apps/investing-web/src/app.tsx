@@ -254,8 +254,12 @@ function PositionList({
                       {money(position.marketValue).replace(/^\+/, "")}
                     </span>
                     {position.priceStatus === "forward-filled" && (
-                      <span className="ml-2 text-xs font-medium text-warning" title="Price is estimated from latest available market data">
-                        · <span aria-hidden="true">est.</span><span className="sr-only">Estimated price</span>
+                      <span
+                        className="ml-2 text-xs font-medium text-warning"
+                        title="Price is estimated from latest available market data"
+                      >
+                        · <span aria-hidden="true">est.</span>
+                        <span className="sr-only">Estimated price</span>
                       </span>
                     )}
                   </>
@@ -409,8 +413,13 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
       </dl>
       {latest && latest.forwardFilled.length > 0 && (
         <details className="mt-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Estimated prices ({latest.forwardFilled.length})</summary>
-          <p className="mt-1 break-words"><span className="sr-only">Estimated price: </span>{latest.forwardFilled.join(", ")}</p>
+          <summary className="cursor-pointer">
+            Estimated prices ({latest.forwardFilled.length})
+          </summary>
+          <p className="mt-1 break-words">
+            <span className="sr-only">Estimated price: </span>
+            {latest.forwardFilled.join(", ")}
+          </p>
         </details>
       )}
       {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (

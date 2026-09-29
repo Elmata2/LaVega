@@ -310,7 +310,10 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     const userId = await tenantId(c.req.raw);
     if (!userId) return c.json({ error: "Log in om je rekeningen te verversen." }, 401);
     if (!refreshLimit(rateLimitKey("eb-refresh", userId, c.req.header("x-forwarded-for"))))
-      return c.json({ error: "Even wachten — te veel verversverzoeken.", code: "eb-rate-limited" }, 429);
+      return c.json(
+        { error: "Even wachten — te veel verversverzoeken.", code: "eb-rate-limited" },
+        429,
+      );
     const sessions = await store.listSessions(userId, SESSION_TTL_MS);
     if (sessions.length === 0) return c.json({ refreshed: [], expired: [], failed: [] });
 
@@ -344,9 +347,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     }
     return c.json({ refreshed, expired, failed });
   });
-
 }
-
 
 /** Balances + a year of transactions for every account in one session.
  *

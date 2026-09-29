@@ -294,7 +294,9 @@ export function PortfolioBenchmarkChart({
                   type="button"
                   disabled={busy}
                   aria-label={`${symbol} remove`}
-                  onClick={() => void replaceSelection(selected.filter((entry) => entry !== symbol))}
+                  onClick={() =>
+                    void replaceSelection(selected.filter((entry) => entry !== symbol))
+                  }
                   className="pressable -mr-1 rounded-full px-1 text-muted-foreground hover:text-foreground"
                 >
                   ×
@@ -697,8 +699,8 @@ export function PerformanceTooltip({
                   {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                 </p>
                 <p className="text-sm font-semibold">
-                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
-                  {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
+                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} · {benchmarkLabel(benchmark)}{" "}
+                  {signedCappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );

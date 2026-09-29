@@ -39,11 +39,19 @@ test("clicking a switch reports only that id and its new state", () => {
   const onChange = vi.fn();
   const { container, root } = render();
   act(() => {
-    root.render(<LayoutPicker kind="widget" enabled={["performance", "kpis"]} onChange={onChange} />);
+    root.render(
+      <LayoutPicker kind="widget" enabled={["performance", "kpis"]} onChange={onChange} />,
+    );
   });
   const switches = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="switch"]'));
-  act(() => switches.find((el) => el.getAttribute("aria-label") === "Performance on Overview")!.click());
-  act(() => switches.find((el) => el.getAttribute("aria-label") === "Sector allocation on Overview")!.click());
+  act(() =>
+    switches.find((el) => el.getAttribute("aria-label") === "Performance on Overview")!.click(),
+  );
+  act(() =>
+    switches
+      .find((el) => el.getAttribute("aria-label") === "Sector allocation on Overview")!
+      .click(),
+  );
   expect(onChange.mock.calls).toEqual([
     ["performance", false],
     ["sectors", true],

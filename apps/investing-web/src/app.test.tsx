@@ -436,10 +436,18 @@ test("overview renders widgets in registry order and excludes positions and net 
     await Promise.resolve();
   });
 
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["status", "performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
+  expect(order).toEqual([
+    "status",
+    "performance",
+    "allocation",
+    "kpis",
+    "risk",
+    "sectors",
+    "agent",
+  ]);
   expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
   expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
 
@@ -478,9 +486,9 @@ test("hiding a widget closes its gap instead of leaving a blank card", async () 
     await Promise.resolve();
   });
   expect(container.querySelector('[data-dashboard-section="allocation"]')).toBeNull();
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
   expect(order).toEqual(["status", "performance", "kpis", "risk", "sectors", "agent"]);
   root.unmount();
 });
@@ -608,7 +616,9 @@ test("hiding both risk and sectors makes zero summary requests", async () => {
       return Promise.resolve(
         withAuthUnconfigured(input, () =>
           String(input) === "/api/investing/layout"
-            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }))
+            ? new Response(
+                JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }),
+              )
             : responseFor(input, init),
         ),
       );
@@ -1932,7 +1942,9 @@ test("switching a module off on /profile removes its top-bar tab without a reloa
   expect(agentsTab()).not.toBeNull();
 
   await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')
+      ?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(agentsTab()).toBeNull();
@@ -1965,7 +1977,9 @@ test("Overview renders no widgets and starts no summary read until the layout sa
     await settle();
   });
   expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
-  expect(container.querySelector('[data-dashboard-section]:not([data-dashboard-section="status"])')).toBeNull();
+  expect(
+    container.querySelector('[data-dashboard-section]:not([data-dashboard-section="status"])'),
+  ).toBeNull();
   expect(summaryReads).toEqual([]);
 
   await act(async () => {
@@ -2159,7 +2173,9 @@ test("/net-worth renders the net-worth chart", async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.querySelector('[role="group"][aria-label="Choose net worth period"]')).not.toBeNull();
+  expect(
+    container.querySelector('[role="group"][aria-label="Choose net worth period"]'),
+  ).not.toBeNull();
   root.unmount();
 });
 

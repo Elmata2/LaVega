@@ -9,14 +9,14 @@ read is `GET /api/auth/get-session`, which `whoami` calls.
 Mounted origin `https://www.lavega.dev`. Investing shell is `/investing/`. Without a session
 the app lands on `/investing/sign-in`.
 
-| Route | Heading an agent can read |
-| --- | --- |
-| `/sign-in` | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`. |
-| `/sign-up` | `Create your account`. Success navigates to `/check-email`. |
-| `/check-email` | `Check your email`. Button `Resend confirmation email`. |
+| Route              | Heading an agent can read                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/sign-in`         | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`.                                                                                                      |
+| `/sign-up`         | `Create your account`. Success navigates to `/check-email`.                                                                                                                     |
+| `/check-email`     | `Check your email`. Button `Resend confirmation email`.                                                                                                                         |
 | `/email-confirmed` | With `?error=`, heading `Confirmation link did not work` and link `Request another link`. Without an error, a session goes to `/` and no session goes to `/sign-in?verified=1`. |
-| `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending). |
-| `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token: `Request another link`. |
+| `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending).                                                                                                     |
+| `/reset-password`  | With a token: `Choose a new password`, then `Password changed`. Without a valid token: `Request another link`.                                                                  |
 
 `RequireAuth` sends every other route to `/sign-in` when there is no session.
 Local standalone has no auth routes. `whoami` there is `state: "unconfigured"`. That is not

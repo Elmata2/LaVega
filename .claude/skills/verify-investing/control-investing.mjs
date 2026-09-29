@@ -1196,8 +1196,7 @@ function resolveCredentials(flags) {
     };
   if (targetName(flags) === "preview") {
     const pulled = pullVercelVerifyCredentials();
-    if (pulled.email)
-      return { email: pulled.email, password: pulled.password, from: "vercel-env" };
+    if (pulled.email) return { email: pulled.email, password: pulled.password, from: "vercel-env" };
   }
   if (flags.email && flags.password)
     return {

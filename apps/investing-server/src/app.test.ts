@@ -1241,13 +1241,22 @@ test("a Trading 212 connection still demands the key itself", async () => {
 
 test("GET position sector reads the resolved sector for that symbol", async () => {
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const investingApp = createApp({ sectorStore });
 
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ kind: "stock", sector: "Technology", source: "provider" });
+  expect(await response.json()).toEqual({
+    kind: "stock",
+    sector: "Technology",
+    source: "provider",
+  });
 });
 
 test("GET position sector reports Unknown for a symbol with no profile and no correction", async () => {
@@ -1383,13 +1392,22 @@ test("PUT position sector then GET reflects the correction immediately, no provi
   expect(put.status).toBe(204);
 
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
-  expect(await response.json()).toEqual({ kind: "stock", sector: "Healthcare", source: "correction" });
+  expect(await response.json()).toEqual({
+    kind: "stock",
+    sector: "Healthcare",
+    source: "correction",
+  });
   expect(sectorProfile).not.toHaveBeenCalled();
 });
 
 test("GET position sector never touches the provider or the classifier", async () => {
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const sectorProfile = vi.fn();
   const sectorClassifier = vi.fn();
   const investingApp = createApp({ sectorStore, sectorProfile, sectorClassifier });
@@ -1446,7 +1464,12 @@ test("PUT position sector is accepted for a symbol with no stored profile yet", 
 
 test("DELETE position sector clears the correction and reverts to automatic resolution", async () => {
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const investingApp = createApp({ sectorStore });
 
   await investingApp.request("/api/investing/positions/AAPL/sector", {
@@ -1460,7 +1483,11 @@ test("DELETE position sector clears the correction and reverts to automatic reso
   expect(cleared.status).toBe(204);
 
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
-  expect(await response.json()).toEqual({ kind: "stock", sector: "Technology", source: "provider" });
+  expect(await response.json()).toEqual({
+    kind: "stock",
+    sector: "Technology",
+    source: "provider",
+  });
 });
 
 test("sector-correction routes read and write under the resolved tenant", async () => {
@@ -1496,7 +1523,10 @@ test("the sector-inference setting defaults to disabled and can be turned on", a
 
 test("the sector-inference setting is isolated per tenant", async () => {
   const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
-  const investingApp = createApp({ resolveTenantId: () => "user-123", sectorInferenceSettingStore });
+  const investingApp = createApp({
+    resolveTenantId: () => "user-123",
+    sectorInferenceSettingStore,
+  });
 
   await investingApp.request("/api/investing/sector-inference", {
     method: "PUT",
@@ -1532,7 +1562,10 @@ test("infer requires market-data consent before it will classify anything", asyn
 
 test("infer requires the owner's inference setting to be on, even with consent given", async () => {
   const sectorClassifier = vi.fn();
-  const investingApp = createApp({ sectorClassifier, marketDataConsentStore: acceptedConsentStore() });
+  const investingApp = createApp({
+    sectorClassifier,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
 
   const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
 
@@ -1551,7 +1584,12 @@ test("infer is a no-op, not an error, when no classifier is configured", async (
   const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
+  expect(await response.json()).toEqual({
+    classified: 0,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
 });
 
 test("infer classifies unknown priced symbols and caches the result", async () => {
@@ -1577,9 +1615,17 @@ test("infer classifies unknown priced symbols and caches the result", async () =
   const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ classified: 1, failed: 0, failedSymbols: [], remaining: 0 });
+  expect(await response.json()).toEqual({
+    classified: 1,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
   expect(sectorClassifier).toHaveBeenCalledWith({ symbol: "MYST", description: "Myst Robotics" });
-  expect(await sectorStore.get("MYST")).toMatchObject({ sector: "Industrials", source: "inferred" });
+  expect(await sectorStore.get("MYST")).toMatchObject({
+    sector: "Industrials",
+    source: "inferred",
+  });
 });
 
 test("infer reports classified vs failed separately, and caches nothing for a failing classifier", async () => {
@@ -1591,7 +1637,12 @@ test("infer reports classified vs failed separately, and caches nothing for a fa
   const sectorClassifier = vi.fn(async ({ symbol }: { symbol: string }) =>
     symbol === "BOOM"
       ? { kind: "failed" as const, reason: "budget refusal" }
-      : { kind: "classified" as const, sector: "Technology", specificity: "sector" as const, confidence: 0.9 },
+      : {
+          kind: "classified" as const,
+          sector: "Technology",
+          specificity: "sector" as const,
+          confidence: 0.9,
+        },
   );
   const investingApp = createApp({
     dashboardReader: async () => ({ ...dashboard, problems: [] }),
@@ -1637,7 +1688,12 @@ test("infer skips symbols in the exclude list and classifies the next candidates
     headers: { "content-type": "application/json" },
   });
 
-  expect(await response.json()).toEqual({ classified: 1, failed: 0, failedSymbols: [], remaining: 0 });
+  expect(await response.json()).toEqual({
+    classified: 1,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
   expect(sectorClassifier).toHaveBeenCalledTimes(1);
   expect(sectorClassifier).toHaveBeenCalledWith(expect.objectContaining({ symbol: "MYST" }));
 });
@@ -1687,7 +1743,12 @@ test("infer reads sector corrections once per request, not once per candidate", 
 
 test("infer skips a symbol that already has a stored profile or an owner correction", async () => {
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const sectorCorrectionStore = createInMemorySectorCorrectionStore();
   await sectorCorrectionStore.set("local", "MSFT", "Healthcare");
   const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
@@ -1706,7 +1767,12 @@ test("infer skips a symbol that already has a stored profile or an owner correct
 
   const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
 
-  expect(await response.json()).toEqual({ classified: 0, failed: 0, failedSymbols: [], remaining: 0 });
+  expect(await response.json()).toEqual({
+    classified: 0,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
   expect(sectorClassifier).not.toHaveBeenCalled();
 });
 
@@ -1737,7 +1803,12 @@ test("summary route reports a sector-coverage breakdown alongside the sector exp
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push(pricedPosition("AAPL", 100));
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const investingApp = createApp({
     dashboardReader: async () => ({ ...dashboard, problems: [] }),
     sectorStore,
@@ -1772,7 +1843,12 @@ test("a correction wins immediately in the very next summary", async () => {
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push(pricedPosition("AAPL", 100));
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const investingApp = createApp({
     dashboardReader: async () => ({ ...dashboard, problems: [] }),
     sectorStore,
@@ -1871,10 +1947,14 @@ test("GET sector-inference reports availability based on whether a classifier is
   const withClassifier = createApp({ sectorClassifier: vi.fn() });
   const withoutClassifier = createApp({});
 
-  expect(await (await withClassifier.request("/api/investing/sector-inference")).json()).toMatchObject({
+  expect(
+    await (await withClassifier.request("/api/investing/sector-inference")).json(),
+  ).toMatchObject({
     available: true,
   });
-  expect(await (await withoutClassifier.request("/api/investing/sector-inference")).json()).toMatchObject({
+  expect(
+    await (await withoutClassifier.request("/api/investing/sector-inference")).json(),
+  ).toMatchObject({
     available: false,
   });
 });

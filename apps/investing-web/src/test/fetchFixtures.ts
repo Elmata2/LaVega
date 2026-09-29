@@ -248,4 +248,3 @@ export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
     return new Response(JSON.stringify({}));
   });
 }
-

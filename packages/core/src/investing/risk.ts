@@ -58,9 +58,7 @@ export function buildHistoricalRisk(
     ...new Set(unknownPoints.flatMap((point) => point.holdingsUnknown ?? [])),
   ].sort();
   const estimatedPrices = unknownPoints.some((point) => point.forwardFilled.length > 0);
-  const estimatedCash = [
-    ...new Set(points.flatMap((point) => point.cashEstimated ?? [])),
-  ].sort();
+  const estimatedCash = [...new Set(points.flatMap((point) => point.cashEstimated ?? []))].sort();
   const knownPoints = points.filter(known);
   const coverage =
     knownPoints.length === 0

@@ -16,7 +16,11 @@ export function createFileInvestingLayoutStore(filePath: string): InvestingLayou
       const parsed: unknown = JSON.parse(contents);
       if (!Array.isArray(parsed)) throw new Error("Invalid investing layout store");
       return parsed.map((row) => {
-        if (!row || typeof row !== "object" || typeof (row as { tenantId?: unknown }).tenantId !== "string")
+        if (
+          !row ||
+          typeof row !== "object" ||
+          typeof (row as { tenantId?: unknown }).tenantId !== "string"
+        )
           throw new Error("Invalid investing layout row");
         const selection = row as InvestingLayoutSelection;
         return { tenantId: selection.tenantId, ...validateInvestingLayout(selection) };

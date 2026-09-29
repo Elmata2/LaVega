@@ -35,6 +35,7 @@
 ## File Structure
 
 **New files:**
+
 - `packages/core/src/investing/sectorTaxonomy.ts` — the shared `GICS_SECTOR_LABELS` array, the snake_case→Title-Case formatter, and (Phase 2) the sector→division fallback map. Single source of truth for every place a sector string can be produced.
 - `packages/adapters/src/market-data/yahoo/__fixtures__/top-holdings-vfem.json`, `.../top-holdings-aggg.json` — real saved Yahoo responses (from the spike's scratchpad) used as CI fixtures.
 - `apps/investing-server/src/neonSectorProfileStore.ts` — the Neon-backed `SectorProfileStore` (global table, no per-tenant RLS: a symbol's sector is not tenant data).
@@ -45,6 +46,7 @@
 - `apps/investing-web/src/components/PositionSectorControl.tsx` — the minimal per-position sector display + correction input.
 
 **Modified files:**
+
 - `packages/adapters/src/market-data/yahoo/sectorProfile.ts` — one combined `quoteType,assetProfile,topHoldings` request; branches into a stock or fund profile.
 - `apps/investing-server/src/inMemorySectorProfileStore.ts`, `fileSectorProfileStore.ts` — widen to the `SectorProfile` discriminated union; file store gains legacy-record normalization.
 - `packages/core/src/investing/summary.ts` — `buildSectorExposure` accumulates a weight vector per position instead of one label.
@@ -63,6 +65,7 @@
 ### Task 1: Yahoo adapter detects funds and returns their sector weights
 
 **Files:**
+
 - Modify: `packages/adapters/src/market-data/yahoo/sectorProfile.ts`
 - Create: `packages/adapters/src/market-data/yahoo/__fixtures__/top-holdings-vfem.json` (copy `combined_VFEM.json` from `/private/tmp/claude-501/-Users-alexandersteunenberg-Desktop-My-Code/c5b63205-9e66-488b-83a1-3b6733495640/scratchpad/spike-sectors/combined_VFEM.json` verbatim — real Yahoo response, equity ETF, `sectorWeightings` sums to ~0.9998)
 - Create: `packages/adapters/src/market-data/yahoo/__fixtures__/top-holdings-aggg.json` (copy `combined_AGGG.json` from the same scratchpad dir — real Yahoo response, bond fund, `sectorWeightings: []`)
@@ -70,6 +73,7 @@
 - Test: `packages/adapters/src/market-data/yahoo/sectorProfile.test.ts`, `packages/core/src/investing/sectorTaxonomy.test.ts`
 
 **Interfaces:**
+
 - Produces: `GICS_SECTOR_LABELS: readonly string[]` (11 entries), `formatSectorWeightKey(key: string): string` from `sectorTaxonomy.ts`.
 - Produces: `SectorProfile = StockSectorProfile | FundSectorProfile` from `sectorProfile.ts`, where `StockSectorProfile = { kind: "stock"; sector: string; industry: string; source: "provider" }` and `FundSectorProfile = { kind: "fund"; weights: { sector: string; weight: number }[]; source: "provider" }`. (The `source` field is always `"provider"` in Phase 1 — added now so Phase 2 only adds the `"inferred"` value, not a second schema migration.)
 - Consumes: nothing new — `getYahooSymbolsToTry` (existing, `symbols.ts`) is unchanged.
@@ -348,11 +352,13 @@ EOF
 ### Task 2: `SectorProfileStore` implementations widen to the new shape, with legacy-record normalization
 
 **Files:**
+
 - Modify: `apps/investing-server/src/inMemorySectorProfileStore.ts`
 - Modify: `apps/investing-server/src/fileSectorProfileStore.ts`
 - Test: `apps/investing-server/src/fileSectorProfileStore.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SectorProfile` (Task 1, `@lavega/adapters`).
 - Produces: `SectorProfileStore = { get(symbol): Promise<SectorProfile | null>; set(symbol, profile): Promise<void> }` — signature unchanged, value type widened. Any legacy on-disk record (`{sector, industry}`, no `kind`) is normalized to `{ kind: "stock", sector, industry, source: "provider" }` on read.
 
@@ -503,12 +509,14 @@ EOF
 **Why this task exists (read before executing):** `apps/server/src/investing-mount.ts` — the actual Vercel production wiring — never passes a `sectorStore` into `createRuntimeApp`, so it silently falls back to `createApp()`'s in-memory default. Unlike `priceStore`/`benchmarkSelectionStore`/`marketDataConsentStore`, which all switch between a Neon-backed and a file-backed implementation depending on whether `runtimeDatabase()` returns a database, sector profiles have never had a Neon-backed option at all. On Vercel this means the classification cache does not survive between invocations — every cache-miss symbol re-negotiates Yahoo's crumb and re-fetches on every request. This is a pre-existing gap, not something either the spike or #135 called out explicitly, but Phase 1's look-through data is exactly what makes this worth fixing now: a fund's weight vector is more expensive to have go uncached than a single sector string was.
 
 **Files:**
+
 - Create: `db/migrations/0017_sector_profiles.sql`
 - Create: `apps/investing-server/src/neonSectorProfileStore.ts`
 - Test: `apps/investing-server/src/neonSectorProfileStore.test.ts`, addition to `packages/database/src/migrations.test.ts`
 - Modify: `apps/server/src/investing-mount.ts`
 
 **Interfaces:**
+
 - Produces: `createNeonSectorProfileStore(db: Database): SectorProfileStore` (no `tenantId` parameter — deliberately global, see below).
 - Consumes: `SectorProfile` (Task 1), `Database` (`@lavega/database`).
 
@@ -597,7 +605,12 @@ import { createNeonSectorProfileStore } from "./neonSectorProfileStore.js";
 test("round-trips a stock and a fund profile, keyed case-insensitively", async () => {
   const db = await createTestDatabase();
   const store = createNeonSectorProfileStore(db);
-  await store.set("aapl", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("aapl", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   expect(await store.get("AAPL")).toEqual({
     kind: "stock",
     sector: "Technology",
@@ -729,10 +742,12 @@ EOF
 ### Task 4: `buildSectorExposure` accumulates a weight vector per position
 
 **Files:**
+
 - Modify: `packages/core/src/investing/summary.ts`
 - Modify: `packages/core/src/investing/summary.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new from earlier tasks (pure function, no adapter/server dependency — this is deliberately the isolated structural change the spike's §4 risk #3 calls out: "size and review it as its own unit").
 - Produces: `SectorWeight = { sector: string; weight: number }`; `buildSectorExposure(positions, weightsBySymbol: ReadonlyMap<string, readonly SectorWeight[]>): SectorExposure[]`. Any residual under 1.0 for a position's vector (a fund whose Yahoo weights don't sum to 100%, or a bond fund's empty `[]`) folds into `"Unknown"` for that position's un-covered share.
 
@@ -767,10 +782,15 @@ test("an unpriced portfolio has no exposure at all", () => {
 });
 
 test("a fund position splits its market value across its own weight vector", () => {
-  const weights = new Map([["VFEM.L", [
-    { sector: "Technology", weight: 0.4 },
-    { sector: "Financial Services", weight: 0.3 },
-  ]]]);
+  const weights = new Map([
+    [
+      "VFEM.L",
+      [
+        { sector: "Technology", weight: 0.4 },
+        { sector: "Financial Services", weight: 0.3 },
+      ],
+    ],
+  ]);
   const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
   expect(exposure).toEqual([
     { sector: "Technology", weight: 0.4 },
@@ -816,7 +836,10 @@ export function buildSectorExposure(
     }
     const residual = Math.max(0, 1 - covered);
     if (residual > 0)
-      totalsBySector.set("Unknown", (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual);
+      totalsBySector.set(
+        "Unknown",
+        (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual,
+      );
     total += position.marketValue;
   }
   if (total <= 0) return [];
@@ -857,11 +880,13 @@ EOF
 ### Task 5: `sectorResolution.ts` resolves weight vectors; consent-gated summary route
 
 **Files:**
+
 - Modify: `apps/investing-server/src/sectorResolution.ts`
 - Modify: `apps/investing-server/src/sectorResolution.test.ts`
 - Verify (no change expected, see Step 5): `apps/investing-server/src/app.ts`'s `/api/investing/summary` route
 
 **Interfaces:**
+
 - Consumes: `SectorProfile` (Task 1), `buildSectorExposure`/`SectorWeight` (Task 4).
 - Produces: `PortfolioSectors = { sectorBySymbol: Map<string, string>; weightsBySymbol: Map<string, SectorWeight[]>; exposure: SectorExposure[] }`. `sectorBySymbol` keeps its existing meaning (one headline label per symbol — a stock's own sector, or a fund's single largest-weight sector) so Task 11 (Phase 2's per-position UI) has an obvious field to read; `weightsBySymbol` is new and carries the full distribution `buildSectorExposure` needs.
 
@@ -881,7 +906,12 @@ const positions = [
 
 test("stored profiles classify priced positions and weight the exposure", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
   const { sectorBySymbol, exposure } = await resolvePortfolioSectors(positions, { store });
 
@@ -907,7 +937,12 @@ test("the fetch fallback persists what it resolves and degrades to Unknown on fa
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async (symbol: string) => {
     if (symbol === "myst") throw new Error("yahoo down");
-    return { kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const };
+    return {
+      kind: "stock" as const,
+      sector: "Technology",
+      industry: "Hardware",
+      source: "provider" as const,
+    };
   });
   const { sectorBySymbol } = await resolvePortfolioSectors(positions, { store, fetchProfile });
   expect(sectorBySymbol.get("AAPL")).toBe("Technology");
@@ -920,13 +955,15 @@ test("a fund profile's weights become the symbol's exposure split", async () => 
   const store = createInMemorySectorProfileStore();
   await store.set("VFEM.L", {
     kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.4 }, { sector: "Healthcare", weight: 0.5 }],
+    weights: [
+      { sector: "Technology", weight: 0.4 },
+      { sector: "Healthcare", weight: 0.5 },
+    ],
     source: "provider",
   });
-  const { exposure } = await resolvePortfolioSectors(
-    [{ symbol: "VFEM.L", marketValue: 100 }],
-    { store },
-  );
+  const { exposure } = await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], {
+    store,
+  });
   expect(exposure).toEqual([
     { sector: "Healthcare", weight: 0.5 },
     { sector: "Technology", weight: 0.4 },
@@ -992,7 +1029,11 @@ export async function resolvePortfolioSectors(
     weightsBySymbol.set(key, weights);
     sectorBySymbol.set(key, weights[0]?.sector ?? UNKNOWN_SECTOR);
   }
-  return { sectorBySymbol, weightsBySymbol, exposure: buildSectorExposure(positions, weightsBySymbol) };
+  return {
+    sectorBySymbol,
+    weightsBySymbol,
+    exposure: buildSectorExposure(positions, weightsBySymbol),
+  };
 }
 
 async function resolveWeights(
@@ -1059,10 +1100,12 @@ EOF
 ### Task 6: Update the sector panel's caption to describe look-through
 
 **Files:**
+
 - Modify: `apps/investing-web/src/components/PortfolioSummaryCard.tsx` (current `master`) **or** `SectorAllocationCard.tsx` if PR #172 has merged by execution time — check `git log --oneline origin/master | grep -i "sector allocation"` or look for the file before starting this task.
 - Test: matching `.test.tsx` for whichever file above
 
 **Interfaces:**
+
 - Consumes: nothing new — this is copy only, no data-shape change. `sectors` (from `usePortfolioSummary`) already renders as `{sector, weight}` pairs; that shape is untouched by Phase 1.
 
 - [ ] **Step 1: Write the failing test**
@@ -1126,6 +1169,7 @@ EOF
 ### Task 7: Database — new AI usage route, worst-case ceiling, and the owner-correction column
 
 **Files:**
+
 - Modify: `packages/database/src/index.ts`
 - Create: `db/migrations/0018_sector_corrections.sql`
 - Modify: `apps/investing-server/src/systemOneUsage.ts`
@@ -1133,6 +1177,7 @@ EOF
 - Test: `packages/database/src/migrations.test.ts`, `apps/investing-server/src/systemOne.test.ts`
 
 **Interfaces:**
+
 - Produces: `AiUsage["route"]` gains `"sector-inference"`. `PreferencesRepository` gains `getSectorCorrections(): Promise<Record<string,string>>`, `setSectorCorrection(symbol: string, sector: string): Promise<void>`, `clearSectorCorrection(symbol: string): Promise<void>`.
 - Produces: `checkSystemOneBudget(userId, worstCaseCents?)` and `recordSystemOneUsage(model, inputTokens, outputTokens, userId, route?)` — both gain an optional trailing parameter so callers other than the portfolio agent can use their own route name and worst-case estimate; both default to today's values (`route: "portfolio-persona"`, cap check unchanged) so no existing caller needs to change.
 - Produces: `createSystemOneProvider(deps)` gains an optional `route?: string` and `failedRequestInputTokens?: number` in `deps`, defaulting to today's `"portfolio-persona"` / `32_000` — a Choice call over instrument name/description is a few hundred tokens, not 32k, so the classifier (Task 8) passes its own, smaller ceiling.
@@ -1205,7 +1250,8 @@ Expected: PASS
 
 export type AiUsage = {
   day: string;
-  route: "categorize" | "extract-invoice" | "chat" | "travel" | "portfolio-persona" | "sector-inference";
+  route:
+    "categorize" | "extract-invoice" | "chat" | "travel" | "portfolio-persona" | "sector-inference";
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -1225,33 +1271,31 @@ export type PreferencesRepository = {
 };
 
 // inside createPreferencesRepository, alongside the existing read/write helpers:
-  const readCorrections = () => read<Record<string, string>>("sector_corrections", {});
-  const writeCorrections = (value: Record<string, string>) => write("sector_corrections", value);
-  return {
-    getBenchmarkSymbols: () => read<string[]>("benchmark_symbols", []),
-    setBenchmarkSymbols: (symbols) => write("benchmark_symbols", [...symbols]),
-    getMarketDataConsent: () => read<unknown | null>("market_data_consent", null),
-    setMarketDataConsent: (decision) => write("market_data_consent", decision),
-    getSectorCorrections: readCorrections,
-    async setSectorCorrection(symbol, sector) {
-      const current = await readCorrections();
-      await writeCorrections({ ...current, [symbol.toUpperCase()]: sector });
-    },
-    async clearSectorCorrection(symbol) {
-      const current = await readCorrections();
-      const { [symbol.toUpperCase()]: _removed, ...rest } = current;
-      await writeCorrections(rest);
-    },
-  };
+const readCorrections = () => read<Record<string, string>>("sector_corrections", {});
+const writeCorrections = (value: Record<string, string>) => write("sector_corrections", value);
+return {
+  getBenchmarkSymbols: () => read<string[]>("benchmark_symbols", []),
+  setBenchmarkSymbols: (symbols) => write("benchmark_symbols", [...symbols]),
+  getMarketDataConsent: () => read<unknown | null>("market_data_consent", null),
+  setMarketDataConsent: (decision) => write("market_data_consent", decision),
+  getSectorCorrections: readCorrections,
+  async setSectorCorrection(symbol, sector) {
+    const current = await readCorrections();
+    await writeCorrections({ ...current, [symbol.toUpperCase()]: sector });
+  },
+  async clearSectorCorrection(symbol) {
+    const current = await readCorrections();
+    const { [symbol.toUpperCase()]: _removed, ...rest } = current;
+    await writeCorrections(rest);
+  },
+};
 ```
 
 - [ ] **Step 6: Widen `systemOneUsage.ts` and `systemOne.ts` with optional, backward-compatible route/ceiling parameters**
 
 ```typescript
 // apps/investing-server/src/systemOneUsage.ts
-export async function checkSystemOneBudget(
-  userId = "unscoped",
-): Promise<SystemOneBudget> {
+export async function checkSystemOneBudget(userId = "unscoped"): Promise<SystemOneBudget> {
   // unchanged body — the cap is per-account across all routes, by design (spentCents sums every route)
 }
 
@@ -1267,7 +1311,15 @@ export async function recordSystemOneUsage(
   const database = databaseSource();
   if (database) {
     await createAiUsageRepository(database).record({
-      userId, day, route, model, inputTokens, outputTokens, pages: 0, searches: 0, costCents,
+      userId,
+      day,
+      route,
+      model,
+      inputTokens,
+      outputTokens,
+      pages: 0,
+      searches: 0,
+      costCents,
     });
     return;
   }
@@ -1290,7 +1342,8 @@ export function createSystemOneProvider(
   } = {},
 ): SystemOneProvider {
   const config = deps.config ?? resolveSystemOneConfig();
-  const client = deps.client ?? new TypeSafeClient({ apiKey: config.apiKey, defaultModel: config.model });
+  const client =
+    deps.client ?? new TypeSafeClient({ apiKey: config.apiKey, defaultModel: config.model });
   const userId = deps.userId;
   const route = deps.route ?? "portfolio-persona";
   const failedRequestInputTokens = deps.failedRequestInputTokens ?? FAILED_REQUEST_INPUT_TOKENS;
@@ -1306,13 +1359,21 @@ export function createSystemOneProvider(
       if (!budget.ok) throw new Error(`System One budget exhausted for ${budget.scope}`);
       let result;
       try {
-        result = await client.systemOne({ state: request.state, questions: request.questions, model: request.model ?? config.model });
+        result = await client.systemOne({
+          state: request.state,
+          questions: request.questions,
+          model: request.model ?? config.model,
+        });
       } catch (error) {
         await record(request.model ?? config.model, failedRequestInputTokens, 0);
         throw error;
       }
       await record(result.model, result.usage.input_tokens, result.usage.output_tokens);
-      return { model: result.model, answers: result.answers, usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens } };
+      return {
+        model: result.model,
+        answers: result.answers,
+        usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens },
+      };
     },
   };
 }
@@ -1371,11 +1432,13 @@ EOF
 ### Task 8: The System One sector classifier
 
 **Files:**
+
 - Create: `apps/investing-server/src/sectorClassifier.ts`
 - Test: `apps/investing-server/src/sectorClassifier.test.ts`
 - Modify: `packages/core/src/investing/sectorTaxonomy.ts` (add the division fallback map)
 
 **Interfaces:**
+
 - Consumes: `GICS_SECTOR_LABELS` (Task 1), `SystemOneProvider`/`createSystemOneProvider` (Task 7).
 - Produces: `SectorClassification = { sector: string; confidence: number }` (already resolved to sector-or-division by the classifier — callers never see the raw Choice response) and `createSystemOneSectorClassifier(provider: SystemOneProvider, threshold?: number): (instrument: { symbol: string; description?: string }) => Promise<SectorClassification | null>`. Returns `null` only for the explicit no-match option — never throws (matches `fetchYahooSectorProfile`'s "never throws" contract so `sectorResolution.ts` can treat both provider and classifier failures identically).
 
@@ -1416,7 +1479,13 @@ import { expect, test, vi } from "vitest";
 import { createSystemOneSectorClassifier } from "./sectorClassifier.js";
 
 function providerReturning(choice: string, confidence: number) {
-  return { judge: vi.fn().mockResolvedValue({ model: "jev-1.13.0", answers: { sector: { type: "choice", choice, confidence, probabilities: {} } }, usage: { inputTokens: 1, outputTokens: 1 } }) };
+  return {
+    judge: vi.fn().mockResolvedValue({
+      model: "jev-1.13.0",
+      answers: { sector: { type: "choice", choice, confidence, probabilities: {} } },
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }),
+  };
 }
 
 test("a confident answer reports the sector itself", async () => {
@@ -1465,9 +1534,10 @@ export const SECTOR_INFERENCE_CONFIDENCE_THRESHOLD = 0.6;
 const NO_MATCH = "NoMatch";
 
 export type SectorClassification = { sector: string; confidence: number };
-export type SectorClassifier = (
-  instrument: { symbol: string; description?: string },
-) => Promise<SectorClassification | null>;
+export type SectorClassifier = (instrument: {
+  symbol: string;
+  description?: string;
+}) => Promise<SectorClassification | null>;
 
 const CRITERIA: Record<string, string> = Object.fromEntries([
   ...GICS_SECTOR_LABELS.map((label) => [label, sectorDescription(label)]),
@@ -1513,7 +1583,8 @@ export function createSystemOneSectorClassifier(
       });
       const answer = result.answers.sector;
       if (!answer || answer.type !== "choice" || answer.choice === NO_MATCH) return null;
-      if (answer.confidence >= threshold) return { sector: answer.choice, confidence: answer.confidence };
+      if (answer.confidence >= threshold)
+        return { sector: answer.choice, confidence: answer.confidence };
       const division = SECTOR_TO_DIVISION[answer.choice as GicsSectorLabel];
       return division ? { sector: division, confidence: answer.confidence } : null;
     } catch {
@@ -1555,10 +1626,12 @@ EOF
 ### Task 9: Precedence ladder — `sectorResolution.ts` gains correction and classifier tiers
 
 **Files:**
+
 - Modify: `apps/investing-server/src/sectorResolution.ts`
 - Modify: `apps/investing-server/src/sectorResolution.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SectorClassifier` (Task 8), `SectorProfile`'s `source` field (Task 1/2).
 - Produces: `SectorResolutionOptions` gains `correction?: (symbol: string) => Promise<string | null>` (always safe to pass, even read-only — it's a cheap read, never a paid call or a write) and `classifier?: (instrument: {symbol, description?}) => Promise<{sector,confidence}|null>` (omit on read-only paths, same discipline as `fetchProfile`). `SectorProfile`'s stock variant gains `confidence?: number`, present only when `source === "inferred"`.
 
@@ -1573,7 +1646,10 @@ test("an owner correction outranks everything and triggers no fetch or classific
   const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
 
   const { sectorBySymbol } = await resolvePortfolioSectors(positions, {
-    store, fetchProfile, classifier, correction,
+    store,
+    fetchProfile,
+    classifier,
+    correction,
   });
 
   expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
@@ -1584,8 +1660,17 @@ test("an owner correction outranks everything and triggers no fetch or classific
 test("a provider profile is used and the classifier is never called", async () => {
   const store = createInMemorySectorProfileStore();
   const classifier = vi.fn();
-  const fetchProfile = vi.fn(async () => ({ kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const }));
-  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, fetchProfile, classifier });
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider" as const,
+  }));
+  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    classifier,
+  });
   expect(classifier).not.toHaveBeenCalled();
 });
 
@@ -1593,19 +1678,40 @@ test("the classifier fills a real gap and is persisted with source inferred", as
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async () => null);
   const classifier = vi.fn(async () => ({ sector: "Technology", confidence: 0.9 }));
-  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100, description: "Myst Robotics" }], {
-    store, fetchProfile, classifier,
-  });
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "MYST", marketValue: 100, description: "Myst Robotics" }],
+    {
+      store,
+      fetchProfile,
+      classifier,
+    },
+  );
   expect(sectorBySymbol.get("MYST")).toBe("Technology");
-  expect(await store.get("MYST")).toEqual({ kind: "stock", sector: "Technology", industry: "Unknown", source: "inferred", confidence: 0.9 });
+  expect(await store.get("MYST")).toEqual({
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    confidence: 0.9,
+  });
 });
 
 test("a cached inferred profile is reused without re-invoking the classifier, but the provider is still retried", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("MYST", { kind: "stock", sector: "Technology", industry: "Unknown", source: "inferred", confidence: 0.7 });
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    confidence: 0.7,
+  });
   const fetchProfile = vi.fn(async () => null);
   const classifier = vi.fn();
-  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, fetchProfile, classifier });
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    classifier,
+  });
   expect(classifier).not.toHaveBeenCalled();
   expect(fetchProfile).toHaveBeenCalledWith("MYST");
   expect(sectorBySymbol.get("MYST")).toBe("Technology");
@@ -1613,9 +1719,23 @@ test("a cached inferred profile is reused without re-invoking the classifier, bu
 
 test("a later provider answer replaces a cached inferred profile", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("MYST", { kind: "stock", sector: "Technology", industry: "Unknown", source: "inferred", confidence: 0.7 });
-  const fetchProfile = vi.fn(async () => ({ kind: "stock" as const, sector: "Healthcare", industry: "Biotech", source: "provider" as const }));
-  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, fetchProfile });
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    confidence: 0.7,
+  });
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Healthcare",
+    industry: "Biotech",
+    source: "provider" as const,
+  }));
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    fetchProfile,
+  });
   expect(sectorBySymbol.get("MYST")).toBe("Healthcare");
   expect(await store.get("MYST")).toMatchObject({ source: "provider" });
 });
@@ -1646,9 +1766,10 @@ export const UNKNOWN_SECTOR = "Unknown";
 
 export type SectorProfileLookup = (symbol: string) => Promise<SectorProfile | null>;
 export type SectorCorrectionLookup = (symbol: string) => Promise<string | null>;
-export type SectorClassifierLookup = (
-  instrument: { symbol: string; description?: string },
-) => Promise<{ sector: string; confidence: number } | null>;
+export type SectorClassifierLookup = (instrument: {
+  symbol: string;
+  description?: string;
+}) => Promise<{ sector: string; confidence: number } | null>;
 
 export type SectorResolutionOptions = {
   store: SectorProfileStore;
@@ -1684,7 +1805,11 @@ export async function resolvePortfolioSectors(
     weightsBySymbol.set(key, weights);
     sectorBySymbol.set(key, weights[0]?.sector ?? UNKNOWN_SECTOR);
   }
-  return { sectorBySymbol, weightsBySymbol, exposure: buildSectorExposure(positions, weightsBySymbol) };
+  return {
+    sectorBySymbol,
+    weightsBySymbol,
+    exposure: buildSectorExposure(positions, weightsBySymbol),
+  };
 }
 
 async function resolveWeights(
@@ -1765,12 +1890,14 @@ EOF
 ### Task 10: Wire consent, the enable flag, and the per-position sector routes into `app.ts`
 
 **Files:**
+
 - Modify: `apps/investing-server/src/app.ts`
 - Modify: `apps/investing-server/src/index.ts` (classifier/correction wiring, `SECTOR_INFERENCE_ENABLED` flag)
 - Modify: `apps/investing-server/src/sectorCorrectionStore.ts` (new file, tenant-scoped store contract + in-memory impl)
 - Test: `apps/investing-server/src/app.test.ts`
 
 **Interfaces:**
+
 - Produces: `SectorCorrectionStore = { get(tenantId, symbol): Promise<string|null>; set(tenantId, symbol, sector): Promise<void>; clear(tenantId, symbol): Promise<void> }`, `createInMemorySectorCorrectionStore(): SectorCorrectionStore`. Neon-backed version wraps Task 7's `PreferencesRepository` methods (wire in `investing-mount.ts` alongside the other Neon preference-backed stores — same file, same pattern, not written out again here since it's a direct pass-through).
 - Produces: `GET /api/investing/positions/:symbol/sector` → `{ sector: string, source: "provider"|"inferred"|"unknown", confidence?: number }`; `PUT /api/investing/positions/:symbol/sector` → body `{ sector: string }`, validated against `GICS_SECTOR_LABELS`, `204` on success, `400` on an unrecognized sector.
 
@@ -1809,8 +1936,19 @@ export function createInMemorySectorCorrectionStore(): SectorCorrectionStore {
 // apps/investing-server/src/app.test.ts — add, matching this file's existing createApp()/request-building conventions
 test("GET position sector reads the resolved sector for that symbol", async () => {
   const sectorStore = createInMemorySectorProfileStore();
-  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
-  const app = createApp({ sectorStore, dashboardReader: async () => ({ ...emptyInvestingDashboard(), positions: [{ symbol: "AAPL", marketValue: 100, description: "Apple" }] }) });
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
+  const app = createApp({
+    sectorStore,
+    dashboardReader: async () => ({
+      ...emptyInvestingDashboard(),
+      positions: [{ symbol: "AAPL", marketValue: 100, description: "Apple" }],
+    }),
+  });
   const res = await app.request("/api/investing/positions/AAPL/sector");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ sector: "Technology", source: "provider" });
@@ -1819,15 +1957,27 @@ test("GET position sector reads the resolved sector for that symbol", async () =
 test("PUT position sector rejects a label outside the GICS set", async () => {
   const app = createApp({});
   const res = await app.request("/api/investing/positions/AAPL/sector", {
-    method: "PUT", body: JSON.stringify({ sector: "Not A Sector" }), headers: { "content-type": "application/json" },
+    method: "PUT",
+    body: JSON.stringify({ sector: "Not A Sector" }),
+    headers: { "content-type": "application/json" },
   });
   expect(res.status).toBe(400);
 });
 
 test("PUT position sector then GET reflects the correction immediately, no provider call", async () => {
   const fetchProfile = vi.fn();
-  const app = createApp({ sectorProfile: fetchProfile, dashboardReader: async () => ({ ...emptyInvestingDashboard(), positions: [{ symbol: "AAPL", marketValue: 100 }] }) });
-  await app.request("/api/investing/positions/AAPL/sector", { method: "PUT", body: JSON.stringify({ sector: "Healthcare" }), headers: { "content-type": "application/json" } });
+  const app = createApp({
+    sectorProfile: fetchProfile,
+    dashboardReader: async () => ({
+      ...emptyInvestingDashboard(),
+      positions: [{ symbol: "AAPL", marketValue: 100 }],
+    }),
+  });
+  await app.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
   const res = await app.request("/api/investing/positions/AAPL/sector");
   expect(await res.json()).toMatchObject({ sector: "Healthcare" });
   expect(fetchProfile).not.toHaveBeenCalled();
@@ -1881,12 +2031,16 @@ Pass `correction: (symbol) => sectorCorrectionStore.get(tenantId, symbol)` (clos
 
 ```typescript
 // apps/investing-server/src/index.ts — alongside sectorDependencies
-  const sectorInferenceEnabled = process.env.SECTOR_INFERENCE_ENABLED === "1";
-  const sectorClassifier = sectorInferenceEnabled
-    ? createSystemOneSectorClassifier(
-        createSystemOneProvider({ userId: tenantId, route: "sector-inference", failedRequestInputTokens: 500 }),
-      )
-    : undefined;
+const sectorInferenceEnabled = process.env.SECTOR_INFERENCE_ENABLED === "1";
+const sectorClassifier = sectorInferenceEnabled
+  ? createSystemOneSectorClassifier(
+      createSystemOneProvider({
+        userId: tenantId,
+        route: "sector-inference",
+        failedRequestInputTokens: 500,
+      }),
+    )
+  : undefined;
 ```
 
 Two separate gates stay separate on purpose: a set `TYPESAFE_API_KEY` alone must not turn on a new AI-cost feature (the exact production mistake this codebase already hit once with `ANTHROPIC_API_KEY` being present but the feature dark — see the LaVega project memory on that). `SECTOR_INFERENCE_ENABLED` is a second, explicit switch.
@@ -1922,11 +2076,13 @@ EOF
 ### Task 11: Minimal Position Detail UI — sector display and correction control
 
 **Files:**
+
 - Create: `apps/investing-web/src/components/PositionSectorControl.tsx`
 - Test: `apps/investing-web/src/components/PositionSectorControl.test.tsx`
 - Modify: `apps/investing-web/src/app.tsx` (`PositionDetailSummary`, ~line 2018-2061)
 
 **Interfaces:**
+
 - Consumes: `GET/PUT /api/investing/positions/:symbol/sector` (Task 10).
 - Produces: `<PositionSectorControl symbol={string} />` — fetches on mount, renders the sector label with a small "inferred"/"your correction" badge when `source !== "provider"`, and a `<select>` of `GICS_SECTOR_LABELS` plus a Save button that `PUT`s and refetches.
 
@@ -1940,9 +2096,13 @@ import { expect, test, vi } from "vitest";
 import { PositionSectorControl } from "./PositionSectorControl";
 
 test("shows the resolved sector and an inferred badge when the source is inferred", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, json: async () => ({ sector: "Technology", source: "inferred", confidence: 0.7 }),
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sector: "Technology", source: "inferred", confidence: 0.7 }),
+    }),
+  );
   render(<PositionSectorControl symbol="MYST" />);
   await waitFor(() => expect(screen.getByText("Technology")).toBeInTheDocument());
   expect(screen.getByText(/inferred/i)).toBeInTheDocument();
@@ -1951,9 +2111,15 @@ test("shows the resolved sector and an inferred badge when the source is inferre
 test("saving a correction PUTs the chosen sector and shows it without a badge", async () => {
   const fetchMock = vi
     .fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ sector: "Technology", source: "inferred", confidence: 0.7 }) })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sector: "Technology", source: "inferred", confidence: 0.7 }),
+    })
     .mockResolvedValueOnce({ ok: true, status: 204 })
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ sector: "Healthcare", source: "correction" }) });
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sector: "Healthcare", source: "correction" }),
+    });
   vi.stubGlobal("fetch", fetchMock);
   render(<PositionSectorControl symbol="MYST" />);
   await waitFor(() => screen.getByText("Technology"));
@@ -1982,7 +2148,11 @@ Expected: FAIL, module doesn't exist
 import { useEffect, useState } from "react";
 import { GICS_SECTOR_LABELS } from "@lavega/core";
 
-type SectorState = { sector: string; source: "provider" | "inferred" | "correction" | "unknown"; confidence?: number };
+type SectorState = {
+  sector: string;
+  source: "provider" | "inferred" | "correction" | "unknown";
+  confidence?: number;
+};
 
 export function PositionSectorControl({ symbol }: { symbol: string }) {
   const [state, setState] = useState<SectorState | null>(null);
@@ -2007,7 +2177,9 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
         inferred{state.confidence !== undefined ? ` · ${Math.round(state.confidence * 100)}%` : ""}
       </span>
     ) : state.source === "correction" ? (
-      <span className="ml-2 rounded-pill bg-secondary px-2 py-0.5 text-xs text-muted-foreground">your correction</span>
+      <span className="ml-2 rounded-pill bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+        your correction
+      </span>
     ) : null;
 
   async function save() {
@@ -2065,7 +2237,7 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
 
 ```tsx
 // apps/investing-web/src/app.tsx — inside PositionDetailSummary, after the closing </dl> (~line 2115)
-      <PositionSectorControl symbol={position.symbol} />
+<PositionSectorControl symbol={position.symbol} />
 ```
 
 Add the import alongside `app.tsx`'s existing component imports at the top of the file.
@@ -2131,6 +2303,7 @@ This is the last task before opening PR2 (stacked on PR1) per the `opening-a-pr`
 ## Self-Review
 
 **1. Spec coverage.**
+
 - Spike §4 Option A (fund detection, storage, exposure math) → Tasks 1, 2, 4, 5.
 - Spike §4 PR2 (caption update, consent-gap close) → Task 6 (caption); consent gap is PR #171's, explicitly not re-planned (Global Constraints).
 - Spike §3's residual-not-silently-classified requirement → Task 4's "Review Focus" tests, Task 5's fund test.

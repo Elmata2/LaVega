@@ -94,7 +94,7 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
     for each new command or flag.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
-    page. It only reads; every write in it runs with `--dry-run`.     It skips only when neither a readable `auth.preview.json` nor
+    page. It only reads; every write in it runs with `--dry-run`. It skips only when neither a readable `auth.preview.json` nor
     `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is already available.
     `login` itself also runs `vercel env pull` for that pair.
     It uses its own state directory, so it does not move your pin or session.
@@ -338,7 +338,7 @@ real tenant. Prefer it over prod for anything that writes.
   `doctor` fails `positionsPresent` when a connected broker shows zero positions, which is
   the symptom of either gap.
 - **Account.** Preview has its own test user, never a real person's login. `login
-  --target preview` loads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the
+--target preview` loads `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` from the
   process, or runs `vercel env pull`. Those two names are in the Vercel project Config for
   development, preview, and production. Do not write `auth.preview.json`. Do not ask for a
   personal password. Do not invent or sign up an account. `credentialsFrom` is `vercel-env`

@@ -204,8 +204,8 @@ export function PortfolioSummaryCard({
               Volatility, beta, alpha and the observation counts use every day in the selected
               range, skipping only the daily intervals that touch a missing price, unknown cash or
               unknown ownership. Maximum drawdown still uses only the most recent unbroken stretch
-              of complete dates. A day the market was closed keeps its last close. Today is left
-              out until its closes are in.
+              of complete dates. A day the market was closed keeps its last close. Today is left out
+              until its closes are in.
             </p>
           </div>
         </details>

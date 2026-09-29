@@ -228,8 +228,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const priceStore = options.priceStore;
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
-  const investingLayoutStore =
-    options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
+  const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
@@ -886,8 +885,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   };
   const sectorDependencies = {
     sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
-    sectorCorrectionStore:
-      options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
+    sectorCorrectionStore: options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
     sectorInferenceSettingStore:
       options.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore(),
     /* Gated only on whether a System One client is configured — never on a

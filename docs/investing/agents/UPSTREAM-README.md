@@ -4,7 +4,6 @@ This is a proof of concept for an AI-powered hedge fund. The goal of this projec
 
 <img width="2400" height="1460" alt="image" src="https://github.com/user-attachments/assets/e3985623-c226-4c1a-a587-e03fb4eca31e" />
 
-
 Note: the system does not actually make any trades.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)

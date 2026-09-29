@@ -34,7 +34,10 @@ export function isValidFundWeight(
  *  implementation can persist a sector outside the taxonomy. */
 export function sanitizeSectorProfile(profile: SectorProfile): SectorProfile {
   if (profile.kind !== "fund") return profile;
-  const sanitized: FundSectorProfile = { ...profile, weights: profile.weights.filter(isValidFundWeight) };
+  const sanitized: FundSectorProfile = {
+    ...profile,
+    weights: profile.weights.filter(isValidFundWeight),
+  };
   if (sanitized.fetchedAt !== undefined && !isValidFetchedAt(sanitized.fetchedAt))
     delete sanitized.fetchedAt;
   return sanitized;

@@ -13,13 +13,13 @@ apps on one account; each links to the other.
 
 ## Decisions
 
-| Question | Decision |
-|---|---|
-| What is "Personal" inside Investing? | A link back to LaVega Personal in the top bar, same session. No Personal data inside Investing. |
-| What is switchable? | Tabs (modules) and Overview cards (widgets), both from the profile page; widgets also from an "Add widget" button. |
-| Shared shell package or copy? | Copy Personal's pattern into `apps/investing-web` (approach 1). Personal is not touched. Extract a shared package only if the copies drift. |
-| Where are settings stored? | Server-side per account, in the existing `investing.preferences` store (the one that holds benchmark selection). Personal keeps its browser storage. |
-| Widget ordering | Fixed order, no drag-and-drop, as in Personal. |
+| Question                             | Decision                                                                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What is "Personal" inside Investing? | A link back to LaVega Personal in the top bar, same session. No Personal data inside Investing.                                                      |
+| What is switchable?                  | Tabs (modules) and Overview cards (widgets), both from the profile page; widgets also from an "Add widget" button.                                   |
+| Shared shell package or copy?        | Copy Personal's pattern into `apps/investing-web` (approach 1). Personal is not touched. Extract a shared package only if the copies drift.          |
+| Where are settings stored?           | Server-side per account, in the existing `investing.preferences` store (the one that holds benchmark selection). Personal keeps its browser storage. |
+| Widget ordering                      | Fixed order, no drag-and-drop, as in Personal.                                                                                                       |
 
 ## 1. Shell and navigation
 
@@ -40,14 +40,14 @@ Sections, in order:
 
 ## 3. Overview widgets
 
-| Widget id | Card | Default | Column |
-|---|---|---|---|
-| `performance` | Benchmark comparison chart | on | left, wide |
-| `allocation` | Allocation donut | on | left, wide |
-| `kpis` | Key figures | on | right, first |
-| `risk` | Risk & composition (`PortfolioSummaryCard`) | on | right, second |
-| `sectors` | Sector allocation | on | full width, below |
-| `agent` | Portfolio agent card | on | full width, below |
+| Widget id     | Card                                        | Default | Column            |
+| ------------- | ------------------------------------------- | ------- | ----------------- |
+| `performance` | Benchmark comparison chart                  | on      | left, wide        |
+| `allocation`  | Allocation donut                            | on      | left, wide        |
+| `kpis`        | Key figures                                 | on      | right, first      |
+| `risk`        | Risk & composition (`PortfolioSummaryCard`) | on      | right, second     |
+| `sectors`     | Sector allocation                           | on      | full width, below |
+| `agent`       | Portfolio agent card                        | on      | full width, below |
 
 - Positions table and net-worth chart leave Overview; they live on their tabs.
 - Hiding a card closes its gap; the grid does not leave holes.
