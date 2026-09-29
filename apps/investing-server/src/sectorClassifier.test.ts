@@ -11,22 +11,54 @@ function providerReturning(choice: string, confidence: number) {
   };
 }
 
+function providerRejecting(error: unknown) {
+  return { judge: vi.fn().mockRejectedValue(error) };
+}
+
 test("a confident answer reports the sector itself", async () => {
   const classifier = createSystemOneSectorClassifier(providerReturning("Technology", 0.9), 0.6);
   expect(await classifier({ symbol: "ACME", description: "Acme Cloud Software Inc" })).toEqual({
+    kind: "classified",
     sector: "Technology",
+    specificity: "sector",
     confidence: 0.9,
   });
 });
 
 test("an unconfident answer reports the broader division instead", async () => {
   const classifier = createSystemOneSectorClassifier(providerReturning("Technology", 0.3), 0.6);
-  expect(await classifier({ symbol: "ACME" })).toEqual({ sector: "Sensitive", confidence: 0.3 });
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "classified",
+    sector: "Sensitive",
+    specificity: "division",
+    confidence: 0.3,
+  });
 });
 
-test("an explicit no-match resolves to null, mapped to Unknown by the caller", async () => {
+test("an explicit no-match resolves to the no-match result", async () => {
   const classifier = createSystemOneSectorClassifier(providerReturning("NoMatch", 0.95), 0.6);
-  expect(await classifier({ symbol: "ACME" })).toBeNull();
+  expect(await classifier({ symbol: "ACME" })).toEqual({ kind: "no-match" });
+});
+
+test("a high-confidence answer outside the GICS set is never trusted as a sector", async () => {
+  const classifier = createSystemOneSectorClassifier(providerReturning("Private", 0.99), 0.6);
+  expect(await classifier({ symbol: "ACME" })).toEqual({ kind: "no-match" });
+});
+
+test("a provider throw resolves to failed, not no-match", async () => {
+  const classifier = createSystemOneSectorClassifier(providerRejecting(new Error("upstream timeout")), 0.6);
+  expect(await classifier({ symbol: "ACME" })).toEqual({ kind: "failed", reason: "upstream timeout" });
+});
+
+test("a budget refusal resolves to failed, not no-match", async () => {
+  const classifier = createSystemOneSectorClassifier(
+    providerRejecting(new Error("System One budget exhausted for day")),
+    0.6,
+  );
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "System One budget exhausted for day",
+  });
 });
 
 test("sends only symbol and description as state — never holdings, quantity, or value", async () => {

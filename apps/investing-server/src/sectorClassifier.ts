@@ -1,16 +1,25 @@
-import { SECTOR_TO_DIVISION, type GicsSectorLabel } from "@lavega/core";
+import { GICS_SECTOR_LABELS, SECTOR_TO_DIVISION, type GicsSectorLabel } from "@lavega/core";
 import type { SystemOneProvider } from "./systemOne.js";
 
 /** Set once and measured, per issue #135's own "Tuning the confidence
  *  threshold" out-of-scope note — not a claim about the right number. */
 export const SECTOR_INFERENCE_CONFIDENCE_THRESHOLD = 0.6;
 
-const NO_MATCH = "NoMatch";
+const NO_MATCH = "NoMatch" as const;
 
-export type SectorClassification = { sector: string; confidence: number };
+/** `classified` reports a sector or, below the confidence threshold, the
+ *  division it rolls up into — `specificity` says which. `no-match` is the
+ *  model's own explicit "none of these sectors fit"; safe to cache as
+ *  Unknown. `failed` is everything else that kept the model from answering
+ *  (provider error, timeout, budget refusal, a malformed response) — it must
+ *  never be cached as Unknown, only retried later. */
+export type SectorClassification =
+  | { kind: "classified"; sector: string; specificity: "sector" | "division"; confidence: number }
+  | { kind: "no-match" }
+  | { kind: "failed"; reason: string };
 export type SectorClassifier = (
   instrument: { symbol: string; description?: string },
-) => Promise<SectorClassification | null>;
+) => Promise<SectorClassification>;
 
 const SECTOR_DESCRIPTIONS: Record<GicsSectorLabel, string> = {
   Technology: "Software, hardware, semiconductors, IT services.",
@@ -26,21 +35,32 @@ const SECTOR_DESCRIPTIONS: Record<GicsSectorLabel, string> = {
   "Real Estate": "REITs and real-estate management and development.",
 };
 
-const CRITERIA: Record<string, string> = {
+const CRITERIA: Record<GicsSectorLabel | typeof NO_MATCH, string> = {
   ...SECTOR_DESCRIPTIONS,
   [NO_MATCH]: "No listed GICS sector plausibly describes this instrument.",
 };
 
-/** Never throws — a failed or ambiguous classification degrades to `null`,
- *  the same contract fetchYahooSectorProfile already has, so sectorResolution
- *  can treat a missing provider profile and a missing inference identically. */
+const GICS_SECTOR_LABEL_SET: ReadonlySet<string> = new Set(GICS_SECTOR_LABELS);
+
+function isGicsSectorLabel(value: string): value is GicsSectorLabel {
+  return GICS_SECTOR_LABEL_SET.has(value);
+}
+
+/** Every answer is checked against `GICS_SECTOR_LABELS` before it is trusted
+ *  as a sector — the same discipline `portfolioAgent.ts` applies to its own
+ *  Choice answers. `SystemOneProvider.judge` types `choice` as `string`, so
+ *  nothing upstream stops a model from answering with text outside its own
+ *  criteria; an unvalidated pass-through is exactly how a legal-entity name
+ *  became a sector before (see `sectorTaxonomy.ts`'s header comment). An
+ *  answer that fails validation reports `no-match`, never the raw string. */
 export function createSystemOneSectorClassifier(
   provider: SystemOneProvider,
   threshold = SECTOR_INFERENCE_CONFIDENCE_THRESHOLD,
 ): SectorClassifier {
   return async (instrument) => {
+    let result;
     try {
-      const result = await provider.judge({
+      result = await provider.judge({
         state: { symbol: instrument.symbol, description: instrument.description ?? null },
         questions: {
           sector: {
@@ -51,13 +71,21 @@ export function createSystemOneSectorClassifier(
           },
         },
       });
-      const answer = result.answers.sector;
-      if (!answer || answer.type !== "choice" || answer.choice === NO_MATCH) return null;
-      if (answer.confidence >= threshold) return { sector: answer.choice, confidence: answer.confidence };
-      const division = SECTOR_TO_DIVISION[answer.choice as GicsSectorLabel];
-      return division ? { sector: division, confidence: answer.confidence } : null;
-    } catch {
-      return null;
+    } catch (error) {
+      return { kind: "failed", reason: error instanceof Error ? error.message : String(error) };
     }
+    const answer = result.answers.sector;
+    if (!answer || answer.type !== "choice")
+      return { kind: "failed", reason: "System One did not return a choice answer for sector" };
+    if (answer.choice === NO_MATCH) return { kind: "no-match" };
+    if (!isGicsSectorLabel(answer.choice)) return { kind: "no-match" };
+    if (answer.confidence >= threshold)
+      return { kind: "classified", sector: answer.choice, specificity: "sector", confidence: answer.confidence };
+    return {
+      kind: "classified",
+      sector: SECTOR_TO_DIVISION[answer.choice],
+      specificity: "division",
+      confidence: answer.confidence,
+    };
   };
 }
