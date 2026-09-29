@@ -169,6 +169,32 @@ test("omits a coverage source that rounds to zero", () => {
   expect(container.textContent).not.toMatch(/inferred|your corrections|unknown/);
 });
 
+test("three equal thirds round to sum to 100 instead of dropping a point", () => {
+  const { container, root } = render();
+  const third = 1 / 3;
+  act(() =>
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: {
+            ...readyState.data,
+            sectorCoverage: coverage({ provider: third, inferred: third, correction: third }),
+          },
+        }}
+        refresh={noRefresh}
+      />,
+    ),
+  );
+  const match = container.textContent?.match(
+    /(\d+)% from provider data · (\d+)% inferred · (\d+)% your corrections/,
+  );
+  expect(match).not.toBeNull();
+  const [, provider, inferred, correction] = match!;
+  expect(Number(provider) + Number(inferred) + Number(correction)).toBe(100);
+  expect(container.textContent).toContain("34% from provider data · 33% inferred · 33% your corrections");
+});
+
 test("shows no coverage line when the summary predates sectorCoverage", () => {
   const { container, root } = render();
   act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));

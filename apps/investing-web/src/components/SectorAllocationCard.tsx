@@ -29,11 +29,35 @@ const COVERAGE_LABELS: Record<keyof SectorCoverage, string> = {
   unknown: "unknown",
 };
 
+/** Largest-remainder rounding: round every share down first, then hand the
+ *  leftover whole points (the gap between that and the shares' true total)
+ *  to whichever shares lost the most to flooring. Plain per-share rounding
+ *  can under- or overshoot the total by a point or two (three even 1/3
+ *  shares would each round to 33%, one point short); this keeps the
+ *  displayed parts summing to the shares' actual total. */
+function largestRemainderRound(shares: number[]): number[] {
+  const scaled = shares.map((share) => share * 100);
+  const floors = scaled.map(Math.floor);
+  const remainder = Math.round(
+    scaled.reduce((sum, value) => sum + value, 0) - floors.reduce((sum, value) => sum + value, 0),
+  );
+  const byRemainingFraction = scaled
+    .map((value, index) => ({ index, fraction: value - floors[index]! }))
+    .sort((left, right) => right.fraction - left.fraction);
+  const rounded = [...floors];
+  for (let i = 0; i < remainder && i < byRemainingFraction.length; i += 1) {
+    rounded[byRemainingFraction[i]!.index] += 1;
+  }
+  return rounded;
+}
+
 /** Renders as "82% from provider data · 10% inferred · 3% your corrections
  *  · 5% unknown", dropping any share that rounds to zero. */
 function coverageLine(coverage: SectorCoverage): string | null {
-  const parts = (Object.keys(COVERAGE_LABELS) as Array<keyof SectorCoverage>)
-    .map((key) => ({ key, pct: Math.round((coverage[key] ?? 0) * 100) }))
+  const keys = Object.keys(COVERAGE_LABELS) as Array<keyof SectorCoverage>;
+  const pcts = largestRemainderRound(keys.map((key) => coverage[key] ?? 0));
+  const parts = keys
+    .map((key, index) => ({ key, pct: pcts[index]! }))
     .filter(({ pct }) => pct > 0)
     .map(({ key, pct }) => `${pct}% ${COVERAGE_LABELS[key]}`);
   return parts.length > 0 ? parts.join(" · ") : null;
