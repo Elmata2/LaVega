@@ -118,6 +118,30 @@ test("hides the drawdown start date when it matches the risk range's start or is
   expect(second.container.textContent).not.toContain("since");
 });
 
+test("marks the risk period as of its last measured date when that date is in the past", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-15T12:00:00Z"));
+  try {
+    const { container, root } = render();
+    act(() => root.render(card()));
+    expect(container.textContent).toContain("as of 10 Sept 2026");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("omits the as-of note when the risk period already runs through today", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-10T12:00:00Z"));
+  try {
+    const { container, root } = render();
+    act(() => root.render(card()));
+    expect(container.textContent).not.toContain("as of");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("shows a position's name above its ticker, and just the ticker when there is no name", () => {
   const { container, root } = render();
   act(() =>
