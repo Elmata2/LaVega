@@ -213,6 +213,54 @@ test("a tenant with no preferences row reads an empty layout rather than throwin
   expect(await repository.getLayout()).toBeNull();
 });
 
+test("sector corrections round-trip upper-cased and merge into the existing map without touching other columns", async () => {
+  const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Technology" } }]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getSectorCorrections()).toEqual({ AAPL: "Technology" });
+
+  await repository.setSectorCorrection("msft", "Technology");
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("sector_corrections");
+  expect(write.sql).not.toContain("benchmark_symbols");
+  expect(write.values).toEqual([JSON.stringify({ AAPL: "Technology", MSFT: "Technology" })]);
+});
+
+test("clearing a sector correction removes only that symbol, case-insensitively", async () => {
+  const { db, calls } = fakeDatabase([
+    { sector_corrections: { AAPL: "Technology", MSFT: "Technology" } },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  await repository.clearSectorCorrection("aapl");
+
+  const write = executed(calls).at(-1)!;
+  expect(write.values).toEqual([JSON.stringify({ MSFT: "Technology" })]);
+});
+
+test("a tenant with no preferences row reads no sector corrections rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getSectorCorrections()).toEqual({});
+});
+
+test("sector inference defaults off and round-trips as a plain boolean, not jsonb", async () => {
+  const { db, calls } = fakeDatabase([{ sector_inference_enabled: true }]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getSectorInferenceEnabled()).toBe(true);
+
+  await repository.setSectorInferenceEnabled(false);
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("sector_inference_enabled");
+  expect(write.sql).not.toContain("::jsonb");
+  expect(write.values).toEqual([false]);
+});
+
+test("a tenant with no preferences row reads sector inference as disabled rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getSectorInferenceEnabled()).toBe(false);
+});
+
 test("broker sync state round-trips per broker", async () => {
   const { db, calls } = fakeDatabase([
     { state: { lastSyncedAt: "2026-01-02T00:00:00.000Z", retryAfter: null } },

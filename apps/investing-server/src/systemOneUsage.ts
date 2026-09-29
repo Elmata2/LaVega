@@ -1,4 +1,4 @@
-import { createAiUsageRepository, type Database } from "@lavega/database";
+import { createAiUsageRepository, type AiUsage, type Database } from "@lavega/database";
 
 /* THE DATABASE IS HANDED TO US, NOT FETCHED.
  *
@@ -56,6 +56,7 @@ export async function recordSystemOneUsage(
   inputTokens: number,
   outputTokens: number,
   userId = "unscoped",
+  route: AiUsage["route"] = "portfolio-persona",
 ): Promise<void> {
   const { day, month } = parts();
   const costCents = Math.max(1, Math.ceil((inputTokens / 1_000_000) * INPUT_EUR_CENTS_PER_MILLION));
@@ -64,7 +65,7 @@ export async function recordSystemOneUsage(
     await createAiUsageRepository(database).record({
       userId,
       day,
-      route: "portfolio-persona",
+      route,
       model,
       inputTokens,
       outputTokens,

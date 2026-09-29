@@ -42,6 +42,8 @@ export function createSystemOneProvider(
     client?: SystemOneClient;
     config?: SystemOneConfig;
     userId?: string;
+    route?: string; // AiUsage["route"], kept as string here to avoid an investing-server -> database type import
+    failedRequestInputTokens?: number;
     checkBudget?: () => Promise<{ ok: true } | { ok: false; scope: "day" | "month" }>;
     recordUsage?: (model: string, inputTokens: number, outputTokens: number) => Promise<void>;
   } = {},
@@ -50,11 +52,13 @@ export function createSystemOneProvider(
   const client =
     deps.client ?? new TypeSafeClient({ apiKey: config.apiKey, defaultModel: config.model });
   const userId = deps.userId;
+  const route = deps.route ?? "portfolio-persona";
+  const failedRequestInputTokens = deps.failedRequestInputTokens ?? FAILED_REQUEST_INPUT_TOKENS;
   const gate = deps.checkBudget ?? (() => checkSystemOneBudget(userId));
   const record =
     deps.recordUsage ??
     ((model: string, inputTokens: number, outputTokens: number) =>
-      recordSystemOneUsage(model, inputTokens, outputTokens, userId));
+      recordSystemOneUsage(model, inputTokens, outputTokens, userId, route as never));
   return {
     async judge(request) {
       assertStateSize(request.state);
@@ -68,7 +72,7 @@ export function createSystemOneProvider(
           model: request.model ?? config.model,
         });
       } catch (error) {
-        await record(request.model ?? config.model, FAILED_REQUEST_INPUT_TOKENS, 0);
+        await record(request.model ?? config.model, failedRequestInputTokens, 0);
         throw error;
       }
       await record(result.model, result.usage.input_tokens, result.usage.output_tokens);
