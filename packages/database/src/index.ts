@@ -1078,7 +1078,60 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-/* The nine tables that hold anything belonging to a person. Deliberately a
+export type PersonalNetWorthTotal = { date: string; totalCents: number };
+
+/**
+ * Personal's opt-in share of its own "Totale positie" into Investing's net
+ * worth (0019_personal_net_worth_totals.sql). Personal owns every write —
+ * `put` is called once per day, from the browser, only while the switch is on
+ * and the vault is unlocked. `list` is Investing's read side: it needs the
+ * whole history to carry the latest total forward onto days with no total of
+ * their own, so unlike every other repository in this file it takes no
+ * upper bound and returns everything the tenant has.
+ */
+export function createPersonalNetWorthRepository(db: Database, userId: string | undefined | null) {
+  const tenantId = requireUserId(userId);
+  return {
+    async put(date: string, totalCents: number): Promise<void> {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(
+          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency)
+           VALUES (current_setting('app.user_id'), $1, $2, 'EUR')
+           ON CONFLICT (user_id, date) DO UPDATE SET
+             total_cents = EXCLUDED.total_cents,
+             updated_at = CURRENT_TIMESTAMP`,
+          [date, totalCents],
+        );
+      });
+    },
+    /** Every stored total, oldest first — Investing carries the latest one on
+     *  or before a date forward, so it needs the full series, not a window.
+     *  `date` is formatted in SQL rather than trusted from the driver: a DATE
+     *  column round-trips as a string over Neon but as a JS `Date` under the
+     *  PGlite driver these repositories are tested against, and `to_char`
+     *  gives one answer regardless of which one is reading it back. */
+    async list(): Promise<PersonalNetWorthTotal[]> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents
+           FROM personal.net_worth_totals ORDER BY date ASC`,
+        );
+        return result.rows.map((row) => ({
+          date: row.date as string,
+          totalCents: Number(row.total_cents),
+        }));
+      });
+    },
+    /** Turning the share switch off: every stored total for this user, gone. */
+    async deleteAll(): Promise<void> {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query("DELETE FROM personal.net_worth_totals");
+      });
+    },
+  };
+}
+
+/* The ten tables that hold anything belonging to a person. Deliberately a
  * literal list rather than a query over the catalogue: a table added later
  * should have to be considered here by a human, not silently swept up or —
  * worse — silently missed. Order is child-before-parent; nothing here has a
@@ -1097,6 +1150,7 @@ const USER_DATA_TABLES = [
   "investing.dashboard_snapshots",
   "investing.dashboard_sources",
   "personal.vaults",
+  "personal.net_worth_totals",
 ] as const;
 
 export type ErasureReport = { table: string; rows: number }[];
