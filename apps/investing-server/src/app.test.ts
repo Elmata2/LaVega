@@ -1247,14 +1247,14 @@ test("GET position sector reads the resolved sector for that symbol", async () =
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ sector: "Technology", source: "provider" });
+  expect(await response.json()).toEqual({ kind: "stock", sector: "Technology", source: "provider" });
 });
 
 test("GET position sector reports Unknown for a symbol with no profile and no correction", async () => {
   const investingApp = createApp({});
   const response = await investingApp.request("/api/investing/positions/MYST/sector");
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ sector: "Unknown", source: "unknown" });
+  expect(await response.json()).toEqual({ kind: "unknown", sector: "Unknown", source: "unknown" });
 });
 
 test("GET position sector reports an inferred profile's confidence", async () => {
@@ -1272,7 +1272,12 @@ test("GET position sector reports an inferred profile's confidence", async () =>
 
   const response = await investingApp.request("/api/investing/positions/MYST/sector");
 
-  expect(await response.json()).toEqual({ sector: "Healthcare", source: "inferred", confidence: 0.82 });
+  expect(await response.json()).toEqual({
+    kind: "stock",
+    sector: "Healthcare",
+    source: "inferred",
+    confidence: 0.82,
+  });
 });
 
 test("GET position sector reports a cached no-match inference as unknown, not as a confident inference", async () => {
@@ -1290,10 +1295,10 @@ test("GET position sector reports a cached no-match inference as unknown, not as
 
   const response = await investingApp.request("/api/investing/positions/MYST/sector");
 
-  expect(await response.json()).toEqual({ sector: "Unknown", source: "unknown" });
+  expect(await response.json()).toEqual({ kind: "stock", sector: "Unknown", source: "unknown" });
 });
 
-test("GET position sector reports a fund's single largest weight", async () => {
+test("GET position sector reports a fund with no single sector, since it's split across holdings", async () => {
   const sectorStore = createInMemorySectorProfileStore();
   await sectorStore.set("VFEM.L", {
     kind: "fund",
@@ -1307,7 +1312,7 @@ test("GET position sector reports a fund's single largest weight", async () => {
 
   const response = await investingApp.request("/api/investing/positions/VFEM.L/sector");
 
-  expect(await response.json()).toEqual({ sector: "Healthcare", source: "provider" });
+  expect(await response.json()).toEqual({ kind: "fund", sector: null, source: "provider" });
 });
 
 test("PUT position sector rejects a label outside the GICS set", async () => {
@@ -1332,8 +1337,37 @@ test("PUT position sector then GET reflects the correction immediately, no provi
   expect(put.status).toBe(204);
 
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
-  expect(await response.json()).toMatchObject({ sector: "Healthcare", source: "correction" });
+  expect(await response.json()).toEqual({ kind: "stock", sector: "Healthcare", source: "correction" });
   expect(sectorProfile).not.toHaveBeenCalled();
+});
+
+test("GET position sector never touches the provider or the classifier", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  const sectorProfile = vi.fn();
+  const sectorClassifier = vi.fn();
+  const investingApp = createApp({ sectorStore, sectorProfile, sectorClassifier });
+
+  await investingApp.request("/api/investing/positions/AAPL/sector");
+
+  expect(sectorProfile).not.toHaveBeenCalled();
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("GET position sector: a fund's cached profile outranks a stale owner correction, and the correction isn't reported", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("VFEM.L", {
+    kind: "fund",
+    weights: [{ sector: "Technology", weight: 1 }],
+    source: "provider",
+  });
+  const sectorCorrectionStore = createInMemorySectorCorrectionStore();
+  await sectorCorrectionStore.set("local", "VFEM.L", "Energy");
+  const investingApp = createApp({ sectorStore, sectorCorrectionStore });
+
+  const response = await investingApp.request("/api/investing/positions/VFEM.L/sector");
+
+  expect(await response.json()).toEqual({ kind: "fund", sector: null, source: "provider" });
 });
 
 test("PUT position sector rejects a fund symbol, since a fund's sector is its weight vector", async () => {
@@ -1380,7 +1414,7 @@ test("DELETE position sector clears the correction and reverts to automatic reso
   expect(cleared.status).toBe(204);
 
   const response = await investingApp.request("/api/investing/positions/AAPL/sector");
-  expect(await response.json()).toEqual({ sector: "Technology", source: "provider" });
+  expect(await response.json()).toEqual({ kind: "stock", sector: "Technology", source: "provider" });
 });
 
 test("sector-correction routes read and write under the resolved tenant", async () => {

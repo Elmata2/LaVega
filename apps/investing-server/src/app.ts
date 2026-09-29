@@ -342,16 +342,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/investing/positions/:symbol/sector", async (c) => {
     const symbol = c.req.param("symbol");
     const tenantId = await resolveTenantId();
-    const corrected = await sectorCorrectionStore.get(tenantId, symbol);
-    if (corrected) return c.json({ sector: corrected, source: "correction" as const });
+    /* Same precedence as resolveWeights: read the cached profile before the
+     * correction, so a fund always wins. Read-only — no fetchProfile, no
+     * classifier, no store write. */
     const profile = await sectorStore.get(symbol);
-    if (!profile) return c.json({ sector: UNKNOWN_SECTOR, source: "unknown" as const });
-    if (profile.kind === "fund") {
-      const largest = [...profile.weights].sort((left, right) => right.weight - left.weight)[0];
-      return c.json({ sector: largest?.sector ?? UNKNOWN_SECTOR, source: "provider" as const });
-    }
+    if (profile?.kind === "fund")
+      return c.json({ kind: "fund" as const, sector: null, source: "provider" as const });
+    const corrected = await sectorCorrectionStore.get(tenantId, symbol);
+    if (corrected) return c.json({ kind: "stock" as const, sector: corrected, source: "correction" as const });
+    if (!profile) return c.json({ kind: "unknown" as const, sector: UNKNOWN_SECTOR, source: "unknown" as const });
     const resolved = resolvedStockSector(profile);
     return c.json({
+      kind: "stock" as const,
       sector: resolved.sector,
       source: resolved.source,
       ...(resolved.confidence !== undefined ? { confidence: resolved.confidence } : {}),

@@ -327,6 +327,44 @@ test("a correction for a cached stock short-circuits with zero fetch or classifi
   expect(classifier).not.toHaveBeenCalled();
 });
 
+test("a correction suppresses the classifier for a symbol the provider has no answer for", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Technology",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+  const correction = vi.fn(async (symbol: string) => (symbol === "MYST" ? "Healthcare" : null));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("MYST")).toBe("Healthcare");
+  expect(classifier).not.toHaveBeenCalled();
+});
+
+test("the same symbol without a correction falls through to the classifier", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Technology",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
+
+  expect(sectorBySymbol.get("MYST")).toBe("Technology");
+  expect(classifier).toHaveBeenCalledWith({ symbol: "MYST", description: undefined });
+});
+
 test("a correction saved for an uncached symbol that later resolves as a fund shows the fund's weights, correction ignored", async () => {
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async () => ({
