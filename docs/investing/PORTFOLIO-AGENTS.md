@@ -2,6 +2,8 @@
 
 LaVega ports the useful structure from `virattt/ai-hedge-fund`, not its Python runtime.
 
+Copies of the persona prompts, `llm_agent.py`, the strategy config, and the source vision live in [`agents/`](./agents/README.md) as reference.
+
 Source components inspected:
 
 - `src/agents/*.py` at `ad3f8e91`: old graph agents fetch metrics, line items, market cap, news/insiders, then call one LLM prompt per persona.
