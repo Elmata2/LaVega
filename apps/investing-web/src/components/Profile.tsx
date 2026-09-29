@@ -7,7 +7,6 @@ import { BrokerSettings } from "./BrokerSettings.js";
 import { LayoutPicker } from "./LayoutPicker.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import type { InvestingModuleId, InvestingWidgetId } from "@lavega/core";
 
 /* Everything that is a setting rather than a place to work: broker
  * credentials, which tabs and which Overview cards are switched on, and the
@@ -99,12 +98,8 @@ export function Profile() {
             <LayoutPicker
               kind="module"
               enabled={layout.modules}
-              onChange={(next: InvestingModuleId[]) => {
-                const record: Partial<Record<InvestingModuleId, boolean>> = {};
-                for (const id of ["positions", "net-worth", "agents"] as const)
-                  record[id] = next.includes(id);
-                layout.setModules(record);
-              }}
+              disabled={layout.status === "loading"}
+              onChange={(id, on) => layout.setModules({ [id]: on })}
             />
             {layout.saveError && (
               <p role="alert" className="mt-3 text-sm text-negative">
@@ -127,19 +122,8 @@ export function Profile() {
             <LayoutPicker
               kind="widget"
               enabled={layout.widgets}
-              onChange={(next: InvestingWidgetId[]) => {
-                const record: Partial<Record<InvestingWidgetId, boolean>> = {};
-                for (const id of [
-                  "performance",
-                  "allocation",
-                  "kpis",
-                  "risk",
-                  "sectors",
-                  "agent",
-                ] as const)
-                  record[id] = next.includes(id);
-                layout.setWidgets(record);
-              }}
+              disabled={layout.status === "loading"}
+              onChange={(id, on) => layout.setWidgets({ [id]: on })}
             />
             {layout.saveError && (
               <p role="alert" className="mt-3 text-sm text-negative">

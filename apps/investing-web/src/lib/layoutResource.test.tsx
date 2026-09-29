@@ -56,6 +56,13 @@ function ControlProbe() {
       </button>
       <button
         type="button"
+        data-testid="toggle-net-worth"
+        onClick={() => layout.setModules({ "net-worth": false })}
+      >
+        toggle net worth
+      </button>
+      <button
+        type="button"
         data-testid="toggle-sectors"
         onClick={() => layout.setWidgets({ sectors: false })}
       >
@@ -156,7 +163,7 @@ test("a failed or unauthorized fetch keeps the registry defaults instead of erro
   act(() => root.unmount());
 });
 
-test("a module toggle made before the initial fetch resolves survives that fetch", async () => {
+test("a module toggle made before the initial fetch resolves survives that fetch, without undoing the server's other choices", async () => {
   let resolveGet: (value: Response) => void = () => {};
   vi.stubGlobal(
     "fetch",
@@ -170,12 +177,14 @@ test("a module toggle made before the initial fetch resolves survives that fetch
   const { container, root } = render();
   act(() => root.render(<ControlProbe />));
 
-  await step(() => click(container, "toggle-agents"));
-  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  await step(() => click(container, "toggle-net-worth"));
+  expect(text(container, "modules")).toBe("overview,positions,agents");
 
-  await step(() => resolveGet(new Response(JSON.stringify({ modules: {}, widgets: {} }))));
+  await step(() =>
+    resolveGet(new Response(JSON.stringify({ modules: { agents: false }, widgets: {} }))),
+  );
   expect(text(container, "status")).toBe("ready");
-  expect(text(container, "modules")).toBe("overview,positions,net-worth");
+  expect(text(container, "modules")).toBe("overview,positions");
   act(() => root.unmount());
 });
 
@@ -197,13 +206,27 @@ test("a toggle made before the initial fetch resolves is saved on top of the ser
   const { container, root } = render();
   act(() => root.render(<ControlProbe />));
 
-  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-net-worth"));
   await step(() =>
-    resolveGet(new Response(JSON.stringify({ modules: {}, widgets: { sectors: false } }))),
+    resolveGet(
+      new Response(JSON.stringify({ modules: { agents: false }, widgets: { sectors: false } })),
+    ),
   );
 
-  expect(bodies).toEqual([{ modules: { agents: false }, widgets: { sectors: false } }]);
+  expect(bodies).toEqual([
+    { modules: { agents: false, "net-worth": false }, widgets: { sectors: false } },
+  ]);
   expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  act(() => root.unmount());
+});
+
+test("a toggle after the load changes only its own id and keeps the server's other choices", async () => {
+  const { puts } = stubQueuedPuts({ modules: { agents: false }, widgets: {} });
+  const { container, root } = await mountReady();
+
+  await step(() => click(container, "toggle-net-worth"));
+  expect(puts[0]!.body).toEqual({ modules: { agents: false, "net-worth": false }, widgets: {} });
+  expect(text(container, "modules")).toBe("overview,positions");
   act(() => root.unmount());
 });
 

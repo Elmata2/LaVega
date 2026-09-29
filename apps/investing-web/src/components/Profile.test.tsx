@@ -701,3 +701,62 @@ test("signing out and in as another user drops the first user's layout and unsen
   expect(tab("/positions")).toBeNull();
   act(() => root.unmount());
 });
+
+test("a switch flipped after a failed load saves only that choice, so a module the user hid stays hidden", async () => {
+  const gets: Array<(response: Response) => void> = [];
+  const bodies: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/investing/layout" && init?.method === "PUT") {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (String(input) === "/api/investing/layout")
+        return new Promise<Response>((resolve) => gets.push(resolve));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await settle();
+  });
+  const control = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+
+  expect(gets).toHaveLength(1);
+  expect(control("Net worth in the top bar").getAttribute("aria-disabled")).toBe("true");
+  expect(control("Sector allocation on Overview").getAttribute("aria-disabled")).toBe("true");
+
+  await act(async () => {
+    gets[0]!(new Response("", { status: 500 }));
+    await settle();
+  });
+  expect(control("Net worth in the top bar").getAttribute("aria-disabled")).not.toBe("true");
+
+  await act(async () => {
+    control("Net worth in the top bar").click();
+    await settle();
+  });
+  expect(gets).toHaveLength(2);
+  expect(bodies).toEqual([]);
+
+  await act(async () => {
+    gets[1]!(new Response(JSON.stringify({ modules: { agents: false }, widgets: {} })));
+    await settle();
+  });
+  expect(bodies).toEqual([{ modules: { agents: false, "net-worth": false }, widgets: {} }]);
+  expect(control("Agents in the top bar").getAttribute("aria-checked")).toBe("false");
+  expect(
+    container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]'),
+  ).toBeNull();
+  act(() => root.unmount());
+});

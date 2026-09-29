@@ -35,15 +35,41 @@ test("module picker locks Overview's switch and lists every other module", () =>
   root.unmount();
 });
 
-test("clicking a switch reports the next enabled set, not a mutation of the old one", () => {
+test("clicking a switch reports only that id and its new state", () => {
   const onChange = vi.fn();
   const { container, root } = render();
   act(() => {
     root.render(<LayoutPicker kind="widget" enabled={["performance", "kpis"]} onChange={onChange} />);
   });
   const switches = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="switch"]'));
-  const performanceSwitch = switches.find((el) => el.getAttribute("aria-checked") === "true")!;
-  act(() => performanceSwitch.click());
-  expect(onChange).toHaveBeenCalledWith(["kpis"]);
+  act(() => switches.find((el) => el.getAttribute("aria-label") === "Performance on Overview")!.click());
+  act(() => switches.find((el) => el.getAttribute("aria-label") === "Sector allocation on Overview")!.click());
+  expect(onChange.mock.calls).toEqual([
+    ["performance", false],
+    ["sectors", true],
+  ]);
+  root.unmount();
+});
+
+test("a disabled picker shows every switch as disabled and reports nothing", () => {
+  const onChange = vi.fn();
+  const { container, root } = render();
+  act(() => {
+    root.render(
+      <LayoutPicker
+        kind="module"
+        enabled={["overview", "positions", "net-worth", "agents"]}
+        onChange={onChange}
+        disabled
+      />,
+    );
+  });
+  const switches = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="switch"]'));
+  for (const el of switches) {
+    expect(el.disabled).toBe(true);
+    expect(el.getAttribute("aria-disabled")).toBe("true");
+  }
+  act(() => switches[1]!.click());
+  expect(onChange).not.toHaveBeenCalled();
   root.unmount();
 });

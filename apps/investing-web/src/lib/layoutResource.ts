@@ -61,8 +61,10 @@ export type InvestingLayoutResource = {
   status: "loading" | "ready";
   modules: Array<InvestingModuleId | typeof HOME_MODULE>;
   widgets: InvestingWidgetId[];
-  setModules: (next: Partial<Record<InvestingModuleId, boolean>>) => void;
-  setWidgets: (next: Partial<Record<InvestingWidgetId, boolean>>) => void;
+  /** Each setter takes only the ids the reader changed and merges them into
+   *  the stored choices; an id it leaves out keeps whatever the server holds. */
+  setModules: (changed: Partial<Record<InvestingModuleId, boolean>>) => void;
+  setWidgets: (changed: Partial<Record<InvestingWidgetId, boolean>>) => void;
   saveError: string | null;
 };
 
@@ -162,10 +164,11 @@ function createLayoutStore() {
     });
   }
 
-  function applyChange<K extends "modules" | "widgets">(kind: K, next: InvestingLayout[K]) {
+  function applyChange<K extends "modules" | "widgets">(kind: K, changed: InvestingLayout[K]) {
     if (disposed) return;
-    localEdits = { ...localEdits, [kind]: next };
-    queue.pending = { ...displayed(queue), [kind]: next };
+    localEdits = { ...localEdits, [kind]: { ...localEdits[kind], ...changed } };
+    const current = displayed(queue);
+    queue.pending = { ...current, [kind]: { ...current[kind], ...changed } };
     if (queue.load === "idle" || queue.load === "failed") load();
     pump();
     publish();
@@ -180,10 +183,10 @@ function createLayoutStore() {
       };
     },
     getSnapshot: () => snapshot,
-    setModules: (next: Partial<Record<InvestingModuleId, boolean>>) =>
-      applyChange("modules", next),
-    setWidgets: (next: Partial<Record<InvestingWidgetId, boolean>>) =>
-      applyChange("widgets", next),
+    setModules: (changed: Partial<Record<InvestingModuleId, boolean>>) =>
+      applyChange("modules", changed),
+    setWidgets: (changed: Partial<Record<InvestingWidgetId, boolean>>) =>
+      applyChange("widgets", changed),
     dispose() {
       disposed = true;
     },

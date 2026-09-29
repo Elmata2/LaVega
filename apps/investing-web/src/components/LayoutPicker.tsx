@@ -6,22 +6,31 @@ import type { InvestingModuleId, InvestingWidgetId } from "@lavega/core";
  * role="switch" button rather than a new shadcn Switch import — investing-web
  * has no Switch component yet and one control does not earn a new dependency. */
 
+/* `onChange` reports only the switch that moved, so a caller saves that one
+ * choice instead of re-stating every id (which would pin today's defaults
+ * and could overwrite choices it hasn't loaded yet). */
 type LayoutPickerProps =
   | {
       kind: "module";
       enabled: Array<InvestingModuleId | typeof HOME_MODULE>;
-      onChange: (next: InvestingModuleId[]) => void;
+      onChange: (id: InvestingModuleId, on: boolean) => void;
+      disabled?: boolean;
     }
-  | { kind: "widget"; enabled: InvestingWidgetId[]; onChange: (next: InvestingWidgetId[]) => void };
+  | {
+      kind: "widget";
+      enabled: InvestingWidgetId[];
+      onChange: (id: InvestingWidgetId, on: boolean) => void;
+      disabled?: boolean;
+    };
 
 function Switch({
   on,
-  locked,
+  disabled,
   label,
   onToggle,
 }: {
   on: boolean;
-  locked?: boolean;
+  disabled?: boolean;
   label: string;
   onToggle: () => void;
 }) {
@@ -31,7 +40,8 @@ function Switch({
       role="switch"
       aria-checked={on}
       aria-label={label}
-      disabled={locked}
+      disabled={disabled}
+      aria-disabled={disabled}
       onClick={onToggle}
       className={`relative h-6 w-11 shrink-0 rounded-pill border border-border transition-colors disabled:opacity-60 ${on ? "bg-primary" : "bg-secondary"}`}
     >
@@ -61,12 +71,10 @@ export function LayoutPicker(props: LayoutPickerProps) {
               </div>
               <Switch
                 on={isOn}
-                locked={locked}
+                disabled={locked || props.disabled}
                 label={`${m.label} in the top bar`}
                 onToggle={() => {
-                  if (locked) return;
-                  const next = isOn ? [...on].filter((id) => id !== m.id) : [...on, m.id];
-                  props.onChange(next.filter((id): id is InvestingModuleId => id !== HOME_MODULE));
+                  if (m.id !== HOME_MODULE) props.onChange(m.id, !isOn);
                 }}
               />
             </li>
@@ -89,11 +97,9 @@ export function LayoutPicker(props: LayoutPickerProps) {
             </div>
             <Switch
               on={isOn}
+              disabled={props.disabled}
               label={`${w.label} on Overview`}
-              onToggle={() => {
-                const next = isOn ? [...on].filter((id) => id !== w.id) : [...on, w.id];
-                props.onChange(next);
-              }}
+              onToggle={() => props.onChange(w.id, !isOn)}
             />
           </li>
         );
