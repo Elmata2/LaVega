@@ -329,7 +329,7 @@ export async function runPortfolioConversation({
   }
   const text = await conversationProvider.reply({
     model,
-    system: `${agent.instructions}\n${agent.criteria}\nEducational analysis only. Do not give trade instructions. Use only provided portfolio facts.`,
+    system: `${agent.instructions}\n${agent.criteria}\nEducational analysis only. Do not give trade instructions. Use only provided portfolio facts. Answer in short, plain conversational prose. Use short paragraphs and, at most, one simple bullet list when it truly helps. Never use headings, bold, italics, or an "Examples" section.`,
     prompt: [
       "Typed Jev judgment for this lens:",
       JSON.stringify({ signal: choice, confidence }),

@@ -822,6 +822,58 @@ test("agent route opens focused chat with the account positions", async () => {
   root.unmount();
 });
 
+test("an assistant reply's markdown renders through AgentMessageText, but a user's own literal markdown stays plain text", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/agents/portfolio/conversation" && init?.method === "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ result: { ...agentConversation, text: "This is **bold** advice." } }),
+          ),
+        );
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents/bill_ackman"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const input = container.querySelector<HTMLInputElement>("#agent-message")!;
+  const form = input.closest("form")!;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, "Tell me **bold** things");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const userBubble = [...container.querySelectorAll(".justify-end p")].find((node) =>
+    node.textContent?.includes("Tell me"),
+  );
+  expect(userBubble?.textContent).toContain("**bold**");
+  expect(userBubble?.querySelector("strong")).toBeNull();
+
+  const assistantBubble = [...container.querySelectorAll(".justify-start")].find((node) =>
+    node.textContent?.includes("bold advice"),
+  );
+  expect(assistantBubble?.querySelector("strong")?.textContent).toBe("bold");
+  expect(assistantBubble?.textContent).not.toContain("**");
+  root.unmount();
+});
+
 test("Overview shows an alert linking to /profile#status when a broker sync has a problem", async () => {
   vi.stubGlobal(
     "fetch",

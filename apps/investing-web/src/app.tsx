@@ -18,6 +18,7 @@ import {
   type RiskRange,
 } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
+import { AgentMessageText } from "./components/AgentMessageText";
 import { AllocationDonut } from "./components/AllocationDonut";
 import {
   AuthForm,
@@ -728,11 +729,15 @@ function AgentView() {
               key={`${message.role}-${index}`}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <p
-                className={`max-w-[86%] whitespace-pre-line rounded-[18px] px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
-              >
-                {message.content}
-              </p>
+              {message.role === "user" ? (
+                <p className="max-w-[86%] whitespace-pre-line rounded-[18px] bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+                  {message.content}
+                </p>
+              ) : (
+                <div className="max-w-[86%] rounded-[18px] bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                  <AgentMessageText text={message.content} />
+                </div>
+              )}
             </div>
           ))}
           {sending && (
