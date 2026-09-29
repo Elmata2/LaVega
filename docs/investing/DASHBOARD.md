@@ -419,6 +419,43 @@ The net-worth chart has its own range, crosshair, and zoom state. Do not synchro
 
 Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega/tree/prototype-networth-85/apps/investing-chart-prototype).
 
+### Personal's opt-in share (owner's own bank money)
+
+The owner may opt in, from Personal's (`apps/web`) own profile settings, to
+share their Personal "Totale positie" (the consolidated EUR total Overzicht
+shows — `consolidate()` in `packages/core/src/ingest.ts`) into this chart. Off
+by default; nothing crosses the network until the owner turns the switch on.
+
+What crosses the boundary, and nothing else: while the switch is on and the
+Personal vault is unlocked, after every sync/import and on unlock, Personal
+computes today's total in EUR and sends `PUT /api/personal/net-worth-total`
+with exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
+balance breakdown or entity name ever leaves the browser, and a day with any
+unknown balance sends nothing at all — never a partial sum. Turning the switch
+off sends `DELETE /api/personal/net-worth-total`, which removes every total
+the account ever shared.
+
+The number is stored server-side, in the clear (not end-to-end encrypted like
+the vault backup), in `personal.net_worth_totals` — Personal owns every write;
+Investing only reads. Investing's read side is `GET
+/api/investing/personal-net-worth`, a small per-tenant list kept deliberately
+outside `InvestingDashboardData`'s cache/version machinery (that cache is
+built for the much larger broker/price read model, and folding a second,
+independently-written source into it would risk serving a stale total). The
+net-worth-web client (`NetWorthPage.tsx`) fetches it separately and folds it
+into each range's portfolio series with `mergeInPersonalNetWorth`
+(`@lavega/core`): the latest total on or before a date is carried forward,
+a date before the owner's first shared total gets no Personal part, and the
+chart's own "Total" line and headline figure become portfolio value plus
+Personal value. Returns, risk, and allocation elsewhere keep reading the
+unmerged, portfolio-only series and never include Personal money.
+
+When a total exists, the chart adds a third stacked band, "Bank accounts
+(Personal, as of {latest shared date})", alongside Investments and Cash. When
+nothing has ever been shared, `mergeInPersonalNetWorth` and the chart's own
+optional fields make this a no-op: the chart renders exactly as it did before
+this existed.
+
 ## Loading, empty, and error states
 
 Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
