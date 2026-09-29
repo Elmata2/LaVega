@@ -226,10 +226,6 @@ test("max drawdown still removes an owner withdrawal even after an isolated inco
 });
 
 test("measures risk through the last known date instead of hiding it when today is still settling", () => {
-  // Mirrors production evidence: 275 clean days of history, but the latest
-  // date has a price that has not resolved yet (a close still settling).
-  // risk.ts:92-93 used to gate the whole card on that raw last point instead
-  // of the last KNOWN one, hiding 275 real observations behind "unavailable".
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
   );
