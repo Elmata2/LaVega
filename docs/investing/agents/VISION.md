@@ -20,7 +20,7 @@ for what's built today versus planned.)
 The org chart is unchanged from a real fund. We just swapped the humans for AI.
 
 ```
- FUND  "Alpha One"                    capital · mandate · a
+ FUND  "Alpha One"                    capital · mandate · always-on
  │
  ├─ CIO  →  capital allocator         decides how much each strategy gets
  │
@@ -43,7 +43,8 @@ The org chart is unchanged from a real fund. We just swapped the humans for AI.
 | Portfolio manager | **Portfolio construction** — turns views into target positions |
 | CIO / capital allocation | **Allocator** — distributes capital across strategies |
 | Chief risk officer | **Risk model** — hard limits the analysts cannot override |
-| Trading desk | **Executio*Ledger** — positions, P&L, and every decision, forever |
+| Trading desk | **Execution** — places orders through a broker |
+| Back office / books | **Ledger** — positions, P&L, and every decision, forever |
 
 ## Everything is pluggable
 
@@ -64,7 +65,7 @@ mix and match at every one:
   approximations* of these investors' public philosophies — not the actual
   individuals, and not endorsements.)
 - **Strategies** bundle analysts together with a policy for blending their views.
-- **The allocator (CIO)** iluggable — start with a human-set dial, then
+- **The allocator (CIO)** is *also* pluggable — start with a human-set dial, then
   drop in a dynamic allocator (risk-parity, a Millennium-style "feed the winners /
   cut the drawdowns" model, or even an LLM CIO that reasons about market regime and
   each pod's track record).
@@ -85,7 +86,7 @@ clock and the broker:**
 
 Because it's **one code path by design**, what you backtest is what trades — no
 separate "research" implementation that quietly diverges from production. (Two of
-the three modes exist today: the backtester is `run_cycle` looped o
+the three modes exist today: the backtester is `run_cycle` looped over history with
 a simulated broker, and "run it as of today" is the same `run_cycle` as a single
 live-clock tick — so PIT, fail-loud, and master risk hold for every tick by
 construction. What separates run-today from true paper mode is the ledger's read
@@ -108,7 +109,7 @@ A "cycle" is one tick — one trading day in a backtest, or one scheduled run wh
         ▼
   risk model                hard caps clamp or veto (conviction requests, risk disposes)
         ▼
-  execution                 target vs.  orders to place
+  execution                 target vs. broker reality → the orders to place
         ▼
   ledger                    persist the decision, the thesis, the fills, the new NAV
 ```
@@ -125,7 +126,13 @@ A real shop trades its book *and* researches new ideas at the same time. So does
  │   Event  25% ██          │        │   tilt the allocator 70/30"│
  │   Macro  20% ██          │        │ run it over years of history│
  │   Growth 15% █           │        └─────────────┬──────────────┘
- └────────────┬────────�s, and new allocation policies — and the winners
+ └────────────┬─────────────┘    promote if it wins │
+              └──────────◄─────────────────────────-┘
+                  the live fund hot-swaps to the better mandate
+```
+
+You don't "graduate" from backtest to live. The fund runs continuously while the lab
+explores new analysts, new strategies, and new allocation policies — and the winners
 get promoted into the running fund. The lab operates at two levels:
 
 - **Level 1 — you run the lab.** You propose the candidates ("add Munger, drop PEAD,
@@ -143,7 +150,7 @@ get promoted into the running fund. The lab operates at two levels:
 These principles are the difference between a toy and a system you can actually
 reason about:
 
-- **Point-in-time honesty.** On any simund may only use data that
+- **Point-in-time honesty.** On any simulated date, the fund may only use data that
   was actually public by then. No lookahead, ever. This is what makes a backtest mean
   something.
 - **The backtest is the live system.** Same pipeline, same code. If it can't be
@@ -162,7 +169,7 @@ reason about:
 
 ## The goal
 
-Build, in the open, hedge fund that genuinely tries to **outperform the market** —
+Build, in the open, an AI hedge fund that genuinely tries to **outperform the market** —
 and that is honest enough about its own performance to tell you when it doesn't.
 
 See [ROADMAP.md](./ROADMAP.md) for what's built, what's next, and where you can help.
