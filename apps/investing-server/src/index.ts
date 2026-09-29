@@ -66,6 +66,7 @@ import {
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
+import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 import { useDatabaseSource } from "./systemOneUsage.js";
 import {
   createDevFixtureBrokerData,
@@ -188,6 +189,7 @@ export type RuntimeAppOptions = {
   investingLayoutStore?: InvestingLayoutStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
+  sectorStore?: SectorProfileStore;
   /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
@@ -871,7 +873,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce, answerPortfolioConversation });
   };
   const sectorDependencies = {
-    sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
   };
   if (!dsn)
     return withPortfolioAgentRoute(
