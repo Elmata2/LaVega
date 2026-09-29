@@ -368,7 +368,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     c.json(await investingLayoutStore.get(await resolveTenantId())),
   );
   investingApp.put("/api/investing/layout", async (c) => {
-    const body: unknown = await c.req.json().catch(() => ({}));
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return c.json({ problems: ["layout must be a JSON object"] }, 400);
     const layout = validateInvestingLayout(body);
     const tenantId = await resolveTenantId();
     await investingLayoutStore.set({ tenantId, ...layout });

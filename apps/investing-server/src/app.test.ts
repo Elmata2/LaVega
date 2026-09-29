@@ -169,15 +169,24 @@ test("layout route persists per-tenant choices and drops unknown ids", async () 
   });
 });
 
-test("layout route sanitizes a malformed body instead of rejecting it", async () => {
+test("layout route rejects a body that is not a JSON object and keeps the stored layout", async () => {
   const investingApp = createApp({ investingLayoutStore: createInMemoryInvestingLayoutStore() });
-  const response = await investingApp.request("/api/investing/layout", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: "not json",
+  const put = (body: string) =>
+    investingApp.request("/api/investing/layout", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  expect((await put(JSON.stringify({ modules: { agents: false }, widgets: {} }))).status).toBe(200);
+
+  for (const body of ["not json", "null", "[]", '"layout"']) {
+    const response = await put(body);
+    expect(response.status, body).toBe(400);
+  }
+  expect(await (await investingApp.request("/api/investing/layout")).json()).toEqual({
+    modules: { agents: false },
+    widgets: {},
   });
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ modules: {}, widgets: {} });
 });
 
 test("benchmark search route returns results after persisted consent", async () => {
