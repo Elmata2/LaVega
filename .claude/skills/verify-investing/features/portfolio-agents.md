@@ -12,9 +12,10 @@ OpenAI-compatible endpoint (OpenRouter by default).
 - one-shot analysis: `Analyse portfolio` (`Agent reading…` while pending) posts
   `/api/agents/portfolio/run` and shows a signal (`bullish` / `bearish` / `neutral` /
   `no_view`) with a confidence.
-- conversation: `Open conversation with <name>` opens `/agents/:agentId`. The positions panel
-  there is `Positions in conversation`. Each turn posts `/api/agents/portfolio/conversation`
-  with the last 12 turns.
+- conversation: `Open conversation with <name>` opens `/agents/:agentId`. The positions
+  panel's accessible name is `Positions in conversation`. The visible heading is
+  `Your positions`. Empty copy is `No positions available.` Each turn posts
+  `/api/agents/portfolio/conversation` with the last 12 turns.
 - failure states: `Agents unavailable`, `No portfolio agents available.`, `Agent not found`,
   `Agent run failed.`, `Agent reply failed.`
 
@@ -33,7 +34,12 @@ node $C assets --target prod --path /investing/agents/warren_buffett
 node $C api POST /api/agents/portfolio/conversation --target preview \
   --body '{"agentId":"warren_buffett","prompt":"What is my biggest risk?"}'
 node $C browser open --target prod                          # then snapshot, click the card
+node $C browser screenshot --png /tmp/lavega-verify-investing/evidence/munger-chat.png
 ```
+
+The PNG path is `/tmp/lavega-verify-investing/evidence/<name>.png`. `browser screenshot`
+creates that directory. A repo path or `$TMPDIR` is `path-rejected`. Do not retry under a
+different folder.
 
 Proof it works: the catalog returns six agents, a run returns `result` with a `signal`, and a
 conversation returns `result.text` plus `judgment`.
@@ -42,6 +48,9 @@ conversation returns `result.text` plus `judgment`.
 
 - `run` and `conversation` call a paid model on every request. They are not reads; keep them
   off `--target prod` unless the user asked.
+- On the local file vault, both return 502 `Agent run storage failed to start` while the
+  vault is `empty` or `locked`. That happens before the model call. A local model proof
+  needs an unlocked vault and `LAVEGA_AGENT_API_KEY` or `OPENROUTER_API_KEY`.
 - Model errors answer `502` with `problems`, not `503`. An unknown `agentId` or an empty
   `prompt` answers `400`.
 - The key is `LAVEGA_AGENT_API_KEY`, then `OPENROUTER_API_KEY`. The model is

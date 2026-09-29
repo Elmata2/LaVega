@@ -21,9 +21,12 @@ Empty and missing copy, verbatim:
 - description under that title: `Connect a broker or import a statement to see your investments.`
 - unknown symbol: `Position not found`
 - URL without a symbol: `No position selected`
-- unpriced value cell: `Value unknown`
-- missing FX: `FX rate missing`
-- missing return: `Return unavailable`
+- list, unpriced value cell: `Value unknown`
+- list, missing FX: `FX rate missing`
+- list, missing return: `Return unavailable`
+- detail current value uses the same `FX rate missing` or `Value unknown`
+- detail total return, when it cannot be calculated, is `Unavailable`
+- detail missing-FX banner: `FX rate missing. Return cannot be calculated.`
 
 ## Drive
 
