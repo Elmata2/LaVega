@@ -30,12 +30,14 @@ import {
   buildInvestingDashboard,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
+  type InvestingLayoutStore,
 } from "@lavega/core";
 import {
   createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
+  createInMemoryInvestingLayoutStore,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
@@ -183,6 +185,7 @@ export type RuntimeAppOptions = {
   priceStore: PriceStore;
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
+  investingLayoutStore?: InvestingLayoutStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
   /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
@@ -211,6 +214,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const priceStore = options.priceStore;
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const investingLayoutStore =
+    options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
@@ -878,6 +883,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         store: priceStore,
         fxProvider,
         benchmarkSelectionStore,
+        investingLayoutStore,
         marketDataConsentStore,
         dashboardReader,
         onPriceDataChanged,
@@ -895,6 +901,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       store: priceStore,
       fxProvider,
       benchmarkSelectionStore,
+      investingLayoutStore,
       marketDataConsentStore,
       dashboardReader,
       onPriceDataChanged,

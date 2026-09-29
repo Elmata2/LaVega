@@ -499,9 +499,11 @@ export type PreferencesRepository = {
   setBenchmarkSymbols(symbols: readonly string[]): Promise<void>;
   getMarketDataConsent(): Promise<unknown | null>;
   setMarketDataConsent(decision: unknown): Promise<void>;
+  getLayout(): Promise<unknown | null>;
+  setLayout(layout: unknown): Promise<void>;
 };
 
-/** Benchmarks and market-data consent share one row, so each write names its own column. */
+/** Benchmarks, market-data consent and layout share one row, so each write names its own column. */
 export function createPreferencesRepository(
   db: Database,
   userId: string | undefined | null,
@@ -528,6 +530,8 @@ export function createPreferencesRepository(
     setBenchmarkSymbols: (symbols) => write("benchmark_symbols", [...symbols]),
     getMarketDataConsent: () => read<unknown | null>("market_data_consent", null),
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
+    getLayout: () => read<unknown | null>("layout", null),
+    setLayout: (layout) => write("layout", layout),
   };
 }
 

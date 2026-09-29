@@ -4,14 +4,17 @@ import {
   LOCAL_TENANT_ID,
   buildHistoricalRisk,
   validateBenchmarkSymbols,
+  validateInvestingLayout,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
+  type InvestingLayoutStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
+  createInMemoryInvestingLayoutStore,
   createInMemoryPriceStore,
   createYahooPriceProvider,
   createFrankfurterFxProvider,
@@ -108,6 +111,7 @@ type PriceDependencies = {
   fxProvider: ReturnType<typeof createFrankfurterFxProvider>;
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
   benchmarkSelectionStore: BenchmarkSelectionStore;
+  investingLayoutStore: InvestingLayoutStore;
   benchmarkSearch: (
     query: string,
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
@@ -147,6 +151,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const dashboardReader = dependencies.dashboardReader ?? (async () => emptyInvestingDashboard());
   const benchmarkSelectionStore =
     dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const investingLayoutStore =
+    dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const benchmarkSearch =
     dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore =
@@ -368,6 +374,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (!(await hasYahooConsent(await resolveTenantId())))
       return c.json({ consentRequired: true, problems: ["Yahoo Finance consent required"] }, 428);
     return c.json(await benchmarkSearch(query));
+  });
+  investingApp.get("/api/investing/layout", async (c) =>
+    c.json(await investingLayoutStore.get(await resolveTenantId())),
+  );
+  investingApp.put("/api/investing/layout", async (c) => {
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return c.json({ problems: ["layout must be a JSON object"] }, 400);
+    const layout = validateInvestingLayout(body);
+    const tenantId = await resolveTenantId();
+    await investingLayoutStore.set({ tenantId, ...layout });
+    return c.json(layout);
   });
   investingApp.get("/api/market-data/consent", async (c) =>
     c.json(await marketDataConsentStore.get(await resolveTenantId())),

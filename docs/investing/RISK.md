@@ -12,7 +12,7 @@ For each adjacent, positive, finite account valuation, daily return is `(ending 
 
 Dates are sorted. Duplicate dates, unknown values, non-positive values and intervals longer than four calendar days break continuity. Returns at or below -100% invalidate the interval; values are never clipped. The next valid valuation may start a new interval, but never bridges the invalid interval. The full-window risk gate still rejects the incomplete window. Beta pairs must share both their start and end dates.
 
-The card measures the most recent run of complete dates inside the selected range and needs at least 60 valid daily returns in it. A date with a missing price, unknown cash or unsupported ownership ends that run; earlier dates are left out, and the card states the date the window starts and why. A day a market was closed is not a gap: when a later close exists, the last close is the true value. Only a close carried past the latest one (a session still settling, usually today) is an estimate, and trailing estimated days are left out of the window. The start may move later than the range start, but never silently: `risk.from` and a reason name it. The UI must state each data limit, show the observation count and never display invalid numbers as valid estimates.
+The card measures volatility, beta, alpha and the observation counts over every date in the selected range and needs at least 60 valid daily returns. A date with a missing price, unknown cash or unsupported ownership removes only the daily return intervals that touch it; the dates around it still count. Maximum drawdown needs a continuous compounded path, so it still uses the most recent unbroken run of complete dates and reports where that run starts as `risk.drawdownFrom`. A day a market was closed is not a gap: when a later close exists, the last close is the true value. Only a close carried past the latest one (a session still settling, usually today) is an estimate; if today itself is incomplete the card is unavailable. The drawdown start may move later than the range start, but never silently: `risk.drawdownFrom` and a reason name it. The UI must state each data limit, show the observation count and never display invalid numbers as valid estimates.
 
 ## Metrics
 
@@ -43,7 +43,7 @@ To unlock reliable figures: reconcile every broker cash currency from a dated ba
 
 Axis: selected risk period. Persona: signed-in account owner. Screen: `/investing`.
 
-1. One year: risk window starts at 2026-06-12 for the checked account, with 73 returns as of 2026-09-23. Volatility and drawdown show estimates; the cash reconciliation caveat above still applies.
+1. One year (2026-09-28, after #170): risk runs 2025-10-08 to 2026-09-28 with 275 valid returns and 209 benchmark pairs; maximum drawdown is measured from 2026-05-05. Before #170 the whole card started at 2026-05-05 with 104 returns. Volatility and drawdown show estimates; the cash reconciliation caveat above still applies.
 2. Six months: select `6 months` in `Risk period`. Confirm the selected range and any stated data limits; do not infer cash coverage from a non-null value alone.
 3. Account history: select `Account history`. History starts at the first dated account evidence, not the earliest market quote. Confirm the stated risk start and data limits.
 4. Method disclosure: expand `How to read these metrics`. Read end-of-day cash-flow convention, fixed latest FX, 0% cash rate and price-only benchmark limits. Collapse and re-open it.

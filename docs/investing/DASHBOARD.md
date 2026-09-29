@@ -13,13 +13,14 @@ The dashboard answers four questions:
 3. What does the portfolio hold now?
 4. What produced the return for one position?
 
-The overview contains these views:
+The app is a full-window shell with tabs in a top bar (Overview, and whichever of Positions, Net worth and Agents the owner has switched on) and a profile page for brokers, tabs and cards. See `docs/superpowers/specs/2026-09-28-investing-shell-design.md` for the shell's layout, module and widget model. Overview itself is a grid of independently hideable cards:
 
 - A portfolio chart in EUR value mode or indexed-return mode.
 - A compact allocation donut.
-- A current-positions table.
-- A separate stacked net-worth chart for invested value and cash.
-- A detail page for each open or closed position.
+- Key figures, risk & composition, and sector allocation.
+- A portfolio agent card.
+
+The positions table and the stacked net-worth chart moved to their own tabs (`/positions`, `/net-worth`); they are no longer part of Overview.
 
 All market charts use daily end-of-day data. Do not add candlesticks, OHLC controls, or intraday behavior. The dashboard does not change the personal-finance dashboard.
 
@@ -203,23 +204,17 @@ lease; serial syncs are covered by these changes.
 
 ## Overview layout
 
-Use the chart-and-right-rail layout selected by the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)).
+The chart-and-right-rail layout from the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)) shaped the original widget choices; the investing shell (`docs/superpowers/specs/2026-09-28-investing-shell-design.md`) superseded it with an independently hideable widget grid.
 
-Implementation status: production overview uses this responsive reading order. KPI values and broker, price, vault, and cache states stay in the right rail on wide screens and follow the performance chart on narrow screens. Refresh failures keep the last valid dashboard payload visible.
+Implementation status: refresh failures keep the last valid dashboard payload visible.
 
-On wide screens:
-
-- Put the portfolio chart in the main column.
-- Put a compact right rail beside it. Order right-rail content as KPIs, allocation donut, then sync, vault, and price-cache status chips.
-- Put the positions table at full width below the chart and rail.
-- Put the stacked net-worth chart at full width below the positions table.
-
-The KPI block shows current portfolio value, daily change, and total return. Status controls must not compete visually with these values.
-When portfolio history is still empty but current positions do have market values, show the priced-positions total in that value slot and state that it excludes cash and history.
-
-On narrow screens, use this order: portfolio chart, KPIs, allocation donut, status chips, positions table, net-worth chart. Keep tables and charts full width. Do not hide required information behind a desktop-only hover state.
+Overview's card order and column placement (left/right/full-width) are owned by the widget registry described in `docs/superpowers/specs/2026-09-28-investing-shell-design.md` §3-4, not by this document. The positions table and the net-worth chart are on their own tabs and are laid out by those tabs' own pages, each full width.
 
 Prototype reference: [`prototype-layout-78`](https://github.com/Elmata2/LaVega/tree/prototype-layout-78).
+
+The per-tenant module and widget toggles persist in `investing.preferences.layout` (migration
+`db/migrations/0016_investing_layout.sql`). Apply it with `pnpm db:migrate` before deploying
+this shell; without it, `GET`/`PUT /api/investing/layout` fail against that tenant's row.
 
 ## Portfolio chart modes
 

@@ -1,16 +1,7 @@
-import { useState } from "react";
 import type { RiskRange } from "@lavega/core";
-import { usePortfolioSummary } from "../lib/summaryResource";
+import type { SummaryState } from "../lib/summaryResource.js";
 import { shortDate } from "../lib/dates.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-
-const barColors = [
-  "hsl(var(--chart-blue))",
-  "hsl(var(--chart-teal))",
-  "hsl(var(--chart-purple))",
-  "hsl(var(--chart-amber))",
-  "hsl(var(--chart-coral))",
-];
 
 const percent = (value: number | null | undefined): string =>
   value === null || value === undefined || !Number.isFinite(value)
@@ -24,27 +15,37 @@ const decimal = (value: number | null): string =>
     ? "Unavailable"
     : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
+/** Presentational: Overview owns the range/benchmark selection and the single
+ *  `usePortfolioSummary` read shared with SectorAllocationCard (the endpoint
+ *  is the slowest call on the page), so this card only renders `state` and
+ *  reports the reader's choices back through `onRangeChange`/`onBenchmarkChange`. */
 export function PortfolioSummaryCard({
   currency,
-  revision = "",
   stillLoading = false,
+  state,
+  refresh,
+  range,
+  onRangeChange,
+  benchmark,
+  onBenchmarkChange,
 }: {
   currency?: string;
-  revision?: string;
   /** A broker or price sync is in flight, so the reasons below are a status
    *  rather than a verdict. Passed in rather than read here: this card is
    *  presentational, and subscribing to the sync session from inside it made
    *  mounting it start polling — which an existing test caught by counting
    *  four fetches where it expects one. */
   stillLoading?: boolean;
+  state: SummaryState;
+  refresh: () => void;
+  range: RiskRange;
+  onRangeChange: (range: RiskRange) => void;
+  benchmark: string;
+  onBenchmarkChange: (benchmark: string) => void;
 }) {
-  const [range, setRange] = useState<RiskRange>("1Y");
-  const [selection, setSelection] = useState({ value: "", revision });
-  const benchmark = selection.revision === revision ? selection.value : "";
-  const { state, refresh } = usePortfolioSummary(range, benchmark, revision);
   if (state.status === "loading")
     return (
-      <Card aria-busy="true">
+      <Card aria-busy="true" data-dashboard-section="risk">
         <CardContent>
           <p className="p-5 text-sm text-muted-foreground">Loading summary…</p>
         </CardContent>
@@ -52,13 +53,13 @@ export function PortfolioSummaryCard({
     );
   if (state.status === "error")
     return (
-      <Card role="alert">
+      <Card role="alert" data-dashboard-section="risk">
         <CardContent>
           <p className="p-5 text-sm text-muted-foreground">{state.message}</p>
         </CardContent>
       </Card>
     );
-  const { metrics, sectors, topPositions, risk, composition } = state.data;
+  const { metrics, topPositions, risk, composition } = state.data;
   const drawdownCaption =
     risk.drawdownFrom && risk.drawdownFrom !== risk.from
       ? `since ${shortDate(risk.drawdownFrom)}`
@@ -72,7 +73,7 @@ export function PortfolioSummaryCard({
     ["Benchmark pairs", `${metrics.pairedObservationDays}`, null],
   ];
   return (
-    <Card aria-label="Portfolio summary" data-dashboard-section="summary">
+    <Card aria-label="Portfolio summary" data-dashboard-section="risk">
       <CardHeader>
         <p className="text-sm font-medium text-muted-foreground">Risk &amp; composition</p>
         <CardTitle className="text-xl">Summary</CardTitle>
@@ -88,7 +89,7 @@ export function PortfolioSummaryCard({
               aria-label="Risk period"
               className="rounded-md border bg-background px-2 py-1"
               value={range}
-              onChange={(event) => setRange(event.target.value as RiskRange)}
+              onChange={(event) => onRangeChange(event.target.value as RiskRange)}
             >
               <option value="6M">6 months</option>
               <option value="1Y">1 year</option>
@@ -102,7 +103,7 @@ export function PortfolioSummaryCard({
                 aria-label="Risk benchmark"
                 className="max-w-full rounded-md border bg-background px-2 py-1"
                 value={benchmark || risk.benchmark?.symbol || ""}
-                onChange={(event) => setSelection({ value: event.target.value, revision })}
+                onChange={(event) => onBenchmarkChange(event.target.value)}
               >
                 {risk.benchmarks.map((item) => (
                   <option key={item.symbol} value={item.symbol}>
@@ -233,32 +234,6 @@ export function PortfolioSummaryCard({
                 <span className="shrink-0 font-semibold tabular-nums">
                   {percent(position.weight)}
                 </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Sector allocation</p>
-          <ul aria-label="Sector allocation" className="space-y-2">
-            {sectors.length === 0 && (
-              <li className="text-sm text-muted-foreground">No sector data yet.</li>
-            )}
-            {sectors.map((sector, index) => (
-              <li key={sector.sector}>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate">{sector.sector}</span>
-                  <span className="font-semibold tabular-nums">{percent(sector.weight)}</span>
-                </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-secondary">
-                  <div
-                    aria-hidden="true"
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min(100, sector.weight * 100)}%`,
-                      backgroundColor: barColors[index % barColors.length],
-                    }}
-                  />
-                </div>
               </li>
             ))}
           </ul>

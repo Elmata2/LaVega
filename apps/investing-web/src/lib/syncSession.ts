@@ -242,3 +242,10 @@ export function startBrokerSync(force = false): Promise<SyncResult> {
   wakeSyncSession();
   return brokerRun;
 }
+
+/** A broker that never had credentials saved is not a sync failure; both the
+ *  overview status line and the profile page's sync action hide that noise
+ *  the same way. */
+export function filterVisibleSyncProblems(problems: readonly string[]): string[] {
+  return problems.filter((problem) => !/credentials are not configured/i.test(problem));
+}
