@@ -15,6 +15,7 @@ import {
   buildIndexedSeries,
   type InvestingDashboardData,
   type InvestingPositionDetail,
+  type RiskRange,
 } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
@@ -33,12 +34,13 @@ import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
-import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
+import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { longDate } from "./lib/dates.js";
 import { useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
+import { usePortfolioSummary } from "./lib/summaryResource.js";
 import {
   runPortfolioAgent,
   sendPortfolioAgentMessage,
@@ -1375,10 +1377,50 @@ function HistoryLoading({ brokers }: { brokers: string[] }) {
   );
 }
 
+function OverviewEmptyState() {
+  const navigate = useNavigate();
+  return (
+    <div className="rounded-card border border-dashed border-border bg-transparent p-10 text-center">
+      <p className="text-sm text-muted-foreground">
+        Every Overview card is switched off. Add one to see your portfolio here.
+      </p>
+      <Button type="button" className="mt-4" onClick={() => navigate("/profile#widgets")}>
+        <span aria-hidden="true">+</span> Add widget
+      </Button>
+    </div>
+  );
+}
+
 function Overview() {
   const state = useDashboard();
   const { broker, price } = useSyncSession();
+  const layout = useInvestingLayout();
   const gate = historyGate(broker?.history);
+  const widgets = new Set(layout.widgets);
+  const showRisk = widgets.has("risk");
+  const showSectors = widgets.has("sectors");
+  /* Overview owns the range/benchmark selection and the one summary read
+   * shared between PortfolioSummaryCard (risk) and SectorAllocationCard
+   * (sectors): /api/investing/summary is the slowest call on the page, so
+   * neither widget may mount a second copy of this fetch. */
+  const dashboardReady = state.status === "ready" && gate.kind === "ready";
+  const dataVersion = dashboardReady ? state.data.dataVersion : 0;
+  const benchmarksRevision = dashboardReady
+    ? state.data.benchmarks.map((item) => item.symbol).join(",")
+    : "";
+  const [range, setRange] = useState<RiskRange>("1Y");
+  const [benchmarkSelection, setBenchmarkSelection] = useState({
+    value: "",
+    revision: benchmarksRevision,
+  });
+  const benchmark =
+    benchmarkSelection.revision === benchmarksRevision ? benchmarkSelection.value : "";
+  const { state: summaryState, refresh: refreshSummary } = usePortfolioSummary(
+    range,
+    benchmark,
+    `${dataVersion}:${benchmarksRevision}`,
+    dashboardReady && (showRisk || showSectors),
+  );
   return (
     <div className="space-y-5">
       <AppOpenSync />
@@ -1392,57 +1434,72 @@ function Overview() {
         <>
           {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
           <DashboardProblems problems={state.data.problems} />
-          <div
-            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
-            data-dashboard-layout="overview"
-          >
-            <div className="min-w-0 space-y-5">
-              <div data-dashboard-section="performance">
-                <PortfolioBenchmarkChart
-                  data={state.data.portfolio}
-                  benchmarks={state.data.benchmarks}
-                  externalCashFlows={state.data.externalCashFlows}
-                  currency={state.data.presentationCurrency}
-                />
+          <OverviewStatusRail dataVersion={state.data.dataVersion} />
+          {widgets.size === 0 ? (
+            <OverviewEmptyState />
+          ) : (
+            <>
+              <div
+                className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
+                data-dashboard-layout="overview"
+              >
+                <div className="min-w-0 space-y-5">
+                  {widgets.has("performance") && (
+                    <div data-dashboard-section="performance">
+                      <PortfolioBenchmarkChart
+                        data={state.data.portfolio}
+                        benchmarks={state.data.benchmarks}
+                        externalCashFlows={state.data.externalCashFlows}
+                        currency={state.data.presentationCurrency}
+                      />
+                    </div>
+                  )}
+                  {widgets.has("allocation") && (
+                    <div data-dashboard-section="allocation">
+                      <AllocationDonut
+                        instrument={state.data.allocation.instrument}
+                        entity={state.data.allocation.entity}
+                        currency={state.data.presentationCurrency}
+                      />
+                    </div>
+                  )}
+                </div>
+                <aside aria-label="Portfolio overview" className="space-y-5">
+                  {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
+                  {showRisk && (
+                    <PortfolioSummaryCard
+                      /* De kaart is presentational; of er nog iets binnenkomt weet
+                         dit scherm, dat de sync-sessie toch al leest. */
+                      stillLoading={
+                        gate.updating.length > 0 ||
+                        broker?.status === "running" ||
+                        broker?.status === "waiting" ||
+                        price?.status === "running" ||
+                        price?.status === "paused" ||
+                        (price?.remainingSymbols?.length ?? 0) > 0
+                      }
+                      currency={state.data.presentationCurrency}
+                      state={summaryState}
+                      refresh={refreshSummary}
+                      range={range}
+                      onRangeChange={setRange}
+                      benchmark={benchmark}
+                      onBenchmarkChange={(value) =>
+                        setBenchmarkSelection({ value, revision: benchmarksRevision })
+                      }
+                    />
+                  )}
+                </aside>
               </div>
-              <div data-dashboard-section="allocation">
-                <AllocationDonut
-                  instrument={state.data.allocation.instrument}
-                  entity={state.data.allocation.entity}
+              {showSectors && (
+                <SectorAllocationCard
                   currency={state.data.presentationCurrency}
+                  state={summaryState}
                 />
-              </div>
-            </div>
-            <aside aria-label="Portfolio overview" className="space-y-5">
-              <PortfolioKpis data={state.data} />
-              <PortfolioSummaryCard
-                /* De kaart is presentational; of er nog iets binnenkomt weet
-                   dit scherm, dat de sync-sessie toch al leest. */
-                stillLoading={
-                  gate.updating.length > 0 ||
-                  broker?.status === "running" ||
-                  broker?.status === "waiting" ||
-                  price?.status === "running" ||
-                  price?.status === "paused" ||
-                  (price?.remainingSymbols?.length ?? 0) > 0
-                }
-                currency={state.data.presentationCurrency}
-                revision={state.data.benchmarks.map((item) => item.symbol).join(",")}
-              />
-              <PortfolioAgentCard />
-              <OverviewStatusRail dataVersion={state.data.dataVersion} />
-            </aside>
-          </div>
-          <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />
-          <section aria-labelledby="positions-heading" data-dashboard-section="positions">
-            <h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">
-              Positions
-            </h3>
-            <PositionList
-              positions={state.data.positions}
-              currency={state.data.presentationCurrency}
-            />
-          </section>
+              )}
+              {widgets.has("agent") && <PortfolioAgentCard />}
+            </>
+          )}
         </>
       )}
     </div>

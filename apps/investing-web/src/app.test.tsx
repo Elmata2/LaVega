@@ -16,6 +16,7 @@ import {
   emptyDashboard,
   emptyResponseFor,
   portfolioAgents,
+  portfolioSummary,
   responseFor,
   withAuthUnconfigured,
 } from "./test/fetchFixtures.js";
@@ -177,7 +178,6 @@ test("overview shows priced positions total when history is still unavailable", 
 
   expect(container.textContent).toContain("10,150.00");
   expect(container.textContent).toContain("Priced positions only");
-  expect(container.textContent).toContain("0.319 shares");
   expect(container.textContent).not.toContain("credentials are not configured");
   root.unmount();
 });
@@ -416,7 +416,7 @@ test("positions table shows forward-filled, unpriced, missing-FX, and missing-co
   root.unmount();
 });
 
-test("overview exposes positions as navigation links", async () => {
+test("overview renders widgets in registry order and excludes positions and net worth", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
@@ -424,7 +424,6 @@ test("overview exposes positions as navigation links", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={["/"]}>
@@ -433,16 +432,36 @@ test("overview exposes positions as navigation links", async () => {
     );
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 
-  expect(container.querySelector('a[href="/positions/ASML"]')).not.toBeNull();
+  const order = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
+  ).map((element) => element.dataset.dashboardSection);
+  expect(order).toEqual(["status", "performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
+
+  const riskCard = container.querySelector<HTMLElement>('[data-dashboard-section="risk"]')!;
+  expect(riskCard.textContent).toContain("Historical account risk");
+  expect(riskCard.textContent).toContain("Largest positions");
+  expect(riskCard.textContent).not.toContain("Sector allocation");
   root.unmount();
 });
 
-test("overview preserves responsive reading order and independent chart ranges", async () => {
+test("hiding a widget closes its gap instead of leaving a blank card", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { allocation: false } }))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
   );
   const container = document.createElement("div");
   document.body.append(container);
@@ -458,45 +477,213 @@ test("overview preserves responsive reading order and independent chart ranges",
     await Promise.resolve();
     await Promise.resolve();
   });
+  expect(container.querySelector('[data-dashboard-section="allocation"]')).toBeNull();
+  const order = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
+  ).map((element) => element.dataset.dashboardSection);
+  expect(order).toEqual(["status", "performance", "kpis", "risk", "sectors", "agent"]);
+  root.unmount();
+});
 
-  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
-    (element) => element.dataset.dashboardSection,
+test("switching off every widget shows one line and an Add widget button, not a blank page", async () => {
+  const allOff = {
+    modules: {},
+    widgets: {
+      performance: false,
+      allocation: false,
+      kpis: false,
+      risk: false,
+      sectors: false,
+      agent: false,
+    },
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify(allOff))
+            : responseFor(input, init),
+        ),
+      ),
+    ),
   );
-  /* Key figures lead the right column, then the risk-and-composition card
-   * ("summary" bundles both), so a reorder of either would show up here. */
-  expect(order).toEqual([
-    "performance",
-    "allocation",
-    "kpis",
-    "summary",
-    "agent",
-    "status",
-    "net-worth",
-    "positions",
-  ]);
-  const summaryCard = container.querySelector<HTMLElement>('[data-dashboard-section="summary"]')!;
-  expect(summaryCard.textContent).toContain("Historical account risk");
-  expect(summaryCard.textContent?.indexOf("Historical account risk")).toBeLessThan(
-    summaryCard.textContent!.indexOf("Largest positions"),
-  );
-  const performanceRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Choose period"]',
-  )!;
-  const netWorthRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Choose net worth period"]',
-  )!;
-  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 month",
-  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
   await act(async () => {
-    Array.from(netWorthRange.querySelectorAll("button"))
-      .find((button) => button.textContent === "All")
-      ?.click();
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
-  expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("All");
-  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 month",
+  expect(container.querySelector('[data-dashboard-section="status"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section="performance"]')).toBeNull();
+  const addWidget = Array.from(container.querySelectorAll("button")).find((button) =>
+    button.textContent?.includes("Add widget"),
   );
+  expect(addWidget).toBeTruthy();
+  root.unmount();
+});
+
+/* /api/investing/summary is the slowest call on the page (over 40s observed in
+ * production), so the risk widget and the sectors widget must share one read
+ * instead of each mounting their own `usePortfolioSummary`. */
+test("risk and sectors widgets share exactly one GET to the summary endpoint", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(summaryRequests).toHaveLength(1);
+  expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("hiding risk still renders sectors, from the same one request", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false } }))
+            : responseFor(input, init),
+        ),
+      );
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[data-dashboard-section="risk"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).not.toBeNull();
+  expect(summaryRequests).toHaveLength(1);
+  root.unmount();
+});
+
+test("hiding both risk and sectors makes zero summary requests", async () => {
+  const summaryRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      if (String(input).startsWith("/api/investing/summary")) summaryRequests.push(String(input));
+      return Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }))
+            : responseFor(input, init),
+        ),
+      );
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[data-dashboard-section="risk"]')).toBeNull();
+  expect(container.querySelector('[data-dashboard-section="sectors"]')).toBeNull();
+  expect(summaryRequests).toHaveLength(0);
+  root.unmount();
+});
+
+test("changing the risk range refetches once and both cards update", async () => {
+  const summaryRequests: string[] = [];
+  const summaryFor = (range: string) => ({
+    ...portfolioSummary,
+    sectors: [{ sector: range === "6M" ? "Energy" : "Technology", weight: 1 }],
+    risk: { ...portfolioSummary.risk, range, to: range === "6M" ? "2026-03-10" : "2026-09-10" },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => {
+      const url = String(input);
+      if (url.startsWith("/api/investing/summary")) {
+        summaryRequests.push(url);
+        const range = new URLSearchParams(url.split("?")[1] ?? "").get("range") ?? "1Y";
+        return Promise.resolve(new Response(JSON.stringify(summaryFor(range))));
+      }
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(summaryRequests).toHaveLength(1);
+  const sectorsCard = container.querySelector<HTMLElement>('[data-dashboard-section="sectors"]')!;
+  const riskCard = container.querySelector<HTMLElement>('[data-dashboard-section="risk"]')!;
+  expect(sectorsCard.textContent).toContain("Technology");
+
+  const select = container.querySelector('select[aria-label="Risk period"]') as HTMLSelectElement;
+  await act(async () => {
+    select.value = "6M";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(summaryRequests).toHaveLength(2);
+  expect(summaryRequests[1]).toContain("range=6M");
+  expect(sectorsCard.textContent).toContain("Energy");
+  expect(riskCard.textContent).toContain("2026-03-10");
   root.unmount();
 });
 
@@ -777,7 +964,6 @@ test("overview separates positions, cash, and incomplete value states", async ()
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Positions");
   expect(container.textContent).toContain("Cash");
   expect(container.textContent).toContain("Value partly unknown");
   expect(container.textContent).toContain("MSFT");
@@ -786,7 +972,7 @@ test("overview separates positions, cash, and incomplete value states", async ()
   root.unmount();
 });
 
-test("position navigation moves from overview to detail and back", async () => {
+test("position navigation moves from the positions list to detail and back", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
@@ -797,7 +983,7 @@ test("position navigation moves from overview to detail and back", async () => {
 
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={["/positions"]}>
         <App />
       </MemoryRouter>,
     );
