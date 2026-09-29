@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import type { SectorProfile } from "@lavega/adapters";
 import { app, createApp } from "./app.js";
 import {
   createFrankfurterFxProvider,
@@ -167,7 +168,10 @@ test("layout route persists per-tenant choices and drops unknown ids", async () 
     }),
   });
   expect(saved.status).toBe(200);
-  expect(await saved.json()).toEqual({ modules: { positions: false }, widgets: { sectors: false } });
+  expect(await saved.json()).toEqual({
+    modules: { positions: false },
+    widgets: { sectors: false },
+  });
   expect(await (await investingApp.request("/api/investing/layout")).json()).toEqual({
     modules: { positions: false },
     widgets: { sectors: false },
@@ -714,14 +718,20 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
     sectorProfile: vi.fn(async (symbol: string) =>
-      symbol === "MYST" ? null : { sector: "Technology", industry: "Hardware" },
+      symbol === "MYST"
+        ? null
+        : {
+            kind: "stock" as const,
+            sector: "Technology",
+            industry: "Hardware",
+            source: "provider" as const,
+          },
     ),
     sectorStore: (() => {
-      const map = new Map<string, { sector: string; industry: string }>();
+      const map = new Map<string, SectorProfile>();
       return {
         get: async (symbol: string) => map.get(symbol) ?? null,
-        set: async (symbol: string, profile: { sector: string; industry: string }) =>
-          void map.set(symbol, profile),
+        set: async (symbol: string, profile: SectorProfile) => void map.set(symbol, profile),
       };
     })(),
     marketDataConsentStore: acceptedConsentStore(),
@@ -777,7 +787,12 @@ test("summary route includes a position's description in top positions when set"
   });
   const investingApp = createApp({
     dashboardReader: async () => ({ ...dashboard, problems: [] }),
-    sectorProfile: vi.fn(async () => ({ sector: "Technology", industry: "Hardware" })),
+    sectorProfile: vi.fn(async () => ({
+      kind: "stock" as const,
+      sector: "Technology",
+      industry: "Hardware",
+      source: "provider" as const,
+    })),
   });
 
   const response = await investingApp.request("/api/investing/summary");
@@ -1139,7 +1154,12 @@ test("summary route does not fetch sector profiles without market data consent",
       firstBuyDate: null,
     },
   });
-  const sectorProfile = vi.fn(async () => ({ sector: "Technology", industry: "Hardware" }));
+  const sectorProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider" as const,
+  }));
   // No marketDataConsentStore override: the default starts unaccepted, exactly
   // like a tenant who has never seen the Yahoo Finance disclosure.
   const investingApp = createApp({

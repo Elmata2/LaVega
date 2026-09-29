@@ -79,6 +79,7 @@ test("renders metrics and top positions, and excludes sector content", async () 
   expect(container.textContent).toContain("excluding cash");
   expect(container.textContent).not.toContain("+60");
   expect(container.textContent).not.toContain("Sector allocation");
+  expect(container.textContent).not.toMatch(/underlying holdings are not included/i);
   expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
 });
 

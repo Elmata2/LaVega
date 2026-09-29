@@ -210,8 +210,7 @@ export function PortfolioSummaryCard({
           </div>
         </details>
         <p className="text-xs text-muted-foreground">
-          Current composition · percentages of priced investments, excluding cash. Funds are grouped
-          by their reported sector; underlying holdings are not included.
+          Current composition · percentages of priced investments, excluding cash.
           {composition &&
             ` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
         </p>

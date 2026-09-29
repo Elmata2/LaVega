@@ -109,6 +109,15 @@ test("personal.ai_usage deliberately has neither RLS nor FORCE — aggregate own
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
+test("investing.sector_profiles deliberately has neither RLS nor FORCE — a symbol's sector is not tenant data", async () => {
+  const rows = await db.query<{ enabled: boolean; forced: boolean }>(
+    `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'investing' AND c.relname = 'sector_profiles'`,
+  );
+  expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
+});
+
 test("a table created after the migrations in schema personal is automatically granted to lavega_runtime", async () => {
   await db.exec("CREATE TABLE personal.future_probe (id INT)");
   const grants = await db.query<{ privilege_type: string }>(

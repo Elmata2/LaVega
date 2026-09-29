@@ -91,3 +91,20 @@ test("renders the shared summary error instead of a second one", () => {
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("boom");
 });
+
+test("caption describes look-through instead of claiming holdings are excluded", () => {
+  const { container, root } = render();
+  act(() => root.render(<SectorAllocationCard state={readyState} />));
+  expect(container.textContent).not.toMatch(/underlying holdings are not included/i);
+  expect(container.textContent).toMatch(/look(ed)?[\s-]*through/i);
+});
+
+test("look-through caption is absent when there is no sector data", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      <SectorAllocationCard state={{ ...readyState, data: { ...readyState.data, sectors: [] } }} />,
+    ),
+  );
+  expect(container.textContent).not.toMatch(/look(ed)?[\s-]*through/i);
+});
