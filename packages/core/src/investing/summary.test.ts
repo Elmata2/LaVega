@@ -128,10 +128,11 @@ test("a fund position splits its market value across its own weight vector", () 
   const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
   expect(exposure).toEqual([
     { sector: "Technology", weight: 0.4 },
-    // 1 - (0.4+0.3) computes as 0.30000000000000004 (double rounding), so the
-    // residual edges out the covered 0.3 bucket for weight-desc placement.
-    { sector: "Unknown", weight: 0.30000000000000004 },
+    // 1 - (0.4+0.3) computes as 0.30000000000000004 (double rounding), a
+    // near-tie with the exact 0.3 covered bucket at sort precision — resolved
+    // by sector name, not the float dust in the raw residual.
     { sector: "Financial Services", weight: 0.3 },
+    { sector: "Unknown", weight: 0.30000000000000004 },
   ]);
 });
 
@@ -140,6 +141,38 @@ test("a fund with an empty weight vector (bond fund) is entirely Unknown, not an
   expect(buildSectorExposure([{ symbol: "AGGG.L", marketValue: 500 }], weights)).toEqual([
     { sector: "Unknown", weight: 1 },
   ]);
+});
+
+test("weights overshooting 1 scale down instead of inflating total exposure past 100%", () => {
+  const weights = new Map([
+    ["ACME", [
+      { sector: "Technology", weight: 0.5001 },
+      { sector: "Health Care", weight: 0.5 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "ACME", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+  const total = exposure.reduce((sum, entry) => sum + entry.weight, 0);
+  expect(total).toBeCloseTo(1, 12);
+});
+
+test("ten weights summing just under 1 by float error don't create a phantom Unknown row", () => {
+  const sectors = Array.from({ length: 10 }, (_, index) => `Sector${index}`);
+  const weights = new Map([["FUND", sectors.map((sector) => ({ sector, weight: 0.1 }))]]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(exposure).toHaveLength(10);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+});
+
+test("near-tied weights sort deterministically by sector name, not float noise", () => {
+  const weights = new Map([
+    ["FUND", [
+      { sector: "Zeta", weight: 0.5 },
+      { sector: "Alpha", weight: 0.5 - 1e-10 },
+    ]],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).toEqual(["Alpha", "Zeta"]);
 });
 
 test("owner deposit is removed from daily return", () => {

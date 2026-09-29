@@ -225,6 +225,21 @@ function maxDrawdown(values: readonly number[]): number {
 
 export type SectorWeight = { sector: string; weight: number };
 
+/** A resolved weight vector rarely sums to exactly 1 (Yahoo rounds its
+ *  published fund-holding percentages before publishing them). Below this
+ *  fraction of a position's own weight, an apparent shortfall is float
+ *  noise, not a real unclassified share, so it is dropped instead of
+ *  manufacturing a phantom Unknown row. */
+export const SECTOR_RESIDUAL_EPSILON = 1e-6;
+
+/** Sort-order rounding: two bucket weights within this distance are
+ *  indistinguishable, so sector name — not float dust — decides their order. */
+const SECTOR_SORT_PRECISION = 1e-9;
+
+function roundForSort(weight: number): number {
+  return Math.round(weight / SECTOR_SORT_PRECISION) * SECTOR_SORT_PRECISION;
+}
+
 export function buildSectorExposure(
   positions: readonly { symbol: string; marketValue: number | null }[],
   weightsBySymbol: ReadonlyMap<string, readonly SectorWeight[]>,
@@ -234,18 +249,26 @@ export function buildSectorExposure(
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
     const vector = weightsBySymbol.get(position.symbol.toUpperCase()) ?? [];
-    let covered = 0;
+    const covered = vector.reduce((sum, { weight }) => sum + weight, 0);
+    // Only ever scale an overshoot down. A vector that sums below 1 keeps
+    // its true residual — it is never normalized up into full coverage.
+    const scale = covered > 1 ? 1 / covered : 1;
     for (const { sector, weight } of vector) {
-      totalsBySector.set(sector, (totalsBySector.get(sector) ?? 0) + position.marketValue * weight);
-      covered += weight;
+      totalsBySector.set(
+        sector,
+        (totalsBySector.get(sector) ?? 0) + position.marketValue * weight * scale,
+      );
     }
-    const residual = Math.max(0, 1 - covered);
-    if (residual > 0)
+    const residual = Math.max(0, 1 - covered * scale);
+    if (residual > SECTOR_RESIDUAL_EPSILON)
       totalsBySector.set("Unknown", (totalsBySector.get("Unknown") ?? 0) + position.marketValue * residual);
     total += position.marketValue;
   }
   if (total <= 0) return [];
   return [...totalsBySector.entries()]
     .map(([sector, value]) => ({ sector, weight: value / total }))
-    .sort((left, right) => right.weight - left.weight || left.sector.localeCompare(right.sector));
+    .sort((left, right) => {
+      const byWeight = roundForSort(right.weight) - roundForSort(left.weight);
+      return byWeight !== 0 ? byWeight : left.sector.localeCompare(right.sector);
+    });
 }
