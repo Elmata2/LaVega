@@ -375,3 +375,84 @@ test("stops the infer loop on 428 without refreshing when nothing was classified
   expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
   expect(refresh).not.toHaveBeenCalled();
 });
+
+test("a classifier that always fails triggers at most the capped number of POSTs across many summary refreshes, and never refreshes", async () => {
+  let calls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer") {
+        calls += 1;
+        return new Response(
+          JSON.stringify({ classified: 0, failed: 1, failedSymbols: ["BOOM"], remaining: 0 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const refresh = vi.fn();
+  const { root } = render();
+  // Simulates something outside this hook's control handing back a brand-new
+  // summary object on every render, each still reporting unknown coverage —
+  // the shape of the pre-fix endless loop, minus this hook's own refresh.
+  for (let round = 0; round < 6; round += 1) {
+    await act(async () => {
+      root.render(
+        <SectorAllocationCard
+          state={{
+            ...readyState,
+            data: {
+              ...readyState.data,
+              sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }),
+              topPositions: [{ symbol: `ROUND${round}`, weight: 0 }],
+            },
+          }}
+          refresh={refresh}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  expect(calls).toBe(3);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test("sends symbols the server reported as failed back as exclude on the next attempt", async () => {
+  const bodies: Array<{ exclude?: unknown }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer") {
+        bodies.push(init?.body ? (JSON.parse(String(init.body)) as { exclude?: unknown }) : {});
+        return new Response(
+          JSON.stringify({ classified: 1, failed: 1, failedSymbols: ["BOOM"], remaining: 5 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const { root } = render();
+  await act(async () => {
+    root.render(
+      <SectorAllocationCard
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+        }}
+        refresh={() => {}}
+      />,
+    );
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+  });
+
+  expect(bodies).toHaveLength(3);
+  expect(bodies[0]?.exclude).toEqual([]);
+  expect(bodies[1]?.exclude).toEqual(["BOOM"]);
+  expect(bodies[2]?.exclude).toEqual(["BOOM"]);
+});

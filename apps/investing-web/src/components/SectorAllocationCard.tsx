@@ -11,10 +11,14 @@ const barColors = [
   "hsl(var(--chart-coral))",
 ];
 
-/** Caps a single mount's background classification run: each server call
- *  classifies at most 10 symbols (SECTOR_INFERENCE_BATCH_SIZE, Task 10), so
- *  a few rounds cover a typical portfolio without ever spinning forever on
- *  one that keeps reporting progress. */
+/** Caps this component instance's total background classification calls —
+ *  across every summary refresh the run itself triggers, not just one
+ *  effect invocation (#135 final review, C1). A server that mis-reported
+ *  classified > 0 for symbols that actually failed once made this loop
+ *  forever: each refresh produced a new summary object, which re-armed a
+ *  fresh 3-attempt budget. Counting attempts in a ref that survives across
+ *  state changes closes that off — at most this many paid classifier calls
+ *  per page mount, full stop. */
 const MAX_INFER_ATTEMPTS = 3;
 
 const percent = (value: number | null | undefined): string =>
@@ -70,6 +74,17 @@ function coverageLine(coverage: SectorCoverage): string | null {
  *  React StrictMode's double effect invocation — while still re-arming for
  *  the next distinct summary (initial load, a manual refresh, a poll).
  *
+ *  Two refs make the loop resilient instead of infinite (#135 final review,
+ *  C1). `attemptsRef` counts POSTs for the component's whole lifetime, not
+ *  per effect run, so a chain of refreshes — each handing back a new
+ *  `state.data` that still reports unknown coverage — can't re-arm a fresh
+ *  budget forever. `excludeRef` accumulates symbols the server reports as
+ *  failed this session and is sent back as `exclude`, so a handful of
+ *  always-failing symbols (head-of-line in the server's candidate list)
+ *  don't crowd out ones that might actually resolve. The route only
+ *  refreshes when `classified > 0`, so a classifier that fails every
+ *  symbol never triggers a refresh at all.
+ *
  *  `refresh` is read through a ref rather than listed as an effect
  *  dependency: usePortfolioSummary memoizes it, but this run's own
  *  correctness never depended on that — an unrelated parent re-render
@@ -94,6 +109,8 @@ function useSectorInference(state: SummaryState, refresh: () => void): void {
   }, [refresh]);
 
   const ranFor = useRef<unknown>(null);
+  const attemptsRef = useRef(0);
+  const excludeRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!enabled || state.status !== "ready") return;
     const unknown = state.data.sectorCoverage?.unknown ?? 0;
@@ -103,14 +120,19 @@ function useSectorInference(state: SummaryState, refresh: () => void): void {
     let cancelled = false;
     (async () => {
       let classifiedAny = false;
-      for (let attempt = 0; attempt < MAX_INFER_ATTEMPTS && !cancelled; attempt += 1) {
-        const response = await fetch("/api/investing/sectors/infer", { method: "POST" }).catch(
-          () => null,
-        );
-        if (!response || response.status === 428 || !response.ok) break;
-        const body: { classified?: unknown; remaining?: unknown } = await response
-          .json()
-          .catch(() => ({}));
+      while (attemptsRef.current < MAX_INFER_ATTEMPTS && !cancelled) {
+        attemptsRef.current += 1;
+        const response = await fetch("/api/investing/sectors/infer", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ exclude: [...excludeRef.current] }),
+        }).catch(() => null);
+        if (!response || !response.ok) break;
+        const body: { classified?: unknown; remaining?: unknown; failedSymbols?: unknown } =
+          await response.json().catch(() => ({}));
+        if (Array.isArray(body.failedSymbols))
+          for (const symbol of body.failedSymbols)
+            if (typeof symbol === "string") excludeRef.current.add(symbol);
         if (typeof body.classified === "number" && body.classified > 0) classifiedAny = true;
         else break;
         if (typeof body.remaining === "number" && body.remaining <= 0) break;
