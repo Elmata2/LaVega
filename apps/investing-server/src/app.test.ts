@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
 import {
   createFrankfurterFxProvider,
@@ -8,6 +8,7 @@ import {
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
+import type { PriceSyncTarget } from "./priceOrchestrator.js";
 
 const acceptedConsentStore = () => ({
   get: vi.fn(async () => ({
@@ -17,6 +18,10 @@ const acceptedConsentStore = () => ({
     disclosureVersion: "yahoo-finance-v1",
   })),
   set: vi.fn(async () => undefined),
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 test("GET /health reports investing server health through Hono app.request", async () => {
@@ -141,6 +146,88 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
     body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }),
   });
   expect(invalid.status).toBe(400);
+});
+
+test("a benchmark added via PUT during an already-running sync is fetched next by that same sync", async () => {
+  // priceSyncTargets is wired to the real benchmark selection store, exactly as
+  // apps/investing-server/src/index.ts wires it in production: PUT only ever
+  // writes that store. Nothing here calls into the orchestrator that is running.
+  const holdings: PriceSyncTarget[] = [
+    {
+      kind: "current",
+      symbol: "ASML",
+      ticker: "ASML",
+      exchange: "AMS",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+    {
+      kind: "current",
+      symbol: "ADYEN",
+      ticker: "ADYEN",
+      exchange: "AMS",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+  ];
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const priceSyncTargets = vi.fn(async (tenantId: string) => {
+    const { symbols } = await benchmarkSelectionStore.get(tenantId);
+    return [
+      ...symbols.map((symbol) => ({
+        kind: "benchmark" as const,
+        symbol,
+        ticker: symbol,
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      })),
+      ...holdings,
+    ];
+  });
+  let releaseFirst!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn(async (request: { symbol: string }) => {
+      if (request.symbol === "ASML") await firstPending;
+      return { bars: [], problems: [] };
+    }),
+  };
+  const investingApp = createApp({
+    provider: provider as never,
+    benchmarkSelectionStore,
+    priceSyncTargets,
+    priceSyncPaceMs: 0,
+    // The default 5 s throttle on the mid-sync re-check (see priceOrchestrator's
+    // benchmarkRecheckEveryMs) would outlast this test's real-time window.
+    priceSyncBenchmarkRecheckEveryMs: 0,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const sync = investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(() =>
+    expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML" })),
+  );
+
+  const put = await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: ["^AEX"] }),
+  });
+  expect(put.status).toBe(200);
+
+  releaseFirst();
+  await sync;
+
+  expect(provider.get.mock.calls.map(([request]) => request.symbol)).toEqual([
+    "ASML",
+    "^AEX",
+    "ADYEN",
+  ]);
 });
 
 test("benchmark search route returns results after persisted consent", async () => {
@@ -591,6 +678,7 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
           void map.set(symbol, profile),
       };
     })(),
+    marketDataConsentStore: acceptedConsentStore(),
   });
 
   const response = await investingApp.request("/api/investing/summary");
@@ -653,6 +741,86 @@ test("summary route includes a position's description in top positions when set"
 
   expect(response.status).toBe(200);
   expect(payload.topPositions).toEqual([{ symbol: "AAPL", weight: 1, description: "Apple Inc." }]);
+});
+
+test("summary route negotiates the Yahoo crumb at most once across positions and requests", async () => {
+  const crumbRequests = vi.fn();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("https://fc.yahoo.com/")) {
+        return new Response(null, { status: 200, headers: { "set-cookie": "A=1; Path=/" } });
+      }
+      if (url.startsWith("https://query2.finance.yahoo.com/v1/test/getcrumb")) {
+        crumbRequests();
+        return new Response("test-crumb", { status: 200 });
+      }
+      if (url.includes("/v10/finance/quoteSummary/")) {
+        return new Response(
+          JSON.stringify({
+            quoteSummary: {
+              result: [{ assetProfile: { sector: "Technology", industry: "Software" } }],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected fetch in test: ${url}`);
+    }),
+  );
+
+  const dashboard = emptyInvestingDashboard();
+  const returns = {
+    status: "unpriced" as const,
+    remainingCostBasis: 0,
+    realizedCostBasisRemoved: 0,
+    unrealizedGain: 0,
+    realizedGain: 0,
+    dividendsReceived: 0,
+    totalReturn: 0,
+    totalReturnPercentage: null,
+    sinceFirstBuyPercentage: null,
+    firstBuyDate: null,
+  };
+  dashboard.positions.push(
+    {
+      symbol: "AAPL",
+      entity: "personal",
+      quantity: 1,
+      marketValue: 300,
+      portfolioWeight: null,
+      priceStatus: "priced",
+      currency: "EUR",
+      asOf: "2026-08-18",
+      returns,
+    },
+    {
+      symbol: "MSFT",
+      entity: "personal",
+      quantity: 1,
+      marketValue: 100,
+      portfolioWeight: null,
+      priceStatus: "priced",
+      currency: "EUR",
+      asOf: "2026-08-18",
+      returns,
+    },
+  );
+  // No sectorProfile / sectorHttpClient override: this exercises the actual
+  // default wiring in createApp, not a test double standing in for it.
+  // Consent must be accepted, or the route never calls Yahoo at all.
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const first = await investingApp.request("/api/investing/summary");
+  const second = await investingApp.request("/api/investing/summary");
+
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(crumbRequests.mock.calls.length).toBeLessThanOrEqual(1);
 });
 
 test("summary route reports failures as 503 problem payload", async () => {
@@ -899,6 +1067,44 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
   expect(response.status).toBe(200);
   expect(body.topPositions).toEqual([{ symbol: "AAPL", weight: 1, description: "Apple" }]);
   expect(body.sectors).toBeDefined();
+});
+
+test("summary route does not fetch sector profiles without market data consent", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({
+    symbol: "AAPL",
+    entity: "personal",
+    quantity: 1,
+    marketValue: 100,
+    portfolioWeight: null,
+    priceStatus: "priced",
+    currency: "EUR",
+    asOf: "2026-08-18",
+    returns: {
+      status: "unpriced",
+      remainingCostBasis: 0,
+      realizedCostBasisRemoved: 0,
+      unrealizedGain: 0,
+      realizedGain: 0,
+      dividendsReceived: 0,
+      totalReturn: 0,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate: null,
+    },
+  });
+  const sectorProfile = vi.fn(async () => ({ sector: "Technology", industry: "Hardware" }));
+  // No marketDataConsentStore override: the default starts unaccepted, exactly
+  // like a tenant who has never seen the Yahoo Finance disclosure.
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    sectorProfile,
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+
+  expect(response.status).toBe(200);
+  expect(sectorProfile).not.toHaveBeenCalled();
 });
 
 /* TRADING 212 GEBRUIKT EEN SLEUTELPAAR — sleutel als gebruikersnaam, geheim als

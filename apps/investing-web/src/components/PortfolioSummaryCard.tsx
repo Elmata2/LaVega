@@ -128,7 +128,7 @@ export function PortfolioSummaryCard({
               een stand van zaken van een minuut geleden. Het verschil tussen
               "dit kan niet" en "dit kan nog niet" is precies het verschil tussen
               iets repareren en even wachten, en dat hoort het scherm te zeggen. */}
-          {stillLoading ? (
+          {stillLoading && risk.status === "unavailable" ? (
             <p>
               Your history is still downloading, so there is not enough of it to measure risk
               against yet. The figures below fill in on their own once it finishes — nothing here

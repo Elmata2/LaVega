@@ -37,7 +37,7 @@ import {
   YAHOO_DISCLOSURE_VERSION,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
-import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
+import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
@@ -119,6 +119,7 @@ type PriceDependencies = {
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
   priceSyncPaceMs: number;
+  priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
@@ -150,7 +151,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
-  const sectorProfile = dependencies.sectorProfile ?? fetchYahooSectorProfile;
+  /* One client per running server process, not per symbol: its crumb and
+   * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
+   * instead of every cache-miss symbol paying its own crumb negotiation. */
+  const sectorHttpClient = new YahooHttpClient();
+  const sectorProfile =
+    dependencies.sectorProfile ??
+    ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   /* Who the request belongs to. Standalone and local runs have a single tenant;
    * mounted behind the personal server this resolves to the signed-in user. */
@@ -172,6 +179,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
+    benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
     sync: async (target, tenantId) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
@@ -269,10 +277,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         }));
       /* Same classification rule as the portfolio-agent snapshot, which
        * passes no fetchProfile. This route keeps the fetch-and-persist
-       * fallback; only the resolution itself is shared. */
+       * fallback; only the resolution itself is shared. Without consent,
+       * omit fetchProfile entirely: resolvePortfolioSectors still answers
+       * from cached profiles, it just never calls Yahoo for a fresh one. */
+      const consented = await hasYahooConsent(await resolveTenantId());
       const { exposure } = await resolvePortfolioSectors(data.positions, {
         store: sectorStore,
-        fetchProfile: sectorProfile,
+        ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
         ...buildHistoricalRisk(data, range, benchmark),
