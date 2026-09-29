@@ -5,12 +5,26 @@ import { formatSectorWeightKey } from "@lavega/core";
 const QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary/";
 const MODULES = "quoteType,assetProfile,topHoldings";
 
-export type StockSectorProfile = {
+export type ProviderStockSectorProfile = {
   kind: "stock";
   sector: string;
   industry: string;
   source: "provider";
 };
+/** Written only by sectorResolution.ts's classifier tier, never by this
+ *  provider adapter. `sector` is a GICS label at "sector" specificity or a
+ *  division label (Cyclical/Defensive/Sensitive) at "division" specificity
+ *  — see SECTOR_TO_DIVISION in @lavega/core. */
+export type InferredStockSectorProfile = {
+  kind: "stock";
+  sector: string;
+  industry: string;
+  source: "inferred";
+  specificity: "sector" | "division";
+  confidence: number;
+  inferredAt: string;
+};
+export type StockSectorProfile = ProviderStockSectorProfile | InferredStockSectorProfile;
 export type FundSectorProfile = {
   kind: "fund";
   weights: { sector: string; weight: number }[];

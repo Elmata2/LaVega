@@ -1,13 +1,22 @@
-import { buildSectorExposure, GICS_SECTOR_LABELS, type SectorExposure, type SectorWeight } from "@lavega/core";
-import type { FundSectorProfile, SectorProfile } from "@lavega/adapters";
+import {
+  buildSectorExposure,
+  GICS_SECTOR_LABELS,
+  SECTOR_DIVISION_LABELS,
+  type SectorExposure,
+  type SectorWeight,
+} from "@lavega/core";
+import type { FundSectorProfile, SectorProfile, StockSectorProfile } from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
+import type { SectorClassifier } from "./sectorClassifier.js";
 
 /** What a symbol's sector is called when no stored profile answers for it,
- *  or when a stored sector string falls outside the GICS taxonomy. Never an
- *  entity name and never a guessed industry. */
+ *  a stored sector string falls outside the taxonomy, or the classifier
+ *  found no match at all. Never an entity name and never a guessed
+ *  industry. */
 export const UNKNOWN_SECTOR = "Unknown";
 
 const GICS_SECTOR_LABEL_SET = new Set<string>(GICS_SECTOR_LABELS);
+const SECTOR_DIVISION_LABEL_SET = new Set<string>(SECTOR_DIVISION_LABELS);
 
 /** A fund's stored weight vector goes stale as the fund rebalances; a
  *  stock's headline sector rarely changes, so only fund profiles are
@@ -15,6 +24,7 @@ const GICS_SECTOR_LABEL_SET = new Set<string>(GICS_SECTOR_LABELS);
 export const FUND_PROFILE_REFRESH_DAYS = 90;
 
 export type SectorProfileLookup = (symbol: string) => Promise<SectorProfile | null>;
+export type SectorCorrectionLookup = (symbol: string) => Promise<string | null>;
 
 export type SectorResolutionOptions = {
   store: SectorProfileStore;
@@ -22,6 +32,15 @@ export type SectorResolutionOptions = {
    *  (the portfolio-agent snapshot): stored profiles only, no provider call
    *  and no store write, and no re-fetch of a stale fund profile either. */
   fetchProfile?: SectorProfileLookup;
+  /** The owner's own override for this symbol — a preferences read, cheap
+   *  and side-effect-free. Always safe to pass, including on read-only
+   *  paths: it never calls a provider and never writes to the sector store.
+   *  Outranks a provider profile and a classifier inference alike. */
+  correction?: SectorCorrectionLookup;
+  /** System One classification, persisted with source "inferred". Omit it
+   *  on read-only paths and wherever consent or the enable setting say no —
+   *  the same discipline fetchProfile already has. */
+  classifier?: SectorClassifier;
 };
 
 export type PortfolioSectors = {
@@ -46,26 +65,26 @@ const SECTOR_RESOLUTION_CONCURRENCY = 8;
  *  be classified two ways — they differ only in whether a missing or stale
  *  profile may be fetched. */
 export async function resolvePortfolioSectors(
-  positions: readonly { symbol: string; marketValue: number | null }[],
+  positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
   options: SectorResolutionOptions,
 ): Promise<PortfolioSectors> {
   const sectorBySymbol = new Map<string, string>();
   const weightsBySymbol = new Map<string, SectorWeight[]>();
   const seen = new Set<string>();
-  const pending: { key: string; symbol: string }[] = [];
+  const pending: { key: string; symbol: string; description?: string }[] = [];
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
     const key = position.symbol.toUpperCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    pending.push({ key, symbol: position.symbol });
+    pending.push({ key, symbol: position.symbol, description: position.description });
   }
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(SECTOR_RESOLUTION_CONCURRENCY, pending.length) }, async () => {
       while (next < pending.length) {
         const item = pending[next++]!;
-        const weights = await resolveWeights(item.symbol, options);
+        const weights = await resolveWeights(item, options);
         weightsBySymbol.set(item.key, weights);
         sectorBySymbol.set(item.key, weights[0]?.sector ?? UNKNOWN_SECTOR);
       }
@@ -88,31 +107,85 @@ function stampFetchedAt(profile: SectorProfile): SectorProfile {
 }
 
 async function resolveWeights(
-  symbol: string,
-  { store, fetchProfile }: SectorResolutionOptions,
+  position: { symbol: string; description?: string },
+  { store, fetchProfile, correction, classifier }: SectorResolutionOptions,
 ): Promise<SectorWeight[]> {
-  const stored = await store.get(symbol);
-  if (!fetchProfile) return profileToWeights(stored);
-  const fresh = stored && !(stored.kind === "fund" && isStaleFundProfile(stored));
-  if (fresh) return profileToWeights(stored);
-  try {
-    const fetched = await fetchProfile(symbol);
-    if (!fetched) return profileToWeights(stored);
-    const stamped = stampFetchedAt(fetched);
-    await store.set(symbol, stamped);
-    return profileToWeights(stamped);
-  } catch {
-    return profileToWeights(stored);
+  const { symbol } = position;
+  const corrected = correction ? await correction(symbol) : null;
+  if (corrected) return [{ sector: corrected, weight: 1 }];
+
+  let profile = await store.get(symbol);
+  const fresh = profile && profile.source === "provider" && !(profile.kind === "fund" && isStaleFundProfile(profile));
+  if (!fresh && fetchProfile) {
+    try {
+      const fetched = await fetchProfile(symbol);
+      if (fetched) {
+        profile = stampFetchedAt(fetched);
+        await store.set(symbol, profile);
+      }
+    } catch {
+      /* keep whatever was already stored, if anything */
+    }
   }
+  if (!profile && classifier) {
+    const classification = await classifier({ symbol, description: position.description });
+    const inferred = classificationToProfile(classification);
+    if (inferred) {
+      profile = inferred;
+      await store.set(symbol, inferred);
+    }
+  }
+  return profileToWeights(profile);
+}
+
+/** `classified` becomes a cacheable inferred profile at whatever specificity
+ *  the classifier reported. `no-match` becomes a cacheable inferred Unknown,
+ *  so the same symbol isn't re-asked on every resolution. `failed` (a
+ *  provider error, timeout, budget refusal, or malformed answer) is never
+ *  cached — it must be retried on a later pass, not frozen as Unknown. An
+ *  undefined classification (an unimplemented test double, or any classifier
+ *  that breaks its own return contract) is treated the same as `failed`. */
+function classificationToProfile(
+  classification: Awaited<ReturnType<SectorClassifier>> | undefined,
+): StockSectorProfile | null {
+  if (!classification || classification.kind === "failed") return null;
+  const inferredAt = new Date().toISOString();
+  if (classification.kind === "no-match")
+    return {
+      kind: "stock",
+      sector: UNKNOWN_SECTOR,
+      industry: "Unknown",
+      source: "inferred",
+      specificity: "sector",
+      confidence: 0,
+      inferredAt,
+    };
+  return {
+    kind: "stock",
+    sector: classification.sector,
+    industry: "Unknown",
+    source: "inferred",
+    specificity: classification.specificity,
+    confidence: classification.confidence,
+    inferredAt,
+  };
 }
 
 function profileToWeights(profile: SectorProfile | null): SectorWeight[] {
   if (!profile) return [];
   if (profile.kind === "stock") {
-    // Yahoo's sector string is free text; never let an arbitrary provider
-    // value become a sector label outside the fixed GICS taxonomy.
-    const sector = GICS_SECTOR_LABEL_SET.has(profile.sector) ? profile.sector : UNKNOWN_SECTOR;
+    const sector = isDisplayableStockSector(profile) ? profile.sector : UNKNOWN_SECTOR;
     return [{ sector, weight: 1 }];
   }
   return [...profile.weights].sort((left, right) => right.weight - left.weight);
+}
+
+/** A stock's sector is only ever a GICS label or, when the profile is
+ *  inferred, one of the three broader divisions the classifier falls back
+ *  to at low confidence. Neither Yahoo's free-text sector nor the
+ *  classifier's own answer is trusted past this check — never let an
+ *  arbitrary value become a sector label outside the fixed taxonomy. */
+function isDisplayableStockSector(profile: StockSectorProfile): boolean {
+  if (GICS_SECTOR_LABEL_SET.has(profile.sector)) return true;
+  return profile.source === "inferred" && SECTOR_DIVISION_LABEL_SET.has(profile.sector);
 }

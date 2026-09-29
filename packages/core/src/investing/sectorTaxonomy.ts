@@ -52,7 +52,9 @@ export function formatSectorWeightKey(key: string): GicsSectorLabel | null {
  *  Services inconsistently across sources); it is a defensible first cut,
  *  not a verified-authoritative one — the confidence threshold below it is
  *  explicitly a placeholder to measure and tune, not a final number. */
-export const SECTOR_TO_DIVISION: Record<GicsSectorLabel, "Cyclical" | "Defensive" | "Sensitive"> = {
+export type SectorDivisionLabel = "Cyclical" | "Defensive" | "Sensitive";
+
+export const SECTOR_TO_DIVISION: Record<GicsSectorLabel, SectorDivisionLabel> = {
   "Consumer Cyclical": "Cyclical",
   "Financial Services": "Cyclical",
   "Real Estate": "Cyclical",
@@ -65,3 +67,12 @@ export const SECTOR_TO_DIVISION: Record<GicsSectorLabel, "Cyclical" | "Defensive
   Industrials: "Sensitive",
   Technology: "Sensitive",
 };
+
+/** The three division labels, derived from SECTOR_TO_DIVISION's own values
+ *  so the set can never drift out of sync with it. An inferred stock
+ *  profile (sectorResolution.ts) may carry one of these instead of a GICS
+ *  sector when the classifier's confidence was below its threshold; a
+ *  provider-sourced profile never may. */
+export const SECTOR_DIVISION_LABELS: readonly SectorDivisionLabel[] = Array.from(
+  new Set(Object.values(SECTOR_TO_DIVISION)),
+);

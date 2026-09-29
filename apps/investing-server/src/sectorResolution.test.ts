@@ -269,3 +269,210 @@ test("a stock profile is never re-fetched for staleness even when very old", asy
 
   expect(fetchProfile).not.toHaveBeenCalled();
 });
+
+test("an owner correction outranks everything and triggers no fetch or classification", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn();
+  const classifier = vi.fn();
+  const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(positions, {
+    store,
+    fetchProfile,
+    classifier,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
+  expect(fetchProfile).not.toHaveBeenCalledWith("AAPL");
+  expect(classifier).not.toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL" }));
+});
+
+test("a correction is re-checked on the very next resolution, not just the first", async () => {
+  const store = createInMemorySectorProfileStore();
+  const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
+
+  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, correction });
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    correction,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Healthcare");
+  expect(correction).toHaveBeenCalledTimes(2);
+});
+
+test("a provider profile is used and the classifier is never called", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn();
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider" as const,
+  }));
+
+  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, fetchProfile, classifier });
+
+  expect(classifier).not.toHaveBeenCalled();
+});
+
+test("a classified answer fills a real gap and is persisted with source inferred", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn(async () => null);
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Technology",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "MYST", marketValue: 100, description: "Myst Robotics" }],
+    { store, fetchProfile, classifier },
+  );
+
+  expect(sectorBySymbol.get("MYST")).toBe("Technology");
+  expect(classifier).toHaveBeenCalledWith({ symbol: "MYST", description: "Myst Robotics" });
+  const stored = await store.get("MYST");
+  expect(stored).toMatchObject({
+    kind: "stock",
+    sector: "Technology",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+  });
+  expect(typeof (stored as { inferredAt?: string }).inferredAt).toBe("string");
+});
+
+test("a low-confidence classification is persisted and displayed as its broader division", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Sensitive",
+    specificity: "division" as const,
+    confidence: 0.3,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
+
+  expect(sectorBySymbol.get("MYST")).toBe("Sensitive");
+  expect(await store.get("MYST")).toMatchObject({ sector: "Sensitive", specificity: "division" });
+});
+
+test("an explicit no-match is cached as an inferred Unknown, so the classifier isn't re-asked next time", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({ kind: "no-match" as const }));
+
+  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  expect(first.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
+  expect(await store.get("MYST")).toMatchObject({ source: "inferred" });
+
+  const second = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  expect(second.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
+  expect(classifier).toHaveBeenCalledTimes(1);
+});
+
+test("a failed classification is never cached, so it is retried on the next pass", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({ kind: "failed" as const, reason: "budget refusal" }));
+
+  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  expect(first.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
+  expect(await store.get("MYST")).toBeNull();
+
+  await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  expect(classifier).toHaveBeenCalledTimes(2);
+});
+
+test("a cached inferred profile is reused without re-invoking the classifier, but the provider is still retried", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.7,
+    inferredAt: new Date().toISOString(),
+  });
+  const fetchProfile = vi.fn(async () => null);
+  const classifier = vi.fn();
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    classifier,
+  });
+
+  expect(classifier).not.toHaveBeenCalled();
+  expect(fetchProfile).toHaveBeenCalledWith("MYST");
+  expect(sectorBySymbol.get("MYST")).toBe("Technology");
+});
+
+test("a later provider answer replaces a cached inferred profile", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.7,
+    inferredAt: new Date().toISOString(),
+  });
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Healthcare",
+    industry: "Biotech",
+    source: "provider" as const,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    fetchProfile,
+  });
+
+  expect(sectorBySymbol.get("MYST")).toBe("Healthcare");
+  expect(await store.get("MYST")).toMatchObject({ source: "provider" });
+});
+
+test("read-only paths omitting classifier and correction cause no calls and no writes, same as omitting fetchProfile", async () => {
+  const store = createInMemorySectorProfileStore();
+  const set = vi.spyOn(store, "set");
+
+  const { exposure } = await resolvePortfolioSectors(positions, { store });
+
+  expect(set).not.toHaveBeenCalled();
+  expect(exposure).toEqual([{ sector: UNKNOWN_SECTOR, weight: 1 }]);
+});
+
+test("an inferred sector outside the GICS-or-division taxonomy is never displayed raw, guarding against an entity name leaking through", async () => {
+  const store = createInMemorySectorProfileStore();
+  const classifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Private",
+    specificity: "sector" as const,
+    confidence: 0.95,
+  }));
+
+  const { sectorBySymbol, exposure } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
+
+  expect(sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
+  expect(exposure).toEqual([{ sector: UNKNOWN_SECTOR, weight: 1 }]);
+});
+
+test("a division label on a provider-sourced profile is not trusted and resolves to Unknown", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("ACME", { kind: "stock", sector: "Cyclical", industry: "Widgets", source: "provider" });
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "ACME", marketValue: 100 }], { store });
+
+  expect(sectorBySymbol.get("ACME")).toBe(UNKNOWN_SECTOR);
+});
