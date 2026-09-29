@@ -23,7 +23,7 @@ type LayoutPickerProps =
       disabled?: boolean;
     };
 
-function Switch({
+export function Switch({
   on,
   disabled,
   label,
