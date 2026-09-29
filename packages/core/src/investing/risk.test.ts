@@ -6,7 +6,13 @@ import {
   type InvestingDashboardData,
 } from "./dashboard.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
-import { benchmarkCurrencyMismatchReason, buildHistoricalRisk, RISK_MINIMUM_OBSERVATIONS } from "./risk.js";
+import {
+  benchmarkCurrencyMismatchReason,
+  buildHistoricalRisk,
+  RISK_MAX_STALE_DAYS,
+  RISK_MINIMUM_OBSERVATIONS,
+  RISK_SETTLING_DAYS,
+} from "./risk.js";
 
 function businessDates(count: number): string[] {
   const dates: string[] = [];
@@ -34,6 +40,24 @@ function pointsFromReturns(returns: readonly number[]): PortfolioValuePoint[] {
       cashUnknown: [],
     };
   });
+}
+
+/** Appends `days` business dates (matching businessDaysAfter's counting)
+ *  past the series' last point, each unpriced, to control the exact
+ *  business-day size of a trailing gap. */
+function appendUnknownDays(
+  points: readonly PortfolioValuePoint[],
+  days: number,
+): PortfolioValuePoint[] {
+  const last = points.at(-1)!;
+  const extra: PortfolioValuePoint[] = [];
+  let cursor = new Date(`${last.date}T00:00:00Z`);
+  while (extra.length < days) {
+    cursor = new Date(cursor.getTime() + 86_400_000);
+    if (cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6) continue;
+    extra.push({ ...last, date: cursor.toISOString().slice(0, 10), unpriced: ["AAPL"] });
+  }
+  return [...points, ...extra];
 }
 
 test("warns when the measured risk window contains negative cash", () => {
@@ -259,6 +283,44 @@ test("an interior gap plus an incomplete last day still measures through the las
   expect(report.risk.drawdownFrom).toBe(points[gapIndex + 1]!.date);
   expect(report.risk.reasons).toContain(
     `Measured through ${priorDate}; later dates are still settling.`,
+  );
+});
+
+test("caps how stale the last known date may be before the estimate goes unavailable", () => {
+  const base = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const lastKnownDate = base.at(-1)!.date;
+
+  const withinCap = buildHistoricalRisk(dashboard(appendUnknownDays(base, 3)));
+  expect(withinCap.risk.status).toBe("estimate");
+  expect(withinCap.risk.to).toBe(lastKnownDate);
+
+  const staleExtended = appendUnknownDays(base, RISK_MAX_STALE_DAYS + 3);
+  const firstBadDate = staleExtended[base.length]!.date;
+  const pastCap = buildHistoricalRisk(dashboard(staleExtended));
+  expect(pastCap.risk.status).toBe("unavailable");
+  expect(pastCap.risk.reasons).toContain(`Risk data has been incomplete since ${firstBadDate}.`);
+});
+
+test("names a short trailing gap as still settling and a longer one as incomplete", () => {
+  const base = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const lastKnownDate = base.at(-1)!.date;
+
+  const settling = buildHistoricalRisk(dashboard(appendUnknownDays(base, RISK_SETTLING_DAYS)));
+  expect(settling.risk.status).toBe("estimate");
+  expect(settling.risk.reasons).toContain(
+    `Measured through ${lastKnownDate}; later dates are still settling.`,
+  );
+
+  const incomplete = buildHistoricalRisk(
+    dashboard(appendUnknownDays(base, RISK_SETTLING_DAYS + 3)),
+  );
+  expect(incomplete.risk.status).toBe("estimate");
+  expect(incomplete.risk.reasons).toContain(
+    `Measured through ${lastKnownDate}; later dates are incomplete.`,
   );
 });
 
