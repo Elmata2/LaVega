@@ -2,9 +2,10 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
 import { forgetDashboards } from "./lib/dashboardResource";
+import { resetInvestingLayoutStoreForTests } from "./lib/layoutResource";
 import { PERSONAL_URL } from "./lib/personal";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 import {
@@ -21,6 +22,8 @@ import {
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
+
+beforeEach(() => resetInvestingLayoutStoreForTests());
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -1716,6 +1719,39 @@ test("a user who switched off every module except Overview still gets a working 
   expect(tabs[0]?.textContent).toBe("Overview");
   expect(container.textContent).toContain("Portfolio value");
   root.unmount();
+});
+
+test("switching a module off on /profile removes its top-bar tab without a reload", async () => {
+  let layoutGets = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/investing/layout" && init?.method !== "PUT") layoutGets += 1;
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const agentsTab = () =>
+    container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]');
+  expect(agentsTab()).not.toBeNull();
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(agentsTab()).toBeNull();
+  expect(layoutGets).toBe(1);
+  act(() => root.unmount());
 });
 
 test("/brokers/connect redirects to the profile page's brokers section", async () => {

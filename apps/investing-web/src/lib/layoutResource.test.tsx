@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, test, vi } from "vitest";
-import { useInvestingLayout } from "./layoutResource.js";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resetInvestingLayoutStoreForTests, useInvestingLayout } from "./layoutResource.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+beforeEach(() => resetInvestingLayoutStoreForTests());
 afterEach(() => vi.restoreAllMocks());
 
 function Probe() {
@@ -391,5 +392,54 @@ test("an empty 200 is a real load, so a toggle saves straight away", async () =>
   expect(getCount()).toBe(1);
   expect(bodies).toEqual([{ modules: { agents: false }, widgets: {} }]);
   expect(text(container, "save-error")).toBe("");
+  act(() => root.unmount());
+});
+
+function Mirror() {
+  const layout = useInvestingLayout();
+  return (
+    <div>
+      <span data-testid="mirror-status">{layout.status}</span>
+      <span data-testid="mirror-modules">{layout.modules.join(",")}</span>
+    </div>
+  );
+}
+
+test("every component using the hook shares one layout, one GET and one save queue", async () => {
+  let gets = 0;
+  const bodies: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(ok());
+      }
+      gets += 1;
+      return Promise.resolve(new Response(JSON.stringify({ modules: {}, widgets: {} })));
+    }),
+  );
+  const { container, root } = render();
+  await step(() =>
+    root.render(
+      <>
+        <ControlProbe />
+        <Mirror />
+      </>,
+    ),
+  );
+  expect(gets).toBe(1);
+  expect(text(container, "mirror-status")).toBe("ready");
+
+  await step(() => click(container, "toggle-agents"));
+  expect(text(container, "mirror-modules")).toBe("overview,positions,net-worth");
+  expect(bodies).toEqual([{ modules: { agents: false }, widgets: {} }]);
+
+  const later = render();
+  await step(() => later.root.render(<Mirror />));
+  expect(text(later.container, "mirror-status")).toBe("ready");
+  expect(text(later.container, "mirror-modules")).toBe("overview,positions,net-worth");
+  expect(gets).toBe(1);
+  act(() => later.root.unmount());
   act(() => root.unmount());
 });

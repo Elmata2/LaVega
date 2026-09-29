@@ -2,13 +2,15 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "../app.js";
+import { resetInvestingLayoutStoreForTests } from "../lib/layoutResource.js";
 import { emptyResponseFor, responseFor, withAuthUnconfigured } from "../test/fetchFixtures.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+beforeEach(() => resetInvestingLayoutStoreForTests());
 afterEach(() => vi.restoreAllMocks());
 
 test("profile page lists brokers, modules, widgets and account sections", async () => {
