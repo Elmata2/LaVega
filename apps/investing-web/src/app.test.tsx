@@ -11,6 +11,7 @@ import {
   agentConversation,
   agentInsight,
   dashboard,
+  deferredLayoutFetch,
   emptyDashboard,
   emptyResponseFor,
   portfolioAgents,
@@ -1769,6 +1770,116 @@ test("layout GET failing does not blank the shell — it renders with defaults",
   );
   expect(tabs.map((a) => a.textContent)).toEqual(["Overview", "Positions", "Net worth", "Agents"]);
   expect(container.textContent).toContain("Portfolio value");
+  root.unmount();
+});
+
+test("the top bar shows only Overview while the layout loads, then every module once it resolves", async () => {
+  const layout = deferredLayoutFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input) === "/api/investing/layout"
+        ? layout.fetch()
+        : Promise.resolve(emptyResponseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const loadingTabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(loadingTabs.map((a) => a.textContent)).toEqual(["Overview"]);
+
+  await act(async () => {
+    layout.resolve({ modules: {}, widgets: {} });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const readyTabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(readyTabs.map((a) => a.textContent)).toEqual([
+    "Overview",
+    "Positions",
+    "Net worth",
+    "Agents",
+  ]);
+  root.unmount();
+});
+
+test("a deep link to a disabled module never renders its content or tab, before or after the layout resolves", async () => {
+  const layout = deferredLayoutFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input) === "/api/investing/layout"
+        ? layout.fetch()
+        : Promise.resolve(emptyResponseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).toBeNull();
+  expect(container.textContent).not.toContain("Agents unavailable");
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+
+  await act(async () => {
+    layout.resolve({ modules: { agents: false }, widgets: {} });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).toBeNull();
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+  expect(container.querySelector("h2")?.textContent).toBe("Overview");
+  root.unmount();
+});
+
+test("a failed layout load still renders a deep-linked module route, with defaults instead of a blank redirect", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response("", { status: 500 })
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).not.toBeNull();
   root.unmount();
 });
 

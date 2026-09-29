@@ -1187,6 +1187,7 @@ function ModuleRoute({
   children: React.ReactNode;
 }) {
   const layout = useInvestingLayout();
+  if (layout.status === "loading") return null;
   if (!layout.modules.includes(moduleId)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -1214,7 +1215,7 @@ function Layout() {
             aria-label="Main navigation"
             className="flex items-center gap-1 rounded-pill bg-secondary p-1"
           >
-            {layout.modules.map((id) => (
+            {(layout.status === "loading" ? [HOME_MODULE] : layout.modules).map((id) => (
               <NavLink
                 key={id}
                 to={investingModulePath(id)}
@@ -1228,15 +1229,6 @@ function Layout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            {isOverview && (
-              <button
-                type="button"
-                onClick={() => navigate("/profile#widgets")}
-                className="pressable rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
-              >
-                <span aria-hidden="true">+</span> Add widget
-              </button>
-            )}
             {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
                 gewone cross-document link, want de persoonlijke app is een eigen
                 deploy en geen route hierbinnen. Zonder dit was de oversteek
@@ -1263,6 +1255,15 @@ function Layout() {
                 </svg>
                 <span>Personal</span>
               </a>
+            )}
+            {isOverview && (
+              <button
+                type="button"
+                onClick={() => navigate("/profile#widgets")}
+                className="pressable rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
+              >
+                <span aria-hidden="true">+</span> Add widget
+              </button>
             )}
             <Link
               to="/profile"

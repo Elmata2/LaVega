@@ -214,6 +214,31 @@ export function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   });
 }
 
+/* A layout GET this test resolves by hand, instead of `responseFor`'s
+ * immediate answer — for watching what the shell renders while that request
+ * is still in flight. `useInvestingLayout` is called once per component that
+ * needs it (Layout and every `ModuleRoute`), so each call to `fetch` here
+ * must get its own `Response`: two callers reading the same `Response`
+ * instance would race to consume its one-shot body. */
+export function deferredLayoutFetch(): {
+  fetch: () => Promise<Response>;
+  resolve: (body: unknown) => void;
+} {
+  let resolved: string | null = null;
+  let waiters: Array<() => void> = [];
+  return {
+    fetch: () =>
+      resolved !== null
+        ? Promise.resolve(new Response(resolved))
+        : new Promise<void>((settle) => waiters.push(settle)).then(() => new Response(resolved!)),
+    resolve: (body: unknown) => {
+      resolved = JSON.stringify(body);
+      for (const settle of waiters) settle();
+      waiters = [];
+    },
+  };
+}
+
 export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   return withAuthUnconfigured(input, () => {
