@@ -7,14 +7,17 @@ import { resetNetWorthShareStateForTests } from "./netWorthShare.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/* An unlocked, empty vault: every read resolves at once to nothing, so the
- * app reaches gate "ready" without ever touching IndexedDB. Only the methods
- * App.tsx actually calls on mount/render are here — the rest of the real
- * VaultStorage interface is irrelevant to this test. */
+/* An unlocked vault: every read resolves at once, so the app reaches gate
+ * "ready" without ever touching IndexedDB. Only the methods App.tsx actually
+ * calls on mount/render are here — the rest of the real VaultStorage
+ * interface is irrelevant to this test. `mockAccounts` is mutable per test
+ * (empty by default) so a test that needs a real total to share can seed one
+ * account before rendering. */
+let mockAccounts: unknown[] = [];
 function fakeStorage(): VaultStorage {
   return {
     status: async () => "unlocked",
-    getAccounts: async () => [],
+    getAccounts: async () => mockAccounts,
     getTxs: async () => [],
     getRules: async () => [],
     getScheduledFlows: async () => [],
@@ -56,6 +59,7 @@ beforeEach(async () => {
   App = (await import("./App.js")).default;
   resetNetWorthShareStateForTests();
   localStorage.clear();
+  mockAccounts = [];
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     if (url.includes("/api/personal/net-worth-total")) return new Response(null, { status: 200 });
@@ -72,6 +76,7 @@ afterEach(() => {
   root = null;
   container = null;
   vi.resetModules();
+  vi.useRealTimers();
 });
 
 async function renderApp() {
@@ -134,4 +139,43 @@ test("switching the share off sends exactly one DELETE, never a PUT after it", a
   expect(calls).toHaveLength(1);
   expect((calls[0]![1] as RequestInit | undefined)?.method).toBe("DELETE");
   expect(toggle.checked).toBe(false);
+});
+
+test("a tab left open past midnight shares under the new day, not the day it mounted", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-29T23:58:00Z"));
+  mockAccounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 1234.56 },
+  ];
+  localStorage.setItem("lavega.shareNetWorth", "1");
+  const el = await renderApp();
+  await act(async () => {});
+
+  const puts = () =>
+    shareTotalCalls().filter((c) => (c[1] as RequestInit | undefined)?.method === "PUT");
+  const bodyOf = (call: unknown[]) => JSON.parse((call[1] as RequestInit).body as string);
+
+  expect(puts()).toHaveLength(1);
+  expect(bodyOf(puts()[0]!).date).toBe("2026-09-29");
+
+  // Cross midnight, then retrigger the PUT effect the same way a real sync
+  // would (accounts/txs changing): toggling the switch off and back on both
+  // sit in the effect's dependency list, same as an account/tx update.
+  vi.setSystemTime(new Date("2026-09-30T00:05:00Z"));
+  openProfiel(el);
+  const toggle = el.querySelector<HTMLInputElement>(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  )!;
+  expect(toggle.checked).toBe(true);
+  await act(async () => {
+    toggle.click();
+  });
+  await act(async () => {});
+  await act(async () => {
+    toggle.click();
+  });
+  await act(async () => {});
+
+  const lastPut = puts().at(-1)!;
+  expect(bodyOf(lastPut).date).toBe("2026-09-30");
 });
