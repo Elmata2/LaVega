@@ -61,6 +61,26 @@ test("a date in the future is refused", async () => {
   expect(put).not.toHaveBeenCalled();
 });
 
+test("a date before 2000-01-01 is refused", async () => {
+  const { app, put } = appWith("user-123");
+  const res = await app.request(
+    "/api/personal/net-worth-total",
+    putRequest({ ...validBody, date: "1999-12-31" }),
+  );
+  expect(res.status).toBe(400);
+  expect(put).not.toHaveBeenCalled();
+});
+
+test("2000-01-01 itself is accepted", async () => {
+  const { app, put } = appWith("user-123");
+  const res = await app.request(
+    "/api/personal/net-worth-total",
+    putRequest({ ...validBody, date: "2000-01-01" }),
+  );
+  expect(res.status).toBe(200);
+  expect(put).toHaveBeenCalledWith("2000-01-01", validBody.totalCents);
+});
+
 test("today's date is accepted", async () => {
   const { app, put } = appWith("user-123");
   const res = await app.request(
