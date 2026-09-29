@@ -29,10 +29,43 @@ test("profile page lists brokers, modules, widgets and account sections", async 
     await Promise.resolve();
   });
   expect(container.textContent).toContain("Brokers");
-  expect(container.textContent).toContain("Connect broker");
   expect(container.textContent).toContain("Modules");
   expect(container.textContent).toContain("Widgets");
   expect(container.textContent).toContain("Account");
+  root.unmount();
+});
+
+test("connect broker opens setup guide with IBKR instructions", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(responseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+  });
+  const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]');
+  expect(profileLink).not.toBeNull();
+
+  await act(async () => {
+    profileLink?.click();
+  });
+  expect(container.querySelector("#brokers")).not.toBeNull();
+  expect(container.textContent).toContain("Interactive Brokers");
+  expect(container.textContent).toContain("Flex Web Service");
+  expect(container.textContent).toContain("Trading 212");
+  expect(container.textContent).toContain("Flex-token");
+  expect(container.textContent).toContain("Cash Report");
+  expect(container.textContent).toContain("Statement of Funds");
   root.unmount();
 });
 

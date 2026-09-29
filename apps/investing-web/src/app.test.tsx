@@ -1255,37 +1255,6 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   root.unmount();
 });
 
-test("connect broker opens setup guide with IBKR instructions", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-      Promise.resolve(responseFor(input, init)),
-    ),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/profile"]}>
-        <App />
-      </MemoryRouter>,
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  expect(container.textContent).toContain("Connect broker");
-  expect(container.textContent).toContain("Interactive Brokers");
-  expect(container.textContent).toContain("Flex Web Service");
-  expect(container.textContent).toContain("Trading 212");
-  expect(container.textContent).toContain("Flex-token");
-  expect(container.textContent).toContain("Cash Report");
-  expect(container.textContent).toContain("Statement of Funds");
-  expect(container.querySelector('a[href="/"]')).not.toBeNull();
-  root.unmount();
-});
-
 test("overview keeps portfolio visible and links to reconnect for unreadable broker", async () => {
   vi.stubGlobal(
     "fetch",
@@ -1627,6 +1596,222 @@ test("the header offers a way back to the personal app", async () => {
   const back = container.querySelector(`a[href="${PERSONAL_URL}"]`) as HTMLAnchorElement | null;
   expect(back).not.toBeNull();
   expect(back!.textContent).toContain("Personal");
+  root.unmount();
+});
+
+test("the shell has no max-width frame", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+  });
+  expect(container.querySelector(".max-w-6xl")).toBeNull();
+  root.unmount();
+});
+
+test("a disabled module's route redirects to Overview instead of rendering", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: { agents: false }, widgets: {} }))
+            : emptyResponseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
+  expect(container.textContent).not.toContain("Agents unavailable");
+  root.unmount();
+});
+
+test("a deep link to a disabled module's detail route also redirects home", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(JSON.stringify({ modules: { positions: false }, widgets: {} }))
+            : emptyResponseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/positions/ASML"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).not.toContain("Position detail");
+  root.unmount();
+});
+
+test("a user who switched off every module except Overview still gets a working shell", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response(
+                JSON.stringify({
+                  modules: { positions: false, "net-worth": false, agents: false },
+                  widgets: {},
+                }),
+              )
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(tabs).toHaveLength(1);
+  expect(tabs[0]?.textContent).toBe("Overview");
+  expect(container.textContent).toContain("Portfolio value");
+  root.unmount();
+});
+
+test("/brokers/connect redirects to the profile page's brokers section", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(emptyResponseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/brokers/connect"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Brokers");
+  expect(container.querySelector("#brokers")).not.toBeNull();
+  root.unmount();
+});
+
+test("layout GET failing does not blank the shell — it renders with defaults", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/investing/layout"
+            ? new Response("", { status: 500 })
+            : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tabs = Array.from(
+    container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a'),
+  );
+  expect(tabs.map((a) => a.textContent)).toEqual(["Overview", "Positions", "Net worth", "Agents"]);
+  expect(container.textContent).toContain("Portfolio value");
+  root.unmount();
+});
+
+test("/net-worth renders the net-worth chart", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/net-worth"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('[role="group"][aria-label="Choose net worth period"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("/agents lists every portfolio agent and links to its conversation", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).toContain("Bill Ackman");
+  expect(container.querySelector('a[href="/agents/bill_ackman"]')).not.toBeNull();
   root.unmount();
 });
 

@@ -26,6 +26,8 @@ import {
   ResetPasswordPage,
 } from "./components/AuthForm";
 import { Profile } from "./components/Profile";
+import { NetWorthPage } from "./components/NetWorthPage.js";
+import { AgentsList } from "./components/AgentsList.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -33,9 +35,10 @@ import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
-import { signOut } from "./lib/auth-client";
 import { longDate } from "./lib/dates.js";
 import { useDashboard } from "./lib/dashboardResource";
+import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
+import { useInvestingLayout } from "./lib/layoutResource.js";
 import {
   runPortfolioAgent,
   sendPortfolioAgentMessage,
@@ -1176,35 +1179,33 @@ export function HealthStatus() {
   );
 }
 
-function SignOutLink() {
-  const navigate = useNavigate();
-  async function handleSignOut() {
-    await signOut();
-    navigate("/sign-in", { replace: true });
-  }
-  return (
-    <button
-      type="button"
-      onClick={handleSignOut}
-      className="pressable rounded-xs font-semibold text-primary underline-offset-2 hover:underline"
-    >
-      Sign out
-    </button>
-  );
+function ModuleRoute({
+  moduleId,
+  children,
+}: {
+  moduleId: Exclude<ReturnType<typeof useInvestingLayout>["modules"][number], typeof HOME_MODULE>;
+  children: React.ReactNode;
+}) {
+  const layout = useInvestingLayout();
+  if (!layout.modules.includes(moduleId)) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const layout = useInvestingLayout();
   const detail = location.pathname.startsWith("/positions/");
   const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
-  const connect = location.pathname === "/brokers/connect";
+  const isProfile = location.pathname === "/profile";
+  const isOverview = location.pathname === "/";
   return (
     <div className="min-h-screen p-3 sm:p-6">
-      <div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]">
+      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]">
         <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <Link to="/" className="pressable group">
-            <span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">
+            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
               LaVega
             </span>
             <h1 className="font-display text-3xl font-semibold leading-none">Investing</h1>
@@ -1213,33 +1214,60 @@ function Layout() {
             aria-label="Main navigation"
             className="flex items-center gap-1 rounded-pill bg-secondary p-1"
           >
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
-              }
-            >
-              Overview
-            </NavLink>
-            <NavLink
-              to="/positions"
-              className={({ isActive }) =>
-                `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
-              }
-            >
-              Positions
-            </NavLink>
+            {layout.modules.map((id) => (
+              <NavLink
+                key={id}
+                to={investingModulePath(id)}
+                end={id === HOME_MODULE}
+                className={({ isActive }) =>
+                  `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
+                }
+              >
+                {MODULES.find((m) => m.id === id)?.label ?? id}
+              </NavLink>
+            ))}
           </nav>
-          {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
-              gewone cross-document link, want de persoonlijke app is een eigen
-              deploy en geen route hierbinnen. Zonder dit was de oversteek
-              eenrichtingsverkeer — je kwam hier vanuit de kluis en moest daarna
-              terug via de browserknop of een getypte URL. */}
-          {PERSONAL_URL && (
-            <a
-              href={PERSONAL_URL}
-              className="ml-auto flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          <div className="ml-auto flex items-center gap-2">
+            {isOverview && (
+              <button
+                type="button"
+                onClick={() => navigate("/profile#widgets")}
+                className="pressable rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
+              >
+                <span aria-hidden="true">+</span> Add widget
+              </button>
+            )}
+            {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
+                gewone cross-document link, want de persoonlijke app is een eigen
+                deploy en geen route hierbinnen. Zonder dit was de oversteek
+                eenrichtingsverkeer — je kwam hier vanuit de kluis en moest daarna
+                terug via de browserknop of een getypte URL. */}
+            {PERSONAL_URL && (
+              <a
+                href={PERSONAL_URL}
+                className="flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M19 12H5" />
+                  <path d="m12 19-7-7 7-7" />
+                </svg>
+                <span>Personal</span>
+              </a>
+            )}
+            <Link
+              to="/profile"
+              aria-label="Profile"
+              className={`pressable flex size-9 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
             >
               <svg
                 width="16"
@@ -1247,20 +1275,19 @@ function Layout() {
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.6"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 aria-hidden="true"
               >
-                <path d="M19 12H5" />
-                <path d="m12 19-7-7 7-7" />
+                <circle cx="12" cy="8.5" r="3.5" />
+                <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
               </svg>
-              <span>Personal</span>
-            </a>
-          )}
+            </Link>
+          </div>
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
-          {!connect && (
+          {!isProfile && (
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-primary">
@@ -1270,7 +1297,11 @@ function Layout() {
                       ? "Agent conversation"
                       : positionsList
                         ? "Positions"
-                        : "Your financial overview"}
+                        : location.pathname === "/net-worth"
+                          ? "Net worth"
+                          : location.pathname === "/agents"
+                            ? "Agents"
+                            : "Your financial overview"}
                 </p>
                 <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
                   {detail
@@ -1279,17 +1310,13 @@ function Layout() {
                       ? "Agent"
                       : positionsList
                         ? "Positions"
-                        : "Overview"}
+                        : location.pathname === "/net-worth"
+                          ? "Net worth"
+                          : location.pathname === "/agents"
+                            ? "Agents"
+                            : "Overview"}
                 </h2>
               </div>
-              {!detail && !agentView && (
-                <Link
-                  to="/brokers/connect"
-                  className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
-                >
-                  Connect broker
-                </Link>
-              )}
             </div>
           )}
           <Outlet />
@@ -1298,7 +1325,6 @@ function Layout() {
           <span role="status">
             <HealthStatus />
           </span>
-          <SignOutLink />
         </footer>
       </div>
     </div>
@@ -1794,14 +1820,48 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Overview />} />
-          <Route path="/positions" element={<Positions />} />
-          <Route path="/positions/:symbol" element={<PositionDetail />} />
-          <Route path="/agents/:agentId" element={<AgentView />} />
-          <Route path="/profile" element={<Profile />} />
           <Route
-            path="/brokers/connect"
-            element={<Navigate to="/profile#brokers" replace />}
+            path="/positions"
+            element={
+              <ModuleRoute moduleId="positions">
+                <Positions />
+              </ModuleRoute>
+            }
           />
+          <Route
+            path="/positions/:symbol"
+            element={
+              <ModuleRoute moduleId="positions">
+                <PositionDetail />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/net-worth"
+            element={
+              <ModuleRoute moduleId="net-worth">
+                <NetWorthPage />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents"
+            element={
+              <ModuleRoute moduleId="agents">
+                <AgentsList />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents/:agentId"
+            element={
+              <ModuleRoute moduleId="agents">
+                <AgentView />
+              </ModuleRoute>
+            }
+          />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/brokers/connect" element={<Navigate to="/profile#brokers" replace />} />
         </Route>
       </Route>
     </Routes>
