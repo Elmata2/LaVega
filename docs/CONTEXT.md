@@ -96,7 +96,7 @@ Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contra
 
 ## Portfolio agents (investing)
 
-Specified in **`docs/investing/PORTFOLIO-AGENTS.md`** — investor-persona backend based on `virattt/ai-hedge-fund`: persona registry, portfolio snapshot, OpenAI-compatible model routing, and normalized JSON insights. Read it before touching `apps/investing-server/src/portfolioAgent.ts` or `/api/agents/portfolio`.
+Specified in **`docs/investing/PORTFOLIO-AGENTS.md`**. Investor personas based on `virattt/ai-hedge-fund`, used two ways. The **Analyse** card runs all six personas once over a portfolio snapshot and returns a typed judgment each. The **chat** is one persona per conversation, a tool-using agent that streams its answer and never runs the six-persona judgment. Read it before touching `apps/investing-server/src/portfolioAgent.ts`, `portfolioChat.ts` or `/api/agents/portfolio`.
 
 ## Investing stack
 

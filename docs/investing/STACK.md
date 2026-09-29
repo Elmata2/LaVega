@@ -107,7 +107,7 @@ This reverses the earlier conclusion of [Research: browser infrastructure for AP
 
 ## In-product agent seam
 
-The portfolio agents (`apps/investing-server/src/portfolioAgent.ts`) use the Vercel AI SDK (`ai`) with `@ai-sdk/openai-compatible`, and call tools over the user's own positions and price history. See `PORTFOLIO-AGENTS.md` for personas, routes, and model configuration.
+The portfolio agents use the Vercel AI SDK (`ai`) with `@ai-sdk/openai-compatible` against OpenRouter. The six-persona judgment lives in `apps/investing-server/src/portfolioAgent.ts`. The chat is one `ToolLoopAgent` per conversation in `apps/investing-server/src/portfolioChat.ts`, streamed to `useChat` from `@ai-sdk/react`. It reads positions, prices, risk, sectors, trades and company fundamentals through tools, and fundamentals come from a `FundamentalsProvider` seam (Yahoo first, cached 24 hours). See `PORTFOLIO-AGENTS.md` for personas, routes and model configuration.
 
 ## Hosted-tier seams: identity, secrets, API keys
 
