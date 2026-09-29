@@ -71,6 +71,11 @@ function AccountSection() {
 function DataSection() {
   const [consentAccepted, setConsentAccepted] = useState<boolean | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  /* Defaults to available: a server that omits the field (an older cached
+   * response, a test double) should not read as "misconfigured". Only an
+   * explicit `available: false` — no classifier configured on this
+   * deployment — disables the switch. */
+  const [available, setAvailable] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -82,17 +87,23 @@ function DataSection() {
       })
       .catch(() => current && setConsentAccepted(false));
     void fetch("/api/investing/sector-inference")
-      .then((response) => (response.ok ? response.json() : { enabled: false }))
-      .then((body: { enabled?: unknown }) => {
-        if (current) setEnabled(body.enabled === true);
+      .then((response) => (response.ok ? response.json() : { enabled: false, available: true }))
+      .then((body: { enabled?: unknown; available?: unknown }) => {
+        if (!current) return;
+        setEnabled(body.enabled === true);
+        setAvailable(body.available !== false);
       })
-      .catch(() => current && setEnabled(false));
+      .catch(() => {
+        if (!current) return;
+        setEnabled(false);
+        setAvailable(true);
+      });
     return () => {
       current = false;
     };
   }, []);
 
-  const disabled = saving || enabled === null || consentAccepted !== true;
+  const disabled = saving || enabled === null || consentAccepted !== true || !available;
 
   async function toggle() {
     if (enabled === null || disabled) return;
@@ -127,10 +138,16 @@ function DataSection() {
                 Sends each holding's ticker and name, never quantities or values, to an AI model
                 to classify positions with no sector data. Needs market-data consent.
               </p>
-              {consentAccepted === false && (
+              {!available ? (
                 <p className="mt-1 text-xs text-warning">
-                  Grant market-data consent from Overview before turning this on.
+                  Sector inference is not available on this server.
                 </p>
+              ) : (
+                consentAccepted === false && (
+                  <p className="mt-1 text-xs text-warning">
+                    Grant market-data consent from Overview before turning this on.
+                  </p>
+                )
               )}
             </div>
             <Switch

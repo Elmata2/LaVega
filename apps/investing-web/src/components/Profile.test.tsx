@@ -874,3 +874,71 @@ test("the sector-inference switch turns on and persists once consent is granted"
   expect(toggle.getAttribute("aria-checked")).toBe("true");
   root.unmount();
 });
+
+test("the sector-inference switch is disabled with a hint when the server has no classifier configured", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/market-data/consent"
+            ? new Response(JSON.stringify({ accepted: true }))
+            : String(input) === "/api/investing/sector-inference"
+              ? new Response(JSON.stringify({ enabled: false, available: false }))
+              : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).toBe("true");
+  expect(container.textContent).toContain("Sector inference is not available on this server.");
+  expect(container.textContent).not.toContain("Grant market-data consent");
+  root.unmount();
+});
+
+test("the sector-inference switch stays enabled when the server omits availability", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () =>
+          String(input) === "/api/market-data/consent"
+            ? new Response(JSON.stringify({ accepted: true }))
+            : String(input) === "/api/investing/sector-inference"
+              ? new Response(JSON.stringify({ enabled: false }))
+              : responseFor(input, init),
+        ),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  expect(toggle.getAttribute("aria-disabled")).not.toBe("true");
+  root.unmount();
+});
