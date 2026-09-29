@@ -77,6 +77,8 @@ export function createSystemOneSectorClassifier(
     const answer = result.answers.sector;
     if (!answer || answer.type !== "choice")
       return { kind: "failed", reason: "System One did not return a choice answer for sector" };
+    if (!Number.isFinite(answer.confidence) || answer.confidence < 0 || answer.confidence > 1)
+      return { kind: "failed", reason: `invalid confidence: ${answer.confidence}` };
     if (answer.choice === NO_MATCH) return { kind: "no-match" };
     if (!isGicsSectorLabel(answer.choice)) return { kind: "no-match" };
     if (answer.confidence >= threshold)

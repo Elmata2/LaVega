@@ -15,6 +15,16 @@ function providerRejecting(error: unknown) {
   return { judge: vi.fn().mockRejectedValue(error) };
 }
 
+function providerAnswering(answers: Record<string, unknown>) {
+  return {
+    judge: vi.fn().mockResolvedValue({
+      model: "jev-1.13.0",
+      answers,
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }),
+  };
+}
+
 test("a confident answer reports the sector itself", async () => {
   const classifier = createSystemOneSectorClassifier(providerReturning("Technology", 0.9), 0.6);
   expect(await classifier({ symbol: "ACME", description: "Acme Cloud Software Inc" })).toEqual({
@@ -58,6 +68,41 @@ test("a budget refusal resolves to failed, not no-match", async () => {
   expect(await classifier({ symbol: "ACME" })).toEqual({
     kind: "failed",
     reason: "System One budget exhausted for day",
+  });
+});
+
+test("a NaN confidence resolves to failed, not a cacheable classification", async () => {
+  const classifier = createSystemOneSectorClassifier(providerReturning("Technology", NaN), 0.6);
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "invalid confidence: NaN",
+  });
+});
+
+test("a confidence above 1 resolves to failed, not a cacheable classification", async () => {
+  const classifier = createSystemOneSectorClassifier(providerReturning("Technology", 1.5), 0.6);
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "invalid confidence: 1.5",
+  });
+});
+
+test("a missing sector answer resolves to failed", async () => {
+  const classifier = createSystemOneSectorClassifier(providerAnswering({}), 0.6);
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "System One did not return a choice answer for sector",
+  });
+});
+
+test("a non-choice sector answer resolves to failed", async () => {
+  const classifier = createSystemOneSectorClassifier(
+    providerAnswering({ sector: { type: "score", score: 1, confidence: 0.9, legend: {}, probabilities: {} } }),
+    0.6,
+  );
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "System One did not return a choice answer for sector",
   });
 });
 
