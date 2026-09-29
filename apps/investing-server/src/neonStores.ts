@@ -130,6 +130,7 @@ export function createNeonSectorCorrectionStore(db: Database): SectorCorrectionS
       const corrections = await createPreferencesRepository(db, tenantId).getSectorCorrections();
       return corrections[key(symbol)] ?? null;
     },
+    getAll: (tenantId) => createPreferencesRepository(db, tenantId).getSectorCorrections(),
     set: (tenantId, symbol, sector) =>
       createPreferencesRepository(db, tenantId).setSectorCorrection(symbol, sector),
     clear: (tenantId, symbol) =>

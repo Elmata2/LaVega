@@ -43,3 +43,15 @@ test("corrections are isolated per tenant on disk", async () => {
 
   expect(await store.get("user-b", "AAPL")).toBeNull();
 });
+
+test("getAll reads every correction for the tenant from one file read", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-sector-correction-getall-"));
+  directories.push(directory);
+  const file = join(directory, "corrections.json");
+  const store = createFileSectorCorrectionStore(file);
+  await store.set("user-a", "AAPL", "Healthcare");
+  await store.set("user-a", "MSFT", "Technology");
+  await store.set("user-b", "AAPL", "Energy");
+
+  expect(await store.getAll("user-a")).toEqual({ AAPL: "Healthcare", MSFT: "Technology" });
+});

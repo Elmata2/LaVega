@@ -150,6 +150,14 @@ test("setting a sector correction writes to the preferences row under the caller
   expect(write.values).toEqual([JSON.stringify({ AAPL: "Healthcare" })]);
 });
 
+test("getAll reads every correction for the tenant in one call", async () => {
+  const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } }]);
+  const store = createNeonSectorCorrectionStore(db);
+
+  expect(await store.getAll("user-a")).toEqual({ AAPL: "Healthcare", MSFT: "Technology" });
+  expect(executed(calls)).toHaveLength(1);
+});
+
 test("clearing a sector correction writes the row without that symbol", async () => {
   const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } }]);
   const store = createNeonSectorCorrectionStore(db);

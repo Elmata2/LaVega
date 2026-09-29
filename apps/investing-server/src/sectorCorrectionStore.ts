@@ -5,6 +5,11 @@
  *  store ever sees it. */
 export type SectorCorrectionStore = {
   get(tenantId: string, symbol: string): Promise<string | null>;
+  /** Every correction for the tenant in one read. Callers resolving many
+   *  symbols in one request (the summary route, /sectors/infer) fetch this
+   *  once and index into it locally instead of calling `get` per symbol —
+   *  each `get` on the Neon store re-reads the whole preferences row. */
+  getAll(tenantId: string): Promise<Record<string, string>>;
   set(tenantId: string, symbol: string, sector: string): Promise<void>;
   clear(tenantId: string, symbol: string): Promise<void>;
 };
@@ -15,6 +20,9 @@ export function createInMemorySectorCorrectionStore(): SectorCorrectionStore {
   return {
     async get(tenantId, symbol) {
       return corrections.get(tenantId)?.[key(symbol)] ?? null;
+    },
+    async getAll(tenantId) {
+      return { ...corrections.get(tenantId) };
     },
     async set(tenantId, symbol, sector) {
       corrections.set(tenantId, { ...corrections.get(tenantId), [key(symbol)]: sector });

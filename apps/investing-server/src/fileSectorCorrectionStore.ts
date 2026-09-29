@@ -40,6 +40,12 @@ export function createFileSectorCorrectionStore(
         null
       );
     },
+    async getAll(tenantId) {
+      const rows = await store.read();
+      return Object.fromEntries(
+        rows.filter((row) => row.tenantId === tenantId).map((row) => [row.symbol, row.sector]),
+      );
+    },
     async set(tenantId, symbol, sector) {
       await store.update((rows) => [
         ...rows.filter((row) => !(row.tenantId === tenantId && row.symbol === key(symbol))),
