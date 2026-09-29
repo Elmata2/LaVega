@@ -225,12 +225,14 @@ function maxDrawdown(values: readonly number[]): number {
 
 export type SectorWeight = { sector: string; weight: number };
 
-/** A resolved weight vector rarely sums to exactly 1 (Yahoo rounds its
- *  published fund-holding percentages before publishing them). Below this
- *  fraction of a position's own weight, an apparent shortfall is float
- *  noise, not a real unclassified share, so it is dropped instead of
- *  manufacturing a phantom Unknown row. */
-export const SECTOR_RESIDUAL_EPSILON = 1e-6;
+/** A resolved weight vector rarely sums to exactly 1: Yahoo rounds each of
+ *  up to 11 published sector weights to 4 decimals, so a normal equity
+ *  ETF's vector sums to 0.9995-0.9998 and leaves a 0.0002-0.0005 residual
+ *  before any float arithmetic even runs. This is a rounding tolerance, not
+ *  float-noise sizing — below it, a shortfall is publisher rounding, not a
+ *  real unclassified share, so it is dropped instead of manufacturing a
+ *  phantom Unknown row. */
+export const SECTOR_RESIDUAL_EPSILON = 1e-3;
 
 /** Sort-order rounding: two bucket weights within this distance are
  *  indistinguishable, so sector name — not float dust — decides their order. */

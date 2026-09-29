@@ -150,6 +150,53 @@ test("a fund position splits its market value across its own weight vector", () 
   ]);
 });
 
+test("a VFEM-like fund whose 11 published sector weights round to 0.9998 has no Unknown row", () => {
+  const weights = new Map([
+    [
+      "VFEM.L",
+      [
+        { sector: "Sector0", weight: 0.0909 },
+        { sector: "Sector1", weight: 0.0909 },
+        { sector: "Sector2", weight: 0.0909 },
+        { sector: "Sector3", weight: 0.0909 },
+        { sector: "Sector4", weight: 0.0909 },
+        { sector: "Sector5", weight: 0.0909 },
+        { sector: "Sector6", weight: 0.0909 },
+        { sector: "Sector7", weight: 0.0909 },
+        { sector: "Sector8", weight: 0.0909 },
+        { sector: "Sector9", weight: 0.0909 },
+        { sector: "Sector10", weight: 0.0908 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "VFEM.L", marketValue: 1000 }], weights);
+  expect(exposure.map((entry) => entry.sector)).not.toContain("Unknown");
+});
+
+test("a real 0.5% unclassified residual still shows as Unknown", () => {
+  const weights = new Map([
+    [
+      "FUND",
+      [
+        { sector: "Sector0", weight: 0.0905 },
+        { sector: "Sector1", weight: 0.0905 },
+        { sector: "Sector2", weight: 0.0905 },
+        { sector: "Sector3", weight: 0.0905 },
+        { sector: "Sector4", weight: 0.0905 },
+        { sector: "Sector5", weight: 0.0905 },
+        { sector: "Sector6", weight: 0.0905 },
+        { sector: "Sector7", weight: 0.0905 },
+        { sector: "Sector8", weight: 0.0905 },
+        { sector: "Sector9", weight: 0.0905 },
+        { sector: "Sector10", weight: 0.09 },
+      ],
+    ],
+  ]);
+  const exposure = buildSectorExposure([{ symbol: "FUND", marketValue: 1000 }], weights);
+  const unknown = exposure.find((entry) => entry.sector === "Unknown");
+  expect(unknown?.weight).toBeCloseTo(0.005, 6);
+});
+
 test("a fund with an empty weight vector (bond fund) is entirely Unknown, not an error", () => {
   const weights = new Map([["AGGG.L", []]]);
   expect(buildSectorExposure([{ symbol: "AGGG.L", marketValue: 500 }], weights)).toEqual([
