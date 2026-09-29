@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   HistoricalRisk,
   PortfolioMetrics,
@@ -125,8 +125,12 @@ export function usePortfolioSummary(
       });
     return () => controller.abort();
   }, [range, benchmark, requestKey, enabled]);
+  /* Stable across re-renders: a caller (SectorAllocationCard's background
+   * inference effect) depends on this identity to avoid restarting a
+   * pending run on every unrelated parent re-render. */
+  const refresh = useCallback(() => setRefreshes((value) => value + 1), []);
   return {
     state: state.key === requestKey ? state.result : { status: "loading" },
-    refresh: () => setRefreshes((value) => value + 1),
+    refresh,
   };
 }

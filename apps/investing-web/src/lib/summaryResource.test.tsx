@@ -81,6 +81,18 @@ test("requests the endpoint with the range and benchmark as query params", async
   root.unmount();
 });
 
+test("refresh keeps the same identity across an unrelated re-render", async () => {
+  const fetcher = vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 }));
+  vi.stubGlobal("fetch", fetcher);
+  const samples: Sample[] = [];
+  const { root, Probe } = mount(samples);
+  await act(async () => root.render(<Probe range="1Y" benchmark="" revision="" />));
+  const settled = samples.at(-1)!.refresh;
+  await act(async () => root.render(<Probe range="1Y" benchmark="" revision="" />));
+  expect(samples.at(-1)!.refresh).toBe(settled);
+  root.unmount();
+});
+
 test("refresh requests the endpoint again with the same parameters", async () => {
   const fetcher = vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 }));
   vi.stubGlobal("fetch", fetcher);

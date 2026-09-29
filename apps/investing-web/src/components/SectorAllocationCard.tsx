@@ -44,7 +44,13 @@ function coverageLine(coverage: SectorCoverage): string | null {
  *  refreshes so the newly classified symbols show up. A ref keyed on the
  *  `state.data` identity stops it re-running for the same load — including
  *  React StrictMode's double effect invocation — while still re-arming for
- *  the next distinct summary (initial load, a manual refresh, a poll). */
+ *  the next distinct summary (initial load, a manual refresh, a poll).
+ *
+ *  `refresh` is read through a ref rather than listed as an effect
+ *  dependency: usePortfolioSummary memoizes it, but this run's own
+ *  correctness never depended on that — an unrelated parent re-render
+ *  handing down a new `refresh` closure must not cancel an in-flight
+ *  classification loop and lose its post-inference refresh. */
 function useSectorInference(state: SummaryState, refresh: () => void): void {
   const [enabled, setEnabled] = useState(false);
   useEffect(() => {
@@ -57,6 +63,11 @@ function useSectorInference(state: SummaryState, refresh: () => void): void {
       current = false;
     };
   }, []);
+
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   const ranFor = useRef<unknown>(null);
   useEffect(() => {
@@ -80,12 +91,12 @@ function useSectorInference(state: SummaryState, refresh: () => void): void {
         else break;
         if (typeof body.remaining === "number" && body.remaining <= 0) break;
       }
-      if (classifiedAny && !cancelled) refresh();
+      if (classifiedAny && !cancelled) refreshRef.current();
     })();
     return () => {
       cancelled = true;
     };
-  }, [enabled, state, refresh]);
+  }, [enabled, state]);
 }
 
 /** Presentational: `/api/investing/summary` is the slowest call on the page,

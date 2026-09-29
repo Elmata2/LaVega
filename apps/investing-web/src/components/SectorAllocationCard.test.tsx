@@ -270,6 +270,52 @@ test("stops the bounded infer loop instead of looping forever when classificatio
   expect(refresh).toHaveBeenCalledTimes(1);
 });
 
+test("an unrelated re-render mid-run, handing a new refresh closure, doesn't cancel the run", async () => {
+  const requests: string[] = [];
+  let resolveInfer: (response: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sectors/infer")
+        return new Promise<Response>((resolve) => {
+          resolveInfer = resolve;
+        });
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+  const state: SummaryState = {
+    ...readyState,
+    data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
+  };
+  const { root } = render();
+  await act(async () => {
+    root.render(<SectorAllocationCard state={state} refresh={() => {}} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+
+  const refresh = vi.fn();
+  act(() => {
+    // Same state by identity, brand-new refresh closure — simulates the
+    // parent (Overview) re-rendering for an unrelated reason mid-run.
+    root.render(<SectorAllocationCard state={state} refresh={refresh} />);
+  });
+
+  await act(async () => {
+    resolveInfer(new Response(JSON.stringify({ classified: 2, remaining: 0 })));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(requests.filter((url) => url === "/api/investing/sectors/infer")).toHaveLength(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
 test("stops the infer loop on 428 without refreshing when nothing was classified", async () => {
   const requests: string[] = [];
   vi.stubGlobal(
