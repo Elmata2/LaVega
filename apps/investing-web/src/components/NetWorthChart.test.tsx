@@ -107,6 +107,41 @@ test("renders accessible exact values and explicit empty state", async () => {
   await act(async () => root.unmount());
 });
 
+test("without personalAsOfDate the chart renders exactly as before — no band, no legend swatch", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<NetWorthChart data={{ "1M": points, All: points }} />);
+  });
+  expect(container.textContent).not.toContain("Bank accounts");
+  await act(async () => root.unmount());
+});
+
+test("with personalAsOfDate, the band's legend and as-of label appear and the total includes it", async () => {
+  const withPersonal = points.map((point) => ({
+    ...point,
+    personalValue: 50,
+    netWorth: (point.value ?? 0) + 50,
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <NetWorthChart
+        data={{ "1M": withPersonal, All: withPersonal }}
+        personalAsOfDate="2026-01-05"
+      />,
+    );
+  });
+  expect(container.textContent).toContain("Bank accounts (Personal, as of 5 Jan 2026)");
+  expect(container.querySelector('ul[aria-label="Exact net worth values"]')?.textContent).toContain(
+    "bank accounts (Personal)",
+  );
+  await act(async () => root.unmount());
+});
+
 test("window helper does not alter source series", () => {
   expect(
     netWorthPointsForWindow(
