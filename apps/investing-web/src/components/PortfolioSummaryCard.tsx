@@ -124,6 +124,7 @@ export function PortfolioSummaryCard({
                 ? "Still loading"
                 : "Unavailable"
               : "Estimate, currency moves excluded"}
+            {asOfCaption}
           </p>
           {/* "Unavailable" NAAST EEN LIJST REDENEN LEEST ALS EEN OORDEEL, en zo
               stond het er ook terwijl de prijsgeschiedenis nog gewoon binnenkwam:
@@ -142,8 +143,7 @@ export function PortfolioSummaryCard({
           )}
           {risk.from && risk.to && (
             <p>
-              {risk.from} to {risk.to}
-              {asOfCaption} · {risk.currency}
+              {risk.from} to {risk.to} · {risk.currency}
             </p>
           )}
           {risk.reasons.length > 0 && (
