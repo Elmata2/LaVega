@@ -52,6 +52,16 @@ export type SectorResolutionOptions = {
    *  on read-only paths and wherever consent or the enable setting say no —
    *  the same discipline fetchProfile already has. */
   classifier?: SectorClassifier;
+  /** Whether an already-cached `source: "inferred"` profile may be shown to
+   *  this tenant. The cache is global (no tenantId — sector_profiles has no
+   *  RLS), so a symbol another tenant had classified stays cached forever;
+   *  without this, a tenant who turned inference off (or never gave
+   *  market-data consent) would still see that AI label. `false` degrades
+   *  the profile to Unknown for display and coverage alike — the profile
+   *  itself is never touched. Omitted or `true` shows it, so every existing
+   *  caller that doesn't know about tenant settings (or doesn't need to)
+   *  keeps today's behavior. */
+  showInferred?: boolean;
 };
 
 export type PortfolioSectors = {
@@ -127,7 +137,7 @@ function stampFetchedAt(profile: SectorProfile): SectorProfile {
 
 async function resolveWeights(
   position: { symbol: string; description?: string },
-  { store, fetchProfile, correction, classifier }: SectorResolutionOptions,
+  { store, fetchProfile, correction, classifier, showInferred }: SectorResolutionOptions,
 ): Promise<SectorWeight[]> {
   const { symbol } = position;
   /* Read the cache, and ask for the correction, before deciding anything —
@@ -169,7 +179,7 @@ async function resolveWeights(
       await store.set(symbol, inferred);
     }
   }
-  return profileToWeights(profile);
+  return profileToWeights(profile, showInferred);
 }
 
 /** `classified` becomes a cacheable inferred profile at whatever specificity
@@ -205,10 +215,10 @@ function classificationToProfile(
   };
 }
 
-function profileToWeights(profile: SectorProfile | null): SectorWeight[] {
+function profileToWeights(profile: SectorProfile | null, showInferred?: boolean): SectorWeight[] {
   if (!profile) return [];
   if (profile.kind === "stock") {
-    const resolved = resolvedStockSector(profile);
+    const resolved = resolvedStockSector(profile, { showInferred });
     return [{ sector: resolved.sector, weight: 1, source: resolved.source }];
   }
   return [...profile.weights]
@@ -234,8 +244,15 @@ function isDisplayableStockSector(profile: StockSectorProfile): boolean {
  *  "inferred" with nothing behind it. */
 export function resolvedStockSector(
   profile: StockSectorProfile,
+  options?: { showInferred?: boolean },
 ): { sector: string; source: SectorWeightSource; confidence?: number } {
   if (!isDisplayableStockSector(profile)) return { sector: UNKNOWN_SECTOR, source: "unknown" };
+  /* An inferred label the tenant isn't allowed to see (inference off, or no
+   * market-data consent) reads exactly like an unresolved symbol — never a
+   * confident-looking sector, and never the classifier's answer leaking
+   * across tenants through the global sector_profiles cache. */
+  if (profile.source === "inferred" && options?.showInferred === false)
+    return { sector: UNKNOWN_SECTOR, source: "unknown" };
   return profile.source === "inferred"
     ? { sector: profile.sector, source: "inferred", confidence: profile.confidence }
     : { sector: profile.sector, source: "provider" };

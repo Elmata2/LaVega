@@ -3,6 +3,7 @@ import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.j
 import {
   FUND_PROFILE_REFRESH_DAYS,
   resolvePortfolioSectors,
+  resolvedStockSector,
   UNKNOWN_SECTOR,
 } from "./sectorResolution.js";
 
@@ -666,6 +667,83 @@ test("coverage attributes an unresolved position to unknown", async () => {
   const { coverage } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store });
 
   expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("an inferred profile is hidden as Unknown when showInferred is false", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: new Date().toISOString(),
+  });
+
+  const { sectorBySymbol, coverage } = await resolvePortfolioSectors(
+    [{ symbol: "MYST", marketValue: 100 }],
+    { store, showInferred: false },
+  );
+
+  expect(sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
+  expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
+});
+
+test("an inferred profile still shows when showInferred is true or omitted", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("MYST", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.9,
+    inferredAt: new Date().toISOString(),
+  });
+
+  const omitted = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store });
+  const explicit = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    showInferred: true,
+  });
+
+  expect(omitted.sectorBySymbol.get("MYST")).toBe("Technology");
+  expect(explicit.sectorBySymbol.get("MYST")).toBe("Technology");
+});
+
+test("a provider profile is unaffected by showInferred: false", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    showInferred: false,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Technology");
+});
+
+test("resolvedStockSector reports Unknown, not the inferred label, when showInferred is false", () => {
+  const profile = {
+    kind: "stock" as const,
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred" as const,
+    specificity: "sector" as const,
+    confidence: 0.82,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  };
+
+  expect(resolvedStockSector(profile, { showInferred: false })).toEqual({
+    sector: UNKNOWN_SECTOR,
+    source: "unknown",
+  });
+  expect(resolvedStockSector(profile)).toEqual({
+    sector: "Healthcare",
+    source: "inferred",
+    confidence: 0.82,
+  });
 });
 
 test("coverage splits across a mixed portfolio and sums to 1", async () => {
