@@ -30,6 +30,7 @@ import {
 import { Profile } from "./components/Profile";
 import { NetWorthPage } from "./components/NetWorthPage.js";
 import { AgentsList } from "./components/AgentsList.js";
+import { StockResearch } from "./components/StockResearch.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -709,7 +710,7 @@ function AgentView() {
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
           <div className="flex justify-start">
-            <p className="max-w-[86%] whitespace-pre-line rounded-[18px] bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+            <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
               I am {agent.displayName}. I look at your positions through this lens. Ask a question
               about a holding, concentration, return or risk.
             </p>
@@ -1187,6 +1188,7 @@ function Layout() {
   const detail = location.pathname.startsWith("/positions/");
   const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
+  const isStockResearch = location.pathname === "/agents/research";
   const isProfile = location.pathname === "/profile";
   const isOverview = location.pathname === "/";
   return (
@@ -1276,7 +1278,7 @@ function Layout() {
           </div>
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
-          {!isProfile && (
+          {!isProfile && !isStockResearch && (
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-primary">
@@ -1898,6 +1900,14 @@ export function App() {
             element={
               <ModuleRoute moduleId="agents">
                 <AgentsList />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents/research"
+            element={
+              <ModuleRoute moduleId="agents">
+                <StockResearch />
               </ModuleRoute>
             }
           />

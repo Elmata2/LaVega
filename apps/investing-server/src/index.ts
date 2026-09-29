@@ -24,6 +24,7 @@ import {
 import { createProblemReporter } from "./observability.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
+import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
@@ -801,9 +802,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
-  const fundamentals = createCachedFundamentalsProvider(
-    options.fundamentalsProvider ?? createYahooFundamentalsProvider(),
-  );
+  const freshFundamentals = options.fundamentalsProvider ?? createYahooFundamentalsProvider();
+  const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
   const unavailableFundamentals: FundamentalsProvider = {
     fetch: async () => {
       throw new Error("Market data consent is not given");
@@ -832,6 +832,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   };
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
+    attachStockResearchRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      consent: marketDataConsentStore,
+      fundamentals: freshFundamentals,
+      chatModel: options.chatModel,
+    });
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
         agents: listPortfolioAgents().map(
