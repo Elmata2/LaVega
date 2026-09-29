@@ -6,16 +6,21 @@ The landing view: portfolio value over time, KPIs, allocation, and the operation
 
 - headline figures: `Portfolio value`, `Daily change`, `Total return`; `Value partly
 unknown` when some positions are unpriced.
-- portfolio chart (aside `Portfolio overview`) with window modes and a benchmark overlay.
-- KPI block (`Portfolio KPIs`) — volatility, beta, alpha, max drawdown, from
+- portfolio chart (`Performance` widget) with window modes and a benchmark overlay.
+- allocation donut (`Allocation` widget).
+- KPI block (`Key figures` widget) — volatility, beta, alpha, max drawdown, from
   `/api/investing/summary`.
-- allocation donut (`Allocation`, `Allocation details`) and `Sector allocation`.
-- net-worth chart (`Net worth`, `Net worth partly unknown`).
-- portfolio agents card (`Choose agent`) — see [portfolio-agents.md](portfolio-agents.md).
+- risk & composition (`Risk & composition` widget) and `Sector allocation` (its own widget,
+  independently hideable — see `SectorAllocationCard`).
+- portfolio agents card (`Choose agent` widget) — see [portfolio-agents.md](portfolio-agents.md).
 - operational status (`Operational status`) — chips `Connection`, `Brokers`,
-  `Price history`, `Vault`, `Cache`.
+  `Price history`, `Vault`, `Cache`. Always rendered; not a switchable widget.
+- every card above can be switched off from `/profile#widgets`; switching off every
+  card replaces the grid with one line and an `Add widget` button.
 - degraded and empty states: `Dashboard unavailable`, `Refresh failed`, `Reading problems`,
-  `No positions loaded`, `Cached data remains visible`, `Still loading your history`.
+  `Cached data remains visible`, `Still loading your history`.
+- the positions table and the net-worth chart are their own tabs (`/positions`, `/net-worth`),
+  not part of this view.
 
 ## How to get to it (user POV)
 

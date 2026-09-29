@@ -21,9 +21,12 @@ capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync pr
 
 ## How to get to it (user POV)
 
-`Connect broker` in the header, or `/investing/brokers/connect`. Pick a broker, paste the
-credentials, enter the vault passphrase, and press `Save and sync`. On a later visit the vault
-is already populated and the form is `Unlock vault` with `Unlock and sync`.
+Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#brokers`), or the
+profile button in the top bar. `/brokers/connect` is a redirect kept for old bookmarks.
+
+Pick a broker, paste the credentials, enter the vault passphrase, and press `Save and sync`. On
+a later visit the vault is already populated and the form is `Unlock vault` with `Unlock and
+sync`.
 
 ## Driving it with control-investing
 
