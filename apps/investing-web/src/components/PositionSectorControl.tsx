@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { GICS_SECTOR_LABELS } from "@lavega/core";
 
+type SectorKind = "stock" | "fund" | "unknown";
 type SectorSource = "provider" | "inferred" | "correction" | "unknown";
-type SectorState = { sector: string; source: SectorSource; confidence?: number };
+type SectorState = {
+  kind?: SectorKind;
+  sector: string | null;
+  source: SectorSource;
+  confidence?: number;
+};
 
 const badgeClass = "ml-2 rounded-pill bg-secondary px-2 py-0.5 text-xs text-muted-foreground";
 
@@ -11,10 +17,11 @@ function sectorUrl(symbol: string): string {
 }
 
 /** A fund's sector is a look-through weight vector, not a single label, so
- *  PUT rejects it with 422 (Task 10). Nothing in InvestingPositionDetail
- *  marks a position as a fund, so this can't hide the control up front; it
- *  finds out from the same 422 the API already uses to enforce the rule,
- *  and then hides itself for the rest of this mount. */
+ *  PUT rejects it with 422 (Task 10). The GET response's `kind` field
+ *  already knows this up front once the profile is cached, so the control
+ *  hides itself immediately; a symbol GET hasn't cached yet still learns
+ *  it from that same 422 (a response with no `kind` is treated as a
+ *  stock, for a server that hasn't shipped the field yet). */
 export function PositionSectorControl({ symbol }: { symbol: string }) {
   const [state, setState] = useState<SectorState | null>(null);
   const [selection, setSelection] = useState("");
@@ -34,6 +41,7 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
   }, [symbol]);
 
   if (!state) return null;
+  const isFund = fund || state.kind === "fund";
 
   const badge =
     state.source === "inferred" ? (
@@ -84,11 +92,13 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4 text-sm">
-      <span>
-        Sector: <span className="font-semibold">{state.sector}</span>
-        {badge}
-      </span>
-      {fund ? (
+      {state.sector !== null && (
+        <span>
+          Sector: <span className="font-semibold">{state.sector}</span>
+          {badge}
+        </span>
+      )}
+      {isFund ? (
         <p className="text-xs text-muted-foreground">
           Split across its holdings' sectors — correct the underlying holdings instead.
         </p>

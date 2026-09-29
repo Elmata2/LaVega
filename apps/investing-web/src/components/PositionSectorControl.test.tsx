@@ -153,3 +153,42 @@ test("a fund's 422 hides the correction control and explains why", async () => {
   expect(container.querySelector('select[aria-label="Correct sector"]')).toBeNull();
   expect(container.textContent).toMatch(/split across its holdings/i);
 });
+
+test("kind fund from GET hides the correction control from the start, with no PUT needed", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ kind: "fund", sector: null, source: "provider" }))),
+  );
+  const { container, root } = render();
+  act(() => root.render(<PositionSectorControl symbol="VFEM.L" />));
+  await act(async () => {});
+
+  expect(container.querySelector('select[aria-label="Correct sector"]')).toBeNull();
+  expect(container.textContent).toMatch(/split across its holdings/i);
+});
+
+test("kind stock from GET shows the resolved sector and the correction control", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ kind: "stock", sector: "Technology", source: "provider" }))),
+  );
+  const { container, root } = render();
+  act(() => root.render(<PositionSectorControl symbol="AAPL" />));
+  await act(async () => {});
+
+  expect(container.textContent).toContain("Technology");
+  expect(container.querySelector('select[aria-label="Correct sector"]')).not.toBeNull();
+});
+
+test("a missing kind is treated as a stock, for backward compatibility with an older server", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ sector: "Technology", source: "provider" }))),
+  );
+  const { container, root } = render();
+  act(() => root.render(<PositionSectorControl symbol="AAPL" />));
+  await act(async () => {});
+
+  expect(container.textContent).toContain("Technology");
+  expect(container.querySelector('select[aria-label="Correct sector"]')).not.toBeNull();
+});
