@@ -17,7 +17,7 @@ import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 import { accountGaps } from "@lavega/core";
-import { POSITION_WINDOW_DAYS, positionSeries, type PositionSeries } from "../../totalePositie.js";
+import { POSITION_WINDOW_DAYS, positionSeries } from "../../totalePositie.js";
 
 export { POSITION_WINDOW_DAYS, positionSeries, type PositionPoint, type PositionSeries } from "../../totalePositie.js";
 

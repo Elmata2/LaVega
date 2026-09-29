@@ -1,9 +1,19 @@
 import { useMemo } from "react";
-import { PORTFOLIO_RANGES, mergeInPersonalNetWorth, type PortfolioRange } from "@lavega/core";
+import {
+  PORTFOLIO_RANGES,
+  mergeInPersonalNetWorth,
+  type PersonalNetWorthTotal,
+  type PortfolioRange,
+} from "@lavega/core";
 import { useDashboard } from "../lib/dashboardResource.js";
 import { usePersonalNetWorthTotals } from "../lib/personalNetWorthResource.js";
 import { NetWorthChart } from "./NetWorthChart.js";
 import { EmptyState } from "./EmptyState.js";
+
+/** A stable empty-array reference for the non-EUR skip path below, so it
+ *  doesn't itself read as "changes every render" to callers that depend on
+ *  it. */
+const NO_PERSONAL_TOTALS: PersonalNetWorthTotal[] = [];
 
 function Loading() {
   return (
@@ -30,7 +40,9 @@ export function NetWorthPage() {
    * total, so a non-EUR presentation currency skips the merge entirely —
    * exactly the same no-op path an owner who never shared anything gets. */
   const totalsInPresentationCurrency =
-    state.status === "ready" && state.data.presentationCurrency === "EUR" ? personalTotals : [];
+    state.status === "ready" && state.data.presentationCurrency === "EUR"
+      ? personalTotals
+      : NO_PERSONAL_TOTALS;
   const netWorthData = useMemo(() => {
     if (!portfolio) return undefined;
     const merged: Partial<Record<PortfolioRange, ReturnType<typeof mergeInPersonalNetWorth>["points"]>> =
