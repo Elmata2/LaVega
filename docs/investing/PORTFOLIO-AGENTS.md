@@ -33,7 +33,6 @@ LaVega implementation:
 Not copied:
 
 - Python LangGraph orchestration. Current product needs direct request/response per user portfolio.
-- Financial Datasets API fetch layer. The chat reads company fundamentals through the `FundamentalsProvider` seam instead (see [Chat](#chat)); news and insider data are still not fetched.
 - Prompt cache table. Current run store keeps latest result only; add durable per-agent snapshot cache when runs become scheduled or expensive.
 
 ## Chat
@@ -44,7 +43,7 @@ The chat is one agent per conversation. It never calls the six-persona judgment;
 - Persona: `apps/investing-server/src/personaProfiles.ts` holds conversational rewrites of the persona sources in [`agents/`](./agents/README.md), plus shared rules: stay in voice, use the brief and tools, never invent a number, educational and not advice.
 - Tools: `get_positions`, `get_price`, `compute_portfolio_value`, `get_fundamentals`, `get_sector_exposure`, `get_risk` and `get_trades`. All read the signed-in tenant's data only.
 - Prefetch: before the model is called, the server renders a portfolio brief and fetches fundamentals in parallel for up to 3 symbols the message names and the 5 largest holdings (5 second cap each). The first answer rarely waits on a tool round trip.
-- Fundamentals: `FundamentalsProvider` in `@lavega/core`, with Yahoo (`quoteSummary` plus timeseries) as the first adapter. Results are cached for 24 hours per symbol, misses included, and concurrent reads share one fetch. Fundamentals are read only after the user accepts market-data consent; without it, the tool reports them as unavailable.
+- Fundamentals: `FundamentalsProvider` in `@lavega/core`, with Yahoo Finance (`quoteSummary` plus timeseries) as the only adapter. FactSet is a possible later adapter behind the same seam. Results are cached for 24 hours per symbol, misses included, and concurrent reads share one fetch. Fundamentals are read only after the user accepts market-data consent; without it, the tool reports them as unavailable.
 - Model: `LAVEGA_AGENT_MODEL`, default `mistralai/mistral-small-2603`. On OpenRouter the request also sends `models` with `qwen/qwen3.8-flash` as fallback, because Mistral's shared OpenRouter pool often answers 429. Key: `LAVEGA_AGENT_API_KEY`, then `OPENROUTER_API_KEY`. Base URL: `LAVEGA_AGENT_BASE_URL`.
 - Latency, measured locally on the fixture portfolio (29 September 2026): the first token arrives in about 0.6 to 1.6 seconds when the brief is enough, and 7 to 16 seconds when the model takes tool steps first. Before this change, a turn ran the full judgment before answering.
 - Errors: an unknown persona or an empty message answers `400`. A model failure mid-stream arrives as an `error` event, and the UI shows `Agent reply failed.`

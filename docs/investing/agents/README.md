@@ -30,7 +30,7 @@ These files are copied unchanged from [`virattt/ai-hedge-fund`](https://github.c
 - `content_hash` hashes the snapshot without `as_of`. The agent re-reasons only when a new filing changes the data.
 - `render()` prints a short summary block and a history table, newest period first.
 
-The source uses Financial Datasets (`api.financialdatasets.ai`). `docs/investing/STACK.md` rules that vendor out, so LaVega fills the same fields from Yahoo quoteSummary.
+The source uses Financial Datasets (`api.financialdatasets.ai`). `docs/investing/STACK.md` rules that vendor out, so LaVega fills the same fields from Yahoo quoteSummary. FactSet is a possible later source.
 
 ## What LaVega takes
 
