@@ -2,7 +2,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resetInvestingLayoutStoreForTests, useInvestingLayout } from "./layoutResource.js";
+import {
+  resetInvestingLayoutStoreForTests,
+  setLayoutOwner,
+  useInvestingLayout,
+} from "./layoutResource.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -442,4 +446,23 @@ test("every component using the hook shares one layout, one GET and one save que
   expect(gets).toBe(1);
   act(() => later.root.unmount());
   act(() => root.unmount());
+});
+
+test("a different account without a sign-out gets a fresh store, and the old queue sends nothing more", async () => {
+  setLayoutOwner("a");
+  const { puts, outstanding } = stubQueuedPuts();
+  const { container, root } = await mountReady();
+  await step(() => click(container, "toggle-agents"));
+  await step(() => click(container, "toggle-sectors"));
+  expect(puts).toHaveLength(1);
+  act(() => root.unmount());
+
+  setLayoutOwner("b");
+  await step(() => outstanding()[0]!.resolve(ok()));
+  expect(puts).toHaveLength(1);
+
+  const next = await mountReady();
+  expect(text(next.container, "modules")).toBe("overview,positions,net-worth,agents");
+  expect(text(next.container, "widgets")).toBe("performance,allocation,kpis,risk,sectors,agent");
+  act(() => next.root.unmount());
 });

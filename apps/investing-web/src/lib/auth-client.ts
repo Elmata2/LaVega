@@ -4,6 +4,7 @@
  * everywhere else, and the surface it needs here is three endpoints. */
 
 import { forgetDashboards } from "./dashboardResource";
+import { forgetLayout } from "./layoutResource";
 
 export type AuthUser = { id: string; email: string; name?: string | null };
 
@@ -116,5 +117,6 @@ export async function signIn(input: { email: string; password: string }): Promis
 export async function signOut(): Promise<void> {
   // Portfolio data kept for a fast reload must not outlive the session on a shared device.
   forgetDashboards();
+  forgetLayout();
   await fetch("/api/auth/sign-out", { method: "POST" });
 }

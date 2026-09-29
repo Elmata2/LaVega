@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getSession, type SessionState } from "../lib/auth-client";
 import { setDashboardOwner } from "../lib/dashboardResource";
+import { setLayoutOwner } from "../lib/layoutResource";
 
 /* Gates the routes nested under it behind a signed-in session.
  *
@@ -18,13 +19,14 @@ export function RequireAuth() {
     let current = true;
     void getSession().then((next) => {
       if (!current) return;
-      setDashboardOwner(
+      const owner =
         next.status === "authenticated"
           ? next.user.id
           : next.status === "unconfigured"
             ? "local"
-            : null,
-      );
+            : null;
+      setDashboardOwner(owner);
+      setLayoutOwner(owner);
       setState(next);
     });
     return () => {

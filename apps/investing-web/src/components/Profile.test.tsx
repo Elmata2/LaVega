@@ -598,3 +598,106 @@ test("Trading 212 requires both halves of the key pair", async () => {
   root.unmount();
 });
 
+
+test("signing out and in as another user drops the first user's layout and unsent edits", async () => {
+  type User = "a" | "b";
+  let user: User | null = "a";
+  const layouts: Record<User, unknown> = {
+    a: { modules: { agents: false }, widgets: {} },
+    b: { modules: { positions: false }, widgets: {} },
+  };
+  const layoutGets: Array<User | null> = [];
+  const puts: Array<{ user: User | null; resolve: (response: Response) => void }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/auth/get-session")
+        return Promise.resolve(
+          new Response(JSON.stringify(user ? { user: { id: user, email: `${user}@x.test` } } : null)),
+        );
+      if (url === "/api/auth/sign-out") {
+        user = null;
+        return Promise.resolve(new Response("{}"));
+      }
+      if (url === "/api/auth/sign-in/email") {
+        user = String(init?.body).includes('"b@x.test"') ? "b" : "a";
+        return Promise.resolve(new Response("{}"));
+      }
+      if (url === "/api/investing/layout" && init?.method === "PUT")
+        return new Promise<Response>((resolve) => puts.push({ user, resolve }));
+      if (url === "/api/investing/layout") {
+        layoutGets.push(user);
+        return Promise.resolve(new Response(JSON.stringify(user ? layouts[user] : {})));
+      }
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const tab = (href: string) =>
+    container.querySelector(`nav[aria-label="Main navigation"] a[href="${href}"]`);
+  const toggle = async (label: string) =>
+    act(async () => {
+      container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.click();
+      await settle();
+    });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await settle();
+  });
+  expect(layoutGets).toEqual(["a"]);
+  expect(tab("/agents")).toBeNull();
+
+  await toggle("Positions in the top bar");
+  await toggle("Net worth in the top bar");
+  expect(puts).toHaveLength(1);
+
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.trim() === "Sign out")
+      ?.click();
+    await settle();
+  });
+  const email = container.querySelector<HTMLInputElement>('input[name="email"]');
+  expect(email).not.toBeNull();
+
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    for (const [name, value] of [
+      ["email", "b@x.test"],
+      ["password", "correct horse battery staple"],
+    ] as const) {
+      const input = container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await settle();
+  });
+  await act(async () => {
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await settle();
+    await settle();
+  });
+
+  // A's save that was already on the wire lands only now, after B signed in.
+  await act(async () => {
+    puts[0]!.resolve(new Response(null, { status: 204 }));
+    await settle();
+  });
+
+  expect(puts.map((put) => put.user)).toEqual(["a"]);
+  expect(layoutGets.at(-1)).toBe("b");
+  expect(tab("/agents")).not.toBeNull();
+  expect(tab("/positions")).toBeNull();
+  act(() => root.unmount());
+});

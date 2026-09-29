@@ -90,8 +90,11 @@ function displayed(queue: SaveQueue): InvestingLayout {
 /** One layout per app: the top bar, every module route and the profile page
  *  must agree, so they all read this store instead of each owning a copy.
  *  The first subscriber starts the GET. The queue keeps draining with no
- *  subscribers, so an edit is never dropped by navigating away. */
+ *  subscribers, so an edit is never dropped by navigating away. `dispose`
+ *  ends it for good: once the account changes, nothing it still holds may
+ *  reach the server under the next account's session. */
 function createLayoutStore() {
+  let disposed = false;
   const queue: SaveQueue = {
     load: "idle",
     confirmed: EMPTY_LAYOUT,
@@ -126,6 +129,7 @@ function createLayoutStore() {
     queue.inFlight = sent;
     queue.pending = null;
     void putLayout(sent).then((ok) => {
+      if (disposed) return;
       queue.inFlight = null;
       if (ok) queue.confirmed = sent;
       if (!queue.pending) queue.saveError = ok ? null : SAVE_ERROR_MESSAGE;
@@ -137,6 +141,7 @@ function createLayoutStore() {
   function load() {
     queue.load = "loading";
     void fetchLayout().then((serverLayout) => {
+      if (disposed) return;
       if (serverLayout === null) {
         queue.load = "failed";
         queue.saveError = LOAD_ERROR_MESSAGE;
@@ -158,6 +163,7 @@ function createLayoutStore() {
   }
 
   function applyChange<K extends "modules" | "widgets">(kind: K, next: InvestingLayout[K]) {
+    if (disposed) return;
     localEdits = { ...localEdits, [kind]: next };
     queue.pending = { ...displayed(queue), [kind]: next };
     if (queue.load === "idle" || queue.load === "failed") load();
@@ -168,7 +174,7 @@ function createLayoutStore() {
   return {
     subscribe(listener: () => void) {
       listeners.add(listener);
-      if (queue.load === "idle") load();
+      if (queue.load === "idle" && !disposed) load();
       return () => {
         listeners.delete(listener);
       };
@@ -178,19 +184,39 @@ function createLayoutStore() {
       applyChange("modules", next),
     setWidgets: (next: Partial<Record<InvestingWidgetId, boolean>>) =>
       applyChange("widgets", next),
+    dispose() {
+      disposed = true;
+    },
   };
 }
 
 let store: ReturnType<typeof createLayoutStore> | null = null;
+let owner: string | null = null;
 
 function layoutStore() {
   store ??= createLayoutStore();
   return store;
 }
 
-/** Tests mount many apps in one module instance; each needs a fresh store. */
-export function resetInvestingLayoutStoreForTests() {
+/** Drops the current account's layout, including any save not yet sent. */
+export function forgetLayout(): void {
+  owner = null;
+  store?.dispose();
   store = null;
+}
+
+/** Scopes the store to the signed-in account (RequireAuth calls it once the
+ *  session resolves), so a different account never inherits the last one's
+ *  layout or unsent edits, even when nobody signed out in this tab. */
+export function setLayoutOwner(userId: string | null): void {
+  if (userId === owner) return;
+  forgetLayout();
+  owner = userId;
+}
+
+/** Tests mount many apps in one module instance; each needs a fresh store. */
+export function resetInvestingLayoutStoreForTests(): void {
+  forgetLayout();
 }
 
 export function useInvestingLayout(): InvestingLayoutResource {
