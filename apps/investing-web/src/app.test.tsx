@@ -874,7 +874,7 @@ test("an assistant reply's markdown renders through AgentMessageText, but a user
   root.unmount();
 });
 
-test("Overview shows an alert linking to /profile#status when a broker sync has a problem", async () => {
+test("Overview shows an alert linking to /profile#brokers when a broker sync has a problem", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -909,7 +909,7 @@ test("Overview shows an alert linking to /profile#status when a broker sync has 
   });
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("Status needs attention");
-  const link = alert?.querySelector<HTMLAnchorElement>('a[href="/profile#status"]');
+  const link = alert?.querySelector<HTMLAnchorElement>('a[href="/profile#brokers"]');
   expect(link).not.toBeNull();
   root.unmount();
 });
@@ -967,7 +967,124 @@ test("Overview shows no status alert with the healthy default fixture", async ()
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.querySelector('a[href="/profile#status"]')).toBeNull();
+  expect(container.querySelector('a[href="/profile#brokers"]')).toBeNull();
+  root.unmount();
+});
+
+test("Overview shows an alert linking to /profile#brokers when the vault is locked", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "idle",
+              pages: 0,
+              ordersRead: 0,
+              positionsRead: 0,
+              waitUntil: null,
+              remaining: null,
+              updatedAt: null,
+              message: null,
+            }),
+          ),
+        );
+      if (url === "/api/prices/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "idle",
+              total: 0,
+              completed: 0,
+              remainingSymbols: [],
+              currentSymbol: null,
+              waitUntil: null,
+              updatedAt: null,
+              message: null,
+              problems: [],
+            }),
+          ),
+        );
+      if (url === "/api/brokers/credentials/status")
+        return Promise.resolve(new Response(JSON.stringify({ status: "locked" })));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Status needs attention");
+  expect(alert?.querySelector<HTMLAnchorElement>('a[href="/profile#brokers"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("Overview shows no alert when a broker sync is merely waiting", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "waiting",
+              pages: 1,
+              ordersRead: 0,
+              positionsRead: 0,
+              waitUntil: "2026-08-21T10:05:00Z",
+              remaining: null,
+              updatedAt: "2026-08-21T10:00:00Z",
+              message: "Waiting for API capacity",
+            }),
+          ),
+        );
+      if (url === "/api/prices/sync/status")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: "idle",
+              total: 0,
+              completed: 0,
+              remainingSymbols: [],
+              currentSymbol: null,
+              waitUntil: null,
+              updatedAt: null,
+              message: null,
+              problems: [],
+            }),
+          ),
+        );
+      if (url === "/api/brokers/credentials/status")
+        return Promise.resolve(new Response(JSON.stringify({ status: "unlocked" })));
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(container.textContent).not.toContain("Status needs attention");
+  expect(container.querySelector('a[href="/profile#brokers"]')).toBeNull();
   root.unmount();
 });
 
@@ -1026,7 +1143,7 @@ test("overview makes KPIs and all operational status chips visible", async () =>
   expect(container.textContent).toContain("ASML");
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("Status needs attention");
-  expect(alert?.querySelector('a[href="/profile#status"]')).not.toBeNull();
+  expect(alert?.querySelector('a[href="/profile#brokers"]')).not.toBeNull();
 
   const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
   await act(async () => {
@@ -1078,7 +1195,7 @@ test("overview shows when sync status cannot be read", async () => {
   });
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("Status needs attention");
-  expect(alert?.querySelector('a[href="/profile#status"]')).not.toBeNull();
+  expect(alert?.querySelector('a[href="/profile#brokers"]')).not.toBeNull();
 
   const profileLink = container.querySelector<HTMLAnchorElement>('a[href="/profile"]')!;
   await act(async () => {

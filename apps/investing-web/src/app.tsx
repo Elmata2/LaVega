@@ -1178,7 +1178,7 @@ function OverviewEmptyState() {
 
 function Overview() {
   const state = useDashboard();
-  const { broker, price, priceProblem, connection } = useSyncSession();
+  const { broker, price, priceProblem, connection, vault } = useSyncSession();
   const layout = useInvestingLayout();
   const gate = historyGate(broker?.history);
   /* Until the layout loads, the registry defaults would flash widgets the
@@ -1225,11 +1225,12 @@ function Overview() {
           {(connection !== "online" ||
             broker?.status === "problem" ||
             price?.status === "problem" ||
-            priceProblem) && (
+            priceProblem ||
+            vault === "locked") && (
             <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
               <p>
                 Status needs attention.{" "}
-                <Link to="/profile#status" className="font-semibold underline">
+                <Link to="/profile#brokers" className="font-semibold underline">
                   Review it in Profile
                 </Link>
               </p>
