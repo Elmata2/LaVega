@@ -96,6 +96,10 @@ Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contra
 
 ## Portfolio agents (investing)
 
+Single-company research lives at `/investing/agents/research`. See
+[`investing/STOCK-RESEARCH.md`](investing/STOCK-RESEARCH.md) for shared facts, five
+System One judgments, signed report reuse and profile chat.
+
 Specified in **`docs/investing/PORTFOLIO-AGENTS.md`**. Investor personas based on `virattt/ai-hedge-fund`, used two ways. The **Analyse** card runs all six personas once over a portfolio snapshot and returns a typed judgment each. The **chat** is one persona per conversation, a tool-using agent that streams its answer and never runs the six-persona judgment. Read it before touching `apps/investing-server/src/portfolioAgent.ts`, `portfolioChat.ts` or `/api/agents/portfolio`.
 
 ## Investing stack

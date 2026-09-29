@@ -2,6 +2,9 @@
 
 LaVega ports the useful structure from `virattt/ai-hedge-fund`, not its Python runtime.
 
+The Agents catalog also opens a single-company [Stock research](STOCK-RESEARCH.md)
+workspace. Its five lens judgments and conversations share one signed company report.
+
 Reference copies of the source (persona prompts, agent base, fundamentals snapshot, data protocol, decision records, risk limits, strategies, and project docs) live in [`agents/`](./agents/README.md).
 
 Source components inspected:
