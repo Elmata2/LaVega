@@ -86,12 +86,16 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
   request or action and changes nothing. `help --json` lists each effect as `remote-write`,
   `local-destructive`, `local-install` or `browser-action`. A `remote-write` on `--target prod`
   also needs `--allow-prod-write`.
-- **Tests.** There are two suites:
+- **Tests.** Before you add or change any test for investing verification, read the global
+  **`test-audit`** skill (`~/.agents/skills/test-audit/SKILL.md`) and pass its authoring
+  gate: name the behavior or regression, confirm existing coverage does not already own it,
+  and do not add test-only production seams. Skip or rewrite anything that matches its junk
+  patterns. There are two suites:
   - `pnpm run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
     the prod guard. It runs against a stub HTTP server and fake `browse` and `vercel`
     binaries, so it is fast and offline, and it can exercise writes such as `prices purge
 --yes` without deleting real data. Run it after any change to the CLI, and add a test
-    for each new command or flag.
+    for each new command or flag only when `test-audit` says it earns its place.
   - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
     page. It only reads; every write in it runs with `--dry-run`. It skips only when neither a readable `auth.preview.json` nor
