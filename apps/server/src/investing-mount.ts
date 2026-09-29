@@ -28,8 +28,18 @@ import {
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
   createNeonPriceStore,
+  createNeonSectorCorrectionStore,
+  createNeonSectorInferenceSettingStore,
 } from "@lavega/investing-server/src/neonStores.js";
 import { createNeonSectorProfileStore } from "@lavega/investing-server/src/neonSectorProfileStore.js";
+import {
+  createFileSectorCorrectionStore,
+  runtimeSectorCorrectionFile,
+} from "@lavega/investing-server/src/fileSectorCorrectionStore.js";
+import {
+  createFileSectorInferenceSettingStore,
+  runtimeSectorInferenceSettingFile,
+} from "@lavega/investing-server/src/fileSectorInferenceSettingStore.js";
 import {
   createFileSectorProfileStore,
   runtimeSectorStoreFile,
@@ -133,6 +143,12 @@ async function getInvestingFetch(): Promise<{
     sectorStore: database
       ? createNeonSectorProfileStore(database)
       : createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorCorrectionStore: database
+      ? createNeonSectorCorrectionStore(database)
+      : createFileSectorCorrectionStore(runtimeSectorCorrectionFile()),
+    sectorInferenceSettingStore: database
+      ? createNeonSectorInferenceSettingStore(database)
+      : createFileSectorInferenceSettingStore(runtimeSectorInferenceSettingFile()),
     dashboardCache,
   });
   const apiNamespaces = new Set(
