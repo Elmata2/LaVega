@@ -1,15 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createAgentMemoryRepository, eraseUserData, type Database } from "./index.js";
-import { databaseOver, singleConnectionDatabase } from "./testing.js";
+import { databaseOver, migratedTestDatabase } from "./testing.js";
 
 /* Deletion rules and tenant isolation live in foreign keys and RLS policies,
  * so these run the real migrations on real Postgres as the runtime role. */
 
-const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let pglite: PGlite;
 let db: Database;
 
@@ -20,15 +16,7 @@ const userMessage = (text: string) => ({ id: text, role: "user", parts: [{ type:
 
 beforeAll(async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
-  pglite = new PGlite();
-  await pglite.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
-  for (const name of readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await pglite.exec(readFileSync(join(migrationsDir, name), "utf8"));
-  // Only a non-superuser is subject to row-level security.
-  await pglite.exec("SET ROLE lavega_runtime;");
-  db = singleConnectionDatabase(pglite);
+  ({ pglite, db } = await migratedTestDatabase());
 }, 60_000);
 
 afterAll(async () => {
