@@ -48,7 +48,7 @@ export function ChartTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-soft">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md">
       <p className="mb-1 text-muted-foreground">
         {labelFormatter ? labelFormatter(label ?? "") : label}
       </p>

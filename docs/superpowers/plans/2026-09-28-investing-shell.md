@@ -92,6 +92,7 @@ docs/investing/DASHBOARD.md                                  # scope/layout sect
 ### Task 1: Layout data model, registry validation, and server storage
 
 **Files:**
+
 - Create: `packages/core/src/investing/layout.ts`
 - Create: `packages/core/src/investing/layout.test.ts`
 - Modify: `packages/core/src/investing/index.ts`
@@ -112,6 +113,7 @@ docs/investing/DASHBOARD.md                                  # scope/layout sect
 - Modify: `apps/server/src/investing-mount.ts:9-27,101-132`
 
 **Interfaces:**
+
 - Produces (from `@lavega/core`): `InvestingModuleId = "positions" | "net-worth" | "agents"`, `InvestingWidgetId = "performance" | "allocation" | "kpis" | "risk" | "sectors" | "agent"`, `INVESTING_MODULE_IDS: readonly InvestingModuleId[]`, `INVESTING_WIDGET_IDS: readonly InvestingWidgetId[]`, `type InvestingLayout = { modules: Partial<Record<InvestingModuleId, boolean>>; widgets: Partial<Record<InvestingWidgetId, boolean>> }`, `type InvestingLayoutSelection = { tenantId: string } & InvestingLayout`, `interface InvestingLayoutStore { get(tenantId: string): Promise<InvestingLayout>; set(selection: InvestingLayoutSelection): Promise<void> }`, `function validateInvestingLayout(input: unknown): InvestingLayout`.
 - Produces (from `@lavega/adapters`): `createInMemoryInvestingLayoutStore(initial?: InvestingLayoutSelection[]): InvestingLayoutStore`.
 - Produces (from `apps/investing-server`): `createFileInvestingLayoutStore(filePath: string): InvestingLayoutStore`, `runtimeInvestingLayoutFile(): string`, `createNeonInvestingLayoutStore(db: Database): InvestingLayoutStore` (in `neonStores.ts`).
@@ -124,11 +126,7 @@ docs/investing/DASHBOARD.md                                  # scope/layout sect
 ```ts
 // packages/core/src/investing/layout.test.ts
 import { describe, expect, test } from "vitest";
-import {
-  INVESTING_MODULE_IDS,
-  INVESTING_WIDGET_IDS,
-  validateInvestingLayout,
-} from "./layout.js";
+import { INVESTING_MODULE_IDS, INVESTING_WIDGET_IDS, validateInvestingLayout } from "./layout.js";
 
 describe("investing layout validation", () => {
   test("no widget id is also a module id", () => {
@@ -189,12 +187,7 @@ export const INVESTING_MODULE_IDS: readonly InvestingModuleId[] = [
  *  both "which tab" and "which card" questions, which is exactly the bug the
  *  no-widget-id-is-a-module-id rule (layout.test.ts) exists to catch. */
 export type InvestingWidgetId =
-  | "performance"
-  | "allocation"
-  | "kpis"
-  | "risk"
-  | "sectors"
-  | "agent";
+  "performance" | "allocation" | "kpis" | "risk" | "sectors" | "agent";
 export const INVESTING_WIDGET_IDS: readonly InvestingWidgetId[] = [
   "performance",
   "allocation",
@@ -315,10 +308,7 @@ export function createInMemoryInvestingLayoutStore(
   initial: InvestingLayoutSelection[] = [],
 ): InvestingLayoutStore {
   const rows = new Map<string, InvestingLayout>(
-    initial.map((selection) => [
-      selection.tenantId,
-      validateInvestingLayout(selection),
-    ]),
+    initial.map((selection) => [selection.tenantId, validateInvestingLayout(selection)]),
   );
   return {
     async get(tenantId) {
@@ -419,7 +409,11 @@ export function createFileInvestingLayoutStore(filePath: string): InvestingLayou
       const parsed: unknown = JSON.parse(contents);
       if (!Array.isArray(parsed)) throw new Error("Invalid investing layout store");
       return parsed.map((row) => {
-        if (!row || typeof row !== "object" || typeof (row as { tenantId?: unknown }).tenantId !== "string")
+        if (
+          !row ||
+          typeof row !== "object" ||
+          typeof (row as { tenantId?: unknown }).tenantId !== "string"
+        )
           throw new Error("Invalid investing layout row");
         const selection = row as InvestingLayoutSelection;
         return { tenantId: selection.tenantId, ...validateInvestingLayout(selection) };
@@ -675,7 +669,10 @@ test("layout route persists per-tenant choices and drops unknown ids", async () 
     }),
   });
   expect(saved.status).toBe(200);
-  expect(await saved.json()).toEqual({ modules: { positions: false }, widgets: { sectors: false } });
+  expect(await saved.json()).toEqual({
+    modules: { positions: false },
+    widgets: { sectors: false },
+  });
   expect(await (await investingApp.request("/api/investing/layout")).json()).toEqual({
     modules: { positions: false },
     widgets: { sectors: false },
@@ -720,22 +717,22 @@ type PriceDependencies = {
 
 ```ts
 // apps/investing-server/src/app.ts:138-160 — add default, alongside benchmarkSelectionStore
-  const investingLayoutStore =
-    dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
+const investingLayoutStore =
+  dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
 ```
 
 ```ts
 // apps/investing-server/src/app.ts — add immediately after the /api/investing/benchmarks routes (after line 360)
-  investingApp.get("/api/investing/layout", async (c) =>
-    c.json(await investingLayoutStore.get(await resolveTenantId())),
-  );
-  investingApp.put("/api/investing/layout", async (c) => {
-    const body: unknown = await c.req.json().catch(() => ({}));
-    const layout = validateInvestingLayout(body);
-    const tenantId = await resolveTenantId();
-    await investingLayoutStore.set({ tenantId, ...layout });
-    return c.json(layout);
-  });
+investingApp.get("/api/investing/layout", async (c) =>
+  c.json(await investingLayoutStore.get(await resolveTenantId())),
+);
+investingApp.put("/api/investing/layout", async (c) => {
+  const body: unknown = await c.req.json().catch(() => ({}));
+  const layout = validateInvestingLayout(body);
+  const tenantId = await resolveTenantId();
+  await investingLayoutStore.set({ tenantId, ...layout });
+  return c.json(layout);
+});
 ```
 
 - [ ] **Step 30: Run the tests to verify they pass**
@@ -765,10 +762,9 @@ export type RuntimeAppOptions = {
 
 ```ts
 // apps/investing-server/src/index.ts:210-213 — add default alongside benchmarkSelectionStore
-  const benchmarkSelectionStore =
-    options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
-  const investingLayoutStore =
-    options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
+const benchmarkSelectionStore =
+  options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
 ```
 
 ```ts
@@ -790,12 +786,12 @@ import {
 
 ```ts
 // apps/investing-server/src/docker.ts:68-73 — add to the standalone createRuntimeApp call
-  const runtimeApp = await createRuntimeApp({
-    priceStore: createFilePriceStore(runtimePriceStoreFile()),
-    benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
-    marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
-    investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
-  });
+const runtimeApp = await createRuntimeApp({
+  priceStore: createFilePriceStore(runtimePriceStoreFile()),
+  benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
+  marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+  investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+});
 ```
 
 ```ts
@@ -814,22 +810,22 @@ import {
 
 ```ts
 // apps/server/src/investing-mount.ts:109-121 — add to the createRuntimeApp call inside getInvestingFetch()
-  const runtimeApp = await createRuntimeApp({
-    resolveTenantId: currentInvestingTenant,
-    priceStore: database
-      ? createNeonPriceStore(database, currentInvestingTenant)
-      : createFilePriceStore(runtimePriceStoreFile()),
-    benchmarkSelectionStore: database
-      ? createNeonBenchmarkSelectionStore(database)
-      : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
-    marketDataConsentStore: database
-      ? createNeonMarketDataConsentStore(database)
-      : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
-    investingLayoutStore: database
-      ? createNeonInvestingLayoutStore(database)
-      : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
-    dashboardCache,
-  });
+const runtimeApp = await createRuntimeApp({
+  resolveTenantId: currentInvestingTenant,
+  priceStore: database
+    ? createNeonPriceStore(database, currentInvestingTenant)
+    : createFilePriceStore(runtimePriceStoreFile()),
+  benchmarkSelectionStore: database
+    ? createNeonBenchmarkSelectionStore(database)
+    : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
+  marketDataConsentStore: database
+    ? createNeonMarketDataConsentStore(database)
+    : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+  investingLayoutStore: database
+    ? createNeonInvestingLayoutStore(database)
+    : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+  dashboardCache,
+});
 ```
 
 - [ ] **Step 33: Run the full investing-server suite and the server-side mount tests**
@@ -852,6 +848,7 @@ git commit -m "feat(investing): wire investing layout store through runtime, doc
 ### Task 2: Web layout resource, registry, and the Profile page
 
 **Files:**
+
 - Create: `apps/investing-web/src/lib/investingRegistry.ts`
 - Create: `apps/investing-web/src/lib/investingRegistry.test.ts`
 - Create: `apps/investing-web/src/lib/layoutResource.ts`
@@ -865,6 +862,7 @@ git commit -m "feat(investing): wire investing layout store through runtime, doc
 - Modify: `apps/investing-web/src/app.test.tsx` (move the 11 broker-connect tests listed in Step 12 to `Profile.test.tsx`)
 
 **Interfaces:**
+
 - Consumes: `InvestingModuleId`, `InvestingWidgetId`, `InvestingLayout` from `@lavega/core` (Task 1); `GET`/`PUT /api/investing/layout` (Task 1).
 - Produces: `investingModulePath(id: InvestingModuleId | "overview"): string`; `MODULES: InvestingModuleDef[]`, `WIDGETS: InvestingWidgetDef[]`, `HOME_MODULE = "overview"`; `resolveModules(stored: Partial<Record<InvestingModuleId, boolean>>): InvestingModuleId[]` (registry order, "overview" always included first); `resolveWidgets(stored: Partial<Record<InvestingWidgetId, boolean>>): InvestingWidgetId[]` (registry order); `toggleModule`/`toggleWidget` helpers with the same shape as Personal's.
 - Produces: `useInvestingLayout(): { status: "loading" | "ready"; modules: InvestingModuleId[]; widgets: InvestingWidgetId[]; setModules: (next: Partial<Record<InvestingModuleId, boolean>>) => void; setWidgets: (next: Partial<Record<InvestingWidgetId, boolean>>) => void }`. While `status === "loading"`, `modules`/`widgets` already reflect the registry defaults (`resolveModules({})`/`resolveWidgets({})`) — Task 3's shell and Task 4's Overview never need to special-case "loading" to avoid a blank/flashing render.
@@ -919,10 +917,7 @@ describe("investing registry", () => {
       "sectors",
       "agent",
     ]);
-    expect(resolveWidgets({ agent: true, performance: true })).toEqual([
-      "performance",
-      "agent",
-    ]);
+    expect(resolveWidgets({ agent: true, performance: true })).toEqual(["performance", "agent"]);
   });
 
   test("unknown stored widget ids are dropped, never rendered as a card", () => {
@@ -1275,7 +1270,10 @@ function render() {
 }
 
 test("resolves registry defaults immediately, before the fetch settles", async () => {
-  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise<Response>(() => {})),
+  );
   const { container, root } = render();
   act(() => root.render(<Probe />));
   expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("loading");
@@ -1311,7 +1309,10 @@ test("applies the tenant's stored choices once the fetch resolves", async () => 
 });
 
 test("a failed or unauthorized fetch keeps the registry defaults instead of erroring", async () => {
-  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("", { status: 401 }))));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response("", { status: 401 }))),
+  );
   const { container, root } = render();
   await act(async () => {
     root.render(<Probe />);
@@ -1482,7 +1483,9 @@ test("clicking a switch reports the next enabled set, not a mutation of the old 
   const onChange = vi.fn();
   const { container, root } = render();
   act(() => {
-    root.render(<LayoutPicker kind="widget" enabled={["performance", "kpis"]} onChange={onChange} />);
+    root.render(
+      <LayoutPicker kind="widget" enabled={["performance", "kpis"]} onChange={onChange} />,
+    );
   });
   const switches = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="switch"]'));
   const performanceSwitch = switches.find((el) => el.getAttribute("aria-checked") === "true")!;
@@ -1512,7 +1515,11 @@ import type { InvestingModuleId, InvestingWidgetId } from "@lavega/core";
 type Kind = "module" | "widget";
 
 type LayoutPickerProps =
-  | { kind: "module"; enabled: Array<InvestingModuleId | typeof HOME_MODULE>; onChange: (next: InvestingModuleId[]) => void }
+  | {
+      kind: "module";
+      enabled: Array<InvestingModuleId | typeof HOME_MODULE>;
+      onChange: (next: InvestingModuleId[]) => void;
+    }
   | { kind: "widget"; enabled: InvestingWidgetId[]; onChange: (next: InvestingWidgetId[]) => void };
 
 function Switch({
@@ -2008,6 +2015,7 @@ Profile.test.tsx is red until Task 3 adds the /profile route."
 ### Task 3: Shell — full width, top bar tabs, module-gated routes, new list pages
 
 **Files:**
+
 - Modify: `apps/investing-web/src/app.tsx:1774-1884` (`Layout`), `:2363-2383` (`App`)
 - Modify: `apps/investing-web/src/app.test.tsx` (route/nav tests; finish moving the deferred test from Task 2 Step 20)
 - Create: `apps/investing-web/src/components/AgentsList.tsx`
@@ -2016,6 +2024,7 @@ Profile.test.tsx is red until Task 3 adds the /profile route."
 - Create: `apps/investing-web/src/components/NetWorthPage.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useInvestingLayout`, `HOME_MODULE`, `MODULES`, `investingModulePath` (Task 2); `Profile` (Task 2); `useAgentCatalog`, `AgentCatalogProblem` (existing, `apps/investing-web/src/lib/portfolioAgents.ts` / `app.tsx`); `useDashboard`, `NetWorthChart`, `DashboardLoading`, `DashboardError` (existing).
 - Produces: `<ModuleRoute moduleId="positions" | "net-worth" | "agents">{children}</ModuleRoute>` (route guard, local to `app.tsx`, not exported — Task 4 does not need it since Overview is always reachable).
 - Produces routes: `/net-worth`, `/agents` (list), `/profile`; `/brokers/connect` becomes `<Navigate to="/profile#brokers" replace />`.
@@ -2214,7 +2223,9 @@ test("/net-worth renders the net-worth chart", async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.querySelector('[role="group"][aria-label="Choose net worth period"]')).not.toBeNull();
+  expect(
+    container.querySelector('[role="group"][aria-label="Choose net worth period"]'),
+  ).not.toBeNull();
   root.unmount();
 });
 
@@ -2270,9 +2281,7 @@ export function NetWorthPage() {
   if (state.status === "loading") return <Loading />;
   if (state.status === "error")
     return <EmptyState title="Dashboard unavailable" description={state.message} />;
-  return (
-    <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />
-  );
+  return <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />;
 }
 ```
 
@@ -2619,6 +2628,7 @@ git commit -m "feat(investing-web): full-width shell, dynamic tabs, module-gated
 ### Task 4: Overview as a widget grid
 
 **Files:**
+
 - Modify: `apps/investing-web/src/app.tsx:1929-2001` (`Overview`)
 - Modify: `apps/investing-web/src/app.test.tsx` (rewrite the order test at line 663; the sector assertion is removed as part of Step 6 below)
 - Modify: `apps/investing-web/src/components/PortfolioSummaryCard.tsx:75` (rename `data-dashboard-section`, remove the sector block)
@@ -2627,6 +2637,7 @@ git commit -m "feat(investing-web): full-width shell, dynamic tabs, module-gated
 - Create: `apps/investing-web/src/components/SectorAllocationCard.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useInvestingLayout`, `WIDGETS` (Task 2); `usePortfolioSummary`, `PortfolioSummary` (existing, `apps/investing-web/src/lib/summaryResource.ts`).
 - Produces: `<SectorAllocationCard currency={string} revision={string} />` — a `Card` with `data-dashboard-section="sectors"`, its own `usePortfolioSummary` fetch (sectors are independent of the risk period/benchmark selector `PortfolioSummaryCard` owns, so this is a second, independent read of `/api/investing/summary`, not a shared cache — each widget can be hidden independently and must not depend on its neighbor being mounted).
 - No change to `PortfolioSummaryCard`'s public props; only its rendered `data-dashboard-section` value (`"summary"` → `"risk"`) and its content (sector block removed).
@@ -2704,9 +2715,7 @@ test("renders sector bars from the summary endpoint", async () => {
 test("no sector data yet reads as an honest empty state, not a broken card", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(
-      async () => new Response(JSON.stringify({ ...summary, sectors: [] }), { status: 200 }),
-    ),
+    vi.fn(async () => new Response(JSON.stringify({ ...summary, sectors: [] }), { status: 200 })),
   );
   const { container, root } = render();
   act(() => root.render(<SectorAllocationCard />));
@@ -2876,10 +2885,18 @@ test("overview renders widgets in registry order and excludes positions and net 
     await Promise.resolve();
   });
 
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["status", "performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
+  expect(order).toEqual([
+    "status",
+    "performance",
+    "allocation",
+    "kpis",
+    "risk",
+    "sectors",
+    "agent",
+  ]);
   expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
   expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
 
@@ -2918,9 +2935,9 @@ test("hiding a widget closes its gap instead of leaving a blank card", async () 
     await Promise.resolve();
   });
   expect(container.querySelector('[data-dashboard-section="allocation"]')).toBeNull();
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
   expect(order).toEqual(["status", "performance", "kpis", "risk", "sectors", "agent"]);
   root.unmount();
 });
@@ -2989,11 +3006,7 @@ function OverviewEmptyState() {
       <p className="text-sm text-muted-foreground">
         Every Overview card is switched off. Add one to see your portfolio here.
       </p>
-      <Button
-        type="button"
-        className="mt-4"
-        onClick={() => navigate("/profile#widgets")}
-      >
+      <Button type="button" className="mt-4" onClick={() => navigate("/profile#widgets")}>
         <span aria-hidden="true">+</span> Add widget
       </Button>
     </div>
@@ -3113,6 +3126,7 @@ git commit -m "feat(investing-web): render Overview as a widget grid"
 ### Task 5: Verification and docs
 
 **Files:**
+
 - Modify: `docs/investing/DASHBOARD.md` (Scope section, ~lines 16-21; layout-order paragraphs, ~lines 214-220)
 - Modify: `.claude/skills/verify-investing/features/README.md` (route table)
 - Modify: `.claude/skills/verify-investing/features/dashboard-overview.md` (sub-features list)
@@ -3120,6 +3134,7 @@ git commit -m "feat(investing-web): render Overview as a widget grid"
 - No source changes — this task is verification plus the feature-map correction the `verify-investing` skill's own README requires ("when a run finds it wrong, fix the map in the same change").
 
 **Interfaces:**
+
 - Consumes: the shipped shell from Tasks 1-4; the `verify-investing` CLI (`node .claude/skills/verify-investing/control-investing.mjs`) and its `browser` subcommand.
 
 - [ ] **Step 1: Build the investing-web bundle and start the standalone server**
@@ -3192,6 +3207,7 @@ node .claude/skills/verify-investing/control-investing.mjs cleanup
 
 ```markdown
 <!-- docs/investing/DASHBOARD.md:16-21 — replace the "overview contains these views" bullet list -->
+
 The app is a full-window shell with tabs in a top bar (Overview, and whichever of Positions, Net worth and Agents the owner has switched on) and a profile page for brokers, tabs and cards. See `docs/superpowers/specs/2026-09-28-investing-shell-design.md` for the shell's layout, module and widget model. Overview itself is a grid of independently hideable cards:
 
 - A portfolio chart in EUR value mode or indexed-return mode.
@@ -3204,6 +3220,7 @@ The positions table and the stacked net-worth chart moved to their own tabs (`/p
 
 ```markdown
 <!-- docs/investing/DASHBOARD.md:214-220 — replace the now-obsolete layout-order paragraphs -->
+
 Overview's card order and column placement (left/right/full-width) are owned by the widget registry described in `docs/superpowers/specs/2026-09-28-investing-shell-design.md` §3-4, not by this document. The positions table and the net-worth chart are on their own tabs and are laid out by those tabs' own pages, each full width.
 ```
 
@@ -3211,21 +3228,23 @@ Overview's card order and column placement (left/right/full-width) are owned by 
 
 ```markdown
 <!-- .claude/skills/verify-investing/features/README.md — replace the intro paragraph on routes and the table -->
+
 Every other route (`/`, `/positions`, `/positions/:symbol`, `/net-worth`, `/agents`, `/agents/:agentId`, `/profile`) sits behind `RequireAuth`. `/brokers/connect` redirects to `/profile#brokers`. The top bar's tabs are exactly the modules the tenant's stored layout enables, plus the always-on Overview tab.
 
-| Feature                                    | Route                                                                                             | File                                                   |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------| ------------------------------------------------------- |
-| Account and session                        | `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, `/reset-password` | [auth-session.md](auth-session.md)                     |
-| Dashboard overview                         | `/`                                                                                               | [dashboard-overview.md](dashboard-overview.md)         |
-| Portfolio agents                           | `/`, `/agents`, `/agents/:agentId`                                                                 | [portfolio-agents.md](portfolio-agents.md)             |
-| Profile (brokers, modules, widgets, account)| `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
-| Positions and position detail              | `/positions`, `/positions/:symbol`                                                                 | [positions.md](positions.md)                           |
-| Net worth                                  | `/net-worth`                                                                                       | [dashboard-overview.md](dashboard-overview.md)         |
-| Prices, benchmarks and market-data consent | `/` (Vault / Cache panels)                                                                          | [prices-and-market-data.md](prices-and-market-data.md) |
+| Feature                                      | Route                                                                                             | File                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Account and session                          | `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, `/reset-password` | [auth-session.md](auth-session.md)                     |
+| Dashboard overview                           | `/`                                                                                               | [dashboard-overview.md](dashboard-overview.md)         |
+| Portfolio agents                             | `/`, `/agents`, `/agents/:agentId`                                                                | [portfolio-agents.md](portfolio-agents.md)             |
+| Profile (brokers, modules, widgets, account) | `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
+| Positions and position detail                | `/positions`, `/positions/:symbol`                                                                | [positions.md](positions.md)                           |
+| Net worth                                    | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
+| Prices, benchmarks and market-data consent   | `/` (Vault / Cache panels)                                                                        | [prices-and-market-data.md](prices-and-market-data.md) |
 ```
 
 ```markdown
 <!-- .claude/skills/verify-investing/features/dashboard-overview.md — replace the sub-features list -->
+
 ## Sub-features
 
 - headline figures: `Portfolio value`, `Daily change`, `Total return`; `Value partly
@@ -3249,6 +3268,7 @@ unknown` when some positions are unpriced.
 
 ```markdown
 <!-- .claude/skills/verify-investing/features/broker-connect-sync.md — update the reach text -->
+
 Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#brokers`), or the
 profile button in the top bar. `/brokers/connect` is a redirect kept for old bookmarks.
 ```

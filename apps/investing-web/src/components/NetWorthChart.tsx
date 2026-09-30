@@ -93,7 +93,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
 
   return (
     <Card data-dashboard-section="net-worth">
-      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Net worth</p>
           <CardTitle>Investments and cash</CardTitle>
@@ -132,29 +132,58 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 on {activePoint ? dateLabel(activePoint.date) : "unknown date"}
               </span>
             </div>
-            {activePoint && points.length > 1 && (() => {
-              const first = points[0]!;
-              const change = activePoint.value !== null && first.value !== null ? activePoint.value - first.value : null;
-              const investmentChange = activePoint.positionsValue !== null && first.positionsValue !== null ? activePoint.positionsValue - first.positionsValue : null;
-              const cashChange = activePoint.cashValue !== null && first.cashValue !== null ? activePoint.cashValue - first.cashValue : null;
-              const formatChange = (value: number | null) => value === null ? "Unknown" : `${value >= 0 ? "+" : ""}${money(value, currency)}`;
-              return (
-                <div className="mb-5 grid gap-3 sm:grid-cols-3" aria-label="Net worth change summary">
-                  <div className="rounded-[14px] border border-border bg-secondary/30 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trend</p>
-                    <p className={`mt-1 text-xl font-semibold tabular-nums ${change !== null && change < 0 ? "text-negative" : "text-positive"}`}>{formatChange(change)}</p>
+            {activePoint &&
+              points.length > 1 &&
+              (() => {
+                const first = points[0]!;
+                const change =
+                  activePoint.value !== null && first.value !== null
+                    ? activePoint.value - first.value
+                    : null;
+                const investmentChange =
+                  activePoint.positionsValue !== null && first.positionsValue !== null
+                    ? activePoint.positionsValue - first.positionsValue
+                    : null;
+                const cashChange =
+                  activePoint.cashValue !== null && first.cashValue !== null
+                    ? activePoint.cashValue - first.cashValue
+                    : null;
+                const formatChange = (value: number | null) =>
+                  value === null ? "Unknown" : `${value >= 0 ? "+" : ""}${money(value, currency)}`;
+                return (
+                  <div
+                    className="mb-5 grid gap-3 sm:grid-cols-3"
+                    aria-label="Net worth change summary"
+                  >
+                    <div className="rounded-tile border border-border bg-secondary/30 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Trend
+                      </p>
+                      <p
+                        className={`mt-1 text-xl font-semibold tabular-nums ${change !== null && change < 0 ? "text-negative" : "text-positive"}`}
+                      >
+                        {formatChange(change)}
+                      </p>
+                    </div>
+                    <div className="rounded-tile border border-border p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Investments
+                      </p>
+                      <p className="mt-1 text-lg font-semibold tabular-nums">
+                        {formatChange(investmentChange)}
+                      </p>
+                    </div>
+                    <div className="rounded-tile border border-border p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Cash
+                      </p>
+                      <p className="mt-1 text-lg font-semibold tabular-nums">
+                        {formatChange(cashChange)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-[14px] border border-border p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Investments</p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums">{formatChange(investmentChange)}</p>
-                  </div>
-                  <div className="rounded-[14px] border border-border p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash</p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums">{formatChange(cashChange)}</p>
-                  </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
             <form
               onSubmit={applyTypedDates}
               aria-label="Choose net worth date range"
@@ -169,7 +198,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                   max={maxDate}
                   value={dateFrom}
                   onChange={(event) => setDateFrom(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                  className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                 />
               </label>
               <label className="font-semibold text-muted-foreground">
@@ -181,7 +210,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                   max={maxDate}
                   value={dateTo}
                   onChange={(event) => setDateTo(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                  className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                 />
               </label>
               <button
@@ -211,7 +240,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
               role="img"
               tabIndex={0}
               aria-label="Net worth: investments, cash and total. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom."
-              className="touch-pan-y select-none rounded-[12px]"
+              className="touch-pan-y select-none rounded-xl"
               {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
@@ -231,13 +260,19 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                       patternTransform="rotate(45)"
                       patternUnits="userSpaceOnUse"
                     >
-                      <rect width="6" height="6" fill="hsl(var(--chart-teal) / 0.14)" />
+                      <rect
+                        width="6"
+                        height="6"
+                        fill="var(--color-chart-teal)"
+                        fillOpacity={0.14}
+                      />
                       <line
                         x1="0"
                         y1="0"
                         x2="0"
                         y2="6"
-                        stroke="hsl(var(--chart-teal) / 0.6)"
+                        stroke="var(--color-chart-teal)"
+                        strokeOpacity={0.6}
                         strokeWidth="2"
                       />
                     </pattern>
@@ -334,17 +369,11 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
               aria-label="Net worth chart series"
             >
               <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="size-2 rounded-full bg-[hsl(var(--chart-teal))]"
-                />
+                <span aria-hidden="true" className="size-2 rounded-full bg-chart-teal" />
                 Investments
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="size-2 rounded-full bg-[hsl(var(--chart-amber))]"
-                />
+                <span aria-hidden="true" className="size-2 rounded-full bg-chart-amber" />
                 Cash
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -355,24 +384,41 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden="true" className="h-2.5 w-3 net-worth-hatch" />
                   Estimated prices ({warnings.forwardFilled.length})
-                  <span className="sr-only"> Estimated price: {warnings.forwardFilled.join(", ")}</span>
+                  <span className="sr-only">
+                    {" "}
+                    Estimated price: {warnings.forwardFilled.join(", ")}
+                  </span>
                 </span>
               )}
             </div>
-            {(warnings.unpriced.length > 0 || warnings.cashUnknown.length > 0 || warnings.cashEstimated.length > 0) && (
+            {(warnings.unpriced.length > 0 ||
+              warnings.cashUnknown.length > 0 ||
+              warnings.cashEstimated.length > 0) && (
               <div
                 role="status"
-                className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5"
+                className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5"
               >
                 <p className="font-semibold">Net worth partly unknown</p>
                 {warnings.unpriced.length > 0 && (
-                  <p><span className="sr-only">Excluded due to stale price: {warnings.unpriced.join(", ")} </span>Excluded due to stale price: {warnings.unpriced.length} instruments</p>
+                  <p>
+                    <span className="sr-only">
+                      Excluded due to stale price: {warnings.unpriced.join(", ")}{" "}
+                    </span>
+                    Excluded due to stale price: {warnings.unpriced.length} instruments
+                  </p>
                 )}
                 {warnings.cashUnknown.length > 0 && (
-                  <p><span className="sr-only">Cash value unknown: {warnings.cashUnknown.join(", ")} </span>Cash value unknown: {warnings.cashUnknown.length} accounts</p>
+                  <p>
+                    <span className="sr-only">
+                      Cash value unknown: {warnings.cashUnknown.join(", ")}{" "}
+                    </span>
+                    Cash value unknown: {warnings.cashUnknown.length} accounts
+                  </p>
                 )}
                 {warnings.cashEstimated.length > 0 && (
-                  <p>Cash estimated from unproven history: {warnings.cashEstimated.length} accounts</p>
+                  <p>
+                    Cash estimated from unproven history: {warnings.cashEstimated.length} accounts
+                  </p>
                 )}
               </div>
             )}
@@ -395,7 +441,7 @@ function NetWorthTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(320px,80vw)] rounded-[12px] border border-border bg-card px-3 py-2 text-xs shadow-soft">
+    <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
       <p className="mb-1 text-muted-foreground">{dateLabel(point.date)}</p>
       <p className="mb-2 text-base font-semibold tabular-nums">
         {displayValue(point.value, currency)}

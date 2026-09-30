@@ -152,7 +152,10 @@ test("renders error state when the API fails", async () => {
   const samples: Sample[] = [];
   const { root, Probe } = mount(samples);
   await act(async () => root.render(<Probe range="1Y" benchmark="" revision="" />));
-  expect(samples.at(-1)?.state).toEqual({ status: "error", message: "Failed to load summary: 503" });
+  expect(samples.at(-1)?.state).toEqual({
+    status: "error",
+    message: "Failed to load summary: 503",
+  });
   root.unmount();
 });
 
@@ -181,7 +184,10 @@ test("a body that is not JSON reads as an invalid format", async () => {
   const samples: Sample[] = [];
   const { root, Probe } = mount(samples);
   await act(async () => root.render(<Probe range="1Y" benchmark="" revision="" />));
-  expect(samples.at(-1)?.state).toEqual({ status: "error", message: "Summary has an invalid format." });
+  expect(samples.at(-1)?.state).toEqual({
+    status: "error",
+    message: "Summary has an invalid format.",
+  });
   root.unmount();
 });
 
@@ -204,6 +210,9 @@ test.each([
   const samples: Sample[] = [];
   const { root, Probe } = mount(samples);
   await act(async () => root.render(<Probe range="1Y" benchmark="" revision="" />));
-  expect(samples.at(-1)?.state).toEqual({ status: "error", message: "Summary has an invalid format." });
+  expect(samples.at(-1)?.state).toEqual({
+    status: "error",
+    message: "Summary has an invalid format.",
+  });
   root.unmount();
 });

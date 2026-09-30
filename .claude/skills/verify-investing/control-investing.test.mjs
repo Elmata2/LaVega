@@ -1064,6 +1064,100 @@ echo "browse-ok $1"
     assert.deepEqual(browseCalls(), []);
   });
 
+  test("screenshot --help names the /tmp evidence path", async () => {
+    const result = await run(["browser", "screenshot", "--help"]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /\/tmp\/lavega-verify-investing\/evidence/);
+    assert.match(result.stdout, /\$TMPDIR/);
+    assert.match(result.stdout, /parent directory does not exist/);
+    assert.match(result.stdout, /Do not retry a different folder/);
+  });
+
+  test("screenshot --png outside /tmp is refused before browse", async () => {
+    const png = join(process.env.HOME, "lavega-not-allowed.png");
+    const result = await run(["browser", "screenshot", "--png", png]);
+    assert.equal(result.code, 2);
+    assert.equal(result.error.error.code, "path-rejected");
+    assert.match(result.error.error.message, /screenshot path rejected/);
+    assert.match(result.error.error.fix, /\/tmp\/lavega-verify-investing\/evidence\/<name>\.png/);
+    assert.match(result.error.error.fix, /\$TMPDIR/);
+    assert.match(result.error.error.fix, /Do not retry a different folder/);
+    assert.equal(existsSync(png), false);
+    assert.deepEqual(browseCalls(), []);
+  });
+
+  test("screenshot defaults under /tmp when the state dir is not", async () => {
+    pngBrowse();
+    const outside = mkdtempSync(join(process.env.HOME, "control-investing-outside-"));
+    try {
+      const result = await run(["browser", "screenshot"], { VERIFY_INVESTING_DIR: outside });
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(
+        result.json.saved,
+        /^\/tmp\/lavega-verify-investing\/evidence\/screenshot-.*\.png$/,
+      );
+      assert.equal(existsSync(result.json.saved), true);
+      const pngBytes = readFileSync(result.json.saved);
+      assert.equal(pngBytes[0], 0x89);
+      rmSync(result.json.saved, { force: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("screenshot creates a missing /tmp parent before browse", async () => {
+    const dir = join("/tmp", `lavega-shot-${process.pid}-${Date.now()}`);
+    const png = join(dir, "nested", "chat.png");
+    writeFileSync(
+      fakeBrowse,
+      `#!/bin/sh
+echo "$@" >> "${browseLog}"
+out=""
+for arg in "$@"; do out="$arg"; done
+parent=$(dirname "$out")
+if [ ! -d "$parent" ]; then echo "Path must be within: /tmp" >&2; exit 1; fi
+printf '\\211PNG\\r\\n\\032\\n' > "$out"
+echo "browse-ok"
+`,
+    );
+    chmodSync(fakeBrowse, 0o755);
+    try {
+      const result = await run(["browser", "screenshot", "--png", png]);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.json.saved, png);
+      assert.equal(existsSync(png), true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("browser raw screenshot outside /tmp is refused", async () => {
+    const png = join(process.env.HOME, "lavega-raw-missing", "munger-chat.png");
+    const result = await run(["browser", "raw", "--", "screenshot", png]);
+    assert.equal(result.code, 2);
+    assert.equal(result.error.error.code, "path-rejected");
+    assert.match(result.error.error.fix, /\/tmp\/lavega-verify-investing\/evidence/);
+    assert.equal(existsSync(dirname(png)), false);
+    assert.deepEqual(browseCalls(), []);
+    const dry = await run(["browser", "raw", "--dry-run", "--", "screenshot", png]);
+    assert.equal(dry.code, 2);
+    assert.equal(dry.error.error.code, "path-rejected");
+    assert.equal(existsSync(dirname(png)), false);
+  });
+
+  test("a browse path rejection names the evidence png path", async () => {
+    writeFileSync(
+      fakeBrowse,
+      `#!/bin/sh\necho "Path must be within: /tmp, /opt/other" >&2\nexit 1\n`,
+    );
+    chmodSync(fakeBrowse, 0o755);
+    const result = await run(["browser", "screenshot"]);
+    assert.equal(result.code, 1);
+    assert.match(result.json.fix, /\/tmp\/lavega-verify-investing\/evidence\/<name>\.png/);
+    assert.doesNotMatch(result.json.fix, /working directory/);
+    assert.notEqual(result.error?.error?.code, "browse-sandboxed");
+  });
+
   test("click --dry-run does not call browse", async () => {
     const result = await run(["browser", "click", "@e3", "--dry-run"]);
     assert.equal(result.code, 0);
@@ -1098,6 +1192,25 @@ echo "browse-ok $1"
     );
     chmodSync(fakeBrowse, 0o755);
   }
+
+  test("browser commands prepend ~/.bun/bin so browse can spawn bun", async () => {
+    const home = join(stateDir, "home-browse-bun");
+    const bunDir = join(home, ".bun/bin");
+    mkdirSync(bunDir, { recursive: true });
+    writeFileSync(join(bunDir, "bun"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(bunDir, "bun"), 0o755);
+    const pathLog = join(stateDir, "browse-path.log");
+    const bin = join(stateDir, "path-browse");
+    writeFileSync(bin, `#!/bin/sh\necho "$PATH" > "${pathLog}"\nexit 0\n`);
+    chmodSync(bin, 0o755);
+    const result = await run(["browser", "open", ...local()], {
+      HOME: home,
+      PATH: "/usr/bin:/bin",
+      LAVEGA_BROWSE_BIN: bin,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(readFileSync(pathLog, "utf8"), new RegExp(bunDir));
+  });
 
   test("browser open sandbox refusal says to escalate, not to install", async () => {
     sandboxBrowse();

@@ -1,3 +1,4 @@
+import { useChat } from "@ai-sdk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
@@ -29,6 +30,7 @@ import {
 import { Profile } from "./components/Profile";
 import { NetWorthPage } from "./components/NetWorthPage.js";
 import { AgentsList } from "./components/AgentsList.js";
+import { StockResearch } from "./components/StockResearch.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -43,8 +45,9 @@ import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegist
 import { useInvestingLayout } from "./lib/layoutResource.js";
 import { usePortfolioSummary } from "./lib/summaryResource.js";
 import {
+  chatErrorMessage,
+  portfolioChat,
   runPortfolioAgent,
-  sendPortfolioAgentMessage,
   useAgentCatalog,
   useAgentRequests,
   type PortfolioAgentDefinition,
@@ -254,8 +257,12 @@ function PositionList({
                       {money(position.marketValue).replace(/^\+/, "")}
                     </span>
                     {position.priceStatus === "forward-filled" && (
-                      <span className="ml-2 text-xs font-medium text-warning" title="Price is estimated from latest available market data">
-                        · <span aria-hidden="true">est.</span><span className="sr-only">Estimated price</span>
+                      <span
+                        className="ml-2 text-xs font-medium text-warning"
+                        title="Price is estimated from latest available market data"
+                      >
+                        · <span aria-hidden="true">est.</span>
+                        <span className="sr-only">Estimated price</span>
                       </span>
                     )}
                   </>
@@ -368,10 +375,10 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
   return (
     <section
       aria-label="Portfolio KPIs"
-      className="rounded-card border border-border bg-card p-5 shadow-soft"
+      className="rounded-card border border-border bg-card p-5 shadow-md"
       data-dashboard-section="kpis"
     >
-      <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
         Key figures
       </p>
       <dl className="mt-4 space-y-4">
@@ -409,14 +416,19 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
       </dl>
       {latest && latest.forwardFilled.length > 0 && (
         <details className="mt-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Estimated prices ({latest.forwardFilled.length})</summary>
-          <p className="mt-1 break-words"><span className="sr-only">Estimated price: </span>{latest.forwardFilled.join(", ")}</p>
+          <summary className="cursor-pointer">
+            Estimated prices ({latest.forwardFilled.length})
+          </summary>
+          <p className="mt-1 break-words">
+            <span className="sr-only">Estimated price: </span>
+            {latest.forwardFilled.join(", ")}
+          </p>
         </details>
       )}
       {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
         <div
           role="status"
-          className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"
+          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"
         >
           <p className="font-semibold">Value partly unknown</p>
           {latest.unpriced.length > 0 && <p>No usable price: {latest.unpriced.join(", ")}</p>}
@@ -500,7 +512,7 @@ function PersonaRadioGroup({
                 moveSelection(index, -1);
               }
             }}
-            className={`pressable rounded-[14px] border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
+            className={`pressable rounded-tile border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
           >
             {agent.displayName}
           </button>
@@ -554,12 +566,12 @@ function PortfolioAgentCard() {
   return (
     <section
       aria-labelledby="portfolio-agent-title"
-      className="rounded-card border border-border bg-card p-5 shadow-soft"
+      className="rounded-card border border-border bg-card p-5 shadow-md"
       data-dashboard-section="agent"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent</p>
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Agent</p>
           <h3 id="portfolio-agent-title" className="mt-1 font-display text-2xl font-semibold">
             Investor lens
           </h3>
@@ -592,7 +604,7 @@ function PortfolioAgentCard() {
           <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
           <Link
             to={`/agents/${active.id}`}
-            className="pressable mt-4 flex items-center justify-between rounded-[14px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
+            className="pressable mt-4 flex items-center justify-between rounded-tile border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
           >
             <span>Open conversation with {active.displayName}</span>
             <span aria-hidden="true">→</span>
@@ -606,7 +618,7 @@ function PortfolioAgentCard() {
             </p>
           )}
           {insight && (
-            <article className="mt-4 rounded-[14px] border border-border bg-secondary/30 p-4">
+            <article className="mt-4 rounded-tile border border-border bg-secondary/30 p-4">
               <p className="text-sm font-semibold">{insight.displayName}</p>
               <p className="mt-2 text-sm leading-6">{insight.summary}</p>
               {insight.insights.length > 0 && (
@@ -625,62 +637,34 @@ function PortfolioAgentCard() {
   );
 }
 
-type AgentMessage = { role: "user" | "assistant"; content: string };
-
 function AgentView() {
   const { agentId } = useParams();
   const dashboard = useDashboard();
   const { catalog, reload } = useAgentCatalog();
-  const { requestFor, start, settle } = useAgentRequests();
-  const [conversations, setConversations] = useState<Record<string, AgentMessage[]>>({});
   const [input, setInput] = useState("");
 
   const agents = catalog.status === "ready" ? catalog.agents : [];
   const agent = agents.find((item) => item.id === agentId);
-  const request = requestFor(agent?.id ?? "");
-  const sending = request.pending;
-  const error = request.error;
+  const { messages, sendMessage, status, error } = useChat({
+    chat: portfolioChat(agent?.id ?? ""),
+  });
+  const sending = status === "submitted" || status === "streaming";
+  /* A reply that is still in tool steps has no text yet; the status line
+   * stands in for it rather than an empty bubble. */
+  const bubbles = messages
+    .map((message) => ({
+      id: message.id,
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }))
+    .filter((message) => message.text.length > 0);
 
-  const initialMessage: AgentMessage | null = agent
-    ? {
-        role: "assistant",
-        content: `I am ${agent.displayName}. I look at your positions through this lens. Ask a question about concentration, return or risk.`,
-      }
-    : null;
-  const messages = agent ? (conversations[agent.id] ?? [initialMessage!]) : [];
-
-  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+  function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = input.trim();
     if (!agent || !question || sending) return;
-    /* The reader can navigate to another persona while this runs, so the
-     * reply, the failure and the pending flag all travel with the id that
-     * started the request rather than with whatever is on screen later. */
-    const personaId = agent.id;
-    const opening = initialMessage!;
     setInput("");
-    setConversations((current) => ({
-      ...current,
-      [personaId]: [...(current[personaId] ?? [opening]), { role: "user", content: question }],
-    }));
-    start(personaId);
-    try {
-      const reply = await sendPortfolioAgentMessage(
-        personaId,
-        question,
-        currentConversation(conversations[personaId] ?? [opening]),
-      );
-      setConversations((current) => ({
-        ...current,
-        [personaId]: [
-          ...(current[personaId] ?? [opening]),
-          { role: "assistant", content: reply.text },
-        ],
-      }));
-      settle(personaId, null);
-    } catch (reason) {
-      settle(personaId, reason instanceof Error ? reason.message : "Agent reply failed.");
-    }
+    void sendMessage({ text: question });
   }
 
   if (dashboard.status === "loading" || catalog.status === "loading") return <DashboardLoading />;
@@ -713,41 +697,47 @@ function AgentView() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-soft">
+      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-md">
         <div className="border-b border-border px-5 py-5 sm:px-6">
           <Link to="/" className="text-sm font-semibold text-primary hover:underline">
             ← Back to overview
           </Link>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-[.16em] text-primary">
+          <p className="mt-6 text-xs font-semibold uppercase tracking-eyebrow text-primary">
             Portfolio agent
           </p>
           <h2 className="mt-1 font-display text-4xl font-semibold">{agent.displayName}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
-          {messages.map((message, index) => (
+          <div className="flex justify-start">
+            <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+              I am {agent.displayName}. I look at your positions through this lens. Ask a question
+              about a holding, concentration, return or risk.
+            </p>
+          </div>
+          {bubbles.map((message) => (
             <div
-              key={`${message.role}-${index}`}
+              key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <p
-                className={`max-w-[86%] whitespace-pre-line rounded-[18px] px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+                className={`max-w-[86%] whitespace-pre-line rounded-lg px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
               >
-                {message.content}
+                {message.text}
               </p>
             </div>
           ))}
-          {sending && (
+          {sending && bubbles.at(-1)?.role !== "assistant" && (
             <p role="status" className="text-sm text-muted-foreground">
               {agent.displayName} is reading positions…
             </p>
           )}
         </div>
-        <form onSubmit={sendMessage} className="border-t border-border p-4 sm:p-5">
+        <form onSubmit={submit} className="border-t border-border p-4 sm:p-5">
           <label htmlFor="agent-message" className="sr-only">
             Ask {agent.displayName}
           </label>
-          <div className="flex gap-2 rounded-[16px] border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="flex gap-2 rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
             <input
               id="agent-message"
               value={input}
@@ -762,7 +752,7 @@ function AgentView() {
           </div>
           {error && (
             <p role="alert" className="mt-3 text-sm text-negative">
-              {error}
+              {chatErrorMessage(error)}
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
@@ -772,11 +762,11 @@ function AgentView() {
       </section>
       <aside
         aria-label="Positions in conversation"
-        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-soft lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
+        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-md lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
       >
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Context</p>
+            <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Context</p>
             <h3 className="mt-1 font-display text-2xl font-semibold">Your positions</h3>
           </div>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -791,7 +781,7 @@ function AgentView() {
               <Link
                 key={`${position.symbol}-${position.entity}`}
                 to={`/positions/${encodeURIComponent(position.symbol)}`}
-                className="pressable flex items-center justify-between gap-3 rounded-[12px] bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
+                className="pressable flex items-center justify-between gap-3 rounded-xl bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">
@@ -823,10 +813,6 @@ function AgentView() {
       </aside>
     </div>
   );
-}
-
-function currentConversation(messages: readonly AgentMessage[]) {
-  return messages.filter((message) => !message.content.startsWith("I am ")).slice(-12);
 }
 
 type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
@@ -865,7 +851,7 @@ function StatusChip({
             ? "bg-primary"
             : "bg-muted-foreground";
   return (
-    <div className={`rounded-[14px] border px-3 py-2.5 ${toneClass}`}>
+    <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2 text-xs font-semibold">
           <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />
@@ -873,7 +859,7 @@ function StatusChip({
         </span>
         <span className="text-xs font-semibold">{value}</span>
       </div>
-      {detail && <p className="mt-1 truncate pl-4 text-[11px] text-muted-foreground">{detail}</p>}
+      {detail && <p className="mt-1 truncate pl-4 text-2xs text-muted-foreground">{detail}</p>}
       {children}
     </div>
   );
@@ -919,10 +905,10 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
   return (
     <section
       aria-label="Operational status"
-      className="rounded-card border border-border bg-card p-4 shadow-soft"
+      className="rounded-card border border-border bg-card p-4 shadow-md"
       data-dashboard-section="status"
     >
-      <p className="mb-3 text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
         Status
       </p>
       <div className="space-y-2" aria-live="polite">
@@ -1202,11 +1188,12 @@ function Layout() {
   const detail = location.pathname.startsWith("/positions/");
   const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
+  const isStockResearch = location.pathname === "/agents/research";
   const isProfile = location.pathname === "/profile";
   const isOverview = location.pathname === "/";
   return (
     <div className="min-h-screen p-3 sm:p-6">
-      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]">
+      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background shadow-xl sm:min-h-[calc(100vh-3rem)]">
         <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <Link to="/" className="pressable group">
             <span className="text-xs font-semibold uppercase tracking-wide text-primary">
@@ -1291,7 +1278,7 @@ function Layout() {
           </div>
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
-          {!isProfile && (
+          {!isProfile && !isStockResearch && (
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-primary">
@@ -1550,11 +1537,11 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="position-title"
-      className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"
+      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
             {position.status === "closed" ? "Closed position" : "Open position"}
           </p>
           <h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">
@@ -1574,7 +1561,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         className={`mt-6 grid gap-3 ${position.status === "closed" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
       >
         {position.status === "open" && (
-          <div className="rounded-[14px] bg-secondary/40 p-4">
+          <div className="rounded-tile bg-secondary/40 p-4">
             <dt className="text-xs font-semibold text-muted-foreground">Current value</dt>
             <dd className="mt-1 text-xl font-semibold tabular-nums">
               {position.currentValue === null ? (
@@ -1591,7 +1578,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </div>
         )}
         {position.status === "open" && (
-          <div className="rounded-[14px] bg-secondary/40 p-4">
+          <div className="rounded-tile bg-secondary/40 p-4">
             <dt className="text-xs font-semibold text-muted-foreground">Daily change</dt>
             <dd
               className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}
@@ -1603,7 +1590,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             </dd>
           </div>
         )}
-        <div className="rounded-[14px] bg-secondary/40 p-4">
+        <div className="rounded-tile bg-secondary/40 p-4">
           <dt className="text-xs font-semibold text-muted-foreground">
             {brokerUnrealized ? "Unrealized return" : "Total return"}
           </dt>
@@ -1618,7 +1605,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </dd>
         </div>
         {position.status === "closed" && (
-          <div className="rounded-[14px] bg-secondary/40 p-4">
+          <div className="rounded-tile bg-secondary/40 p-4">
             <dt className="text-xs font-semibold text-muted-foreground">Final status</dt>
             <dd className="mt-1 text-xl font-semibold">0 shares · closed</dd>
           </div>
@@ -1627,7 +1614,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       {!available && !brokerUnrealized && (
         <p
           role="status"
-          className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
           {position.returnStatus === "missing-fx"
             ? "FX rate missing. Return cannot be calculated."
@@ -1637,7 +1624,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       {brokerUnrealized && (
         <p
           role="status"
-          className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
           Unrealized return uses your broker's current cost basis. Lifetime return remains
           unavailable because trade history is incomplete.
@@ -1754,7 +1741,7 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="activity-title"
-      className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"
+      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
     >
       <h3 id="activity-title" className="font-display text-2xl font-semibold">
         Activity
@@ -1913,6 +1900,14 @@ export function App() {
             element={
               <ModuleRoute moduleId="agents">
                 <AgentsList />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents/research"
+            element={
+              <ModuleRoute moduleId="agents">
+                <StockResearch />
               </ModuleRoute>
             }
           />

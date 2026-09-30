@@ -275,9 +275,9 @@ test("clicking Refresh risk calls refresh", () => {
 test("renders a loading placeholder while the shared summary is in flight", () => {
   const { container, root } = render();
   act(() => root.render(card({ state: { status: "loading" } })));
-  expect(container.querySelector('[data-dashboard-section="risk"]')?.getAttribute("aria-busy")).toBe(
-    "true",
-  );
+  expect(
+    container.querySelector('[data-dashboard-section="risk"]')?.getAttribute("aria-busy"),
+  ).toBe("true");
 });
 
 test("renders the shared summary's error", () => {

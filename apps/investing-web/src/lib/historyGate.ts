@@ -54,5 +54,9 @@ export function historyGate(history: HistoryProgress | null | undefined): Histor
 
 /** How the broker is written on screen. */
 export function brokerLabel(broker: string): string {
-  return broker === "trading212" ? "Trading 212" : broker === "ibkr" ? "Interactive Brokers" : broker;
+  return broker === "trading212"
+    ? "Trading 212"
+    : broker === "ibkr"
+      ? "Interactive Brokers"
+      : broker;
 }

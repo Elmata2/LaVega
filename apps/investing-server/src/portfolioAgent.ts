@@ -1,120 +1,15 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText, jsonSchema, tool, type ToolSet } from "ai";
 import type {
   ChoiceQuestion,
   ChoiceResponse,
   ScoreQuestion,
   ScoreResponse,
 } from "@typesafe-ai/sdk";
-import {
-  computePortfolioValueSeries,
-  inCurrentShareUnits,
-  type CashBalance,
-  type CashFlow,
-  type CashHistoryCoverage,
-  type Dividend,
-  type InvestingDashboardData,
-  type Position,
-  type SectorExposure,
-  type Trade,
-} from "@lavega/core";
-import type { PriceStore } from "@lavega/adapters";
-import { readPriceBars } from "./priceReader.js";
+import type { InvestingDashboardData, SectorExposure } from "@lavega/core";
 import {
   createSystemOneProvider,
   type SystemOneProvider,
   type SystemOneQuestion,
 } from "./systemOne.js";
-
-const TENANT_ID = "local";
-export const DEFAULT_PORTFOLIO_CONVERSATION_MODEL = "inclusionai/ling-3.0-flash-fin:free";
-
-export type PortfolioAgentBrokerData = {
-  positions: Position[];
-  trades: Trade[];
-  dividends: Dividend[];
-  cashBalances: CashBalance[];
-  cashFlows: CashFlow[];
-  cashCoverage?: CashHistoryCoverage[];
-};
-
-export type PortfolioAgentDeps = {
-  readBrokerData: () => PortfolioAgentBrokerData;
-  priceStore: PriceStore;
-  fxRate?: { base: string; date: string; rates: Record<string, number> };
-};
-
-const IDENTITY_FX = { base: "EUR", date: "0000-01-01", rates: { EUR: 1 } };
-
-export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
-  const getPriceBar = async (symbol: string, date?: string) => {
-    const bars = await deps.priceStore.getRange(TENANT_ID, symbol, date, date);
-    return bars.filter((bar) => date === undefined || bar.date <= date).at(-1) ?? null;
-  };
-
-  return {
-    get_positions: tool({
-      description: "Current broker positions with symbol and quantity",
-      inputSchema: jsonSchema<Record<string, never>>({
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      }),
-      execute: async () => deps.readBrokerData().positions,
-    }),
-    get_price: tool({
-      description: "Latest known closing price for a symbol, optionally as of a date (YYYY-MM-DD)",
-      inputSchema: jsonSchema<{ symbol: string; date?: string }>({
-        type: "object",
-        properties: {
-          symbol: { type: "string" },
-          date: { type: "string", description: "YYYY-MM-DD" },
-        },
-        required: ["symbol"],
-        additionalProperties: false,
-      }),
-      execute: async ({ symbol, date }) => {
-        const bar = await getPriceBar(symbol.trim().toUpperCase(), date);
-        return bar
-          ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency }
-          : null;
-      },
-    }),
-    compute_portfolio_value: tool({
-      description: "Latest computed total portfolio value in EUR with its date",
-      inputSchema: jsonSchema<Record<string, never>>({
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      }),
-      execute: async () => {
-        const { positions, trades, dividends, cashBalances, cashFlows, cashCoverage } =
-          deps.readBrokerData();
-        const symbols = [
-          ...new Set([
-            ...positions.map((position) => position.symbol),
-            ...trades.map((trade) => trade.symbol),
-          ]),
-        ];
-        const { bars } = await readPriceBars(deps.priceStore, TENANT_ID, symbols);
-        const today = bars
-          .map((bar) => bar.date)
-          .sort()
-          .at(-1);
-        const units = inCurrentShareUnits(positions, trades, bars);
-        const series = computePortfolioValueSeries(
-          units.positions,
-          units.trades,
-          bars,
-          "EUR",
-          deps.fxRate ?? IDENTITY_FX,
-          { cashBalances, cashFlows, cashCoverage, dividends, today },
-        );
-        return series.at(-1) ?? null;
-      },
-    }),
-  };
-}
 
 export type RunPortfolioAgentOptions = {
   model?: string;
@@ -159,18 +54,6 @@ export type PortfolioJudgmentRun = {
   judgments: PortfolioJudgment[];
   model: string;
   snapshotHash: string;
-};
-export type PortfolioConversationTurn = { role: "user" | "assistant"; content: string };
-export type PortfolioConversationReply = {
-  agentId: PortfolioAgentId;
-  displayName: string;
-  text: string;
-  model: string;
-  snapshotHash: string;
-  judgment: { signal: PortfolioJudgmentChoice; confidence: number };
-};
-export type PortfolioConversationProvider = {
-  reply(input: { model: string; system: string; prompt: string }): Promise<string>;
 };
 export type PortfolioJudgmentComposition = {
   signal: PortfolioJudgmentChoice;
@@ -255,100 +138,6 @@ export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinit
   const normalized = id?.trim() as PortfolioAgentId | undefined;
   if (normalized && PORTFOLIO_AGENT_IDS.includes(normalized)) return PERSONAS[normalized];
   return PERSONAS.warren_buffett;
-}
-
-export function resolvePortfolioConversationConfig() {
-  const apiKey = process.env.LAVEGA_AGENT_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) throw new Error("LAVEGA_AGENT_API_KEY or OPENROUTER_API_KEY is not set");
-  return {
-    apiKey,
-    baseURL: process.env.LAVEGA_AGENT_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
-    model: process.env.LAVEGA_AGENT_MODEL?.trim() || DEFAULT_PORTFOLIO_CONVERSATION_MODEL,
-  };
-}
-
-function createPortfolioConversationProvider(
-  config: ReturnType<typeof resolvePortfolioConversationConfig>,
-): PortfolioConversationProvider {
-  const provider = createOpenAICompatible({
-    name: "lavega-agent",
-    baseURL: config.baseURL,
-    apiKey: config.apiKey,
-  });
-  return {
-    async reply(input) {
-      const { text } = await generateText({
-        model: provider.chatModel(input.model),
-        system: input.system,
-        prompt: input.prompt,
-        abortSignal: AbortSignal.timeout(60_000),
-      });
-      return text;
-    },
-  };
-}
-
-export async function runPortfolioConversation({
-  agentId,
-  prompt,
-  history,
-  dashboard,
-  sectors,
-  judgment,
-  provider,
-}: {
-  agentId: PortfolioAgentId;
-  prompt: string;
-  history: readonly PortfolioConversationTurn[];
-  dashboard: InvestingDashboardData;
-  sectors?: readonly SectorExposure[];
-  judgment: PortfolioJudgmentRun;
-  provider?: PortfolioConversationProvider;
-}): Promise<PortfolioConversationReply> {
-  const agent = getPortfolioAgent(agentId);
-  const selected = judgment.judgments.find((item) => item.agentId === agentId);
-  const signal = selected?.signal?.choice;
-  const choice: PortfolioJudgmentChoice =
-    signal === "bullish" || signal === "bearish" || signal === "neutral" || signal === "no_view"
-      ? signal
-      : "no_view";
-  const probability = selected?.signal?.probabilities?.[choice];
-  const confidence =
-    typeof probability === "number" && Number.isFinite(probability)
-      ? Math.round(Math.max(0, Math.min(1, probability)) * 100)
-      : 0;
-  let model: string;
-  let conversationProvider: PortfolioConversationProvider;
-  if (provider) {
-    model = "injected";
-    conversationProvider = provider;
-  } else {
-    const config = resolvePortfolioConversationConfig();
-    model = config.model;
-    conversationProvider = createPortfolioConversationProvider(config);
-  }
-  const text = await conversationProvider.reply({
-    model,
-    system: `${agent.instructions}\n${agent.criteria}\nEducational analysis only. Do not give trade instructions. Use only provided portfolio facts.`,
-    prompt: [
-      "Typed Jev judgment for this lens:",
-      JSON.stringify({ signal: choice, confidence }),
-      "Portfolio snapshot:",
-      renderPortfolioConversationSnapshot(dashboard, sectors),
-      "Conversation so far:",
-      history.map((turn) => `${turn.role}: ${turn.content}`).join("\n"),
-      "User question:",
-      prompt,
-    ].join("\n\n"),
-  });
-  return {
-    agentId,
-    displayName: agent.displayName,
-    text,
-    model,
-    snapshotHash: judgment.snapshotHash,
-    judgment: { signal: choice, confidence },
-  };
 }
 
 export async function runPortfolioAgent({
@@ -512,27 +301,6 @@ export function renderPortfolioSnapshot(
     null,
     2,
   );
-}
-
-export function renderPortfolioConversationSnapshot(
-  dashboard: InvestingDashboardData,
-  sectors?: readonly SectorExposure[],
-): string {
-  return JSON.stringify({
-    ...JSON.parse(renderPortfolioSnapshot(dashboard, sectors)),
-    positions: dashboard.positions.map((position) => ({
-      symbol: position.symbol,
-      entity: position.entity,
-      description: position.description ?? null,
-      quantity: round(position.quantity, 6),
-      marketValue: round(position.marketValue, 2),
-      weight: round(position.portfolioWeight, 4),
-      priceStatus: position.priceStatus,
-      returnStatus: position.returns.status,
-      totalReturn: round(position.returns.totalReturn, 2),
-      totalReturnPercentage: round(position.returns.totalReturnPercentage, 4),
-    })),
-  });
 }
 
 export async function portfolioSnapshotHash(

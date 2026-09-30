@@ -2,7 +2,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { PerformanceTooltip, PortfolioBenchmarkChart, pointsForWindow } from "./PortfolioBenchmarkChart";
+import {
+  PerformanceTooltip,
+  PortfolioBenchmarkChart,
+  pointsForWindow,
+} from "./PortfolioBenchmarkChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -185,7 +189,7 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   const daxDotBefore = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.backgroundColor;
+    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="^AEX remove"]')?.click();
     await Promise.resolve();
@@ -196,7 +200,7 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   );
   const daxDotAfter = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.backgroundColor;
+    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
   expect(daxDotAfter).not.toBe(daxDotBefore);
   await act(async () => root.unmount());
 });
@@ -452,7 +456,9 @@ test("comparison card says no price history for a benchmark with zero points", a
     root.render(
       <PortfolioBenchmarkChart
         data={{ "1M": points }}
-        benchmarks={[{ symbol: "NEWETF", name: "New ETF", exchange: "NYSE Arca", currency: "EUR", points: [] }]}
+        benchmarks={[
+          { symbol: "NEWETF", name: "New ETF", exchange: "NYSE Arca", currency: "EUR", points: [] },
+        ]}
       />,
     );
     await Promise.resolve();
@@ -594,9 +600,7 @@ test("search results mark an instrument whose currency differs from the portfoli
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 260));
   });
-  const resultButton = container.querySelector<HTMLButtonElement>(
-    '#benchmark-results button',
-  )!;
+  const resultButton = container.querySelector<HTMLButtonElement>("#benchmark-results button")!;
   expect(resultButton.textContent).toContain("Converted to EUR at each day's ECB rate.");
   expect(resultButton.textContent).not.toContain("Beta and alpha need a");
   expect(resultButton.disabled).toBe(false);
@@ -610,7 +614,9 @@ test("a failed search clears the previous search's results instead of leaving th
       const url = String(input);
       if (url.includes("q=GSPC"))
         return new Response(
-          JSON.stringify({ results: [{ symbol: "^GSPC", name: "S&P 500", exchange: "SNP", currency: "USD" }] }),
+          JSON.stringify({
+            results: [{ symbol: "^GSPC", name: "S&P 500", exchange: "SNP", currency: "USD" }],
+          }),
         );
       if (url.includes("/benchmarks/search")) return new Response(null, { status: 428 });
       return new Response(JSON.stringify({ tenantId: "local", symbols: [] }));

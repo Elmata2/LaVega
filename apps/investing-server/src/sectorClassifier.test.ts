@@ -56,8 +56,14 @@ test("a high-confidence answer outside the GICS set is never trusted as a sector
 });
 
 test("a provider throw resolves to failed, not no-match", async () => {
-  const classifier = createSystemOneSectorClassifier(providerRejecting(new Error("upstream timeout")), 0.6);
-  expect(await classifier({ symbol: "ACME" })).toEqual({ kind: "failed", reason: "upstream timeout" });
+  const classifier = createSystemOneSectorClassifier(
+    providerRejecting(new Error("upstream timeout")),
+    0.6,
+  );
+  expect(await classifier({ symbol: "ACME" })).toEqual({
+    kind: "failed",
+    reason: "upstream timeout",
+  });
 });
 
 test("a budget refusal resolves to failed, not no-match", async () => {
@@ -97,7 +103,9 @@ test("a missing sector answer resolves to failed", async () => {
 
 test("a non-choice sector answer resolves to failed", async () => {
   const classifier = createSystemOneSectorClassifier(
-    providerAnswering({ sector: { type: "score", score: 1, confidence: 0.9, legend: {}, probabilities: {} } }),
+    providerAnswering({
+      sector: { type: "score", score: 1, confidence: 0.9, legend: {}, probabilities: {} },
+    }),
     0.6,
   );
   expect(await classifier({ symbol: "ACME" })).toEqual({

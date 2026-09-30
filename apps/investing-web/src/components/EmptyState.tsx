@@ -2,8 +2,11 @@ import { Card, CardContent } from "./ui/card";
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <Card className="border-dashed bg-transparent shadow-none">
-      <CardContent className="flex min-h-56 flex-col items-center justify-center px-6 text-center">
+    <Card variant="empty">
+      <CardContent
+        spacing="inset"
+        className="flex min-h-56 flex-col items-center justify-center text-center"
+      >
         <div
           className="mb-4 flex h-12 w-12 items-center justify-center rounded-pill bg-secondary text-xl text-primary"
           aria-hidden="true"

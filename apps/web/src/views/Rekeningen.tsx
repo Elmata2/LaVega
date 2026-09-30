@@ -755,9 +755,9 @@ export function saldoAgeNote(age: SaldoAge, locale: Locale): string {
      * grens dus niet trekken — dus trekt hij hem niet, en wijst hij naar de
      * regel eronder die over de koppeling gaat en over niets anders. */
     /* HET OPHAALMOMENT GAAT VOOR. Sinds een bankkoppeling zichzelf ververst is
-       * het koppelmoment niet langer het beste wat we over dit bedrag weten:
-       * een rekening van vorige maand kan een saldo van vanochtend dragen, en
-       * "gekoppeld op <toen>" leest dan als een uitspraak over het bedrag. */
+     * het koppelmoment niet langer het beste wat we over dit bedrag weten:
+     * een rekening van vorige maand kan een saldo van vanochtend dragen, en
+     * "gekoppeld op <toen>" leest dan als een uitspraak over het bedrag. */
     if (age.fetchedAt) return c.saldoAgeUndatedFetched + tx + invite;
     if (age.linkedAt) return c.saldoAgeUndatedLinked + tx + invite;
     return c.saldoAgeUndatedUnlinked + tx + invite;

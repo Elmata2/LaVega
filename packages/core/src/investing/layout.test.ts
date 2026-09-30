@@ -1,9 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  INVESTING_MODULE_IDS,
-  INVESTING_WIDGET_IDS,
-  validateInvestingLayout,
-} from "./layout.js";
+import { INVESTING_MODULE_IDS, INVESTING_WIDGET_IDS, validateInvestingLayout } from "./layout.js";
 
 describe("investing layout validation", () => {
   test("no widget id is also a module id", () => {

@@ -9,18 +9,19 @@ read is `GET /api/auth/get-session`, which `whoami` calls.
 Mounted origin `https://www.lavega.dev`. Investing shell is `/investing/`. Without a session
 the app lands on `/investing/sign-in`.
 
-| Route | Heading an agent can read |
-| --- | --- |
-| `/sign-in` | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`. |
-| `/sign-up` | `Create your account`. Success navigates to `/check-email`. |
-| `/check-email` | `Check your email`. Button `Resend confirmation email`. |
+| Route              | Heading an agent can read                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/sign-in`         | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`.                                                                                                      |
+| `/sign-up`         | `Create your account`. Success navigates to `/check-email`.                                                                                                                     |
+| `/check-email`     | `Check your email`. Button `Resend confirmation email`.                                                                                                                         |
 | `/email-confirmed` | With `?error=`, heading `Confirmation link did not work` and link `Request another link`. Without an error, a session goes to `/` and no session goes to `/sign-in?verified=1`. |
 | `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending). |
-| `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token: `Request another link`. |
+| `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token the heading stays `Choose a new password`. Alert: `Reset link is invalid or expired. Request a new link.` Link: `Request another link`. |
 
-`RequireAuth` sends every other route to `/sign-in` when there is no session.
-Local standalone has no auth routes. `whoami` there is `state: "unconfigured"`. That is not
-a logged-in marker.
+`RequireAuth` sends every other route to `/sign-in` when the session is anonymous.
+Local standalone still serves these SPA routes. `/api/auth/*` answers 503
+`Authentication is not configured`. `RequireAuth` treats that as unconfigured and does not
+redirect. `whoami` there is `state: "unconfigured"`. That is not a logged-in marker.
 
 ## Drive
 
@@ -70,8 +71,8 @@ Each recovery route succeeds on its own heading from the Reach table, read from
 `browser snapshot` or `browser text`. A 200 shell that is still `/sign-in` after `login` is
 not success.
 
-Local `whoami` `state: "unconfigured"` is success only for the claim "this server has no
-auth". It does not satisfy the logged-in marker.
+Local `whoami` `state: "unconfigured"` is success only for the claim "auth is not configured".
+It does not satisfy the logged-in marker.
 
 ## Verified-unreachable
 
@@ -81,9 +82,10 @@ auth". It does not satisfy the logged-in marker.
   `vercel` logged in against the LaVega project (`vercel link`), or those two env vars in
   the process. Do not write `auth.preview.json`. Do not invent an account and do not ask
   for a personal password. Prod is a readable `auth.json`, then the same env pair.
-- `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-password`, and
-  `/reset-password` are mounted routes. They are verified-unreachable on `--target local`.
-  Prerequisite: `--target preview` or `--target prod`.
+- Login success is verified-unreachable on `--target local`. Prerequisite: `--target preview`
+  or `--target prod`, plus credentials. Recovery headings are readable on local with
+  `browser goto /sign-in` (and `/sign-up`, `/check-email`, `/forgot-password`,
+  `/reset-password`). A session after `login` is not.
 - A missing `vercel` CLI blocks preview URL discovery. Pass `--base` or `LAVEGA_PREVIEW_URL`
   when the deploy URL is already known. That does not replace the credentials prerequisite.
 
@@ -93,5 +95,6 @@ auth". It does not satisfy the logged-in marker.
   `/api/*` is a missing session, not a backend failure.
 - The mount refuses to fall back to the local tenant when it cannot name a user. That 401 is
   deliberate: the fallback would serve one user another user's portfolio.
-- The standalone server has no auth routes at all, so `whoami` reports `unconfigured` there.
-  Auth bugs cannot be reproduced locally on `--target local`.
+- The standalone server answers `/api/auth/*` with 503. It does not sign a session in, so
+  `whoami` reports `unconfigured`. Auth bugs that need a session cannot be reproduced on
+  `--target local`.

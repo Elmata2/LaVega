@@ -78,9 +78,9 @@ export function PortfolioSummaryCard({
     <Card aria-label="Portfolio summary" data-dashboard-section="risk">
       <CardHeader>
         <p className="text-sm font-medium text-muted-foreground">Risk &amp; composition</p>
-        <CardTitle className="text-xl">Summary</CardTitle>
+        <CardTitle size="md">Summary</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent spacing="loose">
         <div className="flex flex-wrap gap-3 text-sm">
           <button type="button" className="self-end rounded-md border px-2 py-1" onClick={refresh}>
             Refresh risk

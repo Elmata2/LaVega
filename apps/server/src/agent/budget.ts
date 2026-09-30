@@ -130,10 +130,7 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
  *  `releaseReservation(reservation)` (it didn't; give the room back) —
  *  `reservation` is `undefined` only when `route` itself was omitted, the
  *  read-only form used to just peek at the caps without charging anything. */
-export async function checkBudget(
-  route?: AiUsage["route"],
-  userId?: string,
-): Promise<BudgetGate> {
+export async function checkBudget(route?: AiUsage["route"], userId?: string): Promise<BudgetGate> {
   const account = aiAccountId(userId);
   const caps = loadBudgetConfig();
 

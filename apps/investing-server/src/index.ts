@@ -17,17 +17,20 @@ import {
 import {
   isPortfolioAgentId,
   listPortfolioAgents,
-  runPortfolioConversation,
   runPortfolioAgent,
-  type PortfolioConversationReply,
-  type PortfolioConversationTurn,
   type PortfolioJudgmentRun,
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
+import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
+import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
+import { resolvePortfolioSectors } from "./sectorResolution.js";
+import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
   benchmarkDisplayName,
   buildInvestingDashboard,
+  type FundamentalsProvider,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
   type InvestingLayoutStore,
@@ -36,6 +39,7 @@ import {
   createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
+  createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
   SCHEDULED_BROKERS,
@@ -185,13 +189,6 @@ export function createRuntimeBrokerSync(
 export type PortfolioAgentRunner = (
   options: RunPortfolioAgentOptions,
 ) => Promise<PortfolioJudgmentRun>;
-export type PortfolioConversationRunner = (input: {
-  agentId: import("./portfolioAgent.js").PortfolioAgentId;
-  prompt: string;
-  history: readonly PortfolioConversationTurn[];
-  dashboard: InvestingDashboardData;
-  judgment: PortfolioJudgmentRun;
-}) => Promise<PortfolioConversationReply>;
 export type RuntimeAppOptions = {
   priceStore: PriceStore;
   resolveTenantId?: () => string | Promise<string>;
@@ -206,17 +203,14 @@ export type RuntimeAppOptions = {
   agentRunStore?: AgentRunStore;
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
   runAgent?: PortfolioAgentRunner;
-  runConversation?: PortfolioConversationRunner;
+  chatModel?: LanguageModel;
+  fundamentalsProvider?: FundamentalsProvider;
   dashboardCache?: DashboardCache;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
   runPortfolioAgentOnce: (model?: string) => Promise<AgentRunRecord>;
-  answerPortfolioConversation: (
-    agentId: import("./portfolioAgent.js").PortfolioAgentId,
-    prompt: string,
-    history: readonly PortfolioConversationTurn[],
-  ) => Promise<PortfolioConversationReply>;
+  portfolioChatContext: () => Promise<PortfolioChatContext>;
 };
 
 /* The merge rules and the snapshot shape live with the sync that produces
@@ -228,8 +222,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const priceStore = options.priceStore;
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
-  const investingLayoutStore =
-    options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
+  const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
@@ -699,32 +692,18 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           : await runPortfolioAgent({ dashboard, model, userId: tenantId });
       });
     };
-    const answerPortfolioConversation = async (
-      agentId: import("./portfolioAgent.js").PortfolioAgentId,
-      prompt: string,
-      history: readonly PortfolioConversationTurn[],
-    ): Promise<PortfolioConversationReply> => {
-      const judgmentRecord = await runPortfolioAgentOnce();
-      const judgment = judgmentRecord.result;
-      if (
-        !judgment ||
-        typeof judgment !== "object" ||
-        !Array.isArray((judgment as { judgments?: unknown }).judgments) ||
-        typeof (judgment as { model?: unknown }).model !== "string" ||
-        typeof (judgment as { snapshotHash?: unknown }).snapshotHash !== "string"
-      )
-        throw new Error("Portfolio judgment did not return a result");
-      const dashboard = await dashboardReader({});
-      const input = {
-        agentId,
-        prompt,
-        history,
-        dashboard,
-        judgment: judgment as PortfolioJudgmentRun,
+    const portfolioChatData = async () => {
+      await restoreBrokerData();
+      return {
+        dashboard: await dashboardReader({}),
+        trades: () => brokerData.read().trades,
+        price: async (symbol: string, date?: string) => {
+          const bar = (await priceStore.getRange(tenantId, symbol, undefined, date)).at(-1);
+          return bar
+            ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency }
+            : null;
+        },
       };
-      return options.runConversation
-        ? options.runConversation(input)
-        : runPortfolioConversation(input);
     };
     return {
       brokerSync,
@@ -777,7 +756,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
       },
       runPortfolioAgentOnce,
-      answerPortfolioConversation,
+      portfolioChatData,
     };
   };
 
@@ -823,13 +802,42 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
-  const answerPortfolioConversation = async (
-    agentId: import("./portfolioAgent.js").PortfolioAgentId,
-    prompt: string,
-    history: readonly PortfolioConversationTurn[],
-  ) => (await currentRuntime()).answerPortfolioConversation(agentId, prompt, history);
+  const freshFundamentals = options.fundamentalsProvider ?? createYahooFundamentalsProvider();
+  const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
+  const unavailableFundamentals: FundamentalsProvider = {
+    fetch: async () => {
+      throw new Error("Market data consent is not given");
+    },
+  };
+  /* Sectors resolve read-only, as for the Analyse card: stored profiles and
+   * the owner's corrections, never a provider fetch on the chat path. */
+  const portfolioChatContext = async (): Promise<PortfolioChatContext> => {
+    const tenantId = await resolveTenantId();
+    const [data, consent, corrections, inferenceEnabled] = await Promise.all([
+      (await tenantRuntime(tenantId)).portfolioChatData(),
+      marketDataConsentStore.get(tenantId),
+      sectorDependencies.sectorCorrectionStore.getAll(tenantId),
+      sectorDependencies.sectorInferenceSettingStore.get(tenantId),
+    ]);
+    const { exposure } = await resolvePortfolioSectors(data.dashboard.positions, {
+      store: sectorDependencies.sectorStore,
+      correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
+      showInferred: consent.accepted && inferenceEnabled,
+    }).catch(() => ({ exposure: null }));
+    return {
+      ...data,
+      sectors: exposure,
+      fundamentals: consent.accepted ? fundamentals : unavailableFundamentals,
+    };
+  };
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
+    attachStockResearchRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      consent: marketDataConsentStore,
+      fundamentals: freshFundamentals,
+      chatModel: options.chatModel,
+    });
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
         agents: listPortfolioAgents().map(
@@ -852,28 +860,30 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }
     });
     honoApp.post("/api/agents/portfolio/conversation", async (c) => {
-      const body: { agentId?: unknown; prompt?: unknown; history?: unknown } = await c.req
-        .json()
-        .catch(() => ({}));
+      const body: { agentId?: unknown; messages?: unknown } = await c.req.json().catch(() => ({}));
       if (!isPortfolioAgentId(body.agentId))
         return c.json({ problems: ["Unknown portfolio agent"] }, 400);
-      if (typeof body.prompt !== "string" || !body.prompt.trim())
-        return c.json({ problems: ["Conversation prompt is required"] }, 400);
-      const history = Array.isArray(body.history)
-        ? body.history
-            .slice(-12)
-            .filter(
-              (item): item is PortfolioConversationTurn =>
-                !!item &&
-                typeof item === "object" &&
-                ((item as { role?: unknown }).role === "user" ||
-                  (item as { role?: unknown }).role === "assistant") &&
-                typeof (item as { content?: unknown }).content === "string",
-            )
+      const messages = Array.isArray(body.messages)
+        ? (body.messages as UIMessage[]).slice(-12)
         : [];
+      const last = messages.at(-1);
+      const message =
+        last?.role === "user" && Array.isArray(last.parts)
+          ? last.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+          : "";
+      if (!message.trim()) return c.json({ problems: ["Conversation message is required"] }, 400);
       try {
-        return c.json({
-          result: await answerPortfolioConversation(body.agentId, body.prompt.trim(), history),
+        const agent = await createPortfolioChatAgent({
+          agentId: body.agentId,
+          message,
+          context: await portfolioChatContext(),
+          ...(options.chatModel ? { model: options.chatModel } : {}),
+        });
+        return await createAgentUIStreamResponse({
+          agent,
+          uiMessages: messages,
+          abortSignal: c.req.raw.signal,
+          onError: () => "The agent could not answer. Try again.",
         });
       } catch (error) {
         return c.json(
@@ -882,12 +892,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         );
       }
     });
-    return Object.assign(honoApp, { runPortfolioAgentOnce, answerPortfolioConversation });
+    return Object.assign(honoApp, { runPortfolioAgentOnce, portfolioChatContext });
   };
   const sectorDependencies = {
     sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
-    sectorCorrectionStore:
-      options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
+    sectorCorrectionStore: options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
     sectorInferenceSettingStore:
       options.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore(),
     /* Gated only on whether a System One client is configured — never on a

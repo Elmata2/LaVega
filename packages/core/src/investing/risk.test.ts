@@ -439,9 +439,9 @@ test("a benchmark converted by buildInvestingDashboard resolves comparable witho
   expect(report.risk.status).toBe("estimate");
   expect(report.metrics.beta).toBeCloseTo(1.5, 6);
   expect(report.metrics.alpha).toBeCloseTo(0.0007 * 252, 6);
-  expect(
-    report.risk.reasons.some((reason) => reason.startsWith("Beta and alpha need a")),
-  ).toBe(false);
+  expect(report.risk.reasons.some((reason) => reason.startsWith("Beta and alpha need a"))).toBe(
+    false,
+  );
 });
 
 test("benchmarkCurrencyMismatchReason builds the mismatch sentence", () => {
@@ -484,10 +484,18 @@ test("still disqualifies a materially large unresolved holding", () => {
 test("a tiny holding failing through holdingsUnknown, unpriced, and forwardFilled still yields a usable window", () => {
   const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
   const tiny = (point: PortfolioValuePoint) => point.value! * 0.0003;
-  points[40] = { ...points[40]!, holdingsUnknown: ["TWND_US_EQ"], unaccountedValue: tiny(points[40]!) };
+  points[40] = {
+    ...points[40]!,
+    holdingsUnknown: ["TWND_US_EQ"],
+    unaccountedValue: tiny(points[40]!),
+  };
   points[120] = { ...points[120]!, unpriced: ["TWND_US_EQ"], unaccountedValue: tiny(points[120]!) };
   const last = points.at(-1)!;
-  points[points.length - 1] = { ...last, forwardFilled: ["TWND_US_EQ"], unaccountedValue: tiny(last) };
+  points[points.length - 1] = {
+    ...last,
+    forwardFilled: ["TWND_US_EQ"],
+    unaccountedValue: tiny(last),
+  };
 
   const report = buildHistoricalRisk(dashboard(points));
 
@@ -500,18 +508,27 @@ test("a tiny holding failing through holdingsUnknown, unpriced, and forwardFille
 });
 
 test.each([
-  ["holdingsUnknown", (point: PortfolioValuePoint): PortfolioValuePoint => ({
-    ...point,
-    holdingsUnknown: ["TWND_US_EQ"],
-  })],
-  ["unpriced", (point: PortfolioValuePoint): PortfolioValuePoint => ({
-    ...point,
-    unpriced: ["TWND_US_EQ"],
-  })],
-  ["forwardFilled", (point: PortfolioValuePoint): PortfolioValuePoint => ({
-    ...point,
-    forwardFilled: ["TWND_US_EQ"],
-  })],
+  [
+    "holdingsUnknown",
+    (point: PortfolioValuePoint): PortfolioValuePoint => ({
+      ...point,
+      holdingsUnknown: ["TWND_US_EQ"],
+    }),
+  ],
+  [
+    "unpriced",
+    (point: PortfolioValuePoint): PortfolioValuePoint => ({
+      ...point,
+      unpriced: ["TWND_US_EQ"],
+    }),
+  ],
+  [
+    "forwardFilled",
+    (point: PortfolioValuePoint): PortfolioValuePoint => ({
+      ...point,
+      forwardFilled: ["TWND_US_EQ"],
+    }),
+  ],
 ])(
   "a holding at 20%% of value on the latest date via %s is dropped, not shown as valid",
   (_route, apply) => {

@@ -17,9 +17,10 @@ export type SectorClassification =
   | { kind: "classified"; sector: string; specificity: "sector" | "division"; confidence: number }
   | { kind: "no-match" }
   | { kind: "failed"; reason: string };
-export type SectorClassifier = (
-  instrument: { symbol: string; description?: string },
-) => Promise<SectorClassification>;
+export type SectorClassifier = (instrument: {
+  symbol: string;
+  description?: string;
+}) => Promise<SectorClassification>;
 
 const SECTOR_DESCRIPTIONS: Record<GicsSectorLabel, string> = {
   Technology: "Software, hardware, semiconductors, IT services.",
@@ -82,7 +83,12 @@ export function createSystemOneSectorClassifier(
     if (answer.choice === NO_MATCH) return { kind: "no-match" };
     if (!isGicsSectorLabel(answer.choice)) return { kind: "no-match" };
     if (answer.confidence >= threshold)
-      return { kind: "classified", sector: answer.choice, specificity: "sector", confidence: answer.confidence };
+      return {
+        kind: "classified",
+        sector: answer.choice,
+        specificity: "sector",
+        confidence: answer.confidence,
+      };
     return {
       kind: "classified",
       sector: SECTOR_TO_DIVISION[answer.choice],

@@ -1,5 +1,6 @@
+import { Chat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useState } from "react";
-
 export type PortfolioAgentDefinition = {
   id: string;
   displayName: string;
@@ -17,15 +18,6 @@ export type PortfolioAgentInsight = {
   insights: string[];
   model: string;
   snapshotHash: string;
-};
-export type PortfolioConversationTurn = { role: "user" | "assistant"; content: string };
-export type PortfolioConversationReply = {
-  agentId: string;
-  displayName: string;
-  text: string;
-  model: string;
-  snapshotHash: string;
-  judgment: { signal: "bullish" | "bearish" | "neutral" | "no_view"; confidence: number };
 };
 
 /* The catalog has four outcomes and the UI must be able to tell them apart:
@@ -145,27 +137,6 @@ export async function runPortfolioAgent(
   return insight;
 }
 
-export async function sendPortfolioAgentMessage(
-  agentId: string,
-  prompt: string,
-  history: readonly PortfolioConversationTurn[],
-): Promise<PortfolioConversationReply> {
-  const response = await fetch("/api/agents/portfolio/conversation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ agentId, prompt, history }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    result?: unknown;
-    problems?: string[];
-  };
-  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent reply failed.");
-  const result = payload.result as Partial<PortfolioConversationReply> | undefined;
-  if (!result || typeof result.text !== "string" || typeof result.agentId !== "string")
-    throw new Error("Agent gave an invalid reply.");
-  return result as PortfolioConversationReply;
-}
-
 export function useAgentCatalog(): { catalog: AgentCatalog; reload: () => void } {
   const [catalog, setCatalog] = useState<AgentCatalog>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -218,4 +189,37 @@ export function useAgentRequests(): {
   }, []);
 
   return { requestFor, start, settle };
+}
+
+/* One Chat per persona for the page's lifetime, so a reply keeps streaming
+ * into the right conversation while the reader looks at another persona. */
+const portfolioChats = new Map<string, Chat<UIMessage>>();
+
+export function portfolioChat(agentId: string): Chat<UIMessage> {
+  let chat = portfolioChats.get(agentId);
+  if (!chat) {
+    chat = new Chat({
+      id: agentId,
+      transport: new DefaultChatTransport({
+        api: "/api/agents/portfolio/conversation",
+        body: { agentId },
+      }),
+    });
+    portfolioChats.set(agentId, chat);
+  }
+  return chat;
+}
+
+export function forgetPortfolioChats() {
+  portfolioChats.clear();
+}
+
+/** The server answers a refused turn with JSON problems; the transport
+ *  surfaces that body as the error message. */
+export function chatErrorMessage(error: Error): string {
+  try {
+    const problems = (JSON.parse(error.message) as { problems?: unknown }).problems;
+    if (Array.isArray(problems) && typeof problems[0] === "string") return problems[0];
+  } catch {}
+  return "Agent reply failed.";
 }

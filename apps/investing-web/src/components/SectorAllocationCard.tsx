@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SectorCoverage } from "@lavega/core";
 import type { SummaryState } from "../lib/summaryResource.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
 const barColors = [
-  "hsl(var(--chart-blue))",
-  "hsl(var(--chart-teal))",
-  "hsl(var(--chart-purple))",
-  "hsl(var(--chart-amber))",
-  "hsl(var(--chart-coral))",
+  "var(--color-chart-blue)",
+  "var(--color-chart-teal)",
+  "var(--color-chart-purple)",
+  "var(--color-chart-amber)",
+  "var(--color-chart-coral)",
 ];
 
 /** Caps this component instance's total background classification calls —
@@ -182,7 +182,7 @@ export function SectorAllocationCard({
     <Card data-dashboard-section="sectors">
       <CardHeader>
         <p className="text-sm font-medium text-muted-foreground">Composition</p>
-        <CardTitle className="text-xl">Sector allocation</CardTitle>
+        <CardTitle size="md">Sector allocation</CardTitle>
       </CardHeader>
       <CardContent>
         <ul aria-label="Sector allocation" className="space-y-2">
@@ -198,11 +198,13 @@ export function SectorAllocationCard({
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-secondary">
                 <div
                   aria-hidden="true"
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, sector.weight * 100)}%`,
-                    backgroundColor: barColors[index % barColors.length],
-                  }}
+                  className="h-full w-(--bar-width) rounded-full bg-(--bar-color)"
+                  style={
+                    {
+                      "--bar-width": `${Math.min(100, sector.weight * 100)}%`,
+                      "--bar-color": barColors[index % barColors.length],
+                    } as CSSProperties
+                  }
                 />
               </div>
             </li>
@@ -210,8 +212,8 @@ export function SectorAllocationCard({
         </ul>
         {sectors.length > 0 && (
           <p className="mt-3 text-xs text-muted-foreground">
-            Fund holdings are looked through to their published sector weights; a small residual
-            may still show as Unknown.
+            Fund holdings are looked through to their published sector weights; a small residual may
+            still show as Unknown.
           </p>
         )}
         {coverage && <p className="mt-1 text-xs text-muted-foreground">{coverage}</p>}
