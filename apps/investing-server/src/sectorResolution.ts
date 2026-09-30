@@ -8,7 +8,12 @@ import {
   type SectorWeight,
   type SectorWeightSource,
 } from "@lavega/core";
-import type { FundSectorProfile, SectorProfile, StockSectorProfile } from "@lavega/adapters";
+import type {
+  FundSectorProfile,
+  PriceStore,
+  SectorProfile,
+  StockSectorProfile,
+} from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 import type { SectorClassifier } from "./sectorClassifier.js";
 
@@ -62,6 +67,16 @@ export type SectorResolutionOptions = {
    *  caller that doesn't know about tenant settings (or doesn't need to)
    *  keeps today's behavior. */
   showInferred?: boolean;
+  /** Maps a broker symbol to the Yahoo listing symbol price sync already
+   *  proved it trades under (PriceStore.getCoverage's `listing`), so a
+   *  renamed or SPAC-era broker code (T212's OAC_US_EQ for Hims & Hers) is
+   *  looked up and cached under the same ticker (HIMS) prices already
+   *  settled on, instead of re-guessing exchange suffixes off the stale
+   *  broker code. A local/DB read, never a provider call, so it's safe to
+   *  pass on a read-only path too. Returns null when prices have never
+   *  resolved a listing for this symbol, in which case every lookup stays
+   *  keyed by the broker symbol, unchanged from before this option existed. */
+  resolveListing?: (symbol: string) => Promise<string | null>;
 };
 
 export type PortfolioSectors = {
@@ -77,6 +92,20 @@ export type PortfolioSectors = {
    *  or unknown, over the same positions. */
   coverage: SectorCoverage;
 };
+
+/** Every sector route's `resolveListing`: the Yahoo listing symbol price
+ *  sync already proved a broker symbol trades under (PriceStore.getCoverage's
+ *  `listing`), so a renamed or SPAC-era broker code is looked up under the
+ *  same ticker prices settled on instead of the stale code. A local/DB read,
+ *  never a provider call. Null when prices have never resolved a listing for
+ *  this symbol. */
+export async function resolveSectorListing(
+  priceStore: PriceStore,
+  tenantId: string,
+  symbol: string,
+): Promise<string | null> {
+  return (await priceStore.getCoverage(tenantId, symbol))?.listing ?? null;
+}
 
 /** Bounded fan-out to the sector-profile provider (a single upstream host,
  *  fc.yahoo.com / query2.finance.yahoo.com): high enough that ~200 distinct
@@ -137,13 +166,28 @@ function stampFetchedAt(profile: SectorProfile): SectorProfile {
 
 async function resolveWeights(
   position: { symbol: string; description?: string },
-  { store, fetchProfile, correction, classifier, showInferred }: SectorResolutionOptions,
+  {
+    store,
+    fetchProfile,
+    correction,
+    classifier,
+    showInferred,
+    resolveListing,
+  }: SectorResolutionOptions,
 ): Promise<SectorWeight[]> {
   const { symbol } = position;
+  /* The cache key for every profile read and write below. A broker symbol
+   * that price sync has already resolved to a live Yahoo listing (a renamed
+   * or SPAC-era code) is looked up and cached under that listing instead of
+   * itself, so it shares a cache entry with every other holding of the same
+   * instrument. Unresolved, it falls back to the broker symbol as before. */
+  const lookupSymbol = (resolveListing ? await resolveListing(symbol) : null) ?? symbol;
   /* Read the cache, and ask for the correction, before deciding anything —
    * store.get is a local/DB read, not a provider call, so this costs nothing
-   * a read-only path couldn't already afford. */
-  let profile = await store.get(symbol);
+   * a read-only path couldn't already afford. The correction stays keyed by
+   * the broker symbol: it's the owner's word on the position as they see it
+   * in the UI, not on whichever listing prices happened to resolve. */
+  let profile = await store.get(lookupSymbol);
   const corrected = correction ? await correction(symbol) : null;
 
   const fresh =
@@ -152,10 +196,10 @@ async function resolveWeights(
     !(profile.kind === "fund" && isStaleFundProfile(profile));
   if (!fresh && fetchProfile) {
     try {
-      const fetched = await fetchProfile(symbol);
+      const fetched = await fetchProfile(lookupSymbol);
       if (fetched) {
         profile = stampFetchedAt(fetched);
-        await store.set(symbol, profile);
+        await store.set(lookupSymbol, profile);
       }
     } catch {
       /* keep whatever was already stored, if anything */
@@ -179,7 +223,7 @@ async function resolveWeights(
     const inferred = classificationToProfile(classification);
     if (inferred) {
       profile = inferred;
-      await store.set(symbol, inferred);
+      await store.set(lookupSymbol, inferred);
     }
   }
   return profileToWeights(profile, showInferred);

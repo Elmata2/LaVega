@@ -53,6 +53,7 @@ import {
 } from "./inMemorySectorProfileStore.js";
 import {
   resolvePortfolioSectors,
+  resolveSectorListing,
   resolvedStockSector,
   UNKNOWN_SECTOR,
 } from "./sectorResolution.js";
@@ -276,6 +277,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingApp = new Hono();
   const hasYahooConsent = async (tenantId: string) =>
     (await marketDataConsentStore.get(tenantId)).accepted;
+  const resolveSectorListingSymbol = (tenantId: string, symbol: string) =>
+    resolveSectorListing(store, tenantId, symbol);
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
@@ -357,6 +360,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         store: sectorStore,
         correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
         showInferred: consented && inferenceEnabled,
+        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
         ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
@@ -382,8 +386,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const tenantId = await resolveTenantId();
     /* Same precedence as resolveWeights: read the cached profile before the
      * correction, so a fund always wins. Read-only — no fetchProfile, no
-     * classifier, no store write. */
-    const profile = await sectorStore.get(symbol);
+     * classifier, no store write. Looked up under the same resolved-listing
+     * key resolveWeights caches under, so a renamed broker code (fetched and
+     * cached elsewhere under its live Yahoo ticker) is found here too. */
+    const listing = await resolveSectorListingSymbol(tenantId, symbol);
+    const profile = await sectorStore.get(listing ?? symbol);
     if (profile?.kind === "fund")
       return c.json({ kind: "fund" as const, sector: null, source: "provider" as const });
     const corrected = await sectorCorrectionStore.get(tenantId, symbol);
@@ -412,13 +419,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const body: { sector?: unknown } = await c.req.json().catch(() => ({}));
     if (typeof body.sector !== "string" || !GICS_SECTOR_LABELS.includes(body.sector as never))
       return c.json({ message: "sector must be one of the GICS sector labels" }, 400);
-    const profile = await sectorStore.get(symbol);
+    const tenantId = await resolveTenantId();
+    const listing = await resolveSectorListingSymbol(tenantId, symbol);
+    const profile = await sectorStore.get(listing ?? symbol);
     if (profile?.kind === "fund")
       return c.json(
         { message: "A fund's sector is its look-through weight vector, not a single correction" },
         422,
       );
-    await sectorCorrectionStore.set(await resolveTenantId(), symbol, body.sector);
+    await sectorCorrectionStore.set(tenantId, symbol, body.sector);
     return c.body(null, 204);
   });
   investingApp.delete("/api/investing/positions/:symbol/sector", async (c) => {
@@ -469,6 +478,27 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const corrections = await sectorCorrectionStore.getAll(tenantId);
     const seen = new Set<string>();
     const candidates: typeof priced = [];
+    /* A renamed holding's lookup key (its price-resolved listing, same as
+     * resolveWeights would use), kept per candidate so the classifier isn't
+     * asked to reclassify a symbol a provider profile already answers for
+     * under its listing, and so "cached this round" below can be read back
+     * under the same key the write actually landed on. Computed once here
+     * and handed to resolvePortfolioSectors below (rather than re-resolved
+     * from tenantId+symbol) so a single PriceStore read decides both this
+     * round's candidate list and the round's actual cache key — two reads
+     * per candidate could otherwise land on different coverage rows if a
+     * price sync updates PriceStore between them, reporting a symbol this
+     * round successfully classified as failed. */
+    const lookupSymbols = new Map<string, string>();
+    /* Two broker symbols resolving to the same listing (a renamed holding
+     * held under both its old and new code, or via two brokers) must not
+     * both become candidates: resolvePortfolioSectors dedupes its own
+     * pending list by raw symbol, not by resolved listing, so both would
+     * race sectorStore.get(lookupSymbol) as empty and both would pay for a
+     * classification of the same instrument. The second claimant is simply
+     * left off `candidates` — once the first's classification lands, the
+     * per-position cache check above picks it up next round for free. */
+    const seenLookups = new Set<string>();
     for (const position of priced) {
       const key = position.symbol.toUpperCase();
       if (seen.has(key)) continue;
@@ -478,27 +508,32 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
        * candidates aren't retried forever ahead of ones that might succeed. */
       if (excluded.has(key)) continue;
       if (corrections[key]) continue;
-      if (await sectorStore.get(position.symbol)) continue;
+      const lookupSymbol =
+        (await resolveSectorListingSymbol(tenantId, position.symbol)) ?? position.symbol;
+      if (await sectorStore.get(lookupSymbol)) continue;
+      if (seenLookups.has(lookupSymbol)) continue;
+      seenLookups.add(lookupSymbol);
+      lookupSymbols.set(key, lookupSymbol);
       candidates.push(position);
     }
     const batch = candidates.slice(0, SECTOR_INFERENCE_BATCH_SIZE);
+    await resolvePortfolioSectors(batch, {
+      store: sectorStore,
+      classifier: dependencies.sectorClassifier,
+      resolveListing: async (symbol) => lookupSymbols.get(symbol.toUpperCase()) ?? symbol,
+    });
     /* classified counts symbols actually cached this round (classified or
      * no-match), never batch.length — a classifier failure leaves the
      * symbol uncached, and reporting it as classified anyway is what let
      * the client refresh forever on the same always-failing symbols
-     * (#135 final review, C1). */
+     * (#135 final review, C1). The candidate filter above guarantees each
+     * batch entry's lookup key was empty before this call, so finding a
+     * profile there now means this round wrote it. */
     const cachedThisRound = new Set<string>();
-    const trackingStore: SectorProfileStore = {
-      get: (symbol) => sectorStore.get(symbol),
-      async set(symbol, profile) {
-        cachedThisRound.add(symbol.toUpperCase());
-        await sectorStore.set(symbol, profile);
-      },
-    };
-    await resolvePortfolioSectors(batch, {
-      store: trackingStore,
-      classifier: dependencies.sectorClassifier,
-    });
+    for (const position of batch) {
+      const key = position.symbol.toUpperCase();
+      if (await sectorStore.get(lookupSymbols.get(key)!)) cachedThisRound.add(key);
+    }
     const failedSymbols = batch
       .map((position) => position.symbol.toUpperCase())
       .filter((symbol) => !cachedThisRound.has(symbol));
