@@ -23,9 +23,7 @@ function adapters(sync: () => Promise<BrokerResult>) {
 
 /** A credential store whose answer for each broker the test controls, including
  *  a thrown error for a broker whose stored credentials cannot be decrypted. */
-function credentialsWith(
-  get: (broker: "ibkr" | "trading212") => unknown,
-): CredentialStore {
+function credentialsWith(get: (broker: "ibkr" | "trading212") => unknown): CredentialStore {
   return {
     async getCredentials(_tenantId: string, broker: "ibkr" | "trading212") {
       return get(broker);
@@ -419,9 +417,7 @@ test("a broker with no configured credentials is skipped, not a problem", async 
 
   expect(ibkrSync).not.toHaveBeenCalled();
   expect(result.outcomes.find((outcome) => outcome.broker === "ibkr")?.status).toBe("skipped");
-  expect(result.outcomes.find((outcome) => outcome.broker === "trading212")?.status).toBe(
-    "synced",
-  );
+  expect(result.outcomes.find((outcome) => outcome.broker === "trading212")?.status).toBe("synced");
   expect(result.problems).toEqual([]);
   expect((await operations.progress("ibkr"))?.status).not.toBe("problem");
 });
