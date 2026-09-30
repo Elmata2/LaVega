@@ -1,4 +1,4 @@
-import type { PriceBar } from "@lavega/core";
+import { isPriceFresh, type PriceBar } from "@lavega/core";
 import type { PriceCoverage, PriceProvenance, PriceStore } from "../prices/PriceStore.js";
 import type { Provider } from "./providerRouter.js";
 import { firstProviderResult, hasProblems } from "./providerRouter.js";
@@ -7,6 +7,8 @@ import type { PriceProviderResult, YahooPriceRequest } from "./yahoo/priceProvid
 export type PriceSyncInput = Omit<YahooPriceRequest, "from" | "to"> & {
   today?: string;
   backfillFrom?: string;
+  /** Gates the delisted short-circuit; see `PriceCoverage.delistedSince`. */
+  kind?: "current" | "closed" | "benchmark";
 };
 export type PriceSyncResult = {
   bars: PriceBar[];
@@ -17,10 +19,15 @@ export type PriceSyncResult = {
 /** An omitted `from` leaves the window to the provider's default history. */
 type Window = { from: string | undefined; to: string };
 
-/** One provider answer. Only an answer with bars proves a provenance. */
+/** One provider answer. Only an answer with bars proves a provenance.
+ *  `notFound` carries through `PriceProviderResult.notFound`. */
 type Answer =
   | { ok: true; bars: PriceBar[]; provenance: PriceProvenance | null }
-  | { ok: false; problems: string[] };
+  | { ok: false; problems: string[]; notFound?: boolean };
+
+/** How long a locked listing must have been unconfirmed before a fresh
+ *  not-found answer counts as confirmed rather than possibly transient. */
+const LISTING_MISSING_CONFIRMATION_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Brings one symbol's cache to cover `backfillFrom` through `today`.
@@ -36,25 +43,35 @@ export async function syncPrices(input: {
   tenantId: string;
   priceProviders: readonly Provider<YahooPriceRequest, PriceProviderResult>[];
   request: PriceSyncInput;
+  /** Injectable for tests; the wall clock a `listingMissingSince` confirmation
+   *  gap is measured against, independent of `request.today`'s calendar date. */
+  now?: () => Date;
 }): Promise<PriceSyncResult> {
   const { store, tenantId, request } = input;
-  const today = request.today ?? new Date().toISOString().slice(0, 10);
+  const nowMs = (input.now ?? (() => new Date()))().getTime();
+  const today = request.today ?? new Date(nowMs).toISOString().slice(0, 10);
   const wanted: Window = { from: request.backfillFrom, to: today };
   const [cachedBars, storedCoverage] = await Promise.all([
     store.getRange(tenantId, request.symbol, wanted.from, today),
     store.getCoverage(tenantId, request.symbol),
   ]);
   const coverage = storedCoverage ?? coverageOf(request.symbol, cachedBars);
+  const lastBarDate = cachedBars.at(-1)?.date;
 
-  const ask = async (window: Window): Promise<Answer> => {
+  /* Already confirmed dead: nothing future can change that answer. */
+  if (coverage?.delistedSince && request.kind === "closed")
+    return { bars: cachedBars, problems: [], fetched: false };
+
+  const ask = async (window: Window, listing?: string, currency?: string): Promise<Answer> => {
     const result = await firstProviderResult(
       input.priceProviders,
-      { ...request, ...window },
+      { ...request, ...window, listing, ...(currency !== undefined ? { currency } : {}) },
       undefined,
       hasProblems,
     );
     if (!result) return { ok: false, problems: ["No price provider returned data"] };
-    if (result.value.problems.length) return { ok: false, problems: result.value.problems };
+    if (result.value.problems.length)
+      return { ok: false, problems: result.value.problems, notFound: result.value.notFound };
     const last = result.value.bars.at(-1);
     return {
       ok: true,
@@ -63,12 +80,29 @@ export async function syncPrices(input: {
     };
   };
   const read = () => store.getRange(tenantId, request.symbol, wanted.from, today);
+  const isClosedNotFound = (answer: Answer | null): boolean =>
+    answer?.ok === false && answer.notFound === true && request.kind === "closed";
+  const recordDelisted = async (): Promise<PriceSyncResult> => {
+    await store.putCoverage(tenantId, {
+      symbol: request.symbol,
+      from: coverage?.from ?? wanted.from ?? today,
+      to: coverage?.to ?? today,
+      listing: coverage?.listing ?? null,
+      currency: coverage?.currency ?? request.currency,
+      delistedSince: today,
+      listingMissingSince: undefined,
+    });
+    return { bars: cachedBars, problems: [], fetched: true };
+  };
 
   /* Replaces the window's bars and coverage rather than widening them: nothing
    * cached before is trusted to match what the provider quotes now. */
   const refresh = async (from: string | undefined): Promise<PriceSyncResult> => {
     const answer = await ask({ from, to: today });
-    if (!answer.ok) return { bars: cachedBars, problems: answer.problems, fetched: true };
+    if (!answer.ok)
+      return isClosedNotFound(answer)
+        ? recordDelisted()
+        : { bars: cachedBars, problems: answer.problems, fetched: true };
     const first = answer.bars[0];
     if (!first || !answer.provenance)
       return { bars: cachedBars, problems: ["Price provider returned no bars"], fetched: true };
@@ -95,26 +129,110 @@ export async function syncPrices(input: {
     coverage.to < today ? { from: shiftDate(coverage.to, 1), to: today } : null;
   if (!prefix && !suffix) return { bars: cachedBars, problems: [], fetched: false };
 
-  const before = prefix && (await ask(prefix));
-  const after = suffix && (await ask(suffix));
-  const answered = [before, after].filter((answer) => answer?.ok === true);
+  /* A known listing is fetched directly, skipping the ISIN search and ticker
+   * guesses a caller with no locked listing pays on every sync (issue #101).
+   * Re-derive only when that listing turns out dead or, for a held symbol,
+   * stops quoting anything for longer than a quiet day explains.
+   *
+   * A held symbol's dead listing is not replaced on one 404: a transient
+   * Yahoo failure, or two syncs seconds apart from repeat page loads, would
+   * otherwise lock onto whatever the re-resolution probe happens to return.
+   * `listingMissingSince` set at least `LISTING_MISSING_CONFIRMATION_MS`
+   * earlier is what makes a 404 confirmed rather than a first occurrence or
+   * too recent to mean anything; a closed position, already exiting through
+   * `recordDelisted` below, does not need this second opinion. */
+  const listingConfirmedMissing =
+    coverage.listingMissingSince != null &&
+    nowMs - Date.parse(coverage.listingMissingSince) >= LISTING_MISSING_CONFIRMATION_MS;
+  let reResolvedListing = false;
+  const resolveWindow = async (window: Window): Promise<Answer> => {
+    const locked = coverage.listing ?? undefined;
+    const first = await ask(window, locked);
+    if (!locked) return first;
+    const dead =
+      !first.ok &&
+      first.notFound === true &&
+      (request.kind !== "current" || listingConfirmedMissing);
+    const stale =
+      first.ok &&
+      first.bars.length === 0 &&
+      request.kind === "current" &&
+      lastBarDate !== undefined &&
+      !isPriceFresh(lastBarDate, today);
+    if (!dead && !stale) return first;
+    // Prefer the currency this symbol is already recorded in: a swap the
+    // broker's own stated currency would not predict is still the likeliest
+    // continuation of the same history, not evidence to distrust it.
+    const reResolved = await ask(window, undefined, coverage.currency);
+    if (!reResolved.ok || reResolved.bars.length === 0) return first;
+    reResolvedListing = true;
+    return reResolved;
+  };
+
+  const before = prefix && (await resolveWindow(prefix));
+  const after = suffix && (await resolveWindow(suffix));
+  if (isClosedNotFound(before) || isClosedNotFound(after)) return recordDelisted();
+  /* A held listing quoting nothing for a while is not a holiday: unlike a
+   * closed position, it is still owed forward price data. Give it the same
+   * missed-days grace `isPriceFresh` already gives a stale value elsewhere,
+   * then stop treating silence as a covered, unremarkable gap. */
+  const afterIsStaleQuiet =
+    after?.ok === true &&
+    after.bars.length === 0 &&
+    request.kind === "current" &&
+    lastBarDate !== undefined &&
+    !isPriceFresh(lastBarDate, today);
+  const answered = [before, afterIsStaleQuiet ? null : after].filter(
+    (answer) => answer?.ok === true,
+  );
   const provenances = answered.flatMap((answer) => answer.provenance ?? []);
   const splitAfterCache = after?.ok && after.bars.some((bar) => (bar.split ?? 1) !== 1);
-  if (splitAfterCache || provenances.some((provenance) => changed(coverage, provenance)))
+  const currencySwapped = provenances.some((provenance) => currencyChanged(coverage, provenance));
+  const listingSwapped = provenances.some((provenance) => listingChanged(coverage, provenance));
+  /* A currency swap is never merged, confirmed by re-resolution or not: bars
+   * in two currencies cannot share one coverage row. A listing swap
+   * `resolveWindow` itself just confirmed is not the unrequested surprise
+   * this otherwise exists to catch, so only that case is spared the refetch
+   * that would undo the request saving this function makes. */
+  if (splitAfterCache || currencySwapped || (listingSwapped && !reResolvedListing))
     return refresh(refreshFrom);
 
   const problems = [before, after].flatMap((answer) =>
     answer?.ok === false ? answer.problems : [],
   );
-  if (after?.ok && after.bars.length === 0) problems.push("Price provider returned no bars");
-  if (answered.length === 0) return { bars: cachedBars, problems, fetched: true };
+  if (afterIsStaleQuiet) problems.push(`no prices since ${lastBarDate}`);
+
+  const notFoundNow = (answer: Answer | null): boolean =>
+    answer?.ok === false && answer.notFound === true;
+  const succeededNow = (answer: Answer | null): boolean =>
+    answer?.ok === true && answer.bars.length > 0;
+  const nextListingMissingSince =
+    succeededNow(before) || succeededNow(after)
+      ? undefined
+      : notFoundNow(before) || notFoundNow(after)
+        ? (coverage.listingMissingSince ?? new Date(nowMs).toISOString())
+        : coverage.listingMissingSince;
+
+  if (answered.length === 0) {
+    if (nextListingMissingSince !== coverage.listingMissingSince)
+      await store.putCoverage(tenantId, {
+        ...coverage,
+        listingMissingSince: nextListingMissingSince,
+      });
+    return { bars: cachedBars, problems, fetched: true };
+  }
   const bars = answered.flatMap((answer) => answer.bars);
   if (bars.length) await store.upsert(tenantId, bars);
   await store.putCoverage(tenantId, {
     ...coverage,
     listing: provenances.at(-1)?.listing ?? coverage.listing,
     from: prefix && before?.ok ? prefix.from : coverage.from,
-    to: after?.ok ? (after.bars.at(-1)?.date ?? coverage.to) : coverage.to,
+    to:
+      after?.ok && !afterIsStaleQuiet
+        ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to)
+        : coverage.to,
+    delistedSince: bars.length > 0 ? undefined : coverage.delistedSince,
+    listingMissingSince: nextListingMissingSince,
   });
   return { bars: bars.length ? await read() : cachedBars, problems, fetched: true };
 }
@@ -127,8 +245,11 @@ function coverageOf(symbol: string, bars: readonly PriceBar[]): PriceCoverage | 
   return { symbol, from: first.date, to: last.date, listing: null, currency: first.currency };
 }
 
-function changed(cached: PriceProvenance, quoted: PriceProvenance): boolean {
-  if (cached.currency !== quoted.currency) return true;
+function currencyChanged(cached: PriceProvenance, quoted: PriceProvenance): boolean {
+  return cached.currency !== quoted.currency;
+}
+
+function listingChanged(cached: PriceProvenance, quoted: PriceProvenance): boolean {
   return cached.listing !== null && quoted.listing !== null && cached.listing !== quoted.listing;
 }
 

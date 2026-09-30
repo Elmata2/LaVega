@@ -117,6 +117,27 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       expect(await store.getCoverage("local", "BBB")).toBeNull();
     });
 
+    test("coverage keeps a delistedSince marker across reads", async () => {
+      const store = createStore();
+      await store.putCoverage("local", { ...coverage, delistedSince: "2026-01-01" });
+      expect(await store.getCoverage("local", "AAA")).toEqual({
+        ...coverage,
+        delistedSince: "2026-01-01",
+      });
+    });
+
+    test("coverage keeps a listingMissingSince marker across reads", async () => {
+      const store = createStore();
+      await store.putCoverage("local", {
+        ...coverage,
+        listingMissingSince: "2026-01-01T09:30:00.000Z",
+      });
+      expect(await store.getCoverage("local", "AAA")).toEqual({
+        ...coverage,
+        listingMissingSince: "2026-01-01T09:30:00.000Z",
+      });
+    });
+
     test("isolates coverage between tenants", async () => {
       const store = createStore();
       await store.putCoverage("local", coverage);

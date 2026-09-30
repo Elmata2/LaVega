@@ -4,6 +4,7 @@ import {
   type BenchmarkInstrument,
 } from "@lavega/core";
 import { YahooHttpClient } from "./http.js";
+import { isKnownYahooExchange } from "./symbols.js";
 import type { YahooChartResponse } from "./types.js";
 
 type SearchQuote = {
@@ -49,10 +50,18 @@ async function confirmedCurrency(
 const ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 
 /** Ask Yahoo for a broker ISIN's symbol. This is a provider lookup, not
- *  independent identity verification: the search response has no matching ISIN. */
+ *  independent identity verification: the search response has no matching ISIN.
+ *
+ *  Yahoo's own ranking is not currency-aware: for one ISIN it can list a
+ *  thin cross-listing ahead of the listing the broker actually quotes in.
+ *  `preferredCurrency` (the broker instrument's currency) is checked against
+ *  each candidate in order, confirming via a chart request where the search
+ *  result omits `currency`; a known exchange breaks a further tie; the first
+ *  quote is the last resort. */
 export async function resolveYahooSymbolByIsin(
   isin: string,
   client: YahooHttpClient,
+  preferredCurrency?: string,
 ): Promise<string | null> {
   const normalized = isin.trim().toUpperCase();
   if (!ISIN.test(normalized)) return null;
@@ -60,7 +69,18 @@ export async function resolveYahooSymbolByIsin(
     const response = await client.fetchJsonWithCrumb<SearchResponse>(
       `https://query1.finance.yahoo.com/v1/finance/search?q=${normalized}&quotesCount=4&newsCount=0`,
     );
-    return (response.quotes ?? []).find((quote) => quote.symbol)?.symbol?.toUpperCase() ?? null;
+    const quotes = (response.quotes ?? []).filter(
+      (quote): quote is SearchQuote & { symbol: string } => Boolean(quote.symbol),
+    );
+    const first = quotes[0];
+    if (!first) return null;
+    if (!preferredCurrency) return first.symbol.toUpperCase();
+    const wanted = normalizeCurrencyCode(preferredCurrency);
+    for (const quote of quotes) {
+      if ((await confirmedCurrency(client, quote)) === wanted) return quote.symbol.toUpperCase();
+    }
+    const knownExchange = quotes.find((quote) => isKnownYahooExchange(quote.exchange ?? ""));
+    return (knownExchange ?? first).symbol.toUpperCase();
   } catch {
     return null;
   }

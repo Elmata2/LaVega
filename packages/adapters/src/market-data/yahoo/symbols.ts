@@ -93,6 +93,12 @@ export function getYahooSymbolForKnownExchange(ticker: string, exchange: string)
   return `${normalized}${suffix}`;
 }
 
+/** Whether `exchange` is one of the venues this module can otherwise place a
+ *  ticker on, as a cheap primacy signal among candidates with no better tie-break. */
+export function isKnownYahooExchange(exchange: string): boolean {
+  return Object.hasOwn(EXCHANGE_SUFFIX_MAP, exchange);
+}
+
 export function getYahooSymbolsToTry(ticker: string, exchange: string): string[] {
   if (tickerHasYahooSuffix(ticker)) return [ticker];
   const normalized = ticker.replace(/ /g, "-");
