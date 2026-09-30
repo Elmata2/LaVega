@@ -51,6 +51,26 @@ export function databaseOver(connect: () => Promise<Connection>): Database {
   return { connect, http } as unknown as Database;
 }
 
+/** A fresh PGlite with every migration applied, acting as `lavega_runtime` so
+ *  row-level security applies as it does in production. */
+export async function migratedTestDatabase(): Promise<{
+  pglite: import("@electric-sql/pglite").PGlite;
+  db: Database;
+}> {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const migrations = new URL("../../../db/migrations/", import.meta.url);
+  const pglite = new PGlite();
+  await pglite.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
+  for (const name of readdirSync(migrations)
+    .filter((name) => name.endsWith(".sql"))
+    .sort())
+    await pglite.exec(readFileSync(new URL(name, migrations), "utf8"));
+  // Only a non-superuser is subject to row-level security.
+  await pglite.exec("SET ROLE lavega_runtime;");
+  return { pglite, db: singleConnectionDatabase(pglite) };
+}
+
 /** A `Database` over one in-process Postgres such as PGlite, which has a single
  *  connection: each caller waits for the one before it to release. */
 export function singleConnectionDatabase(instance: {

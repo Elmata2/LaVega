@@ -1078,15 +1078,20 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-/* The nine tables that hold anything belonging to a person. Deliberately a
+/* The tables that hold anything belonging to a person. Deliberately a
  * literal list rather than a query over the catalogue: a table added later
  * should have to be considered here by a human, not silently swept up or —
- * worse — silently missed. Order is child-before-parent; nothing here has a
- * foreign key to another, but that stops being true the moment one is added. */
+ * worse — silently missed. Order is child-before-parent: agent memory
+ * (0019) references investing.agent_threads, so its children go first. */
 const USER_DATA_TABLES = [
   "personal.eb_sessions",
   "personal.eb_pending_auth",
   "personal.n8n_forwarding",
+  "investing.agent_observations",
+  "investing.agent_messages",
+  "investing.goals",
+  "investing.theses",
+  "investing.agent_threads",
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
@@ -1586,3 +1591,5 @@ export function createN8nForwardingRepository(db: Database) {
     },
   };
 }
+
+export * from "./agentMemory.js";

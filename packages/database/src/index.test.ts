@@ -571,6 +571,11 @@ test("erasure clears every table that holds personal data, in one transaction", 
     "DELETE FROM personal.eb_sessions WHERE user_id = $1",
     "DELETE FROM personal.eb_pending_auth WHERE user_id = $1",
     "DELETE FROM personal.n8n_forwarding WHERE user_id = $1",
+    "DELETE FROM investing.agent_observations WHERE user_id = $1",
+    "DELETE FROM investing.agent_messages WHERE user_id = $1",
+    "DELETE FROM investing.goals WHERE user_id = $1",
+    "DELETE FROM investing.theses WHERE user_id = $1",
+    "DELETE FROM investing.agent_threads WHERE user_id = $1",
     "DELETE FROM investing.agent_runs WHERE user_id = $1",
     "DELETE FROM investing.sync_state WHERE user_id = $1",
     "DELETE FROM investing.preferences WHERE user_id = $1",
@@ -583,7 +588,7 @@ test("erasure clears every table that holds personal data, in one transaction", 
   ]);
   // The personal vault — the one thing the server cannot read — is still erasable.
   expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
-  expect(report).toHaveLength(12);
+  expect(report).toHaveLength(17);
 });
 
 test("erasure scopes personal.eb_pending_auth by user_id — that table has no RLS to fall back on", async () => {
@@ -606,7 +611,7 @@ test("erasure reports zero rows rather than pretending it did not run", async ()
   const { db } = erasureDatabase(0);
   const report = await eraseUserData(db, "user-123");
   expect(report.every((entry) => entry.rows === 0)).toBe(true);
-  expect(report).toHaveLength(12);
+  expect(report).toHaveLength(17);
 });
 
 test("a half-erased account rolls back — the caller is never told they are gone when they are not", async () => {
