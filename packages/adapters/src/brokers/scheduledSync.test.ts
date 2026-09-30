@@ -21,6 +21,17 @@ function adapters(sync: () => Promise<BrokerResult>) {
   return [{ broker: "trading212" as const, adapter: { sync } }];
 }
 
+/** A credential store whose answer for each broker the test controls, including
+ *  a thrown error for a broker whose stored credentials cannot be decrypted. */
+function credentialsWith(get: (broker: "ibkr" | "trading212") => unknown): CredentialStore {
+  return {
+    async getCredentials(_tenantId: string, broker: "ibkr" | "trading212") {
+      return get(broker);
+    },
+    async putCredentials() {},
+  } as unknown as CredentialStore;
+}
+
 const empty = (overrides: {
   positions?: BrokerResult["sections"]["positions"]["rows"];
   trades?: BrokerResult["sections"]["trades"]["rows"];
@@ -375,4 +386,101 @@ test("a run that lost its lease stores neither its data nor its cursor", async (
   expect(await state.get("trading212")).toMatchObject({
     lastSyncedAt: "2026-08-19T12:20:00.000Z",
   });
+});
+
+/* The owner never set up IBKR. A broker with no stored credentials is not a
+ * sync failure, so it must not appear in `problems` or flip the stored
+ * progress to "problem" — that is what turned the Status card red for
+ * something the owner never asked LaVega to sync. */
+test("a broker with no configured credentials is skipped, not a problem", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const ibkrSync = vi.fn();
+  const trading212Sync = vi.fn(async () => empty({}));
+  const creds = credentialsWith((broker) =>
+    broker === "ibkr"
+      ? null
+      : { broker: "trading212", tenantId: "local", token: "key", secret: "secret" },
+  );
+
+  const result = await syncScheduledBrokers({
+    adapters: [
+      { broker: "ibkr", adapter: { sync: ibkrSync } },
+      { broker: "trading212", adapter: { sync: trading212Sync } },
+    ],
+    credentials: creds,
+    operations,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-09-30T09:00:00.000Z"),
+  });
+
+  expect(ibkrSync).not.toHaveBeenCalled();
+  expect(result.outcomes.find((outcome) => outcome.broker === "ibkr")?.status).toBe("skipped");
+  expect(result.outcomes.find((outcome) => outcome.broker === "trading212")?.status).toBe("synced");
+  expect(result.problems).toEqual([]);
+  expect((await operations.progress("ibkr"))?.status).not.toBe("problem");
+});
+
+/* Credentials that were configured and now fail to decrypt are a real
+ * problem, unlike a broker that was never set up: `getCredentials` throws
+ * instead of returning null, and that must still surface with a message. */
+test("credentials that fail to decrypt stay a problem with a message", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const creds = credentialsWith((broker) => {
+    if (broker === "ibkr") throw new Error("credentials could not be decrypted");
+    return { broker: "trading212", tenantId: "local", token: "key", secret: "secret" };
+  });
+
+  const result = await syncScheduledBrokers({
+    adapters: [{ broker: "ibkr", adapter: { sync: vi.fn() } }],
+    credentials: creds,
+    operations,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-09-30T09:00:00.000Z"),
+  });
+
+  expect(result.outcomes[0]?.status).toBe("problem");
+  expect(result.problems).toEqual(["ibkr: credentials could not be decrypted"]);
+  const stored = await operations.progress("ibkr");
+  expect(stored?.status).toBe("problem");
+  expect(stored?.message).toBe("ibkr: credentials could not be decrypted");
+});
+
+/* A prior run (or a prior version of this code) can leave a stored "problem"
+ * with no message. The next run, even one that only skips, must overwrite it
+ * rather than leaving the Status card red forever. */
+test("a stored stale problem clears on the next run", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  await operations.claim("ibkr", {
+    leaseId: "stale",
+    staleBefore: "2000-01-01T00:00:00.000Z",
+    progress: {
+      status: "running",
+      message: null,
+      updatedAt: "2026-09-29T16:40:00.000Z",
+      leaseId: "stale",
+    },
+  });
+  await operations.release("ibkr", "stale", {
+    status: "problem",
+    message: null,
+    updatedAt: "2026-09-29T16:40:00.000Z",
+    leaseId: "stale",
+  });
+  expect((await operations.progress("ibkr"))?.status).toBe("problem");
+
+  await syncScheduledBrokers({
+    adapters: [{ broker: "ibkr", adapter: { sync: vi.fn() } }],
+    credentials: credentialsWith(() => null),
+    operations,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-09-30T09:00:00.000Z"),
+  });
+
+  expect((await operations.progress("ibkr"))?.status).not.toBe("problem");
 });

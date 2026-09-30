@@ -179,8 +179,10 @@ function progressFor(
   problem: string | null,
 ): BrokerSyncProgressRecord {
   const waiting = run.state?.retryAfter != null || run.state?.resume != null;
-  const status: BrokerSyncStatus =
-    run.outcome.status === "synced" ? "completed" : waiting ? "waiting" : "problem";
+  // A skip with nothing to report (recently synced, or never configured) is
+  // not a problem: only a run that actually pushed a problem message earns
+  // that status, so the store never carries "problem" with `message: null`.
+  const status: BrokerSyncStatus = waiting ? "waiting" : problem == null ? "completed" : "problem";
   return { status, message: problem, updatedAt, leaseId };
 }
 
@@ -242,7 +244,12 @@ export async function syncScheduledBrokers(input: {
     } catch (error) {
       return failed(readableError(error, broker));
     }
-    if (credentials == null) return failed("credentials are not configured");
+    // No credentials means this broker was never set up: not a sync failure,
+    // so it must not appear in `problems`. A broker that WAS configured and
+    // then became unreadable (corrupted row, lost decryption key) does not
+    // reach here — `getCredentials` throws instead of returning null, and
+    // that throw is caught above as a real, retryable `failed`.
+    if (credentials == null) return skipped();
 
     let result: BrokerResult;
     try {
