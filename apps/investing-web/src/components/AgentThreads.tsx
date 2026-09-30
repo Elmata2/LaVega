@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { deleteThread, fetchThreads, type ThreadSummary } from "../lib/agentMemory.js";
+import { Button } from "./ui/button.js";
 import { longDate } from "../lib/dates.js";
 
 /* A persona's saved conversations: reopen one, start a new one, or delete
@@ -50,18 +51,14 @@ export function AgentThreads({
 
   return (
     <div className="mb-5 border-b border-border pb-5">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Memory</p>
           <h3 className="mt-1 font-display text-2xl font-semibold">Conversations</h3>
         </div>
-        <button
-          type="button"
-          onClick={onNew}
-          className="pressable shrink-0 text-xs font-semibold text-primary hover:underline"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={onNew}>
           New conversation
-        </button>
+        </Button>
       </div>
       {threads.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">No saved conversations yet.</p>

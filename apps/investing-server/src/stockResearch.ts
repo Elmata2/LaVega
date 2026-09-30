@@ -1,5 +1,5 @@
 import { renderFundamentalsBrief, type CompanyFundamentals } from "@lavega/core";
-import { getPortfolioAgent, type PortfolioAgentId } from "./portfolioAgent.js";
+import { getPortfolioAgent, PORTFOLIO_AGENT_IDS, type PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
 import {
   createSystemOneProvider,
@@ -7,13 +7,7 @@ import {
   type SystemOneQuestion,
 } from "./systemOne.js";
 
-export const STOCK_RESEARCH_AGENT_IDS = [
-  "warren_buffett",
-  "charlie_munger",
-  "bill_ackman",
-  "ben_graham",
-  "peter_lynch",
-] as const;
+export const STOCK_RESEARCH_AGENT_IDS = PORTFOLIO_AGENT_IDS;
 export type StockResearchAgentId = (typeof STOCK_RESEARCH_AGENT_IDS)[number];
 export type StockResearchSignal = "bullish" | "bearish" | "neutral" | "no_view";
 export type StockResearchJudgment = {
@@ -224,7 +218,7 @@ export async function verifyResearchReport(
     !Array.isArray(report.company.quarterly) ||
     !Array.isArray(report.company.estimates) ||
     !Array.isArray(report.judgments) ||
-    report.judgments.length !== 5 ||
+    report.judgments.length !== STOCK_RESEARCH_AGENT_IDS.length ||
     !report.judgments.every(
       (item, index) =>
         item &&

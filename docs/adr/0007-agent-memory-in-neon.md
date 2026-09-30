@@ -53,6 +53,7 @@ Each turn the agent gets a small fixed summary: risk tolerance and the user's go
 
 ## Consequences
 
+- Thesis identity currently uses the normalized broker symbol, not a cross-broker instrument identifier. Different symbols for the same security can therefore hold separate theses. The preview holdings include `GOOGL_US_EQ` and `ABEAd_EQ`, both with ISIN `US02079K3059`. Cross-broker memory needs a canonical instrument key, broker-symbol aliases, and a migration that preserves conflicting confirmed theses for user review. Existing position ISINs provide an identity source; holdings and trade records can keep their broker symbols. Missing ISINs and distinct share classes must remain separate until identity is established. This is a follow-up, not a requirement to rewrite the holdings database.
 - Encrypting free text rules out SQL full-text search over memory. `recall_memory` filters by agent, symbol, and date instead. Semantic recall, if it comes, needs its own decision on how encrypted text is indexed.
 - The user can list, reopen, and delete threads, and edit theses and goals. A thesis cannot be deleted on its own; erase all data removes it.
 - The data export must include threads, theses, goals, observations, and risk tolerance.

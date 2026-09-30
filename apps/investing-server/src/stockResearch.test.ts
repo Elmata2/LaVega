@@ -56,9 +56,13 @@ const judge: SystemOneProvider = {
   })),
 };
 
-test("one typed request evaluates five lenses on identical company facts", async () => {
+test("one typed request evaluates all six lenses on identical company facts", async () => {
   const report = await runStockResearch({ company, tenantId: "alice", provider: judge, now });
-  expect(report.judgments).toHaveLength(5);
+  expect(report.judgments).toHaveLength(6);
+  expect(report.judgments.find((item) => item.agentId === "stanley_druckenmiller")).toMatchObject({
+    displayName: "Stanley Druckenmiller",
+    signal: "bullish",
+  });
   expect(report.judgments[0]).toMatchObject({
     signal: "bullish",
     confidence: 82,
@@ -191,7 +195,7 @@ test("routes gate consent, fetch once, report real failures, and reject unsafe c
       .status,
   ).toBe(413);
 });
-test("persona chat streams the signed snapshot without fetching fundamentals again", async () => {
+test("Druckenmiller chat streams the signed snapshot without fetching fundamentals again", async () => {
   const consent = createInMemoryMarketDataConsentStore();
   await consent.set({
     tenantId: "alice",
@@ -237,7 +241,7 @@ test("persona chat streams the signed snapshot without fetching fundamentals aga
   const { reportToken } = await (await post("/api/agents/research/run", { symbol: "AAPL" })).json();
   const response = await post("/api/agents/research/conversation", {
     reportToken,
-    agentId: "warren_buffett",
+    agentId: "stanley_druckenmiller",
     messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "Discuss the valuation" }] }],
   });
   expect(response.status).toBe(200);
@@ -249,4 +253,5 @@ test("persona chat streams the signed snapshot without fetching fundamentals aga
     content: expect.stringContaining("16 forward"),
   });
   expect(system?.content).toContain("net 20.0% | ROE 40.0%");
+  expect(system?.content).toContain("You are Stanley Druckenmiller");
 });

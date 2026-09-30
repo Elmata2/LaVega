@@ -22,6 +22,7 @@ const LENSES: Record<string, string> = {
   bill_ackman: "Cash generation & value unlock",
   ben_graham: "Value & margin of safety",
   peter_lynch: "Growth at a reasonable price",
+  stanley_druckenmiller: "Growth, momentum & macro risks",
 };
 
 function signalLabel(signal: StockJudgment["signal"]) {
@@ -241,11 +242,11 @@ export function StockResearch() {
             Research Stock
           </p>
           <h1 className="mt-1 font-display text-4xl font-semibold">
-            One company. Five perspectives.
+            One company. Six perspectives.
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-            Compare company facts through five investing philosophies. Select a view to ask deeper
-            questions.
+            Compare company facts through all six investing philosophies. Select a view to ask
+            deeper questions.
           </p>
         </div>
         <form
@@ -284,7 +285,7 @@ export function StockResearch() {
       )}
       {pending && (
         <p role="status" className="text-sm text-muted-foreground">
-          Fetching company facts and five investor views. This can take a moment.
+          Fetching company facts and six investor views. This can take a moment.
         </p>
       )}
       {!report && !pending && (
@@ -295,7 +296,7 @@ export function StockResearch() {
           <CardContent>
             <p className="text-sm leading-6 text-muted-foreground">
               Try AAPL for Apple. Research includes valuation, profitability, growth and cash flow,
-              followed by five independent views.
+              followed by six independent views.
             </p>
           </CardContent>
         </Card>
@@ -385,7 +386,7 @@ export function StockResearch() {
               )}
             </CardContent>
           </Card>
-          <aside aria-label="Five investor views" className="space-y-3">
+          <aside aria-label="Six investor views" className="space-y-3">
             <div>
               <h2 className="font-display text-2xl font-semibold">Investor views</h2>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">

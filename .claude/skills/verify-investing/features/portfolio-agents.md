@@ -19,13 +19,17 @@ OpenAI-compatible endpoint (OpenRouter by default).
   `Your positions`. Empty copy is `No positions available.`
 - failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
   the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
-  available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
+available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
 - while a chat reply streams and no assistant bubble is in yet, the status is
   `<displayName> is reading positions…`. The analyse control still reads `Agent reading…`.
 
 ## How to get to it (user POV)
 
-Sign in, and the `Investor lens` card is on the overview. Pick a persona, then press
+Sign in, then open **Agents** to select any of the six personas, including Charlie Munger.
+The **Research Stock** card runs one stock through all six agents together.
+Saved conversation headers wrap on narrow screens so **New conversation** remains inside the card.
+
+The `Investor lens` card is on the overview. Pick a persona, then press
 `Analyse portfolio`, or follow `Open conversation with <name>`. Deep links work:
 `/investing/agents/warren_buffett`.
 
