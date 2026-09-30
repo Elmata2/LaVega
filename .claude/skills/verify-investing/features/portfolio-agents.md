@@ -8,7 +8,7 @@ OpenAI-compatible endpoint (OpenRouter by default).
 
 - agent catalog: `GET /api/agents/portfolio` lists six personas (`warren_buffett`,
   `charlie_munger`, `bill_ackman`, `ben_graham`, `peter_lynch`, `stanley_druckenmiller`).
-- agent picker: radio group `Choose agent` on the overview.
+- agent picker: card title `Investor lens`. Radio group `aria-label="Choose agent"`.
 - one-shot analysis: `Analyse portfolio` (`Agent reading…` while pending) posts
   `/api/agents/portfolio/run` and shows a signal (`bullish` / `bearish` / `neutral` /
   `no_view`) with a confidence.
@@ -17,12 +17,15 @@ OpenAI-compatible endpoint (OpenRouter by default).
   with `{ agentId, messages }` and streams the reply (`text/event-stream`).
 - The positions panel's accessible name is `Positions in conversation`. The visible heading is
   `Your positions`. Empty copy is `No positions available.`
-- failure states: `Agents unavailable`, `No portfolio agents available.`, `Agent not found`,
-  `Agent run failed.`, `Agent reply failed.`
+- failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
+  the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
+  available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
+- while a chat reply streams and no assistant bubble is in yet, the status is
+  `<displayName> is reading positions…`. The analyse control still reads `Agent reading…`.
 
 ## How to get to it (user POV)
 
-Sign in, and the agent card is on the overview. Pick a persona in `Choose agent`, then press
+Sign in, and the `Investor lens` card is on the overview. Pick a persona, then press
 `Analyse portfolio`, or follow `Open conversation with <name>`. Deep links work:
 `/investing/agents/warren_buffett`.
 
@@ -42,15 +45,19 @@ The PNG path is `/tmp/lavega-verify-investing/evidence/<name>.png`. `browser scr
 creates that directory. A repo path or `$TMPDIR` is `path-rejected`. Do not retry under a
 different folder.
 
-Proof it works: the catalog returns six agents, a run returns `result` with a `signal`, and a
+Proof it works: the catalog returns six agents. A run returns `result.judgments` (one entry
+per persona) with `signal.choice` of `bullish`, `bearish`, `neutral`, or `no_view`, plus
+`result.model` and `result.snapshotHash`. There is no top-level `result.signal`. A
 conversation streams `text-delta` events and ends with `data: [DONE]`. The chat never runs the six-persona judgment.
 
 ## Gotchas
 
 - `run` and `conversation` call a paid model on every request. They are not reads; keep them
   off `--target prod` unless the user asked.
-- Model errors answer `502` with `problems`, not `503`. An unknown `agentId` or no user
-  message answers `400`. A model failure after the stream opened is an `error` event in a `200`
+- Model errors answer `502` with `problems`, not `503`. On
+  `POST /api/agents/portfolio/conversation`, an unknown `agentId` answers `400`
+  `Unknown portfolio agent`, and a missing user message answers `400`.
+  `POST /api/agents/portfolio/run` does not read `agentId`. A model failure after the stream opened is an `error` event in a `200`
   stream, and the UI shows `Agent reply failed.`
 - On the local file vault, both return 502 `Agent run storage failed to start` while the
   vault is `empty` or `locked`. That happens before the model call. A local model proof

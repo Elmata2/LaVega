@@ -10,13 +10,25 @@ The button label is `Allow Yahoo Finance` (`Saving…` while the PUT is in fligh
 disclosure says LaVega sends tickers and search terms to Yahoo Finance. Without consent,
 cached data remains visible.
 
-After accept, the button unmounts. Operational status (`aria-label` `Operational status`)
-shows the chip `Price history`. Idle value is `Ready`. A running or paused run shows
-`<completed> of <total> loaded`. Other values, verbatim: `Waiting`, `Up to date`, `Problem`,
-`Incomplete`, `Unknown`. Completed is `Up to date`. The broker chip uses `In progress` for a
-running broker sync. The price chip does not.
+After accept, the button unmounts from Overview. Overview does not show the status chips.
 
-`Cache` holds purge (`Yes, delete everything`, then `Price data deleted`, or `Failed to clear`).
+The chips are on Profile, `/profile#status`, section `aria-label="Status"`, title `Status`:
+
+- `Brokers`. A running sync reads `In progress`. A waiting sync's detail falls back to
+  `Waiting for API capacity`.
+- `Price history`. Idle value is `Ready`. A running or paused run shows
+  `<completed> of <total> loaded`. Other values, verbatim: `Waiting`, `Up to date`,
+  `Problem`, `Incomplete`, `Unknown`. Completed is `Up to date`. The price chip does not
+  use `In progress`.
+- `Vault`: `Not set up`, `Locked`, `Open`, or `Unknown`.
+- `Cache`: `Version <dataVersion>` or `Loading…`, and the button `Clear price data`.
+  Confirm is `Yes, delete everything`, then `Price data deleted`, or `Failed to clear`.
+- `Connection` renders only when the connection is not online (`Reconnecting` or `Offline`).
+
+When the connection is not `online`, broker or price status is `problem`, a price problem
+is set, or the vault is `locked`, Overview shows `Status needs attention` and
+`Review it in Profile`. That alert is not the chip panel.
+
 Benchmark search calls `/api/investing/benchmarks/search?q=`.
 
 ## Drive
@@ -57,7 +69,7 @@ node $C sync-status --out "$E/post-sync-status.json"
 # When the broker POST failed, the button did not start price sync. Dry-run, then one live wait.
 node $C prices sync --dry-run --out "$E/prices-dry-run.json"
 node $C prices sync --wait --out "$E/post-prices-sync.json"
-node $C browser goto '/?verify=1'          # local SPA root. Mounted: /investing/?verify=1
+node $C browser goto '/profile#status'   # local. Mounted: /investing/profile#status
 node $C browser wait-settle
 node $C browser text --out "$E/post-price-text.json"
 node $C dashboard --out "$E/post-dashboard.json"
@@ -87,7 +99,8 @@ Both of these. A loaded page is not success.
    zero times. `post-prices-sync.json` `body.status` is `completed` and `body.message` is a
    string. Empty book message, verbatim: `No price symbols to synchronize`. With symbols,
    `body.completed` equals `body.total` and `body.remainingSymbols` is `[]`. After the reload
-   in Drive, browser text contains `Price history` and `Up to date`.
+   in Drive, browser text on Profile `#status` contains `Price history` and `Up to date`.
+   Those strings are not on `/?verify=1`.
    An empty vault's click also shows `Broker sync failed.` and broker `message`
    `credential vault is locked`. That broker post-state is success for "the button POSTed
    sync". It is not the price signal. The price signal is the `prices sync --wait` body.
@@ -108,7 +121,7 @@ There is no separate job id. `positionsRead` and `lastSyncedAt` are the refresh 
   [auth-session.md](auth-session.md). Report `page`.
 - A priced holding (`priceStatus` `priced` and `marketValue` not null): prerequisite is
   `positionsRead` > 0. Consent plus an empty book can still pass observable success 1 and 2
-  via `No price symbols to synchronize` and `Price history` / `Up to date`. It cannot prove
+  via `No price symbols to synchronize` and Profile `Price history` / `Up to date`. It cannot prove
   a quote for a symbol.
 - `browser install` not `installed: true`: the Allow button is verified-unreachable.
   Prerequisite: `browser install` exit 0, or `browse-sandboxed` escalated and retried.

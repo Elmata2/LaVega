@@ -5,7 +5,7 @@ dividends. This is where most investing reports originate.
 
 ## Sub-features
 
-- credential form (`Save credentials`, broker radio group `Broker`) for Trading 212
+- credential form (heading `Save credentials`, broker `<select aria-label="Broker">`) for Trading 212
   (`API key` and `API secret`, both required) and Interactive Brokers (`Flex-token`,
   field label `Query ID`; the setup card also says `Numeric Query ID`). Local file vault
   also asks for `Vault password`.
@@ -18,8 +18,9 @@ dividends. This is where most investing reports originate.
 - `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
   vault, then force a sync. Success reads `Vault unlocked. Sync completed.`
 - `Start sync` (`Syncing…` while pending) — force a sync with the vault already open.
-- sync progress: `In progress`, `Ready`, `Completed`, `API pause` / `Waiting for API
-capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
+- sync progress: `In progress`, `Ready`, `Completed`, `API pause`. The progress line reads
+  `Waiting for new API capacity`. The Profile `Brokers` chip detail falls back to
+  `Waiting for API capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
   `Failed to unlock vault.`, `Broker credential storage is unavailable. Try again later.`
 
 ## How to get to it (user POV)
