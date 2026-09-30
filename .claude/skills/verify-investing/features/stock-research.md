@@ -16,10 +16,11 @@ Use `control-investing.mjs` from the skill directory:
    consent if needed with `consent --accept --target preview`.
 4. Open `browser open --target preview`, then
    `browser goto /investing/agents/research?verify=1 --target preview`.
-5. Fill **Ticker** with `AAPL`, then click **Research stock**. Wait for actual report.
+5. The textbox accessible name is **Stock ticker** (it starts as `AAPL`). Click **Research stock**
+   (`Researching…` while pending). Wait for an actual report.
 6. Confirm company symbol, fetched time, forward P/E, ROE and net margin render. Compare
    displayed values to the research response. Null values must say unavailable.
-7. Confirm five lens buttons display typed signals and clearly labeled probabilities.
+7. Confirm five **Investor views** (aside `aria-label` `Five investor views`) display typed signals and clearly labeled probabilities.
    No view must remain distinct from neutral. Record model and snapshot timestamps.
 8. Select Warren Buffett, ask about valuation and wait for streamed reply. Switch to
    another lens and back. The Buffett thread must remain in Buffett's conversation.
@@ -37,5 +38,7 @@ signature, tenant binding and expiry in server tests; browser checks verify real
 data and model calls. Static page rendering alone does not prove this feature works.
 
 Provider outage, missing consent, missing API keys or blocked preview auth are explicit
-verification gaps, not passing checks. A broker-related doctor failure can coexist with
+verification gaps, not passing checks. A local run that has consent and no `TYPESAFE_API_KEY`
+answers 502, and the page shows `TYPESAFE_API_KEY is not set; configure TypeSafe System One`.
+That is a gap, not a pass. A broker-related doctor failure can coexist with
 a working stock research report; record it separately.

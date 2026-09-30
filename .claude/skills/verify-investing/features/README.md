@@ -17,7 +17,8 @@ routes are `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-
 Every other route (`/`, `/positions`, `/positions/:symbol`, `/net-worth`, `/agents`,
 `/agents/:agentId`, `/profile`) sits behind `RequireAuth`. `/brokers/connect` redirects to
 `/profile#brokers`. The top bar's tabs are exactly the modules the tenant's stored layout
-enables, plus the always-on Overview tab.
+enables, plus the always-on Overview tab. A `Personal` link beside that nav leaves this
+app for LaVega Personal. It is not an investing route.
 
 | Feature                                      | Route                                                                                             | File                                                   |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -28,7 +29,7 @@ enables, plus the always-on Overview tab.
 | Profile (brokers, modules, widgets, account) | `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
 | Positions and position detail                | `/positions`, `/positions/:symbol`                                                                | [positions.md](positions.md)                           |
 | Net worth                                    | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
-| Prices, benchmarks and market-data consent   | `/` (Vault / Cache panels)                                                                        | [prices-and-market-data.md](prices-and-market-data.md) |
+| Prices, benchmarks and market-data consent   | `/` (Yahoo consent); chips on `/profile#status`                                                   | [prices-and-market-data.md](prices-and-market-data.md) |
 
 Backing docs: `docs/investing/DASHBOARD.md` (layout, return definitions, chart modes),
 `docs/investing/CONNECTORS.md` (broker adapters, credentials, disclosure gates),
