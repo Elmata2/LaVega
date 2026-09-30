@@ -826,9 +826,11 @@ test("agent route opens focused chat with the account positions", async () => {
   );
   const body = JSON.parse(String(runRequest?.init?.body)) as {
     agentId: string;
+    id: string;
     messages: Array<{ role: string; parts: Array<{ type: string; text: string }> }>;
   };
   expect(body.agentId).toBe("bill_ackman");
+  expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   expect(body.messages.map((message) => [message.role, message.parts[0]?.text])).toEqual([
     ["user", "Waarom is ASML mijn grootste risico?"],
   ]);

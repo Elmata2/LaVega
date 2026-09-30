@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getSession, signOut, type SessionState } from "../lib/auth-client.js";
 import { useInvestingLayout } from "../lib/layoutResource.js";
 import { PERSONAL_URL } from "../lib/personal.js";
+import { AgentMemorySection } from "./AgentMemorySection.js";
 import { BrokerSettings } from "./BrokerSettings.js";
 import { LayoutPicker, Switch } from "./LayoutPicker.js";
 import { Button } from "./ui/button.js";
@@ -234,6 +235,8 @@ export function Profile() {
       </section>
 
       <DataSection />
+
+      <AgentMemorySection />
 
       <AccountSection />
     </div>

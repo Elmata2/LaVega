@@ -31,6 +31,8 @@ import { Profile } from "./components/Profile";
 import { NetWorthPage } from "./components/NetWorthPage.js";
 import { AgentsList } from "./components/AgentsList.js";
 import { StockResearch } from "./components/StockResearch.js";
+import { AgentThreads } from "./components/AgentThreads.js";
+import { fetchThreadMessages } from "./lib/agentMemory.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -46,7 +48,11 @@ import { useInvestingLayout } from "./lib/layoutResource.js";
 import { usePortfolioSummary } from "./lib/summaryResource.js";
 import {
   chatErrorMessage,
+  currentThreadId,
+  forgetThread,
   portfolioChat,
+  selectThread,
+  startNewThread,
   runPortfolioAgent,
   useAgentCatalog,
   useAgentRequests,
@@ -645,10 +651,42 @@ function AgentView() {
 
   const agents = catalog.status === "ready" ? catalog.agents : [];
   const agent = agents.find((item) => item.id === agentId);
+  /* From the URL, not the catalog: the chat is created on first render,
+   *  before the catalog has loaded, and keeps the agent it was made with. */
+  const personaId = agentId ?? "";
+  /* The persona's current thread lives in portfolioAgents; this only
+   *  re-renders when it changes. */
+  const [, setThreadVersion] = useState(0);
+  const threadId = currentThreadId(personaId);
+  const [openError, setOpenError] = useState<string | null>(null);
   const { messages, sendMessage, status, error } = useChat({
-    chat: portfolioChat(agent?.id ?? ""),
+    chat: portfolioChat(personaId, threadId),
   });
   const sending = status === "submitted" || status === "streaming";
+  /* Refetch the list when a turn starts (a new thread appears) and when its
+   * reply settles (the thread moves to the top). */
+  const threadsKey = `${threadId}:${status === "ready" ? messages.length : "busy"}`;
+
+  function showThread(next: string) {
+    selectThread(personaId, next);
+    setThreadVersion((value) => value + 1);
+    setOpenError(null);
+  }
+
+  async function openThread(next: string) {
+    if (next === threadId) return;
+    try {
+      portfolioChat(personaId, next, await fetchThreadMessages(next));
+      showThread(next);
+    } catch (reason) {
+      setOpenError(reason instanceof Error ? reason.message : "Conversation could not be opened.");
+    }
+  }
+
+  function threadDeleted(deleted: string) {
+    forgetThread(deleted);
+    if (deleted === threadId) showThread(startNewThread(personaId));
+  }
   /* A reply that is still in tool steps has no text yet; the status line
    * stands in for it rather than an empty bubble. */
   const bubbles = messages
@@ -755,15 +793,28 @@ function AgentView() {
               {chatErrorMessage(error)}
             </p>
           )}
+          {openError && (
+            <p role="alert" className="mt-3 text-sm text-negative">
+              {openError}
+            </p>
+          )}
           <p className="mt-3 text-xs text-muted-foreground">
             Educational analysis. No personal investment advice.
           </p>
         </form>
       </section>
       <aside
-        aria-label="Positions in conversation"
+        aria-label="Conversation context"
         className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-md lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
       >
+        <AgentThreads
+          agentId={agent.id}
+          activeThreadId={threadId}
+          refreshKey={threadsKey}
+          onOpen={(next) => void openThread(next)}
+          onNew={() => showThread(startNewThread(agent.id))}
+          onDeleted={threadDeleted}
+        />
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Context</p>

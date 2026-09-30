@@ -191,27 +191,59 @@ export function useAgentRequests(): {
   return { requestFor, start, settle };
 }
 
-/* One Chat per persona for the page's lifetime, so a reply keeps streaming
- * into the right conversation while the reader looks at another persona. */
+/* One Chat per thread for the page's lifetime, so a reply keeps streaming
+ * into the right conversation while the reader looks at another one. The
+ * chat id is the thread id the server stores the conversation under. */
 const portfolioChats = new Map<string, Chat<UIMessage>>();
+const currentThreads = new Map<string, string>();
 
-export function portfolioChat(agentId: string): Chat<UIMessage> {
-  let chat = portfolioChats.get(agentId);
+/** The thread a persona's page shows: the one last opened, or a new one. */
+export function currentThreadId(agentId: string): string {
+  let threadId = currentThreads.get(agentId);
+  if (!threadId) {
+    threadId = crypto.randomUUID();
+    currentThreads.set(agentId, threadId);
+  }
+  return threadId;
+}
+
+export function selectThread(agentId: string, threadId: string) {
+  currentThreads.set(agentId, threadId);
+}
+
+export function startNewThread(agentId: string): string {
+  const threadId = crypto.randomUUID();
+  currentThreads.set(agentId, threadId);
+  return threadId;
+}
+
+export function forgetThread(threadId: string) {
+  portfolioChats.delete(threadId);
+}
+
+export function portfolioChat(
+  agentId: string,
+  threadId: string,
+  messages?: UIMessage[],
+): Chat<UIMessage> {
+  let chat = portfolioChats.get(threadId);
   if (!chat) {
     chat = new Chat({
-      id: agentId,
+      id: threadId,
+      messages,
       transport: new DefaultChatTransport({
         api: "/api/agents/portfolio/conversation",
         body: { agentId },
       }),
     });
-    portfolioChats.set(agentId, chat);
+    portfolioChats.set(threadId, chat);
   }
   return chat;
 }
 
 export function forgetPortfolioChats() {
   portfolioChats.clear();
+  currentThreads.clear();
 }
 
 /** The server answers a refused turn with JSON problems; the transport
