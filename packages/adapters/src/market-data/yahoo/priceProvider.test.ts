@@ -11,19 +11,45 @@ const request = {
   today: "2026-01-01",
 };
 
-test("reports a no-listing problem naming the primary symbol, not the last fallback, when every candidate 404s as not-found", async () => {
-  const fetchFn = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url === "https://fc.yahoo.com/")
-      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
-    if (url.includes("getcrumb")) return new Response("crumb-value");
-    return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
-  }) as typeof fetch;
-  const provider = createYahooPriceProvider({ client: new YahooHttpClient(fetchFn, 20_000, 1) });
+test.each([
+  ["SKX_US_EQ", "SKX", "SKX.F"],
+  ["MASI_US_EQ", "MASI", "MASI.MI"],
+])(
+  "reports unresolved %s instead of accepting another company's chart",
+  async (ticker, primary, unrelated) => {
+    const requested: string[] = [];
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb-value");
+      const symbol = decodeURIComponent(url.slice(url.indexOf("/chart/") + 7, url.indexOf("?")));
+      requested.push(symbol);
+      if (symbol === unrelated) {
+        return new Response(
+          JSON.stringify({
+            chart: {
+              result: [
+                {
+                  meta: { currency: "EUR" },
+                  timestamp: [0],
+                  indicators: { quote: [{ close: [10] }] },
+                },
+              ],
+            },
+          }),
+        );
+      }
+      return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
+    }) as typeof fetch;
+    const provider = createYahooPriceProvider({ client: new YahooHttpClient(fetchFn, 20_000, 1) });
 
-  const result = await provider.get(request);
+    const result = await provider.get({ ...request, ticker, symbol: ticker });
 
-  expect(result?.problems).toEqual([
-    "No listing found on Yahoo Finance for SKX (tried 16 symbols)",
-  ]);
-});
+    expect(result?.bars).toEqual([]);
+    expect(requested).toEqual([primary]);
+    expect(result?.problems).toEqual([
+      `No listing found on Yahoo Finance for ${primary} (tried 1 symbol)`,
+    ]);
+  },
+);

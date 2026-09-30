@@ -48,8 +48,8 @@ async function confirmedCurrency(
 
 const ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 
-/** Resolve a broker ISIN to the Yahoo symbol for that instrument. Yahoo matches
- *  an ISIN exactly, which beats guessing an exchange suffix from a broker ticker. */
+/** Ask Yahoo for a broker ISIN's symbol. This is a provider lookup, not
+ *  independent identity verification: the search response has no matching ISIN. */
 export async function resolveYahooSymbolByIsin(
   isin: string,
   client: YahooHttpClient,

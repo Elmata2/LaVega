@@ -58,7 +58,7 @@ function stubClient(
   return { client: new YahooHttpClient(fetchFn, 20_000, 1), charts: requested };
 }
 
-test("passes over a listing that carries no closes and keeps looking", async () => {
+test("does not guess another venue when the encoded listing has no closes", async () => {
   const { client, charts } = stubClient({
     "BY6.DE": { currency: "EUR", closes: [] },
     "BY6.VI": { currency: "EUR", closes: [10, 11] },
@@ -66,12 +66,11 @@ test("passes over a listing that carries no closes and keeps looking", async () 
 
   const history = await loadYahooPriceHistory({ ticker: "BY6d_EQ", exchange: "UNKNOWN", client });
 
-  expect(history.symbol).toBe("BY6.VI");
-  expect(history.points.map((point) => point.close)).toEqual([10, 11]);
-  expect(charts).toContain("BY6.DE");
+  expect(history).toMatchObject({ symbol: "BY6.DE", points: [] });
+  expect(charts).toEqual(["BY6.DE"]);
 });
 
-test("resolves the exact listing from the ISIN before guessing suffixes", async () => {
+test("uses the Yahoo ISIN lookup result before the encoded venue", async () => {
   const { client, charts } = stubClient(
     { "NOVN.SW": { currency: "CHF", closes: [90] } },
     { CH0012005267: "NOVN.SW" },
@@ -141,7 +140,7 @@ test("reports no-listing naming the primary symbol when every candidate is genui
   expect(rejection).toBeInstanceOf(YahooNoListingError);
   const error = rejection as YahooNoListingError;
   expect(error.candidates[0]).toBe("SKX");
-  expect(error.candidates).toHaveLength(16);
+  expect(error.candidates).toHaveLength(1);
   expect(charts).toEqual(error.candidates);
 });
 
@@ -196,4 +195,30 @@ test("uses the broker ticker when ISIN search returns no listing", async () => {
   });
   expect(history.symbol).toBe("MASI");
   expect(charts).toEqual(["MASI"]);
+});
+
+test.each([
+  ["MASI_US_EQ", "MASI", "MASI.MI"],
+  ["SKX_US_EQ", "SKX", "SKX.F"],
+])("does not accept another company for %s", async (ticker, primary, unrelated) => {
+  const { client, charts } = stubClient({ [unrelated]: { currency: "EUR", closes: [10] } });
+  await expect(
+    loadYahooPriceHistory({ ticker, exchange: "UNKNOWN", client }),
+  ).rejects.toBeInstanceOf(YahooNoListingError);
+  expect(charts).toEqual([primary]);
+});
+
+test("permits an alternate venue returned by Yahoo ISIN lookup", async () => {
+  const { client, charts } = stubClient(
+    { "BY6.VI": { currency: "EUR", closes: [10, 11] } },
+    { CNE100000296: "BY6.VI" },
+  );
+  const history = await loadYahooPriceHistory({
+    ticker: "BY6d_EQ",
+    exchange: "UNKNOWN",
+    isin: "CNE100000296",
+    client,
+  });
+  expect(history.symbol).toBe("BY6.VI");
+  expect(charts).toEqual(["BY6.VI"]);
 });

@@ -87,13 +87,12 @@ export async function loadYahooPriceHistory(
   throw new Error(`No Yahoo history for ${input.ticker}`);
 }
 
-/** The ISIN is the instrument's own identifier, so Yahoo can answer with the
- *  exact listing. Ticker suffix guessing only runs when that fails. */
+/** Keep Yahoo's ISIN lookup result ahead of the broker listing candidates. */
 async function yahooSymbolCandidates(
   input: YahooPriceHistoryInput,
   client: YahooHttpClient,
 ): Promise<string[]> {
   const guesses = getYahooSymbolsToTry(input.ticker, input.exchange);
-  const exact = input.isin ? await resolveYahooSymbolByIsin(input.isin, client) : null;
-  return exact ? [exact, ...guesses.filter((guess) => guess !== exact)] : guesses;
+  const resolved = input.isin ? await resolveYahooSymbolByIsin(input.isin, client) : null;
+  return resolved ? [resolved, ...guesses.filter((guess) => guess !== resolved)] : guesses;
 }

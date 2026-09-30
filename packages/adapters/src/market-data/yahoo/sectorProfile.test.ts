@@ -43,7 +43,7 @@ test("degrades to null on request failure or empty profile", async () => {
   ).toBeNull();
 });
 
-test("tries Yahoo listing candidates for Trading 212-style symbols before giving up", async () => {
+test("does not guess another venue for an empty encoded sector listing", async () => {
   const fetchJsonWithCrumb = vi
     .fn()
     .mockResolvedValueOnce({ quoteSummary: { result: [{}] } })
@@ -51,12 +51,8 @@ test("tries Yahoo listing candidates for Trading 212-style symbols before giving
 
   const result = await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never);
 
-  expect(result).toEqual({
-    kind: "stock",
-    sector: "Technology",
-    industry: "Consumer Electronics",
-    source: "provider",
-  });
+  expect(result).toBeNull();
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
   expect(fetchJsonWithCrumb).toHaveBeenNthCalledWith(
     1,
     "https://query2.finance.yahoo.com/v10/finance/quoteSummary/HLMA.L?modules=quoteType,assetProfile,topHoldings",
@@ -116,13 +112,13 @@ test("continues after a missing sector listing", async () => {
     .fn()
     .mockRejectedValueOnce(new Error("[404] Not Found"))
     .mockResolvedValueOnce(fixture);
-  const result = await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never);
+  const result = await fetchYahooSectorProfile("HLMA", { fetchJsonWithCrumb } as never);
   expect(result).toMatchObject({ kind: "stock", sector: "Technology" });
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(2);
 });
 
 test("stops sector candidate lookup after rate limiting", async () => {
   const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error("[429] Too Many Requests"));
-  expect(await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never)).toBeNull();
+  expect(await fetchYahooSectorProfile("HLMA", { fetchJsonWithCrumb } as never)).toBeNull();
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
 });
