@@ -17,4 +17,10 @@ END $$;
 ALTER TABLE investing.price_coverage
   ADD COLUMN IF NOT EXISTS delisted_since DATE;
 
+/* See PriceCoverage.listingMissingSince (packages/adapters). Null: the locked
+ * listing last answered; set on its first confirmed-not-found sync, cleared
+ * on its next successful one. */
+ALTER TABLE investing.price_coverage
+  ADD COLUMN IF NOT EXISTS listing_missing_since DATE;
+
 COMMIT;

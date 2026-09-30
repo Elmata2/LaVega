@@ -9,12 +9,18 @@ export type PriceProvenance = { listing: string | null; currency: string };
  *
  *  `delistedSince` marks a closed position whose listing Yahoo confirmed
  *  gone (every candidate 404s): a known end state for a position that will
- *  never trade again, not a problem to keep retrying. */
+ *  never trade again, not a problem to keep retrying.
+ *
+ *  `listingMissingSince` marks a held position's locked listing as
+ *  unconfirmed after a not-found answer, so a single transient 404 cannot
+ *  swap it out; only a not-found answer on a later sync, with this already
+ *  set, counts as confirmed. Cleared the next time the listing answers. */
 export type PriceCoverage = PriceProvenance & {
   symbol: string;
   from: string;
   to: string;
   delistedSince?: string;
+  listingMissingSince?: string;
 };
 
 /** Storage seam for daily market-data bars. Deliberately separate from CRUD storage.

@@ -126,6 +126,15 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       });
     });
 
+    test("coverage keeps a listingMissingSince marker across reads", async () => {
+      const store = createStore();
+      await store.putCoverage("local", { ...coverage, listingMissingSince: "2026-01-01" });
+      expect(await store.getCoverage("local", "AAA")).toEqual({
+        ...coverage,
+        listingMissingSince: "2026-01-01",
+      });
+    });
+
     test("isolates coverage between tenants", async () => {
       const store = createStore();
       await store.putCoverage("local", coverage);

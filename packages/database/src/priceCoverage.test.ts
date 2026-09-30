@@ -62,6 +62,20 @@ test("delistedSince round-trips and clears when the position trades again", asyn
   expect(await prices.getCoverage("SKX")).toEqual({ ...coverage, symbol: "SKX" });
 });
 
+test("listingMissingSince round-trips and clears once the listing answers again", async () => {
+  const prices = createPriceBarRepository(db, "user-i");
+
+  await prices.putCoverage({ ...coverage, symbol: "SBGL", listingMissingSince: "2026-01-01" });
+  expect(await prices.getCoverage("SBGL")).toEqual({
+    ...coverage,
+    symbol: "SBGL",
+    listingMissingSince: "2026-01-01",
+  });
+
+  await prices.putCoverage({ ...coverage, symbol: "SBGL" });
+  expect(await prices.getCoverage("SBGL")).toEqual({ ...coverage, symbol: "SBGL" });
+});
+
 test("purging a user's price cache also forgets what it covered", async () => {
   const prices = createPriceBarRepository(db, "user-c");
   await prices.upsert([{ symbol: "ASML", date: "2025-06-02", close: 1, currency: "EUR" }]);
