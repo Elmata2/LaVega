@@ -515,6 +515,50 @@ test("price sync resolves ISIN before asking price provider", async () => {
   );
 });
 
+test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
+  "price sync preserves Trading 212 ticker %s and ISIN for Yahoo resolution",
+  async (ticker) => {
+    const isin = "US0000000001";
+    const provider = {
+      sourceKey: "yahoo",
+      priority: 10,
+      get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+    };
+    const identifierProvider = {
+      sourceKey: "openfigi",
+      priority: 10,
+      get: vi.fn().mockResolvedValue({
+        match: { isin, ticker: "OTHER", exchange: "US" },
+        problems: [],
+      }),
+    };
+    const investingApp = createApp({
+      provider: provider as never,
+      identifierProvider: identifierProvider as never,
+      priceSyncTargets: () => [
+        {
+          kind: "current",
+          symbol: ticker,
+          ticker,
+          exchange: "UNKNOWN",
+          isin,
+          currency: "USD",
+          backfillFrom: "2026-01-01",
+        },
+      ],
+      priceSyncPaceMs: 0,
+      marketDataConsentStore: acceptedConsentStore(),
+    });
+
+    await investingApp.request("/api/prices/sync", { method: "POST" });
+
+    expect(identifierProvider.get).not.toHaveBeenCalled();
+    expect(provider.get).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: ticker, ticker, exchange: "UNKNOWN", isin }),
+    );
+  },
+);
+
 test("broker sync route forwards force and keeps problems in response", async () => {
   const brokerSync = vi.fn(async (force: boolean) => ({
     outcomes: [{ status: "synced" }],

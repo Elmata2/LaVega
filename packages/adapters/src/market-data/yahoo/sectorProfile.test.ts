@@ -110,3 +110,19 @@ test("a stock still returns a single-sector profile (existing behavior preserved
     source: "provider",
   });
 });
+
+test("continues after a missing sector listing", async () => {
+  const fetchJsonWithCrumb = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("[404] Not Found"))
+    .mockResolvedValueOnce(fixture);
+  const result = await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never);
+  expect(result).toMatchObject({ kind: "stock", sector: "Technology" });
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(2);
+});
+
+test("stops sector candidate lookup after rate limiting", async () => {
+  const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error("[429] Too Many Requests"));
+  expect(await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never)).toBeNull();
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
+});

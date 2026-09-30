@@ -24,6 +24,6 @@ test("reports a no-listing problem naming the primary symbol, not the last fallb
   const result = await provider.get(request);
 
   expect(result?.problems).toEqual([
-    "No listing found on Yahoo Finance for SKX (tried 16 symbols) - the instrument is probably delisted",
+    "No listing found on Yahoo Finance for SKX (tried 16 symbols)",
   ]);
 });

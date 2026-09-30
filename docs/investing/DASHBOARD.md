@@ -158,6 +158,12 @@ Fetch in this order:
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
+Trading 212 tickers ending in `_EQ` retain their broker ticker and ISIN during price synchronization. They bypass the preliminary OpenFIGI price mapping because Yahoo already decodes the broker ticker and searches the ISIN. Replacing the broker ticker with OpenFIGI's first listing can lose the venue hint or introduce a ticker that Yahoo does not recognize. Plain tickers still use the existing OpenFIGI mapping.
+
+Yahoo price lookup tries another symbol only after a confirmed listing-not-found response or a chart with no closes. Transport failures stop the candidate loop after the HTTP client's retries; changing the symbol cannot repair an outage or a rate limit. Sector lookup continues after a missing listing, but stops on other request failures. An unresolved listing is not proof that an instrument was delisted.
+
+Remaining limits: Yahoo ISIN search selects its first symbol and does not verify the broker venue. Exchange-suffix guesses do not prove security identity. A shared, validated listing resolver for prices, sectors, and fundamentals remains separate work. A delisted security can also require another historical-data source.
+
 Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.
 
 The broker's currency is not evidence of a stale cache, because a listing can quote in another currency. When the provider quotes another listing or currency than the coverage records, or reports a split after it, refetch the whole covered history and make the answer the only rows in that window. A cached session the new answer lacks is deleted, so a holiday on the old listing cannot mark the cache stale on every later sync. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge. Caches written before coverage existed take it from their bars once.

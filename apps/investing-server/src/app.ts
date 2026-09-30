@@ -223,7 +223,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         backfillFrom?: string;
       } = target;
       let identifierProblems: string[] = [];
-      if (target.isin) {
+      // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
+      // arbitrary OpenFIGI listing would discard the broker's venue hint.
+      if (target.isin && !target.ticker.endsWith("_EQ")) {
         const identifier = await mapIdentifier({ isin: target.isin });
         if (
           identifier &&

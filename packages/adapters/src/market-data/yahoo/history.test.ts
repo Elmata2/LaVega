@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { YahooHttpClient } from "./http.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
@@ -145,7 +145,7 @@ test("reports no-listing naming the primary symbol when every candidate is genui
   expect(charts).toEqual(error.candidates);
 });
 
-test("reports the primary candidate's error, not the last fallback's, when failures are mixed", async () => {
+test("stops candidate lookup after a server failure", async () => {
   const requested: string[] = [];
   const fetchFn = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -165,7 +165,35 @@ test("reports the primary candidate's error, not the last fallback's, when failu
     client,
   }).catch((error: unknown) => error);
 
-  expect(requested[0]).toBe("SKX");
+  expect(requested).toEqual(["SKX"]);
   expect(rejection).toBeInstanceOf(Error);
   expect((rejection as Error).message).toContain("[500]");
+});
+
+test.each(["[403] Forbidden", "[429] Too Many Requests", "Request timed out"])(
+  "stops candidate lookup after %s",
+  async (message) => {
+    const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error(message));
+    await expect(
+      loadYahooPriceHistory({
+        ticker: "MASI_US_EQ",
+        exchange: "UNKNOWN",
+        client: { fetchJsonWithCrumb } as never,
+      }),
+    ).rejects.toThrow(message);
+    expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
+    expect(fetchJsonWithCrumb.mock.calls[0]?.[0]).toContain("/chart/MASI?");
+  },
+);
+
+test("uses the broker ticker when ISIN search returns no listing", async () => {
+  const { client, charts } = stubClient({ MASI: { currency: "USD", closes: [150] } });
+  const history = await loadYahooPriceHistory({
+    ticker: "MASI_US_EQ",
+    exchange: "UNKNOWN",
+    isin: "US5747951003",
+    client,
+  });
+  expect(history.symbol).toBe("MASI");
+  expect(charts).toEqual(["MASI"]);
 });
