@@ -93,7 +93,13 @@ import {
 } from "./priceOrchestrator.js";
 import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
-import { createDashboardSnapshotRepository, createFxRateRepository } from "@lavega/database";
+import {
+  createAgentMemoryRepository,
+  createDashboardSnapshotRepository,
+  createFxRateRepository,
+  type AgentMemoryRepository,
+} from "@lavega/database";
+import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
@@ -103,6 +109,7 @@ export { app };
 export { createDashboardCache } from "./dashboardCache.js";
 
 const LOCAL_TENANT_ID = "local";
+const THREAD_TITLE_LENGTH = 80;
 const DASHBOARD_CACHE_TTL_MS = 15_000;
 const TRADING212_HEALTH_MAX_AGE_MS = 26 * 60 * 60 * 1_000;
 
@@ -206,6 +213,8 @@ export type RuntimeAppOptions = {
   chatModel?: LanguageModel;
   fundamentalsProvider?: FundamentalsProvider;
   dashboardCache?: DashboardCache;
+  /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
+  agentMemory?: (tenantId: string) => AgentMemoryRepository;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
@@ -831,7 +840,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     };
   };
 
+  const agentMemory =
+    options.agentMemory ??
+    (database ? (tenantId: string) => createAgentMemoryRepository(database, tenantId) : null);
+
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
+    attachMemoryRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+    });
     attachStockResearchRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
       consent: marketDataConsentStore,
@@ -860,7 +877,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }
     });
     honoApp.post("/api/agents/portfolio/conversation", async (c) => {
-      const body: { agentId?: unknown; messages?: unknown } = await c.req.json().catch(() => ({}));
+      const body: { agentId?: unknown; id?: unknown; messages?: unknown } = await c.req
+        .json()
+        .catch(() => ({}));
       if (!isPortfolioAgentId(body.agentId))
         return c.json({ problems: ["Unknown portfolio agent"] }, 400);
       const messages = Array.isArray(body.messages)
@@ -872,18 +891,41 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           ? last.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
           : "";
       if (!message.trim()) return c.json({ problems: ["Conversation message is required"] }, 400);
+      const agentId = body.agentId;
+      /* The chat id is the thread id. The client's copy of the history feeds
+       * the model; only this turn's user message and the reply are stored. */
+      const repository = agentMemory?.(await resolveTenantId()) ?? null;
+      const threadId = isUuid(body.id) ? body.id : null;
+      if (repository && !threadId)
+        return c.json({ problems: ["Conversation thread id is required"] }, 400);
+      const title = message.trim().replace(/\s+/g, " ").slice(0, THREAD_TITLE_LENGTH);
       try {
-        const agent = await createPortfolioChatAgent({
-          agentId: body.agentId,
-          message,
-          context: await portfolioChatContext(),
-          ...(options.chatModel ? { model: options.chatModel } : {}),
-        });
+        const [agent] = await Promise.all([
+          portfolioChatContext().then((context) =>
+            createPortfolioChatAgent({
+              agentId,
+              message,
+              context,
+              ...(repository && threadId ? { memory: { repository, agentId, threadId } } : {}),
+              ...(options.chatModel ? { model: options.chatModel } : {}),
+            }),
+          ),
+          repository && threadId
+            ? repository.appendMessages(threadId, agentId, title, [last])
+            : undefined,
+        ]);
         return await createAgentUIStreamResponse({
           agent,
           uiMessages: messages,
           abortSignal: c.req.raw.signal,
           onError: () => "The agent could not answer. Try again.",
+          generateMessageId: () => crypto.randomUUID(),
+          onEnd: async ({ responseMessage }) => {
+            if (!repository || !threadId || responseMessage.parts.length === 0) return;
+            await repository
+              .appendMessages(threadId, agentId, title, [responseMessage])
+              .catch((error: unknown) => console.error("[memory] reply not saved", error));
+          },
         });
       } catch (error) {
         return c.json(

@@ -20,6 +20,7 @@ import {
 } from "@lavega/core";
 import type { PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
+import { memoryTools, renderMemoryBrief, type ThreadMemory } from "./chatMemory.js";
 
 export const DEFAULT_PORTFOLIO_CHAT_MODEL = "mistralai/mistral-small-2603";
 const FALLBACK_PORTFOLIO_CHAT_MODELS = ["qwen/qwen3.8-flash"];
@@ -137,13 +138,28 @@ export async function createPortfolioChatAgent(input: {
   agentId: PortfolioAgentId;
   message: string;
   context: PortfolioChatContext;
+  /** Absent without a database: the turn then runs without memory. */
+  memory?: ThreadMemory;
   model?: LanguageModel;
 }): Promise<Agent<never, ToolSet>> {
-  const { context } = input;
+  const { context, memory } = input;
   const symbols = prefetchSymbols(input.message, context.dashboard);
-  const sections = await Promise.all(
-    symbols.map((symbol) => fundamentalsSection(context.fundamentals, symbol)),
+  const held = new Set(
+    context.dashboard.positions.map((position) => position.symbol.toUpperCase()),
   );
+  const named = namedSymbols(input.message, context.dashboard)
+    .map((symbol) => symbol.toUpperCase())
+    .filter((symbol) => held.has(symbol));
+  const [sections, summary] = await Promise.all([
+    Promise.all(symbols.map((symbol) => fundamentalsSection(context.fundamentals, symbol))),
+    /* A portfolio that read as empty is more likely a sync that has not
+     * landed than a sale of everything, so it closes no thesis. */
+    memory?.repository.summary({
+      held: [...held],
+      named,
+      closeUnheld: held.size > 0,
+    }),
+  ]);
   const noArguments = jsonSchema<Record<string, never>>({
     type: "object",
     properties: {},
@@ -155,11 +171,13 @@ export async function createPortfolioChatAgent(input: {
       PORTFOLIO_CHAT_PROFILES[input.agentId],
       `Portfolio brief:\n${renderPortfolioBrief(context.dashboard, context.sectors)}`,
       sections.length > 0 ? `Company fundamentals:\n\n${sections.join("\n\n")}` : "",
+      summary ? renderMemoryBrief(summary, named) : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
     stopWhen: isStepCount(MAX_STEPS),
     tools: {
+      ...(memory ? memoryTools(memory, held) : {}),
       get_positions: tool({
         description:
           "Every holding with weight, market value, cost basis, returns and first buy date. Weights and returns are fractions.",
