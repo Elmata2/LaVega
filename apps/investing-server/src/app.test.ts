@@ -789,6 +789,64 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
   ]);
 });
 
+test("summary route fetches a renamed holding's sector under the ticker price sync resolved it to", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({
+    symbol: "OAC_US_EQ",
+    entity: "personal",
+    quantity: 1,
+    marketValue: 100,
+    portfolioWeight: null,
+    priceStatus: "priced",
+    currency: "USD",
+    asOf: "2026-08-18",
+    returns: {
+      status: "unpriced",
+      remainingCostBasis: 0,
+      realizedCostBasisRemoved: 0,
+      unrealizedGain: 0,
+      realizedGain: 0,
+      dividendsReceived: 0,
+      totalReturn: 0,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate: null,
+    },
+  });
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const sectorProfile = vi.fn(async (symbol: string) =>
+    symbol === "HIMS"
+      ? {
+          kind: "stock" as const,
+          sector: "Healthcare",
+          industry: "Health Information Services",
+          source: "provider" as const,
+        }
+      : null,
+  );
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    store,
+    sectorProfile,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+
+  expect(response.status).toBe(200);
+  const payload = (await response.json()) as { sectors: Array<{ sector: string; weight: number }> };
+  expect(payload.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
+  expect(sectorProfile).toHaveBeenCalledWith("HIMS");
+  expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+});
+
 test("summary route includes a position's description in top positions when set", async () => {
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push({
@@ -1264,6 +1322,34 @@ test("GET position sector reports Unknown for a symbol with no profile and no co
   const response = await investingApp.request("/api/investing/positions/MYST/sector");
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ kind: "unknown", sector: "Unknown", source: "unknown" });
+});
+
+test("GET position sector finds a renamed holding's profile under the ticker price sync resolved it to", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const investingApp = createApp({ store, sectorStore });
+
+  const response = await investingApp.request("/api/investing/positions/OAC_US_EQ/sector");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    kind: "stock",
+    sector: "Healthcare",
+    source: "provider",
+  });
 });
 
 test("GET position sector reports an inferred profile's confidence when inference is enabled and consented", async () => {

@@ -826,6 +826,130 @@ test("resolvedStockSector reports Unknown, not the inferred label, when showInfe
   });
 });
 
+test("a renamed holding resolves its sector under the price-resolved listing, not the stale broker code", async () => {
+  const store = createInMemorySectorProfileStore();
+  const resolveListing = vi.fn(async (symbol: string) => (symbol === "OAC_US_EQ" ? "HIMS" : null));
+  const fetchProfile = vi.fn(async (symbol: string) =>
+    symbol === "HIMS"
+      ? {
+          kind: "stock" as const,
+          sector: "Healthcare",
+          industry: "Health Information Services",
+          source: "provider" as const,
+        }
+      : null,
+  );
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "OAC_US_EQ", marketValue: 100 }],
+    { store, fetchProfile, resolveListing },
+  );
+
+  expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Healthcare");
+  expect(fetchProfile).toHaveBeenCalledWith("HIMS");
+  expect(fetchProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(await store.get("HIMS")).toMatchObject({ sector: "Healthcare" });
+  expect(await store.get("OAC_US_EQ")).toBeNull();
+});
+
+test("a cached profile under the resolved listing is reused without a second fetch", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
+  const resolveListing = vi.fn(async () => "HIMS");
+  const fetchProfile = vi.fn();
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "OAC_US_EQ", marketValue: 100 }],
+    { store, fetchProfile, resolveListing },
+  );
+
+  expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Healthcare");
+  expect(fetchProfile).not.toHaveBeenCalled();
+});
+
+test("a symbol prices never resolved a listing for behaves exactly as before, keyed by its own symbol", async () => {
+  const store = createInMemorySectorProfileStore();
+  const resolveListing = vi.fn(async () => null);
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider" as const,
+  }));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    resolveListing,
+  });
+
+  expect(sectorBySymbol.get("AAPL")).toBe("Technology");
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
+  expect(await store.get("AAPL")).toMatchObject({ sector: "Technology" });
+});
+
+test("omitting resolveListing keeps every call keyed by the broker symbol, same as today", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider" as const,
+  }));
+
+  await resolvePortfolioSectors([{ symbol: "OAC_US_EQ", marketValue: 100 }], {
+    store,
+    fetchProfile,
+  });
+
+  expect(fetchProfile).toHaveBeenCalledWith("OAC_US_EQ");
+});
+
+test("an owner correction still keys off the broker symbol even when the listing resolves elsewhere", async () => {
+  const store = createInMemorySectorProfileStore();
+  const resolveListing = vi.fn(async () => "HIMS");
+  const fetchProfile = vi.fn(async () => ({
+    kind: "stock" as const,
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider" as const,
+  }));
+  const correction = vi.fn(async (symbol: string) => (symbol === "OAC_US_EQ" ? "Energy" : null));
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "OAC_US_EQ", marketValue: 100 }],
+    { store, fetchProfile, resolveListing, correction },
+  );
+
+  expect(correction).toHaveBeenCalledWith("OAC_US_EQ");
+  expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Energy");
+});
+
+test("a read-only lookup with resolveListing still makes no fetch and no write", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
+  const set = vi.spyOn(store, "set");
+  const resolveListing = vi.fn(async () => "HIMS");
+
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "OAC_US_EQ", marketValue: 100 }],
+    { store, resolveListing },
+  );
+
+  expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Healthcare");
+  expect(set).not.toHaveBeenCalled();
+});
+
 test("coverage splits across a mixed portfolio and sums to 1", async () => {
   const store = createInMemorySectorProfileStore();
   await store.set("AAPL", {
