@@ -45,10 +45,14 @@ export function NetWorthPage() {
       : NO_PERSONAL_TOTALS;
   const netWorthData = useMemo(() => {
     if (!portfolio) return undefined;
-    const merged: Partial<Record<PortfolioRange, ReturnType<typeof mergeInPersonalNetWorth>["points"]>> =
-      {};
+    const merged: Partial<
+      Record<PortfolioRange, ReturnType<typeof mergeInPersonalNetWorth>["points"]>
+    > = {};
     for (const range of PORTFOLIO_RANGES)
-      merged[range] = mergeInPersonalNetWorth(portfolio[range], totalsInPresentationCurrency).points;
+      merged[range] = mergeInPersonalNetWorth(
+        portfolio[range],
+        totalsInPresentationCurrency,
+      ).points;
     return merged;
   }, [portfolio, totalsInPresentationCurrency]);
   const latestPersonalDate = useMemo(
