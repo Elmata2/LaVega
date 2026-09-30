@@ -45,6 +45,12 @@ A thesis becomes `dormant` when its position closes. Agents do not read dormant 
 
 Each turn the agent gets a small fixed summary: risk tolerance and the user's goals. Everything else, including theses, observations, and older threads, comes through a `recall_memory` tool the agent calls when it needs it. The summary is one indexed query per turn, so time to first token stays flat. If risk tolerance is null, the agent asks once and saves the answer.
 
+## Implementation notes
+
+- Migration `0019_agent_memory.sql`. Every key and foreign key leads with `user_id`, because a foreign-key check bypasses row-level security: a key on the thread id alone would let one user link rows to another user's thread.
+- The turn summary also carries the thesis of each held symbol the message names, and the dormant thesis of a symbol held again, so the agent can ask for a missing thesis or confirm a dormant one without a tool call. It is still one indexed statement. That statement also marks theses of symbols no longer held as dormant.
+- Messages are stored for reopening a thread; the model reads the history the client sends.
+
 ## Consequences
 
 - Encrypting free text rules out SQL full-text search over memory. `recall_memory` filters by agent, symbol, and date instead. Semantic recall, if it comes, needs its own decision on how encrypted text is indexed.
