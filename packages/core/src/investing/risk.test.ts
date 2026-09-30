@@ -310,7 +310,9 @@ test("names a short trailing gap as still settling and a longer one as incomplet
   );
   const lastKnownDate = base.at(-1)!.date;
 
-  const settling = buildHistoricalRisk(dashboard(appendUnknownDays(base, RISK_SETTLING_BUSINESS_DAYS)));
+  const settling = buildHistoricalRisk(
+    dashboard(appendUnknownDays(base, RISK_SETTLING_BUSINESS_DAYS)),
+  );
   expect(settling.risk.status).toBe("estimate");
   expect(settling.risk.reasons).toContain(
     `Measured through ${lastKnownDate}; later dates are still settling.`,
