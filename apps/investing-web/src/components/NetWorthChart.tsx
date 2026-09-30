@@ -7,13 +7,36 @@ import { ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 
-type Props = {
-  data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>;
-  currency?: string;
+/** A portfolio point, optionally carrying the owner's opted-in Personal total
+ *  (`@lavega/core`'s `mergeInPersonalNetWorth`). Both extra fields are
+ *  optional so a caller with nothing to merge — every existing caller, and
+ *  every point in this file's own tests — can keep passing a plain
+ *  `PortfolioValuePoint[]` unchanged. */
+type ChartInputPoint = PortfolioValuePoint & {
+  personalValue?: number | null;
+  netWorth?: number | null;
 };
 
-type NetWorthChartPoint = PortfolioValuePoint & {
+type Props = {
+  data: Partial<Record<PortfolioRange, ChartInputPoint[]>>;
+  currency?: string;
+  /** The most recent date the owner shared a Personal total, or null/absent
+   *  when nothing has ever been shared. Drives the "Bank accounts (Personal,
+   *  as of …)" band's label; when it is null the band, its legend swatch and
+   *  its tooltip line are all omitted, and the chart renders exactly as it
+   *  did before this existed. */
+  personalAsOfDate?: string | null;
+};
+
+type NetWorthChartPoint = Omit<ChartInputPoint, "personalValue"> & {
   stalePositions: number | null;
+  /** Normalized by `toNetWorthChartPoint`: always present, never `undefined`. */
+  personalValue: number | null;
+  /** `netWorth` when the caller merged one in, otherwise the portfolio-only
+   *  `value` — the single figure this chart's own "Total" line and headline
+   *  number show. Return/risk/allocation elsewhere never read this; they keep
+   *  reading `positionsValue`/`cashValue`/`value` on the untouched source. */
+  netTotal: number | null;
 };
 
 const dateLabel = shortDate;
@@ -44,14 +67,16 @@ export function netWorthPointsForWindow(
   );
 }
 
-export function toNetWorthChartPoint(point: PortfolioValuePoint): NetWorthChartPoint {
+export function toNetWorthChartPoint(point: ChartInputPoint): NetWorthChartPoint {
   return {
     ...point,
+    personalValue: point.personalValue ?? null,
+    netTotal: point.netWorth ?? point.value,
     stalePositions: point.forwardFilled.length > 0 ? point.positionsValue : null,
   };
 }
 
-export function NetWorthChart({ data, currency = "EUR" }: Props) {
+export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null }: Props) {
   const hatchId = `net-worth-hatch-${useId().replace(/:/g, "")}`;
 
   const fullPoints = useMemo(() => allPoints(data), [data]);
@@ -126,19 +151,19 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
           <>
             <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <strong className="font-display text-2xl tabular-nums">
-                {displayValue(activePoint?.value ?? null, currency)}
+                {displayValue(activePoint?.netTotal ?? null, currency)}
               </strong>
               <span className="text-xs text-muted-foreground">
                 on {activePoint ? dateLabel(activePoint.date) : "unknown date"}
               </span>
             </div>
             {activePoint &&
-              points.length > 1 &&
+              chartPoints.length > 1 &&
               (() => {
-                const first = points[0]!;
+                const first = chartPoints[0]!;
                 const change =
-                  activePoint.value !== null && first.value !== null
-                    ? activePoint.value - first.value
+                  activePoint.netTotal !== null && first.netTotal !== null
+                    ? activePoint.netTotal - first.netTotal
                     : null;
                 const investmentChange =
                   activePoint.positionsValue !== null && first.positionsValue !== null
@@ -334,6 +359,18 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                     strokeWidth={1.5}
                     isAnimationActive={false}
                   />
+                  {personalAsOfDate && (
+                    <Area
+                      dataKey="personalValue"
+                      stackId="net"
+                      name={`Bank accounts (Personal, as of ${dateLabel(personalAsOfDate)})`}
+                      connectNulls={false}
+                      stroke="hsl(var(--chart-blue))"
+                      fill="hsl(var(--chart-blue) / 0.24)"
+                      strokeWidth={1.5}
+                      isAnimationActive={false}
+                    />
+                  )}
                   <Area
                     dataKey="stalePositions"
                     name="Estimated price"
@@ -344,7 +381,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                     legendType="none"
                   />
                   <Line
-                    dataKey="value"
+                    dataKey="netTotal"
                     name="Total"
                     connectNulls={false}
                     stroke="hsl(var(--foreground))"
@@ -376,6 +413,12 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 <span aria-hidden="true" className="size-2 rounded-full bg-chart-amber" />
                 Cash
               </span>
+              {personalAsOfDate && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="size-2 rounded-full bg-chart-blue" />
+                  Bank accounts (Personal, as of {dateLabel(personalAsOfDate)})
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-0.5 w-3 bg-foreground" />
                 Total
@@ -444,7 +487,7 @@ function NetWorthTooltip({
     <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
       <p className="mb-1 text-muted-foreground">{dateLabel(point.date)}</p>
       <p className="mb-2 text-base font-semibold tabular-nums">
-        {displayValue(point.value, currency)}
+        {displayValue(point.netTotal, currency)}
       </p>
       <p className="flex justify-between gap-5">
         <span>Investments{point.forwardFilled.length > 0 ? " (estimated price)" : ""}</span>
@@ -454,6 +497,12 @@ function NetWorthTooltip({
         <span>Cash</span>
         <strong>{displayValue(point.cashValue, currency)}</strong>
       </p>
+      {point.personalValue !== null && (
+        <p className="mt-1 flex justify-between gap-5">
+          <span>Bank accounts (Personal)</span>
+          <strong>{displayValue(point.personalValue, currency)}</strong>
+        </p>
+      )}
       {point.unpriced.length > 0 && (
         <p className="mt-2 border-t border-border pt-2 text-warning">
           Excluded due to stale price: {point.unpriced.join(", ")}
@@ -471,6 +520,6 @@ function NetWorthTooltip({
   );
 }
 
-function accessiblePoint(point: PortfolioValuePoint, currency: string): string {
-  return `${dateLabel(point.date)}: total ${displayValue(point.value, currency)}, investments ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.forwardFilled.length ? `, estimated price: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, excluded due to stale price: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cash value unknown: ${point.cashUnknown.join(", ")}` : ""}${point.cashEstimated?.length ? `, cash estimated: ${point.cashEstimated.join(", ")}` : ""}`;
+function accessiblePoint(point: NetWorthChartPoint, currency: string): string {
+  return `${dateLabel(point.date)}: total ${displayValue(point.netTotal, currency)}, investments ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.personalValue !== null ? `, bank accounts (Personal): ${displayValue(point.personalValue, currency)}` : ""}${point.forwardFilled.length ? `, estimated price: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, excluded due to stale price: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cash value unknown: ${point.cashUnknown.join(", ")}` : ""}${point.cashEstimated?.length ? `, cash estimated: ${point.cashEstimated.join(", ")}` : ""}`;
 }

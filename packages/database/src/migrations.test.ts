@@ -146,6 +146,45 @@ test("investing.sector_profiles deliberately has neither RLS nor FORCE — a sym
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
+test("personal.net_worth_totals has the shape opting into Investing's net worth relies on", async () => {
+  const columns = await db.query<{
+    column_name: string;
+    data_type: string;
+    column_default: string | null;
+    is_nullable: string;
+  }>(
+    `SELECT column_name, data_type, column_default, is_nullable FROM information_schema.columns
+     WHERE table_schema = 'personal' AND table_name = 'net_worth_totals'
+     ORDER BY column_name`,
+  );
+  expect(columns.rows).toEqual([
+    { column_name: "currency", data_type: "text", column_default: "'EUR'::text", is_nullable: "NO" },
+    { column_name: "date", data_type: "date", column_default: null, is_nullable: "NO" },
+    {
+      column_name: "total_cents",
+      data_type: "bigint",
+      column_default: null,
+      is_nullable: "NO",
+    },
+    {
+      column_name: "updated_at",
+      data_type: "timestamp with time zone",
+      column_default: "CURRENT_TIMESTAMP",
+      is_nullable: "NO",
+    },
+    { column_name: "user_id", data_type: "text", column_default: null, is_nullable: "NO" },
+  ]);
+
+  const primaryKey = await db.query<{ column_name: string }>(
+    `SELECT a.attname AS column_name
+     FROM pg_index i
+     JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+     WHERE i.indrelid = 'personal.net_worth_totals'::regclass AND i.indisprimary
+     ORDER BY a.attname`,
+  );
+  expect(primaryKey.rows.map((row) => row.column_name)).toEqual(["date", "user_id"]);
+});
+
 test("a table created after the migrations in schema personal is automatically granted to lavega_runtime", async () => {
   await db.exec("CREATE TABLE personal.future_probe (id INT)");
   const grants = await db.query<{ privilege_type: string }>(

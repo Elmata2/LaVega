@@ -69,6 +69,10 @@ import {
   createInMemoryMarketDataConsentStore,
   type MarketDataConsentStore,
 } from "./marketDataConsent.js";
+import {
+  createInMemoryPersonalNetWorthStore,
+  type PersonalNetWorthStore,
+} from "./personalNetWorthStore.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 import {
@@ -196,6 +200,7 @@ export type RuntimeAppOptions = {
   investingLayoutStore?: InvestingLayoutStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
+  personalNetWorthStore?: PersonalNetWorthStore;
   sectorStore?: SectorProfileStore;
   sectorCorrectionStore?: SectorCorrectionStore;
   sectorInferenceSettingStore?: SectorInferenceSettingStore;
@@ -225,6 +230,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const marketDataConsentStore =
     options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
+  const personalNetWorthStore =
+    options.personalNetWorthStore ?? createInMemoryPersonalNetWorthStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
   const database = runtimeDatabase();
   const fxProvider = devFixtureEnabled
@@ -932,6 +939,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         benchmarkSelectionStore,
         investingLayoutStore,
         marketDataConsentStore,
+        personalNetWorthStore,
         dashboardReader,
         onPriceDataChanged,
         priceSyncProgressStore,
@@ -950,6 +958,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       benchmarkSelectionStore,
       investingLayoutStore,
       marketDataConsentStore,
+      personalNetWorthStore,
       dashboardReader,
       onPriceDataChanged,
       priceSyncProgressStore,

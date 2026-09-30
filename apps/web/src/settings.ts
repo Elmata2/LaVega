@@ -139,6 +139,66 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
   }
 }
 
+/** Exported so callers that need to recognize this preference's own storage
+ *  events (the cross-tab sync in App.tsx) or read it directly at send time
+ *  (netWorthShare.ts, immediately before a PUT) don't hardcode the string a
+ *  second time. */
+export const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
+
+/** Opt-in toggle for sharing today's "Totale positie" with LaVega Investing's
+ *  net worth (see apps/web/src/netWorthShare.ts). Defaults false: no number
+ *  leaves this browser until the owner turns this on, exactly like AI
+ *  extraction, chat and AI-categorisation above — the switch itself is a
+ *  preference, so it lives in localStorage; the totals it sends are the truth
+ *  Investing reads, and live on the server instead. */
+export function getShareNetWorthEnabled(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(SHARE_NET_WORTH_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setShareNetWorthEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(SHARE_NET_WORTH_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
+/** Exported for the same reason as SHARE_NET_WORTH_KEY above. */
+export const SHARE_NET_WORTH_PENDING_DELETE_KEY = "lavega.shareNetWorthPendingDelete";
+
+/** Set the moment the owner switches sharing off, before the DELETE that is
+ *  supposed to remove every total this account ever sent is known to have
+ *  succeeded. Cleared only once that DELETE actually lands — a failed or
+ *  interrupted attempt (closed tab, lost connection) leaves this set, so the
+ *  next unlock retries instead of quietly leaving rows behind on the server.
+ *  Per device, like the switch itself: this browser's pending delete says
+ *  nothing about whether another device is still sharing. */
+export function getShareNetWorthPendingDelete(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(SHARE_NET_WORTH_PENDING_DELETE_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setShareNetWorthPendingDelete(pending: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (pending) localStorage.setItem(SHARE_NET_WORTH_PENDING_DELETE_KEY, "1");
+    else localStorage.removeItem(SHARE_NET_WORTH_PENDING_DELETE_KEY);
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 export type { ConversionMode };
 
 const FX_CONVERSION_MODE_KEY = "lavega.fxConversionMode";

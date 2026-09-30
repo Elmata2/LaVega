@@ -1,12 +1,14 @@
 import {
   createAgentRunRepository,
   createBrokerSyncOperationRepository,
+  createPersonalNetWorthRepository,
   createPreferencesRepository,
   createPriceBarRepository,
   createPriceSyncStateRepository,
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
+import type { PersonalNetWorthStore } from "./personalNetWorthStore.js";
 import {
   validateBenchmarkSymbols,
   validateInvestingLayout,
@@ -76,6 +78,14 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
         validateBenchmarkSymbols(selection.symbols),
       );
     },
+  };
+}
+
+/** Investing's read side only — Personal owns every write to this table
+ *  (personal.net_worth_totals), through apps/server's own repository call. */
+export function createNeonPersonalNetWorthStore(db: Database): PersonalNetWorthStore {
+  return {
+    list: (tenantId) => createPersonalNetWorthRepository(db, tenantId).list(),
   };
 }
 

@@ -14,6 +14,7 @@ import { registerN8nRoutes, n8nRouteDependencies } from "./n8n-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
+import { registerNetWorthRoutes, netWorthRouteDependencies } from "./net-worth-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
@@ -280,6 +281,12 @@ if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
  * as the vault routes: without a database there is nothing to erase. */
 const accountDependencies = accountRouteDependencies();
 if (accountDependencies) registerAccountRoutes(app, accountDependencies);
+
+/* The owner's opt-in share of their Personal total into LaVega Investing's net
+ * worth: PUT/DELETE /api/personal/net-worth-total. Same condition as the vault
+ * and account routes — without a database there is nowhere to put it. */
+const netWorthDependencies = netWorthRouteDependencies();
+if (netWorthDependencies) registerNetWorthRoutes(app, netWorthDependencies);
 
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */
