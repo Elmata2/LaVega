@@ -13,8 +13,15 @@ export type YahooPriceRequest = {
   to?: string;
   today?: string;
 };
-/** `listing` names the provider's own symbol for the listing it quoted. */
-export type PriceProviderResult = { bars: PriceBar[]; problems: string[]; listing?: string };
+/** `listing` names the provider's own symbol for the listing it quoted.
+ *  `notFound` marks every candidate as a confirmed Yahoo 404, not a transient
+ *  or ambiguous failure: the caller can treat this as a real end state. */
+export type PriceProviderResult = {
+  bars: PriceBar[];
+  problems: string[];
+  listing?: string;
+  notFound?: boolean;
+};
 
 export function createYahooPriceProvider(
   input: {
@@ -84,7 +91,11 @@ export function createYahooPriceProvider(
         }
         return { bars, problems: [], listing: history.symbol };
       } catch (error) {
-        return { bars: [], problems: [readableYahooProblem(error)] };
+        return {
+          bars: [],
+          problems: [readableYahooProblem(error)],
+          notFound: error instanceof YahooNoListingError,
+        };
       }
     },
   };

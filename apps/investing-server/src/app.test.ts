@@ -435,6 +435,40 @@ test("router problems reach HTTP response unchanged", async () => {
   expect(provider.get).toHaveBeenCalledOnce();
 });
 
+test("a closed position Yahoo confirms delisted does not flip Price history to problem", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({
+      bars: [],
+      problems: ["No listing found on Yahoo Finance for SKX (tried 1 symbol)"],
+      notFound: true,
+    }),
+  };
+  const investingApp = createApp({
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        kind: "closed",
+        symbol: "SKX_US_EQ",
+        ticker: "SKX_US_EQ",
+        exchange: "UNKNOWN",
+        currency: "USD",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    priceSyncPaceMs: 0,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  await investingApp.request("/api/prices/sync", { method: "POST" });
+
+  expect(await (await investingApp.request("/api/prices/sync/status")).json()).toMatchObject({
+    status: "completed",
+    problems: [],
+  });
+});
+
 test("GET /api/config/status reports missing keys without returning key values", async () => {
   const llmKey = process.env.ANTHROPIC_API_KEY;
   const marketDataKey = process.env.MARKET_DATA_API_KEY;

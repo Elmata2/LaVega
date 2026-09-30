@@ -54,8 +54,34 @@ test.each([
     expect(result?.problems).toEqual([
       `No listing found on Yahoo Finance for ${primary} (tried 1 symbol)`,
     ]);
+    expect(result?.notFound).toBe(true);
   },
 );
+
+test("resolves a delisted broker ticker to its ISIN's current listing", async () => {
+  const fetchJsonWithCrumb = vi
+    .fn()
+    .mockResolvedValueOnce({ quotes: [{ symbol: "SBSW" }] })
+    .mockResolvedValueOnce(chartResponse([10]));
+  const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
+
+  const result = await provider.get({
+    ticker: "SBGL_US_EQ",
+    exchange: "UNKNOWN",
+    symbol: "SBGL_US_EQ",
+    currency: "USD",
+    isin: "US82575P1075",
+    today: "2026-01-01",
+  });
+
+  expect(fetchJsonWithCrumb.mock.calls[1]?.[0]).toContain("/chart/SBSW?");
+  expect(result).toMatchObject({
+    listing: "SBSW",
+    problems: [],
+    bars: [{ symbol: "SBGL_US_EQ", currency: "USD", close: 10 }],
+  });
+  expect(result?.notFound).toBeUndefined();
+});
 
 const adrRequest = {
   ticker: "TSFAd_EQ",
@@ -170,10 +196,12 @@ test("reports a fallback transport error instead of unresolved identity", async 
     client: { fetchJsonWithCrumb } as never,
     resolveMissingListing: async () => "TSM",
   });
-  expect(await provider.get(adrRequest)).toMatchObject({
+  const result = await provider.get(adrRequest);
+  expect(result).toMatchObject({
     bars: [],
     problems: ["Yahoo Finance rate-limited price request"],
   });
+  expect(result?.notFound).toBe(false);
 });
 
 test("reuses one default Yahoo session across broker symbols", async () => {

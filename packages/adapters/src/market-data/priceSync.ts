@@ -7,6 +7,8 @@ import type { PriceProviderResult, YahooPriceRequest } from "./yahoo/priceProvid
 export type PriceSyncInput = Omit<YahooPriceRequest, "from" | "to"> & {
   today?: string;
   backfillFrom?: string;
+  /** Gates the delisted short-circuit; see `PriceCoverage.delistedSince`. */
+  kind?: "current" | "closed" | "benchmark";
 };
 export type PriceSyncResult = {
   bars: PriceBar[];
@@ -17,10 +19,11 @@ export type PriceSyncResult = {
 /** An omitted `from` leaves the window to the provider's default history. */
 type Window = { from: string | undefined; to: string };
 
-/** One provider answer. Only an answer with bars proves a provenance. */
+/** One provider answer. Only an answer with bars proves a provenance.
+ *  `notFound` carries through `PriceProviderResult.notFound`. */
 type Answer =
   | { ok: true; bars: PriceBar[]; provenance: PriceProvenance | null }
-  | { ok: false; problems: string[] };
+  | { ok: false; problems: string[]; notFound?: boolean };
 
 /**
  * Brings one symbol's cache to cover `backfillFrom` through `today`.
@@ -46,6 +49,10 @@ export async function syncPrices(input: {
   ]);
   const coverage = storedCoverage ?? coverageOf(request.symbol, cachedBars);
 
+  /* Already confirmed dead: nothing future can change that answer. */
+  if (coverage?.delistedSince && request.kind === "closed")
+    return { bars: cachedBars, problems: [], fetched: false };
+
   const ask = async (window: Window): Promise<Answer> => {
     const result = await firstProviderResult(
       input.priceProviders,
@@ -54,7 +61,8 @@ export async function syncPrices(input: {
       hasProblems,
     );
     if (!result) return { ok: false, problems: ["No price provider returned data"] };
-    if (result.value.problems.length) return { ok: false, problems: result.value.problems };
+    if (result.value.problems.length)
+      return { ok: false, problems: result.value.problems, notFound: result.value.notFound };
     const last = result.value.bars.at(-1);
     return {
       ok: true,
@@ -63,12 +71,28 @@ export async function syncPrices(input: {
     };
   };
   const read = () => store.getRange(tenantId, request.symbol, wanted.from, today);
+  const isClosedNotFound = (answer: Answer | null): boolean =>
+    answer?.ok === false && answer.notFound === true && request.kind === "closed";
+  const recordDelisted = async (): Promise<PriceSyncResult> => {
+    await store.putCoverage(tenantId, {
+      symbol: request.symbol,
+      from: coverage?.from ?? wanted.from ?? today,
+      to: coverage?.to ?? today,
+      listing: coverage?.listing ?? null,
+      currency: coverage?.currency ?? request.currency,
+      delistedSince: today,
+    });
+    return { bars: cachedBars, problems: [], fetched: true };
+  };
 
   /* Replaces the window's bars and coverage rather than widening them: nothing
    * cached before is trusted to match what the provider quotes now. */
   const refresh = async (from: string | undefined): Promise<PriceSyncResult> => {
     const answer = await ask({ from, to: today });
-    if (!answer.ok) return { bars: cachedBars, problems: answer.problems, fetched: true };
+    if (!answer.ok)
+      return isClosedNotFound(answer)
+        ? recordDelisted()
+        : { bars: cachedBars, problems: answer.problems, fetched: true };
     const first = answer.bars[0];
     if (!first || !answer.provenance)
       return { bars: cachedBars, problems: ["Price provider returned no bars"], fetched: true };
@@ -97,6 +121,7 @@ export async function syncPrices(input: {
 
   const before = prefix && (await ask(prefix));
   const after = suffix && (await ask(suffix));
+  if (isClosedNotFound(before) || isClosedNotFound(after)) return recordDelisted();
   const answered = [before, after].filter((answer) => answer?.ok === true);
   const provenances = answered.flatMap((answer) => answer.provenance ?? []);
   const splitAfterCache = after?.ok && after.bars.some((bar) => (bar.split ?? 1) !== 1);
@@ -106,7 +131,6 @@ export async function syncPrices(input: {
   const problems = [before, after].flatMap((answer) =>
     answer?.ok === false ? answer.problems : [],
   );
-  if (after?.ok && after.bars.length === 0) problems.push("Price provider returned no bars");
   if (answered.length === 0) return { bars: cachedBars, problems, fetched: true };
   const bars = answered.flatMap((answer) => answer.bars);
   if (bars.length) await store.upsert(tenantId, bars);
@@ -114,7 +138,7 @@ export async function syncPrices(input: {
     ...coverage,
     listing: provenances.at(-1)?.listing ?? coverage.listing,
     from: prefix && before?.ok ? prefix.from : coverage.from,
-    to: after?.ok ? (after.bars.at(-1)?.date ?? coverage.to) : coverage.to,
+    to: after?.ok ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to) : coverage.to,
   });
   return { bars: bars.length ? await read() : cachedBars, problems, fetched: true };
 }

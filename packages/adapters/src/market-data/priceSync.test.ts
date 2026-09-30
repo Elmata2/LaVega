@@ -504,6 +504,136 @@ test("a refresh to another listing drops cached sessions that listing did not tr
   expect(new Set(settled.bars.map((bar) => bar.currency))).toEqual(new Set(["USD"]));
 });
 
+test("an empty trading-day suffix is asked for once, not on every sync", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "ASML.AS",
+    currency: "EUR",
+  });
+  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  const { get, providers } = market([{ date: "2025-01-01", close: 100 }]);
+  const sync = (today: string) =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders: providers,
+      request: { ...request, backfillFrom: "2025-01-01", today },
+    });
+
+  const result = await sync("2025-01-02");
+
+  expect(result.problems).toEqual([]);
+  expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+
+  get.mockClear();
+  await sync("2025-01-02");
+  expect(get).not.toHaveBeenCalled();
+});
+
+test("a closed position Yahoo confirms gone is marked delisted, not a problem", async () => {
+  const store = createInMemoryPriceStore();
+  const get = vi.fn(async () => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for SKX (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+  const sync = (today: string) =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders,
+      request: {
+        ...request,
+        symbol: "SKX_US_EQ",
+        ticker: "SKX_US_EQ",
+        kind: "closed" as const,
+        today,
+      },
+    });
+
+  const result = await sync("2026-01-01");
+
+  expect(result.problems).toEqual([]);
+  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+    delistedSince: "2026-01-01",
+  });
+
+  get.mockClear();
+  await sync("2026-01-02");
+  expect(get).not.toHaveBeenCalled();
+});
+
+test("a held position Yahoo confirms gone still reports a problem", async () => {
+  const store = createInMemoryPriceStore();
+  const get = vi.fn(async () => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for SBGL (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      kind: "current" as const,
+      today: "2026-01-01",
+    },
+  });
+
+  expect(result.problems).toEqual(["No listing found on Yahoo Finance for SBGL (tried 1 symbol)"]);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toBeNull();
+});
+
+test("a closed position that stops resolving mid-sync is marked delisted from the suffix path", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SKX_US_EQ",
+    from: "2020-01-01",
+    to: "2025-12-31",
+    listing: "SKX",
+    currency: "USD",
+  });
+  await store.upsert("local", [
+    { symbol: "SKX_US_EQ", date: "2025-12-31", close: 60, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for SKX (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SKX_US_EQ",
+      ticker: "SKX_US_EQ",
+      currency: "USD",
+      kind: "closed" as const,
+      backfillFrom: "2020-01-01",
+      today: "2026-01-01",
+    },
+  });
+
+  expect(result.problems).toEqual([]);
+  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+    delistedSince: "2026-01-01",
+  });
+});
+
 test("a cache written before splits were recorded refreshes once, then settles", async () => {
   const store = createInMemoryPriceStore();
   const sessions = weekdays("2025-01-06", "2025-01-10");
