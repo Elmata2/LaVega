@@ -61,7 +61,14 @@ test.each([
 test("resolves a delisted broker ticker to its ISIN's current listing", async () => {
   const fetchJsonWithCrumb = vi
     .fn()
-    .mockResolvedValueOnce({ quotes: [{ symbol: "SBSW" }] })
+    .mockResolvedValueOnce({
+      quotes: [
+        { symbol: "SBSWN.MX", exchange: "MEX" },
+        { symbol: "SBSW", exchange: "NYQ" },
+      ],
+    })
+    .mockResolvedValueOnce({ chart: { result: [{ meta: { currency: "MXN" } }] } })
+    .mockResolvedValueOnce({ chart: { result: [{ meta: { currency: "USD" } }] } })
     .mockResolvedValueOnce(chartResponse([10]));
   const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
 
@@ -74,7 +81,7 @@ test("resolves a delisted broker ticker to its ISIN's current listing", async ()
     today: "2026-01-01",
   });
 
-  expect(fetchJsonWithCrumb.mock.calls[1]?.[0]).toContain("/chart/SBSW?");
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(4);
   expect(result).toMatchObject({
     listing: "SBSW",
     problems: [],

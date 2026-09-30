@@ -40,6 +40,7 @@ export function createYahooPriceProvider(
           ticker: request.ticker,
           exchange: request.exchange,
           isin: request.isin,
+          currency: request.currency,
           from: request.from,
           to: request.to ?? request.today ?? (input.today ?? currentDate)(),
           interval: "1d" as const,

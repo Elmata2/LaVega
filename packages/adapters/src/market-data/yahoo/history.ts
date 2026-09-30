@@ -16,6 +16,8 @@ export type YahooPriceHistoryInput = {
   ticker: string;
   exchange: string;
   isin?: string;
+  /** The broker instrument's currency; steers a multi-candidate ISIN lookup. */
+  currency?: string;
   /** Explicit provider listing; bypasses ISIN lookup and ticker guesses. */
   listing?: string;
   range?: YahooRange;
@@ -96,6 +98,8 @@ async function yahooSymbolCandidates(
 ): Promise<string[]> {
   if (input.listing) return [input.listing];
   const guesses = getYahooSymbolsToTry(input.ticker, input.exchange);
-  const resolved = input.isin ? await resolveYahooSymbolByIsin(input.isin, client) : null;
+  const resolved = input.isin
+    ? await resolveYahooSymbolByIsin(input.isin, client, input.currency)
+    : null;
   return resolved ? [resolved, ...guesses.filter((guess) => guess !== resolved)] : guesses;
 }
