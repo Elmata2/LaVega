@@ -1,4 +1,5 @@
 const EXCHANGE_SUFFIX_MAP: Record<string, string> = {
+  US: "",
   NASDAQ: "",
   NMS: "",
   NYSE: "",
@@ -30,6 +31,7 @@ const EXCHANGE_SUFFIX_MAP: Record<string, string> = {
   VSE: ".VI",
   WSE: ".WA",
   ATHEX: ".AT",
+  HK: ".HK",
   HKEX: ".HK",
   SEHK: ".HK",
   TYO: ".T",
@@ -76,6 +78,19 @@ const KNOWN = new Set(Object.values(EXCHANGE_SUFFIX_MAP).concat(FALLBACKS));
 export function getYahooSymbol(ticker: string, exchange: string): string {
   if (tickerHasYahooSuffix(ticker)) return ticker;
   return `${ticker.replace(/ /g, "-")}${EXCHANGE_SUFFIX_MAP[exchange] ?? ""}`;
+}
+
+/** Translate an identifier provider's ticker only when its venue is known.
+ *  A conflicting or unrecognized suffix cannot be treated as that listing. */
+export function getYahooSymbolForKnownExchange(ticker: string, exchange: string): string | null {
+  if (!Object.hasOwn(EXCHANGE_SUFFIX_MAP, exchange)) return null;
+  const suffix = EXCHANGE_SUFFIX_MAP[exchange];
+  const normalized = ticker.trim().toUpperCase().replace(/[/ ]/g, "-");
+  if (suffix === undefined || !/^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\.[A-Z]+)?$/.test(normalized))
+    return null;
+  const dot = normalized.indexOf(".");
+  if (dot >= 0) return normalized.slice(dot) === suffix ? normalized : null;
+  return `${normalized}${suffix}`;
 }
 
 export function getYahooSymbolsToTry(ticker: string, exchange: string): string[] {

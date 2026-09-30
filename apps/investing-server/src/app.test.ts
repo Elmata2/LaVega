@@ -559,6 +559,124 @@ test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
   },
 );
 
+test.each([
+  {
+    name: "known US listing",
+    isin: "US8740391003",
+    matchIsin: "US8740391003",
+    exchange: "US",
+    resolved: true,
+  },
+  {
+    name: "unknown exchange",
+    isin: "US8740391003",
+    matchIsin: "US8740391003",
+    exchange: "UNKNOWN",
+    resolved: false,
+  },
+  {
+    name: "missing ISIN",
+    isin: undefined,
+    matchIsin: "US8740391003",
+    exchange: "US",
+    resolved: false,
+  },
+  {
+    name: "different ISIN",
+    isin: "US8740391003",
+    matchIsin: "US0000000001",
+    exchange: "US",
+    resolved: false,
+  },
+])(
+  "default Yahoo provider resolves a missing encoded listing only with $name",
+  async ({ isin, matchIsin, exchange, resolved }) => {
+    const requested: string[] = [];
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" },
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "https://fc.yahoo.com/")
+          return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+        if (url.includes("getcrumb")) return new Response("crumb-value");
+        if (url.includes("/v1/finance/search")) return json({ quotes: [] });
+        const symbol = decodeURIComponent(new URL(url).pathname.split("/").at(-1)!);
+        requested.push(symbol);
+        if (symbol === "TSM")
+          return json({
+            chart: {
+              result: [
+                {
+                  meta: { currency: "USD" },
+                  timestamp: [Date.parse("2026-01-01T00:00:00Z") / 1000],
+                  indicators: { quote: [{ close: [200] }] },
+                },
+              ],
+            },
+          });
+        return new Response(
+          JSON.stringify({
+            chart: { result: null, error: { code: "Not Found", description: "No data found" } },
+          }),
+          { status: 404 },
+        );
+      }),
+    );
+    const identifierProvider = {
+      sourceKey: "openfigi",
+      priority: 10,
+      get: vi.fn().mockResolvedValue({
+        match: { isin: matchIsin, ticker: "TSM", exchange },
+        problems: [],
+      }),
+    };
+    const store = createInMemoryPriceStore();
+    const investingApp = createApp({
+      store,
+      identifierProvider: identifierProvider as never,
+      priceSyncTargets: () => [
+        {
+          kind: "current",
+          symbol: "TSFAd_EQ",
+          ticker: "TSFAd_EQ",
+          exchange: "UNKNOWN",
+          ...(isin ? { isin } : {}),
+          currency: "EUR",
+          backfillFrom: "2026-01-01",
+          today: "2026-01-02",
+        },
+      ],
+      priceSyncPaceMs: 0,
+      marketDataConsentStore: acceptedConsentStore(),
+    });
+
+    expect((await investingApp.request("/api/prices/sync", { method: "POST" })).status).toBe(200);
+
+    if (isin) expect(identifierProvider.get).toHaveBeenCalledWith({ isin });
+    else expect(identifierProvider.get).not.toHaveBeenCalled();
+    expect(requested[0]).toBe("TSFA.DE");
+    if (resolved) {
+      expect(requested).toContain("TSM");
+      expect(await store.getCoverage("local", "TSFAd_EQ")).toMatchObject({
+        symbol: "TSFAd_EQ",
+        listing: "TSM",
+        currency: "USD",
+      });
+      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([
+        { symbol: "TSFAd_EQ", date: "2026-01-01", close: 200, currency: "USD", split: 1 },
+      ]);
+    } else {
+      expect(requested).toEqual(["TSFA.DE"]);
+      expect(await store.getCoverage("local", "TSFAd_EQ")).toBeNull();
+      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([]);
+    }
+  },
+);
+
 test("broker sync route forwards force and keeps problems in response", async () => {
   const brokerSync = vi.fn(async (force: boolean) => ({
     outcomes: [{ status: "synced" }],
