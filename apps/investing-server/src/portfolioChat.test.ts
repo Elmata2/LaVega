@@ -93,6 +93,9 @@ test("fetches fundamentals before the model call and survives a failing symbol",
   expect(instructions).toContain("AAPL | AAPL company");
   expect(instructions).toContain("MSFT: fundamentals unavailable right now.");
   expect(instructions).toContain("VWRL: no company fundamentals");
+  expect(instructions).toContain(
+    "Write concise plain-text paragraphs without Markdown formatting: no headings, no bold or italic asterisks, no numbered or bulleted list syntax.",
+  );
   expect(Object.keys(agent.tools).sort()).toEqual([
     "compute_portfolio_value",
     "get_fundamentals",

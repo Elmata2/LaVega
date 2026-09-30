@@ -158,6 +158,18 @@ Fetch in this order:
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
+Trading 212 tickers ending in `_EQ` retain their broker ticker and ISIN during price synchronization. They bypass the preliminary OpenFIGI price mapping because Yahoo already decodes the broker ticker and searches the ISIN. Replacing the broker ticker with OpenFIGI's first listing can lose the venue hint or introduce a ticker that Yahoo does not recognize. Plain tickers still use the existing OpenFIGI mapping.
+
+Decoded Trading 212 tickers use only their encoded venue. They do not try the same ticker on unrelated exchanges. During preview verification, the old suffix sweep mapped Masimo (`MASI_US_EQ`) to Masi Agricola (`MASI.MI`) and Skechers (`SKX_US_EQ`) to Skylark (`SKX.F`). Nonempty price history does not establish security identity. Yahoo's ISIN lookup remains a separate candidate source.
+
+After a genuine listing-not-found result, the default price provider can ask OpenFIGI for an alternate listing of the same ISIN. The returned ISIN must match, and its exchange must have a known Yahoo suffix. Unknown exchanges, invalid tickers, and conflicting suffixes are rejected. The alternate is one explicit symbol, not another suffix sweep. Successful lookup and transport failures do not call this fallback. For example, `TSFAd_EQ` has TSMC ADR ISIN `US8740391003`; OpenFIGI maps that ISIN to US `TSM`, whose Yahoo prices are in USD. The stored broker symbol remains `TSFAd_EQ`.
+
+Yahoo price lookup tries another candidate only after a confirmed listing-not-found response or a chart with no closes. Transport failures stop the candidate loop after the HTTP client's retries; changing the symbol cannot repair an outage or a rate limit. Sector lookup continues after a missing listing, but stops on other request failures. An unresolved listing is not proof that an instrument was delisted.
+
+Each price provider reuses one Yahoo HTTP client for all symbols and explicit fallback requests. Cookie and crumb negotiation happens once per provider session instead of once per symbol, reducing authentication traffic during a large backfill.
+
+Remaining limits: Yahoo ISIN search selects its first symbol and does not return an ISIN equality check or verify the broker venue. Plain tickers with unknown exchanges still have suffix fallbacks. A shared, validated listing resolver for prices, sectors, and fundamentals remains separate work. A delisted security can also require another historical-data source. Previously mismatched cached series need targeted repair; a failed lookup retains cached bars, and complete coverage can skip the provider entirely. Do not purge valid alternate listings merely because their venue differs from the broker venue.
+
 Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.
 
 The broker's currency is not evidence of a stale cache, because a listing can quote in another currency. When the provider quotes another listing or currency than the coverage records, or reports a split after it, refetch the whole covered history and make the answer the only rows in that window. A cached session the new answer lacks is deleted, so a holiday on the old listing cannot mark the cache stale on every later sync. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge. Caches written before coverage existed take it from their bars once.
@@ -418,6 +430,56 @@ Apply a hatched or dashed texture to the positions area on dates where `forwardF
 The net-worth chart has its own range, crosshair, and zoom state. Do not synchronize these controls with the portfolio-return chart.
 
 Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega/tree/prototype-networth-85/apps/investing-chart-prototype).
+
+### Personal's opt-in share (owner's own bank money)
+
+The owner may opt in, from Personal's (`apps/web`) own profile settings, to
+share their Personal "Totale positie" (the same EUR total Overzicht's
+SaldoBlock shows — `positionSeries` in `apps/web/src/totalePositie.ts`) into
+this chart. Off by default; nothing crosses the network until the owner turns
+the switch on. The switch is **per device**: turning it on only shares totals
+from visits on that browser, and a total already shared stays with Investing
+until the switch is turned off again on a device where it is on.
+
+What crosses the boundary, and nothing else: while the switch is on and the
+Personal vault is unlocked, after every sync/import and on unlock, Personal
+computes the current day's total (read fresh at send time, not memoized from
+when the tab loaded) in EUR and sends `PUT /api/personal/net-worth-total` with
+exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
+balance breakdown or entity name ever leaves the browser. A day with at least
+one known balance still sends the partial sum, exactly like the card; only a
+day with zero known balances sends nothing. Turning the switch off queues a
+`DELETE /api/personal/net-worth-total`, which removes every total the account
+ever shared; the underlying preference only flips off once that delete
+actually succeeds, retrying on the next unlock or app start otherwise, so a
+failed delete never leaves stale totals behind silently.
+
+The number is stored server-side, in the clear (not end-to-end encrypted like
+the vault backup), in `personal.net_worth_totals` — Personal owns every write;
+Investing only reads. Investing's read side is `GET
+/api/investing/personal-net-worth`, a small per-tenant list kept deliberately
+outside `InvestingDashboardData`'s cache/version machinery (that cache is
+built for the much larger broker/price read model, and folding a second,
+independently-written source into it would risk serving a stale total). The
+net-worth-web client (`NetWorthPage.tsx`) fetches it separately and folds it
+into each range's portfolio series with `mergeInPersonalNetWorth`
+(`@lavega/core`): the latest total on or before a date is carried forward,
+a date before the owner's first shared total gets no Personal part, and the
+chart's own "Total" line and headline figure become portfolio value plus
+Personal value. Returns, risk, and allocation elsewhere keep reading the
+unmerged, portfolio-only series and never include Personal money.
+
+Personal's total always arrives in EUR (the PUT body is hardcoded
+`currency: "EUR"`), so `NetWorthPage.tsx` only performs this merge while
+`presentationCurrency` is `"EUR"`; any other presentation currency skips it,
+the same no-op path an owner who has never shared anything gets — adding raw
+EUR cents onto a converted total would be silently wrong.
+
+When a total exists, the chart adds a third stacked band, "Bank accounts
+(Personal, as of {latest shared date})", alongside Investments and Cash. When
+nothing has ever been shared, `mergeInPersonalNetWorth` and the chart's own
+optional fields make this a no-op: the chart renders exactly as it did before
+this existed.
 
 ## Loading, empty, and error states
 

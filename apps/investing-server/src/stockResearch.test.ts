@@ -13,7 +13,9 @@ import {
   normalizeResearchSymbol,
   runStockResearch,
   signResearchReport,
+  stockResearchChatInstructions,
   verifyResearchReport,
+  type StockResearchReport,
 } from "./stockResearch.js";
 import type { SystemOneProvider, SystemOneRequest, SystemOneResult } from "./systemOne.js";
 
@@ -70,6 +72,21 @@ test("one typed request evaluates five lenses on identical company facts", async
     conviction: null,
   });
   expect(judge.judge).toHaveBeenCalledTimes(1);
+});
+test("chat instructions carry the persona, the snapshot, and the plain-prose rule", async () => {
+  const report: StockResearchReport = await runStockResearch({
+    company,
+    tenantId: "alice",
+    provider: judge,
+    now,
+  });
+  const instructions = stockResearchChatInstructions(report, "warren_buffett");
+  expect(instructions).toContain("You are Warren Buffett");
+  expect(instructions).toContain(
+    "Write concise plain-text paragraphs without Markdown formatting.",
+  );
+  expect(instructions).toContain("Do not invent missing facts or current prices.");
+  expect(instructions).toContain("AAPL");
 });
 test("signed reports preserve exact facts and reject tampering, another tenant, and expiry", async () => {
   const report = await runStockResearch({ company, tenantId: "alice", provider: judge, now });

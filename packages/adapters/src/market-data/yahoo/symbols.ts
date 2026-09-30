@@ -1,4 +1,5 @@
 const EXCHANGE_SUFFIX_MAP: Record<string, string> = {
+  US: "",
   NASDAQ: "",
   NMS: "",
   NYSE: "",
@@ -30,6 +31,7 @@ const EXCHANGE_SUFFIX_MAP: Record<string, string> = {
   VSE: ".VI",
   WSE: ".WA",
   ATHEX: ".AT",
+  HK: ".HK",
   HKEX: ".HK",
   SEHK: ".HK",
   TYO: ".T",
@@ -78,13 +80,26 @@ export function getYahooSymbol(ticker: string, exchange: string): string {
   return `${ticker.replace(/ /g, "-")}${EXCHANGE_SUFFIX_MAP[exchange] ?? ""}`;
 }
 
+/** Translate an identifier provider's ticker only when its venue is known.
+ *  A conflicting or unrecognized suffix cannot be treated as that listing. */
+export function getYahooSymbolForKnownExchange(ticker: string, exchange: string): string | null {
+  if (!Object.hasOwn(EXCHANGE_SUFFIX_MAP, exchange)) return null;
+  const suffix = EXCHANGE_SUFFIX_MAP[exchange];
+  const normalized = ticker.trim().toUpperCase().replace(/[/ ]/g, "-");
+  if (suffix === undefined || !/^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\.[A-Z]+)?$/.test(normalized))
+    return null;
+  const dot = normalized.indexOf(".");
+  if (dot >= 0) return normalized.slice(dot) === suffix ? normalized : null;
+  return `${normalized}${suffix}`;
+}
+
 export function getYahooSymbolsToTry(ticker: string, exchange: string): string[] {
   if (tickerHasYahooSuffix(ticker)) return [ticker];
   const normalized = ticker.replace(/ /g, "-");
+  const trading212 = trading212YahooCandidates(normalized);
+  if (trading212.length) return trading212;
   const suffix = EXCHANGE_SUFFIX_MAP[exchange];
   if (suffix !== undefined) return [getYahooSymbol(normalized, exchange)];
-  const trading212 = trading212YahooCandidates(normalized);
-  if (trading212.length) return unique(trading212);
   return FALLBACKS.map((candidate) => `${normalized}${candidate}`);
 }
 
@@ -98,7 +113,7 @@ function trading212YahooCandidates(ticker: string): string[] {
   if (country) {
     const base = yahooClassSymbol(country.base.replace(/_CORP$/, ""));
     const suffix = TRADING212_COUNTRY_SUFFIX_MAP[country.country];
-    if (suffix !== undefined) return expandTrading212Base(base, suffix);
+    if (suffix !== undefined) return [`${base}${suffix}`];
   }
 
   const venueBody = /^(?<body>.+)_EQ$/.exec(ticker)?.groups?.body;
@@ -110,7 +125,7 @@ function trading212YahooCandidates(ticker: string): string[] {
       if (!venueBody.endsWith(venue) || venueBody.length === venue.length) continue;
       const base = yahooClassSymbol(venueBody.slice(0, -venue.length));
       const suffix = TRADING212_VENUE_SUFFIX_MAP[venue]!;
-      return expandTrading212Base(base, suffix);
+      return [`${base}${suffix}`];
     }
   }
 
@@ -119,12 +134,4 @@ function trading212YahooCandidates(ticker: string): string[] {
 
 function yahooClassSymbol(value: string): string {
   return value.replace(/[/_]/g, "-");
-}
-
-function expandTrading212Base(base: string, preferredSuffix: string): string[] {
-  return [`${base}${preferredSuffix}`, ...FALLBACKS.map((suffix) => `${base}${suffix}`)];
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
 }

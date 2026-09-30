@@ -64,6 +64,8 @@ export function PortfolioSummaryCard({
     risk.drawdownFrom && risk.drawdownFrom !== risk.from
       ? `since ${shortDate(risk.drawdownFrom)}`
       : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const asOfCaption = risk.to && risk.to < today ? ` (as of ${shortDate(risk.to)})` : "";
   const stats: Array<[string, string, string | null]> = [
     ["Annual volatility", percent(metrics.annualizedVolatility), null],
     ["Beta", decimal(metrics.beta), null],
@@ -122,6 +124,7 @@ export function PortfolioSummaryCard({
                 ? "Still loading"
                 : "Unavailable"
               : "Estimate, currency moves excluded"}
+            {asOfCaption}
           </p>
           {/* "Unavailable" NAAST EEN LIJST REDENEN LEEST ALS EEN OORDEEL, en zo
               stond het er ook terwijl de prijsgeschiedenis nog gewoon binnenkwam:
@@ -204,8 +207,9 @@ export function PortfolioSummaryCard({
               Volatility, beta, alpha and the observation counts use every day in the selected
               range, skipping only the daily intervals that touch a missing price, unknown cash or
               unknown ownership. Maximum drawdown still uses only the most recent unbroken stretch
-              of complete dates. A day the market was closed keeps its last close. Today is left out
-              until its closes are in.
+              of complete dates. A day the market was closed keeps its last close. A still-settling
+              close, usually today, is dropped and the estimate is measured through the last
+              complete date instead.
             </p>
           </div>
         </details>

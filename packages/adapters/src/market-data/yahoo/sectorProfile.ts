@@ -59,13 +59,18 @@ export async function fetchYahooSectorProfile(
   try {
     const httpClient = client ?? new YahooHttpClient();
     for (const candidate of sectorProfileCandidates(symbol)) {
-      const data = await httpClient.fetchJsonWithCrumb<YahooCombinedResponse>(
-        `${QUOTE_SUMMARY_URL}${encodeURIComponent(candidate)}?modules=${MODULES}`,
-      );
-      const result = data.quoteSummary?.result?.[0];
-      if (!result) continue;
-      const profile = toSectorProfile(result);
-      if (profile) return profile;
+      try {
+        const data = await httpClient.fetchJsonWithCrumb<YahooCombinedResponse>(
+          `${QUOTE_SUMMARY_URL}${encodeURIComponent(candidate)}?modules=${MODULES}`,
+        );
+        const result = data.quoteSummary?.result?.[0];
+        if (!result) continue;
+        const profile = toSectorProfile(result);
+        if (profile) return profile;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("[404]")) continue;
+        return null;
+      }
     }
     return null;
   } catch {

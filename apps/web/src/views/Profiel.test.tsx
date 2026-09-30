@@ -76,6 +76,9 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeRegionChange: () => {},
     fxConversionMode: "convert",
     onFxConversionModeChange: () => {},
+    shareNetWorthEnabled: false,
+    onShareNetWorthEnabledChange: () => {},
+    shareNetWorthPendingDelete: false,
     ownerName: { first: "", last: "" },
     onOwnerNameChange: () => {},
     onLock: () => {},
@@ -685,6 +688,37 @@ test("de omreken-checkbox volgt de fxConversionMode prop", async () => {
     '[aria-label="Vreemde valuta omrekenen naar euro"]',
   ) as HTMLInputElement;
   expect(toggle.checked).toBe(false);
+});
+
+test("de net-worth-share schakelaar staat standaard uit en meldt de verandering naar boven", async () => {
+  const onChange = vi.fn();
+  await render({ shareNetWorthEnabled: false, onShareNetWorthEnabledChange: onChange });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
+  act(() => toggle.click());
+  expect(onChange).toHaveBeenCalledWith(true);
+});
+
+test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async () => {
+  await render({ shareNetWorthEnabled: true });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(true);
+});
+
+test("een mislukte verwijdering na het uitzetten toont de terugval-melding", async () => {
+  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
+  expect(container!.textContent).toContain(
+    "Kon je gedeelde bedragen niet verwijderen",
+  );
+});
+
+test("geen terugval-melding zolang er niets mislukt is", async () => {
+  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: false });
+  expect(container!.textContent).not.toContain("Kon je gedeelde bedragen niet verwijderen");
 });
 
 test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async () => {

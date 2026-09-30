@@ -19,6 +19,7 @@ import {
   type RiskRange,
 } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
+import { AgentMessageText } from "./components/AgentMessageText";
 import { AllocationDonut } from "./components/AllocationDonut";
 import {
   AuthForm,
@@ -59,13 +60,12 @@ import {
   type PortfolioAgentDefinition,
   type PortfolioAgentInsight,
 } from "./lib/portfolioAgents";
-import { priceOutcomeProblems, type PriceSyncProgress } from "./lib/priceSync";
+import { priceOutcomeProblems } from "./lib/priceSync";
 import {
   continuePriceSync,
   filterVisibleSyncProblems,
   startBrokerSync,
   useSyncSession,
-  type BrokerProgress,
 } from "./lib/syncSession";
 import { PERSONAL_URL } from "./lib/personal";
 import { brokerLabel, historyGate } from "./lib/historyGate";
@@ -73,7 +73,6 @@ import { brokerLabel, historyGate } from "./lib/historyGate";
 /* `service` only comes back from the investing server itself. Mounted on
  * lavega.dev the personal server answers /health, and it names no service. */
 type Health = { ok: boolean; service?: string };
-type PriceProgress = PriceSyncProgress;
 function DashboardLoading() {
   return (
     <div
@@ -758,11 +757,15 @@ function AgentView() {
               key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <p
-                className={`max-w-[86%] whitespace-pre-line rounded-lg px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
-              >
-                {message.text}
-              </p>
+              {message.role === "user" ? (
+                <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+                  {message.text}
+                </p>
+              ) : (
+                <div className="max-w-[86%] rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                  <AgentMessageText text={message.text} />
+                </div>
+              )}
             </div>
           ))}
           {sending && bubbles.at(-1)?.role !== "assistant" && (
@@ -866,170 +869,6 @@ function AgentView() {
   );
 }
 
-type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
-
-function StatusChip({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-  children,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone?: StatusTone;
-  children?: React.ReactNode;
-}) {
-  const toneClass =
-    tone === "problem"
-      ? "border-negative/30 bg-negative/5"
-      : tone === "warning"
-        ? "border-warning/30 bg-warning/10"
-        : tone === "success"
-          ? "border-positive/30 bg-positive/5"
-          : tone === "active"
-            ? "border-primary/20 bg-secondary/40"
-            : "border-border bg-secondary/20";
-  const dotClass =
-    tone === "problem"
-      ? "bg-negative"
-      : tone === "warning"
-        ? "bg-warning"
-        : tone === "success"
-          ? "bg-positive"
-          : tone === "active"
-            ? "bg-primary"
-            : "bg-muted-foreground";
-  return (
-    <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2 text-xs font-semibold">
-          <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />
-          {label}
-        </span>
-        <span className="text-xs font-semibold">{value}</span>
-      </div>
-      {detail && <p className="mt-1 truncate pl-4 text-2xs text-muted-foreground">{detail}</p>}
-      {children}
-    </div>
-  );
-}
-
-function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
-  const { broker, price, priceProblem, vault, connection } = useSyncSession();
-  const brokerValue =
-    broker?.status === "running"
-      ? "In progress"
-      : broker?.status === "waiting"
-        ? "Waiting"
-        : broker?.status === "completed"
-          ? "Up to date"
-          : broker?.status === "problem"
-            ? "Problem"
-            : broker?.status === "idle"
-              ? "Ready"
-              : "Unknown";
-  const priceValue = priceProblem
-    ? "Incomplete"
-    : price?.status === "running" || price?.status === "paused"
-      ? `${price.completed} of ${price.total} loaded`
-      : price?.status === "waiting"
-        ? "Waiting"
-        : price?.status === "completed"
-          ? "Up to date"
-          : price?.status === "problem"
-            ? "Problem"
-            : price?.status === "idle"
-              ? "Ready"
-              : "Unknown";
-  const statusTone = (status?: BrokerProgress["status"] | PriceProgress["status"]): StatusTone =>
-    status === "problem"
-      ? "problem"
-      : status === "waiting"
-        ? "warning"
-        : status === "running" || status === "paused"
-          ? "active"
-          : status === "completed"
-            ? "success"
-            : "neutral";
-  return (
-    <section
-      aria-label="Operational status"
-      className="rounded-card border border-border bg-card p-4 shadow-md"
-      data-dashboard-section="status"
-    >
-      <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-        Status
-      </p>
-      <div className="space-y-2" aria-live="polite">
-        {connection !== "online" && (
-          <StatusChip
-            label="Connection"
-            value={connection === "retrying" ? "Reconnecting" : "Offline"}
-            tone={connection === "retrying" ? "warning" : "problem"}
-            detail={
-              connection === "retrying"
-                ? "Sync continues; status checks retry"
-                : "Status could not be read"
-            }
-          />
-        )}
-        <StatusChip
-          label="Brokers"
-          value={brokerValue}
-          tone={statusTone(broker?.status)}
-          detail={
-            broker?.status === "waiting"
-              ? (broker.message ?? "Waiting for API capacity")
-              : broker?.status === "problem"
-                ? (broker.message ?? "Cached data remains visible")
-                : undefined
-          }
-        />
-        <StatusChip
-          label="Price history"
-          value={priceValue}
-          tone={priceProblem ? "problem" : statusTone(price?.status)}
-          detail={
-            priceProblem
-              ? priceProblem
-              : price?.status === "running" || price?.status === "paused"
-                ? price.currentSymbol
-                  ? `${price.currentSymbol} is loading`
-                  : `${price.remainingSymbols.length} symbols remaining`
-                : price?.status === "problem"
-                  ? `${price.problems.length} symbol problems; cache remains available`
-                  : undefined
-          }
-        />
-        <StatusChip
-          label="Vault"
-          value={
-            vault === "unlocked"
-              ? "Open"
-              : vault === "locked"
-                ? "Locked"
-                : vault === "empty"
-                  ? "Not set up"
-                  : "Unknown"
-          }
-          tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"}
-        />
-        <StatusChip
-          label="Cache"
-          value={`Version ${dataVersion}`}
-          tone={dataVersion > 0 ? "success" : "neutral"}
-        >
-          <div className="mt-2 flex justify-end">
-            <ClearPriceCache />
-          </div>
-        </StatusChip>
-      </div>
-    </section>
-  );
-}
-
 function AppOpenSync() {
   const [problems, setProblems] = useState<string[]>([]);
   const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
@@ -1130,61 +969,6 @@ function AppOpenSync() {
           <li key={`${problem}-${index}`}>{problem}</li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function ClearPriceCache() {
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  async function clear() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/prices/cache", { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to clear");
-      setMessage("Price data deleted");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to clear");
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (confirming)
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-3" role="alert">
-        <span className="text-xs text-negative">This deletes all locally stored price data.</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setConfirming(false)}
-          disabled={busy}
-        >
-          Cancel
-        </Button>
-        <Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>
-          {busy ? "Clearing…" : "Yes, delete everything"}
-        </Button>
-      </div>
-    );
-  return (
-    <div className="flex items-center gap-3">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => setConfirming(true)}
-        disabled={busy}
-      >
-        Clear price data
-      </Button>
-      {message && (
-        <span role="status" className="text-xs text-muted-foreground">
-          {message}
-        </span>
-      )}
     </div>
   );
 }
@@ -1432,7 +1216,7 @@ function OverviewEmptyState() {
 
 function Overview() {
   const state = useDashboard();
-  const { broker, price } = useSyncSession();
+  const { broker, price, priceProblem, connection, vault } = useSyncSession();
   const layout = useInvestingLayout();
   const gate = historyGate(broker?.history);
   /* Until the layout loads, the registry defaults would flash widgets the
@@ -1476,7 +1260,20 @@ function Overview() {
         <>
           {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
           <DashboardProblems problems={state.data.problems} />
-          <OverviewStatusRail dataVersion={state.data.dataVersion} />
+          {(connection !== "online" ||
+            broker?.status === "problem" ||
+            price?.status === "problem" ||
+            priceProblem ||
+            vault === "locked") && (
+            <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
+              <p>
+                Status needs attention.{" "}
+                <Link to="/profile#brokers" className="font-semibold underline">
+                  Review it in Profile
+                </Link>
+              </p>
+            </div>
+          )}
           {!layoutReady ? null : widgets.size === 0 ? (
             <OverviewEmptyState />
           ) : (

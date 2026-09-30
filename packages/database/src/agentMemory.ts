@@ -9,7 +9,7 @@ import {
 } from "./index.js";
 
 /*
- * Portfolio agent memory (ADR 0007, migration 0019). Terms follow the
+ * Portfolio agent memory (ADR 0007, migration 0020). Terms follow the
  * investing glossary in docs/CONTEXT.md. Threads and observations belong to
  * one agent; theses, goals and risk tolerance are shared by all agents.
  *
