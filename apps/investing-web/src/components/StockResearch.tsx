@@ -2,6 +2,7 @@ import { useChat, type Chat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AgentMessageText } from "./AgentMessageText.js";
 import {
   createStockResearchChat,
   researchAmount,
@@ -77,7 +78,13 @@ function ResearchConversation({
               <p className="mb-1 text-xs font-semibold text-muted-foreground">
                 {message.role === "user" ? "You" : judgment.displayName}
               </p>
-              <p className="whitespace-pre-wrap break-words text-sm leading-7">{text}</p>
+              {message.role === "user" ? (
+                <p className="whitespace-pre-wrap break-words text-sm leading-7">{text}</p>
+              ) : (
+                <div className="text-sm leading-7">
+                  <AgentMessageText text={text} />
+                </div>
+              )}
             </div>
           ) : null;
         })}

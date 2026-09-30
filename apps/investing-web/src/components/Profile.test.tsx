@@ -4,8 +4,15 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "../app.js";
+import { forgetDashboards } from "../lib/dashboardResource.js";
 import { resetInvestingLayoutStoreForTests } from "../lib/layoutResource.js";
-import { emptyResponseFor, responseFor, withAuthUnconfigured } from "../test/fetchFixtures.js";
+import {
+  dashboard,
+  deferredDashboardFetch,
+  emptyResponseFor,
+  responseFor,
+  withAuthUnconfigured,
+} from "../test/fetchFixtures.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -35,6 +42,73 @@ test("profile page lists brokers, modules, widgets and account sections", async 
   expect(container.textContent).toContain("Widgets");
   expect(container.textContent).toContain("Account");
   root.unmount();
+});
+
+test("profile status section lists brokers, price history, vault and cache with a clear-cache control", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) => Promise.resolve(responseFor(input, init))),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const status = container.querySelector("#status");
+  expect(status).not.toBeNull();
+  expect(status?.textContent).toContain("Brokers");
+  expect(status?.textContent).toContain("Price history");
+  expect(status?.textContent).toContain("Vault");
+  expect(status?.textContent).toContain("Cache");
+  expect(
+    Array.from(status?.querySelectorAll("button") ?? []).some((button) =>
+      button.textContent?.includes("Clear price data"),
+    ),
+  ).toBe(true);
+  root.unmount();
+});
+
+test("profile Cache chip shows a loading state, not Version 0, before the dashboard resolves", async () => {
+  forgetDashboards();
+  const dashboardFetch = deferredDashboardFetch();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/investing/dashboard") return dashboardFetch.fetch();
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await settle();
+  });
+
+  const status = container.querySelector("#status");
+  expect(status?.textContent).toContain("Loading…");
+  expect(status?.textContent).not.toContain("Version 0");
+
+  await act(async () => {
+    dashboardFetch.resolve({ ...dashboard, dataVersion: 3 });
+    await settle();
+  });
+  expect(status?.textContent).toContain("Version 3");
+  root.unmount();
+  forgetDashboards();
 });
 
 test("connect broker opens setup guide with IBKR instructions", async () => {

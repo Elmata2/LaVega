@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession, signOut, type SessionState } from "../lib/auth-client.js";
+import { useDashboard } from "../lib/dashboardResource.js";
 import { useInvestingLayout } from "../lib/layoutResource.js";
 import { PERSONAL_URL } from "../lib/personal.js";
+import type { PriceSyncProgress } from "../lib/priceSync.js";
+import { useSyncSession, type BrokerProgress } from "../lib/syncSession.js";
 import { BrokerSettings } from "./BrokerSettings.js";
 import { LayoutPicker, Switch } from "./LayoutPicker.js";
 import { Button } from "./ui/button.js";
@@ -163,6 +166,229 @@ function DataSection() {
   );
 }
 
+type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
+
+function StatusChip({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  children,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: StatusTone;
+  children?: React.ReactNode;
+}) {
+  const toneClass =
+    tone === "problem"
+      ? "border-negative/30 bg-negative/5"
+      : tone === "warning"
+        ? "border-warning/30 bg-warning/10"
+        : tone === "success"
+          ? "border-positive/30 bg-positive/5"
+          : tone === "active"
+            ? "border-primary/20 bg-secondary/40"
+            : "border-border bg-secondary/20";
+  const dotClass =
+    tone === "problem"
+      ? "bg-negative"
+      : tone === "warning"
+        ? "bg-warning"
+        : tone === "success"
+          ? "bg-positive"
+          : tone === "active"
+            ? "bg-primary"
+            : "bg-muted-foreground";
+  return (
+    <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+          <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />
+          {label}
+        </span>
+        <span className="text-xs font-semibold">{value}</span>
+      </div>
+      {detail && <p className="mt-1 truncate pl-4 text-2xs text-muted-foreground">{detail}</p>}
+      {children}
+    </div>
+  );
+}
+
+function ClearPriceCache() {
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  async function clear() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/prices/cache", { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to clear");
+      setMessage("Price data deleted");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to clear");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (confirming)
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-3" role="alert">
+        <span className="text-xs text-negative">This deletes all locally stored price data.</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+        >
+          Cancel
+        </Button>
+        <Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>
+          {busy ? "Clearing…" : "Yes, delete everything"}
+        </Button>
+      </div>
+    );
+  return (
+    <div className="flex items-center gap-3">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setConfirming(true)}
+        disabled={busy}
+      >
+        Clear price data
+      </Button>
+      {message && (
+        <span role="status" className="text-xs text-muted-foreground">
+          {message}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatusSection() {
+  const state = useDashboard();
+  const { broker, price, priceProblem, vault, connection } = useSyncSession();
+  const dataVersion = state.status === "ready" ? state.data.dataVersion : 0;
+  const brokerValue =
+    broker?.status === "running"
+      ? "In progress"
+      : broker?.status === "waiting"
+        ? "Waiting"
+        : broker?.status === "completed"
+          ? "Up to date"
+          : broker?.status === "problem"
+            ? "Problem"
+            : broker?.status === "idle"
+              ? "Ready"
+              : "Unknown";
+  const priceValue = priceProblem
+    ? "Incomplete"
+    : price?.status === "running" || price?.status === "paused"
+      ? `${price.completed} of ${price.total} loaded`
+      : price?.status === "waiting"
+        ? "Waiting"
+        : price?.status === "completed"
+          ? "Up to date"
+          : price?.status === "problem"
+            ? "Problem"
+            : price?.status === "idle"
+              ? "Ready"
+              : "Unknown";
+  const statusTone = (
+    status?: BrokerProgress["status"] | PriceSyncProgress["status"],
+  ): StatusTone =>
+    status === "problem"
+      ? "problem"
+      : status === "waiting"
+        ? "warning"
+        : status === "running" || status === "paused"
+          ? "active"
+          : status === "completed"
+            ? "success"
+            : "neutral";
+  return (
+    <section id="status" aria-label="Status">
+      <Card>
+        <CardHeader>
+          <CardTitle>Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2" aria-live="polite">
+            {connection !== "online" && (
+              <StatusChip
+                label="Connection"
+                value={connection === "retrying" ? "Reconnecting" : "Offline"}
+                tone={connection === "retrying" ? "warning" : "problem"}
+                detail={
+                  connection === "retrying"
+                    ? "Sync continues; status checks retry"
+                    : "Status could not be read"
+                }
+              />
+            )}
+            <StatusChip
+              label="Brokers"
+              value={brokerValue}
+              tone={statusTone(broker?.status)}
+              detail={
+                broker?.status === "waiting"
+                  ? (broker.message ?? "Waiting for API capacity")
+                  : broker?.status === "problem"
+                    ? (broker.message ?? "Cached data remains visible")
+                    : undefined
+              }
+            />
+            <StatusChip
+              label="Price history"
+              value={priceValue}
+              tone={priceProblem ? "problem" : statusTone(price?.status)}
+              detail={
+                priceProblem
+                  ? priceProblem
+                  : price?.status === "running" || price?.status === "paused"
+                    ? price.currentSymbol
+                      ? `${price.currentSymbol} is loading`
+                      : `${price.remainingSymbols.length} symbols remaining`
+                    : price?.status === "problem"
+                      ? `${price.problems.length} symbol problems; cache remains available`
+                      : undefined
+              }
+            />
+            <StatusChip
+              label="Vault"
+              value={
+                vault === "unlocked"
+                  ? "Open"
+                  : vault === "locked"
+                    ? "Locked"
+                    : vault === "empty"
+                      ? "Not set up"
+                      : "Unknown"
+              }
+              tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"}
+            />
+            <StatusChip
+              label="Cache"
+              value={state.status === "ready" ? `Version ${dataVersion}` : "Loading…"}
+              tone={state.status === "ready" && dataVersion > 0 ? "success" : "neutral"}
+            >
+              <div className="mt-2 flex justify-end">
+                <ClearPriceCache />
+              </div>
+            </StatusChip>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 export function Profile() {
   const layout = useInvestingLayout();
 
@@ -232,6 +458,8 @@ export function Profile() {
           </CardContent>
         </Card>
       </section>
+
+      <StatusSection />
 
       <DataSection />
 
