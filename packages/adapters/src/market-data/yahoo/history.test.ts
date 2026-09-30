@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { YahooHttpClient } from "./http.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
@@ -58,7 +58,7 @@ function stubClient(
   return { client: new YahooHttpClient(fetchFn, 20_000, 1), charts: requested };
 }
 
-test("passes over a listing that carries no closes and keeps looking", async () => {
+test("does not guess another venue when the encoded listing has no closes", async () => {
   const { client, charts } = stubClient({
     "BY6.DE": { currency: "EUR", closes: [] },
     "BY6.VI": { currency: "EUR", closes: [10, 11] },
@@ -66,12 +66,11 @@ test("passes over a listing that carries no closes and keeps looking", async () 
 
   const history = await loadYahooPriceHistory({ ticker: "BY6d_EQ", exchange: "UNKNOWN", client });
 
-  expect(history.symbol).toBe("BY6.VI");
-  expect(history.points.map((point) => point.close)).toEqual([10, 11]);
-  expect(charts).toContain("BY6.DE");
+  expect(history).toMatchObject({ symbol: "BY6.DE", points: [] });
+  expect(charts).toEqual(["BY6.DE"]);
 });
 
-test("resolves the exact listing from the ISIN before guessing suffixes", async () => {
+test("uses the Yahoo ISIN lookup result before the encoded venue", async () => {
   const { client, charts } = stubClient(
     { "NOVN.SW": { currency: "CHF", closes: [90] } },
     { CH0012005267: "NOVN.SW" },
@@ -141,11 +140,11 @@ test("reports no-listing naming the primary symbol when every candidate is genui
   expect(rejection).toBeInstanceOf(YahooNoListingError);
   const error = rejection as YahooNoListingError;
   expect(error.candidates[0]).toBe("SKX");
-  expect(error.candidates).toHaveLength(16);
+  expect(error.candidates).toHaveLength(1);
   expect(charts).toEqual(error.candidates);
 });
 
-test("reports the primary candidate's error, not the last fallback's, when failures are mixed", async () => {
+test("stops candidate lookup after a server failure", async () => {
   const requested: string[] = [];
   const fetchFn = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -165,7 +164,61 @@ test("reports the primary candidate's error, not the last fallback's, when failu
     client,
   }).catch((error: unknown) => error);
 
-  expect(requested[0]).toBe("SKX");
+  expect(requested).toEqual(["SKX"]);
   expect(rejection).toBeInstanceOf(Error);
   expect((rejection as Error).message).toContain("[500]");
+});
+
+test.each(["[403] Forbidden", "[429] Too Many Requests", "Request timed out"])(
+  "stops candidate lookup after %s",
+  async (message) => {
+    const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error(message));
+    await expect(
+      loadYahooPriceHistory({
+        ticker: "MASI_US_EQ",
+        exchange: "UNKNOWN",
+        client: { fetchJsonWithCrumb } as never,
+      }),
+    ).rejects.toThrow(message);
+    expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
+    expect(fetchJsonWithCrumb.mock.calls[0]?.[0]).toContain("/chart/MASI?");
+  },
+);
+
+test("uses the broker ticker when ISIN search returns no listing", async () => {
+  const { client, charts } = stubClient({ MASI: { currency: "USD", closes: [150] } });
+  const history = await loadYahooPriceHistory({
+    ticker: "MASI_US_EQ",
+    exchange: "UNKNOWN",
+    isin: "US5747951003",
+    client,
+  });
+  expect(history.symbol).toBe("MASI");
+  expect(charts).toEqual(["MASI"]);
+});
+
+test.each([
+  ["MASI_US_EQ", "MASI", "MASI.MI"],
+  ["SKX_US_EQ", "SKX", "SKX.F"],
+])("does not accept another company for %s", async (ticker, primary, unrelated) => {
+  const { client, charts } = stubClient({ [unrelated]: { currency: "EUR", closes: [10] } });
+  await expect(
+    loadYahooPriceHistory({ ticker, exchange: "UNKNOWN", client }),
+  ).rejects.toBeInstanceOf(YahooNoListingError);
+  expect(charts).toEqual([primary]);
+});
+
+test("permits an alternate venue returned by Yahoo ISIN lookup", async () => {
+  const { client, charts } = stubClient(
+    { "BY6.VI": { currency: "EUR", closes: [10, 11] } },
+    { CNE100000296: "BY6.VI" },
+  );
+  const history = await loadYahooPriceHistory({
+    ticker: "BY6d_EQ",
+    exchange: "UNKNOWN",
+    isin: "CNE100000296",
+    client,
+  });
+  expect(history.symbol).toBe("BY6.VI");
+  expect(charts).toEqual(["BY6.VI"]);
 });

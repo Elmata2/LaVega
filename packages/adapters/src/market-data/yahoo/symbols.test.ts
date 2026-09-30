@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { getYahooSymbol, getYahooSymbolsToTry } from "./symbols.js";
+import { getYahooSymbol, getYahooSymbolsToTry, getYahooSymbolForKnownExchange } from "./symbols.js";
 
 test("maps European exchange codes to Yahoo suffixes", () => {
   expect(getYahooSymbol("ASML", "AMS")).toBe("ASML.AS");
@@ -14,7 +14,7 @@ test("keeps known Yahoo symbols and offers unknown-exchange fallbacks", () => {
 
 test("strips Trading 212 ticker suffix for unknown exchanges", () => {
   const candidates = getYahooSymbolsToTry("AMD_US_EQ", "UNKNOWN");
-  expect(candidates[0]).toBe("AMD");
+  expect(candidates).toEqual(["AMD"]);
 });
 
 test.each([
@@ -31,5 +31,27 @@ test.each([
   ["SRENHs_EQ", "SREN.SW"],
   ["ZURNs_EQ", "ZURN.SW"],
 ])("bridges Trading 212 broker ticker %s to Yahoo candidate %s", (brokerSymbol, yahooSymbol) => {
-  expect(getYahooSymbolsToTry(brokerSymbol, "UNKNOWN")[0]).toBe(yahooSymbol);
+  expect(getYahooSymbolsToTry(brokerSymbol, "UNKNOWN")).toEqual([yahooSymbol]);
+});
+
+test("uses the encoded broker venue before a mapped exchange", () => {
+  expect(getYahooSymbolsToTry("MASI_US_EQ", "BVME")).toEqual(["MASI"]);
+  expect(getYahooSymbolsToTry("HLMAl_EQ", "NASDAQ")).toEqual(["HLMA.L"]);
+});
+
+test.each([
+  ["TSM", "US", "TSM"],
+  ["0700", "HK", "0700.HK"],
+  ["ASML", "AMS", "ASML.AS"],
+  ["ASML.AS", "AMS", "ASML.AS"],
+  ["BRK/A", "US", "BRK-A"],
+  ["TSM", "UNKNOWN", null],
+  ["TSM", "__proto__", null],
+  ["MASI*", "US", null],
+  ["TSM.DE", "US", null],
+  ["ASML.AS", "LSE", null],
+  ["TSM.XYZ", "US", null],
+  ["", "US", null],
+])("maps only a valid known venue: %s / %s", (ticker, exchange, expected) => {
+  expect(getYahooSymbolForKnownExchange(ticker, exchange)).toBe(expected);
 });

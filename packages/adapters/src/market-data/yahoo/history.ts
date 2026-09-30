@@ -16,6 +16,8 @@ export type YahooPriceHistoryInput = {
   ticker: string;
   exchange: string;
   isin?: string;
+  /** Explicit provider listing; bypasses ISIN lookup and ticker guesses. */
+  listing?: string;
   range?: YahooRange;
   interval?: YahooInterval;
   from?: string;
@@ -24,8 +26,8 @@ export type YahooPriceHistoryInput = {
 };
 const CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
-/** Every candidate symbol got a genuine Yahoo not-found, so retrying is pointless;
- *  this is almost always a delisting, never a fetch failure. */
+/** Every candidate symbol got a genuine Yahoo not-found. This does not
+ *  distinguish a delisting from an unresolved provider symbol. */
 export class YahooNoListingError extends Error {
   constructor(
     public readonly ticker: string,
@@ -51,7 +53,7 @@ export async function loadYahooPriceHistory(
   input: YahooPriceHistoryInput,
 ): Promise<YahooPriceHistory> {
   const client = input.client ?? new YahooHttpClient();
-  const failures: Array<{ symbol: string; error: unknown; notFound: boolean }> = [];
+  const missing: string[] = [];
   let empty: YahooPriceHistory | null = null;
   for (const symbol of await yahooSymbolCandidates(input, client)) {
     try {
@@ -78,25 +80,22 @@ export async function loadYahooPriceHistory(
       }
       return history;
     } catch (error) {
-      failures.push({ symbol, error, notFound: isYahooNotFound(error) });
+      if (!isYahooNotFound(error)) throw error;
+      missing.push(symbol);
     }
   }
   if (empty) return empty;
-  if (failures.length > 0 && failures.every((failure) => failure.notFound))
-    throw new YahooNoListingError(
-      input.ticker,
-      failures.map((failure) => failure.symbol),
-    );
-  throw failures[0]?.error ?? new Error(`No Yahoo history for ${input.ticker}`);
+  if (missing.length > 0) throw new YahooNoListingError(input.ticker, missing);
+  throw new Error(`No Yahoo history for ${input.ticker}`);
 }
 
-/** The ISIN is the instrument's own identifier, so Yahoo can answer with the
- *  exact listing. Ticker suffix guessing only runs when that fails. */
+/** Keep Yahoo's ISIN lookup result ahead of the broker listing candidates. */
 async function yahooSymbolCandidates(
   input: YahooPriceHistoryInput,
   client: YahooHttpClient,
 ): Promise<string[]> {
+  if (input.listing) return [input.listing];
   const guesses = getYahooSymbolsToTry(input.ticker, input.exchange);
-  const exact = input.isin ? await resolveYahooSymbolByIsin(input.isin, client) : null;
-  return exact ? [exact, ...guesses.filter((guess) => guess !== exact)] : guesses;
+  const resolved = input.isin ? await resolveYahooSymbolByIsin(input.isin, client) : null;
+  return resolved ? [resolved, ...guesses.filter((guess) => guess !== resolved)] : guesses;
 }

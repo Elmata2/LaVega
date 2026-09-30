@@ -20,6 +20,7 @@ import {
   createYahooPriceProvider,
   createFrankfurterFxProvider,
   createOpenFigiIdentifierProvider,
+  getYahooSymbolForKnownExchange,
   firstProviderResult,
   hasProblems,
   searchYahooBenchmarks,
@@ -173,9 +174,25 @@ type PriceDependencies = {
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
-  const provider = dependencies.provider ?? createYahooPriceProvider();
-  const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
+  const provider =
+    dependencies.provider ??
+    createYahooPriceProvider({
+      resolveMissingListing: async (request) => {
+        if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
+        const isin = request.isin.trim().toUpperCase();
+        const identifier = await identifierProvider.get({ isin });
+        if (
+          !identifier ||
+          identifier.problems.length ||
+          identifier.match.isin.trim().toUpperCase() !== isin ||
+          !identifier.match.exchange
+        )
+          return null;
+        return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
+      },
+    });
+  const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
   const configureBroker = dependencies.configureBroker;
   const problemReporter = dependencies.problemReporter ?? createProblemReporter();
@@ -230,7 +247,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         backfillFrom?: string;
       } = target;
       let identifierProblems: string[] = [];
-      if (target.isin) {
+      // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
+      // arbitrary OpenFIGI listing would discard the broker's venue hint.
+      if (target.isin && !target.ticker.endsWith("_EQ")) {
         const identifier = await mapIdentifier({ isin: target.isin });
         if (
           identifier &&

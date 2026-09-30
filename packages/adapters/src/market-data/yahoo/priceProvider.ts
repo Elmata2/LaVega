@@ -1,7 +1,7 @@
 import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
-import type { YahooHttpClient } from "./http.js";
+import { YahooHttpClient } from "./http.js";
 
 export type YahooPriceRequest = {
   ticker: string;
@@ -17,22 +17,50 @@ export type YahooPriceRequest = {
 export type PriceProviderResult = { bars: PriceBar[]; problems: string[]; listing?: string };
 
 export function createYahooPriceProvider(
-  input: { client?: YahooHttpClient; today?: () => string } = {},
+  input: {
+    client?: YahooHttpClient;
+    today?: () => string;
+    resolveMissingListing?: (request: YahooPriceRequest) => Promise<string | null>;
+  } = {},
 ): Provider<YahooPriceRequest, PriceProviderResult> {
+  const client = input.client ?? new YahooHttpClient();
   return {
     sourceKey: "yahoo",
     priority: 10,
     async get(request) {
       try {
-        const history = await loadYahooPriceHistory({
+        const historyInput = {
           ticker: request.ticker,
           exchange: request.exchange,
           isin: request.isin,
           from: request.from,
           to: request.to ?? request.today ?? (input.today ?? currentDate)(),
-          interval: "1d",
-          client: input.client,
-        });
+          interval: "1d" as const,
+          client,
+        };
+        let history;
+        try {
+          history = await loadYahooPriceHistory(historyInput);
+        } catch (error) {
+          if (!(error instanceof YahooNoListingError) || !input.resolveMissingListing) throw error;
+          const listing = (await input.resolveMissingListing(request))?.trim().toUpperCase();
+          if (
+            !listing ||
+            !/^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\.[A-Z]+)?$/.test(listing) ||
+            error.candidates.some((candidate) => candidate.toUpperCase() === listing)
+          )
+            throw error;
+          try {
+            history = await loadYahooPriceHistory({ ...historyInput, listing });
+          } catch (fallbackError) {
+            if (fallbackError instanceof YahooNoListingError)
+              throw new YahooNoListingError(error.ticker, [
+                ...error.candidates,
+                ...fallbackError.candidates,
+              ]);
+            throw fallbackError;
+          }
+        }
         // Label a bar with the currency the quote is actually in. The broker's
         // instrument currency can name a different listing of the same stock.
         const currency = normalizeCurrencyCode(history.currency ?? request.currency);
@@ -66,8 +94,10 @@ function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 function readableYahooProblem(error: unknown): string {
-  if (error instanceof YahooNoListingError)
-    return `No listing found on Yahoo Finance for ${error.candidates[0]} (tried ${error.candidates.length} symbols) - the instrument is probably delisted`;
+  if (error instanceof YahooNoListingError) {
+    const count = error.candidates.length;
+    return `No listing found on Yahoo Finance for ${error.candidates[0]} (tried ${count} ${count === 1 ? "symbol" : "symbols"})`;
+  }
   const message = error instanceof Error ? error.message : String(error);
   if (/\[429\]|rate.?limit/i.test(message)) return "Yahoo Finance rate-limited price request";
   if (/\[403\]|blocked|forbidden/i.test(message)) return "Yahoo Finance blocked price request";
