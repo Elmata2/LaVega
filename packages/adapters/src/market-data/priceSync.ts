@@ -54,10 +54,10 @@ export async function syncPrices(input: {
   if (coverage?.delistedSince && request.kind === "closed")
     return { bars: cachedBars, problems: [], fetched: false };
 
-  const ask = async (window: Window, listing?: string): Promise<Answer> => {
+  const ask = async (window: Window, listing?: string, currency?: string): Promise<Answer> => {
     const result = await firstProviderResult(
       input.priceProviders,
-      { ...request, ...window, listing },
+      { ...request, ...window, listing, ...(currency !== undefined ? { currency } : {}) },
       undefined,
       hasProblems,
     );
@@ -82,6 +82,7 @@ export async function syncPrices(input: {
       listing: coverage?.listing ?? null,
       currency: coverage?.currency ?? request.currency,
       delistedSince: today,
+      listingMissingSince: undefined,
     });
     return { bars: cachedBars, problems: [], fetched: true };
   };
@@ -123,13 +124,24 @@ export async function syncPrices(input: {
   /* A known listing is fetched directly, skipping the ISIN search and ticker
    * guesses a caller with no locked listing pays on every sync (issue #101).
    * Re-derive only when that listing turns out dead or, for a held symbol,
-   * stops quoting anything for longer than a quiet day explains. */
+   * stops quoting anything for longer than a quiet day explains.
+   *
+   * A held symbol's dead listing is not replaced on one 404: a transient
+   * Yahoo failure would otherwise lock onto whatever the re-resolution probe
+   * happens to return. `listingMissingSince` (already set from a prior sync)
+   * is what makes a 404 confirmed rather than a first occurrence; a closed
+   * position, already exiting through `recordDelisted` below, does not need
+   * this second opinion. */
+  const listingConfirmedMissing = coverage.listingMissingSince != null;
   let reResolvedListing = false;
   const resolveWindow = async (window: Window): Promise<Answer> => {
     const locked = coverage.listing ?? undefined;
     const first = await ask(window, locked);
     if (!locked) return first;
-    const dead = !first.ok && first.notFound === true;
+    const dead =
+      !first.ok &&
+      first.notFound === true &&
+      (request.kind !== "current" || listingConfirmedMissing);
     const stale =
       first.ok &&
       first.bars.length === 0 &&
@@ -137,7 +149,10 @@ export async function syncPrices(input: {
       lastBarDate !== undefined &&
       !isPriceFresh(lastBarDate, today);
     if (!dead && !stale) return first;
-    const reResolved = await ask(window);
+    // Prefer the currency this symbol is already recorded in: a swap the
+    // broker's own stated currency would not predict is still the likeliest
+    // continuation of the same history, not evidence to distrust it.
+    const reResolved = await ask(window, undefined, coverage.currency);
     if (!reResolved.ok || reResolved.bars.length === 0) return first;
     reResolvedListing = true;
     return reResolved;
@@ -161,20 +176,40 @@ export async function syncPrices(input: {
   );
   const provenances = answered.flatMap((answer) => answer.provenance ?? []);
   const splitAfterCache = after?.ok && after.bars.some((bar) => (bar.split ?? 1) !== 1);
-  /* A listing change `resolveWindow` itself just confirmed is not the
-   * unrequested surprise `changed` exists to catch; a full refetch here
-   * would undo the very request saving this function makes. */
-  if (
-    splitAfterCache ||
-    (!reResolvedListing && provenances.some((provenance) => changed(coverage, provenance)))
-  )
+  const currencySwapped = provenances.some((provenance) => currencyChanged(coverage, provenance));
+  const listingSwapped = provenances.some((provenance) => listingChanged(coverage, provenance));
+  /* A currency swap is never merged, confirmed by re-resolution or not: bars
+   * in two currencies cannot share one coverage row. A listing swap
+   * `resolveWindow` itself just confirmed is not the unrequested surprise
+   * this otherwise exists to catch, so only that case is spared the refetch
+   * that would undo the request saving this function makes. */
+  if (splitAfterCache || currencySwapped || (listingSwapped && !reResolvedListing))
     return refresh(refreshFrom);
 
   const problems = [before, after].flatMap((answer) =>
     answer?.ok === false ? answer.problems : [],
   );
   if (afterIsStaleQuiet) problems.push(`no prices since ${lastBarDate}`);
-  if (answered.length === 0) return { bars: cachedBars, problems, fetched: true };
+
+  const notFoundNow = (answer: Answer | null): boolean =>
+    answer?.ok === false && answer.notFound === true;
+  const succeededNow = (answer: Answer | null): boolean =>
+    answer?.ok === true && answer.bars.length > 0;
+  const nextListingMissingSince =
+    succeededNow(before) || succeededNow(after)
+      ? undefined
+      : notFoundNow(before) || notFoundNow(after)
+        ? (coverage.listingMissingSince ?? today)
+        : coverage.listingMissingSince;
+
+  if (answered.length === 0) {
+    if (nextListingMissingSince !== coverage.listingMissingSince)
+      await store.putCoverage(tenantId, {
+        ...coverage,
+        listingMissingSince: nextListingMissingSince,
+      });
+    return { bars: cachedBars, problems, fetched: true };
+  }
   const bars = answered.flatMap((answer) => answer.bars);
   if (bars.length) await store.upsert(tenantId, bars);
   await store.putCoverage(tenantId, {
@@ -186,6 +221,7 @@ export async function syncPrices(input: {
         ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to)
         : coverage.to,
     delistedSince: bars.length > 0 ? undefined : coverage.delistedSince,
+    listingMissingSince: nextListingMissingSince,
   });
   return { bars: bars.length ? await read() : cachedBars, problems, fetched: true };
 }
@@ -198,8 +234,11 @@ function coverageOf(symbol: string, bars: readonly PriceBar[]): PriceCoverage | 
   return { symbol, from: first.date, to: last.date, listing: null, currency: first.currency };
 }
 
-function changed(cached: PriceProvenance, quoted: PriceProvenance): boolean {
-  if (cached.currency !== quoted.currency) return true;
+function currencyChanged(cached: PriceProvenance, quoted: PriceProvenance): boolean {
+  return cached.currency !== quoted.currency;
+}
+
+function listingChanged(cached: PriceProvenance, quoted: PriceProvenance): boolean {
   return cached.listing !== null && quoted.listing !== null && cached.listing !== quoted.listing;
 }
 
