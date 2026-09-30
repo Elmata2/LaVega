@@ -9,6 +9,10 @@ export type YahooPriceRequest = {
   symbol: string;
   currency: string;
   isin?: string;
+  /** A previously confirmed provider symbol. Fetched directly, skipping the
+   *  ISIN search and ticker guesses that a caller with no known listing pays
+   *  on every request. */
+  listing?: string;
   from?: string;
   to?: string;
   today?: string;
@@ -41,6 +45,7 @@ export function createYahooPriceProvider(
           exchange: request.exchange,
           isin: request.isin,
           currency: request.currency,
+          listing: request.listing,
           from: request.from,
           to: request.to ?? request.today ?? (input.today ?? currentDate)(),
           interval: "1d" as const,

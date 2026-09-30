@@ -54,10 +54,10 @@ export async function syncPrices(input: {
   if (coverage?.delistedSince && request.kind === "closed")
     return { bars: cachedBars, problems: [], fetched: false };
 
-  const ask = async (window: Window): Promise<Answer> => {
+  const ask = async (window: Window, listing?: string): Promise<Answer> => {
     const result = await firstProviderResult(
       input.priceProviders,
-      { ...request, ...window },
+      { ...request, ...window, listing },
       undefined,
       hasProblems,
     );
@@ -120,8 +120,31 @@ export async function syncPrices(input: {
     coverage.to < today ? { from: shiftDate(coverage.to, 1), to: today } : null;
   if (!prefix && !suffix) return { bars: cachedBars, problems: [], fetched: false };
 
-  const before = prefix && (await ask(prefix));
-  const after = suffix && (await ask(suffix));
+  /* A known listing is fetched directly, skipping the ISIN search and ticker
+   * guesses a caller with no locked listing pays on every sync (issue #101).
+   * Re-derive only when that listing turns out dead or, for a held symbol,
+   * stops quoting anything for longer than a quiet day explains. */
+  let reResolvedListing = false;
+  const resolveWindow = async (window: Window): Promise<Answer> => {
+    const locked = coverage.listing ?? undefined;
+    const first = await ask(window, locked);
+    if (!locked) return first;
+    const dead = !first.ok && first.notFound === true;
+    const stale =
+      first.ok &&
+      first.bars.length === 0 &&
+      request.kind === "current" &&
+      lastBarDate !== undefined &&
+      !isPriceFresh(lastBarDate, today);
+    if (!dead && !stale) return first;
+    const reResolved = await ask(window);
+    if (!reResolved.ok || reResolved.bars.length === 0) return first;
+    reResolvedListing = true;
+    return reResolved;
+  };
+
+  const before = prefix && (await resolveWindow(prefix));
+  const after = suffix && (await resolveWindow(suffix));
   if (isClosedNotFound(before) || isClosedNotFound(after)) return recordDelisted();
   /* A held listing quoting nothing for a while is not a holiday: unlike a
    * closed position, it is still owed forward price data. Give it the same
@@ -138,7 +161,13 @@ export async function syncPrices(input: {
   );
   const provenances = answered.flatMap((answer) => answer.provenance ?? []);
   const splitAfterCache = after?.ok && after.bars.some((bar) => (bar.split ?? 1) !== 1);
-  if (splitAfterCache || provenances.some((provenance) => changed(coverage, provenance)))
+  /* A listing change `resolveWindow` itself just confirmed is not the
+   * unrequested surprise `changed` exists to catch; a full refetch here
+   * would undo the very request saving this function makes. */
+  if (
+    splitAfterCache ||
+    (!reResolvedListing && provenances.some((provenance) => changed(coverage, provenance)))
+  )
     return refresh(refreshFrom);
 
   const problems = [before, after].flatMap((answer) =>

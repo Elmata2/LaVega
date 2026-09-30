@@ -740,6 +740,187 @@ test("a closed position that stops resolving mid-sync is marked delisted from th
   });
 });
 
+test("a resolved listing is fetched directly on the next sync, not re-derived", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SBGL_US_EQ",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "SBSW",
+    currency: "USD",
+  });
+  await store.upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async (_request: { listing?: string }) => ({
+    bars: [{ symbol: "SBGL_US_EQ", date: "2025-01-02", close: 11, currency: "USD", split: 1 }],
+    problems: [],
+    listing: "SBSW",
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(get.mock.calls[0]?.[0]).toMatchObject({ listing: "SBSW", isin: "US82575P1075" });
+});
+
+test("a stored listing that 404s triggers exactly one re-resolution", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SBGL_US_EQ",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "OLDSYM",
+    currency: "USD",
+  });
+  await store.upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async ({ listing }: { listing?: string }) =>
+    listing === "OLDSYM"
+      ? {
+          bars: [],
+          problems: ["No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)"],
+          notFound: true,
+        }
+      : {
+          bars: [
+            { symbol: "SBGL_US_EQ", date: "2025-01-02", close: 11, currency: "USD", split: 1 },
+          ],
+          problems: [],
+          listing: "NEWSYM",
+        },
+  );
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      kind: "current" as const,
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(get.mock.calls[0]?.[0]).toMatchObject({ listing: "OLDSYM" });
+  expect(get.mock.calls[1]?.[0]?.listing).toBeUndefined();
+  expect(result.problems).toEqual([]);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+    listing: "NEWSYM",
+  });
+});
+
+test("a resolved listing confirmed dead twice reports the problem without a second re-resolution", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SBGL_US_EQ",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "OLDSYM",
+    currency: "USD",
+  });
+  await store.upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      kind: "current" as const,
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(result.problems).toEqual([
+    "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
+  ]);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+    listing: "OLDSYM",
+  });
+});
+
+test("a resolved symbol's first sync still applies currency preference", async () => {
+  const store = createInMemoryPriceStore();
+  const fetchJsonWithCrumb = vi
+    .fn()
+    .mockResolvedValueOnce({
+      quotes: [
+        { symbol: "SBSWN.MX", exchange: "MEX" },
+        { symbol: "SBSW", exchange: "NYQ" },
+      ],
+    })
+    .mockResolvedValueOnce({ chart: { result: [{ meta: { currency: "MXN" } }] } })
+    .mockResolvedValueOnce({ chart: { result: [{ meta: { currency: "USD" } }] } })
+    .mockResolvedValueOnce({
+      chart: {
+        result: [
+          {
+            meta: { currency: "USD" },
+            timestamp: [Math.floor(Date.parse("2025-01-01T00:00:00Z") / 1000)],
+            indicators: { quote: [{ close: [10] }] },
+          },
+        ],
+      },
+    });
+  const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [provider],
+    request: {
+      ticker: "SBGL_US_EQ",
+      exchange: "UNKNOWN",
+      symbol: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      today: "2025-01-01",
+    },
+  });
+
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(4);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+    listing: "SBSW",
+  });
+});
+
 test("a cache written before splits were recorded refreshes once, then settles", async () => {
   const store = createInMemoryPriceStore();
   const sessions = weekdays("2025-01-06", "2025-01-10");
