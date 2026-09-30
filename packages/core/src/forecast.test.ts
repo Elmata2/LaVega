@@ -994,7 +994,9 @@ test("the same history, but steady, still scores high — dispersion only ever c
   // Zelfde vorm, zelfde dekking, zelfde aantal transacties: alleen het BEDRAG
   // is elke maand vrijwel gelijk. Als deze ook zou zakken, strafte de regel
   // geschiedenis in plaats van spreiding.
-  const txs = lumpyYear([5_000, 5_050, 4_980, 5_020, 5_000, 4_990, 5_010, 5_000, 5_030, 4_970, 5_000, 5_010]);
+  const txs = lumpyYear([
+    5_000, 5_050, 4_980, 5_020, 5_000, 4_990, 5_010, 5_000, 5_030, 4_970, 5_000, 5_010,
+  ]);
   const { consolidated } = forecastCashflow(txs, [LUMPY_ACC], {
     asOf: "2026-12-20",
     bufferCents: 0,

@@ -669,7 +669,7 @@ export default function App() {
      * het vroegen. Dat is dezelfde fout die dit veld moest wegnemen, één as
      * verderop. */
     const fetchedOn = new Date().toISOString().slice(0, 10);
-        const newAccounts: Account[] = [];
+    const newAccounts: Account[] = [];
     const rawTxs: Array<Omit<Tx, "id">> = [];
     for (const item of items) {
       /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
@@ -692,8 +692,7 @@ export default function App() {
       acc.balanceFetchedAt = fetchedOn;
       newAccounts.push(acc);
       const key = ebAccountKey(item.account);
-      for (const t of item.transactions ?? [])
-        rawTxs.push(mapEbTransaction(t, key, acc.currency));
+      for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
     }
     const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
     /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
@@ -724,8 +723,7 @@ export default function App() {
     // Reconcile invoices against the freshly linked bank txs (same as file import).
     const curInvoices = await storage.getInvoices();
     const reconciled = reconcileInvoices(curInvoices, ft);
-    if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
-      await saveInvoices(reconciled);
+    if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
     return { accounts: addedAccounts, txs: addedTxs };
   }
 

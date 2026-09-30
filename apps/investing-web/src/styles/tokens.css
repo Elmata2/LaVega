@@ -5,6 +5,8 @@
   --radius-card: var(--radius-card);
   --radius-frame: var(--radius-frame);
   --radius-pill: var(--radius-pill);
+  --radius-tile: 14px;
+  --radius-chip: 10px;
 
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -40,8 +42,11 @@
   --color-chart-amber: hsl(var(--chart-amber));
   --color-chart-coral: hsl(var(--chart-coral));
 
-  --shadow-soft: var(--shadow-soft);
-  --shadow-float: var(--shadow-float);
+  --shadow-md: var(--shadow-soft);
+  --shadow-xl: var(--shadow-float);
+
+  --tracking-eyebrow: 0.16em;
+  --text-2xs: 11px;
 
   --font-display: var(--font-display);
   --font-sans: var(--font-body);

@@ -368,8 +368,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (profile?.kind === "fund")
       return c.json({ kind: "fund" as const, sector: null, source: "provider" as const });
     const corrected = await sectorCorrectionStore.get(tenantId, symbol);
-    if (corrected) return c.json({ kind: "stock" as const, sector: corrected, source: "correction" as const });
-    if (!profile) return c.json({ kind: "unknown" as const, sector: UNKNOWN_SECTOR, source: "unknown" as const });
+    if (corrected)
+      return c.json({ kind: "stock" as const, sector: corrected, source: "correction" as const });
+    if (!profile)
+      return c.json({
+        kind: "unknown" as const,
+        sector: UNKNOWN_SECTOR,
+        source: "unknown" as const,
+      });
     /* Same visibility rule as the summary route (I1, #135 final review): an
      * inferred profile this tenant isn't allowed to see reads as Unknown. */
     const consented = await hasYahooConsent(tenantId);
@@ -427,7 +433,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const body: { exclude?: unknown } = await c.req.json().catch(() => ({}));
     let excluded = new Set<string>();
     if (body.exclude !== undefined) {
-      if (!Array.isArray(body.exclude) || !body.exclude.every((symbol) => typeof symbol === "string"))
+      if (
+        !Array.isArray(body.exclude) ||
+        !body.exclude.every((symbol) => typeof symbol === "string")
+      )
         return c.json({ problems: ["exclude must be a string array"] }, 400);
       excluded = new Set(
         body.exclude.slice(0, MAX_SECTOR_INFERENCE_EXCLUDE).map((symbol) => symbol.toUpperCase()),

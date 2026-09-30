@@ -25,8 +25,8 @@ function BrokerSetupCard({
   warning?: string;
 }) {
   return (
-    <article className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-      <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{eyebrow}</p>
+    <article className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6">
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">{eyebrow}</p>
       <h3 className="mt-2 font-display text-3xl font-semibold">{name}</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       <div className="mt-6 border-t border-border pt-5">
@@ -51,7 +51,7 @@ function BrokerSetupCard({
       {warning && (
         <p
           role="note"
-          className="mt-6 rounded-[14px] bg-warning/10 px-4 py-3 text-xs leading-5 text-foreground"
+          className="mt-6 rounded-tile bg-warning/10 px-4 py-3 text-xs leading-5 text-foreground"
         >
           {warning}
         </p>
@@ -99,7 +99,7 @@ function BrokerSyncAction() {
       {problems.length > 0 && (
         <div
           role="alert"
-          className="mt-4 basis-full rounded-[14px] border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
+          className="mt-4 basis-full rounded-tile border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
         >
           <p className="font-semibold">Sync not completed</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -136,7 +136,7 @@ function BrokerSyncProgressCard() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
             Broker sync
           </p>
           <h3 className="mt-2 font-display text-2xl font-semibold">
@@ -269,7 +269,7 @@ function BrokerVaultUnlock() {
       className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
+        <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
           Existing vault
         </p>
         <h3 className="mt-2 font-display text-2xl font-semibold">Unlock vault</h3>
@@ -286,7 +286,7 @@ function BrokerVaultUnlock() {
             autoComplete="current-password"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
-            className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
+            className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
           />
         </label>
         {message && (
@@ -376,11 +376,11 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
   return (
     <form
       onSubmit={submit}
-      className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"
+      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Step 2</p>
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Step 2</p>
           <h3 className="mt-2 font-display text-3xl font-semibold">Save credentials</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {passphraseMode === "unused"
@@ -411,7 +411,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
             autoComplete="off"
             value={token}
             onChange={(event) => setToken(event.target.value)}
-            className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
+            className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
           />
         </label>
         {broker === "ibkr" ? (
@@ -423,7 +423,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
               inputMode="numeric"
               value={queryId}
               onChange={(event) => setQueryId(event.target.value)}
-              className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
+              className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
             />
           </label>
         ) : (
@@ -436,7 +436,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
               autoComplete="off"
               value={secret}
               onChange={(event) => setSecret(event.target.value)}
-              className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
+              className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
             />
           </label>
         )}
@@ -450,7 +450,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
               autoComplete="new-password"
               value={passphrase}
               onChange={(event) => setPassphrase(event.target.value)}
-              className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
+              className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
             />
             <span className="mt-2 block text-xs font-normal text-muted-foreground">
               New vault? This password becomes the vault key. Keep it safe; LaVega cannot recover

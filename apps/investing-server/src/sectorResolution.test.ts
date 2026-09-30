@@ -15,7 +15,12 @@ const positions = [
 
 test("stored profiles classify priced positions and weight the exposure", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
   const { sectorBySymbol, exposure } = await resolvePortfolioSectors(positions, { store });
 
@@ -43,7 +48,12 @@ test("the fetch fallback persists what it resolves and degrades to Unknown on fa
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async (symbol: string) => {
     if (symbol === "myst") throw new Error("yahoo down");
-    return { kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const };
+    return {
+      kind: "stock" as const,
+      sector: "Technology",
+      industry: "Hardware",
+      source: "provider" as const,
+    };
   });
 
   const { sectorBySymbol } = await resolvePortfolioSectors(positions, { store, fetchProfile });
@@ -58,13 +68,15 @@ test("a fund profile's weights become the symbol's exposure split", async () => 
   const store = createInMemorySectorProfileStore();
   await store.set("VFEM.L", {
     kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.4 }, { sector: "Healthcare", weight: 0.5 }],
+    weights: [
+      { sector: "Technology", weight: 0.4 },
+      { sector: "Healthcare", weight: 0.5 },
+    ],
     source: "provider",
   });
-  const { exposure } = await resolvePortfolioSectors(
-    [{ symbol: "VFEM.L", marketValue: 100 }],
-    { store },
-  );
+  const { exposure } = await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], {
+    store,
+  });
   expect(exposure).toEqual([
     { sector: "Healthcare", weight: 0.5 },
     { sector: "Technology", weight: 0.4 },
@@ -79,7 +91,10 @@ test("a fund's headline sectorBySymbol label is its single largest weight", asyn
   const store = createInMemorySectorProfileStore();
   await store.set("VFEM.L", {
     kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.4 }, { sector: "Healthcare", weight: 0.5 }],
+    weights: [
+      { sector: "Technology", weight: 0.4 },
+      { sector: "Healthcare", weight: 0.5 },
+    ],
     source: "provider",
   });
   const { sectorBySymbol, weightsBySymbol } = await resolvePortfolioSectors(
@@ -263,7 +278,12 @@ test("a read-only lookup (no fetchProfile) never re-fetches a stale fund profile
 
 test("a stock profile is never re-fetched for staleness even when very old", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const fetchProfile = vi.fn();
 
   await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, fetchProfile });
@@ -275,7 +295,12 @@ test("an owner correction outranks a freshly-fetched stock and never invokes the
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async (symbol: string) =>
     symbol === "AAPL"
-      ? { kind: "stock" as const, sector: "Technology", industry: "Hardware", source: "provider" as const }
+      ? {
+          kind: "stock" as const,
+          sector: "Technology",
+          industry: "Hardware",
+          source: "provider" as const,
+        }
       : null,
   );
   const classifier = vi.fn();
@@ -311,7 +336,12 @@ test("a correction for a symbol with no cached profile is applied directly when 
 
 test("a correction for a cached stock short-circuits with zero fetch or classifier calls", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const fetchProfile = vi.fn();
   const classifier = vi.fn();
   const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
@@ -402,11 +432,14 @@ test("a correction against an already-cached fund is ignored on every later reso
   const fetchProfile = vi.fn();
   const correction = vi.fn(async () => "Energy");
 
-  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "VFEM.L", marketValue: 100 }], {
-    store,
-    fetchProfile,
-    correction,
-  });
+  const { sectorBySymbol } = await resolvePortfolioSectors(
+    [{ symbol: "VFEM.L", marketValue: 100 }],
+    {
+      store,
+      fetchProfile,
+      correction,
+    },
+  );
 
   expect(sectorBySymbol.get("VFEM.L")).toBe("Technology");
   expect(fetchProfile).not.toHaveBeenCalled();
@@ -436,7 +469,11 @@ test("a provider profile is used and the classifier is never called", async () =
     source: "provider" as const,
   }));
 
-  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store, fetchProfile, classifier });
+  await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+    fetchProfile,
+    classifier,
+  });
 
   expect(classifier).not.toHaveBeenCalled();
 });
@@ -491,11 +528,17 @@ test("an explicit no-match is cached as an inferred Unknown, so the classifier i
   const store = createInMemorySectorProfileStore();
   const classifier = vi.fn(async () => ({ kind: "no-match" as const }));
 
-  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
   expect(first.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
   expect(await store.get("MYST")).toMatchObject({ source: "inferred" });
 
-  const second = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  const second = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
   expect(second.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
   expect(classifier).toHaveBeenCalledTimes(1);
 });
@@ -504,7 +547,10 @@ test("a failed classification is never cached, so it is retried on the next pass
   const store = createInMemorySectorProfileStore();
   const classifier = vi.fn(async () => ({ kind: "failed" as const, reason: "budget refusal" }));
 
-  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store, classifier });
+  const first = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+    classifier,
+  });
   expect(first.sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
   expect(await store.get("MYST")).toBeNull();
 
@@ -516,7 +562,12 @@ test("a classifier that throws for one symbol doesn't fail the whole batch, and 
   const store = createInMemorySectorProfileStore();
   const classifier = vi.fn(async (instrument: { symbol: string }) => {
     if (instrument.symbol === "BOOM") throw new Error("System One timed out");
-    return { kind: "classified" as const, sector: "Technology", specificity: "sector" as const, confidence: 0.9 };
+    return {
+      kind: "classified" as const,
+      sector: "Technology",
+      specificity: "sector" as const,
+      confidence: 0.9,
+    };
   });
 
   const { sectorBySymbol } = await resolvePortfolioSectors(
@@ -604,10 +655,13 @@ test("an inferred sector outside the GICS-or-division taxonomy is never displaye
     confidence: 0.95,
   }));
 
-  const { sectorBySymbol, exposure } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
-    store,
-    classifier,
-  });
+  const { sectorBySymbol, exposure } = await resolvePortfolioSectors(
+    [{ symbol: "MYST", marketValue: 100 }],
+    {
+      store,
+      classifier,
+    },
+  );
 
   expect(sectorBySymbol.get("MYST")).toBe(UNKNOWN_SECTOR);
   expect(exposure).toEqual([{ sector: UNKNOWN_SECTOR, weight: 1 }]);
@@ -615,18 +669,32 @@ test("an inferred sector outside the GICS-or-division taxonomy is never displaye
 
 test("a division label on a provider-sourced profile is not trusted and resolves to Unknown", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("ACME", { kind: "stock", sector: "Cyclical", industry: "Widgets", source: "provider" });
+  await store.set("ACME", {
+    kind: "stock",
+    sector: "Cyclical",
+    industry: "Widgets",
+    source: "provider",
+  });
 
-  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "ACME", marketValue: 100 }], { store });
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "ACME", marketValue: 100 }], {
+    store,
+  });
 
   expect(sectorBySymbol.get("ACME")).toBe(UNKNOWN_SECTOR);
 });
 
 test("coverage attributes a provider-sourced position to provider and sums to 1", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
-  const { coverage } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], { store });
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
+    store,
+  });
 
   expect(coverage).toEqual({ provider: 1, inferred: 0, correction: 0, unknown: 0 });
 });
@@ -650,7 +718,12 @@ test("coverage attributes an inferred position to inferred", async () => {
 
 test("coverage attributes a corrected position to correction, outranking a stored provider profile", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const correction = vi.fn(async (symbol: string) => (symbol === "AAPL" ? "Healthcare" : null));
 
   const { coverage } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
@@ -664,7 +737,9 @@ test("coverage attributes a corrected position to correction, outranking a store
 test("coverage attributes an unresolved position to unknown", async () => {
   const store = createInMemorySectorProfileStore();
 
-  const { coverage } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], { store });
+  const { coverage } = await resolvePortfolioSectors([{ symbol: "MYST", marketValue: 100 }], {
+    store,
+  });
 
   expect(coverage).toEqual({ provider: 0, inferred: 0, correction: 0, unknown: 1 });
 });
@@ -714,7 +789,12 @@ test("an inferred profile still shows when showInferred is true or omitted", asy
 
 test("a provider profile is unaffected by showInferred: false", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
   const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "AAPL", marketValue: 100 }], {
     store,
@@ -748,7 +828,12 @@ test("resolvedStockSector reports Unknown, not the inferred label, when showInfe
 
 test("coverage splits across a mixed portfolio and sums to 1", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
   const classifier = vi.fn(async ({ symbol }: { symbol: string }) =>
     symbol === "MYST"
       ? {
@@ -772,8 +857,7 @@ test("coverage splits across a mixed portfolio and sums to 1", async () => {
   expect(coverage.provider).toBeCloseTo(0.5, 12);
   expect(coverage.inferred).toBeCloseTo(0.3, 12);
   expect(coverage.unknown).toBeCloseTo(0.2, 12);
-  expect(coverage.provider + coverage.inferred + coverage.correction + coverage.unknown).toBeCloseTo(
-    1,
-    12,
-  );
+  expect(
+    coverage.provider + coverage.inferred + coverage.correction + coverage.unknown,
+  ).toBeCloseTo(1, 12);
 });

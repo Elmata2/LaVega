@@ -91,16 +91,20 @@ test("no sector data yet reads as an honest empty state, not a broken card", () 
 
 test("renders a loading placeholder without claiming an outcome", () => {
   const { container, root } = render();
-  act(() => root.render(<SectorAllocationCard state={{ status: "loading" }} refresh={noRefresh} />));
-  expect(container.querySelector('[data-dashboard-section="sectors"]')?.getAttribute("aria-busy")).toBe(
-    "true",
+  act(() =>
+    root.render(<SectorAllocationCard state={{ status: "loading" }} refresh={noRefresh} />),
   );
+  expect(
+    container.querySelector('[data-dashboard-section="sectors"]')?.getAttribute("aria-busy"),
+  ).toBe("true");
 });
 
 test("renders the shared summary error instead of a second one", () => {
   const { container, root } = render();
   act(() =>
-    root.render(<SectorAllocationCard state={{ status: "error", message: "boom" }} refresh={noRefresh} />),
+    root.render(
+      <SectorAllocationCard state={{ status: "error", message: "boom" }} refresh={noRefresh} />,
+    ),
   );
   const alert = container.querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("boom");
@@ -143,7 +147,12 @@ test("shows the coverage line with each nonzero source, omitting the rest", () =
           ...readyState,
           data: {
             ...readyState.data,
-            sectorCoverage: coverage({ provider: 0.82, inferred: 0.1, correction: 0.03, unknown: 0.05 }),
+            sectorCoverage: coverage({
+              provider: 0.82,
+              inferred: 0.1,
+              correction: 0.03,
+              unknown: 0.05,
+            }),
           },
         }}
         refresh={noRefresh}
@@ -160,7 +169,10 @@ test("omits a coverage source that rounds to zero", () => {
   act(() =>
     root.render(
       <SectorAllocationCard
-        state={{ ...readyState, data: { ...readyState.data, sectorCoverage: coverage({ provider: 1 }) } }}
+        state={{
+          ...readyState,
+          data: { ...readyState.data, sectorCoverage: coverage({ provider: 1 }) },
+        }}
         refresh={noRefresh}
       />,
     ),
@@ -192,7 +204,9 @@ test("three equal thirds round to sum to 100 instead of dropping a point", () =>
   expect(match).not.toBeNull();
   const [, provider, inferred, correction] = match!;
   expect(Number(provider) + Number(inferred) + Number(correction)).toBe(100);
-  expect(container.textContent).toContain("34% from provider data · 33% inferred · 33% your corrections");
+  expect(container.textContent).toContain(
+    "34% from provider data · 33% inferred · 33% your corrections",
+  );
 });
 
 test("shows no coverage line when the summary predates sectorCoverage", () => {
@@ -208,7 +222,8 @@ test("classifies unknown positions once inference is enabled, then refreshes", a
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer")
         return new Response(JSON.stringify({ classified: 2, remaining: 0 }));
       throw new Error(`unexpected fetch: ${url}`);
@@ -241,7 +256,8 @@ test("never calls infer when inference is disabled, even with unknown coverage",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: false }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: false }));
       throw new Error(`unexpected fetch: ${url}`);
     }),
   );
@@ -270,7 +286,8 @@ test("stops the bounded infer loop instead of looping forever when classificatio
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer") {
         calls += 1;
         return new Response(JSON.stringify({ classified: 10, remaining: 40 }));
@@ -304,7 +321,8 @@ test("an unrelated re-render mid-run, handing a new refresh closure, doesn't can
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer")
         return new Promise<Response>((resolve) => {
           resolveInfer = resolve;
@@ -349,7 +367,8 @@ test("stops the infer loop on 428 without refreshing when nothing was classified
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer")
         return new Response(JSON.stringify({ problems: ["Sector inference is not enabled"] }), {
           status: 428,
@@ -382,7 +401,8 @@ test("a classifier that always fails triggers at most the capped number of POSTs
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer") {
         calls += 1;
         return new Response(
@@ -427,7 +447,8 @@ test("sends symbols the server reported as failed back as exclude on the next at
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/investing/sector-inference") return new Response(JSON.stringify({ enabled: true }));
+      if (url === "/api/investing/sector-inference")
+        return new Response(JSON.stringify({ enabled: true }));
       if (url === "/api/investing/sectors/infer") {
         bodies.push(init?.body ? (JSON.parse(String(init.body)) as { exclude?: unknown }) : {});
         return new Response(

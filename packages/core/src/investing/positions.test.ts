@@ -90,14 +90,7 @@ test("position return stays unavailable for incomplete history and a zero denomi
 });
 
 test("a genuinely missing FX rate keeps the missing-fx status and carries no problem", () => {
-  const result = calculatePositionReturn(
-    10,
-    20,
-    [trade({ date: "2099-01-01" })],
-    [],
-    "EUR",
-    rates,
-  );
+  const result = calculatePositionReturn(10, 20, [trade({ date: "2099-01-01" })], [], "EUR", rates);
   expect(result).toMatchObject({ status: "missing-fx" });
   expect(result.problem).toBeUndefined();
 });

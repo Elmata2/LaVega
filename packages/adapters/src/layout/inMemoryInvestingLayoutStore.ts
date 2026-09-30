@@ -9,10 +9,7 @@ export function createInMemoryInvestingLayoutStore(
   initial: InvestingLayoutSelection[] = [],
 ): InvestingLayoutStore {
   const rows = new Map<string, InvestingLayout>(
-    initial.map((selection) => [
-      selection.tenantId,
-      validateInvestingLayout(selection),
-    ]),
+    initial.map((selection) => [selection.tenantId, validateInvestingLayout(selection)]),
   );
   return {
     async get(tenantId) {

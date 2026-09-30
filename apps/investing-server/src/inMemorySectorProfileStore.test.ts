@@ -79,7 +79,12 @@ test("set() strips a fund profile's non-GICS and out-of-range weights, keeping t
 
 test("an inferred write never overwrites an existing provider profile", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
   await store.set("AAPL", {
     kind: "stock",
@@ -96,9 +101,19 @@ test("an inferred write never overwrites an existing provider profile", async ()
 
 test("a provider write still replaces an existing provider profile", async () => {
   const store = createInMemorySectorProfileStore();
-  await store.set("AAPL", { kind: "stock", sector: "Technology", industry: "Hardware", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
 
-  await store.set("AAPL", { kind: "stock", sector: "Healthcare", industry: "Biotech", source: "provider" });
+  await store.set("AAPL", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Biotech",
+    source: "provider",
+  });
 
   expect(await store.get("AAPL")).toMatchObject({ sector: "Healthcare", source: "provider" });
 });

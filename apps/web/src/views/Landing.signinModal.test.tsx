@@ -163,9 +163,7 @@ test("submitting valid credentials navigates to the app, not a pushState", async
   const el = render(onEnter);
   act(() => click(loginButton(el)));
   act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
-  act(() =>
-    setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"),
-  );
+  act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
   expect(assign).toHaveBeenCalledWith("/app");
   expect(onEnter).not.toHaveBeenCalled();

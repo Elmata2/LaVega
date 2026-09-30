@@ -40,9 +40,9 @@ test("any one unfinished section is enough to hold the figures back", () => {
  * gevulde waarde bewijst dat er ooit een volledige stand was. Samenvoegen gaat
  * op id, dus wat er nu ligt is die stand plus nieuwe rijen — een superset. */
 test("a resumed sync after a complete one shows, and says it is updating", () => {
-  expect(historyGate({ trading212: { ...midFirstSync, lastSyncedAt: "2026-09-01T00:00:00Z" } })).toEqual(
-    { kind: "ready", updating: ["trading212"] },
-  );
+  expect(
+    historyGate({ trading212: { ...midFirstSync, lastSyncedAt: "2026-09-01T00:00:00Z" } }),
+  ).toEqual({ kind: "ready", updating: ["trading212"] });
 });
 
 test("everything complete is simply ready", () => {
@@ -57,7 +57,12 @@ test("everything complete is simply ready", () => {
 test("a broker that never ran does not hold the screen", () => {
   expect(
     historyGate({
-      ibkr: { lastSyncedAt: null, ordersComplete: true, transactionsComplete: true, dividendsComplete: true },
+      ibkr: {
+        lastSyncedAt: null,
+        ordersComplete: true,
+        transactionsComplete: true,
+        dividendsComplete: true,
+      },
     }),
   ).toEqual({ kind: "ready", updating: [] });
 });
