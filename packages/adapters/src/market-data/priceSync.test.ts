@@ -534,6 +534,72 @@ test("an empty trading-day suffix is asked for once, not on every sync", async (
   expect(get).not.toHaveBeenCalled();
 });
 
+test("a held position's quiet day within the missed-days window is not a problem", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "ASML.AS",
+    currency: "EUR",
+  });
+  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  const { get, providers } = market([{ date: "2025-01-01", close: 100 }]);
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: providers,
+    request: {
+      ...request,
+      kind: "current" as const,
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(result.problems).toEqual([]);
+  expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+});
+
+test("a held position silent for more than 5 business days reports a problem every run", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "ASML.AS",
+    currency: "EUR",
+  });
+  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  const get = vi.fn(async () => ({ bars: [], problems: [], listing: "ASML.AS" }));
+  const priceProviders = [{ sourceKey: "stub", priority: 10, get }];
+  const sync = () =>
+    syncPrices({
+      store,
+      tenantId: "local",
+      priceProviders,
+      request: {
+        ...request,
+        kind: "current" as const,
+        backfillFrom: "2025-01-01",
+        today: "2025-01-10",
+      },
+    });
+
+  const result = await sync();
+
+  expect(result.problems).toEqual(["no prices since 2025-01-01"]);
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-01" });
+
+  get.mockClear();
+  const second = await sync();
+
+  expect(get).toHaveBeenCalled();
+  expect(second.problems).toEqual(["no prices since 2025-01-01"]);
+});
+
 test("a closed position Yahoo confirms gone is marked delisted, not a problem", async () => {
   const store = createInMemoryPriceStore();
   const get = vi.fn(async () => ({
@@ -592,6 +658,46 @@ test("a held position Yahoo confirms gone still reports a problem", async () => 
 
   expect(result.problems).toEqual(["No listing found on Yahoo Finance for SBGL (tried 1 symbol)"]);
   await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toBeNull();
+});
+
+test("a re-bought position clears its stale delistedSince once bars arrive again", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SKX_US_EQ",
+    from: "2020-01-01",
+    to: "2025-12-31",
+    listing: "SKX",
+    currency: "USD",
+    delistedSince: "2026-01-01",
+  });
+  await store.upsert("local", [
+    { symbol: "SKX_US_EQ", date: "2025-12-31", close: 60, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async () => ({
+    bars: [{ symbol: "SKX_US_EQ", date: "2026-01-02", close: 65, currency: "USD", split: 1 }],
+    problems: [],
+    listing: "SKX",
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: {
+      ...request,
+      symbol: "SKX_US_EQ",
+      ticker: "SKX_US_EQ",
+      currency: "USD",
+      kind: "current" as const,
+      backfillFrom: "2020-01-01",
+      today: "2026-01-02",
+    },
+  });
+
+  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+    delistedSince: undefined,
+  });
 });
 
 test("a closed position that stops resolving mid-sync is marked delisted from the suffix path", async () => {

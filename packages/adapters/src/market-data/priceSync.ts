@@ -1,4 +1,4 @@
-import type { PriceBar } from "@lavega/core";
+import { isPriceFresh, type PriceBar } from "@lavega/core";
 import type { PriceCoverage, PriceProvenance, PriceStore } from "../prices/PriceStore.js";
 import type { Provider } from "./providerRouter.js";
 import { firstProviderResult, hasProblems } from "./providerRouter.js";
@@ -48,6 +48,7 @@ export async function syncPrices(input: {
     store.getCoverage(tenantId, request.symbol),
   ]);
   const coverage = storedCoverage ?? coverageOf(request.symbol, cachedBars);
+  const lastBarDate = cachedBars.at(-1)?.date;
 
   /* Already confirmed dead: nothing future can change that answer. */
   if (coverage?.delistedSince && request.kind === "closed")
@@ -122,7 +123,19 @@ export async function syncPrices(input: {
   const before = prefix && (await ask(prefix));
   const after = suffix && (await ask(suffix));
   if (isClosedNotFound(before) || isClosedNotFound(after)) return recordDelisted();
-  const answered = [before, after].filter((answer) => answer?.ok === true);
+  /* A held listing quoting nothing for a while is not a holiday: unlike a
+   * closed position, it is still owed forward price data. Give it the same
+   * missed-days grace `isPriceFresh` already gives a stale value elsewhere,
+   * then stop treating silence as a covered, unremarkable gap. */
+  const afterIsStaleQuiet =
+    after?.ok === true &&
+    after.bars.length === 0 &&
+    request.kind === "current" &&
+    lastBarDate !== undefined &&
+    !isPriceFresh(lastBarDate, today);
+  const answered = [before, afterIsStaleQuiet ? null : after].filter(
+    (answer) => answer?.ok === true,
+  );
   const provenances = answered.flatMap((answer) => answer.provenance ?? []);
   const splitAfterCache = after?.ok && after.bars.some((bar) => (bar.split ?? 1) !== 1);
   if (splitAfterCache || provenances.some((provenance) => changed(coverage, provenance)))
@@ -131,6 +144,7 @@ export async function syncPrices(input: {
   const problems = [before, after].flatMap((answer) =>
     answer?.ok === false ? answer.problems : [],
   );
+  if (afterIsStaleQuiet) problems.push(`no prices since ${lastBarDate}`);
   if (answered.length === 0) return { bars: cachedBars, problems, fetched: true };
   const bars = answered.flatMap((answer) => answer.bars);
   if (bars.length) await store.upsert(tenantId, bars);
@@ -138,7 +152,11 @@ export async function syncPrices(input: {
     ...coverage,
     listing: provenances.at(-1)?.listing ?? coverage.listing,
     from: prefix && before?.ok ? prefix.from : coverage.from,
-    to: after?.ok ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to) : coverage.to,
+    to:
+      after?.ok && !afterIsStaleQuiet
+        ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to)
+        : coverage.to,
+    delistedSince: bars.length > 0 ? undefined : coverage.delistedSince,
   });
   return { bars: bars.length ? await read() : cachedBars, problems, fetched: true };
 }
