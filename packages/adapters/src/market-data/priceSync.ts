@@ -25,6 +25,10 @@ type Answer =
   | { ok: true; bars: PriceBar[]; provenance: PriceProvenance | null }
   | { ok: false; problems: string[]; notFound?: boolean };
 
+/** How long a locked listing must have been unconfirmed before a fresh
+ *  not-found answer counts as confirmed rather than possibly transient. */
+const LISTING_MISSING_CONFIRMATION_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Brings one symbol's cache to cover `backfillFrom` through `today`.
  *
@@ -39,9 +43,13 @@ export async function syncPrices(input: {
   tenantId: string;
   priceProviders: readonly Provider<YahooPriceRequest, PriceProviderResult>[];
   request: PriceSyncInput;
+  /** Injectable for tests; the wall clock a `listingMissingSince` confirmation
+   *  gap is measured against, independent of `request.today`'s calendar date. */
+  now?: () => Date;
 }): Promise<PriceSyncResult> {
   const { store, tenantId, request } = input;
-  const today = request.today ?? new Date().toISOString().slice(0, 10);
+  const nowMs = (input.now ?? (() => new Date()))().getTime();
+  const today = request.today ?? new Date(nowMs).toISOString().slice(0, 10);
   const wanted: Window = { from: request.backfillFrom, to: today };
   const [cachedBars, storedCoverage] = await Promise.all([
     store.getRange(tenantId, request.symbol, wanted.from, today),
@@ -127,12 +135,15 @@ export async function syncPrices(input: {
    * stops quoting anything for longer than a quiet day explains.
    *
    * A held symbol's dead listing is not replaced on one 404: a transient
-   * Yahoo failure would otherwise lock onto whatever the re-resolution probe
-   * happens to return. `listingMissingSince` (already set from a prior sync)
-   * is what makes a 404 confirmed rather than a first occurrence; a closed
-   * position, already exiting through `recordDelisted` below, does not need
-   * this second opinion. */
-  const listingConfirmedMissing = coverage.listingMissingSince != null;
+   * Yahoo failure, or two syncs seconds apart from repeat page loads, would
+   * otherwise lock onto whatever the re-resolution probe happens to return.
+   * `listingMissingSince` set at least `LISTING_MISSING_CONFIRMATION_MS`
+   * earlier is what makes a 404 confirmed rather than a first occurrence or
+   * too recent to mean anything; a closed position, already exiting through
+   * `recordDelisted` below, does not need this second opinion. */
+  const listingConfirmedMissing =
+    coverage.listingMissingSince != null &&
+    nowMs - Date.parse(coverage.listingMissingSince) >= LISTING_MISSING_CONFIRMATION_MS;
   let reResolvedListing = false;
   const resolveWindow = async (window: Window): Promise<Answer> => {
     const locked = coverage.listing ?? undefined;
@@ -199,7 +210,7 @@ export async function syncPrices(input: {
     succeededNow(before) || succeededNow(after)
       ? undefined
       : notFoundNow(before) || notFoundNow(after)
-        ? (coverage.listingMissingSince ?? today)
+        ? (coverage.listingMissingSince ?? new Date(nowMs).toISOString())
         : coverage.listingMissingSince;
 
   if (answered.length === 0) {

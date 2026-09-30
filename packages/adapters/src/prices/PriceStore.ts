@@ -11,10 +11,11 @@ export type PriceProvenance = { listing: string | null; currency: string };
  *  gone (every candidate 404s): a known end state for a position that will
  *  never trade again, not a problem to keep retrying.
  *
- *  `listingMissingSince` marks a held position's locked listing as
- *  unconfirmed after a not-found answer, so a single transient 404 cannot
- *  swap it out; only a not-found answer on a later sync, with this already
- *  set, counts as confirmed. Cleared the next time the listing answers. */
+ *  `listingMissingSince` (an ISO timestamp, not a date) marks a held
+ *  position's locked listing as unconfirmed after a not-found answer, so a
+ *  single transient 404 cannot swap it out; only a not-found answer at
+ *  least 24 hours later, with this already set, counts as confirmed.
+ *  Cleared the next time the listing answers. */
 export type PriceCoverage = PriceProvenance & {
   symbol: string;
   from: string;

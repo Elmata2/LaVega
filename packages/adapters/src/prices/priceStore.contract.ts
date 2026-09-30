@@ -128,10 +128,13 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
 
     test("coverage keeps a listingMissingSince marker across reads", async () => {
       const store = createStore();
-      await store.putCoverage("local", { ...coverage, listingMissingSince: "2026-01-01" });
+      await store.putCoverage("local", {
+        ...coverage,
+        listingMissingSince: "2026-01-01T09:30:00.000Z",
+      });
       expect(await store.getCoverage("local", "AAA")).toEqual({
         ...coverage,
-        listingMissingSince: "2026-01-01",
+        listingMissingSince: "2026-01-01T09:30:00.000Z",
       });
     });
 

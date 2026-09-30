@@ -474,7 +474,7 @@ export function createPriceBarRepository(
     async getCoverage(symbol) {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since, 'YYYY-MM-DD') AS "listingMissingSince" FROM investing.price_coverage WHERE symbol = $1`,
+          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince" FROM investing.price_coverage WHERE symbol = $1`,
           [symbol],
         );
         const row = result.rows[0] as

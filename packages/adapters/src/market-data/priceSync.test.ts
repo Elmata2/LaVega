@@ -812,6 +812,7 @@ test("a stored listing that 404s triggers exactly one re-resolution once confirm
     store,
     tenantId: "local",
     priceProviders,
+    now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
       ...request,
       symbol: "SBGL_US_EQ",
@@ -857,6 +858,7 @@ test("a single 404 on a locked listing is not enough to re-resolve", async () =>
     store,
     tenantId: "local",
     priceProviders,
+    now: () => new Date("2025-01-02T00:00:00.000Z"),
     request: {
       ...request,
       symbol: "SBGL_US_EQ",
@@ -876,7 +878,109 @@ test("a single 404 on a locked listing is not enough to re-resolve", async () =>
   ]);
   await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
     listing: "OLDSYM",
-    listingMissingSince: "2025-01-02",
+    listingMissingSince: "2025-01-02T00:00:00.000Z",
+  });
+});
+
+test("a second 404 one minute after the first is still unconfirmed", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SBGL_US_EQ",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "OLDSYM",
+    currency: "USD",
+    listingMissingSince: "2025-01-02T00:00:00.000Z",
+  });
+  await store.upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async (_request: { listing?: string }) => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    now: () => new Date("2025-01-02T00:01:00.000Z"),
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      kind: "current" as const,
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(result.problems).toEqual([
+    "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
+  ]);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+    listing: "OLDSYM",
+    listingMissingSince: "2025-01-02T00:00:00.000Z",
+  });
+});
+
+test("a second 404 confirmed 25 hours after the first triggers exactly one re-resolution", async () => {
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "SBGL_US_EQ",
+    from: "2025-01-01",
+    to: "2025-01-01",
+    listing: "OLDSYM",
+    currency: "USD",
+    listingMissingSince: "2025-01-01T00:00:00.000Z",
+  });
+  await store.upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
+  ]);
+  const get = vi.fn(async ({ listing }: { listing?: string }) =>
+    listing === "OLDSYM"
+      ? {
+          bars: [],
+          problems: ["No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)"],
+          notFound: true,
+        }
+      : {
+          bars: [
+            { symbol: "SBGL_US_EQ", date: "2025-01-02", close: 11, currency: "USD", split: 1 },
+          ],
+          problems: [],
+          listing: "NEWSYM",
+        },
+  );
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    now: () => new Date("2025-01-02T01:00:00.000Z"),
+    request: {
+      ...request,
+      symbol: "SBGL_US_EQ",
+      ticker: "SBGL_US_EQ",
+      currency: "USD",
+      isin: "US82575P1075",
+      kind: "current" as const,
+      backfillFrom: "2025-01-01",
+      today: "2025-01-02",
+    },
+  });
+
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(result.problems).toEqual([]);
+  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+    listing: "NEWSYM",
+    listingMissingSince: undefined,
   });
 });
 
@@ -888,7 +992,7 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
     to: "2025-01-01",
     listing: "OLDSYM",
     currency: "USD",
-    listingMissingSince: "2025-01-01",
+    listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
   await store.upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
@@ -904,6 +1008,7 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
     store,
     tenantId: "local",
     priceProviders,
+    now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
       ...request,
       symbol: "SBGL_US_EQ",
@@ -922,7 +1027,7 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
   ]);
   await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
     listing: "OLDSYM",
-    listingMissingSince: "2025-01-01",
+    listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
 });
 
@@ -1005,6 +1110,7 @@ test("a confirmed re-resolution to a different-currency listing refreshes instea
     store,
     tenantId: "local",
     priceProviders,
+    now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
       ...request,
       symbol: "SBGL_US_EQ",
@@ -1065,6 +1171,7 @@ test("re-resolution prefers the currency already on record over the broker's sta
     store,
     tenantId: "local",
     priceProviders,
+    now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
       ...request,
       symbol: "SBGL_US_EQ",

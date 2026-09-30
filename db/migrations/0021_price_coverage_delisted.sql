@@ -19,8 +19,9 @@ ALTER TABLE investing.price_coverage
 
 /* See PriceCoverage.listingMissingSince (packages/adapters). Null: the locked
  * listing last answered; set on its first confirmed-not-found sync, cleared
- * on its next successful one. */
+ * on its next successful one. Timestamped, not dated: confirmation needs a
+ * 24-hour gap, which a day boundary alone cannot tell apart from a minute. */
 ALTER TABLE investing.price_coverage
-  ADD COLUMN IF NOT EXISTS listing_missing_since DATE;
+  ADD COLUMN IF NOT EXISTS listing_missing_since TIMESTAMPTZ;
 
 COMMIT;

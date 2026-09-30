@@ -62,14 +62,18 @@ test("delistedSince round-trips and clears when the position trades again", asyn
   expect(await prices.getCoverage("SKX")).toEqual({ ...coverage, symbol: "SKX" });
 });
 
-test("listingMissingSince round-trips and clears once the listing answers again", async () => {
+test("listingMissingSince round-trips as a timestamp and clears once the listing answers again", async () => {
   const prices = createPriceBarRepository(db, "user-i");
 
-  await prices.putCoverage({ ...coverage, symbol: "SBGL", listingMissingSince: "2026-01-01" });
+  await prices.putCoverage({
+    ...coverage,
+    symbol: "SBGL",
+    listingMissingSince: "2026-01-01T09:30:00.000Z",
+  });
   expect(await prices.getCoverage("SBGL")).toEqual({
     ...coverage,
     symbol: "SBGL",
-    listingMissingSince: "2026-01-01",
+    listingMissingSince: "2026-01-01T09:30:00.000Z",
   });
 
   await prices.putCoverage({ ...coverage, symbol: "SBGL" });
