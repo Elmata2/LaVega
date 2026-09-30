@@ -112,6 +112,13 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Activity** — dated broker events for one instrument: trades and dividends. Several events can share one date without an invented order when timestamps are unavailable.
 - **Quantity history** — dated changes in held units, used to explain partial buys and sells. It is an expandable detail, not a separate position.
 - **Closed position** — an instrument with zero current quantity but retained trade or dividend history. It remains addressable through its detail route.
+- **Thread** — one saved conversation between the user and one portfolio agent. The user can list past threads, reopen them, and delete them. Deleting a thread also deletes the observations taken from it, but never a thesis, a goal, a position, or broker data.
+- **Thesis** — the user's reason for owning one instrument: why they own it, their view of what it is worth, the entry reasoning, and what would prove them wrong. There is one thesis per instrument, shared by all brokers and all agents. The user confirms it, can edit it, and cannot delete it on its own.
+- **Dormant thesis** — the thesis of a closed position. Agents do not use it. When the user buys the instrument again, the agent shows it, explicitly labelled as from a previous holding, and asks whether it is still true.
+- **Goal** — a target outcome the user states in conversation. It is about the whole portfolio (for example €500 per month in dividends) or about one instrument (for example trim above 15% weight). A view of what a stock is worth is part of the thesis, not a goal.
+- **Observation** — something an agent noted from a thread, so it can later say "last month you said...". It belongs to its thread.
+- **Risk tolerance** — a user profile setting with three levels: Conservative, Balanced, Aggressive. Every agent reads it before it answers. If it is not set, the agent asks once in conversation and saves the answer.
+- **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, and profile setting. It is separate from deleting one thread.
 
 ## Conventions
 
