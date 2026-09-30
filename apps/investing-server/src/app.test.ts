@@ -1714,6 +1714,140 @@ test("infer classifies unknown priced symbols and caches the result", async () =
   });
 });
 
+test("infer skips a renamed holding already cached under its price-resolved listing, and never calls the classifier for it", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("OAC_US_EQ", 100));
+  const sectorClassifier = vi.fn();
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorStore,
+    store,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    classified: 0,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
+  expect(sectorClassifier).not.toHaveBeenCalled();
+});
+
+test("infer classifies a renamed holding under its price-resolved listing when nothing is cached yet", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("OAC_US_EQ", 100, "Hims & Hers Health"));
+  const sectorClassifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Healthcare",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorStore,
+    store,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    classified: 1,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
+  expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare", source: "inferred" });
+  expect(await sectorStore.get("OAC_US_EQ")).toBeNull();
+});
+
+test("infer classifies two broker symbols that resolve to the same listing only once", async () => {
+  const sectorStore = createInMemorySectorProfileStore();
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  await store.putCoverage("local", {
+    symbol: "HIMS_OLD",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();
+  await sectorInferenceSettingStore.set("local", true);
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("OAC_US_EQ", 100, "Hims & Hers Health"));
+  dashboard.positions.push(pricedPosition("HIMS_OLD", 50, "Hims & Hers Health"));
+  const sectorClassifier = vi.fn(async () => ({
+    kind: "classified" as const,
+    sector: "Healthcare",
+    specificity: "sector" as const,
+    confidence: 0.9,
+  }));
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    marketDataConsentStore: acceptedConsentStore(),
+    sectorInferenceSettingStore,
+    sectorStore,
+    store,
+    sectorClassifier,
+  });
+
+  const response = await investingApp.request("/api/investing/sectors/infer", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(sectorClassifier).toHaveBeenCalledTimes(1);
+  expect(await response.json()).toEqual({
+    classified: 1,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
+  expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare", source: "inferred" });
+});
+
 test("infer reports classified vs failed separately, and caches nothing for a failing classifier", async () => {
   const sectorStore = createInMemorySectorProfileStore();
   const sectorInferenceSettingStore = createInMemorySectorInferenceSettingStore();

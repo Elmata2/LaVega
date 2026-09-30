@@ -8,7 +8,12 @@ import {
   type SectorWeight,
   type SectorWeightSource,
 } from "@lavega/core";
-import type { FundSectorProfile, SectorProfile, StockSectorProfile } from "@lavega/adapters";
+import type {
+  FundSectorProfile,
+  PriceStore,
+  SectorProfile,
+  StockSectorProfile,
+} from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 import type { SectorClassifier } from "./sectorClassifier.js";
 
@@ -87,6 +92,20 @@ export type PortfolioSectors = {
    *  or unknown, over the same positions. */
   coverage: SectorCoverage;
 };
+
+/** Every sector route's `resolveListing`: the Yahoo listing symbol price
+ *  sync already proved a broker symbol trades under (PriceStore.getCoverage's
+ *  `listing`), so a renamed or SPAC-era broker code is looked up under the
+ *  same ticker prices settled on instead of the stale code. A local/DB read,
+ *  never a provider call. Null when prices have never resolved a listing for
+ *  this symbol. */
+export async function resolveSectorListing(
+  priceStore: PriceStore,
+  tenantId: string,
+  symbol: string,
+): Promise<string | null> {
+  return (await priceStore.getCoverage(tenantId, symbol))?.listing ?? null;
+}
 
 /** Bounded fan-out to the sector-profile provider (a single upstream host,
  *  fc.yahoo.com / query2.finance.yahoo.com): high enough that ~200 distinct

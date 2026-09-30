@@ -25,7 +25,7 @@ import { createProblemReporter } from "./observability.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
 import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
-import { resolvePortfolioSectors } from "./sectorResolution.js";
+import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
   benchmarkDisplayName,
@@ -817,7 +817,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     },
   };
   /* Sectors resolve read-only, as for the Analyse card: stored profiles and
-   * the owner's corrections, never a provider fetch on the chat path. */
+   * the owner's corrections, never a provider fetch on the chat path.
+   * resolveListing is still wired in — it's a local PriceStore read, not a
+   * provider fetch — so the chat sees a renamed holding under the same
+   * listing the summary route already cached it under. */
   const portfolioChatContext = async (): Promise<PortfolioChatContext> => {
     const tenantId = await resolveTenantId();
     const [data, consent, corrections, inferenceEnabled] = await Promise.all([
@@ -830,6 +833,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       store: sectorDependencies.sectorStore,
       correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
       showInferred: consent.accepted && inferenceEnabled,
+      resolveListing: (symbol) => resolveSectorListing(priceStore, tenantId, symbol),
     }).catch(() => ({ exposure: null }));
     return {
       ...data,

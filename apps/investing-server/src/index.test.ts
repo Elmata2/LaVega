@@ -16,6 +16,7 @@ import {
   createRuntimeBrokerSync,
 } from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -499,6 +500,35 @@ test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", 
     failedSymbols: [],
     remaining: 0,
   });
+});
+
+test("portfolio chat context resolves a renamed holding's sector through its price-resolved listing", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const store = createInMemoryPriceStore();
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPLX", {
+    kind: "stock",
+    sector: "Real Estate",
+    industry: "Unknown",
+    source: "provider",
+  });
+  const runtimeApp = await createRuntimeApp({ priceStore: store, sectorStore });
+  // The fixture's AAPL position exists before price sync ever resolves a
+  // listing for it, exactly like a real renamed holding: the summary route
+  // already cached its sector profile under the listing prices settled on
+  // (AAPLX), not under the broker symbol still on the position.
+  await store.putCoverage("local", {
+    symbol: "AAPL",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "AAPLX",
+    currency: "USD",
+  });
+
+  const context = await runtimeApp.portfolioChatContext();
+
+  expect(context.sectors?.some((exposure) => exposure.sector === "Real Estate")).toBe(true);
 });
 
 test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
