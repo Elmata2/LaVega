@@ -5,8 +5,17 @@ import type { PriceBar } from "@lavega/core";
 export type PriceProvenance = { listing: string | null; currency: string };
 
 /** The dates a provider has answered for one symbol, bars or not. A date
- *  inside with no bar is a day the market was closed, not a gap to fetch. */
-export type PriceCoverage = PriceProvenance & { symbol: string; from: string; to: string };
+ *  inside with no bar is a day the market was closed, not a gap to fetch.
+ *
+ *  `delistedSince` marks a closed position whose listing Yahoo confirmed
+ *  gone (every candidate 404s): a known end state for a position that will
+ *  never trade again, not a problem to keep retrying. */
+export type PriceCoverage = PriceProvenance & {
+  symbol: string;
+  from: string;
+  to: string;
+  delistedSince?: string;
+};
 
 /** Storage seam for daily market-data bars. Deliberately separate from CRUD storage.
  *  Tenancy is an argument on every operation, never a field on a bar, so no caller

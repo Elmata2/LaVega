@@ -353,13 +353,15 @@ export type PriceBarRepository = {
   purgeAll(): Promise<void>;
 };
 
-/** The dates the provider answered for one symbol, and what it quoted them as. */
+/** The dates the provider answered for one symbol, and what it quoted them
+ *  as. `delistedSince` mirrors `PriceCoverage.delistedSince` (adapters). */
 export type PriceCoverageRow = {
   symbol: string;
   from: string;
   to: string;
   listing: string | null;
   currency: string;
+  delistedSince?: string;
 };
 
 /** The repository is built for one tenant, so a row never names its own. */
@@ -470,17 +472,27 @@ export function createPriceBarRepository(
     async getCoverage(symbol) {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency FROM investing.price_coverage WHERE symbol = $1`,
+          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince" FROM investing.price_coverage WHERE symbol = $1`,
           [symbol],
         );
-        return (result.rows[0] as PriceCoverageRow | undefined) ?? null;
+        const row = result.rows[0] as
+          | (PriceCoverageRow & { delistedSince: string | null })
+          | undefined;
+        return row ? { ...row, delistedSince: row.delistedSince ?? undefined } : null;
       });
     },
     async putCoverage(coverage) {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, updated_at = CURRENT_TIMESTAMP",
-          [coverage.symbol, coverage.from, coverage.to, coverage.listing, coverage.currency],
+          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, updated_at = CURRENT_TIMESTAMP",
+          [
+            coverage.symbol,
+            coverage.from,
+            coverage.to,
+            coverage.listing,
+            coverage.currency,
+            coverage.delistedSince ?? null,
+          ],
         );
       });
     },
