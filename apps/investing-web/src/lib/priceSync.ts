@@ -76,8 +76,7 @@ export async function runPriceSyncUntilComplete(
           break;
         }
       }
-      if (active)
-        return { kind: "incomplete", message: PRICE_SYNC_EXHAUSTED_MESSAGE };
+      if (active) return { kind: "incomplete", message: PRICE_SYNC_EXHAUSTED_MESSAGE };
       continue;
     }
     /* Only a completed run has problems to report. */

@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { EmptyState } from "./EmptyState";
+import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
@@ -67,7 +68,7 @@ function MarkerDetails({
     <section
       role="status"
       aria-live="polite"
-      className="rounded-[12px] border border-border bg-secondary/30 p-3 text-xs"
+      className="rounded-xl border border-border bg-secondary/30 p-3 text-xs"
     >
       <p className="font-semibold">
         {dateLabel(date)} · Close {priceLabel(close, currency)}
@@ -159,7 +160,7 @@ export function PositionPriceChart({
 
   return (
     <Card>
-      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Price history</p>
           <CardTitle>{symbol}</CardTitle>
@@ -207,7 +208,7 @@ export function PositionPriceChart({
                   max={maxDate}
                   value={dateFrom}
                   onChange={(event) => setDateFrom(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                  className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                 />
               </label>
               <label className="font-semibold text-muted-foreground">
@@ -219,7 +220,7 @@ export function PositionPriceChart({
                   max={maxDate}
                   value={dateTo}
                   onChange={(event) => setDateTo(event.target.value)}
-                  className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground"
+                  className="mt-1 block rounded-chip border border-input bg-background px-2 py-1.5 font-normal text-foreground"
                 />
               </label>
               <button
@@ -252,7 +253,7 @@ export function PositionPriceChart({
               role="img"
               tabIndex={0}
               aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-[12px] outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-pan-y select-none rounded-xl outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
                 chart.handlers.onKeyDown(event);
                 setActiveEventDate(null);
@@ -338,11 +339,7 @@ export function PositionPriceChart({
                   onClick={() => activateMarker(pointIndex, marker.eventDate)}
                   className="pressable inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1.5 font-semibold"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: markerColors[marker.kind] }}
-                  />
+                  <Swatch className="size-2 rounded-full" color={markerColors[marker.kind]} />
                   {dateLabel(marker.eventDate)} · {marker.label}
                 </button>
               ))}

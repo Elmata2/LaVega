@@ -520,8 +520,6 @@ test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", asyn
   if (agenda) expect(agenda.getAttribute("aria-checked")).not.toBe("false");
 });
 
-
-
 /* ══════ CASHBACK CORRIGEREN — de feedbackmodule ═════════════════════════════
  *
  * App review 4, punt 22. Hij vroeg om de aanname "een gewone kaart heeft geen

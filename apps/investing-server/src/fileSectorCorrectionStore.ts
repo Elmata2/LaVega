@@ -36,8 +36,7 @@ export function createFileSectorCorrectionStore(
     async get(tenantId, symbol) {
       const rows = await store.read();
       return (
-        rows.find((row) => row.tenantId === tenantId && row.symbol === key(symbol))?.sector ??
-        null
+        rows.find((row) => row.tenantId === tenantId && row.symbol === key(symbol))?.sector ?? null
       );
     },
     async getAll(tenantId) {

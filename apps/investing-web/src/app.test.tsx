@@ -5,12 +5,14 @@ import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App, HealthStatus } from "./app";
 import { forgetDashboards } from "./lib/dashboardResource";
+import { forgetPortfolioChats } from "./lib/portfolioAgents";
 import { resetInvestingLayoutStoreForTests } from "./lib/layoutResource";
 import { PERSONAL_URL } from "./lib/personal";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 import {
-  agentConversation,
   agentInsight,
+  agentReply,
+  agentReplyStream,
   dashboard,
   deferredLayoutFetch,
   emptyDashboard,
@@ -30,6 +32,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   globalThis.localStorage?.clear();
   forgetDashboards();
+  forgetPortfolioChats();
 });
 test("overview shell fetches and displays investing server health", async () => {
   vi.stubGlobal(
@@ -150,7 +153,7 @@ test("overview shows priced positions total when history is still unavailable", 
           if (url === "/api/agents/portfolio/run" && init?.method === "POST")
             return new Response(JSON.stringify({ result: agentInsight }));
           if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
-            return new Response(JSON.stringify({ result: agentConversation }));
+            return agentReplyStream();
           if (url === "/api/brokers/sync" && init?.method === "POST")
             return new Response(
               JSON.stringify({ problems: ["ibkr: credentials are not configured"] }),
@@ -608,7 +611,9 @@ test("hiding both risk and sectors makes zero summary requests", async () => {
       return Promise.resolve(
         withAuthUnconfigured(input, () =>
           String(input) === "/api/investing/layout"
-            ? new Response(JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }))
+            ? new Response(
+                JSON.stringify({ modules: {}, widgets: { risk: false, sectors: false } }),
+              )
             : responseFor(input, init),
         ),
       );
@@ -811,14 +816,15 @@ test("agent route opens focused chat with the account positions", async () => {
   const runRequest = requests.find(
     (request) => request.url === "/api/agents/portfolio/conversation",
   );
-  expect(runRequest?.init?.body).toBe(
-    JSON.stringify({
-      agentId: "bill_ackman",
-      prompt: "Waarom is ASML mijn grootste risico?",
-      history: [],
-    }),
-  );
-  expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
+  const body = JSON.parse(String(runRequest?.init?.body)) as {
+    agentId: string;
+    messages: Array<{ role: string; parts: Array<{ type: string; text: string }> }>;
+  };
+  expect(body.agentId).toBe("bill_ackman");
+  expect(body.messages.map((message) => [message.role, message.parts[0]?.text])).toEqual([
+    ["user", "Waarom is ASML mijn grootste risico?"],
+  ]);
+  await vi.waitFor(() => expect(container.textContent).toContain(agentReply));
   root.unmount();
 });
 
@@ -827,11 +833,7 @@ test("an assistant reply's markdown renders through AgentMessageText, but a user
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/agents/portfolio/conversation" && init?.method === "POST")
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ result: { ...agentConversation, text: "This is **bold** advice." } }),
-          ),
-        );
+        return Promise.resolve(agentReplyStream("This is **bold** advice."));
       return Promise.resolve(responseFor(input, init));
     }),
   );
@@ -2025,14 +2027,11 @@ test("agent route keeps a reply with the persona that asked for it", async () =>
   expect(container.textContent).not.toContain("is reading positions…");
 
   await act(async () => {
-    releaseRun?.(new Response(JSON.stringify({ result: agentConversation })));
-    await Promise.resolve();
-    await Promise.resolve();
+    releaseRun?.(agentReplyStream());
+    await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
-  expect(container.textContent).not.toContain(
-    "ASML is concentrated but priced with clear conviction.",
-  );
+  expect(container.textContent).not.toContain(agentReply);
   expect(container.querySelector<HTMLInputElement>("#agent-message")?.disabled).toBe(false);
 
   await act(async () => {
@@ -2040,7 +2039,7 @@ test("agent route keeps a reply with the persona that asked for it", async () =>
     window.dispatchEvent(new PopStateEvent("popstate"));
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
+  expect(container.textContent).toContain(agentReply);
   root.unmount();
   window.history.pushState({}, "", "/");
 });
@@ -2222,7 +2221,9 @@ test("switching a module off on /profile removes its top-bar tab without a reloa
   expect(agentsTab()).not.toBeNull();
 
   await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Agents in the top bar"]')
+      ?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(agentsTab()).toBeNull();
@@ -2448,7 +2449,9 @@ test("/net-worth renders the net-worth chart", async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.querySelector('[role="group"][aria-label="Choose net worth period"]')).not.toBeNull();
+  expect(
+    container.querySelector('[role="group"][aria-label="Choose net worth period"]'),
+  ).not.toBeNull();
   root.unmount();
 });
 

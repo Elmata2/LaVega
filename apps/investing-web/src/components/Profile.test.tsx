@@ -672,7 +672,6 @@ test("Trading 212 requires both halves of the key pair", async () => {
   root.unmount();
 });
 
-
 test("signing out and in as another user drops the first user's layout and unsent edits", async () => {
   type User = "a" | "b";
   let user: User | null = "a";
@@ -688,7 +687,9 @@ test("signing out and in as another user drops the first user's layout and unsen
       const url = String(input);
       if (url === "/api/auth/get-session")
         return Promise.resolve(
-          new Response(JSON.stringify(user ? { user: { id: user, email: `${user}@x.test` } } : null)),
+          new Response(
+            JSON.stringify(user ? { user: { id: user, email: `${user}@x.test` } } : null),
+          ),
         );
       if (url === "/api/auth/sign-out") {
         user = null;
@@ -829,9 +830,7 @@ test("a switch flipped after a failed load saves only that choice, so a module t
   });
   expect(bodies).toEqual([{ modules: { agents: false, "net-worth": false }, widgets: {} }]);
   expect(control("Agents in the top bar").getAttribute("aria-checked")).toBe("false");
-  expect(
-    container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]'),
-  ).toBeNull();
+  expect(container.querySelector('nav[aria-label="Main navigation"] a[href="/agents"]')).toBeNull();
   act(() => root.unmount());
 });
 
@@ -863,7 +862,9 @@ test("the sector-inference switch is disabled without market-data consent", asyn
     await Promise.resolve();
   });
 
-  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  const toggle = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Sector inference"]',
+  )!;
   expect(toggle.getAttribute("aria-disabled")).toBe("true");
   expect(container.textContent).toContain("Grant market-data consent");
   root.unmount();
@@ -910,7 +911,8 @@ test("the sector-inference switch turns on and persists once consent is granted"
       Promise.resolve(
         withAuthUnconfigured(input, () => {
           const url = String(input);
-          if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+          if (url === "/api/market-data/consent")
+            return new Response(JSON.stringify({ accepted: true }));
           if (url === "/api/investing/sector-inference" && init?.method === "PUT") {
             puts.push(JSON.parse(String(init.body)));
             return new Response(JSON.stringify({ enabled: true }));
@@ -935,7 +937,9 @@ test("the sector-inference switch turns on and persists once consent is granted"
     await Promise.resolve();
   });
 
-  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  const toggle = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Sector inference"]',
+  )!;
   expect(toggle.getAttribute("aria-disabled")).not.toBe("true");
   expect(toggle.getAttribute("aria-checked")).toBe("false");
   await act(async () => {
@@ -977,7 +981,9 @@ test("the sector-inference switch is disabled with a hint when the server has no
     await Promise.resolve();
   });
 
-  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  const toggle = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Sector inference"]',
+  )!;
   expect(toggle.getAttribute("aria-disabled")).toBe("true");
   expect(container.textContent).toContain("Sector inference is not available on this server.");
   expect(container.textContent).not.toContain("Grant market-data consent");
@@ -1012,7 +1018,9 @@ test("the sector-inference switch stays enabled when the server omits availabili
     await Promise.resolve();
   });
 
-  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Sector inference"]')!;
+  const toggle = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Sector inference"]',
+  )!;
   expect(toggle.getAttribute("aria-disabled")).not.toBe("true");
   root.unmount();
 });

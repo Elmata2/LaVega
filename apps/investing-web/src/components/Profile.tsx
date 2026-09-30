@@ -138,8 +138,8 @@ function DataSection() {
             <div className="min-w-0">
               <p className="font-semibold">Sector inference</p>
               <p className="text-sm text-muted-foreground">
-                Sends each holding's ticker and name, never quantities or values, to an AI model
-                to classify positions with no sector data. Needs market-data consent.
+                Sends each holding's ticker and name, never quantities or values, to an AI model to
+                classify positions with no sector data. Needs market-data consent.
               </p>
               {!available ? (
                 <p className="mt-1 text-xs text-warning">
@@ -202,7 +202,7 @@ function StatusChip({
             ? "bg-primary"
             : "bg-muted-foreground";
   return (
-    <div className={`rounded-[14px] border px-3 py-2.5 ${toneClass}`}>
+    <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2 text-xs font-semibold">
           <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />
@@ -210,7 +210,7 @@ function StatusChip({
         </span>
         <span className="text-xs font-semibold">{value}</span>
       </div>
-      {detail && <p className="mt-1 truncate pl-4 text-[11px] text-muted-foreground">{detail}</p>}
+      {detail && <p className="mt-1 truncate pl-4 text-2xs text-muted-foreground">{detail}</p>}
       {children}
     </div>
   );

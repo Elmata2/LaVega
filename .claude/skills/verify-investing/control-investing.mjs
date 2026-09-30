@@ -26,11 +26,12 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const skillDir = dirname(fileURLToPath(import.meta.url));
@@ -40,6 +41,10 @@ const SELF = "node .claude/skills/verify-investing/control-investing.mjs";
 const stateRoot = process.env.VERIFY_INVESTING_DIR || "/tmp/lavega-verify-investing";
 const runDir = join(stateRoot, "run"); // torn down by `down` / `cleanup`
 const evidenceDir = join(stateRoot, "evidence"); // survives teardown
+/* browse validateOutputPath allows /tmp (after realpath) and the daemon's git
+ * root from process start. A state dir outside /tmp is not that root. PNGs
+ * then go here, which is under /tmp even when VERIFY_INVESTING_DIR is not. */
+const SCREENSHOT_EVIDENCE = "/tmp/lavega-verify-investing/evidence";
 const pidFile = join(runDir, "local.pid");
 const portFile = join(runDir, "local.port");
 const dataFile = join(runDir, "local.data");
@@ -1196,8 +1201,7 @@ function resolveCredentials(flags) {
     };
   if (targetName(flags) === "preview") {
     const pulled = pullVercelVerifyCredentials();
-    if (pulled.email)
-      return { email: pulled.email, password: pulled.password, from: "vercel-env" };
+    if (pulled.email) return { email: pulled.email, password: pulled.password, from: "vercel-env" };
   }
   if (flags.email && flags.password)
     return {
@@ -1819,6 +1823,10 @@ function redact(value) {
 }
 
 function runBrowse(args) {
+  // The browse binary starts its server by spawning `bun` from PATH. Install
+  // puts ~/.bun/bin on PATH only for that process; later browser commands
+  // must do it again or open fails with ENOENT even after a successful install.
+  prependBunPath();
   const bin = browseBin();
   if (!existsSync(bin))
     fail(
@@ -1890,10 +1898,11 @@ function browseOutputText(step) {
 /* Chromium not installed is the one failure every fresh machine hits. */
 function browseFix(step) {
   const text = browseOutputText(step);
-  if (/Path must be within/i.test(text))
-    return "browse only reads and writes under /tmp or its working directory: keep VERIFY_INVESTING_DIR and --out under /tmp";
+  if (/Path must be within/i.test(text)) return PNG_PATH_FIX;
   if (/Executable doesn't exist|playwright install/i.test(text))
     return "install the pinned Chromium once: bunx playwright@1.58.2 install chromium";
+  if (/Executable not found in \$PATH:\s*"bun"|ENOENT[\s\S]*spawn bun/i.test(text))
+    return `browse starts its server with bun from PATH. This CLI prepends ~/.bun/bin when that file exists. If it is absent, run \`${SELF} browser install\`.`;
   if (sandboxRefusedChromium(text)) return SANDBOX_BROWSE_FIX;
   if (/no (element|match)|not found|timeout/i.test(text))
     return `take a fresh \`${SELF} browser snapshot --interactive\` and use an @e ref from it`;
@@ -2039,10 +2048,76 @@ function commandBrowserSnapshot({ flags }) {
   return browseAndPrint(args);
 }
 
+/**
+ * browse `validateOutputPath` (gstack browse/src/path-security.ts) allows a
+ * write only under realpath(/tmp), under os.tmpdir() when that dir is not
+ * `/`, `$HOME`, or a parent of the daemon cwd, or under the daemon cwd. The
+ * daemon cwd is the git root from when that process started, not this shell.
+ * The check realpaths the parent, and if that is missing, the grandparent
+ * only. `/tmp/lavega-verify-investing/evidence/shot.png` is rejected when
+ * neither directory exists, even though the path is under /tmp. Agents then
+ * retry a file directly in /tmp. Create the parent here, and refuse anything
+ * that is not under /tmp, so the first path is one browse accepts.
+ */
+const PNG_PATH_FIX = `use \`${SELF} browser screenshot --png /tmp/lavega-verify-investing/evidence/<name>.png\`. browse writes a PNG only under /tmp (after realpath) or the daemon git root from when that daemon started — not this shell's cwd, not the repo, not $TMPDIR, and not os.tmpdir() when that is outside /tmp. A path under /tmp is also rejected when its parent directory does not exist, because browse realpaths only one level up. This command creates /tmp/lavega-verify-investing/evidence before it calls browse. Do not retry a different folder.`;
+
+function tmpRootReal() {
+  try {
+    return realpathSync("/tmp");
+  } catch {
+    return "/tmp";
+  }
+}
+
+function pathWithin(child, parent) {
+  return child === parent || child.startsWith(`${parent}${sep}`);
+}
+
+/** Absolute path after walking to an existing ancestor. Null when not under /tmp. */
+function locateUnderTmp(filePath) {
+  const absolute = resolve(String(filePath));
+  let current = absolute;
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  let real;
+  try {
+    real = realpathSync(current);
+  } catch {
+    return null;
+  }
+  const suffix = absolute.slice(current.length).replace(/^[/\\]/, "");
+  const full = suffix ? join(real, suffix) : real;
+  if (!pathWithin(full, tmpRootReal())) return null;
+  return { absolute, full };
+}
+
+/** Evidence dir when it is under /tmp; otherwise the fixed /tmp evidence dir. */
+function pngDirectory() {
+  return locateUnderTmp(join(evidenceDir, "shot.png")) ? evidenceDir : SCREENSHOT_EVIDENCE;
+}
+
+function assertPngPath(filePath) {
+  const located = locateUnderTmp(filePath);
+  if (!located)
+    fail(`screenshot path rejected: ${resolve(String(filePath))}`, PNG_PATH_FIX, {
+      code: "path-rejected",
+    });
+  return located;
+}
+
+function preparePngPath(filePath) {
+  const located = assertPngPath(filePath);
+  mkdirSync(dirname(located.absolute), { recursive: true });
+  return located.absolute;
+}
+
 /** PNG path. Global `--out` is the JSON dump and must not be this file. */
 function screenshotPath(flags) {
   if (flags.png) return resolve(String(flags.png));
-  return join(evidenceDir, `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
+  return join(pngDirectory(), `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
 }
 
 function commandBrowserScreenshot({ flags }) {
@@ -2051,14 +2126,64 @@ function commandBrowserScreenshot({ flags }) {
   if (outputPath && resolve(out) === outputPath)
     fail(
       "--png and --out point at the same file",
-      "pass --png for the PNG and --out for the JSON dump, as two different paths under /tmp",
+      "pass --png for the PNG and --out for the JSON dump, as two different paths under /tmp/lavega-verify-investing/evidence",
       { code: "flag-invalid" },
     );
+  preparePngPath(out);
   const args = ["screenshot"];
   if (flags.viewport) args.push("--viewport");
   if (flags.selector) args.push(String(flags.selector));
   args.push(out);
   return browseAndPrint(args, { saved: out });
+}
+
+/** `browser raw` paths that browse will validate. `mkdir` only on a real run. */
+function rawOutputPaths(args, mkdir) {
+  const apply = mkdir ? preparePngPath : (file) => assertPngPath(file).absolute;
+  const command = args[0];
+  if (command === "snapshot") {
+    for (let index = 1; index < args.length; index += 1) {
+      if (args[index] === "-o" || args[index] === "--output") {
+        const file = args[index + 1];
+        if (file && !file.startsWith("-")) apply(expandHome(file));
+      }
+    }
+    return;
+  }
+  if (command !== "screenshot" && command !== "pdf" && command !== "prettyscreenshot") return;
+  let skipNext = false;
+  for (const arg of args.slice(1)) {
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    if (
+      arg === "--selector" ||
+      arg === "--clip" ||
+      arg === "--scroll-to" ||
+      arg === "--hide" ||
+      arg === "--width" ||
+      arg === "--format"
+    ) {
+      skipNext = true;
+      continue;
+    }
+    if (arg.startsWith("-")) continue;
+    const isPath = arg.includes("/") || arg.startsWith("~") || /\.(png|jpe?g|webp|pdf)$/i.test(arg);
+    if (!isPath) continue;
+    apply(expandHome(arg));
+  }
+}
+
+function expandHome(filePath) {
+  if (filePath === "~") return process.env.HOME ?? filePath;
+  if (filePath.startsWith("~/")) return join(process.env.HOME ?? "", filePath.slice(2));
+  return filePath;
+}
+
+function commandBrowserRaw({ args }) {
+  rawOutputPaths(args, true);
+  return browseAndPrint(args);
 }
 
 function commandBrowserConsole({ flags }) {
@@ -2510,13 +2635,14 @@ const COMMANDS = [
   {
     name: "browser screenshot",
     group: "Browser",
-    summary: "Save a PNG under evidence (or --png). --out is the JSON dump",
+    summary: "Save a PNG under /tmp evidence (or --png). --out is the JSON dump",
     description:
-      "The PNG defaults to evidence/screenshot-<time>.png. --png sets the image path. --out writes this command's JSON and must be a different path; it does not replace the PNG. browser raw -- screenshot <path> writes the PNG at <path> and does not use --out.",
+      "The PNG must be under /tmp. Default is evidence/screenshot-<time>.png when that evidence directory is under /tmp, and /tmp/lavega-verify-investing/evidence/screenshot-<time>.png when VERIFY_INVESTING_DIR is not. This command creates the directory before browse runs. browse rejects a repo path, this shell's cwd, $TMPDIR, and os.tmpdir() outside /tmp, and it also rejects a /tmp path whose parent directory does not exist (it realpaths only one level). --png sets the image path. --out writes this command's JSON and must be a different path; it does not replace the PNG. browser raw -- screenshot <path> uses the same /tmp rule. Do not retry a different folder.",
     flags: {
       png: {
         type: "string",
-        description: "PNG path (default: evidence/screenshot-<time>.png). Not --out",
+        description:
+          "PNG path under /tmp (default: /tmp/lavega-verify-investing/evidence/screenshot-<time>.png when the state dir is outside /tmp). Not --out",
       },
       out: {
         type: "string",
@@ -2640,11 +2766,14 @@ const COMMANDS = [
     group: "Browser",
     summary: "Pass arguments straight to browse: browser raw -- <args>",
     description:
-      "The escape hatch for browse commands not wrapped here; run `browse --help` for the list.",
+      "The escape hatch for browse commands not wrapped here; run `browse --help` for the list. screenshot, pdf, prettyscreenshot, and snapshot -o paths must be under /tmp. The command creates the parent directory. A repo path or $TMPDIR path is path-rejected before browse runs.",
     args: [{ name: "args", required: true, variadic: true }],
     effect: "browser-action",
-    plan: ({ args }) => ({ browse: args }),
-    run: ({ args }) => browseAndPrint(args),
+    plan: ({ args }) => {
+      rawOutputPaths(args, false);
+      return { browse: args };
+    },
+    run: commandBrowserRaw,
     examples: ["browser raw -- is visible @e3", "browser raw -- viewport 390x844"],
   },
 ];
@@ -2786,7 +2915,8 @@ Targets (every command)
 Every side effect takes --dry-run. Writes on --target prod need --allow-prod-write.
 Output is JSON. Errors are JSON on stderr with a "fix". Exit: 0 ok, 1 check failed, 2 usage/refused.
 More: \`<command> --help\`, \`browser --help\`, \`help --json\` (whole surface as JSON).
-Evidence lives in ${evidenceDir}; run state in ${runDir}.`;
+Evidence lives in ${evidenceDir}; PNG screenshots in ${pngDirectory()}; run state in ${runDir}.
+A PNG must be under /tmp. Use /tmp/lavega-verify-investing/evidence/<name>.png.`;
 }
 
 function groupText(prefix) {

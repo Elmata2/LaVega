@@ -171,14 +171,24 @@ export const agentInsight = {
   model: "test-model",
   snapshotHash: "hash",
 };
-export const agentConversation = {
-  agentId: "bill_ackman",
-  displayName: "Bill Ackman",
-  text: "ASML is concentrated but priced with clear conviction.",
-  model: "openrouter-test",
-  snapshotHash: "snapshot",
-  judgment: { signal: "bullish", confidence: 80 },
-};
+export const agentReply = "ASML is concentrated but priced with clear conviction.";
+
+/** The UI message stream the conversation route answers with. */
+export function agentReplyStream(text = agentReply): Response {
+  const chunks = [
+    { type: "start" },
+    { type: "start-step" },
+    { type: "text-start", id: "text-1" },
+    { type: "text-delta", id: "text-1", delta: text },
+    { type: "text-end", id: "text-1" },
+    { type: "finish-step" },
+    { type: "finish" },
+  ];
+  return new Response(
+    [...chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`), "data: [DONE]\n\n"].join(""),
+    { headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" } },
+  );
+}
 
 /* Every existing test here predates sign-up and runs against a backend
  * with no DATABASE_URL / BETTER_AUTH_SECRET, exactly like local dev — so
@@ -204,7 +214,7 @@ export function responseFor(input: RequestInfo | URL, init?: RequestInit) {
     if (url === "/api/agents/portfolio/run" && init?.method === "POST")
       return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentConversation }));
+      return agentReplyStream();
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
@@ -251,7 +261,7 @@ export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
     if (url === "/api/agents/portfolio/run" && init?.method === "POST")
       return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
-      return new Response(JSON.stringify({ result: agentConversation }));
+      return agentReplyStream();
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard"))
@@ -259,4 +269,3 @@ export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
     return new Response(JSON.stringify({}));
   });
 }
-

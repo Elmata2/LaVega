@@ -96,101 +96,97 @@ export default function Onboarding({ onDone }: OnboardingProps) {
       <Card as="form" className="vault-gate-card" aria-label={c.ariaLabel} onSubmit={finish}>
         <h2>{c.title}</h2>
         <p className="cell-sub">{c.intro}</p>
-          <Field>
-            <label htmlFor="ob-locale">{c.languageLabel}</label>
-            <select
-              id="ob-locale"
-              value={locale}
-              onChange={(e) => setAppLocale(e.target.value as Locale)}
-            >
-              <option value="nl">Nederlands</option>
-              <option value="en">English</option>
-            </select>
-          </Field>
+        <Field>
+          <label htmlFor="ob-locale">{c.languageLabel}</label>
+          <select
+            id="ob-locale"
+            value={locale}
+            onChange={(e) => setAppLocale(e.target.value as Locale)}
+          >
+            <option value="nl">Nederlands</option>
+            <option value="en">English</option>
+          </select>
+        </Field>
 
-          <Field>
-            <label htmlFor="ob-first">{c.firstNameLabel}</label>
-            <input id="ob-first" value={first} onChange={(e) => setFirst(e.target.value)} />
-          </Field>
-          <Field>
-            <label htmlFor="ob-last">{c.lastNameLabel}</label>
-            <input id="ob-last" value={last} onChange={(e) => setLast(e.target.value)} />
-          </Field>
-          <p className="cell-sub">{c.nameNote}</p>
+        <Field>
+          <label htmlFor="ob-first">{c.firstNameLabel}</label>
+          <input id="ob-first" value={first} onChange={(e) => setFirst(e.target.value)} />
+        </Field>
+        <Field>
+          <label htmlFor="ob-last">{c.lastNameLabel}</label>
+          <input id="ob-last" value={last} onChange={(e) => setLast(e.target.value)} />
+        </Field>
+        <p className="cell-sub">{c.nameNote}</p>
 
+        <Field>
+          <label htmlFor="ob-country">{c.countryLabel}</label>
+          <select
+            id="ob-country"
+            value={country}
+            onChange={(e) => {
+              setCountry(e.target.value);
+              // Een regio hoort bij het land dat hij toen koos. Hem laten
+              // staan zou "Bayern" onder Canada kunnen zetten.
+              setRegion("");
+            }}
+          >
+            <option value="">—</option>
+            {countryListIn(locale).map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className="cell-sub">{c.countryHint}</p>
+
+        {country !== "" && (
           <Field>
-            <label htmlFor="ob-country">{c.countryLabel}</label>
-            <select
-              id="ob-country"
-              value={country}
-              onChange={(e) => {
-                setCountry(e.target.value);
-                // Een regio hoort bij het land dat hij toen koos. Hem laten
-                // staan zou "Bayern" onder Canada kunnen zetten.
-                setRegion("");
-              }}
-            >
-              <option value="">—</option>
-              {countryListIn(locale).map((o) => (
-                <option key={o.code} value={o.code}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="ob-region">{regionLabelIn(locale, country)}</label>
+            {regionOptions.length > 0 ? (
+              <select id="ob-region" value={region} onChange={(e) => setRegion(e.target.value)}>
+                <option value="">—</option>
+                {regionOptions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="ob-region"
+                value={region}
+                placeholder={c.regionPlaceholder}
+                onChange={(e) => setRegion(e.target.value)}
+              />
+            )}
           </Field>
-          <p className="cell-sub">{c.countryHint}</p>
+        )}
 
-          {country !== "" && (
-            <Field>
-              <label htmlFor="ob-region">{regionLabelIn(locale, country)}</label>
-              {regionOptions.length > 0 ? (
-                <select
-                  id="ob-region"
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {regionOptions.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  id="ob-region"
-                  value={region}
-                  placeholder={c.regionPlaceholder}
-                  onChange={(e) => setRegion(e.target.value)}
-                />
-              )}
-            </Field>
-          )}
+        <Field>
+          <label htmlFor="ob-scope">{c.scopeLabel}</label>
+          <select
+            id="ob-scope"
+            value={scope}
+            onChange={(e) => setScope(e.target.value as EntityScope)}
+          >
+            {SCOPE_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {shellCopy[locale].scope[s]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className="cell-sub">{c.scopeHint}</p>
 
-          <Field>
-            <label htmlFor="ob-scope">{c.scopeLabel}</label>
-            <select
-              id="ob-scope"
-              value={scope}
-              onChange={(e) => setScope(e.target.value as EntityScope)}
-            >
-              {SCOPE_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {shellCopy[locale].scope[s]}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <p className="cell-sub">{c.scopeHint}</p>
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary">
-              {c.submit}
-            </Button>
-            <Button type="button" onClick={skip}>
-              {c.skip}
-            </Button>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="primary">
+            {c.submit}
+          </Button>
+          <Button type="button" onClick={skip}>
+            {c.skip}
+          </Button>
+        </div>
       </Card>
     </div>
   );

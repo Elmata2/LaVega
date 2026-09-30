@@ -18,7 +18,5 @@ export function NetWorthPage() {
   if (state.status === "loading") return <Loading />;
   if (state.status === "error")
     return <EmptyState title="Dashboard unavailable" description={state.message} />;
-  return (
-    <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />
-  );
+  return <NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} />;
 }

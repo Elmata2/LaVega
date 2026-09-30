@@ -130,7 +130,10 @@ async function mountReady() {
 }
 
 test("resolves registry defaults immediately, before the fetch settles", async () => {
-  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise<Response>(() => {})),
+  );
   const { container, root } = render();
   act(() => root.render(<Probe />));
   expect(text(container, "status")).toBe("loading");
@@ -156,7 +159,10 @@ test("applies the tenant's stored choices once the fetch resolves", async () => 
 });
 
 test("a failed or unauthorized fetch keeps the registry defaults instead of erroring", async () => {
-  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("", { status: 401 }))));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response("", { status: 401 }))),
+  );
   const { container, root } = render();
   await step(() => root.render(<Probe />));
   expect(text(container, "modules")).toBe("overview,positions,net-worth,agents");

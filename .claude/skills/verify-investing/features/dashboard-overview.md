@@ -4,14 +4,27 @@ The landing view: portfolio value over time, KPIs, allocation, and the operation
 
 ## Sub-features
 
-- headline figures: `Portfolio value`, `Daily change`, `Total return`; `Value partly
-unknown` when some positions are unpriced.
-- portfolio chart (`Performance` widget) with window modes and a benchmark overlay.
-- allocation donut (`Allocation` widget).
-- KPI block (`Key figures` widget) — volatility, beta, alpha, max drawdown, from
-  `/api/investing/summary`.
-- risk & composition (`Risk & composition` widget) and `Sector allocation` (its own widget,
-  independently hideable — see `SectorAllocationCard`).
+- headline figures widget (`Key figures`, section `aria-label="Portfolio KPIs"`,
+  `data-dashboard-section="kpis"`) in the aside (`aria-label="Portfolio overview"`):
+  `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when some
+  positions are unpriced. A missing amount reads `Value unknown`. A missing percent reads
+  `Return unknown`.
+- portfolio chart widget (`Performance`) in the main column
+  (`data-dashboard-section="performance"`), not in the aside. With no benchmark selected
+  the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
+  selected the title is `Comparison` and the axis is `Indexed return`; portfolio and
+  benchmark are percents (`packages/core` `deriveChartMode`). Period group `Choose period`:
+  `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
+  search.
+- allocation donut widget (`Allocation`, `data-dashboard-section="allocation"`) in that
+  same main column.
+- summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
+  Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
+  Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
+  from `GET /api/investing/summary`. Controls: `Refresh risk`, `Risk period` (`6 months`,
+  `1 year`, `Account history`), `Risk benchmark`.
+- `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
+  `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
 - portfolio agents card (`Choose agent` widget) — see [portfolio-agents.md](portfolio-agents.md).
 - operational status (`Operational status`) — chips `Connection`, `Brokers`,
   `Price history`, `Vault`, `Cache`. Always rendered; not a switchable widget.
@@ -33,7 +46,7 @@ the main navigation returns to it.
 C=".claude/skills/verify-investing/control-investing.mjs"
 node $C dashboard --target prod                 # summarized: problems, counts, shape
 node $C dashboard --target prod --raw           # the exact payload the SPA receives
-node $C summary --target prod                   # the KPI block
+node $C summary --target prod                   # the Summary card (risk metrics)
 node $C api GET /api/investing/dashboard --target prod
 ```
 

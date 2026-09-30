@@ -89,7 +89,8 @@ const APP_SESSION_COOKIE = "__Secure-better-auth.session_token";
 
 test("scripts/vercel-build.mjs gates /app on the real better-auth session cookie name", async () => {
   const routes = await readAppGateRoutes();
-  for (const route of routes) expect(route.missing).toEqual([{ type: "cookie", key: APP_SESSION_COOKIE }]);
+  for (const route of routes)
+    expect(route.missing).toEqual([{ type: "cookie", key: APP_SESSION_COOKIE }]);
 });
 
 test("the missing-cookie bounce is ordered ahead of the static /app route, for both /app and /app/(.*)", async () => {
@@ -109,9 +110,9 @@ test("no session cookie at all bounces /app to /", async () => {
 
 test("no session cookie at all bounces a deep /app/<view> path to /", async () => {
   const routes = [...(await readAppGateRoutes()), ...STATIC_APP_ROUTES];
-  expect(
-    evaluateAppRoutes(routes, { pathname: "/app/transacties", cookieHeader: undefined }),
-  ).toBe("bounce");
+  expect(evaluateAppRoutes(routes, { pathname: "/app/transacties", cookieHeader: undefined })).toBe(
+    "bounce",
+  );
 });
 
 test("other cookies present but not the session cookie still bounces", async () => {

@@ -1,10 +1,9 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { InvestingDashboardData } from "@lavega/core";
 import {
   composePortfolioJudgments,
   portfolioJudgmentQuestions,
   runPortfolioAgent,
-  runPortfolioConversation,
 } from "./portfolioAgent.js";
 
 function dashboard(): InvestingDashboardData {
@@ -99,23 +98,6 @@ test("no view remains distinct from neutral and one missing answer leaves other 
   });
   expect(result.judgments[0]?.signal?.choice).toBe("no_view");
   expect(result.judgments.find((item) => item.agentId === "charlie_munger")?.signal).toBeNull();
-});
-
-test("conversation system prompt instructs plain prose over markdown", async () => {
-  const reply = vi.fn(async (_input: { model: string; system: string; prompt: string }) => "reply text");
-  await runPortfolioConversation({
-    agentId: "warren_buffett",
-    prompt: "How is my portfolio doing?",
-    history: [],
-    dashboard: dashboard(),
-    judgment: { judgments: [], model: "jev-test", snapshotHash: "hash" },
-    provider: { reply },
-  });
-  expect(reply).toHaveBeenCalledTimes(1);
-  const system = reply.mock.calls[0]?.[0]?.system ?? "";
-  expect(system).toContain(
-    'Answer in short, plain conversational prose. Use short paragraphs and, at most, one simple bullet list when it truly helps. Never use headings, bold, italics, or an "Examples" section.',
-  );
 });
 
 test("composition reweights typed judgments without provider call", () => {

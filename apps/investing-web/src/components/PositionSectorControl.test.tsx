@@ -28,8 +28,9 @@ function selectSector(select: HTMLSelectElement, value: string) {
 test("shows the resolved sector and an inferred badge with its confidence", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify({ sector: "Technology", source: "inferred", confidence: 0.7 })),
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ sector: "Technology", source: "inferred", confidence: 0.7 })),
     ),
   );
   const { container, root } = render();
@@ -157,7 +158,9 @@ test("a fund's 422 hides the correction control and explains why", async () => {
 test("kind fund from GET hides the correction control from the start, with no PUT needed", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ kind: "fund", sector: null, source: "provider" }))),
+    vi.fn(
+      async () => new Response(JSON.stringify({ kind: "fund", sector: null, source: "provider" })),
+    ),
   );
   const { container, root } = render();
   act(() => root.render(<PositionSectorControl symbol="VFEM.L" />));
@@ -170,7 +173,10 @@ test("kind fund from GET hides the correction control from the start, with no PU
 test("kind stock from GET shows the resolved sector and the correction control", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ kind: "stock", sector: "Technology", source: "provider" }))),
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ kind: "stock", sector: "Technology", source: "provider" })),
+    ),
   );
   const { container, root } = render();
   act(() => root.render(<PositionSectorControl symbol="AAPL" />));

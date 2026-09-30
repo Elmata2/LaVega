@@ -33,7 +33,9 @@ test("it waits the full interval and then goes", () => {
 /* NOOIT TIJDENS EEN SCHRIJFBEWERKING. Een verversing die tussen `putAccounts`
  * en `putTxs` van een import valt, schrijft over een half geschreven kluis. */
 test("it never fires while something is already writing", () => {
-  expect(autoRefreshDue({ ...base, now: base.lastAt + EB_AUTO_REFRESH_MS, busy: true })).toBe(false);
+  expect(autoRefreshDue({ ...base, now: base.lastAt + EB_AUTO_REFRESH_MS, busy: true })).toBe(
+    false,
+  );
 });
 
 /* Wie alleen bestanden importeert heeft geen bank, en hoort niet elk uur een
