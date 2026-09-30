@@ -733,7 +733,7 @@ function AgentView() {
   );
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-md">
         <div className="border-b border-border px-5 py-5 sm:px-6">
           <Link to="/" className="text-sm font-semibold text-primary hover:underline">
@@ -1265,7 +1265,10 @@ function Overview() {
             price?.status === "problem" ||
             priceProblem ||
             vault === "locked") && (
-            <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
+            <div
+              role="alert"
+              className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"
+            >
               <p>
                 Status needs attention.{" "}
                 <Link to="/profile#brokers" className="font-semibold underline">

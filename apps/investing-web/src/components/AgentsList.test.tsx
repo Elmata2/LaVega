@@ -35,8 +35,13 @@ test("lists every portfolio agent and links to its conversation", async () => {
     );
   });
   await act(async () => {});
-  expect(container.textContent).toContain("Bill Ackman");
-  expect(container.querySelector('a[href="/agents/bill_ackman"]')).not.toBeNull();
+  for (const agent of portfolioAgents) {
+    expect(container.textContent).toContain(agent.displayName);
+    expect(container.querySelector(`a[href="/agents/${agent.id}"]`)).not.toBeNull();
+  }
+  expect(container.querySelector('a[href="/agents/research"]')?.textContent).toContain(
+    "All six agents",
+  );
 });
 
 test("shows an empty state with a retry action when the catalog has no agents", async () => {

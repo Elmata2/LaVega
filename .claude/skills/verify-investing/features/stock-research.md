@@ -20,7 +20,7 @@ Use `control-investing.mjs` from the skill directory:
    (`Researching…` while pending). Wait for an actual report.
 6. Confirm company symbol, fetched time, forward P/E, ROE and net margin render. Compare
    displayed values to the research response. Null values must say unavailable.
-7. Confirm five **Investor views** (aside `aria-label` `Five investor views`) display typed signals and clearly labeled probabilities.
+7. Confirm six **Investor views** (aside `aria-label` `Six investor views`) display typed signals and clearly labeled probabilities.
    No view must remain distinct from neutral. Record model and snapshot timestamps.
 8. Select Warren Buffett, ask about valuation and wait for streamed reply. Switch to
    another lens and back. The Buffett thread must remain in Buffett's conversation.
@@ -42,3 +42,6 @@ verification gaps, not passing checks. A local run that has consent and no `TYPE
 answers 502, and the page shows `TYPESAFE_API_KEY is not set; configure TypeSafe System One`.
 That is a gap, not a pass. A broker-related doctor failure can coexist with
 a working stock research report; record it separately.
+
+Reports created before the six-agent catalog change require **Refresh research** before
+continuing their conversations. Their signed five-view snapshot does not match the new catalog.

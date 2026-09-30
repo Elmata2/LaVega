@@ -1,9 +1,9 @@
 # Stock research
 
 Open **Agents → Research Stock** at `/investing/agents/research`. Enter a company ticker,
-such as `AAPL`. The workspace shows company fundamentals on the left and five investment
-lenses on the right: Warren Buffett, Charlie Munger, Bill Ackman, Benjamin Graham and
-Peter Lynch. Existing portfolio agents remain available from the Agents catalog.
+such as `AAPL`. The workspace shows company fundamentals on the left and six investment
+lenses on the right: Warren Buffett, Charlie Munger, Bill Ackman, Benjamin Graham,
+Peter Lynch and Stanley Druckenmiller. Existing portfolio agents remain available from the Agents catalog.
 
 `POST /api/agents/research/run` accepts `{ "symbol": "AAPL" }`. The server checks the
 signed-in tenant's market-data consent, fetches fresh Yahoo company fundamentals, then

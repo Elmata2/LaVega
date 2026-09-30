@@ -11,10 +11,10 @@ export function AgentsList() {
       className="pressable mb-5 block rounded-card border border-primary/30 bg-primary/5 p-5 sm:p-6"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-primary">Research Stock</p>
-      <h2 className="mt-1 font-display text-3xl font-semibold">One stock. Five investing views.</h2>
+      <h2 className="mt-1 font-display text-3xl font-semibold">One stock. All six agents.</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Enter a ticker, compare company facts and investor opinions, then explore any view in a
-        conversation.
+        Research a stock with all six agents together, compare their views, then explore any view in
+        a conversation.
       </p>
       <span className="mt-4 inline-block text-sm font-semibold text-primary">
         Start stock research →

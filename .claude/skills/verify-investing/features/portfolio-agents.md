@@ -19,13 +19,19 @@ OpenAI-compatible endpoint (OpenRouter by default).
   `Your positions`. Empty copy is `No positions available.`
 - failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
   the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
-  available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
+available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
 - while a chat reply streams and no assistant bubble is in yet, the status is
   `<displayName> is reading positions…`. The analyse control still reads `Agent reading…`.
 
 ## How to get to it (user POV)
 
-Sign in, and the `Investor lens` card is on the overview. Pick a persona, then press
+Sign in, then open **Agents** to select any of the six personas, including Charlie Munger.
+The **Research Stock** card runs one stock through all six agents together.
+Saved conversation headers wrap on narrow screens so **New conversation** remains inside the card.
+The conversation layout uses one constrained grid column below the desktop breakpoint; long content
+must not expand the card beyond the viewport.
+
+The `Investor lens` card is on the overview. Pick a persona, then press
 `Analyse portfolio`, or follow `Open conversation with <name>`. Deep links work:
 `/investing/agents/warren_buffett`.
 
@@ -72,3 +78,7 @@ conversation streams `text-delta` events and ends with `data: [DONE]`. The chat 
   a slow reply may come from the fallback model. Check `local.log` for `statusCode: 429`.
 - `browse wait --networkidle` returns before the stream ends. Wait for
   `#agent-message:not([disabled])` instead.
+
+The Vercel adapter forwards streaming deltas as they arrive and holds database context until
+the response completes. Measure first text on preview separately from full reply duration;
+provider latency and output length can change each run.
