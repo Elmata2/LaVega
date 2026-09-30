@@ -166,6 +166,8 @@ After a genuine listing-not-found result, the default price provider can ask Ope
 
 Yahoo price lookup tries another candidate only after a confirmed listing-not-found response or a chart with no closes. Transport failures stop the candidate loop after the HTTP client's retries; changing the symbol cannot repair an outage or a rate limit. Sector lookup continues after a missing listing, but stops on other request failures. An unresolved listing is not proof that an instrument was delisted.
 
+Each price provider reuses one Yahoo HTTP client for all symbols and explicit fallback requests. Cookie and crumb negotiation happens once per provider session instead of once per symbol, reducing authentication traffic during a large backfill.
+
 Remaining limits: Yahoo ISIN search selects its first symbol and does not return an ISIN equality check or verify the broker venue. Plain tickers with unknown exchanges still have suffix fallbacks. A shared, validated listing resolver for prices, sectors, and fundamentals remains separate work. A delisted security can also require another historical-data source. Previously mismatched cached series need targeted repair; a failed lookup retains cached bars, and complete coverage can skip the provider entirely. Do not purge valid alternate listings merely because their venue differs from the broker venue.
 
 Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.

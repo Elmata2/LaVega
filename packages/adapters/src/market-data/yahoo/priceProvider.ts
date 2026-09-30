@@ -1,7 +1,7 @@
 import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
-import type { YahooHttpClient } from "./http.js";
+import { YahooHttpClient } from "./http.js";
 
 export type YahooPriceRequest = {
   ticker: string;
@@ -23,6 +23,7 @@ export function createYahooPriceProvider(
     resolveMissingListing?: (request: YahooPriceRequest) => Promise<string | null>;
   } = {},
 ): Provider<YahooPriceRequest, PriceProviderResult> {
+  const client = input.client ?? new YahooHttpClient();
   return {
     sourceKey: "yahoo",
     priority: 10,
@@ -35,7 +36,7 @@ export function createYahooPriceProvider(
           from: request.from,
           to: request.to ?? request.today ?? (input.today ?? currentDate)(),
           interval: "1d" as const,
-          client: input.client,
+          client,
         };
         let history;
         try {

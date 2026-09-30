@@ -1,8 +1,10 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { YahooHttpClient } from "./http.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
 import { getYahooSymbolForKnownExchange } from "./symbols.js";
 import { notFoundYahooFixture } from "./__fixtures__/not-found.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const request = {
   ticker: "SKX_US_EQ",
@@ -172,4 +174,30 @@ test("reports a fallback transport error instead of unresolved identity", async 
     bars: [],
     problems: ["Yahoo Finance rate-limited price request"],
   });
+});
+
+test("reuses one default Yahoo session across broker symbols", async () => {
+  const requested: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb-value");
+      return new Response(JSON.stringify(chartResponse()), {
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+  const provider = createYahooPriceProvider();
+  for (const ticker of ["CPRX_US_EQ", "AAPL_US_EQ"]) {
+    const result = await provider.get({ ...request, ticker, symbol: ticker });
+    expect(result?.problems).toEqual([]);
+    expect(result?.bars[0]?.symbol).toBe(ticker);
+  }
+  expect(requested.filter((url) => url === "https://fc.yahoo.com/")).toHaveLength(1);
+  expect(requested.filter((url) => url.includes("getcrumb"))).toHaveLength(1);
+  expect(requested.filter((url) => url.includes("/chart/"))).toHaveLength(2);
 });
