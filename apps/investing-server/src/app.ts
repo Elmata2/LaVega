@@ -257,6 +257,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingApp = new Hono();
   const hasYahooConsent = async (tenantId: string) =>
     (await marketDataConsentStore.get(tenantId)).accepted;
+  /* The Yahoo listing price sync already proved this broker symbol trades
+   * under (PriceStore.getCoverage's `listing`), reused so a renamed or
+   * SPAC-era broker code doesn't make the sector fetch re-guess exchange
+   * suffixes off a ticker Yahoo no longer recognizes. A local read, no
+   * network — safe on every sector route, consented or not. */
+  const resolveSectorListingSymbol = async (
+    tenantId: string,
+    symbol: string,
+  ): Promise<string | null> => (await store.getCoverage(tenantId, symbol))?.listing ?? null;
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
@@ -338,6 +347,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         store: sectorStore,
         correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
         showInferred: consented && inferenceEnabled,
+        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
         ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
@@ -363,8 +373,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const tenantId = await resolveTenantId();
     /* Same precedence as resolveWeights: read the cached profile before the
      * correction, so a fund always wins. Read-only — no fetchProfile, no
-     * classifier, no store write. */
-    const profile = await sectorStore.get(symbol);
+     * classifier, no store write. Looked up under the same resolved-listing
+     * key resolveWeights caches under, so a renamed broker code (fetched and
+     * cached elsewhere under its live Yahoo ticker) is found here too. */
+    const listing = await resolveSectorListingSymbol(tenantId, symbol);
+    const profile = await sectorStore.get(listing ?? symbol);
     if (profile?.kind === "fund")
       return c.json({ kind: "fund" as const, sector: null, source: "provider" as const });
     const corrected = await sectorCorrectionStore.get(tenantId, symbol);
@@ -393,13 +406,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const body: { sector?: unknown } = await c.req.json().catch(() => ({}));
     if (typeof body.sector !== "string" || !GICS_SECTOR_LABELS.includes(body.sector as never))
       return c.json({ message: "sector must be one of the GICS sector labels" }, 400);
-    const profile = await sectorStore.get(symbol);
+    const tenantId = await resolveTenantId();
+    const listing = await resolveSectorListingSymbol(tenantId, symbol);
+    const profile = await sectorStore.get(listing ?? symbol);
     if (profile?.kind === "fund")
       return c.json(
         { message: "A fund's sector is its look-through weight vector, not a single correction" },
         422,
       );
-    await sectorCorrectionStore.set(await resolveTenantId(), symbol, body.sector);
+    await sectorCorrectionStore.set(tenantId, symbol, body.sector);
     return c.body(null, 204);
   });
   investingApp.delete("/api/investing/positions/:symbol/sector", async (c) => {
