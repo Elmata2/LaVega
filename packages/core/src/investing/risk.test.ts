@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import type { BenchmarkSeries } from "./benchmarks.js";
+import { businessDaysAfter } from "./calendar.js";
 import {
   buildInvestingDashboard,
   emptyInvestingDashboard,
@@ -9,7 +10,9 @@ import type { PortfolioValuePoint } from "./portfolio.js";
 import {
   benchmarkCurrencyMismatchReason,
   buildHistoricalRisk,
+  RISK_MAX_STALE_BUSINESS_DAYS,
   RISK_MINIMUM_OBSERVATIONS,
+  RISK_SETTLING_BUSINESS_DAYS,
 } from "./risk.js";
 
 function businessDates(count: number): string[] {
@@ -38,6 +41,24 @@ function pointsFromReturns(returns: readonly number[]): PortfolioValuePoint[] {
       cashUnknown: [],
     };
   });
+}
+
+function appendUnknownDays(
+  points: readonly PortfolioValuePoint[],
+  days: number,
+): PortfolioValuePoint[] {
+  const last = points.at(-1)!;
+  const extra: PortfolioValuePoint[] = [];
+  let cursor = new Date(`${last.date}T00:00:00Z`);
+  while (extra.length < days) {
+    cursor = new Date(cursor.getTime() + 86_400_000);
+    if (cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6) continue;
+    extra.push({ ...last, date: cursor.toISOString().slice(0, 10), unpriced: ["AAPL"] });
+  }
+  const appended = [...points, ...extra];
+  if (businessDaysAfter(last.date, appended.at(-1)!.date) !== days)
+    throw new Error(`appendUnknownDays(${days}) drifted from businessDaysAfter's own count`);
+  return appended;
 }
 
 test("warns when the measured risk window contains negative cash", () => {
@@ -229,6 +250,83 @@ test("max drawdown still removes an owner withdrawal even after an isolated inco
   expect(report.metrics.maxDrawdown).toBeCloseTo(0, 6);
 });
 
+test("measures risk through the last known date instead of hiding it when today is still settling", () => {
+  const points = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const priorDate = points.at(-2)!.date;
+  points[points.length - 1] = { ...points.at(-1)!, unpriced: ["AAPL"] };
+
+  const report = buildHistoricalRisk(dashboard(points));
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.metrics.observationDays).toBeGreaterThanOrEqual(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.drawdownFrom).toBe(points[0]!.date);
+  expect(report.risk.missingPrices).toEqual(["AAPL"]);
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
+});
+
+test("an interior gap plus an incomplete last day still measures through the last known date", () => {
+  const points = pointsFromReturns(Array.from({ length: 300 }, () => 0.0005));
+  const gapIndex = 100;
+  points[gapIndex] = { ...points[gapIndex]!, cashUnknown: ["trading212:EUR"] };
+  const priorDate = points.at(-2)!.date;
+  points[points.length - 1] = { ...points.at(-1)!, unpriced: ["AAPL"] };
+
+  const report = buildHistoricalRisk(dashboard(points, { flows: [] }), "All");
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.risk.drawdownFrom).toBe(points[gapIndex + 1]!.date);
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
+});
+
+test("caps how stale the last known date may be before the estimate goes unavailable", () => {
+  const base = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const lastKnownDate = base.at(-1)!.date;
+
+  const withinCap = buildHistoricalRisk(dashboard(appendUnknownDays(base, 3)));
+  expect(withinCap.risk.status).toBe("estimate");
+  expect(withinCap.risk.to).toBe(lastKnownDate);
+
+  const staleExtended = appendUnknownDays(base, RISK_MAX_STALE_BUSINESS_DAYS + 3);
+  const firstBadDate = staleExtended[base.length]!.date;
+  const pastCap = buildHistoricalRisk(dashboard(staleExtended));
+  expect(pastCap.risk.status).toBe("unavailable");
+  expect(pastCap.risk.reasons).toContain(`Risk data has been incomplete since ${firstBadDate}.`);
+});
+
+test("names a short trailing gap as still settling and a longer one as incomplete", () => {
+  const base = pointsFromReturns(
+    Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 20 }, () => 0.001),
+  );
+  const lastKnownDate = base.at(-1)!.date;
+
+  const settling = buildHistoricalRisk(
+    dashboard(appendUnknownDays(base, RISK_SETTLING_BUSINESS_DAYS)),
+  );
+  expect(settling.risk.status).toBe("estimate");
+  expect(settling.risk.reasons).toContain(
+    `Measured through ${lastKnownDate}; later dates are still settling.`,
+  );
+
+  const incomplete = buildHistoricalRisk(
+    dashboard(appendUnknownDays(base, RISK_SETTLING_BUSINESS_DAYS + 3)),
+  );
+  expect(incomplete.risk.status).toBe("estimate");
+  expect(incomplete.risk.reasons).toContain(
+    `Measured through ${lastKnownDate}; later dates are incomplete.`,
+  );
+});
+
 test("includes a last day whose close is still settling when the position is immaterial", () => {
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
@@ -251,11 +349,12 @@ test("includes a last day whose close is still settling when the position is imm
   ]);
 });
 
-test("still disqualifies a last day whose carried-forward position is too large to bound", () => {
+test("measures through the prior day when the last day's carried-forward position is too large to bound", () => {
   const points = pointsFromReturns(
     Array.from({ length: RISK_MINIMUM_OBSERVATIONS + 1 }, (_, index) => (index % 2 ? 0.002 : 0)),
   );
   const last = points.at(-1)!;
+  const priorDate = points.at(-2)!.date;
   points[points.length - 1] = {
     ...last,
     forwardFilled: ["AAPL"],
@@ -263,7 +362,12 @@ test("still disqualifies a last day whose carried-forward position is too large 
   };
   const report = buildHistoricalRisk(dashboard(points));
 
-  expect(report.risk.status).toBe("unavailable");
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.to).toBe(priorDate);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.reasons).toContain(
+    `Measured through ${priorDate}; later dates are still settling.`,
+  );
 });
 
 test("keeps beta and alpha null when no benchmark is selected", () => {
@@ -427,15 +531,23 @@ test.each([
       forwardFilled: ["TWND_US_EQ"],
     }),
   ],
-])("a holding at 20%% of value still disqualifies via %s on the latest date", (_route, apply) => {
-  const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
-  const last = points.at(-1)!;
-  points[points.length - 1] = { ...apply(last), unaccountedValue: last.value! * 0.2 };
+])(
+  "a holding at 20%% of value on the latest date via %s is dropped, not shown as valid",
+  (_route, apply) => {
+    const points = pointsFromReturns(Array.from({ length: 287 }, () => 0.0005));
+    const last = points.at(-1)!;
+    const priorDate = points.at(-2)!.date;
+    points[points.length - 1] = { ...apply(last), unaccountedValue: last.value! * 0.2 };
 
-  const report = buildHistoricalRisk(dashboard(points));
+    const report = buildHistoricalRisk(dashboard(points));
 
-  expect(report.risk.status).toBe("unavailable");
-});
+    expect(report.risk.status).toBe("estimate");
+    expect(report.risk.to).toBe(priorDate);
+    expect(report.risk.reasons).toContain(
+      `Measured through ${priorDate}; later dates are still settling.`,
+    );
+  },
+);
 
 test("requires 60 valid daily return observations", () => {
   const short = buildHistoricalRisk(
