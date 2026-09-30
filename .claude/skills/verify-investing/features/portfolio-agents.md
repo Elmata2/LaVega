@@ -28,6 +28,8 @@ available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
 Sign in, then open **Agents** to select any of the six personas, including Charlie Munger.
 The **Research Stock** card runs one stock through all six agents together.
 Saved conversation headers wrap on narrow screens so **New conversation** remains inside the card.
+The conversation layout uses one constrained grid column below the desktop breakpoint; long content
+must not expand the card beyond the viewport.
 
 The `Investor lens` card is on the overview. Pick a persona, then press
 `Analyse portfolio`, or follow `Open conversation with <name>`. Deep links work:
@@ -76,3 +78,7 @@ conversation streams `text-delta` events and ends with `data: [DONE]`. The chat 
   a slow reply may come from the fallback model. Check `local.log` for `statusCode: 429`.
 - `browse wait --networkidle` returns before the stream ends. Wait for
   `#agent-message:not([disabled])` instead.
+
+The Vercel adapter forwards streaming deltas as they arrive and holds database context until
+the response completes. Measure first text on preview separately from full reply duration;
+provider latency and output length can change each run.
