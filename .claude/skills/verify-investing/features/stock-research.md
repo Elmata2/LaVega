@@ -2,8 +2,13 @@
 
 Route: `/investing/agents/research` on mounted previews, `/agents/research` standalone.
 Reach it from **Agents → Research Stock**. Requires signed-in session, enabled Agents
-module, accepted Yahoo market-data consent, TypeSafe key and chat model key. No broker
-positions are required for this feature.
+module, accepted Yahoo market-data consent, `TYPESAFE_API_KEY` for the report, and
+`LAVEGA_AGENT_API_KEY` or `OPENROUTER_API_KEY` for lens chat. Preview and production also
+need `LAVEGA_ENCRYPTION_KEY` to sign the report. A missing key throws
+`Research report signing requires LAVEGA_ENCRYPTION_KEY`. Standalone local uses a built-in
+signing secret when `VERCEL` is unset and `NODE_ENV` is not `production`. `doctor` reports
+`llm` and `marketData` only. A green doctor does not prove the TypeSafe key or the chat key.
+No broker positions are required for this feature.
 
 ## Drive
 

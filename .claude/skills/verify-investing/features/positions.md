@@ -13,7 +13,8 @@ Column headers, verbatim: `Instrument`, `Value`, `% portfolio`, `Total return`. 
 cell ends with `<quantity> shares`. Detail eyebrow is `Position detail`, heading `Position`.
 Activity table accessible name: `Position activity`. Kinds: `Buy`, `Sell`, `Dividend`.
 Quantity toggle: `Show quantity history` / `Hide history`. Open/closed: `Open position`,
-`Closed position`, `Open`, `Closed`.
+`Closed position`, `Open`, `Closed`. The table lists open holdings only (net quantity not 0).
+A closed holding is not a row. `/positions/:symbol` still opens it and shows `Closed position`.
 
 Empty and missing copy, verbatim:
 
@@ -58,7 +59,8 @@ Exit 0, and one of these is true. Assert the field. Do not treat a loaded page a
    verbatim string `No positions loaded`. That is success for an empty book. It is not success
    for a filled table.
 3. **Missing detail.** `dashboard --symbol <missing> --raw` has no `position.symbol` equal to
-   that symbol, and the page title is `Position not found`.
+   that symbol, and the visible heading is `Position not found`. The document title stays
+   `LaVega Investing`.
 
 ## Verified-unreachable
 
