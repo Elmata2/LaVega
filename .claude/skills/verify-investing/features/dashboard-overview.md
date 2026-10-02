@@ -27,6 +27,9 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`), `Risk benchmark`.
 - `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
   `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
+  Eyebrow `Composition`. Empty copy: `No sector data yet.` The Profile switch that can
+  fill missing sectors is `#data` (`Sector inference`). See
+  [broker-connect-sync.md](broker-connect-sync.md).
 - portfolio agents card, title `Investor lens` (`data-dashboard-section="agent"`). The
   persona picker is a radio group with `aria-label="Choose agent"`. See
   [portfolio-agents.md](portfolio-agents.md).

@@ -11,12 +11,19 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
 - agent catalog: `GET /api/agents/portfolio` lists six personas (`warren_buffett`,
   `charlie_munger`, `bill_ackman`, `ben_graham`, `peter_lynch`, `stanley_druckenmiller`).
 - agent picker: card title `Investor lens`. Radio group `aria-label="Choose agent"`.
+  A click selects that persona and `window.open`s `/agents/:agentId` in a popup named
+  `lavega-agent-workbench`. If the popup is blocked, the same click navigates in-page.
+  Arrow keys move the selection and do not open the conversation. The in-page link then
+  reads `Open conversation with <name>`.
 - one-shot analysis: `Analyse portfolio` (`Agent reading…` while pending) posts
   `/api/agents/portfolio/run` and shows a signal (`bullish` / `bearish` / `neutral` /
   `no_view`) with a confidence.
-- conversation: `Open conversation with <name>` opens `/agents/:agentId`. The positions panel's
-  accessible name is `Conversation context`. The visible heading is `Your positions`. Empty
-  copy is `No positions available.` Each turn posts `/api/agents/portfolio/conversation`.
+- conversation: `Open conversation with <name>` opens `/agents/:agentId`. Back link:
+  `← Back to overview`. Eyebrow `Portfolio agent`, then the display name. Input label
+  `Ask <displayName>`, placeholder `Ask about your positions…`, button `Send`. The positions
+  panel's accessible name is `Conversation context`. Its eyebrow is `Context` and the visible
+  heading is `Your positions`. Empty copy is `No positions available.` Each turn posts
+  `/api/agents/portfolio/conversation`.
   The body is `{ agentId, messages }`. When agent memory is configured, it also needs a UUID
   `id` (the thread id). The reply streams (`text/event-stream`).
 - saved threads: with memory, the conversation shows eyebrow `Memory`, heading `Conversations`,
@@ -33,13 +40,16 @@ available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
 ## How to get to it (user POV)
 
 Sign in, then open **Agents** to select any of the six personas, including Charlie Munger.
-The **Research Stock** card runs one stock through all six agents together.
+The **Research Stock** card (eyebrow `Research Stock`, heading `One stock. All six agents.`,
+link `Start stock research →`) opens `/agents/research`. The research page heading is
+`One company. Six perspectives.` See [stock-research.md](stock-research.md).
 When memory is on, saved conversation headers wrap on narrow screens so **New conversation**
 remains inside the card. The conversation layout uses one constrained grid column below the
 desktop breakpoint; long content must not expand the card beyond the viewport.
 
-The `Investor lens` card is on the overview. Pick a persona, then press
-`Analyse portfolio`, or follow `Open conversation with <name>`. Deep links work:
+The `Investor lens` card is on the overview. A radio click selects that persona and opens
+the conversation popup. Press `Analyse portfolio` for the one-shot judgment, or follow
+`Open conversation with <name>` for the in-page route. Deep links work:
 `/investing/agents/warren_buffett`.
 
 ## Driving it with control-investing

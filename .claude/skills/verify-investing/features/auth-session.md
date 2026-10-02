@@ -18,6 +18,13 @@ the app lands on `/investing/sign-in`.
 | `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending). |
 | `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token the heading stays `Choose a new password`. Alert: `Reset link is invalid or expired. Request a new link.` Link: `Request another link`. |
 
+`/sign-in?verified=1` (the no-session landing from `/email-confirmed`) also shows
+`Email confirmed. Sign in to continue.`
+
+Profile `#account` is the signed-in account block: the email, or `Not signed in.`, or on
+the local file server `Authentication is not configured on this server.` The button is
+`Sign out`. The CLI is `logout`.
+
 `RequireAuth` sends every other route to `/sign-in` when the session is anonymous.
 Local standalone still serves these SPA routes. `/api/auth/*` answers 503
 `Authentication is not configured`. `RequireAuth` treats that as unconfigured and does not

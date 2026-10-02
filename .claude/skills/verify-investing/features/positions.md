@@ -23,11 +23,22 @@ Empty and missing copy, verbatim:
 - unknown symbol: `Position not found`
 - URL without a symbol: `No position selected`
 - list, unpriced value cell: `Value unknown`
+- list, forward-filled value: visible `est.`, screen-reader `Estimated price`
 - list, missing FX: `FX rate missing`
+- list, null `% portfolio`: `Unavailable`
 - list, missing return: `Return unavailable`
 - detail current value uses the same `FX rate missing` or `Value unknown`
 - detail total return, when it cannot be calculated, is `Unavailable`
 - detail missing-FX banner: `FX rate missing. Return cannot be calculated.`
+
+On a position that exists, the detail also shows sector. `Sector: <label>`, badge `inferred`
+(with a percent when confidence is set) or `your correction`. The select is
+`aria-label="Correct sector"` (`Choose…`, then GICS labels). Buttons: `Save` (`Saving…`),
+and `Reset to automatic` (`Resetting…`) when the source is a correction. A fund hides that
+select and says `Split across its holdings' sectors — correct the underlying holdings instead.`
+Errors: `Couldn't save — try again.` and `Couldn't reset — try again.`
+`PUT`/`DELETE /api/investing/positions/:symbol/sector`. `Position not found` does not show
+this control.
 
 ## Drive
 

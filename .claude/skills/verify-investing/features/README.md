@@ -26,7 +26,7 @@ app for LaVega Personal. It is not an investing route.
 | Dashboard overview                           | `/`                                                                                               | [dashboard-overview.md](dashboard-overview.md)         |
 | Portfolio agents                             | `/`, `/agents`, `/agents/:agentId`                                                                | [portfolio-agents.md](portfolio-agents.md)             |
 | Stock research                               | `/agents/research`                                                                                | [stock-research.md](stock-research.md)                 |
-| Profile (brokers, modules, widgets, account) | `/profile`, `/brokers/connect` (redirect)                                                         | [broker-connect-sync.md](broker-connect-sync.md)       |
+| Profile (brokers, modules, widgets, data, account) | `/profile`, `/brokers/connect` (redirect)                                                    | [broker-connect-sync.md](broker-connect-sync.md)       |
 | Positions and position detail                | `/positions`, `/positions/:symbol`                                                                | [positions.md](positions.md)                           |
 | Net worth                                    | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
 | Prices, benchmarks and market-data consent   | `/` (Yahoo consent); chips on `/profile#status`                                                   | [prices-and-market-data.md](prices-and-market-data.md) |
