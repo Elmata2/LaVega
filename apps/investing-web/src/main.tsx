@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { App } from "./app";
 import "@fontsource/eb-garamond/latin-500.css";
 import "@fontsource/eb-garamond/latin-600.css";
@@ -16,5 +17,6 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
       <App />
     </BrowserRouter>
+    <Analytics />
   </StrictMode>,
 );
