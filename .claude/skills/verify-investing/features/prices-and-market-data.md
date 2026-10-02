@@ -5,10 +5,11 @@ overlay, and the consent gate in front of Yahoo Finance.
 
 ## Reach
 
-Overview, before the first market-data call. The section heading is `Yahoo Finance consent`.
-The button label is `Allow Yahoo Finance` (`Saving…` while the PUT is in flight). The
-disclosure says LaVega sends tickers and search terms to Yahoo Finance. Without consent,
-cached data remains visible.
+Overview, before the first Yahoo fetch. While `GET /api/market-data/consent` is in flight
+the status is `Checking market data consent…`. When that GET returns `accepted: false`, the
+section heading is `Yahoo Finance consent`. The button label is `Allow Yahoo Finance`
+(`Saving…` while the PUT is in flight). The disclosure says LaVega sends tickers and search
+terms to Yahoo Finance. Without consent, cached data remains visible.
 
 After accept, the button unmounts from Overview. Overview does not show the status chips.
 
@@ -34,12 +35,15 @@ Benchmark search calls `/api/investing/benchmarks/search?q=`.
 ## Drive
 
 `Allow Yahoo Finance` PUTs `/api/market-data/consent` with `{accepted:true}`, then calls
-`startBrokerSync`, which POSTs `/api/brokers/sync` (not `?force=true`). On a non-OK broker
-response it throws. The catch sets the visible string `Broker sync failed.` and does not call
-price sync. An empty local vault does that: broker `status` becomes `problem`, `message` is
-`credential vault is locked`, `updatedAt` is set, `positionsRead` stays `0`. The price chip
-stays `Ready`. After that failure, dry-run then one `prices sync --wait`. That POST is the
-price continuation the button would have reached. The PUT alone fetches nothing.
+`startBrokerSync`, which POSTs `/api/brokers/sync` (not `?force=true`). A non-OK broker
+response throws only when the body parses as JSON. The catch then sets the visible string
+`Broker sync failed.` and does not call price sync. A non-OK response with no JSON body
+(a proxy cutting the request off) does not throw, and `startBrokerSync` still calls
+`continuePriceSync`. An empty local vault is the JSON failure: broker `status` becomes
+`problem`, `message` is `credential vault is locked`, `updatedAt` is set, `positionsRead`
+stays `0`. The price chip stays `Ready` until a later `prices sync --wait`. After that
+failure, dry-run then one `prices sync --wait`. That POST is the price continuation the
+button would have reached. The PUT alone fetches nothing.
 
 `?verify=1` skips the automatic sync only when consent is already accepted. The click still
 runs the broker POST. `browser open` adds `?verify=1`.

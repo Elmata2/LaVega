@@ -34,6 +34,21 @@ local visit the form is `Unlock vault` with `Unlock and sync`. Hosted preview an
 the Neon vault unlocked (`passphrase: unused`), so that unlock form is not the later-visit
 path there.
 
+The same page holds the other settings sections:
+
+- `#modules`, title `Modules`. Copy: `Choose which tabs appear in the top bar.` Overview is
+  `Always on.`
+- `#widgets`, title `Widgets`. Copy: `Choose which cards appear on Overview.`
+- `#data`, title `Data`. Switch label `Sector inference`. Copy says it sends each holding's
+  ticker and name, never quantities or values, and needs market-data consent. Without a
+  classifier the warning is `Sector inference is not available on this server.` Without
+  consent the warning is `Grant market-data consent from Overview before turning this on.`
+  `GET`/`PUT /api/investing/sector-inference` use `{ enabled, available }` on GET and
+  `{ enabled }` on PUT.
+- `#account`, title `Account`. Local standalone: `Authentication is not configured on this server.`
+  Anonymous: `Not signed in.` Signed in: the email. Button `Sign out`. Link `Go to LaVega Personal`
+  when that URL is configured.
+
 ## Driving it with control-investing
 
 ```bash
@@ -45,10 +60,12 @@ node $C dashboard --target prod                         # did the data actually 
 node $C api POST /api/brokers/credentials --body '{"broker":"trading212","token":"...","secret":"...","passphrase":"..."}'
 ```
 
-Proof that it works, in order: `credentials.status` moves `empty` → `unlocked`, the sync
+Proof that it works, in order: `credentials.body.status` moves `empty` → `unlocked`, the sync
 settles at `status: "completed"`, `positionsRead`/`ordersRead` are non-zero, and the
-dashboard afterwards reports positions. A `completed` sync with an unchanged dashboard is a
-failure — the read model did not pick up the write.
+dashboard afterwards reports positions. `sync-status` puts the HTTP status on
+`credentials.status` (200 when the route answers) and the vault state (`empty`, `locked`,
+or `unlocked`) on `credentials.body.status`. A `completed` sync with an unchanged dashboard
+is a failure — the read model did not pick up the write.
 
 ## Gotchas
 
