@@ -13,7 +13,8 @@ Column headers, verbatim: `Instrument`, `Value`, `% portfolio`, `Total return`. 
 cell ends with `<quantity> shares`. Detail eyebrow is `Position detail`, heading `Position`.
 Activity table accessible name: `Position activity`. Kinds: `Buy`, `Sell`, `Dividend`.
 Quantity toggle: `Show quantity history` / `Hide history`. Open/closed: `Open position`,
-`Closed position`, `Open`, `Closed`.
+`Closed position`, `Open`, `Closed`. The table lists open holdings only (net quantity not 0).
+A closed holding is not a row. `/positions/:symbol` still opens it and shows `Closed position`.
 
 Empty and missing copy, verbatim:
 
@@ -22,11 +23,22 @@ Empty and missing copy, verbatim:
 - unknown symbol: `Position not found`
 - URL without a symbol: `No position selected`
 - list, unpriced value cell: `Value unknown`
+- list, forward-filled value: visible `est.`, screen-reader `Estimated price`
 - list, missing FX: `FX rate missing`
+- list, null `% portfolio`: `Unavailable`
 - list, missing return: `Return unavailable`
 - detail current value uses the same `FX rate missing` or `Value unknown`
 - detail total return, when it cannot be calculated, is `Unavailable`
 - detail missing-FX banner: `FX rate missing. Return cannot be calculated.`
+
+On a position that exists, the detail also shows sector. `Sector: <label>`, badge `inferred`
+(with a percent when confidence is set) or `your correction`. The select is
+`aria-label="Correct sector"` (`Choose…`, then GICS labels). Buttons: `Save` (`Saving…`),
+and `Reset to automatic` (`Resetting…`) when the source is a correction. A fund hides that
+select and says `Split across its holdings' sectors — correct the underlying holdings instead.`
+Errors: `Couldn't save — try again.` and `Couldn't reset — try again.`
+`PUT`/`DELETE /api/investing/positions/:symbol/sector`. `Position not found` does not show
+this control.
 
 ## Drive
 
@@ -58,7 +70,8 @@ Exit 0, and one of these is true. Assert the field. Do not treat a loaded page a
    verbatim string `No positions loaded`. That is success for an empty book. It is not success
    for a filled table.
 3. **Missing detail.** `dashboard --symbol <missing> --raw` has no `position.symbol` equal to
-   that symbol, and the page title is `Position not found`.
+   that symbol, and the visible heading is `Position not found`. The document title stays
+   `LaVega Investing`.
 
 ## Verified-unreachable
 

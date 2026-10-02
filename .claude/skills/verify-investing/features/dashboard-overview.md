@@ -22,10 +22,14 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
   `Valid daily returns`, `Benchmark pairs`, from `GET /api/investing/summary`. When
-  `risk.to` is before today, the headline appends ` (as of <date>)`. Controls:
+  `risk.to` is before today, the line `Historical account risk · …` appends ` (as of <date>)`.
+  The card title stays `Summary`. Controls:
   `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`), `Risk benchmark`.
 - `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
   `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
+  Eyebrow `Composition`. Empty copy: `No sector data yet.` The Profile switch that can
+  fill missing sectors is `#data` (`Sector inference`). See
+  [broker-connect-sync.md](broker-connect-sync.md).
 - portfolio agents card, title `Investor lens` (`data-dashboard-section="agent"`). The
   persona picker is a radio group with `aria-label="Choose agent"`. See
   [portfolio-agents.md](portfolio-agents.md).
@@ -51,8 +55,10 @@ reads `No net worth history` and `Net worth appears once broker and price data a
 With history, the chart stacks `Investments` and `Cash`. `GET /api/investing/personal-net-worth`
 returns `{ totals: [] }` when the owner has shared nothing. When `presentationCurrency` is
 `EUR` and `totals` is non-empty, a third band reads `Bank accounts (Personal, as of <date>)`.
-A non-EUR presentation currency skips that merge. The period group matches the performance
-chart and is not synced with Overview. Returns, risk, and allocation stay portfolio-only.
+A non-EUR presentation currency skips that merge. Preset pills use the same labels as the
+performance chart (`1 month`, `6 months`, `1 year`, `YTD`, `All`) and are not synced with
+Overview. There is no `Custom` pill. A custom window is the form `Choose net worth date range`
+(`From`, `To`, `Apply`). Returns, risk, and allocation stay portfolio-only.
 
 ## How to get to it (user POV)
 
