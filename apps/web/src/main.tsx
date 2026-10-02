@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import "@fontsource/eb-garamond/500.css";
 import "@fontsource/eb-garamond/600.css";
 import "@fontsource/inter/400.css";
@@ -19,5 +20,6 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Root />
     <Analytics />
+    <SpeedInsights />
   </StrictMode>,
 );
