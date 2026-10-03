@@ -1,4 +1,6 @@
+import { generateText, jsonSchema, Output, type LanguageModel } from "ai";
 import { renderFundamentalsBrief, type CompanyFundamentals } from "@lavega/core";
+import { resolvePortfolioChatModel } from "./portfolioChat.js";
 import { getPortfolioAgent, PORTFOLIO_AGENT_IDS, type PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
 import {
@@ -35,6 +37,8 @@ const SIGNAL_CRITERIA = {
   neutral: "Reported strengths and risks are balanced or inconclusive through this investing lens.",
   no_view: "Reported facts do not contain the evidence this investing lens requires.",
 };
+const REASONING_TIMEOUT_MS = 20_000;
+const MAX_REASON_CHARS = 320;
 const REPORT_LIFETIME_MS = 60 * 60 * 1000;
 const MAX_TOKEN_BYTES = 192_000;
 const localSecret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -101,6 +105,7 @@ export async function runStockResearch(input: {
   company: CompanyFundamentals;
   tenantId: string;
   provider?: SystemOneProvider;
+  model?: LanguageModel;
   now?: number;
 }): Promise<StockResearchReport> {
   const result = await (
@@ -139,15 +144,68 @@ export async function runStockResearch(input: {
       reasoning: SIGNAL_CRITERIA[signal],
     };
   });
+  const reasons = await explainJudgments(input.company, judgments, input.model);
   const now = input.now ?? Date.now();
   return {
     symbol: input.company.symbol,
     company: input.company,
-    judgments,
+    judgments: judgments.map((judgment) => ({
+      ...judgment,
+      reasoning: reasons[judgment.agentId] ?? judgment.reasoning,
+    })),
     model: result.model,
     generatedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + REPORT_LIFETIME_MS).toISOString(),
   };
+}
+/** One language-model call that explains each typed signal through its own
+ *  lens. Jev keeps the signal; a lens without a usable reason keeps its criterion. */
+async function explainJudgments(
+  company: CompanyFundamentals,
+  judgments: readonly StockResearchJudgment[],
+  model: LanguageModel | undefined,
+): Promise<Partial<Record<StockResearchAgentId, string>>> {
+  try {
+    const { output } = await generateText({
+      model: model ?? resolvePortfolioChatModel(),
+      abortSignal: AbortSignal.timeout(REASONING_TIMEOUT_MS),
+      output: Output.object({
+        schema: jsonSchema<Record<string, unknown>>({
+          type: "object",
+          properties: Object.fromEntries(
+            STOCK_RESEARCH_AGENT_IDS.map((agentId) => [agentId, { type: "string" }]),
+          ),
+        }),
+      }),
+      instructions: `You write the short reason behind investor-lens signals on one company. A separate typed judge already decided each signal below. Never change, soften, or contradict it. Explain why that lens reaches it for this company.
+Rules for every reason:
+- At most two sentences and under ${MAX_REASON_CHARS} characters, in plain text without Markdown.
+- Argue from that lens's own priorities, so each reason differs from the others.
+- A bullish or bearish reason argues for its signal. Only a neutral reason weighs both sides.
+- Cite one or two concrete figures from the company snapshot. Never invent a number.
+- For no_view, name the evidence this lens needs that the snapshot lacks.
+- This is an educational lens simulation, not the real person's opinion.
+Return one JSON object whose keys are exactly ${STOCK_RESEARCH_AGENT_IDS.join(", ")} and whose values are the reasons.`,
+      prompt: `Company snapshot for ${company.symbol} fetched ${company.fetchedAt}:\n${renderFundamentalsBrief(company)}\n\n${judgments
+        .map(
+          (judgment) =>
+            `## ${judgment.agentId} (${judgment.displayName}): signal ${judgment.signal}\n${PORTFOLIO_CHAT_PROFILES[judgment.agentId]}`,
+        )
+        .join("\n\n")}`,
+    });
+    return Object.fromEntries(
+      STOCK_RESEARCH_AGENT_IDS.flatMap((agentId) => {
+        const reason = output[agentId];
+        return typeof reason === "string" &&
+          reason.trim() &&
+          reason.trim().length <= MAX_REASON_CHARS * 2
+          ? [[agentId, reason.trim()]]
+          : [];
+      }),
+    );
+  } catch {
+    return {};
+  }
 }
 function resolveSecret(secret?: string): string {
   const configured = secret?.trim() || process.env.LAVEGA_ENCRYPTION_KEY?.trim();

@@ -88,6 +88,7 @@ export function attachStockResearchRoutes<T extends Hono>(
         company,
         tenantId,
         provider: deps.judge,
+        model: deps.chatModel,
         now: deps.now?.(),
       });
       return c.json({

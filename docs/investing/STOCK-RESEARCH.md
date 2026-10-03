@@ -20,8 +20,12 @@ Signal is bullish, bearish, neutral or no view. Bullish probability is the model
 probability assigned to the bullish classification, not the probability a share price
 will rise. Signal confidence is the probability assigned to the selected classification.
 Conviction measures evidence certainty separately. System One does not generate written
-reasoning; the short overview describes the relevant investing rubric. Profile chat gives
-a fuller explanation from the facts.
+reasoning, so after it decides the signals, one structured call to the chat model writes
+a reason of at most two sentences for each lens. The call receives the fundamentals
+brief, each lens profile and its fixed signal. It cites figures from the snapshot and
+names missing evidence for no view. It cannot change a signal. When the call fails or
+skips a lens, that lens shows the generic rubric for its signal. Profile chat gives a
+fuller explanation from the facts.
 
 Selecting a lens opens its streaming conversation beside the same metrics. Each lens has
 its own conversation for the report. A new research run starts new conversations.
