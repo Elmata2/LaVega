@@ -555,11 +555,11 @@ function PortfolioAgentCard() {
     }
   }
 
-  function openAgentWindow(agentId: string) {
+  function openAgentTab(agentId: string) {
     const base = window.location.pathname.startsWith("/investing") ? "/investing" : "";
     const target = `${base}/agents/${encodeURIComponent(agentId)}`;
-    const popup = window.open(target, "lavega-agent-workbench", "popup,width=1180,height=860");
-    if (!popup) navigate(`/agents/${encodeURIComponent(agentId)}`);
+    const tab = window.open(target, "_blank");
+    if (!tab) navigate(`/agents/${encodeURIComponent(agentId)}`);
   }
 
   const tone =
@@ -604,7 +604,7 @@ function PortfolioAgentCard() {
             agents={agents}
             selectedId={active.id}
             onSelect={setSelectedId}
-            onOpen={openAgentWindow}
+            onOpen={openAgentTab}
           />
           <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
           <Link

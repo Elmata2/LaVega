@@ -738,7 +738,7 @@ test("overview runs portfolio investor agent and renders its insight", async () 
   root.unmount();
 });
 
-test("clicking an agent opens its workbench window", async () => {
+test("clicking an agent opens its workbench in a new tab", async () => {
   const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
   vi.stubGlobal(
     "fetch",
@@ -766,11 +766,7 @@ test("clicking an agent opens its workbench window", async () => {
       ?.click();
   });
 
-  expect(open).toHaveBeenCalledWith(
-    "/agents/bill_ackman",
-    "lavega-agent-workbench",
-    "popup,width=1180,height=860",
-  );
+  expect(open).toHaveBeenCalledWith("/agents/bill_ackman", "_blank");
   root.unmount();
 });
 
