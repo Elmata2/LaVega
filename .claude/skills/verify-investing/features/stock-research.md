@@ -5,7 +5,9 @@ Reach it from **Agents → Research Stock** (card heading `One stock. All six ag
 The page itself is eyebrow `Research Stock`, heading `One company. Six perspectives.`,
 back link `← All agents`. Requires signed-in session, enabled Agents
 module, accepted Yahoo market-data consent, `TYPESAFE_API_KEY` for the report, and
-`LAVEGA_AGENT_API_KEY` or `OPENROUTER_API_KEY` for lens chat. Preview and production also
+`LAVEGA_AGENT_API_KEY` or `OPENROUTER_API_KEY` for lens chat and the per-lens reasons.
+Without the chat key the report still loads, but every lens shows the same generic rubric
+text for its signal; that is a gap, not a pass. Preview and production also
 need `LAVEGA_ENCRYPTION_KEY` to sign the report. A missing key throws
 `Research report signing requires LAVEGA_ENCRYPTION_KEY`. Standalone local uses a built-in
 signing secret when `VERCEL` is unset and `NODE_ENV` is not `production`. `doctor` reports
@@ -28,7 +30,9 @@ Use `control-investing.mjs` from the skill directory:
 6. Confirm company symbol, fetched time, forward P/E, ROE and net margin render. Compare
    displayed values to the research response. Null values must say unavailable.
 7. Confirm six **Investor views** (aside `aria-label` `Six investor views`) display typed signals and clearly labeled probabilities.
-   No view must remain distinct from neutral. Record model and snapshot timestamps.
+   No view must remain distinct from neutral. Each card's reason must be specific to
+   its lens and company (cites figures), not the shared rubric sentence. Record model
+   and snapshot timestamps.
 8. Select Warren Buffett, ask about valuation and wait for streamed reply. Switch to
    another lens and back. The Buffett thread must remain in Buffett's conversation.
 9. Run another ticker and confirm previous conversations do not appear in its report.
