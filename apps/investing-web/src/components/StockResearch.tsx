@@ -425,7 +425,7 @@ export function StockResearch() {
                     Evidence strength {Math.round(item.conviction)} / 100
                   </span>
                 )}
-                <span className="mt-2 line-clamp-2 block text-xs leading-5 text-muted-foreground">
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">
                   {item.reasoning}
                 </span>
                 <span className="mt-3 block text-xs font-semibold text-primary">
