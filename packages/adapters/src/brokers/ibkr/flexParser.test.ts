@@ -228,3 +228,48 @@ describe("parseFlexStatement", () => {
     expect(result.sections.cashFlows.status).toBe("partial");
   });
 });
+
+describe("parseFlexStatement position date", () => {
+  const position = `<OpenPosition accountId="U1" symbol="AAPL" position="2" currency="USD" />`;
+
+  test("falls back to the enclosing statement's toDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions>${position}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toEqual([
+      expect.objectContaining({ symbol: "AAPL", asOf: "2026-10-02" }),
+    ]);
+  });
+
+  test("uses each statement's own toDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions><OpenPosition accountId="U1" symbol="AAPL" position="2" currency="USD" /></OpenPositions></FlexStatement><FlexStatement accountId="U2" toDate="20261001"><OpenPositions><OpenPosition accountId="U2" symbol="MSFT" position="3" currency="USD" /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.positions.rows.map((row) => [row.symbol, row.asOf])).toEqual([
+      ["AAPL", "2026-10-02"],
+      ["MSFT", "2026-10-01"],
+    ]);
+  });
+
+  test("says the date is missing and names the column when no date exists", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1"><OpenPositions>${position}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toEqual([]);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toMatch(/missing/);
+    expect(result.problems[0]).toMatch(/Report Date/);
+  });
+
+  test("keeps saying invalid for a malformed reportDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement toDate="20261002"><OpenPositions><OpenPosition symbol="AAPL" position="2" reportDate="soon" /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems[0]).toMatch(/invalid date/);
+  });
+});

@@ -27,6 +27,10 @@ function section<T>(rows: T[], present: boolean, problems: string[]): BrokerSect
   };
 }
 
+function flexStatements(xml: string): RegExpExecArray[] {
+  return [...xml.matchAll(/<FlexStatement\b([^>]*)>([\s\S]*?)<\/FlexStatement\s*>/gi)];
+}
+
 function hasTag(xml: string, tag: string): boolean {
   return new RegExp(`<${tag}(?:\\s|>)`, "i").test(xml);
 }
@@ -238,8 +242,7 @@ function cashHistory(
   if (Object.values(sections).some((value) => value.status !== "complete"))
     return unknown("IBKR Flex cash report or Statement of Funds is missing or partial");
   const periods = new Set<string>();
-  const statements = [...xml.matchAll(/<FlexStatement\b([^>]*)>([\s\S]*?)<\/FlexStatement\s*>/gi)];
-  for (const [, attrs = "", body = ""] of statements) {
+  for (const [, attrs = "", body = ""] of flexStatements(xml)) {
     if (!hasTag(body, "CashReport") || !hasTag(body, "StatementOfFunds"))
       return unknown("An IBKR Flex account statement lacks its cash report or Statement of Funds");
     const { fromDate, toDate } = attributes(attrs);
@@ -299,7 +302,16 @@ function side(value: string | undefined): TradeSide {
   }
 }
 
-function parsePosition(attrs: Attributes, entity: string): Position {
+function positionDate(attrs: Attributes, statementDate: string | undefined): string {
+  const value = first(attrs, "reportDate", "date") || statementDate;
+  if (!value)
+    throw new Error(
+      "IBKR Flex position date is missing; enable Report Date in the Open Positions section of the Flex query",
+    );
+  return date(value, "position date");
+}
+
+function parsePosition(attrs: Attributes, entity: string, statementDate?: string): Position {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
   const account = first(attrs, "accountId", "accountID");
@@ -322,7 +334,7 @@ function parsePosition(attrs: Attributes, entity: string): Position {
     marketPrice: numberOrNull(first(attrs, "markPrice", "marketPrice")),
     marketValue: numberOrNull(first(attrs, "positionValue", "marketValue")),
     currency,
-    asOf: date(first(attrs, "reportDate", "date"), "position date"),
+    asOf: positionDate(attrs, statementDate),
   };
 }
 
@@ -388,13 +400,20 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   const trades: TradeWithoutId[] = [];
   const positionProblems: string[] = [];
   const tradeProblems: string[] = [];
-  for (const attrs of rows(xml, "OpenPosition")) {
-    try {
-      positions.push(parsePosition(attrs, entity));
-    } catch (error) {
-      positionProblems.push(
-        error instanceof Error ? error.message : "IBKR Flex OpenPosition row is invalid",
-      );
+  const statements = flexStatements(xml);
+  const positionScopes: Array<[string, string | undefined]> =
+    statements.length > 0
+      ? statements.map(([, attrs = "", body = ""]) => [body, attributes(attrs).toDate])
+      : [[xml, undefined]];
+  for (const [body, statementDate] of positionScopes) {
+    for (const attrs of rows(body, "OpenPosition")) {
+      try {
+        positions.push(parsePosition(attrs, entity, statementDate));
+      } catch (error) {
+        positionProblems.push(
+          error instanceof Error ? error.message : "IBKR Flex OpenPosition row is invalid",
+        );
+      }
     }
   }
   for (const attrs of rows(xml, "Trade")) {
