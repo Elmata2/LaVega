@@ -726,8 +726,15 @@ test("a history whose movements do not close on an empty wallet is refused", () 
     today: "2026-01-06",
   });
 
-  expect(series[0]?.cashValue).toBeNull();
-  expect(series[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+  /* The walk back to the deposit is refused. Nothing was reported after it,
+   * so the balance itself is the estimate, and the shortfall says how much of
+   * the history it may be missing. */
+  expect(series[0]).toMatchObject({
+    cashValue: 100,
+    cashUnknown: [],
+    cashEstimated: ["trading212:EUR"],
+    cashShortfall: { "trading212:EUR": -900 },
+  });
 
   /* Add the withdrawal that accounts for the difference and the history
    * closes, so the same dates can be stated. */
@@ -799,7 +806,7 @@ test("rounding across many movements is tolerated, a missing one is not", () => 
     cashCoverage: [declared],
     today: "2026-01-06",
   });
-  expect(missing[0]?.cashUnknown).toEqual(["trading212:EUR"]);
+  expect(missing[0]?.cashValue).toBe(1500);
   expect(missing[0]?.cashShortfall).toEqual({ "trading212:EUR": -500 });
 });
 
@@ -1217,7 +1224,7 @@ test.each([
 /* Live account, 2026-10-04: a Sunday sync dated the only Trading 212 balance
  * after the last market day, so the latest point of the chart sat before it
  * and its cash read as unknown, although nothing had moved in between. */
-test("a balance stands for earlier dates no movement separates it from", () => {
+test("a balance estimates earlier dates no movement separates it from", () => {
   const declared: CashHistoryCoverage = {
     entity: "personal",
     broker: "trading212",
@@ -1245,8 +1252,8 @@ test("a balance stands for earlier dates no movement separates it from", () => {
   expect(series.find((point) => point.date === "2026-01-05")).toMatchObject({
     cashValue: 150,
     cashUnknown: [],
+    cashEstimated: ["trading212:EUR"],
   });
-  expect(series.find((point) => point.date === "2026-01-05")?.cashEstimated).toBeUndefined();
   expect(series.find((point) => point.date === "2026-01-02")).toMatchObject({
     cashValue: null,
     cashUnknown: ["trading212:EUR"],

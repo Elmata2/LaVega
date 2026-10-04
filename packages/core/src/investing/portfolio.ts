@@ -279,14 +279,28 @@ function cashAmountOnDate(
     proven && proven.to >= (latest?.asOf ?? "")
       ? { asOf: proven.to, amount: walk(proven.to) }
       : latest;
-  if (carried && date > carried.asOf) {
-    const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
-      (day) => day > carried.asOf && day <= date,
+  const movedBetween = (after: string, through: string) =>
+    [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+      (day) => day > after && day <= through,
     );
-    if (!moved) return known(carried.amount);
+  if (carried && date > carried.asOf && !movedBetween(carried.asOf, date))
+    return known(carried.amount);
+  if (!bracketsReconcile(leg, date)) return known(null);
+  if (!leg.tradeCashResolved || !historyCloses(leg)) {
+    /* A sync dates its balance after the last market day, so the chart's
+     * latest point sits just before it. With nothing reported between them
+     * the balance is the best figure for that day, but a history that does
+     * not close may be missing a movement there, so it is an estimate. */
+    const next = leg.anchors
+      .filter((anchor) => anchor.asOf > date)
+      .reduce<CashBalance | undefined>(
+        (first, anchor) => (first && first.asOf <= anchor.asOf ? first : anchor),
+        undefined,
+      );
+    return next && !movedBetween(date, next.asOf)
+      ? { amount: next.amount, estimated: true }
+      : known(null);
   }
-  if (!leg.tradeCashResolved || !bracketsReconcile(leg, date) || !historyCloses(leg))
-    return known(null);
   const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
   return estimate === null || !Number.isFinite(estimate)
     ? known(null)
@@ -641,14 +655,17 @@ export function computePortfolioValueSeries(
     const cashShortfall: Record<string, number> = {};
     for (const leg of legs) {
       const { amount, estimated } = cashAmountOnDate(date, leg);
-      if (amount === null || !Number.isFinite(amount)) {
-        cashUnknown.add(displayCashKey(leg));
+      const unknown = amount === null || !Number.isFinite(amount);
+      if (unknown || estimated) {
         /* What the movements come to when they do not come to nothing. This
          * is the size of the history that is missing, and its sign says which
          * side: below zero the spending is recorded without the funding,
          * above it the funding without the spending. */
         const residual = historyResidual(leg);
         if (residual !== null && !historyCloses(leg)) cashShortfall[displayCashKey(leg)] = residual;
+      }
+      if (unknown) {
+        cashUnknown.add(displayCashKey(leg));
         continue;
       }
       try {
