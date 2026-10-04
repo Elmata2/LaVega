@@ -119,7 +119,8 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Goal** — a target outcome the user states in conversation. It is about the whole portfolio (for example €500 per month in dividends) or about one instrument (for example trim above 15% weight). A view of what a stock is worth is part of the thesis, not a goal.
 - **Observation** — something an agent noted from a thread, so it can later say "last month you said...". It belongs to its thread.
 - **Risk tolerance** — a user profile setting with three levels: Conservative, Balanced, Aggressive. Every agent reads it before it answers. If it is not set, the agent asks once in conversation and saves the answer.
-- **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, and profile setting. It is separate from deleting one thread.
+- **Portfolio letter** — one stored letter from Charlie Munger about the whole portfolio: a verdict and at most three observations, each citing the owner's own figures. The broker-sync cron writes it when the broker snapshot changes (see ADR 0008). The dashboard shows the latest one and never generates one.
+- **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, portfolio letter, and profile setting. It is separate from deleting one thread.
 
 ## Conventions
 

@@ -92,13 +92,14 @@ can be backtested and combined — is a great first contribution:
 
 ## Autonomy
 
-| Item                                                                                                                                                            | Status |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch                                                                                        | ⬜     |
-| Observability — per-cycle events, notifications, heartbeat                                                                                                      | ⬜     |
-| Research lab — backtest candidate strategies/allocators alongside the live fund                                                                                 | ⬜     |
-| Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate                    | ⬜     |
-| Auto-promotion — winners graduate into the live fund through the validation gate (CPCV/PBO), human-approved by default (depends: research lab, validation gate) | ⬜     |
+| Item                                                                                                                                                            | Status                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Scheduler / daemon — market-calendar cron, idempotent ticks, kill-switch                                                                                        | ⬜                                                                     |
+| Proactive portfolio letter (Munger-03) — one stored letter per broker-sync snapshot, written by the daily cron, shown on the dashboard                          | ✅ (gate: new snapshot and (holdings changed or 7 days); see ADR 0008) |
+| Observability — per-cycle events, notifications, heartbeat                                                                                                      | ⬜                                                                     |
+| Research lab — backtest candidate strategies/allocators alongside the live fund                                                                                 | ⬜                                                                     |
+| Strategy generator — composes candidate strategies from the building blocks (analysts × policies × parameters), driven by the fund's mandate                    | ⬜                                                                     |
+| Auto-promotion — winners graduate into the live fund through the validation gate (CPCV/PBO), human-approved by default (depends: research lab, validation gate) | ⬜                                                                     |
 
 ## Interfaces
 
