@@ -1213,3 +1213,42 @@ test.each([
     points.filter(({ date }) => date >= start).map(({ date }) => date),
   );
 });
+
+/* Live account, 2026-10-04: a Sunday sync dated the only Trading 212 balance
+ * after the last market day, so the latest point of the chart sat before it
+ * and its cash read as unknown, although nothing had moved in between. */
+test("a balance stands for earlier dates no movement separates it from", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const withdrawal = (id: string, date: string, amount: number) => ({
+    id,
+    entity: "personal",
+    broker: "trading212",
+    date,
+    currency: "EUR",
+    amount,
+    kind: "withdrawal" as const,
+  });
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(150, "2026-01-06")],
+    cashFlows: [withdrawal("rent", "2026-01-02", -30), withdrawal("card", "2026-01-05", -20)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+
+  expect(series.find((point) => point.date === "2026-01-05")).toMatchObject({
+    cashValue: 150,
+    cashUnknown: [],
+  });
+  expect(series.find((point) => point.date === "2026-01-05")?.cashEstimated).toBeUndefined();
+  expect(series.find((point) => point.date === "2026-01-02")).toMatchObject({
+    cashValue: null,
+    cashUnknown: ["trading212:EUR"],
+  });
+});
