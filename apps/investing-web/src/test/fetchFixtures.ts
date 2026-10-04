@@ -123,6 +123,7 @@ export const portfolioSummary = {
   },
   risk: {
     status: "estimate",
+    basis: "account",
     range: "1Y",
     from: "2025-09-10",
     to: "2026-09-10",

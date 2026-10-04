@@ -40,6 +40,11 @@ export type PortfolioValuePoint = {
    *  known value at all (nothing to bound the gap by), which keeps the date
    *  disqualifying. */
   unaccountedValue?: number | null;
+  /** Return since the previous date of the holdings held then, repriced here.
+   *  Trades and cash cannot move it, so it stays measurable when the cash
+   *  history cannot be proven. Null when a holding of the previous date is
+   *  priced on only one of the two dates; absent on the first date. */
+  holdingsReturn?: number | null;
 };
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
 /** Undefined means the FX provider failed. Conversions then throw and every
@@ -567,8 +572,10 @@ export function computePortfolioValueSeries(
     fxRates,
   );
   const lastKnownValue = new Map<string, number>();
+  let previousHoldings: Map<string, { quantity: number; value: number }> | null = null;
 
   return dates.map((date) => {
+    const currentHoldings = new Map<string, { quantity: number; value: number }>();
     let positionsValue = 0;
     let held = 0;
     let priced = 0;
@@ -623,6 +630,7 @@ export function computePortfolioValueSeries(
         positionsValue += symbolValue;
         priced += 1;
         lastKnownValue.set(symbol, symbolValue);
+        currentHoldings.set(symbol, { quantity, value: symbolValue });
         // A later bar means the market traded again after this date, so the
         // gap was a closed session and the last close is the true value.
         const tradedLater = prices !== undefined && prices.index < prices.bars.length;
@@ -660,6 +668,51 @@ export function computePortfolioValueSeries(
       }
     }
 
+    let holdingsReturn: number | null | undefined;
+    if (previousHoldings) {
+      let before = 0;
+      let after = 0;
+      for (const [symbol, previous] of previousHoldings) {
+        const now = currentHoldings.get(symbol);
+        if (now) {
+          before += previous.value;
+          after += (now.value * previous.quantity) / now.quantity;
+          continue;
+        }
+        if (Math.abs(quantityOnDate(date, holdings.get(symbol) ?? [])) >= 1e-12) continue;
+        const prices = barsBySymbol.get(symbol);
+        while (
+          prices &&
+          prices.index < prices.bars.length &&
+          prices.bars[prices.index]!.date <= date
+        )
+          prices.latest = prices.bars[prices.index++]!;
+        const latest = prices?.latest;
+        let repriced: number | null = null;
+        if (latest && (latest.date === date || isPriceFresh(latest.date, date))) {
+          try {
+            repriced = convertCurrency(
+              previous.quantity * latest.close,
+              latest.currency,
+              presentationCurrency,
+              date,
+              fxRates,
+            );
+          } catch {
+            repriced = null;
+          }
+        }
+        if (repriced === null) {
+          before = Number.NaN;
+          break;
+        }
+        before += previous.value;
+        after += repriced;
+      }
+      holdingsReturn = Number.isFinite(before) && before > 0 ? after / before - 1 : null;
+    }
+    previousHoldings = currentHoldings;
+
     const knownPositionsValue = held > 0 && priced === 0 ? null : positionsValue;
     const knownCashValue = legs.length === 0 || reachableCashLegs === 0 ? null : cashValue;
     const reachableValues = [knownPositionsValue, knownCashValue].filter(
@@ -682,6 +735,7 @@ export function computePortfolioValueSeries(
       ...(unpriced.size || holdingsUnknown.size || forwardFilled.size
         ? { unaccountedValue: unaccountedUnknown ? null : unaccountedValue }
         : {}),
+      ...(holdingsReturn !== undefined ? { holdingsReturn } : {}),
     };
   });
 }

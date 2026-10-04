@@ -115,6 +115,7 @@ export { createDashboardCache } from "./dashboardCache.js";
 const LOCAL_TENANT_ID = "local";
 const THREAD_TITLE_LENGTH = 80;
 const DASHBOARD_CACHE_TTL_MS = 15_000;
+const DASHBOARD_BUILD = process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
 const TRADING212_HEALTH_MAX_AGE_MS = 26 * 60 * 60 * 1_000;
 
 function environment(name: string): string | undefined {
@@ -493,7 +494,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const stored = await timing.measure("stored", () =>
         dashboardSnapshots?.get(storedKey).catch(() => null),
       );
-      if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
+      /* A stored dashboard is the output of the build that made it, so a
+       * deploy must not keep serving the previous build's shape. */
+      const storedBuild = stored?.dashboard as { build?: string; dashboard?: unknown } | null;
+      if (storedBuild?.build === DASHBOARD_BUILD && storedBuild.dashboard)
+        return storedBuild.dashboard as InvestingDashboardData;
       const refreshProblems: string[] = [];
       try {
         await timing.measure("broker", async () => {
@@ -613,7 +618,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           historicalFx.problems.length;
         if (stored && transientProblems === 0)
           await timing.measure("store", () =>
-            dashboardSnapshots?.put(storedKey, stored.version, dashboard).catch(() => undefined),
+            dashboardSnapshots
+              ?.put(storedKey, stored.version, { build: DASHBOARD_BUILD, dashboard })
+              .catch(() => undefined),
           );
         return dashboard;
       };

@@ -37,10 +37,14 @@ test("values holdings by walking trades out from the broker position", () => {
   });
 
   expect(result.find(({ date }) => date === "2026-01-02")).toEqual(point("2026-01-02", 2200));
-  expect(result.find(({ date }) => date === "2026-01-05")).toEqual(
-    point("2026-01-05", 1952.3809523809523),
-  );
-  expect(result.at(-1)).toEqual(point("2026-02-02", 2090.909090909091));
+  expect(result.find(({ date }) => date === "2026-01-05")).toEqual({
+    ...point("2026-01-05", 1952.3809523809523),
+    holdingsReturn: (8 * 100 + 7 * 210) / 1.05 / 2200 - 1,
+  });
+  expect(result.at(-1)).toEqual({
+    ...point("2026-02-02", 2090.909090909091),
+    holdingsReturn: null,
+  });
 });
 
 test("values the broker position when the trade history is short", () => {

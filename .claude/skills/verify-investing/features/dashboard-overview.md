@@ -23,6 +23,7 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
   `Valid daily returns`, `Benchmark pairs`, from `GET /api/investing/summary`. When
   `risk.to` is before today, the line `Historical account risk · …` appends ` (as of <date>)`.
+  With `risk.basis: "holdings"` (cash history unproven) the line reads `Historical holdings risk · …`.
   The card title stays `Summary`. Controls:
   `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`), `Risk benchmark`.
 - `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,

@@ -118,7 +118,7 @@ export function PortfolioSummaryCard({
         </div>
         <div className="space-y-2 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">
-            Historical account risk ·{" "}
+            {risk.basis === "holdings" ? "Historical holdings risk" : "Historical account risk"} ·{" "}
             {risk.status === "unavailable"
               ? stillLoading
                 ? "Still loading"

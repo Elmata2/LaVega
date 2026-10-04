@@ -260,6 +260,21 @@ test("a stored dashboard is served by any instance without reading the vault", a
   expect(persistence.reads).toHaveBeenCalledTimes(2);
 });
 
+test("a dashboard stored by an earlier build is rebuilt instead of served", async () => {
+  persistence.dashboards = new Map([
+    ["tenant\u0000", { version: 0, dashboard: { positions: [{ quantity: 99 }] } }],
+  ]);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    resolveTenantId: () => "tenant",
+  });
+  const response = await app.request("/api/investing/dashboard");
+
+  expect(((await response.json()) as InvestingDashboardData).positions[0]?.quantity).toBe(1);
+  expect(persistence.reads).toHaveBeenCalledTimes(1);
+});
+
 test("Server-Timing tells a built dashboard from a stored one", async () => {
   persistence.dashboards = new Map();
   persistence.snapshots.set("tenant", snapshot(1));
