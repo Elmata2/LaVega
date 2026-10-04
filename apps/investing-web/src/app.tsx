@@ -47,6 +47,8 @@ import { useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
 import { usePortfolioSummary } from "./lib/summaryResource.js";
+import { PortfolioLetterCard } from "./components/PortfolioLetterCard.js";
+import { letterToText, useLatestLetter } from "./lib/portfolioLetter.js";
 import {
   chatErrorMessage,
   currentThreadId,
@@ -1214,8 +1216,11 @@ function OverviewEmptyState() {
   );
 }
 
+const LETTER_AGENT_ID = "charlie_munger";
+
 function Overview() {
   const state = useDashboard();
+  const navigate = useNavigate();
   const { broker, price, priceProblem, connection, vault } = useSyncSession();
   const layout = useInvestingLayout();
   const gate = historyGate(broker?.history);
@@ -1247,6 +1252,16 @@ function Overview() {
     `${dataVersion}:${benchmarksRevision}`,
     dashboardReady && (showRisk || showSectors),
   );
+  const showLetter = widgets.has("agent");
+  const letter = useLatestLetter(dashboardReady && showLetter);
+  function discussLetter() {
+    if (letter.status !== "ready") return;
+    const threadId = startNewThread(LETTER_AGENT_ID);
+    void portfolioChat(LETTER_AGENT_ID, threadId).sendMessage({
+      text: letterToText(letter.letter),
+    });
+    navigate(`/agents/${LETTER_AGENT_ID}`);
+  }
   return (
     <div className="space-y-5">
       <AppOpenSync />
@@ -1331,6 +1346,7 @@ function Overview() {
                       }
                     />
                   )}
+                  {showLetter && <PortfolioLetterCard state={letter} onDiscuss={discussLetter} />}
                 </aside>
               </div>
               {showSectors && (

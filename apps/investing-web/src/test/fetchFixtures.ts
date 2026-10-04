@@ -215,6 +215,7 @@ export function responseFor(input: RequestInfo | URL, init?: RequestInit) {
       return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
       return agentReplyStream();
+    if (url === "/api/letters/latest") return new Response(JSON.stringify({ letter: null }));
     if (url === "/api/brokers/sync" && init?.method === "POST")
       return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));

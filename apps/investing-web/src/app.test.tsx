@@ -439,10 +439,18 @@ test("overview renders widgets in registry order and excludes positions and net 
     await Promise.resolve();
   });
 
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["performance", "allocation", "kpis", "risk", "sectors", "agent"]);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
+  expect(order).toEqual([
+    "performance",
+    "allocation",
+    "kpis",
+    "risk",
+    "letter",
+    "sectors",
+    "agent",
+  ]);
   expect(container.querySelector('[data-dashboard-section="positions"]')).toBeNull();
   expect(container.querySelector('[data-dashboard-section="net-worth"]')).toBeNull();
 
@@ -481,10 +489,10 @@ test("hiding a widget closes its gap instead of leaving a blank card", async () 
     await Promise.resolve();
   });
   expect(container.querySelector('[data-dashboard-section="allocation"]')).toBeNull();
-  const order = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-dashboard-section]"),
-  ).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["performance", "kpis", "risk", "sectors", "agent"]);
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map(
+    (element) => element.dataset.dashboardSection,
+  );
+  expect(order).toEqual(["performance", "kpis", "risk", "letter", "sectors", "agent"]);
   root.unmount();
 });
 
@@ -2481,6 +2489,75 @@ test("/agents lists every portfolio agent and links to its conversation", async 
  * Het pagineren en hervatten werkte al; wat ontbrak is dat het dashboard dat
  * niet wist en gewoon doorrekende op wat er toevallig lag. Rendement komt uit
  * `trades`, dus dat getal was niet onvolledig maar fout — mét decimalen. */
+test("Discuss opens a new Munger thread whose first message is the letter", async () => {
+  const sent: Array<{ agentId: string; id: string; text: string }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/letters/latest")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              letter: {
+                id: "11111111-1111-4111-8111-111111111111",
+                snapshotHash: "s",
+                holdingsHash: "h",
+                createdAt: "2026-10-03T04:00:00Z",
+                verdict: "Too much in one basket.",
+                observations: [{ title: "ASML", body: "It is 42%.", figures: ["42%"] }],
+              },
+            }),
+          ),
+        );
+      if (url === "/api/agents/portfolio/conversation" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as {
+          agentId: string;
+          id: string;
+          messages: Array<{ parts: Array<{ text: string }> }>;
+        };
+        sent.push({
+          agentId: body.agentId,
+          id: body.id,
+          text: body.messages.at(-1)!.parts[0]!.text,
+        });
+      }
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const letter = container.querySelector<HTMLElement>('[data-dashboard-section="letter"]')!;
+  expect(letter.textContent).toContain("Too much in one basket.");
+
+  await act(async () => {
+    Array.from(letter.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Discuss")
+      ?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ agentId: "charlie_munger" });
+  expect(sent[0]!.text).toContain("Too much in one basket.");
+  expect(sent[0]!.text).toContain("1. ASML. It is 42%. (42%)");
+  root.unmount();
+});
+
 test("the overview withholds the figures while a first history is still loading", async () => {
   vi.stubGlobal(
     "fetch",
