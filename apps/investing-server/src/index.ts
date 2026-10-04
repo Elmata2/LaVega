@@ -106,6 +106,8 @@ import {
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { attachLetterRoutes } from "./letterRoutes.js";
+import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
@@ -218,6 +220,8 @@ export type RuntimeAppOptions = {
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
   runAgent?: PortfolioAgentRunner;
   chatModel?: LanguageModel;
+  /** Defaults to a Munger call on the chat model. */
+  letterGenerator?: LetterGenerator;
   fundamentalsProvider?: FundamentalsProvider;
   dashboardCache?: DashboardCache;
   /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
@@ -904,6 +908,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     attachMemoryRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
       memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+    });
+    attachLetterRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      context: portfolioChatContext,
+      generate: options.letterGenerator ?? createLetterGenerator(options.chatModel),
     });
     attachStockResearchRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
