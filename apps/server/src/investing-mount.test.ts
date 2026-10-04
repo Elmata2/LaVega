@@ -238,11 +238,18 @@ test("the cron syncs every tenant with a connected broker, with no allowlist env
   expect(response.status).toBe(200);
   expect(seen).toEqual([
     "user-a:/api/brokers/sync",
+    "user-a:/api/letters/ensure",
     "user-b:/api/brokers/sync",
+    "user-b:/api/letters/ensure",
     "user-c:/api/brokers/sync",
+    "user-c:/api/letters/ensure",
   ]);
-  const body = (await response.json()) as { tenants: unknown[]; skipped: number };
+  const body = (await response.json()) as {
+    tenants: Array<{ letterStatus: number }>;
+    skipped: number;
+  };
   expect(body.tenants).toHaveLength(3);
+  expect(body.tenants.map((tenant) => tenant.letterStatus)).toEqual([200, 200, 200]);
   expect(body.skipped).toBe(0);
 });
 
@@ -292,12 +299,27 @@ test("the cron stops before a tenant that no longer fits, counting from before t
   expect(seen.some((entry) => entry.startsWith("user-b:"))).toBe(false);
 });
 
-test("a tenant costs one request: the price slice runs inside /api/brokers/sync", async () => {
+test("the price slice runs inside /api/brokers/sync, with the letter asked for after it", async () => {
   const { mount, seen } = await cronMount(["user-a"]);
 
   await mount.runInvestingCron(cronRequest());
 
-  expect(seen).toEqual(["user-a:/api/brokers/sync"]);
+  expect(seen).not.toContain("user-a:/api/prices/sync");
+  expect(seen).toEqual(["user-a:/api/brokers/sync", "user-a:/api/letters/ensure"]);
+});
+
+test("a failing letter call leaves the sync result intact", async () => {
+  const { mount } = await cronMount(["user-a"], (_tenant, path) => {
+    if (path === "/api/letters/ensure") throw new Error("model down");
+    return Response.json({ ok: true });
+  });
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    tenants: [{ tenantId: "user-a", brokerStatus: 200, letterStatus: 0 }],
+  });
 });
 
 test("a budget where not even one slice fits is a 500, not a quiet 200 with everything skipped", async () => {

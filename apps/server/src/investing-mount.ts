@@ -235,7 +235,16 @@ export async function runInvestingCron(request: Request): Promise<Response> {
         new Request(`${origin}/api/brokers/sync`, { method: "POST" }),
         tenantId,
       );
-      results.push({ tenantId, brokerStatus: broker.status });
+      /* The letter is a side effect of the sync, never part of its outcome:
+       * a model or database failure here must not turn a good sync red. */
+      const letterStatus = await forwardInvesting(
+        new Request(`${origin}/api/letters/ensure`, { method: "POST" }),
+        tenantId,
+      ).then(
+        (response) => response.status,
+        () => 0,
+      );
+      results.push({ tenantId, brokerStatus: broker.status, letterStatus });
     } catch (error) {
       cronProblem(`Tenant ${tenantId} sync failed`, error);
       results.push({ tenantId, error: "Tenant sync failed" });
