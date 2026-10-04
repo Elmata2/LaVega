@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { generateText, jsonSchema, Output, type LanguageModel } from "ai";
 import {
   renderPortfolioBrief,
@@ -26,17 +25,22 @@ export type LetterGenerator = (input: {
   sectors: readonly SectorExposure[] | null;
 }) => Promise<LetterDraft>;
 
-const digest = (parts: readonly string[]): string =>
-  createHash("sha256").update(parts.join("\n")).digest("hex");
+async function digest(parts: readonly string[]): Promise<string> {
+  const bytes = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(parts.join("\n")),
+  );
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
-export function letterHashes(dashboard: InvestingDashboardData): {
+export async function letterHashes(dashboard: InvestingDashboardData): Promise<{
   snapshotHash: string;
   holdingsHash: string;
-} {
+}> {
   const positions = [...dashboard.positions].sort((a, b) => a.symbol.localeCompare(b.symbol));
   return {
-    holdingsHash: digest(positions.map((p) => `${p.symbol}:${p.quantity}`)),
-    snapshotHash: digest(
+    holdingsHash: await digest(positions.map((p) => `${p.symbol}:${p.quantity}`)),
+    snapshotHash: await digest(
       positions.map((p) =>
         [
           p.symbol,
@@ -139,7 +143,7 @@ export async function ensureLetter(input: {
   now?: () => number;
 }): Promise<{ letter: PortfolioLetter | null; generated: boolean }> {
   const latest = await input.memory.latestLetter();
-  const hashes = letterHashes(input.dashboard);
+  const hashes = await letterHashes(input.dashboard);
   if (!shouldGenerateLetter(latest, hashes, (input.now ?? Date.now)()))
     return { letter: latest, generated: false };
   const draft = normalizeLetterDraft(

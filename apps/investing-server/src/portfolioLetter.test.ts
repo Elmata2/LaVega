@@ -65,11 +65,11 @@ test("the generation gate", () => {
     expect(shouldGenerateLetter(latest, current, NOW), name).toBe(expected);
 });
 
-test("prices do not change the snapshot hash, quantities and cost basis do", () => {
-  const base = letterHashes(dashboard(position("ASML", 2), position("KO", 5)));
-  const reordered = letterHashes(dashboard(position("KO", 5), position("ASML", 2)));
-  const moreCost = letterHashes(dashboard(position("ASML", 2, 150), position("KO", 5)));
-  const moreShares = letterHashes(dashboard(position("ASML", 3), position("KO", 5)));
+test("prices do not change the snapshot hash, quantities and cost basis do", async () => {
+  const base = await letterHashes(dashboard(position("ASML", 2), position("KO", 5)));
+  const reordered = await letterHashes(dashboard(position("KO", 5), position("ASML", 2)));
+  const moreCost = await letterHashes(dashboard(position("ASML", 2, 150), position("KO", 5)));
+  const moreShares = await letterHashes(dashboard(position("ASML", 3), position("KO", 5)));
   expect(reordered).toEqual(base);
   expect(moreCost.holdingsHash).toBe(base.holdingsHash);
   expect(moreCost.snapshotHash).not.toBe(base.snapshotHash);
