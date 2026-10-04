@@ -1222,9 +1222,10 @@ test.each([
 });
 
 /* Live account, 2026-10-04: a Sunday sync dated the only Trading 212 balance
- * after the last market day, so the latest point of the chart sat before it
- * and its cash read as unknown, although nothing had moved in between. */
-test("a balance estimates earlier dates no movement separates it from", () => {
+ * after the last market day, with interest and a card payment booked in
+ * between, and a history ~7,900 EUR short of closing. Every point of the
+ * chart, the latest included, read as cash unknown. */
+test("a balance is walked back through recent movements until the wallet would be overdrawn", () => {
   const declared: CashHistoryCoverage = {
     entity: "personal",
     broker: "trading212",
@@ -1232,30 +1233,34 @@ test("a balance estimates earlier dates no movement separates it from", () => {
     status: "unknown",
     reason: "window unproven",
   };
-  const withdrawal = (id: string, date: string, amount: number) => ({
+  const flow = (id: string, date: string, amount: number) => ({
     id,
     entity: "personal",
     broker: "trading212",
     date,
     currency: "EUR",
     amount,
-    kind: "withdrawal" as const,
+    kind: amount > 0 ? ("deposit" as const) : ("withdrawal" as const),
   });
 
   const series = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
-    cashBalances: [eurCash(150, "2026-01-06")],
-    cashFlows: [withdrawal("rent", "2026-01-02", -30), withdrawal("card", "2026-01-05", -20)],
+    cashBalances: [eurCash(150, "2026-01-07")],
+    cashFlows: [
+      flow("fee", "2026-01-02", -5),
+      flow("deposit", "2026-01-05", 500),
+      flow("card", "2026-01-06", -20),
+    ],
     cashCoverage: [declared],
-    today: "2026-01-06",
+    today: "2026-01-07",
   });
+  const on = (date: string) => series.find((point) => point.date === date);
 
-  expect(series.find((point) => point.date === "2026-01-05")).toMatchObject({
+  expect(on("2026-01-06")).toMatchObject({
     cashValue: 150,
     cashUnknown: [],
     cashEstimated: ["trading212:EUR"],
   });
-  expect(series.find((point) => point.date === "2026-01-02")).toMatchObject({
-    cashValue: null,
-    cashUnknown: ["trading212:EUR"],
-  });
+  expect(on("2026-01-05")).toMatchObject({ cashValue: 170, cashEstimated: ["trading212:EUR"] });
+  /* Before the deposit the wallet would hold -330: a movement is missing. */
+  expect(on("2026-01-02")).toMatchObject({ cashValue: null, cashUnknown: ["trading212:EUR"] });
 });

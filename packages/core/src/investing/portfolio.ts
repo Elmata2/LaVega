@@ -236,6 +236,33 @@ function historyCloses(leg: CashLeg): boolean {
   return Math.abs(residual) <= reconciliationTolerance(counted);
 }
 
+/**
+ * Walk a balance back to an earlier date through the movements reported
+ * between them, or null once the walk would overdraw the wallet.
+ *
+ *  A history that does not close is missing something, but not necessarily
+ *  anything recent: a sync dates its balance after the last market day, and
+ *  the days just before it are best read off that balance and the movements
+ *  in between. A wallet cannot hold less than nothing, so the first day the
+ *  walk would put it there proves a movement is missing between that day and
+ *  the balance, and from there back nothing is stated.
+ */
+function walkBackUntilOverdrawn(
+  date: string,
+  anchor: Anchor,
+  events: readonly CashEvent[],
+): number | null {
+  const between = events
+    .filter((event) => event.date > date && event.date <= anchor.asOf)
+    .sort((left, right) => right.date.localeCompare(left.date));
+  let balance = anchor.amount;
+  for (const [index, event] of between.entries()) {
+    balance -= event.amount;
+    if (!Number.isFinite(balance) || balance < -reconciliationTolerance(index + 1)) return null;
+  }
+  return balance;
+}
+
 /** What a leg held on a date, and whether the broker's history proves it.
  *
  *  A walk may only cross the proven window. Outside it the balance is known on
@@ -279,27 +306,23 @@ function cashAmountOnDate(
     proven && proven.to >= (latest?.asOf ?? "")
       ? { asOf: proven.to, amount: walk(proven.to) }
       : latest;
-  const movedBetween = (after: string, through: string) =>
-    [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
-      (day) => day > after && day <= through,
+  if (carried && date > carried.asOf) {
+    const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+      (day) => day > carried.asOf && day <= date,
     );
-  if (carried && date > carried.asOf && !movedBetween(carried.asOf, date))
-    return known(carried.amount);
+    if (!moved) return known(carried.amount);
+  }
   if (!bracketsReconcile(leg, date)) return known(null);
   if (!leg.tradeCashResolved || !historyCloses(leg)) {
-    /* A sync dates its balance after the last market day, so the chart's
-     * latest point sits just before it. With nothing reported between them
-     * the balance is the best figure for that day, but a history that does
-     * not close may be missing a movement there, so it is an estimate. */
     const next = leg.anchors
       .filter((anchor) => anchor.asOf > date)
       .reduce<CashBalance | undefined>(
         (first, anchor) => (first && first.asOf <= anchor.asOf ? first : anchor),
         undefined,
       );
-    return next && !movedBetween(date, next.asOf)
-      ? { amount: next.amount, estimated: true }
-      : known(null);
+    const walked =
+      next && leg.tradeCashResolved ? walkBackUntilOverdrawn(date, next, leg.events) : null;
+    return walked === null ? known(null) : { amount: walked, estimated: true };
   }
   const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
   return estimate === null || !Number.isFinite(estimate)

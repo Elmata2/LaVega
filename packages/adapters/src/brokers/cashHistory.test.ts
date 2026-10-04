@@ -167,7 +167,7 @@ describe("IBKR cash history from adapter to portfolio", () => {
   });
 });
 
-test("Trading 212 cash with unproven history is walked nowhere past its last movement", () => {
+test("Trading 212 cash with unproven history is estimated back from its balance", () => {
   const sections = allSections("complete");
   sections.cashBalances.rows = [
     { entity: "personal", broker: "trading212", currency: "EUR", amount: 800, asOf: "2026-01-09" },
@@ -218,19 +218,13 @@ test("Trading 212 cash with unproven history is walked nowhere past its last mov
   );
 
   /* This history is short a page, so its movements do not total back to an
-   * empty wallet and the walk is refused. The balance date stands, and the
-   * days from the last trade on are estimated from it, since nothing
-   * reported lies between them. */
-  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([
-    ["trading212:EUR"],
-    ["trading212:EUR"],
-    [],
-    [],
-    [],
-  ]);
+   * empty wallet and nothing is proven. The balance date stands; earlier
+   * dates are walked back from it through the purchase, 800 then 960, and
+   * said to be estimates. */
+  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
   expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
-    [],
-    [],
+    ["trading212:EUR"],
+    ["trading212:EUR"],
     ["trading212:EUR"],
     ["trading212:EUR"],
     [],
