@@ -14,6 +14,14 @@ const THREAD_B = "00000000-0000-4000-8000-00000000000b";
 const thesis = (why: string) => ({ why, worth: "€400", entry: null, wrongIf: null });
 const userMessage = (text: string) => ({ id: text, role: "user", parts: [{ type: "text", text }] });
 
+const letter = (snapshotHash: string, id = crypto.randomUUID()) => ({
+  id,
+  snapshotHash,
+  holdingsHash: "holdings",
+  verdict: "Concentrated, but in quality.",
+  observations: [{ title: "ASML", body: "ASML is 30% of the book.", figures: ["30%"] }],
+});
+
 beforeAll(async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
   ({ pglite, db } = await migratedTestDatabase());
@@ -27,7 +35,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await pglite.exec(
     `RESET ROLE;
-     DELETE FROM investing.agent_observations; DELETE FROM investing.agent_messages;
+     DELETE FROM investing.portfolio_letters; DELETE FROM investing.agent_observations; DELETE FROM investing.agent_messages;
      DELETE FROM investing.goals; DELETE FROM investing.theses;
      DELETE FROM investing.agent_threads; DELETE FROM investing.preferences;
      SET ROLE lavega_runtime;`,
@@ -271,6 +279,7 @@ test("the export holds every memory table and erase-all-data removes them", asyn
     text: "note",
   });
   await memory.setRiskTolerance("conservative");
+  await memory.saveLetter(letter("snap-1"));
   await createAgentMemoryRepository(db, "bob").confirmThesis("KO", thesis("Brand"));
 
   const exported = await memory.exportAll();
@@ -281,6 +290,7 @@ test("the export holds every memory table and erase-all-data removes them", asyn
   expect(exported.theses.map((t) => t.symbol)).toEqual(["ASML"]);
   expect(exported.goals.map((g) => g.text)).toEqual(["income"]);
   expect(exported.observations.map((o) => o.text)).toEqual(["note"]);
+  expect(exported.letters.map((l) => l.snapshotHash)).toEqual(["snap-1"]);
 
   await eraseUserData(db, "alice");
 
@@ -290,6 +300,31 @@ test("the export holds every memory table and erase-all-data removes them", asyn
     theses: [],
     goals: [],
     observations: [],
+    letters: [],
   });
   expect(await createAgentMemoryRepository(db, "bob").listTheses()).toHaveLength(1);
+});
+
+test("a letter is stored once per snapshot, encrypted, and private to its owner", async () => {
+  const alice = createAgentMemoryRepository(db, "alice");
+  expect(await alice.latestLetter()).toBeNull();
+
+  const first = await alice.saveLetter(letter("snap-1"));
+  const again = await alice.saveLetter(letter("snap-1"));
+  expect(again).toEqual(first);
+  expect(first.observations).toEqual(letter("snap-1").observations);
+
+  const second = await alice.saveLetter(letter("snap-2"));
+  expect((await alice.latestLetter())?.id).toBe(second.id);
+  expect(await createAgentMemoryRepository(db, "bob").latestLetter()).toBeNull();
+  /* Another user may hold a letter for the same snapshot hash. */
+  const bobs = await createAgentMemoryRepository(db, "bob").saveLetter(letter("snap-1"));
+  expect(bobs.id).not.toBe(first.id);
+
+  await pglite.exec("RESET ROLE;");
+  const stored = await pglite.query<{ body_blob: Uint8Array }>(
+    "SELECT body_blob FROM investing.portfolio_letters WHERE user_id = 'alice'",
+  );
+  await pglite.exec("SET ROLE lavega_runtime;");
+  expect(Buffer.from(stored.rows[0]!.body_blob).toString("utf8")).not.toContain("quality");
 });

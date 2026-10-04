@@ -79,12 +79,26 @@ export type RecallResult =
   | { kind: "observations"; observations: Observation[] }
   | { kind: "threads"; threads: ThreadSummary[] };
 
+export type LetterObservation = { title: string; body: string; figures: string[] };
+
+/** The portfolio letter (Munger-03): one per broker-sync snapshot. */
+export type PortfolioLetter = {
+  id: string;
+  snapshotHash: string;
+  holdingsHash: string;
+  createdAt: string;
+  verdict: string;
+  /** At most three. */
+  observations: LetterObservation[];
+};
+
 export type AgentMemoryExport = {
   riskTolerance: RiskTolerance | null;
   threads: Array<ThreadSummary & { messages: unknown[] }>;
   theses: Thesis[];
   goals: Goal[];
   observations: Observation[];
+  letters: PortfolioLetter[];
 };
 
 export type AgentMemoryRepository = {
@@ -126,6 +140,9 @@ export type AgentMemoryRepository = {
   recall(query: RecallQuery, limit: number): Promise<RecallResult>;
   getRiskTolerance(): Promise<RiskTolerance | null>;
   setRiskTolerance(value: RiskTolerance | null): Promise<void>;
+  latestLetter(): Promise<PortfolioLetter | null>;
+  /** Stores the letter unless one exists for its snapshot; returns the stored one. */
+  saveLetter(letter: Omit<PortfolioLetter, "createdAt">): Promise<PortfolioLetter>;
   exportAll(): Promise<AgentMemoryExport>;
 };
 
@@ -180,9 +197,24 @@ function threadRow(row: QueryResultRow): ThreadSummary {
   };
 }
 
+function letterRow(row: QueryResultRow): PortfolioLetter {
+  const { verdict, observations } = open<Pick<PortfolioLetter, "verdict" | "observations">>(
+    row.body_blob,
+  );
+  return {
+    id: row.id as string,
+    snapshotHash: row.snapshot_hash as string,
+    holdingsHash: row.holdings_hash as string,
+    createdAt: iso(row.created_at),
+    verdict,
+    observations,
+  };
+}
+
 const THESIS_COLUMNS = "symbol, status, body_blob, updated_at";
 const GOAL_COLUMNS = "id, symbol, body_blob, source_thread_id, updated_at";
 const OBSERVATION_COLUMNS = "id, agent_id, thread_id, symbol, body_blob, created_at";
+const LETTER_COLUMNS = "id, snapshot_hash, holdings_hash, body_blob, created_at";
 const THREAD_COLUMNS = "id, agent_id, title_blob, created_at, updated_at";
 
 export function createAgentMemoryRepository(
@@ -414,6 +446,37 @@ export function createAgentMemoryRepository(
       );
     },
 
+    async latestLetter() {
+      const result = await one(
+        `SELECT ${LETTER_COLUMNS} FROM investing.portfolio_letters
+          ORDER BY created_at DESC LIMIT 1`,
+      );
+      return result.rows[0] ? letterRow(result.rows[0]) : null;
+    },
+
+    async saveLetter(letter) {
+      const result = await one(
+        `WITH inserted AS (
+           INSERT INTO investing.portfolio_letters
+             (user_id, id, snapshot_hash, holdings_hash, body_blob)
+           VALUES (current_setting('app.user_id'), $1, $2, $3, $4)
+           ON CONFLICT (user_id, snapshot_hash) DO NOTHING
+           RETURNING ${LETTER_COLUMNS}
+         )
+         SELECT * FROM inserted
+         UNION ALL
+         SELECT ${LETTER_COLUMNS} FROM investing.portfolio_letters
+          WHERE snapshot_hash = $2 AND NOT EXISTS (SELECT 1 FROM inserted)`,
+        [
+          letter.id,
+          letter.snapshotHash,
+          letter.holdingsHash,
+          encryptBlob({ verdict: letter.verdict, observations: letter.observations }),
+        ],
+      );
+      return letterRow(result.rows[0]!);
+    },
+
     async exportAll() {
       return withTenant(db, tenantId, async (client) => {
         const risk = await client.query("SELECT risk_tolerance FROM investing.preferences");
@@ -432,6 +495,9 @@ export function createAgentMemoryRepository(
         const observations = await client.query(
           `SELECT ${OBSERVATION_COLUMNS} FROM investing.agent_observations ORDER BY created_at`,
         );
+        const letters = await client.query(
+          `SELECT ${LETTER_COLUMNS} FROM investing.portfolio_letters ORDER BY created_at`,
+        );
         const byThread = new Map<string, unknown[]>();
         for (const row of messages.rows) {
           const list = byThread.get(row.thread_id as string) ?? [];
@@ -448,6 +514,7 @@ export function createAgentMemoryRepository(
           theses: theses.rows.map(thesisRow),
           goals: goals.rows.map(goalRow),
           observations: observations.rows.map(observationRow),
+          letters: letters.rows.map(letterRow),
         };
       });
     },

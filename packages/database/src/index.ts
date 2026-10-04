@@ -1177,6 +1177,7 @@ const USER_DATA_TABLES = [
   "personal.eb_sessions",
   "personal.eb_pending_auth",
   "personal.n8n_forwarding",
+  "investing.portfolio_letters",
   "investing.agent_observations",
   "investing.agent_messages",
   "investing.goals",
