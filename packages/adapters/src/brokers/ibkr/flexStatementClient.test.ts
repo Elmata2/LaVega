@@ -155,3 +155,103 @@ test("deadline stops before a Flex poll sleep", async () => {
   ).rejects.toThrow("IBKR Flex sync paused before the host time limit");
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+test("fails fast when GetStatement returns a non-XML statement", async () => {
+  let getCalls = 0;
+  setHttpFetchTransport(async (url) => {
+    if (url.includes("SendRequest")) {
+      return new Response(
+        "<FlexStatementResponse><ReferenceCode>987654</ReferenceCode></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    getCalls += 1;
+    return new Response('"ClientAccountID","Symbol"\n"U1","AAPL"\n', { status: 200 });
+  });
+
+  await expect(
+    loadFlexStatement({
+      token: "secret-flex-token",
+      queryId: "12345",
+      initialWaitMs: 0,
+      pollDelayMs: 0,
+    }),
+  ).rejects.toThrow(/not XML.*Format to XML/s);
+  expect(getCalls).toBe(1);
+});
+
+test.each([
+  ["an HTTP 503 page", () => new Response("<html>Service Unavailable</html>", { status: 503 })],
+  ["an empty body", () => new Response("", { status: 200 })],
+])("retries after %s instead of blaming the query format", async (_label, outage) => {
+  let getCalls = 0;
+  setHttpFetchTransport(async (url) => {
+    if (url.includes("SendRequest")) {
+      return new Response(
+        "<FlexStatementResponse><ReferenceCode>987654</ReferenceCode></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    getCalls += 1;
+    return getCalls === 1
+      ? outage()
+      : new Response("<FlexQueryResponse><FlexStatements /></FlexQueryResponse>", { status: 200 });
+  });
+
+  await expect(
+    loadFlexStatement({
+      token: "secret-flex-token",
+      queryId: "12345",
+      initialWaitMs: 0,
+      pollDelayMs: 0,
+    }),
+  ).resolves.toContain("<FlexQueryResponse>");
+  expect(getCalls).toBe(2);
+});
+
+test("does not blame the query format for an unexpected markup response", async () => {
+  setHttpFetchTransport(async (url) =>
+    url.includes("SendRequest")
+      ? new Response(
+          "<FlexStatementResponse><ReferenceCode>987654</ReferenceCode></FlexStatementResponse>",
+          { status: 200 },
+        )
+      : new Response("<html>Login</html>", { status: 200 }),
+  );
+
+  await expect(
+    loadFlexStatement({
+      token: "secret-flex-token",
+      queryId: "12345",
+      initialWaitMs: 0,
+      pollDelayMs: 0,
+    }),
+  ).rejects.toThrow(/unexpected response/);
+});
+
+test("surfaces an IBKR error carried by a 5xx response instead of retrying", async () => {
+  let getCalls = 0;
+  setHttpFetchTransport(async (url) => {
+    if (url.includes("SendRequest")) {
+      return new Response(
+        "<FlexStatementResponse><ReferenceCode>987654</ReferenceCode></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    getCalls += 1;
+    return new Response(
+      "<FlexStatementResponse><ErrorCode>1012</ErrorCode><ErrorMessage>Token has expired.</ErrorMessage></FlexStatementResponse>",
+      { status: 500 },
+    );
+  });
+
+  await expect(
+    loadFlexStatement({
+      token: "secret-flex-token",
+      queryId: "12345",
+      initialWaitMs: 0,
+      pollDelayMs: 0,
+    }),
+  ).rejects.toThrow(/IBKR error 1012: Token has expired/);
+  expect(getCalls).toBe(1);
+});

@@ -224,14 +224,17 @@ async function getFlexStatement(
       return text;
     }
 
-    if (text.includes("Statement generation in progress")) {
+    const providerMessage = extractFlexErrorMessage(text);
+    if (
+      text.includes("Statement generation in progress") ||
+      (!providerMessage && (resp.status >= 500 || text.trim() === ""))
+    ) {
       const pollDelayMs = context.pollDelayMs ?? FLEX_STATEMENT_POLL_DELAY_MS;
       throwIfFlexDeadline(context.deadlineMs, pollDelayMs);
       await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
       continue;
     }
 
-    const providerMessage = extractFlexErrorMessage(text);
     if (providerMessage) {
       throw flexError(providerMessage, {
         phase: "download",
@@ -242,6 +245,20 @@ async function getFlexStatement(
         httpStatus: resp.status,
       });
     }
+
+    throw flexError(
+      text.trimStart().startsWith("<")
+        ? "IBKR returned an unexpected response instead of the statement"
+        : "the downloaded statement is not XML; set the Flex query's Format to XML in IBKR",
+      {
+        phase: "download",
+        endpoint,
+        queryId: context.queryId,
+        token,
+        referenceCode,
+        httpStatus: resp.status,
+      },
+    );
   }
 
   throw flexError("statement generation timed out", {
