@@ -15,11 +15,19 @@ export type LandingCopy = {
     agents: string;
     privacy: string;
     how: string;
-    waitlist: string;
+    signUp: string;
     investing: string;
     login: string;
   };
-  login: { intro: string; close: string };
+  login: {
+    intro: string;
+    close: string;
+    signUpTitle: string;
+    signUpIntro: string;
+    toSignUp: string;
+    toSignIn: string;
+    linkInvalid: string;
+  };
   langSwitch: { label: string; to: string };
   hero: {
     titleTop: string;
@@ -49,21 +57,6 @@ export type LandingCopy = {
   privacy: { title: string; sub: string; ticks: [string, string, string] };
   how: { eyebrow: string; title: string; steps: Array<{ t: string; d: string }> };
   faq: { eyebrow: string; title: string; items: Array<{ q: string; a: string }> };
-  waitlist: {
-    eyebrow: string;
-    title: string;
-    sub: string;
-    done: string;
-    namePlaceholder: string;
-    nameLabel: string;
-    emailPlaceholder: string;
-    emailLabel: string;
-    submit: string;
-    sending: string;
-    soon: string;
-    notReady: string;
-    error: string;
-  };
   footer: {
     ctaTitle: string;
     cta: string;
@@ -86,17 +79,27 @@ const nl: LandingCopy = {
     agents: "Agents",
     privacy: "Privacy",
     how: "Hoe het werkt",
-    waitlist: "Wachtlijst",
+    signUp: "Account aanmaken",
     investing: "Investing",
     login: "Inloggen",
   },
-  login: { intro: "Log in met je LaVega-account.", close: "Sluiten" },
+  login: {
+    intro: "Log in met je LaVega-account.",
+    close: "Sluiten",
+    signUpTitle: "Account aanmaken",
+    signUpIntro:
+      "Maak een LaVega-account aan. We sturen je een link om je e-mailadres te bevestigen.",
+    toSignUp: "Nog geen account? Account aanmaken",
+    toSignIn: "Al een account? Inloggen",
+    linkInvalid:
+      "Deze bevestigingslink is ongeldig of verlopen. Log in met je e-mailadres en wachtwoord: we sturen dan een nieuwe link.",
+  },
   langSwitch: { label: "English", to: "Switch to English" },
   hero: {
     titleTop: "Al je rekeningen,",
     titleBottom: "één helder getal.",
     sub: "LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment precies hoeveel je hebt en waar je geld heen gaat, reserveer je belasting, en haal het meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.",
-    ctaPrimary: "Kom op de wachtlijst",
+    ctaPrimary: "Account aanmaken",
     ctaSecondary: "Bekijk hoe het werkt",
   },
   device: {
@@ -162,10 +165,6 @@ const nl: LandingCopy = {
     steps: [
       { t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
       { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
-      {
-        t: "Vraag de assistent",
-        d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee.",
-      },
     ],
   },
   faq: {
@@ -188,30 +187,11 @@ const nl: LandingCopy = {
         q: "Werkt het met meerdere rekeningen en BV's?",
         a: "Ja — LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
       },
-      {
-        q: "Gebruikt de AI-assistent mijn gegevens?",
-        a: "Alleen als jij dat aanzet, per onderdeel, en je bevestigt zelf wat er gedeeld wordt. Standaard staat het uit.",
-      },
     ],
-  },
-  waitlist: {
-    eyebrow: "Wachtlijst",
-    title: "Wees er als eerste bij",
-    sub: "LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan de beurt bent — plus af en toe een update over nieuwe agents.",
-    done: "Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.",
-    namePlaceholder: "Naam (optioneel)",
-    nameLabel: "Naam",
-    emailPlaceholder: "jouw@email.nl",
-    emailLabel: "E-mailadres",
-    submit: "Zet me op de lijst",
-    sending: "Bezig…",
-    soon: "Binnenkort",
-    notReady: "De wachtlijst opent zeer binnenkort.",
-    error: "Er ging iets mis — probeer het zo nog eens.",
   },
   footer: {
     ctaTitle: "Klaar om grip te krijgen op je geld?",
-    cta: "Kom op de wachtlijst",
+    cta: "Account aanmaken",
     note: "Lokaal-first personal finance — van student tot ondernemer.",
     product: "Product",
     legal: "Juridisch",
@@ -231,17 +211,26 @@ const en: LandingCopy = {
     agents: "Agents",
     privacy: "Privacy",
     how: "How it works",
-    waitlist: "Waitlist",
+    signUp: "Create account",
     investing: "Investing",
     login: "Sign in",
   },
-  login: { intro: "Sign in with your LaVega account.", close: "Close" },
+  login: {
+    intro: "Sign in with your LaVega account.",
+    close: "Close",
+    signUpTitle: "Create account",
+    signUpIntro: "Create a LaVega account. We will email you a link to confirm your address.",
+    toSignUp: "No account yet? Create account",
+    toSignIn: "Already have an account? Sign in",
+    linkInvalid:
+      "This confirmation link is invalid or has expired. Sign in with your email and password and we will send you a new one.",
+  },
   langSwitch: { label: "Nederlands", to: "Bekijk deze pagina in het Nederlands" },
   hero: {
     titleTop: "Every account,",
     titleBottom: "one clear number.",
     sub: "LaVega brings every account you hold — at any bank — into a single view. Know exactly what you have and where it is going, set aside your tax, and get the most out of your points. Local-first: your figures stay on your own device.",
-    ctaPrimary: "Join the waitlist",
+    ctaPrimary: "Create account",
     ctaSecondary: "See how it works",
   },
   device: {
@@ -310,10 +299,6 @@ const en: LandingCopy = {
         t: "LaVega does the maths",
         d: "Categorises automatically and forecasts your cash position ahead.",
       },
-      {
-        t: "Ask the assistant",
-        d: "Ask your question — the agent looks it up in real time and thinks it through with you.",
-      },
     ],
   },
   faq: {
@@ -336,30 +321,11 @@ const en: LandingCopy = {
         q: "Does it handle multiple accounts and entities?",
         a: "Yes — LaVega brings every account together, personal and business, both per entity and consolidated.",
       },
-      {
-        q: "Does the AI assistant use my data?",
-        a: "Only if you switch it on, per feature, and you confirm what gets shared each time. It is off by default.",
-      },
     ],
-  },
-  waitlist: {
-    eyebrow: "Waitlist",
-    title: "Be among the first",
-    sub: "LaVega is rolling out step by step. Leave your email and we will let you know when it is your turn — plus the occasional note about new agents.",
-    done: "You are on the list! 🎉 We will email you when it is your turn.",
-    namePlaceholder: "Name (optional)",
-    nameLabel: "Name",
-    emailPlaceholder: "you@email.com",
-    emailLabel: "Email address",
-    submit: "Put me on the list",
-    sending: "Sending…",
-    soon: "Soon",
-    notReady: "The waitlist opens very shortly.",
-    error: "Something went wrong — please try again in a moment.",
   },
   footer: {
     ctaTitle: "Ready to get a grip on your money?",
-    cta: "Join the waitlist",
+    cta: "Create account",
     note: "Local-first personal finance, for people whose income does not arrive neatly.",
     /* The policy and terms themselves stay Dutch: they are legal documents for a
      * Dutch company and the Dutch text is the operative one. Translating them

@@ -2,7 +2,7 @@
  * clashes with the app's base.css. Warm cream + espresso + tan, big EB Garamond
  * serif (shared fonts), tasteful float/reveal/marquee animations. */
 
-/* Hero, device, FAQ, waitlist, footer and nav now live in Tailwind utilities
+/* Hero, device, FAQ, footer and nav now live in Tailwind utilities
  * on Landing.tsx (docs/adr/0005). What's left here is either shared with
  * sections outside that pass (strengths, agents, privacy, how, the GSAP
  * card spiral) or a rule an element still needs by selector, not by style
@@ -64,7 +64,7 @@
 
   /* ---- Sections ---- */
   /* `.lp-section`, `.lp-h2`, `.lp-eyebrow` and `.lp-sub` still back the
- * strengths, agents, privacy and how-it-works sections. FAQ/waitlist/footer
+ * strengths, agents, privacy and how-it-works sections. FAQ/footer
  * now carry the equivalent Tailwind utilities directly instead. */
   .lp-section {
     max-width: 1100px;

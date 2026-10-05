@@ -4,7 +4,7 @@ import { createRoot, type Root as ReactRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Root from "./Root";
 import { useAuthState } from "./authClient.js";
-import { takePendingEbParams } from "./appRoutes.js";
+import { resetAuthLinkFailure, takePendingEbParams } from "./appRoutes.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -12,8 +12,8 @@ import { takePendingEbParams } from "./appRoutes.js";
  * same way Landing.signin.test.tsx stubs CardSpiral. */
 vi.mock("./App", () => ({ default: () => <div data-testid="app-shell" /> }));
 vi.mock("./views/Landing", () => ({
-  default: ({ onEnter }: { onEnter: () => void }) => (
-    <div data-testid="landing">
+  default: ({ onEnter, linkError }: { onEnter: () => void; linkError?: boolean }) => (
+    <div data-testid="landing" data-link-error={linkError ? "yes" : "no"}>
       <button type="button" onClick={onEnter}>
         enter
       </button>
@@ -32,6 +32,7 @@ let root: ReactRoot | null = null;
 beforeEach(() => {
   vi.mocked(useAuthState).mockReset();
   window.history.replaceState({}, "", "/");
+  resetAuthLinkFailure();
   takePendingEbParams(); // drain any leftover handoff from a previous test
 });
 
@@ -109,4 +110,12 @@ test("?eb= params captured off a gated, signed-out /app load are not destroyed â
   render();
   expect(window.location.search).toBe(""); // normalizeAppLocation still strips it off the URL
   expect(takePendingEbParams()).toEqual({ session: "abc123", error: null });
+});
+
+test("a failed verification link on a signed-out /app load tells the landing page", () => {
+  window.history.replaceState({}, "", "/app?error=invalid_token");
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  const el = render();
+  expect(window.location.search).toBe("");
+  expect(el.querySelector('[data-testid="landing"]')?.getAttribute("data-link-error")).toBe("yes");
 });

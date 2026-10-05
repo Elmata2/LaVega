@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import CardSpiral from "./CardSpiral";
 import { INVESTING_URL } from "../investing.js";
 import { landingCopy } from "../landingCopy.js";
@@ -14,20 +13,9 @@ import {
 import { APP_BASE } from "../appRoutes.js";
 import { useAuthState } from "../authClient.js";
 import SignInForm from "../components/SignInForm.js";
+import SignUpForm from "../components/SignUpForm.js";
 
-/** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
- *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
- *  shows a "binnenkort" state instead of silently dropping sign-ups. */
-const WAITLIST_ENDPOINT =
-  "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
-
-/** Bots fill and submit forms faster than a human can read them. A submit
- *  before this much time has passed since mount is held (the button shows
- *  "sending") until the window closes, then posted; a real visitor with
- *  autofill loses nothing, a bot has to wait like everyone else. */
-const WAITLIST_MIN_FILL_MS = 2000;
-
-/* The hero/waitlist/footer CTAs used to share `.lp-btn`/`.lp-btn-dark` (still
+/* The hero/footer CTAs used to share `.lp-btn`/`.lp-btn-dark` (still
  * used by the nav login button and the strengths-tile CTA, both outside this
  * pass) with a `.lp-btn-lg` size modifier layered on top. Mixing that
  * unlayered class with a Tailwind padding override would lose to it — see the
@@ -56,19 +44,22 @@ const LP_BTN_TAN =
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
- *  ondernemers). The app isn't public yet — it's a waitlist front door: the
- *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
- *  the vault (`/app`) via `onEnter`, for owner/Railway testing. */
+ *  ondernemers). Every CTA opens the auth dialog on its sign-up view; the header
+ *  "Inloggen" opens it on sign-in and enters the vault (`/app`) via `onEnter`. */
 export default function Landing({
   onEnter,
   locale = DEFAULT_LOCALE,
+  linkError = false,
 }: {
   onEnter: () => void;
   locale?: Locale;
+  /** The visitor followed an invalid or expired confirmation link. */
+  linkError?: boolean;
 }) {
   const c = landingCopy(locale);
   const { state: authState } = useAuthState();
-  const [showSignIn, setShowSignIn] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(linkError);
+  const [authView, setAuthView] = useState<"sign-in" | "sign-up">("sign-in");
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -88,12 +79,21 @@ export default function Landing({
     const shouldOpen = showSignIn && authState.kind !== "signed-in";
     if (shouldOpen && !dialog.open) {
       dialog.showModal();
-      dialog.querySelector<HTMLInputElement>("#account-email")?.focus();
+      dialog.querySelector<HTMLInputElement>("input")?.focus();
     } else if (!shouldOpen && dialog.open) {
       dialog.close();
       triggerRef.current?.focus();
     }
   }, [showSignIn, authState.kind]);
+
+  function openSignUp() {
+    if (authState.kind === "signed-in") {
+      onEnter();
+      return;
+    }
+    setAuthView("sign-up");
+    setShowSignIn(true);
+  }
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
@@ -126,50 +126,6 @@ export default function Landing({
     const card = track.querySelector<HTMLElement>(".lp-feature-card");
     const step = card ? card.offsetWidth + 20 : track.clientWidth * 0.8;
     track.scrollBy({ left: dir * step, behavior: "smooth" });
-  }
-
-  // Waitlist form → Google Sheet (via the Apps Script web app). Fire-and-forget
-  // no-cors POST (Apps Script can't do CORS preflight), so we optimistically
-  // confirm on a resolved fetch and only show an error on a network failure.
-  const wlReady = WAITLIST_ENDPOINT.length > 0;
-  const [wlName, setWlName] = useState("");
-  const [wlEmail, setWlEmail] = useState("");
-  const [wlHoneypot, setWlHoneypot] = useState("");
-  const [wlStatus, setWlStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
-  const wlMountedAt = useRef<number | null>(null);
-  useEffect(() => {
-    wlMountedAt.current = Date.now();
-  }, []);
-
-  async function submitWaitlist(e: FormEvent) {
-    e.preventDefault();
-    const email = wlEmail.trim();
-    if (!wlReady || !email || wlStatus === "sending") return;
-    if (wlHoneypot.trim()) {
-      // A bot filled the hidden field — pretend success without posting.
-      setWlStatus("done");
-      setWlName("");
-      setWlEmail("");
-      setWlHoneypot("");
-      return;
-    }
-    setWlStatus("sending");
-    const elapsed = wlMountedAt.current === null ? 0 : Date.now() - wlMountedAt.current;
-    if (elapsed < WAITLIST_MIN_FILL_MS)
-      await new Promise((resolve) => setTimeout(resolve, WAITLIST_MIN_FILL_MS - elapsed));
-    try {
-      await fetch(WAITLIST_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        body: new URLSearchParams({ name: wlName.trim(), email, source: "lavega.dev" }),
-      });
-      setWlStatus("done");
-      setWlName("");
-      setWlEmail("");
-      setWlHoneypot("");
-    } catch {
-      setWlStatus("error");
-    }
   }
 
   // Let the whole window scroll (the app frame otherwise pins body overflow).
@@ -246,12 +202,13 @@ export default function Landing({
           >
             {c.nav.how}
           </a>
-          <a
-            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
-            href="#wachtlijst"
+          <button
+            type="button"
+            className="text-[var(--lp-ink2)] bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.95rem]! font-medium hover:text-[var(--lp-ink)]"
+            onClick={openSignUp}
           >
-            {c.nav.waitlist}
-          </a>
+            {c.nav.signUp}
+          </button>
           {INVESTING_URL && (
             <a
               className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
@@ -282,7 +239,12 @@ export default function Landing({
               onEnter();
               return;
             }
-            setShowSignIn((shown) => !shown);
+            if (showSignIn && authView === "sign-in") {
+              setShowSignIn(false);
+              return;
+            }
+            setAuthView("sign-in");
+            setShowSignIn(true);
           }}
         >
           {c.nav.login}
@@ -309,23 +271,44 @@ export default function Landing({
         >
           ×
         </button>
-        <h2>{c.nav.login}</h2>
-        <SignInForm
-          locale={locale}
-          intro={c.login.intro}
-          introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
-          onSuccess={() => {
-            setShowSignIn(false);
-            /* A full navigation, not onEnter()'s pushState. Root holds its own
-             * useAuthState, fetched once at page load, and a client-side
-             * transition leaves it reading "signed-out" — so Root's gate sent
-             * the freshly signed-in user straight back to this landing page
-             * while the URL said /app, and signing in looked like it did
-             * nothing. Loading /app for real re-reads the session, and the
-             * server gate sees the cookie that now exists. */
-            window.location.assign(APP_BASE);
-          }}
-        />
+        <h2>{authView === "sign-up" ? c.login.signUpTitle : c.nav.login}</h2>
+        {linkError && authView === "sign-in" && (
+          <p role="alert" className="font-body text-[0.95rem] text-[var(--lp-ink2)]">
+            {c.login.linkInvalid}
+          </p>
+        )}
+        {authView === "sign-up" ? (
+          <SignUpForm
+            locale={locale}
+            intro={c.login.signUpIntro}
+            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+          />
+        ) : (
+          <SignInForm
+            locale={locale}
+            intro={c.login.intro}
+            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+            onSuccess={() => {
+              setShowSignIn(false);
+              /* A full navigation, not onEnter()'s pushState. Root holds its own
+               * useAuthState, fetched once at page load, and a client-side
+               * transition leaves it reading "signed-out" — so Root's gate sent
+               * the freshly signed-in user straight back to this landing page
+               * while the URL said /app, and signing in looked like it did
+               * nothing. Loading /app for real re-reads the session, and the
+               * server gate sees the cookie that now exists. */
+              window.location.assign(APP_BASE);
+            }}
+          />
+        )}
+        <button
+          type="button"
+          data-testid="auth-toggle"
+          className="mt-4 bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.9rem]! text-[var(--lp-ink2)] underline"
+          onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
+        >
+          {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
+        </button>
       </dialog>
 
       {/* Hero */}
@@ -339,9 +322,13 @@ export default function Landing({
           {c.hero.sub}
         </p>
         <div className="lp-reveal flex gap-3 justify-center flex-wrap mb-[56px]">
-          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK}`} href="#wachtlijst">
+          <button
+            type="button"
+            className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK}`}
+            onClick={openSignUp}
+          >
             {c.hero.ctaPrimary} <span aria-hidden="true">→</span>
-          </a>
+          </button>
           <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_LIGHT}`} href="#how">
             {c.hero.ctaSecondary}
           </a>
@@ -622,95 +609,19 @@ export default function Landing({
         </div>
       </section>
 
-      {/* Waitlist */}
-      <section className="max-w-[1100px] mx-auto py-[72px] px-[28px]" id="wachtlijst">
-        <div className="lp-reveal max-w-[680px] mx-auto text-center">
-          <p className="font-mono text-[0.75rem] tracking-[0.08em] uppercase text-[var(--lp-tan-deep)] text-center m-0! mb-[10px]!">
-            {c.waitlist.eyebrow}
-          </p>
-          <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[36px]! text-[var(--lp-ink)]!">
-            {c.waitlist.title}
-          </h2>
-          <p className="max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">
-            {c.waitlist.sub}
-          </p>
-          {wlStatus === "done" ? (
-            <p
-              className="mt-[24px]! text-[1.1rem] text-[var(--lp-pos)] font-semibold"
-              data-testid="waitlist-done"
-            >
-              {c.waitlist.done}
-            </p>
-          ) : (
-            <form
-              className="flex gap-[10px] justify-center flex-wrap mt-[24px]"
-              onSubmit={submitWaitlist}
-              data-testid="waitlist-form"
-            >
-              <input
-                type="text"
-                name="company"
-                value={wlHoneypot}
-                onChange={(e) => setWlHoneypot(e.target.value)}
-                style={{ position: "absolute", left: "-9999px" }}
-                tabIndex={-1}
-                autoComplete="off"
-                aria-hidden="true"
-              />
-              <input
-                type="text"
-                className="flex-[1_1_220px] min-w-0 px-[18px]! py-[14px]! rounded-pill! border! border-[var(--lp-line)]! bg-[var(--lp-card)]! font-body! text-base! text-[var(--lp-ink)]! focus:outline-none! focus:border-[var(--lp-tan-deep)]! focus:shadow-[0_0_0_3px_rgba(207,159,94,.2)] disabled:opacity-60!"
-                placeholder={c.waitlist.namePlaceholder}
-                aria-label={c.waitlist.nameLabel}
-                value={wlName}
-                onChange={(e) => setWlName(e.target.value)}
-                disabled={!wlReady || wlStatus === "sending"}
-              />
-              <input
-                type="email"
-                className="flex-[1_1_220px] min-w-0 px-[18px]! py-[14px]! rounded-pill! border! border-[var(--lp-line)]! bg-[var(--lp-card)]! font-body! text-base! text-[var(--lp-ink)]! focus:outline-none! focus:border-[var(--lp-tan-deep)]! focus:shadow-[0_0_0_3px_rgba(207,159,94,.2)] disabled:opacity-60!"
-                placeholder={c.waitlist.emailPlaceholder}
-                aria-label={c.waitlist.emailLabel}
-                required
-                value={wlEmail}
-                onChange={(e) => setWlEmail(e.target.value)}
-                disabled={!wlReady || wlStatus === "sending"}
-              />
-              <button
-                type="submit"
-                className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK} flex-none [@media(max-width:560px)]:flex-1 [@media(max-width:560px)]:justify-center disabled:opacity-60!`}
-                disabled={!wlReady || wlStatus === "sending"}
-              >
-                {wlReady
-                  ? wlStatus === "sending"
-                    ? c.waitlist.sending
-                    : c.waitlist.submit
-                  : c.waitlist.soon}
-              </button>
-            </form>
-          )}
-          {!wlReady && (
-            <p className="mt-3! text-[0.85rem] text-[var(--lp-ink2)]" data-testid="waitlist-note">
-              {c.waitlist.notReady}
-            </p>
-          )}
-          {wlStatus === "error" && (
-            <p className="mt-3! text-[0.85rem] text-[var(--lp-ink2)]" data-testid="waitlist-note">
-              {c.waitlist.error}
-            </p>
-          )}
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-[var(--lp-espresso)] text-[var(--lp-cream)] mt-[24px]">
         <div className="lp-reveal max-w-[1100px] mx-auto pt-[64px] px-[28px] pb-[40px] text-center">
           <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[24px]! text-[var(--lp-cream)]!">
             {c.footer.ctaTitle}
           </h2>
-          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_TAN}`} href="#wachtlijst">
+          <button
+            type="button"
+            className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_TAN}`}
+            onClick={openSignUp}
+          >
             {c.footer.cta} <span aria-hidden="true">→</span>
-          </a>
+          </button>
         </div>
         <div className="max-w-[1100px] mx-auto py-[32px] px-[28px] grid grid-cols-[1.6fr_1fr_1fr] gap-[32px] border-t border-[color-mix(in_srgb,var(--lp-cream)_12%,transparent)] [@media(max-width:860px)]:grid-cols-1 [@media(max-width:860px)]:gap-[24px]">
           <div>

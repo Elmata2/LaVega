@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Hono } from "hono";
 
 /* checkBudget()/spentCents() failing (Neon unreachable) must answer the
@@ -24,6 +24,14 @@ vi.mock("./agent/budget.js", async () => {
 });
 
 const { registerAgentRoutes } = await import("./agent-routes.js");
+
+beforeEach(() => {
+  vi.stubEnv("LAVEGA_CHAT_ENABLED", "true");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function jsonPost(body: unknown): RequestInit {
   return {

@@ -3,6 +3,8 @@ import {
   APP_BASE,
   isAppPathname,
   normalizeAppLocation,
+  authLinkFailed,
+  resetAuthLinkFailure,
   pathForView,
   takePendingEbParams,
   viewFromPathname,
@@ -89,4 +91,19 @@ test("a legacy #app bookmark that also carries eb= is stripped in the same step"
   );
   expect(replaced).toEqual(["/app"]);
   expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
+
+test("normalizeAppLocation strips error= off a signed-out /app load and remembers that the link failed", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app", search: "?error=invalid_token", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app"]);
+  expect(authLinkFailed()).toBe(true);
+});
+
+test("error= outside /app is not treated as a failed link", () => {
+  resetAuthLinkFailure();
+  normalizeAppLocation({ pathname: "/", search: "?error=x", hash: "" }, () => {});
+  expect(authLinkFailed()).toBe(false);
 });

@@ -172,7 +172,7 @@ test("Account: een mislukte inlogpoging toont de Nederlandse boodschap, niet de 
   act(() =>
     setNativeValue(
       account.querySelector('input[type="email"]') as HTMLInputElement,
-      "alexander@generation-c.nl",
+      "owner@example.com",
     ),
   );
   act(() =>
@@ -193,12 +193,12 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
       if (path.includes("/sign-in/email") && init?.method === "POST") {
         loggedIn = true;
         return new Response(
-          JSON.stringify({ user: { id: "u1", email: "alexander@generation-c.nl" } }),
+          JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }),
         );
       }
       return new Response(
         JSON.stringify(
-          loggedIn ? { user: { id: "u1", email: "alexander@generation-c.nl" } } : { user: null },
+          loggedIn ? { user: { id: "u1", email: "owner@example.com" } } : { user: null },
         ),
       );
     }),
@@ -208,7 +208,7 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
   act(() =>
     setNativeValue(
       account.querySelector('input[type="email"]') as HTMLInputElement,
-      "alexander@generation-c.nl",
+      "owner@example.com",
     ),
   );
   act(() =>
@@ -218,7 +218,7 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
     ),
   );
   await act(async () => submit(account.querySelector("form") as HTMLFormElement));
-  expect(section("Account").textContent).toContain("alexander@generation-c.nl");
+  expect(section("Account").textContent).toContain("owner@example.com");
   expect(
     [...section("Account").querySelectorAll("button")].some((b) => b.textContent === "Uitloggen"),
   ).toBe(true);
@@ -234,7 +234,7 @@ test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het fo
     }
     return new Response(
       JSON.stringify(
-        loggedIn ? { user: { id: "u1", email: "alexander@generation-c.nl" } } : { user: null },
+        loggedIn ? { user: { id: "u1", email: "owner@example.com" } } : { user: null },
       ),
     );
   });

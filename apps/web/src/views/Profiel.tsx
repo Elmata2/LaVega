@@ -103,8 +103,8 @@ type ProfielProps = {
 };
 
 /* Account — sign in against the configured LaVega server so the owner can test
- * the Enable Banking flow. Sign-up is deliberately absent: the server decides
- * who gets an account, not this page. Nothing renders while the state is
+ * the Enable Banking flow. Sign-up lives in the landing page's auth dialog, not
+ * here, and the server still requires a verified email. Nothing renders while the state is
  * `loading`: a signed-out default would flash the login form at someone who
  * is already signed in, for the one render before the real check lands. */
 function AccountBlock() {
@@ -722,7 +722,9 @@ export default function Profiel({
           {c.profiel.netWorthShare.toggleLabel}
         </label>
         <p className="cell-sub">
-          {shareNetWorthEnabled ? c.profiel.netWorthShare.onStatus : c.profiel.netWorthShare.offStatus}
+          {shareNetWorthEnabled
+            ? c.profiel.netWorthShare.onStatus
+            : c.profiel.netWorthShare.offStatus}
         </p>
         {shareNetWorthPendingDelete && (
           <p role="alert" className="text-warn">

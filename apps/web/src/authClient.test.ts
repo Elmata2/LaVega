@@ -27,12 +27,12 @@ test("a 200 with a user means signed in, with that user's email", async () => {
     "fetch",
     vi.fn(
       async () =>
-        new Response(JSON.stringify({ user: { id: "u1", email: "alexander@generation-c.nl" } })),
+        new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } })),
     ),
   );
   await expect(getSession()).resolves.toEqual({
     kind: "signed-in",
-    email: "alexander@generation-c.nl",
+    email: "owner@example.com",
   });
 });
 
@@ -43,7 +43,7 @@ test("a sign-in with wrong credentials reports the credentials kind, not the ser
       async () => new Response(JSON.stringify({ message: "invalid credentials" }), { status: 401 }),
     ),
   );
-  await expect(signIn("alexander@generation-c.nl", "verkeerd")).resolves.toEqual({
+  await expect(signIn("owner@example.com", "verkeerd")).resolves.toEqual({
     ok: false,
     kind: "wrong-credentials",
   });
@@ -54,7 +54,7 @@ test("a sign-in the server can't complete reports the unreachable kind", async (
     "fetch",
     vi.fn(async () => new Response(null, { status: 500 })),
   );
-  await expect(signIn("alexander@generation-c.nl", "geheim")).resolves.toEqual({
+  await expect(signIn("owner@example.com", "geheim")).resolves.toEqual({
     ok: false,
     kind: "unreachable",
   });
@@ -67,7 +67,7 @@ test("a network failure on sign-in also reports the unreachable kind", async () 
       throw new Error("network down");
     }),
   );
-  await expect(signIn("alexander@generation-c.nl", "geheim")).resolves.toEqual({
+  await expect(signIn("owner@example.com", "geheim")).resolves.toEqual({
     ok: false,
     kind: "unreachable",
   });

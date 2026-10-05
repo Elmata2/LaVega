@@ -62,11 +62,6 @@ test("the English hero does not inherit the Dutch market segment", () => {
   ).not.toMatch(/student/i);
 });
 
-test("the waitlist email placeholder is not a .nl address on the English page", () => {
-  expect(landingCopy("nl").waitlist.emailPlaceholder).toContain(".nl");
-  expect(landingCopy("en").waitlist.emailPlaceholder).not.toContain(".nl");
-});
-
 test("the meta description fits within Google's search-result truncation limit", () => {
   expect(landingCopy("nl").meta.description.length).toBeLessThanOrEqual(155);
   expect(landingCopy("en").meta.description.length).toBeLessThanOrEqual(155);

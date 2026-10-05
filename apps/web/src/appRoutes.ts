@@ -75,6 +75,19 @@ export function takePendingEbParams(): PendingEbParams | null {
   return params;
 }
 
+let linkFailed = false;
+
+/** True when better-auth redirected a signed-out visitor to `/app?error=…`
+ *  (an invalid or expired confirmation link). Not consumed on read, so a
+ *  StrictMode double render sees the same answer. */
+export function authLinkFailed(): boolean {
+  return linkFailed;
+}
+
+export function resetAuthLinkFailure(): void {
+  linkFailed = false;
+}
+
 /** Rewrite legacy `#app` into `/app`, and strip `eb=`/`eb_error=` off the URL
  *  immediately (see PendingEbParams above). Safe to call on every load. */
 export function normalizeAppLocation(
@@ -87,7 +100,12 @@ export function normalizeAppLocation(
   const ebError = params.get("eb_error");
   const hasEb = ebSession !== null || ebError !== null;
   const legacyHash = hash === "#app";
-  if (!hasEb && !legacyHash) return;
+  const authError = isAppPathname(pathname) && params.has("error");
+  if (authError) {
+    linkFailed = true;
+    params.delete("error");
+  }
+  if (!hasEb && !legacyHash && !authError) return;
   if (hasEb) {
     pendingEbParams = { session: ebSession, error: ebError };
     params.delete("eb");

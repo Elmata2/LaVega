@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import App from "./App";
 import Landing from "./views/Landing";
-import { APP_BASE, isAppPathname, normalizeAppLocation } from "./appRoutes";
+import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from "./appRoutes";
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
 
@@ -56,6 +56,7 @@ export default function Root() {
   return (
     <Landing
       locale={locale}
+      linkError={authLinkFailed()}
       onEnter={() => {
         window.history.pushState({}, "", APP_BASE);
         setRoute("app");
