@@ -76,20 +76,12 @@ const HOST_DEADLINE_MESSAGE =
   "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
 const RATE_LIMIT_MESSAGE =
   "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
-/** No sanitized live payload yet shows whether the transactions stream also
- *  books execution cash that fills report as walletImpact, or how far back
- *  either stream is retained. Walking cash through both could count a trade
- *  twice, so historical cash stays unknown until that evidence exists. */
 /* Live account, 2026-09-28: all 626 transactions were a DEPOSIT or a WITHDRAW,
  * and only 4 of 1228 executions had a same-day transaction of equal magnitude,
  * the rate coincidence produces. Transactions do not book execution cash, so
  * settlement is the one trade-cash stream. That is a fact about the endpoints,
- * not about any one account's history, so it holds while the window below
- * stays unproven. */
+ * not about any one account's history. */
 const TRADE_CASH_STREAM = "trade-settlement" as const;
-
-const CASH_HISTORY_UNPROVEN =
-  "Trading 212 cash history is unproven: trade settlement and transaction retention are unverified";
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
@@ -292,6 +284,86 @@ function mapCashBalance(
     },
     problems: [],
   };
+}
+
+/** One account's proven cash window, or why it could not be proven.
+ *
+ *  Trading 212 exposes no statement period, so the window is proven by
+ *  arithmetic instead of by a provider field. A Trading 212 account opens
+ *  empty, so a dated balance must equal the sum of every movement after it:
+ *  the transactions, the dividends, and each trade's settlement. When that
+ *  total reconciles, the reported events are the whole history from the first
+ *  movement to the balance date, and the engine may walk cash across it.
+ *
+ *  Anything the broker did not report in full breaks the total by the size of
+ *  the missing movement, so a failure to reconcile leaves the history unknown
+ *  rather than guessing. An amount, a currency or a trade settlement that is
+ *  missing is unprovable on its own and returns unknown before any sum. */
+export type Trading212CashHistoryProof =
+  | { status: "complete"; from: string; to: string }
+  | { status: "unknown"; reason: string };
+
+/** The engine's own reconciliation tolerance (core `portfolio.ts`): one cent
+ *  per movement, because every reported figure is rounded to its last place. */
+function movementTolerance(movements: number): number {
+  return Math.max(0.01, movements * 0.01);
+}
+
+export function proveTrading212CashHistory(input: {
+  balance: CashBalance | null;
+  cashFlows: readonly CashFlow[];
+  dividends: readonly Dividend[];
+  trades: readonly TradeWithoutId[];
+}): Trading212CashHistoryProof {
+  const { balance } = input;
+  if (!balance) return { status: "unknown", reason: "Trading 212 reported no dated cash balance" };
+  const currency = balance.currency;
+  const withoutAmount = input.cashFlows.find((flow) => flow.amount === null);
+  if (withoutAmount)
+    return {
+      status: "unknown",
+      reason: `Trading 212 cash movement ${withoutAmount.brokerFlowId ?? withoutAmount.id} has no amount`,
+    };
+  const foreign = [
+    ...input.cashFlows.filter((flow) => flow.currency !== currency),
+    ...input.dividends.filter((dividend) => dividend.currency !== currency),
+  ][0];
+  if (foreign)
+    return {
+      status: "unknown",
+      reason: `Trading 212 movement is in ${foreign.currency}, not the account currency ${currency}`,
+    };
+  let tradeCash = 0;
+  for (const trade of input.trades) {
+    if (!trade.settlement)
+      return {
+        status: "unknown",
+        reason: `Trading 212 trade ${trade.brokerTradeId ?? trade.symbol} on ${trade.date} has no settlement`,
+      };
+    if (trade.settlement.currency !== currency)
+      return {
+        status: "unknown",
+        reason: `Trading 212 trade settlement is in ${trade.settlement.currency}, not the account currency ${currency}`,
+      };
+    tradeCash += trade.settlement.amount;
+  }
+  const reported =
+    input.cashFlows.reduce((total, flow) => total + (flow.amount as number), 0) +
+    input.dividends.reduce((total, dividend) => total + dividend.amount, 0) +
+    tradeCash;
+  const residual = balance.amount - reported;
+  const movements = input.cashFlows.length + input.dividends.length + input.trades.length;
+  if (Math.abs(residual) > movementTolerance(movements))
+    return {
+      status: "unknown",
+      reason: `Trading 212 cash movements do not reconcile to the reported balance (off by ${residual.toFixed(2)} ${currency})`,
+    };
+  const from = [
+    ...input.cashFlows.map((flow) => flow.date),
+    ...input.dividends.map((dividend) => dividend.date),
+    ...input.trades.map((trade) => trade.date),
+  ].sort()[0];
+  return { status: "complete", from: from ?? balance.asOf, to: balance.asOf };
 }
 
 function transactionKind(type: string): CashFlowKind {
@@ -1002,8 +1074,17 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           entity,
           broker: "trading212",
           tradeCash: TRADE_CASH_STREAM,
-          status: "unknown",
-          reason: CASH_HISTORY_UNPROVEN,
+          ...(ordersComplete && transactionsComplete && dividendsComplete && summaryComplete
+            ? proveTrading212CashHistory({
+                balance: cashBalances[0] ?? null,
+                cashFlows,
+                dividends,
+                trades,
+              })
+            : {
+                status: "unknown" as const,
+                reason: "Trading 212 cash history is unproven: a cash section is incomplete",
+              }),
         },
         ...(historyPending(inputResume ?? config.resume)
           ? { historyMode: "incremental" as const }

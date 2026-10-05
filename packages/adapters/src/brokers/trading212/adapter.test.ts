@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
 import { computePortfolioValueSeries } from "@lavega/core";
-import { createTrading212Adapter } from "./adapter.js";
+import type { CashBalance, CashFlow, Dividend, TradeWithoutId } from "@lavega/core";
+import { createTrading212Adapter, proveTrading212CashHistory } from "./adapter.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -593,6 +594,112 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
     broker: "trading212",
     status: "unknown",
   });
+});
+
+const proofBalance: CashBalance = {
+  entity: "e",
+  broker: "trading212",
+  currency: "EUR",
+  amount: 43.5,
+  asOf: "2026-08-05",
+};
+const proofCashFlows: CashFlow[] = [
+  {
+    id: "d1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-01",
+    currency: "EUR",
+    amount: 100,
+    kind: "deposit",
+  },
+  {
+    id: "w1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-03",
+    currency: "EUR",
+    amount: -10,
+    kind: "withdrawal",
+  },
+];
+const proofDividends: Dividend[] = [
+  {
+    id: "div1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-04",
+    symbol: "AAPL",
+    amount: 3.5,
+    currency: "EUR",
+  },
+];
+const proofTrade: TradeWithoutId = {
+  entity: "e",
+  broker: "trading212",
+  date: "2026-08-02",
+  symbol: "AAPL",
+  side: "buy",
+  quantity: 1,
+  price: 50,
+  amount: 50,
+  currency: "USD",
+  commission: 0,
+  settlement: { currency: "EUR", amount: -50 },
+};
+
+test("proves the cash window when every movement reconciles to the balance", () => {
+  expect(
+    proveTrading212CashHistory({
+      balance: proofBalance,
+      cashFlows: proofCashFlows,
+      dividends: proofDividends,
+      trades: [proofTrade],
+    }),
+  ).toEqual({ status: "complete", from: "2026-08-01", to: "2026-08-05" });
+});
+
+test("leaves cash unknown when the balance does not reconcile to the movements", () => {
+  const proof = proveTrading212CashHistory({
+    balance: { ...proofBalance, amount: 1000 },
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(proof.status).toBe("unknown");
+  expect(proof.status === "unknown" && proof.reason).toContain("do not reconcile");
+});
+
+test("leaves cash unknown when a trade settlement is missing", () => {
+  const proof = proveTrading212CashHistory({
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [{ ...proofTrade, settlement: undefined }],
+  });
+  expect(proof.status).toBe("unknown");
+  expect(proof.status === "unknown" && proof.reason).toContain("has no settlement");
+});
+
+test("leaves cash unknown when a movement amount is missing", () => {
+  const proof = proveTrading212CashHistory({
+    balance: proofBalance,
+    cashFlows: [...proofCashFlows, { ...proofCashFlows[0]!, id: "m1", amount: null }],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(proof.status).toBe("unknown");
+  expect(proof.status === "unknown" && proof.reason).toContain("has no amount");
+});
+
+test("leaves cash unknown when the balance is missing", () => {
+  const proof = proveTrading212CashHistory({
+    balance: null,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [],
+  });
+  expect(proof.status).toBe("unknown");
 });
 
 test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {
