@@ -105,7 +105,7 @@ loadCatalogue();
  *
  * The CSP is strict where it counts and honest where it cannot be. `script-src
  * 'self'` is the anti-XSS directive and is pinned. `connect-src` is NOT pinned
- * to 'self': the waitlist posts to script.google.com and the n8n features call
+ * to 'self': the n8n features call
  * a base URL the user types in themselves, so an enumerated list would break
  * shipped features the first time someone used their own instance. `style-src`
  * allows inline because that is what React renders a `style={{…}}` prop as.

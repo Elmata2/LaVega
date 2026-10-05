@@ -8,7 +8,7 @@
  * (investors, the CEMS network, partners abroad) who reach the site by link,
  * not by search.
  *
- * The app behind the waitlist reads the same cookie but chooses its fallback
+ * The app behind the landing page reads the same cookie but chooses its fallback
  * differently. See `appLocale.ts`.
  */
 

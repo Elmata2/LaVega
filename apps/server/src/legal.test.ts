@@ -16,7 +16,7 @@ test("every third party the code sends data to is named in the policy", () => {
     "Mistral",
     "Cloudflare",
     "n8n",
-    "Google",
+    "Resend",
     "Vercel",
     "Neon",
     "Frankfurter",
@@ -73,4 +73,18 @@ test("the policy tells the user how to erase what is on the server", () => {
   expect(privacyHtml).not.toContain("het wissen van de browseropslag verwijdert alles definitief");
   expect(privacyHtml).toContain("verwijderen van je gegevens op de server");
   expect(privacyHtml).toContain("Autoriteit Persoonsgegevens");
+});
+
+test("the policy names Resend for account mail and no longer names the retired waitlist processor", () => {
+  expect(privacyHtml).toContain("Resend");
+  expect(privacyHtml).not.toContain("Apps Script");
+  expect(privacyHtml).not.toMatch(/wachtlijst/i);
+});
+
+test("chat context is not listed as sent to Mistral while chat is off", () => {
+  expect(privacyHtml).not.toMatch(/chatcontext/i);
+});
+
+test("the policy carries today's update date", () => {
+  expect(privacyHtml).toContain("2026-10-05");
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { APP_BASE } from "./appRoutes.js";
 
 /* Thin client for better-auth's mounted routes on a configured LaVega server
  * (see apps/investing-web/src/lib/auth-client.ts for the sibling app's take on
@@ -26,6 +27,19 @@ export type AuthState =
 export type SignInFailure = "wrong-credentials" | "unreachable";
 
 export type SignInResult = { ok: true; state: AuthState } | { ok: false; kind: SignInFailure };
+
+/** Why a sign-up did not happen, as a kind for the same reason as `SignInFailure`. */
+export type SignUpFailure = "weak-password" | "rate-limited" | "unreachable";
+
+export type SignUpInput = { name: string; email: string; password: string; callbackURL: string };
+
+export type SignUpResult = { ok: true } | { ok: false; kind: SignUpFailure };
+
+/** Where better-auth sends the browser after the emailed link is followed. The
+ *  server auto-signs the user in on verification, so landing on the app is enough. */
+export function verificationCallbackUrl(): string {
+  return `${window.location.origin}${APP_BASE}`;
+}
 
 export async function getSession(): Promise<AuthState> {
   try {
@@ -57,6 +71,29 @@ export async function signIn(email: string, password: string): Promise<SignInRes
     return { ok: false, kind: response.status === 401 ? "wrong-credentials" : "unreachable" };
   const body = (await response.json().catch(() => null)) as { user?: { email: string } } | null;
   return { ok: true, state: { kind: "signed-in", email: body?.user?.email ?? email } };
+}
+
+export async function signUp(input: SignUpInput): Promise<SignUpResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/sign-up/email", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    return { ok: false, kind: "unreachable" };
+  }
+  /* A duplicate email is deliberately indistinguishable from a new one: with
+   * requireEmailVerification on, better-auth answers both with the same 200
+   * (sign-up.mjs, buildGenericDuplicateResponse), so there is no "exists" kind. */
+  if (response.ok) return { ok: true };
+  if (response.status === 429) return { ok: false, kind: "rate-limited" };
+  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  if (body?.code === "PASSWORD_TOO_SHORT" || body?.code === "PASSWORD_TOO_LONG")
+    return { ok: false, kind: "weak-password" };
+  return { ok: false, kind: "unreachable" };
 }
 
 export async function signOut(): Promise<void> {

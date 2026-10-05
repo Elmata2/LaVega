@@ -40,7 +40,7 @@ const PNG_BASE64 = base64Lines(PNG_BYTES);
  *  het logo en attachment_1 de factuur; op volgorde vertrouwen mag niet). */
 export const RAW_PDF_INVOICE = [
   "From: Van Dijk Installatietechniek <facturen@vandijk-installatie.nl>",
-  "To: alexander@generation-c.nl",
+  "To: owner@example.com",
   "Subject: Factuur 2026-0184 van Van Dijk Installatietechniek",
   "Date: Thu, 13 Aug 2026 09:12:44 +0200",
   "Message-ID: <2026-0184.factuur@vandijk-installatie.nl>",
@@ -108,7 +108,7 @@ export const RAW_PDF_INVOICE = [
  *  levert `html` en GEEN `text`: precies de mail die de oude code liet vallen. */
 export const RAW_HTML_ONLY = [
   "From: Fastned B.V. <facturatie@fastned.nl>",
-  "To: alexander@generation-c.nl",
+  "To: owner@example.com",
   "Subject: Uw factuur van augustus 2026",
   "Date: Sat, 15 Aug 2026 06:03:10 +0200",
   "Message-ID: <aug-2026-8831@fastned.nl>",
@@ -152,7 +152,7 @@ export const RAW_HTML_ONLY = [
  *  factuur staat achter een inlog. Dit is geen factuur en ook geen "niets". */
 export const RAW_LINK_ONLY = [
   "From: KPN <noreply@kpn.com>",
-  "To: alexander@generation-c.nl",
+  "To: owner@example.com",
   "Subject: Uw factuur van augustus staat voor u klaar",
   "Date: Fri, 14 Aug 2026 04:31:02 +0200",
   "Message-ID: <mijnkpn-20260814-77213@kpn.com>",
@@ -186,7 +186,7 @@ export const RAW_LINK_ONLY = [
  *  bon die als inline afbeelding verstuurd wordt) en mag niet stil verdwijnen. */
 export const RAW_NO_BODY = [
   "From: Kantoorboekhandel Smit <info@smit-kantoor.nl>",
-  "To: alexander@generation-c.nl",
+  "To: owner@example.com",
   "Subject: Bon",
   "Date: Wed, 12 Aug 2026 17:45:00 +0200",
   "Message-ID: <scan-20260812-2@smit-kantoor.nl>",

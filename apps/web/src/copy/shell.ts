@@ -1,7 +1,7 @@
 import type { Locale } from "../locale.js";
 import type { View } from "../App.js";
 import type { ModuleId, WidgetId } from "../components/moduleRegistry.js";
-import type { SignInFailure } from "../authClient.js";
+import type { SignInFailure, SignUpFailure } from "../authClient.js";
 import type { ImportProblem } from "@lavega/core";
 import type { ShellNotice } from "../shellNotice.js";
 
@@ -146,6 +146,18 @@ export type ShellCopy = {
       signOut: string;
       /** Waarom het inloggen niet doorging, per kind uit `authClient`. */
       signInError: Record<SignInFailure, string>;
+      signUp: {
+        nameLabel: string;
+        submit: string;
+        busy: string;
+        consentBefore: string;
+        privacyLink: string;
+        consentBetween: string;
+        termsLink: string;
+        doneTitle: string;
+        doneBody: (email: string) => string;
+        error: Record<SignUpFailure, string>;
+      };
     };
     head: {
       ariaLabel: string;
@@ -465,6 +477,23 @@ const nl: ShellCopy = {
         "wrong-credentials": "Onjuist e-mailadres of wachtwoord.",
         unreachable: "Inloggen lukte niet. Probeer het later opnieuw.",
       },
+      signUp: {
+        nameLabel: "Naam",
+        submit: "Account aanmaken",
+        busy: "Bezig…",
+        consentBefore: "Ik ga akkoord met het ",
+        privacyLink: "privacybeleid",
+        consentBetween: " en de ",
+        termsLink: "voorwaarden",
+        doneTitle: "Controleer je e-mail",
+        doneBody: (email) =>
+          `We hebben een bevestigingslink gestuurd naar ${email}. Open die link om je account te bevestigen.`,
+        error: {
+          "weak-password": "Kies een wachtwoord van minimaal 8 tekens.",
+          "rate-limited": "Te veel pogingen. Wacht een minuut en probeer het opnieuw.",
+          unreachable: "Account aanmaken lukte niet. Probeer het later opnieuw.",
+        },
+      },
     },
     head: {
       ariaLabel: "Profiel",
@@ -580,8 +609,7 @@ const nl: ShellCopy = {
       onStatus:
         "Staat aan. Elke dag dat je kluis open is en er minstens één saldo bekend is, gaat het bedrag naar Investing.",
       offStatus: "Staat uit. Zet hem aan om je Totale positie in Investing's nettowaarde te zien.",
-      pendingDeleteStatus:
-        "Kon je gedeelde bedragen niet verwijderen — we proberen het opnieuw.",
+      pendingDeleteStatus: "Kon je gedeelde bedragen niet verwijderen — we proberen het opnieuw.",
     },
   },
 };
@@ -798,6 +826,23 @@ const en: ShellCopy = {
       signInError: {
         "wrong-credentials": "Wrong email address or password.",
         unreachable: "Signing in didn't work. Please try again later.",
+      },
+      signUp: {
+        nameLabel: "Name",
+        submit: "Create account",
+        busy: "Working…",
+        consentBefore: "I agree to the ",
+        privacyLink: "privacy policy",
+        consentBetween: " and ",
+        termsLink: "terms",
+        doneTitle: "Check your email",
+        doneBody: (email) =>
+          `We sent a confirmation link to ${email}. Open it to confirm your account.`,
+        error: {
+          "weak-password": "Choose a password of at least 8 characters.",
+          "rate-limited": "Too many attempts. Wait a minute and try again.",
+          unreachable: "Creating the account didn't work. Please try again later.",
+        },
       },
     },
     head: {

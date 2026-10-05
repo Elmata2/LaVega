@@ -1,9 +1,17 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Hono } from "hono";
 import { MistralHttpError } from "./agent/mistral.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import type { ExtractedInvoice } from "./agent/invoiceExtract.js";
 import { recordUsage, resetBudgetMemory } from "./agent/budget.js";
+
+beforeEach(() => {
+  vi.stubEnv("LAVEGA_CHAT_ENABLED", "true");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const FAKE_RESULT: { fields: ExtractedInvoice; confidence: number } = {
   fields: {
@@ -179,6 +187,30 @@ test("extract-invoice: a malformed JSON body falls through to the bad-input fall
     expect(typeof body.error).toBe("string");
   });
 });
+
+test.each([undefined, "", "TRUE", "1", "yes"])(
+  "POST /api/agent/chat returns 404 before any model call when LAVEGA_CHAT_ENABLED is %j",
+  async (flag) => {
+    if (flag === undefined) vi.stubEnv("LAVEGA_CHAT_ENABLED", undefined as unknown as string);
+    else vi.stubEnv("LAVEGA_CHAT_ENABLED", flag);
+    await withApiKey("sk-ant-test", async () => {
+      const app = new Hono();
+      let called = false;
+      registerAgentRoutes(app, {
+        chat: async function* () {
+          called = true;
+          yield "hoi";
+        },
+      });
+      const res = await app.request(
+        "/api/agent/chat",
+        jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+      );
+      expect(res.status).toBe(404);
+      expect(called).toBe(false);
+    });
+  },
+);
 
 test("POST /api/agent/chat returns 503 when no API key is configured", async () => {
   await withApiKey(undefined, async () => {

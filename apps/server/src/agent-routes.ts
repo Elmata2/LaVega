@@ -254,6 +254,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // -> stream. `context` is redacted per-tab by `sanitizeChatContext` BEFORE it
   // reaches `chat` — that's the boundary that keeps raw data off Mistral.
   app.post("/api/agent/chat", async (c) => {
+    if (process.env.LAVEGA_CHAT_ENABLED !== "true")
+      return c.json({ error: "Not found", code: "chat-disabled" }, 404);
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json(

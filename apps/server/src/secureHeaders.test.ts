@@ -32,8 +32,7 @@ test("the CSP pins script execution to this origin", async () => {
 
 test("the CSP still allows the origins the app genuinely calls", async () => {
   const csp = (await app.request("/health")).headers.get("content-security-policy") ?? "";
-  // The waitlist posts to script.google.com and the n8n features call a URL the
-  // user configures, so connect-src cannot be pinned to 'self' without breaking
+  // The n8n features call a URL the user configures, so connect-src cannot be pinned to 'self' without breaking
   // shipped features. Inline STYLE attributes are what React renders.
   expect(csp).toMatch(/connect-src [^;]*https:/);
   expect(csp).toMatch(/style-src [^;]*'unsafe-inline'/);

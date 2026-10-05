@@ -6,7 +6,7 @@ _The context file for AI-assisted work on LaVega. Read this first._
 
 A **local-first, privacy-first personal finance agent** — a "financial company brain." It consolidates all bank accounts across a multi-BV owner's entities into one read-only overview, adds planning/forecasting, and (over time) an agent layer that integrates with everything.
 
-**Owners:** Alexander (Generation C, `alexander@generation-c.nl`) + cofounder. Alexander owns the **personal** proposition; the cofounder owns the **investing** proposition; they share the aggregation core.
+**Owners:** Alexander (`alexander.steunenberg@gmail.com`) + cofounder. Alexander owns the **personal** proposition; the cofounder owns the **investing** proposition; they share the aggregation core.
 
 **Origin:** a clean-room restart of a discontinued product (FinnTell). See "Hard constraints" — no code/assets from that carry over.
 

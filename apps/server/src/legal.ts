@@ -10,8 +10,8 @@
  * nothing checked — the AI features, the invoice mail pipeline and the waitlist
  * all shipped while the page still said the server only did two things. */
 
-const CONTACT_EMAIL = "alexander@generation-c.nl";
-const UPDATED = "2026-08-31";
+const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
+const UPDATED = "2026-10-05";
 
 function page(title: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -91,10 +91,10 @@ export const privacyHtml = page(
 <table>
   <tr><th align="left">Wie</th><th align="left">Wat er heen gaat</th><th align="left">Wanneer</th></tr>
   <tr><td><strong>Enable Banking</strong></td><td>Banktoegang (AIS), rekening- en transactiegegevens</td><td>Als je een bank koppelt</td></tr>
-  <tr><td><strong>Mistral</strong> (EU)</td><td>Factuurdocumenten, transactieomschrijvingen, chatcontext</td><td>Alleen met AI-functies aan</td></tr>
+  <tr><td><strong>Mistral</strong> (EU)</td><td>Factuurdocumenten, transactieomschrijvingen</td><td>Alleen met AI-functies aan</td></tr>
   <tr><td><strong>Cloudflare</strong></td><td>Inkomende factuurmail</td><td>Alleen met het factuuradres aan</td></tr>
   <tr><td><strong>n8n</strong></td><td>Diezelfde mail plus bijlagen</td><td>Alleen met het factuuradres aan</td></tr>
-  <tr><td><strong>Google</strong> (Apps Script)</td><td>Je e-mailadres</td><td>Alleen als je je op de wachtlijst zet</td></tr>
+  <tr><td><strong>Resend</strong></td><td>Je e-mailadres en de inhoud van account-mails (bevestigingslink, wachtwoord resetten, nieuwe inloglink)</td><td>Bij het aanmaken van een account en bij inloggen of resetten</td></tr>
   <tr><td><strong>Frankfurter</strong> (ECB)</td><td>Valutaparen — publiek, niet persoonlijk</td><td>Bij de valutafunctie</td></tr>
   <tr><td><strong>Vercel</strong> (VS)</td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
   <tr><td><strong>Neon</strong> (VS)</td><td>De database: versleutelde kluis-back-up, beleggingsgegevens, account en voorkeuren</td><td>Altijd</td></tr>
@@ -103,7 +103,7 @@ export const privacyHtml = page(
 
 <h2>Jouw controle</h2>
 <p>Je gegevens staan op je eigen apparaat: exporteren en verwijderen kan in de app. Het wissen van je browseropslag verwijdert je lokale kluis.</p>
-<p><strong>Dat wist niet meer alles.</strong> Staat er een back-up of een brokerkoppeling op de server, dan blijft die na het legen van je browser gewoon staan. Om die ook weg te halen is er een aparte handeling: <strong>het verwijderen van je gegevens op de server</strong>. Die verwijdert in één keer je kluis-back-up, je brokerkoppelingen en opgehaalde standen, je voorkeuren, je synchronisatiestand en je agent-geschiedenis. Het is niet terug te draaien, en wij bewaren daarna geen kopie. Je account zelf (je inlog) verwijderen we op verzoek — <a href="mailto:alexander@generation-c.nl">stuur een bericht</a> en we doen het.</p>
+<p><strong>Dat wist niet meer alles.</strong> Staat er een back-up of een brokerkoppeling op de server, dan blijft die na het legen van je browser gewoon staan. Om die ook weg te halen is er een aparte handeling: <strong>het verwijderen van je gegevens op de server</strong>. Die verwijdert in één keer je kluis-back-up, je brokerkoppelingen en opgehaalde standen, je voorkeuren, je synchronisatiestand en je agent-geschiedenis. Het is niet terug te draaien, en wij bewaren daarna geen kopie. Je account zelf (je inlog) verwijderen we op verzoek — <a href="mailto:alexander.steunenberg@gmail.com">stuur een bericht</a> en we doen het.</p>
 <p>Verder heb je de rechten uit de AVG: inzage, correctie, verwijdering, beperking, bezwaar en overdraagbaarheid, en het recht een klacht in te dienen bij de Autoriteit Persoonsgegevens.</p>
 
 <h2>Contact</h2>

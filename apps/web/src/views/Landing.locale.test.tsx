@@ -28,7 +28,7 @@ test("no Dutch copy is left behind on the English page", () => {
   for (const dutch of [
     "Veelgestelde vragen",
     "Inloggen",
-    "Kom op de wachtlijst",
+    "Account aanmaken",
     "Hoe het werkt",
     "Jouw data blijft van jou",
     "Wees er als eerste bij",
@@ -49,7 +49,7 @@ test("the Dutch page is untouched by the English one existing", () => {
   for (const english of [
     "one clear number.",
     "Sign in",
-    "Join the waitlist",
+    "Create account",
     "Frequently asked questions",
   ]) {
     expect(out, `Dutch page leaked English: ${english}`).not.toContain(english);
