@@ -91,7 +91,7 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 ## Observability & error reporting
 
-**Structured stdout, Sentry opt-in.** `createProblemReporter` (`apps/investing-server/src/observability.ts`) writes every broker-sync and dashboard-read problem as one JSON line, after `redactProblem` strips credential-shaped values (API keys, tokens, `Authorization` headers). When `SENTRY_DSN` is set, `apps/investing-server/src/index.ts` initializes `@sentry/node` and the same redacted context goes to Sentry as an exception. Without it, stdout is the only sink.
+**Structured stdout, Sentry opt-in.** `createProblemReporter` (`apps/investing-server/src/observability.ts`) writes every broker-sync and dashboard-read problem as one JSON line, after `redactProblem` strips credential-shaped values (API keys, tokens, `Authorization` headers). When `SENTRY_DSN` is set, `apps/investing-server/src/index.ts` initializes `@sentry/node` and the same redacted context goes to Sentry as an exception. Without it, stdout is the only sink. `redactProblem` lives in `packages/core/src/redact.ts` and is shared with the Personal server and both web apps, which also scrub IBANs, emails and long digit runs before an event leaves (`sentryScrub.ts`).
 
 **Alerting:** Sentry's built-in email notification. No Slack/Discord webhook for v1.
 

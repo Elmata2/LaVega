@@ -19,6 +19,7 @@ test("every third party the code sends data to is named in the policy", () => {
     "Resend",
     "Vercel",
     "Neon",
+    "Sentry",
     "Frankfurter",
   ]) {
     expect(privacyHtml, `policy does not name ${processor}`).toContain(processor);

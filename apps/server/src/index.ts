@@ -15,6 +15,7 @@ import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
 import { registerNetWorthRoutes, netWorthRouteDependencies } from "./net-worth-routes.js";
+import { initServerSentry, serverErrorResponse } from "./observability.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
@@ -79,6 +80,9 @@ export function isStaticAssetPath(pathname: string): boolean {
 }
 
 export const app = new Hono();
+
+initServerSentry();
+app.onError((error) => serverErrorResponse(error));
 
 /** One Neon WebSocket pool belongs to one completed HTTP request. */
 export async function serverFetch(request: Request): Promise<Response> {

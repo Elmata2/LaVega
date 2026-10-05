@@ -45,3 +45,5 @@ export * from "./fxRoutes.js";
 export * from "./n8nSettings.js";
 export * from "./spendPercentile.js";
 export * from "./localeRedirect.js";
+export * from "./redact.js";
+export * from "./sentryScrub.js";

@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Sentry from "@sentry/node";
 import { LOCAL_TENANT_ID } from "@lavega/core";
 import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
@@ -185,7 +186,13 @@ export async function forwardInvesting(
   tenantId = LOCAL_TENANT_ID,
 ): Promise<Response> {
   const runtime = await getInvestingFetch();
-  return withInvestingTenant(tenantId, () => runtime.fetch(rewriteInvestingRequest(request)));
+  /* initServerSentry runs once for the shared process and tags everything
+   * app=server. Anything captured while the investing app handles the request
+   * is its own, so it is re-tagged for the duration of this call. */
+  return Sentry.withScope((scope) => {
+    scope.setTag("app", "investing-server");
+    return withInvestingTenant(tenantId, () => runtime.fetch(rewriteInvestingRequest(request)));
+  });
 }
 
 export async function runInvestingCron(request: Request): Promise<Response> {
