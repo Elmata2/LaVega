@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-Charlie Munger writes one letter per broker-sync snapshot. The letter is stored in `investing.portfolio_letters` (migration `0022`), encrypted like agent memory (ADR 0007). Only the broker-sync cron triggers generation. Loading the dashboard reads the stored letter and never calls the model.
+Charlie Munger writes one letter per broker-sync snapshot. The letter is stored in `investing.portfolio_letters` (migration `0023`), encrypted like agent memory (ADR 0007). Only the broker-sync cron triggers generation. Loading the dashboard reads the stored letter and never calls the model.
 
 ## Trigger and gate
 
