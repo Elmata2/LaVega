@@ -226,7 +226,7 @@ test("without authentication the cron syncs the one local tenant and never asks 
   const response = await mount.runInvestingCron(cronRequest());
 
   expect(response.status).toBe(200);
-  expect(seen).toEqual(["local:/api/brokers/sync"]);
+  expect(seen).toEqual(["local:/api/brokers/sync", "local:/api/letters/ensure"]);
   expect(listBrokerSyncTenantsMock).not.toHaveBeenCalled();
 });
 
