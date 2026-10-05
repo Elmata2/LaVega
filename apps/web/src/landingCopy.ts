@@ -9,6 +9,8 @@ import type { Locale } from "./locale.js";
  * literal translation of the Dutch: "van student tot ondernemer" is a Dutch
  * market segment, not an English one.
  */
+type HowStep = { t: string; d: string };
+
 export type LandingCopy = {
   meta: { title: string; description: string };
   nav: {
@@ -55,7 +57,7 @@ export type LandingCopy = {
     cards: Array<{ t: string; d: string }>;
   };
   privacy: { title: string; sub: string; ticks: [string, string, string] };
-  how: { eyebrow: string; title: string; steps: Array<{ t: string; d: string }> };
+  how: { eyebrow: string; title: string; steps: [HowStep, HowStep, HowStep] };
   faq: { eyebrow: string; title: string; items: Array<{ q: string; a: string }> };
   footer: {
     ctaTitle: string;
@@ -165,6 +167,10 @@ const nl: LandingCopy = {
     steps: [
       { t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
       { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
+      {
+        t: "Blijf vooruit",
+        d: "Een seintje als je buffer krap wordt, je btw al apart gezet en je volgende maanden in beeld.",
+      },
     ],
   },
   faq: {
@@ -298,6 +304,10 @@ const en: LandingCopy = {
       {
         t: "LaVega does the maths",
         d: "Categorises automatically and forecasts your cash position ahead.",
+      },
+      {
+        t: "Stay ahead",
+        d: "A heads-up when your buffer runs low, your VAT already set aside, and the months ahead in view.",
       },
     ],
   },
