@@ -93,6 +93,7 @@ export function computeTimeWeightedReturnSeries(
 ): ReturnPoint[] {
   const flows = aggregateFlows(externalFlows);
   let previous: number | null = null;
+  let previousDate = "";
   let cumulative: number | null = null;
   return points.map((point) => {
     const value = point.value;
@@ -103,10 +104,11 @@ export function computeTimeWeightedReturnSeries(
     }
     if (previous === null || previous <= 0) {
       previous = value;
+      previousDate = point.date;
       cumulative = value > 0 ? 0 : null;
       return { date: point.date, cumulativeReturn: cumulative };
     }
-    const flow = flows.has(point.date) ? flows.get(point.date)! : 0;
+    const flow = sumFlowsBetween(flows, previousDate, point.date);
     if (flow === null) {
       previous = null;
       cumulative = null;
@@ -120,14 +122,31 @@ export function computeTimeWeightedReturnSeries(
      * same answer this function already gives a non-positive base. */
     if (Math.abs(flow) > previous) {
       previous = value;
+      previousDate = point.date;
       cumulative = value > 0 ? 0 : null;
       return { date: point.date, cumulativeReturn: cumulative };
     }
     const daily = (value - previous - flow) / previous;
     cumulative = cumulative === null ? null : (1 + cumulative) * (1 + daily) - 1;
     previous = value;
+    previousDate = point.date;
     return { date: point.date, cumulativeReturn: cumulative };
   });
+}
+
+/** Flows dated in (after, until] belong to the interval ending at `until`; any unknown amount makes it unknown. */
+function sumFlowsBetween(
+  flows: ReadonlyMap<string, number | null>,
+  after: string,
+  until: string,
+): number | null {
+  let total = 0;
+  for (const [date, amount] of flows) {
+    if (date <= after || date > until) continue;
+    if (amount === null) return null;
+    total += amount;
+  }
+  return total;
 }
 
 function aggregateFlows(flows: readonly ExternalCashFlow[]): Map<string, number | null> {
