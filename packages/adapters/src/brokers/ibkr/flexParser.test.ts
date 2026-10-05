@@ -307,3 +307,33 @@ describe("parseFlexStatement currency pairs", () => {
     expect(result.sections.trades.rows).toHaveLength(1);
   });
 });
+
+describe("IBKR cost basis columns", () => {
+  const parse = (attrs: string) =>
+    parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions><OpenPosition accountId="U1" symbol="VUSA" position="4" currency="EUR" ${attrs} /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    ).sections.positions.rows[0];
+
+  test("costBasisPrice and costBasisMoney give a known cost", () => {
+    const position = parse('costBasisPrice="50" costBasisMoney="210"');
+    expect(position?.averagePrice).toBe(50);
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 210, currency: "EUR" });
+  });
+
+  test("costBasisMoney alone derives the average price", () => {
+    const position = parse('costBasisMoney="200"');
+    expect(position?.averagePrice).toBe(50);
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 200, currency: "EUR" });
+  });
+
+  test("costBasisMoney alone does not derive a per-unit price for an option", () => {
+    const position = parse('assetCategory="OPT" costBasisMoney="2000"');
+    expect(position?.averagePrice).toBeNull();
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 2000, currency: "EUR" });
+  });
+
+  test("costBasisMoney still derives the price for a stock", () => {
+    expect(parse('assetCategory="STK" costBasisMoney="200"')?.averagePrice).toBe(50);
+  });
+});

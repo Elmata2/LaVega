@@ -54,6 +54,8 @@ export type CashFlow = {
   id: string;
   entity: string;
   broker: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   date: string;
   currency: string;
   amount: number | null;

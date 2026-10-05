@@ -3,6 +3,8 @@ export type Dividend = {
   id: string;
   entity: string;
   broker: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   date: string;
   symbol: string;
   isin?: string;

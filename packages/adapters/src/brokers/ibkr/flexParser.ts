@@ -14,9 +14,16 @@ import type { TradeWithoutId } from "@lavega/core";
 import type { BrokerSection, BrokerSections } from "../BrokerAccessAdapter.js";
 
 type Attributes = Record<string, string>;
+export type StatementPeriod = { from: string; to: string };
 export type FlexStatementResult = {
   sections: BrokerSections;
   cashHistory?: CashHistoryCoverage;
+  /** Span of the statements, so a re-read of the same window can replace it. */
+  period?: StatementPeriod;
+  /** Account ids of the statements, when every statement names one. */
+  accounts?: string[];
+  /** Latest end date over all statements, even when their periods differ. */
+  statementTo?: string;
   problems: string[];
 };
 
@@ -88,6 +95,11 @@ function brokerIdentity(attrs: Attributes): string | undefined {
   if (!providerId) return undefined;
   const accountId = first(attrs, "accountId", "accountID");
   return accountId ? `${accountId}:${providerId}` : providerId;
+}
+
+function accountField(attrs: Attributes): { account?: string } {
+  const account = first(attrs, "accountId", "accountID");
+  return account ? { account } : {};
 }
 
 function identity(prefix: string, attrs: Attributes, values: unknown[]): string {
@@ -186,6 +198,7 @@ function parseStatementFunds(
           id,
           entity,
           broker: "ibkr",
+          ...accountField(attrs),
           date: flowDate,
           symbol,
           ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
@@ -204,6 +217,7 @@ function parseStatementFunds(
         id,
         entity,
         broker: "ibkr",
+        ...accountField(attrs),
         date: flowDate,
         currency,
         amount,
@@ -264,6 +278,46 @@ function cashHistory(
   };
 }
 
+/** One window only when every account statement states the same period;
+ *  otherwise a replace would drop rows of the account with the shorter one. */
+function statementPeriod(xml: string): StatementPeriod | undefined {
+  const periods = new Set<string>();
+  for (const [, attrs = ""] of flexStatements(xml)) {
+    const { fromDate, toDate } = attributes(attrs);
+    if (!fromDate || !toDate || !/^\d{8}$/.test(fromDate) || !/^\d{8}$/.test(toDate))
+      return undefined;
+    periods.add(`${fromDate}-${toDate}`);
+  }
+  const [period, ...others] = periods;
+  if (!period || others.length > 0) return undefined;
+  const [fromDate, toDate] = period.split("-");
+  return {
+    from: date(fromDate, "statement period start"),
+    to: date(toDate, "statement period end"),
+  };
+}
+
+function latestStatementEnd(xml: string): string | undefined {
+  let latest: string | undefined;
+  for (const [, attrs = ""] of flexStatements(xml)) {
+    const { toDate } = attributes(attrs);
+    if (!toDate || !/^\d{8}$/.test(toDate)) continue;
+    const day = date(toDate, "statement period end");
+    if (latest === undefined || day > latest) latest = day;
+  }
+  return latest;
+}
+
+function statementAccounts(xml: string): string[] | undefined {
+  const accounts: string[] = [];
+  for (const [, attrs = ""] of flexStatements(xml)) {
+    const accountId = first(attributes(attrs), "accountId", "accountID");
+    if (!accountId) return undefined;
+    accounts.push(accountId);
+  }
+  return accounts.length > 0 ? accounts : undefined;
+}
+
 function date(value: string | undefined, field: string): string {
   const raw = value?.split(";")[0] ?? "";
   if (!/^\d{8}$/.test(raw)) throw new Error(`IBKR Flex ${field} has invalid date`);
@@ -320,7 +374,15 @@ function parsePosition(attrs: Attributes, entity: string, statementDate?: string
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
   const account = first(attrs, "accountId", "accountID");
   const quantity = requiredNumber(first(attrs, "position", "quantity"), "position quantity");
-  const averagePrice = numberOrNull(first(attrs, "avgPrice", "averagePrice"));
+  const costBasisMoney = numberOrNull(first(attrs, "costBasisMoney"));
+  const category = first(attrs, "assetCategory")?.trim().toUpperCase();
+  // Options and futures carry a contract multiplier in the total, so only stocks can divide it out.
+  const perUnitFromTotal =
+    (!category || category === "STK") && costBasisMoney !== null && quantity !== 0
+      ? costBasisMoney / quantity
+      : null;
+  const averagePrice =
+    numberOrNull(first(attrs, "avgPrice", "averagePrice", "costBasisPrice")) ?? perUnitFromTotal;
   const currency = first(attrs, "currency", "currencyOfInstrument") || "";
   return {
     entity,
@@ -331,9 +393,9 @@ function parsePosition(attrs: Attributes, entity: string, statementDate?: string
     ...(first(attrs, "description") ? { description: first(attrs, "description") } : {}),
     quantity,
     brokerCost:
-      averagePrice === null
+      costBasisMoney === null && averagePrice === null
         ? { status: "unknown", reason: "not-reported" }
-        : { status: "known", amount: averagePrice * quantity, currency },
+        : { status: "known", amount: costBasisMoney ?? (averagePrice ?? 0) * quantity, currency },
     averagePrice,
     marketPrice: numberOrNull(first(attrs, "markPrice", "marketPrice")),
     marketValue: numberOrNull(first(attrs, "positionValue", "marketValue")),
@@ -369,6 +431,18 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
     commission: numberOrNull(first(attrs, "ibCommission", "commission")),
     ...(brokerTradeId ? { brokerTradeId } : {}),
   };
+}
+
+function periodField(period: StatementPeriod | undefined): { period?: StatementPeriod } {
+  return period ? { period } : {};
+}
+
+function statementToField(statementTo: string | undefined): { statementTo?: string } {
+  return statementTo ? { statementTo } : {};
+}
+
+function accountsField(accounts: string[] | undefined): { accounts?: string[] } {
+  return accounts ? { accounts } : {};
 }
 
 export function parseFlexStatement(xml: string, entity: string): FlexStatementResult {
@@ -441,6 +515,9 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   return {
     sections,
     cashHistory: cashHistory(xml, entity, sections),
+    ...periodField(statementPeriod(xml)),
+    ...accountsField(statementAccounts(xml)),
+    ...statementToField(latestStatementEnd(xml)),
     problems: [...positionProblems, ...tradeProblems, ...cash.problems, ...funds.problems],
   };
 }

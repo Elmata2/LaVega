@@ -55,6 +55,12 @@ export type BrokerResult = {
   /** What these sections prove about past cash. Absent means unknown. */
   cashHistory?: CashHistoryCoverage;
   historyMode?: "snapshot" | "incremental";
+  /** Inclusive dates the history sections cover, when the broker states them. */
+  period?: { from: string; to: string };
+  /** Accounts the statement covers; rows of other accounts are not its to replace. */
+  accounts?: string[];
+  /** Latest end date of the statements read, even when their periods differ. */
+  statementTo?: string;
   source: string;
   problems: string[];
   /**
