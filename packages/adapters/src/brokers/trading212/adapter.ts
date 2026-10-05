@@ -411,7 +411,9 @@ export function resolveTrading212CashHistory(input: {
         };
     }
     if (!best || best.residual > movementTolerance(movements))
-      return unknown("Trading 212 cash movements do not reconcile to the reported balance");
+      return unknown(
+        `Trading 212 cash movements do not reconcile to the reported balance (off by ${(best?.residual ?? balance.amount).toFixed(2)} ${currency} across ${movements} movements, ${ambiguous.length} transfers need a direction)`,
+      );
     for (const [index, flow] of ambiguous.entries())
       flow.amount = best.signs[index]! * (flow.unsignedAmount as number);
     reported += best.signs.reduce((total, sign, index) => total + sign * magnitudes[index]!, 0);
