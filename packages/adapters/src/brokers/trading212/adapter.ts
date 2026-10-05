@@ -4,9 +4,11 @@ import {
   type CashFlowKind,
   type CashHistoryCoverage,
   type Dividend,
+  type FxRates,
   type Position,
   type TradeSide,
   type TradeWithoutId,
+  convertCurrency,
   normalizeTradeQuantity,
 } from "@lavega/core";
 import {
@@ -308,6 +310,7 @@ export function resolveTrading212CashHistory(input: {
   cashFlows: readonly CashFlow[];
   dividends: readonly Dividend[];
   trades: readonly TradeWithoutId[];
+  fxRates: FxRates;
 }): { coverage: CashHistoryCoverage; cashFlows: CashFlow[] } {
   const flows = input.cashFlows.map((flow) => ({ ...flow }));
   const unknown = (reason: string) => ({
@@ -325,6 +328,17 @@ export function resolveTrading212CashHistory(input: {
   const { balance } = input;
   if (!balance) return unknown("Trading 212 reported no dated cash balance");
   const currency = balance.currency;
+  /* Trading 212 keeps one wallet and converts a foreign movement into it at
+   * that day's rate (see core `cashLegs`), so the proof converts the same way
+   * instead of rejecting a currency the account plainly holds. */
+  const inAccountCurrency = (amount: number, from: string, date: string): number | null => {
+    if (from === currency) return amount;
+    try {
+      return convertCurrency(amount, from, currency, date, input.fxRates);
+    } catch {
+      return null;
+    }
+  };
   const dates: string[] = [];
   const ambiguous: CashFlow[] = [];
   let reported = 0;
@@ -336,20 +350,22 @@ export function resolveTrading212CashHistory(input: {
       ambiguous.push(flow);
       continue;
     }
-    if (flow.currency !== currency)
+    const converted = inAccountCurrency(flow.amount, flow.currency, flow.date);
+    if (converted === null)
       return unknown(
-        `Trading 212 movement ${flow.brokerFlowId ?? flow.id} is in ${flow.currency}, not the account currency ${currency}`,
+        `Trading 212 movement ${flow.brokerFlowId ?? flow.id} has no FX rate into ${currency}`,
       );
-    reported += flow.amount;
+    reported += converted;
   }
   for (const dividend of input.dividends) {
     movements += 1;
     dates.push(dividend.date);
-    if (dividend.currency !== currency)
+    const converted = inAccountCurrency(dividend.amount, dividend.currency, dividend.date);
+    if (converted === null)
       return unknown(
-        `Trading 212 dividend ${dividend.brokerDividendId ?? dividend.id} is in ${dividend.currency}, not the account currency ${currency}`,
+        `Trading 212 dividend ${dividend.brokerDividendId ?? dividend.id} has no FX rate into ${currency}`,
       );
-    reported += dividend.amount;
+    reported += converted;
   }
   for (const trade of input.trades) {
     movements += 1;
@@ -358,25 +374,35 @@ export function resolveTrading212CashHistory(input: {
       return unknown(
         `Trading 212 trade ${trade.brokerTradeId ?? trade.symbol} on ${trade.date} has no settlement`,
       );
-    if (trade.settlement.currency !== currency)
-      return unknown(
-        `Trading 212 trade settlement is in ${trade.settlement.currency}, not the account currency ${currency}`,
-      );
-    reported += trade.settlement.amount;
+    const converted = inAccountCurrency(
+      trade.settlement.amount,
+      trade.settlement.currency,
+      trade.date,
+    );
+    if (converted === null)
+      return unknown(`Trading 212 trade settlement has no FX rate into ${currency}`);
+    reported += converted;
   }
   if (ambiguous.length > 0) {
     if (ambiguous.some((flow) => typeof flow.unsignedAmount !== "number"))
       return unknown("Trading 212 transfer direction is unknown and its size is missing");
     if (ambiguous.length > 10)
       return unknown("Trading 212 cash history has too many transfers without a direction");
+    const magnitudes: number[] = [];
+    for (const flow of ambiguous) {
+      const converted = inAccountCurrency(flow.unsignedAmount as number, flow.currency, flow.date);
+      if (converted === null)
+        return unknown(
+          `Trading 212 transfer ${flow.brokerFlowId ?? flow.id} has no FX rate into ${currency}`,
+        );
+      magnitudes.push(converted);
+    }
     const target = balance.amount - reported;
     let best: { residual: number; signs: number[] } | null = null;
     for (let mask = 0; mask < 1 << ambiguous.length; mask += 1) {
       let total = 0;
-      for (let index = 0; index < ambiguous.length; index += 1) {
-        const magnitude = ambiguous[index]!.unsignedAmount as number;
-        total += (mask & (1 << index)) === 0 ? -magnitude : magnitude;
-      }
+      for (let index = 0; index < ambiguous.length; index += 1)
+        total += (mask & (1 << index)) === 0 ? -magnitudes[index]! : magnitudes[index]!;
       const residual = Math.abs(total - target);
       if (!best || residual < best.residual)
         best = {
@@ -388,7 +414,7 @@ export function resolveTrading212CashHistory(input: {
       return unknown("Trading 212 cash movements do not reconcile to the reported balance");
     for (const [index, flow] of ambiguous.entries())
       flow.amount = best.signs[index]! * (flow.unsignedAmount as number);
-    reported += ambiguous.reduce((total, flow) => total + (flow.amount as number), 0);
+    reported += best.signs.reduce((total, sign, index) => total + sign * magnitudes[index]!, 0);
   }
   const residual = balance.amount - reported;
   if (Math.abs(residual) > movementTolerance(movements))

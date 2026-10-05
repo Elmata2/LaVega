@@ -296,6 +296,7 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
      * is unfinished; the adapter states no window on its own. */
     const resolved = resolveTrading212CashHistory({
       entity: "personal",
+      fxRates: FX,
       historyComplete: result.resume == null,
       balance: result.sections.cashBalances.rows[0] ?? null,
       cashFlows: result.sections.cashFlows.rows,

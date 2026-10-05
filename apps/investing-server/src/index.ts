@@ -608,6 +608,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 cashFlows: trading212Flows,
                 dividends: trading212Dividends,
                 trades: trading212Trades,
+                fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
               });
         const effectiveCashFlows = trading212
           ? [...cashFlows.filter((flow) => flow.broker !== "trading212"), ...trading212.cashFlows]

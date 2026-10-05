@@ -647,6 +647,7 @@ const proofTrade: TradeWithoutId = {
 test("proves the cash window when every movement reconciles to the balance", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: proofBalance,
     cashFlows: proofCashFlows,
@@ -666,6 +667,7 @@ test("proves the cash window when every movement reconciles to the balance", () 
 test("resolves an ambiguous transfer from the balance", () => {
   const { coverage, cashFlows } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: { ...proofBalance, amount: 37 },
     cashFlows: [
@@ -688,9 +690,34 @@ test("resolves an ambiguous transfer from the balance", () => {
   expect(cashFlows.find((flow) => flow.id === "transfer-1")?.amount).toBe(-6.5);
 });
 
+test("converts a foreign movement into the account currency before reconciling", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: { base: "EUR", date: "2026-08-01", rates: { USD: 1.25 } },
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 63.5 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "usd-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "USD",
+        amount: 25,
+        kind: "deposit",
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+});
+
 test("leaves cash unknown when the balance does not reconcile to the movements", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: { ...proofBalance, amount: 1000 },
     cashFlows: proofCashFlows,
@@ -704,6 +731,7 @@ test("leaves cash unknown when the balance does not reconcile to the movements",
 test("leaves cash unknown when a trade settlement is missing", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: proofBalance,
     cashFlows: proofCashFlows,
@@ -717,6 +745,7 @@ test("leaves cash unknown when a trade settlement is missing", () => {
 test("leaves cash unknown when an ambiguous transfer has no size", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: proofBalance,
     cashFlows: [...proofCashFlows, { ...proofCashFlows[0]!, id: "m1", amount: null }],
@@ -730,6 +759,7 @@ test("leaves cash unknown when an ambiguous transfer has no size", () => {
 test("leaves cash unknown when the balance is missing", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: true,
     balance: null,
     cashFlows: proofCashFlows,
@@ -742,6 +772,7 @@ test("leaves cash unknown when the balance is missing", () => {
 test("leaves cash unknown while pagination is unfinished", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
+    fxRates: undefined,
     historyComplete: false,
     balance: proofBalance,
     cashFlows: proofCashFlows,
