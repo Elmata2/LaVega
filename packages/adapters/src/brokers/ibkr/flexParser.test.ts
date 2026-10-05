@@ -273,3 +273,37 @@ describe("parseFlexStatement position date", () => {
     expect(result.problems[0]).toMatch(/invalid date/);
   });
 });
+
+describe("parseFlexStatement currency pairs", () => {
+  const stk = `<OpenPosition accountId="U1" assetCategory="STK" symbol="AAPL" position="2" currency="USD" reportDate="20261002" />`;
+  const fx = `<OpenPosition accountId="U1" assetCategory="CASH" symbol="EUR.USD" position="500" currency="USD" reportDate="20261002" />`;
+  const stkTrade = `<Trade accountId="U1" assetCategory="STK" symbol="AAPL" transactionID="t-1" tradeDate="20261001" buySell="BUY" quantity="2" tradePrice="100" currency="USD" />`;
+  const fxTrade = `<Trade accountId="U1" assetCategory="cash" symbol="EUR.USD" transactionID="t-2" tradeDate="20261001" buySell="BUY" quantity="500" tradePrice="1.1" currency="USD" />`;
+
+  test("skips CASH open positions without reporting a problem", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><OpenPositions>${stk}${fx}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.positions.rows.map((row) => row.symbol)).toEqual(["AAPL"]);
+  });
+
+  test("skips CASH trades without reporting a problem", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>${stkTrade}${fxTrade}</Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.trades.rows.map((row) => row.symbol)).toEqual(["AAPL"]);
+  });
+
+  test("keeps rows that carry no assetCategory", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol="AAPL" position="2" currency="USD" reportDate="20261002" /></OpenPositions><Trades><Trade symbol="AAPL" transactionID="t-1" tradeDate="20261001" buySell="BUY" quantity="2" tradePrice="100" currency="USD" /></Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toHaveLength(1);
+    expect(result.sections.trades.rows).toHaveLength(1);
+  });
+});
