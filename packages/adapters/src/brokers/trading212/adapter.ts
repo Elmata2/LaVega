@@ -2,6 +2,7 @@ import {
   type CashBalance,
   type CashFlow,
   type CashFlowKind,
+  type CashHistoryCoverage,
   type Dividend,
   type Position,
   type TradeSide,
@@ -286,84 +287,126 @@ function mapCashBalance(
   };
 }
 
-/** One account's proven cash window, or why it could not be proven.
- *
- *  Trading 212 exposes no statement period, so the window is proven by
- *  arithmetic instead of by a provider field. A Trading 212 account opens
- *  empty, so a dated balance must equal the sum of every movement after it:
- *  the transactions, the dividends, and each trade's settlement. When that
- *  total reconciles, the reported events are the whole history from the first
- *  movement to the balance date, and the engine may walk cash across it.
- *
- *  Anything the broker did not report in full breaks the total by the size of
- *  the missing movement, so a failure to reconcile leaves the history unknown
- *  rather than guessing. An amount, a currency or a trade settlement that is
- *  missing is unprovable on its own and returns unknown before any sum. */
-export type Trading212CashHistoryProof =
-  | { status: "complete"; from: string; to: string }
-  | { status: "unknown"; reason: string };
-
 /** The engine's own reconciliation tolerance (core `portfolio.ts`): one cent
  *  per movement, because every reported figure is rounded to its last place. */
 function movementTolerance(movements: number): number {
   return Math.max(0.01, movements * 0.01);
 }
 
-export function proveTrading212CashHistory(input: {
+/** Prove the window, and resolve any transfer whose direction the broker left
+ *  open, from the dated balance.
+ *
+ *  Returns the coverage plus the cash flows with ambiguous signs applied, so
+ *  the caller can hand both to the engine. A Trading 212 `TRANSFER` with a
+ *  non-negative amount states no direction; the balance decides it, because
+ *  the account opened empty and its total must reconcile. Enumerate the signs
+ *  and keep the assignment whose sum closes the gap. */
+export function resolveTrading212CashHistory(input: {
+  entity: string;
+  historyComplete: boolean;
   balance: CashBalance | null;
   cashFlows: readonly CashFlow[];
   dividends: readonly Dividend[];
   trades: readonly TradeWithoutId[];
-}): Trading212CashHistoryProof {
+}): { coverage: CashHistoryCoverage; cashFlows: CashFlow[] } {
+  const flows = input.cashFlows.map((flow) => ({ ...flow }));
+  const unknown = (reason: string) => ({
+    coverage: {
+      entity: input.entity,
+      broker: "trading212" as const,
+      tradeCash: TRADE_CASH_STREAM,
+      status: "unknown" as const,
+      reason,
+    },
+    cashFlows: flows,
+  });
+  if (!input.historyComplete)
+    return unknown("Trading 212 cash history is not complete: pagination is unfinished");
   const { balance } = input;
-  if (!balance) return { status: "unknown", reason: "Trading 212 reported no dated cash balance" };
+  if (!balance) return unknown("Trading 212 reported no dated cash balance");
   const currency = balance.currency;
-  const withoutAmount = input.cashFlows.find((flow) => flow.amount === null);
-  if (withoutAmount)
-    return {
-      status: "unknown",
-      reason: `Trading 212 cash movement ${withoutAmount.brokerFlowId ?? withoutAmount.id} has no amount`,
-    };
-  const foreign = [
-    ...input.cashFlows.filter((flow) => flow.currency !== currency),
-    ...input.dividends.filter((dividend) => dividend.currency !== currency),
-  ][0];
-  if (foreign)
-    return {
-      status: "unknown",
-      reason: `Trading 212 movement is in ${foreign.currency}, not the account currency ${currency}`,
-    };
-  let tradeCash = 0;
-  for (const trade of input.trades) {
-    if (!trade.settlement)
-      return {
-        status: "unknown",
-        reason: `Trading 212 trade ${trade.brokerTradeId ?? trade.symbol} on ${trade.date} has no settlement`,
-      };
-    if (trade.settlement.currency !== currency)
-      return {
-        status: "unknown",
-        reason: `Trading 212 trade settlement is in ${trade.settlement.currency}, not the account currency ${currency}`,
-      };
-    tradeCash += trade.settlement.amount;
+  const dates: string[] = [];
+  const ambiguous: CashFlow[] = [];
+  let reported = 0;
+  let movements = 0;
+  for (const flow of flows) {
+    movements += 1;
+    dates.push(flow.date);
+    if (flow.amount === null) {
+      ambiguous.push(flow);
+      continue;
+    }
+    if (flow.currency !== currency)
+      return unknown(
+        `Trading 212 movement ${flow.brokerFlowId ?? flow.id} is in ${flow.currency}, not the account currency ${currency}`,
+      );
+    reported += flow.amount;
   }
-  const reported =
-    input.cashFlows.reduce((total, flow) => total + (flow.amount as number), 0) +
-    input.dividends.reduce((total, dividend) => total + dividend.amount, 0) +
-    tradeCash;
+  for (const dividend of input.dividends) {
+    movements += 1;
+    dates.push(dividend.date);
+    if (dividend.currency !== currency)
+      return unknown(
+        `Trading 212 dividend ${dividend.brokerDividendId ?? dividend.id} is in ${dividend.currency}, not the account currency ${currency}`,
+      );
+    reported += dividend.amount;
+  }
+  for (const trade of input.trades) {
+    movements += 1;
+    dates.push(trade.date);
+    if (!trade.settlement)
+      return unknown(
+        `Trading 212 trade ${trade.brokerTradeId ?? trade.symbol} on ${trade.date} has no settlement`,
+      );
+    if (trade.settlement.currency !== currency)
+      return unknown(
+        `Trading 212 trade settlement is in ${trade.settlement.currency}, not the account currency ${currency}`,
+      );
+    reported += trade.settlement.amount;
+  }
+  if (ambiguous.length > 0) {
+    if (ambiguous.some((flow) => typeof flow.unsignedAmount !== "number"))
+      return unknown("Trading 212 transfer direction is unknown and its size is missing");
+    if (ambiguous.length > 10)
+      return unknown("Trading 212 cash history has too many transfers without a direction");
+    const target = balance.amount - reported;
+    let best: { residual: number; signs: number[] } | null = null;
+    for (let mask = 0; mask < 1 << ambiguous.length; mask += 1) {
+      let total = 0;
+      for (let index = 0; index < ambiguous.length; index += 1) {
+        const magnitude = ambiguous[index]!.unsignedAmount as number;
+        total += (mask & (1 << index)) === 0 ? -magnitude : magnitude;
+      }
+      const residual = Math.abs(total - target);
+      if (!best || residual < best.residual)
+        best = {
+          residual,
+          signs: ambiguous.map((_, index) => ((mask & (1 << index)) === 0 ? -1 : 1)),
+        };
+    }
+    if (!best || best.residual > movementTolerance(movements))
+      return unknown("Trading 212 cash movements do not reconcile to the reported balance");
+    for (const [index, flow] of ambiguous.entries())
+      flow.amount = best.signs[index]! * (flow.unsignedAmount as number);
+    reported += ambiguous.reduce((total, flow) => total + (flow.amount as number), 0);
+  }
   const residual = balance.amount - reported;
-  const movements = input.cashFlows.length + input.dividends.length + input.trades.length;
   if (Math.abs(residual) > movementTolerance(movements))
-    return {
-      status: "unknown",
-      reason: `Trading 212 cash movements do not reconcile to the reported balance (off by ${residual.toFixed(2)} ${currency})`,
-    };
-  const from = [
-    ...input.cashFlows.map((flow) => flow.date),
-    ...input.dividends.map((dividend) => dividend.date),
-    ...input.trades.map((trade) => trade.date),
-  ].sort()[0];
-  return { status: "complete", from: from ?? balance.asOf, to: balance.asOf };
+    return unknown(
+      `Trading 212 cash movements do not reconcile to the reported balance (off by ${residual.toFixed(2)} ${currency})`,
+    );
+  const from = [...dates].filter(Boolean).sort()[0] ?? balance.asOf;
+  return {
+    coverage: {
+      entity: input.entity,
+      broker: "trading212",
+      tradeCash: TRADE_CASH_STREAM,
+      status: "complete",
+      from,
+      to: balance.asOf,
+    },
+    cashFlows: flows,
+  };
 }
 
 function transactionKind(type: string): CashFlowKind {
@@ -414,6 +457,7 @@ function mapTransaction(
     kind,
     description: `Trading 212 ${sourceType}`,
     brokerFlowId: reference,
+    ...(isAmbiguousTransfer ? { unsignedAmount: sourceAmount } : {}),
   };
   if (isAmbiguousTransfer) {
     return {
@@ -1070,22 +1114,6 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       );
       return {
         ...synced,
-        cashHistory: {
-          entity,
-          broker: "trading212",
-          tradeCash: TRADE_CASH_STREAM,
-          ...(ordersComplete && transactionsComplete && dividendsComplete && summaryComplete
-            ? proveTrading212CashHistory({
-                balance: cashBalances[0] ?? null,
-                cashFlows,
-                dividends,
-                trades,
-              })
-            : {
-                status: "unknown" as const,
-                reason: "Trading 212 cash history is unproven: a cash section is incomplete",
-              }),
-        },
         ...(historyPending(inputResume ?? config.resume)
           ? { historyMode: "incremental" as const }
           : {}),

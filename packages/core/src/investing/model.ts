@@ -60,6 +60,9 @@ export type CashFlow = {
   kind: CashFlowKind;
   description?: string;
   brokerFlowId?: string;
+  /** The movement's size when its direction is unknown, so `amount` stays
+   *  null but a dated balance can still resolve the sign later. */
+  unsignedAmount?: number;
 };
 
 /** What a broker proved about one account's cash history.

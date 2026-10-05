@@ -42,6 +42,7 @@ import {
   createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
+  resolveTrading212CashHistory,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
@@ -575,14 +576,53 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
               .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
           ]),
         );
+        /* Trading 212 reports no statement period, so its cash window is proven
+         * from the merged history here, where every resumed page has landed.
+         * The adapter sees one page-set per invocation and cannot reconcile.
+         * Only a finished pagination may prove: a short read can look complete. */
+        const trading212SyncState = await syncStateStore.get("trading212");
+        const trading212Balances = cashBalances.filter(
+          (balance) => balance.broker === "trading212",
+        );
+        const trading212Flows = cashFlows.filter((flow) => flow.broker === "trading212");
+        const trading212Dividends = dividends.filter(
+          (dividend) => dividend.broker === "trading212",
+        );
+        const trading212Trades = trades.filter((trade) => trade.broker === "trading212");
+        const trading212 =
+          trading212Balances.length +
+            trading212Flows.length +
+            trading212Dividends.length +
+            trading212Trades.length ===
+          0
+            ? null
+            : resolveTrading212CashHistory({
+                entity:
+                  trading212Balances[0]?.entity ??
+                  trading212Flows[0]?.entity ??
+                  trading212Dividends[0]?.entity ??
+                  trading212Trades[0]!.entity,
+                historyComplete:
+                  trading212SyncState.lastSyncedAt != null && trading212SyncState.resume == null,
+                balance: trading212Balances[0] ?? null,
+                cashFlows: trading212Flows,
+                dividends: trading212Dividends,
+                trades: trading212Trades,
+              });
+        const effectiveCashFlows = trading212
+          ? [...cashFlows.filter((flow) => flow.broker !== "trading212"), ...trading212.cashFlows]
+          : cashFlows;
+        const effectiveCashCoverage = trading212
+          ? [...cashCoverage.filter((entry) => entry.broker !== "trading212"), trading212.coverage]
+          : cashCoverage;
         const dashboard = await timing.measure("build", () =>
           buildInvestingDashboard({
             positions,
             trades,
             dividends,
             cashBalances,
-            cashFlows,
-            cashCoverage,
+            cashFlows: effectiveCashFlows,
+            cashCoverage: effectiveCashCoverage,
             priceBars: prices.bars,
             benchmarkBars: benches.bars,
             benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({

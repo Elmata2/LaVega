@@ -11,7 +11,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { allSections, type BrokerResult } from "./BrokerAccessAdapter.js";
 import { createBrokerDataCache, type BrokerDataSnapshot } from "./brokerSnapshot.js";
 import { parseFlexStatement } from "./ibkr/flexParser.js";
-import { createTrading212Adapter } from "./trading212/adapter.js";
+import { createTrading212Adapter, resolveTrading212CashHistory } from "./trading212/adapter.js";
 
 const DATES = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"];
 const FX: FxRate = { base: "EUR", date: "2026-01-05", rates: { USD: 1.25 } };
@@ -292,8 +292,20 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
       secret: "secret",
       baseUrl: await trading212(),
     }).sync({ entity: "personal" });
+    /* The runtime proves from the merged history and refuses while pagination
+     * is unfinished; the adapter states no window on its own. */
+    const resolved = resolveTrading212CashHistory({
+      entity: "personal",
+      historyComplete: result.resume == null,
+      balance: result.sections.cashBalances.rows[0] ?? null,
+      cashFlows: result.sections.cashFlows.rows,
+      dividends: result.sections.dividends.rows,
+      trades: result.sections.trades.rows,
+    });
     const cache = createBrokerDataCache();
-    cache.apply(outcome("trading212", { ...result, source: "trading-212" }));
+    cache.apply(
+      outcome("trading212", { ...result, source: "trading-212", cashHistory: resolved.coverage }),
+    );
     const data = cache.read();
 
     expect(result.problems).toEqual(
@@ -302,6 +314,7 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
         "Trading 212 transactions pagination repeated nextPagePath",
       ]),
     );
+    expect(resolved.coverage.status).toBe("unknown");
     expect(data.cashCoverage).toEqual([
       expect.objectContaining({ broker: "trading212", status: "unknown" }),
     ]);

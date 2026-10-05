@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { afterEach, expect, test, vi } from "vitest";
 import { computePortfolioValueSeries } from "@lavega/core";
 import type { CashBalance, CashFlow, Dividend, TradeWithoutId } from "@lavega/core";
-import { createTrading212Adapter, proveTrading212CashHistory } from "./adapter.js";
+import { createTrading212Adapter, resolveTrading212CashHistory } from "./adapter.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -587,13 +587,9 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
     },
   ]);
   expect(paths).toContain("/cash-page-2?cursor=opaque");
-  // Complete pagination still leaves past cash unproven: no sanitized payload
-  // yet shows whether transactions also book the fills' wallet impact.
-  expect(result.cashHistory).toMatchObject({
-    entity: "Holding BV",
-    broker: "trading212",
-    status: "unknown",
-  });
+  // The adapter reports no window of its own: Trading 212 exposes no statement
+  // period, so the runtime proves it from the merged history on the read path.
+  expect(result.cashHistory).toBeUndefined();
 });
 
 const proofBalance: CashBalance = {
@@ -649,57 +645,111 @@ const proofTrade: TradeWithoutId = {
 };
 
 test("proves the cash window when every movement reconciles to the balance", () => {
-  expect(
-    proveTrading212CashHistory({
-      balance: proofBalance,
-      cashFlows: proofCashFlows,
-      dividends: proofDividends,
-      trades: [proofTrade],
-    }),
-  ).toEqual({ status: "complete", from: "2026-08-01", to: "2026-08-05" });
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage).toMatchObject({
+    entity: "e",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "complete",
+    from: "2026-08-01",
+    to: "2026-08-05",
+  });
+});
+
+test("resolves an ambiguous transfer from the balance", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 37 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 6.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-1")?.amount).toBe(-6.5);
 });
 
 test("leaves cash unknown when the balance does not reconcile to the movements", () => {
-  const proof = proveTrading212CashHistory({
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
     balance: { ...proofBalance, amount: 1000 },
     cashFlows: proofCashFlows,
     dividends: proofDividends,
     trades: [proofTrade],
   });
-  expect(proof.status).toBe("unknown");
-  expect(proof.status === "unknown" && proof.reason).toContain("do not reconcile");
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("do not reconcile");
 });
 
 test("leaves cash unknown when a trade settlement is missing", () => {
-  const proof = proveTrading212CashHistory({
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
     balance: proofBalance,
     cashFlows: proofCashFlows,
     dividends: proofDividends,
     trades: [{ ...proofTrade, settlement: undefined }],
   });
-  expect(proof.status).toBe("unknown");
-  expect(proof.status === "unknown" && proof.reason).toContain("has no settlement");
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("has no settlement");
 });
 
-test("leaves cash unknown when a movement amount is missing", () => {
-  const proof = proveTrading212CashHistory({
+test("leaves cash unknown when an ambiguous transfer has no size", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
     balance: proofBalance,
     cashFlows: [...proofCashFlows, { ...proofCashFlows[0]!, id: "m1", amount: null }],
     dividends: proofDividends,
     trades: [proofTrade],
   });
-  expect(proof.status).toBe("unknown");
-  expect(proof.status === "unknown" && proof.reason).toContain("has no amount");
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("size is missing");
 });
 
 test("leaves cash unknown when the balance is missing", () => {
-  const proof = proveTrading212CashHistory({
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: true,
     balance: null,
     cashFlows: proofCashFlows,
     dividends: proofDividends,
     trades: [],
   });
-  expect(proof.status).toBe("unknown");
+  expect(coverage.status).toBe("unknown");
+});
+
+test("leaves cash unknown while pagination is unfinished", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    historyComplete: false,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("not complete");
 });
 
 test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {
