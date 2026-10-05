@@ -6,6 +6,7 @@ import {
   createPriceOrchestrator,
   discoverPriceSyncTargets,
   priceSyncDeadlineMs,
+  syncBudgets,
   type PriceSyncTarget,
 } from "./priceOrchestrator.js";
 
@@ -767,4 +768,22 @@ test("the budget is the broker sync budget unless prices are given their own", (
   expect(priceSyncDeadlineMs(environment({ VERCEL: "1" }), 1_000)).toBe(46_000);
   // A local or Docker run has no host limit, so it waits out the whole list.
   expect(priceSyncDeadlineMs(environment({}), 1_000)).toBeUndefined();
+});
+
+test("syncBudgets gives the cron and the per-tenant slice from one reading", () => {
+  const environment = (values: Record<string, string>) => (name: string) => values[name];
+  expect(
+    syncBudgets(
+      environment({ INVESTING_SYNC_BUDGET_MS: "240000", INVESTING_PRICE_SYNC_BUDGET_MS: "60000" }),
+    ),
+  ).toEqual({ cronMs: 240_000, sliceMs: 60_000 });
+  expect(syncBudgets(environment({ INVESTING_SYNC_BUDGET_MS: "90000" }))).toEqual({
+    cronMs: 90_000,
+    sliceMs: 90_000,
+  });
+  expect(syncBudgets(environment({ VERCEL: "1" }))).toEqual({ cronMs: 240_000, sliceMs: 45_000 });
+  expect(syncBudgets(environment({ INVESTING_SYNC_BUDGET_MS: "nope" }))).toEqual({
+    cronMs: undefined,
+    sliceMs: undefined,
+  });
 });

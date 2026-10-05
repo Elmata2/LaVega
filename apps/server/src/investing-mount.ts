@@ -2,8 +2,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasBrokerSyncTime } from "@lavega/adapters";
 import * as Sentry from "@sentry/node";
 import { LOCAL_TENANT_ID } from "@lavega/core";
+import { listBrokerSyncTenants } from "@lavega/database";
+import { syncBudgets } from "@lavega/investing-server/src/priceOrchestrator.js";
+import { createProblemReporter } from "@lavega/investing-server/src/observability.js";
 import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
@@ -88,14 +92,24 @@ export function withInvestingTenant<T>(tenantId: string, fn: () => T): T {
   return tenantScope.run(tenantId, fn);
 }
 
-export function investingCronTenantIds(): string[] {
-  const configured =
-    process.env.INVESTING_CRON_TENANT_IDS?.split(",")
-      .map((tenant) => tenant.trim())
-      .filter(Boolean) ?? [];
-  if (configured.length > 0) return [...new Set(configured)];
-  return getAuth() ? [] : [LOCAL_TENANT_ID];
+/**
+ * Who the nightly cron syncs: everyone with a connected broker, least recently
+ * synced first (SQL has already deduplicated). Without authentication there is
+ * one local tenant. Throws when the database cannot be read; the caller answers
+ * that without the cause.
+ */
+export async function investingCronTenantIds(): Promise<string[]> {
+  const database = runtimeDatabase();
+  /* getAuth() is set only together with a runtime database. */
+  if (!getAuth() || !database) return [LOCAL_TENANT_ID];
+  return listBrokerSyncTenants(database);
 }
+
+const reportCronProblem = createProblemReporter();
+const cronProblem = (message: string, cause?: unknown) =>
+  reportCronProblems([cause instanceof Error ? `${message}: ${cause.message}` : message]);
+const reportCronProblems = (problems: string[]) =>
+  reportCronProblem({ source: "broker-sync", problems });
 
 export function authorizedCronRequest(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -198,29 +212,40 @@ export async function forwardInvesting(
 export async function runInvestingCron(request: Request): Promise<Response> {
   if (!authorizedCronRequest(request))
     return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
-  const tenants = investingCronTenantIds();
-  if (tenants.length === 0)
-    return Response.json(
-      { problems: ["INVESTING_CRON_TENANT_IDS is required when authentication is configured"] },
-      { status: 503 },
-    );
-  const results = [];
-  for (const tenantId of tenants) {
-    const origin = new URL(request.url).origin;
-    const broker = await forwardInvesting(
-      new Request(`${origin}/api/brokers/sync`, { method: "POST" }),
-      tenantId,
-    );
-    const price = await forwardInvesting(
-      new Request(`${origin}/api/prices/sync`, { method: "POST" }),
-      tenantId,
-    );
-    results.push({
-      tenantId,
-      brokerStatus: broker.status,
-      priceStatus: price.status,
-      price: await price.json().catch(() => null),
-    });
+  /* One clock for the whole pass, started before the first thing that costs time. */
+  const { cronMs, sliceMs } = syncBudgets((name) => process.env[name]?.trim() || undefined);
+  const deadlineMs = cronMs === undefined ? undefined : Date.now() + cronMs;
+  let tenants: string[];
+  try {
+    tenants = await investingCronTenantIds();
+  } catch (error) {
+    cronProblem("Could not list tenants to sync", error);
+    return Response.json({ problems: ["Could not list tenants to sync"] }, { status: 503 });
   }
-  return Response.json({ tenants: results });
+  const origin = new URL(request.url).origin;
+  const results = [];
+  let reached = 0;
+  for (const tenantId of tenants) {
+    /* /api/brokers/sync runs the tenant's price slice itself, under the same
+     * deadline, so one request is the whole tenant and one slice bounds it. */
+    if (!hasBrokerSyncTime(deadlineMs, sliceMs ?? 0)) break;
+    reached += 1;
+    try {
+      const broker = await forwardInvesting(
+        new Request(`${origin}/api/brokers/sync`, { method: "POST" }),
+        tenantId,
+      );
+      results.push({ tenantId, brokerStatus: broker.status });
+    } catch (error) {
+      cronProblem(`Tenant ${tenantId} sync failed`, error);
+      results.push({ tenantId, error: "Tenant sync failed" });
+    }
+  }
+  if (tenants.length > 0 && reached === 0) {
+    cronProblem(
+      "No tenant fits the cron budget; check INVESTING_SYNC_BUDGET_MS and INVESTING_PRICE_SYNC_BUDGET_MS",
+    );
+    return Response.json({ problems: ["Sync budget too small for one tenant"] }, { status: 500 });
+  }
+  return Response.json({ tenants: results, skipped: tenants.length - reached });
 }

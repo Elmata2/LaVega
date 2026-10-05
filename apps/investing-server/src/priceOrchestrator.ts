@@ -82,19 +82,44 @@ class PriceSyncLeaseLost extends Error {
 const newLeaseId = () =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-/** When one invocation has to stop so the host does not kill it mid-symbol.
+export type SyncBudgets = {
+  /** The whole function invocation (the nightly cron's pass over every tenant). */
+  cronMs: number | undefined;
+  /** One tenant's request: broker sync plus the price slice that follows it. */
+  sliceMs: number | undefined;
+};
+
+/** The hosted function limit is 300s; leave the rest for persistence and the host. */
+const HOSTED_CRON_BUDGET_MS = 240_000;
+const HOSTED_SLICE_BUDGET_MS = 45_000;
+
+const positiveBudget = (value: string | undefined): number | undefined => {
+  const budget = Number(value);
+  return Number.isFinite(budget) && budget > 0 ? budget : undefined;
+};
+
+/** Where every time budget is read, so the cron and the request handlers agree.
  *  Local and Docker runs have no host limit and get none, exactly like the
  *  broker sync budget they share a name with. */
+export function syncBudgets(environment: (name: string) => string | undefined): SyncBudgets {
+  const hosted = Boolean(environment("VERCEL"));
+  const cron = positiveBudget(environment("INVESTING_SYNC_BUDGET_MS"));
+  return {
+    cronMs: cron ?? (hosted ? HOSTED_CRON_BUDGET_MS : undefined),
+    sliceMs:
+      positiveBudget(environment("INVESTING_PRICE_SYNC_BUDGET_MS")) ??
+      cron ??
+      (hosted ? HOSTED_SLICE_BUDGET_MS : undefined),
+  };
+}
+
+/** When one invocation has to stop so the host does not kill it mid-symbol. */
 export function priceSyncDeadlineMs(
   environment: (name: string) => string | undefined,
   now = Date.now(),
 ): number | undefined {
-  for (const name of ["INVESTING_PRICE_SYNC_BUDGET_MS", "INVESTING_SYNC_BUDGET_MS"]) {
-    const budget = Number(environment(name));
-    if (Number.isFinite(budget) && budget > 0) return now + budget;
-  }
-  if (environment("VERCEL")) return now + 45_000;
-  return undefined;
+  const { sliceMs } = syncBudgets(environment);
+  return sliceMs === undefined ? undefined : now + sliceMs;
 }
 
 function instrument(
