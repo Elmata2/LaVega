@@ -343,6 +343,12 @@ export function resolveTrading212CashHistory(input: {
   const ambiguous: CashFlow[] = [];
   let reported = 0;
   let movements = 0;
+  let deposits = 0;
+  let withdrawals = 0;
+  let dividendsTotal = 0;
+  let tradesTotal = 0;
+  const breakdown = (residual: number) =>
+    `off by ${residual.toFixed(2)} ${currency} across ${movements} movements (deposits ${deposits.toFixed(2)}, withdrawals ${withdrawals.toFixed(2)}, dividends ${dividendsTotal.toFixed(2)}, trade settlements ${tradesTotal.toFixed(2)}, balance ${balance.amount.toFixed(2)})`;
   for (const flow of flows) {
     movements += 1;
     dates.push(flow.date);
@@ -355,6 +361,8 @@ export function resolveTrading212CashHistory(input: {
       return unknown(
         `Trading 212 movement ${flow.brokerFlowId ?? flow.id} has no FX rate into ${currency}`,
       );
+    if (converted >= 0) deposits += converted;
+    else withdrawals += converted;
     reported += converted;
   }
   for (const dividend of input.dividends) {
@@ -365,6 +373,7 @@ export function resolveTrading212CashHistory(input: {
       return unknown(
         `Trading 212 dividend ${dividend.brokerDividendId ?? dividend.id} has no FX rate into ${currency}`,
       );
+    dividendsTotal += converted;
     reported += converted;
   }
   for (const trade of input.trades) {
@@ -381,6 +390,7 @@ export function resolveTrading212CashHistory(input: {
     );
     if (converted === null)
       return unknown(`Trading 212 trade settlement has no FX rate into ${currency}`);
+    tradesTotal += converted;
     reported += converted;
   }
   if (ambiguous.length > 0) {
@@ -418,7 +428,7 @@ export function resolveTrading212CashHistory(input: {
     }
     if (!best || best.residual > movementTolerance(movements))
       return unknown(
-        `Trading 212 cash movements do not reconcile to the reported balance (off by ${(best?.residual ?? balance.amount).toFixed(2)} ${currency} across ${movements} movements, ${ambiguous.length} transfers need a direction)`,
+        `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(best?.residual ?? balance.amount)}, ${ambiguous.length} transfers need a direction)`,
       );
     for (const [index, flow] of ambiguous.entries())
       flow.amount = best.signs[index]! * (flow.unsignedAmount as number);
@@ -427,7 +437,7 @@ export function resolveTrading212CashHistory(input: {
   const residual = balance.amount - reported;
   if (Math.abs(residual) > movementTolerance(movements))
     return unknown(
-      `Trading 212 cash movements do not reconcile to the reported balance (off by ${residual.toFixed(2)} ${currency})`,
+      `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(residual)})`,
     );
   const from = [...dates].filter(Boolean).sort()[0] ?? balance.asOf;
   return {
