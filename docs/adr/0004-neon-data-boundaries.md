@@ -26,6 +26,10 @@ No Better Auth tables, foreign keys to an auth table, or runtime database adapte
 
 Client-supplied user IDs must not set database context. Encryption must happen before sensitive blobs reach Neon.
 
+## One cross-tenant read
+
+The nightly investing cron must find every user with a connected broker, and `broker_vaults` is `FORCE ROW LEVEL SECURITY`. `investing.list_broker_sync_tenants()` (0022) is the single exception: `SECURITY DEFINER`, `search_path` pinned, `EXECUTE` granted to `lavega_runtime` only, returning user ids and nothing else, ordered least recently synced first. It runs as the migration owner, who must bypass RLS; 0022 refuses to apply as a role that cannot. No policy was changed.
+
 ## Table ownership
 
 | Table                      | Cardinality                      | Purpose                                                                                                                         |

@@ -223,6 +223,19 @@ export function createBrokerRepository(
   };
 }
 
+/**
+ * Every user with a connected broker, least recently synced first.
+ *
+ * Deliberately the one read in this file with no tenant: it calls the
+ * SECURITY DEFINER function from 0022, which returns user ids and nothing else.
+ * The table's own policy is untouched, so a query for anything more still sees
+ * only the tenant it names.
+ */
+export async function listBrokerSyncTenants(db: Database): Promise<string[]> {
+  const result = await db.http.query("SELECT tenant_id FROM investing.list_broker_sync_tenants()");
+  return result.rows.map((row) => String(row.tenant_id));
+}
+
 export type DashboardSnapshotRepository = {
   /** The stored dashboard for a query while it is still current, and the
    *  source version a dashboard built now has to be stored under. */

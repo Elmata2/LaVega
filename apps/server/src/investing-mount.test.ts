@@ -5,7 +5,6 @@ import {
   authorizedCronRequest,
   currentInvestingTenant,
   forwardInvesting,
-  investingCronTenantIds,
   investingDist,
   investingOwnsApiPath,
   investingTenantId,
@@ -21,7 +20,11 @@ const {
   dashboardCacheMock,
   getAuthMock,
   verifiedSessionMock,
+  runtimeDatabaseMock,
+  listBrokerSyncTenantsMock,
 } = vi.hoisted(() => ({
+  runtimeDatabaseMock: vi.fn(() => null as unknown),
+  listBrokerSyncTenantsMock: vi.fn(async (_db: unknown) => [] as string[]),
   createRuntimeAppMock: vi.fn(async () => ({
     routes: [
       { method: "GET", path: "/api/investing/dashboard" },
@@ -57,6 +60,14 @@ vi.mock("@lavega/investing-server/src/index.js", () => ({
   createRuntimeApp: createRuntimeAppMock,
 }));
 vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
+vi.mock("@lavega/investing-server/src/credentialStore.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  runtimeDatabase: runtimeDatabaseMock,
+}));
+vi.mock("@lavega/database", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  listBrokerSyncTenants: listBrokerSyncTenantsMock,
+}));
 vi.mock("@lavega/investing-server/src/docker.js", () => ({
   createDockerFetch: createDockerFetchMock,
 }));
@@ -76,7 +87,13 @@ vi.mock("@lavega/investing-server/src/fileMarketDataConsentStore.js", () => ({
 afterEach(() => {
   vi.clearAllMocks();
   delete process.env.CRON_SECRET;
-  delete process.env.INVESTING_CRON_TENANT_IDS;
+  delete process.env.INVESTING_SYNC_BUDGET_MS;
+  delete process.env.INVESTING_PRICE_SYNC_BUDGET_MS;
+  vi.useRealTimers();
+  // clearAllMocks leaves unconsumed once-values queued for the next test.
+  runtimeDatabaseMock.mockReset().mockReturnValue(null);
+  listBrokerSyncTenantsMock.mockReset().mockResolvedValue([]);
+  getAuthMock.mockReset().mockReturnValue(null);
 });
 
 test("rewriteInvestingRequest strips /investing for static and health paths", () => {
@@ -177,41 +194,175 @@ test("cron requests require the configured secret", () => {
   );
 });
 
-test("cron tenants come from env when auth exists, with local fallback only when auth is off", () => {
-  process.env.INVESTING_CRON_TENANT_IDS = " user-a, user-b, user-a ";
-  expect(investingCronTenantIds()).toEqual(["user-a", "user-b"]);
+const cronRequest = () =>
+  new Request("https://lavega.dev/api/cron/investing-sync", {
+    headers: { authorization: "Bearer cron-secret" },
+  });
 
-  delete process.env.INVESTING_CRON_TENANT_IDS;
-  getAuthMock.mockReturnValueOnce({});
-  expect(investingCronTenantIds()).toEqual([]);
-  getAuthMock.mockReturnValueOnce(null);
-  expect(investingCronTenantIds()).toEqual(["local"]);
-});
-
-test("investing cron runs broker sync then a fresh price slice for each configured tenant", async () => {
+async function cronMount(
+  tenants: string[],
+  handle: (tenant: string, path: string) => Response | Promise<Response> = () =>
+    Response.json({ ok: true }),
+) {
   vi.resetModules();
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
   createDockerFetchMock.mockImplementation(() => async (request: Request) => {
-    seen.push(`${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`);
-    return Response.json({ ok: true });
+    const entry = `${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`;
+    seen.push(entry);
+    return handle(mount.currentInvestingTenant(), new URL(request.url).pathname);
   });
   process.env.CRON_SECRET = "cron-secret";
-  process.env.INVESTING_CRON_TENANT_IDS = "user-a,user-b";
+  getAuthMock.mockReturnValue({});
+  runtimeDatabaseMock.mockReturnValueOnce({});
+  listBrokerSyncTenantsMock.mockResolvedValueOnce(tenants);
+  return { mount, seen };
+}
 
-  const response = await mount.runInvestingCron(
-    new Request("https://lavega.dev/api/cron/investing-sync", {
-      headers: { authorization: "Bearer cron-secret" },
-    }),
-  );
+test("without authentication the cron syncs the one local tenant and never asks the database", async () => {
+  const { mount, seen } = await cronMount([]);
+  getAuthMock.mockReturnValue(null);
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(200);
+  expect(seen).toEqual(["local:/api/brokers/sync"]);
+  expect(listBrokerSyncTenantsMock).not.toHaveBeenCalled();
+});
+
+test("the cron syncs every tenant with a connected broker, with no allowlist env", async () => {
+  const { mount, seen } = await cronMount(["user-a", "user-b", "user-c"]);
+
+  const response = await mount.runInvestingCron(cronRequest());
 
   expect(response.status).toBe(200);
   expect(seen).toEqual([
     "user-a:/api/brokers/sync",
-    "user-a:/api/prices/sync",
     "user-b:/api/brokers/sync",
-    "user-b:/api/prices/sync",
+    "user-c:/api/brokers/sync",
   ]);
+  const body = (await response.json()) as { tenants: unknown[]; skipped: number };
+  expect(body.tenants).toHaveLength(3);
+  expect(body.skipped).toBe(0);
+});
+
+test("with no connected broker anywhere the cron succeeds and does nothing", async () => {
+  const { mount, seen } = await cronMount([]);
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(200);
+  expect(seen).toEqual([]);
+});
+
+test("the cron keeps the order the database gave, least recently synced first", async () => {
+  const { mount, seen } = await cronMount(["stale", "newer", "newest"]);
+
+  await mount.runInvestingCron(cronRequest());
+
+  expect(seen.filter((entry) => entry.endsWith("/api/brokers/sync"))).toEqual([
+    "stale:/api/brokers/sync",
+    "newer:/api/brokers/sync",
+    "newest:/api/brokers/sync",
+  ]);
+});
+
+test("the cron stops before a tenant that no longer fits, counting from before the tenant listing", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "100000";
+  process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
+  const { mount, seen } = await cronMount(["user-a", "user-b", "user-c"], (_t, path) => {
+    // a tenant's one request may spend a whole 40s slice
+    if (path === "/api/brokers/sync") vi.setSystemTime(Date.now() + 40_000);
+    return Response.json({ ok: true });
+  });
+  // listing takes 20s: the 80s that remain (minus the 5s margin) fit one 40s slice, not two
+  listBrokerSyncTenantsMock.mockReset().mockImplementationOnce(async () => {
+    vi.setSystemTime(Date.now() + 20_000);
+    return ["user-a", "user-b", "user-c"];
+  });
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  const body = (await response.json()) as { tenants: { tenantId: string }[]; skipped: number };
+  expect(response.status).toBe(200);
+  expect(body.tenants.map((tenant) => tenant.tenantId)).toEqual(["user-a"]);
+  expect(body.skipped).toBe(2);
+  expect(seen.some((entry) => entry.startsWith("user-b:"))).toBe(false);
+});
+
+test("a tenant costs one request: the price slice runs inside /api/brokers/sync", async () => {
+  const { mount, seen } = await cronMount(["user-a"]);
+
+  await mount.runInvestingCron(cronRequest());
+
+  expect(seen).toEqual(["user-a:/api/brokers/sync"]);
+});
+
+test("a budget where not even one slice fits is a 500, not a quiet 200 with everything skipped", async () => {
+  process.env.INVESTING_SYNC_BUDGET_MS = "60000";
+  process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "60000";
+  const { mount, seen } = await cronMount(["user-a", "user-b"]);
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("budget");
+  expect(seen).toEqual([]);
+});
+
+test("the cron answers statuses only, never per-user symbols", async () => {
+  const { mount } = await cronMount(["user-a"], () =>
+    Response.json({ remainingSymbols: ["AAPL", "MSFT"], currentSymbol: "AAPL", completed: 1 }),
+  );
+
+  const text = JSON.stringify(await (await mount.runInvestingCron(cronRequest())).json());
+
+  expect(text).not.toMatch(/AAPL|MSFT|remainingSymbols|currentSymbol/);
+});
+
+test("one tenant that throws or answers 5xx does not stop the others, and the failure is logged", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const { mount, seen } = await cronMount(["user-a", "user-b", "user-c"], (tenant, path) => {
+    if (tenant === "user-a" && path === "/api/brokers/sync")
+      throw new Error("vault exploded: token=secret-token");
+    if (tenant === "user-b") return Response.json({ problems: ["x"] }, { status: 503 });
+    return Response.json({ ok: true });
+  });
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(200);
+  expect(seen).toContain("user-c:/api/brokers/sync");
+  const text = JSON.stringify(await response.json());
+  expect(text).not.toContain("secret-token");
+  expect(text).toContain("user-a");
+  const logged = log.mock.calls.map((call) => String(call[0])).join("\n");
+  expect(logged).toContain("vault exploded");
+  expect(logged).toContain("user-a");
+  expect(logged).not.toContain("secret-token");
+  log.mockRestore();
+});
+
+test("a failing tenant listing is a 503 with a fixed message, not a leak", async () => {
+  vi.resetModules();
+  const mount = await import("./investing-mount.js");
+  process.env.CRON_SECRET = "cron-secret";
+  getAuthMock.mockReturnValue({});
+  runtimeDatabaseMock.mockReturnValueOnce({});
+  listBrokerSyncTenantsMock.mockRejectedValueOnce(new Error("connection string postgres://u:p@h"));
+
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const response = await mount.runInvestingCron(cronRequest());
+
+  expect(response.status).toBe(503);
+  expect(JSON.stringify(await response.json())).not.toContain("postgres://");
+  const logged = log.mock.calls.map((call) => String(call[0])).join("\n");
+  expect(logged).toContain("Could not list tenants");
+  expect(logged).not.toContain("u:p@h");
+  log.mockRestore();
 });
 
 test("forwardInvesting runs the forwarded request inside the caller's tenant scope", async () => {
