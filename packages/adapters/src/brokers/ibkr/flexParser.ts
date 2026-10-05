@@ -289,6 +289,10 @@ function first(attrs: Attributes, ...names: string[]): string | undefined {
   return names.map((name) => attrs[name]).find((value) => value !== undefined);
 }
 
+function isCurrencyPair(attrs: Attributes): boolean {
+  return first(attrs, "assetCategory")?.toUpperCase() === "CASH";
+}
+
 function side(value: string | undefined): TradeSide {
   switch (value?.toUpperCase()) {
     case "BUY":
@@ -407,6 +411,7 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
       : [[xml, undefined]];
   for (const [body, statementDate] of positionScopes) {
     for (const attrs of rows(body, "OpenPosition")) {
+      if (isCurrencyPair(attrs)) continue;
       try {
         positions.push(parsePosition(attrs, entity, statementDate));
       } catch (error) {
@@ -417,6 +422,7 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
     }
   }
   for (const attrs of rows(xml, "Trade")) {
+    if (isCurrencyPair(attrs)) continue;
     try {
       trades.push(parseTrade(attrs, entity));
     } catch (error) {
