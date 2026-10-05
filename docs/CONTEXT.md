@@ -79,6 +79,7 @@ tx = {
 - pnpm workspaces + workspace deps (`@lavega/*`), resolved via `moduleResolution: bundler`; no TypeScript project references
 - **UI:** Vite + React (`apps/web`)
 - **Server:** Hono (`apps/server`) — portable across Node/edge/cheap hosting
+- **TypeScript logic:** Effect 4 (`effect@4.0.1`) for all new code — typed errors, `Schema`, `Layer`/`Context.Service`, structured concurrency. Existing code is ported when touched, not in bulk. Effect source is vendored read-only at `repos/effect`; read `repos/effect/LLMS.md` first. See [ADR 0008](adr/0008-effect-as-typescript-standard.md).
 - **Storage:** IndexedDB adapter now → Postgres adapter later
 - **Tests:** Vitest
 - **Lint / format:** oxlint + oxfmt at repo root (Turborepo root tasks `//#lint`, `//#format`). No ESLint/Prettier. Config: `.oxlintrc.json`, `.oxfmtrc.json`. Scripts: `pnpm lint`, `pnpm lint:fix`, `pnpm format`, `pnpm format:fix`, `pnpm quality`.

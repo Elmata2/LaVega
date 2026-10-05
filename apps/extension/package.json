@@ -10,5 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bundle:points": "tsx scripts/bundle-points-rates.ts"
+  },
+  "dependencies": {
+    "effect": "^4.0.1"
   }
 }

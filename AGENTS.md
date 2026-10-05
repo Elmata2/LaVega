@@ -55,6 +55,43 @@ web UI, macOS daemon); `packages/*` for shared libraries and config. Root script
 `pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
 `pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
+### TypeScript: Effect
+
+All new TypeScript logic uses Effect 4 (`effect@4.0.1`). Read `repos/effect/LLMS.md`
+before writing any Effect code — it is the source of truth for style. See
+`docs/adr/0008-effect-as-typescript-standard.md`.
+
+- `import { Effect, Schema } from "effect"`. Platform modules are subpaths:
+  `effect/schema`, `effect/sql`, `effect/ai`, `effect/http`, `effect/testing`,
+  `effect/cli`, `effect/process`.
+- Domain models and untrusted input go through `Schema` (`Schema.Class`,
+  `Schema.TaggedError`). No hand-written predicates — use `Predicate`.
+- Services: `Context.Service` with a static `layer`; compose `Layer`s and swap
+  them in tests.
+- Errors are typed values: `Schema.TaggedError`, recovered with
+  `Effect.catchTag` / `Effect.catchTags`.
+- Reusable effects use `Effect.fn("name")` (tracing) or `Effect.fnUntraced` (hot
+  paths, libraries). Never a function that only wraps and returns `Effect.gen`.
+- Time uses Effect's `DateTime`, not `Date` / `Date.now`.
+- Entry points run through an Effect runtime. Bridge existing frameworks (Hono)
+  with `ManagedRuntime` — see
+  `repos/effect/ai-docs/src/04_integration/10_managed-runtime.ts`.
+- Tests: `@effect/vitest` (`it.effect`); `TestClock` / `TestConsole` from
+  `effect/testing`.
+- Existing non-Effect code is ported when touched, not in bulk. Keep effects at
+  the service / entry-point boundary; JSX stays plain React.
+
+### Vendored repositories
+
+External source is vendored under `repos/` as read-only reference material.
+
+- Read it; never import from it (`@repos/*` is not a package).
+- Never edit it. Update with
+  `git subtree pull --prefix=repos/effect https://github.com/Effect-TS/effect.git main --squash`.
+- It is excluded from lint, format, search and editor tooling.
+- Prefer examples in `repos/effect/ai-docs/src/` and the vendored tests over web
+  search.
+
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
 Rules:

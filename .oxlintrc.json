@@ -15,7 +15,8 @@
     ".turbo/**",
     ".vercel/**",
     ".pnpm-store/**",
-    "coverage/**"
+    "coverage/**",
+    "repos/**"
   ],
   "overrides": [
     {

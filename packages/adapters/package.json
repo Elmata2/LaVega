@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@lavega/core": "workspace:*",
+    "effect": "^4.0.1",
     "idb": "^8.0.0"
   },
   "devDependencies": {
