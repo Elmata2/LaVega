@@ -119,6 +119,50 @@ describe("benchmark chart domain", () => {
     expect(returns[2]?.cumulativeReturn).toBeCloseTo(0.1);
   });
 
+  test("a deposit dated in a gap between points is not booked as performance", () => {
+    const returns = computeTimeWeightedReturnSeries(
+      [
+        { date: "2025-08-08", value: 9852 },
+        { date: "2025-08-11", value: 21030 },
+        { date: "2025-08-12", value: 21030 * 1.01 },
+      ],
+      [{ date: "2025-08-10", amount: 11015 }],
+    );
+    expect(returns[1]?.cumulativeReturn).toBe(0);
+    expect(returns[2]?.cumulativeReturn).toBeCloseTo(0.01, 9);
+  });
+
+  test("sums every flow dated inside one gap", () => {
+    const returns = computeTimeWeightedReturnSeries(
+      [
+        { date: "2025-08-08", value: 1000 },
+        { date: "2025-08-11", value: 1400 },
+      ],
+      [
+        { date: "2025-08-09", amount: 100 },
+        { date: "2025-08-10", amount: 200 },
+      ],
+    );
+    expect(returns[1]?.cumulativeReturn).toBeCloseTo((1400 - 1000 - 300) / 1000, 9);
+  });
+
+  test("an unknown flow inside a gap makes that interval unknown", () => {
+    expect(
+      computeTimeWeightedReturnSeries(
+        [
+          { date: "2025-08-08", value: 1000 },
+          { date: "2025-08-11", value: 1400 },
+          { date: "2025-08-12", value: 1400 },
+        ],
+        [{ date: "2025-08-10", amount: null }],
+      ),
+    ).toEqual([
+      { date: "2025-08-08", cumulativeReturn: 0 },
+      { date: "2025-08-11", cumulativeReturn: null },
+      { date: "2025-08-12", cumulativeReturn: 0 },
+    ]);
+  });
+
   test("keeps zero starts and unknown gaps undefined, then starts a new valid chain", () => {
     const returns = computeTimeWeightedReturnSeries(
       [
