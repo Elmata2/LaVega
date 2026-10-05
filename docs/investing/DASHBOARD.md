@@ -123,6 +123,8 @@ Treat dividends, interest, fees, trades, and other internal movements as portfol
 
 Return `null` before cash history becomes reachable. Keep gaps visible. Do not shorten the series by silently moving its start.
 
+Trading 212 reports no statement period, so its cash window is proven by arithmetic. A dated balance must equal every reported movement after it: the transactions, the dividends, and each trade's settlement, with a foreign movement converted at that day's rate (as the engine's own wallet fold does). A `TRANSFER` with no stated direction is resolved from the balance as an inflow, an outflow, or an exclusion when it is a move between the account's own pockets. The window is proven when the residual is within one cent per movement or half a percent of the moved volume, whichever is larger; the second absorbs conversion-rate drift between the provider and the engine's daily rates while a discrete missing movement stays unproven. When a section's pagination is unfinished the window stays unknown, because a short read can still conspire to reconcile. Read the proof on the dashboard read, where every resumed page has merged; the adapter sees one page-set and cannot reconcile.
+
 The crosshair also reports money-weighted return as XIRR. Calculate XIRR from the start of the selected visible window through the hovered date:
 
 - Add a synthetic outflow equal to portfolio value on the window's first date.

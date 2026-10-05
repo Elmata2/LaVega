@@ -2,10 +2,13 @@ import {
   type CashBalance,
   type CashFlow,
   type CashFlowKind,
+  type CashHistoryCoverage,
   type Dividend,
+  type FxRates,
   type Position,
   type TradeSide,
   type TradeWithoutId,
+  convertCurrency,
   normalizeTradeQuantity,
 } from "@lavega/core";
 import {
@@ -76,20 +79,12 @@ const HOST_DEADLINE_MESSAGE =
   "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
 const RATE_LIMIT_MESSAGE =
   "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
-/** No sanitized live payload yet shows whether the transactions stream also
- *  books execution cash that fills report as walletImpact, or how far back
- *  either stream is retained. Walking cash through both could count a trade
- *  twice, so historical cash stays unknown until that evidence exists. */
 /* Live account, 2026-09-28: all 626 transactions were a DEPOSIT or a WITHDRAW,
  * and only 4 of 1228 executions had a same-day transaction of equal magnitude,
  * the rate coincidence produces. Transactions do not book execution cash, so
  * settlement is the one trade-cash stream. That is a fact about the endpoints,
- * not about any one account's history, so it holds while the window below
- * stays unproven. */
+ * not about any one account's history. */
 const TRADE_CASH_STREAM = "trade-settlement" as const;
-
-const CASH_HISTORY_UNPROVEN =
-  "Trading 212 cash history is unproven: trade settlement and transaction retention are unverified";
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
@@ -294,6 +289,177 @@ function mapCashBalance(
   };
 }
 
+/** The engine's own reconciliation tolerance (core `portfolio.ts`): one cent
+ *  per movement, because every reported figure is rounded to its last place. */
+function movementTolerance(movements: number): number {
+  return Math.max(0.01, movements * 0.01);
+}
+
+/** Prove the window, and resolve any transfer whose direction the broker left
+ *  open, from the dated balance.
+ *
+ *  Returns the coverage plus the cash flows with ambiguous signs applied, so
+ *  the caller can hand both to the engine. A Trading 212 `TRANSFER` with a
+ *  non-negative amount states no direction; the balance decides it, because
+ *  the account opened empty and its total must reconcile. Enumerate the signs
+ *  and keep the assignment whose sum closes the gap. */
+export function resolveTrading212CashHistory(input: {
+  entity: string;
+  historyComplete: boolean;
+  balance: CashBalance | null;
+  cashFlows: readonly CashFlow[];
+  dividends: readonly Dividend[];
+  trades: readonly TradeWithoutId[];
+  fxRates: FxRates;
+}): { coverage: CashHistoryCoverage; cashFlows: CashFlow[] } {
+  const flows = input.cashFlows.map((flow) => ({ ...flow }));
+  const unknown = (reason: string) => ({
+    coverage: {
+      entity: input.entity,
+      broker: "trading212" as const,
+      tradeCash: TRADE_CASH_STREAM,
+      status: "unknown" as const,
+      reason,
+    },
+    cashFlows: flows,
+  });
+  if (!input.historyComplete)
+    return unknown("Trading 212 cash history is not complete: pagination is unfinished");
+  const { balance } = input;
+  if (!balance) return unknown("Trading 212 reported no dated cash balance");
+  const currency = balance.currency;
+  /* Trading 212 keeps one wallet and converts a foreign movement into it at
+   * that day's rate (see core `cashLegs`), so the proof converts the same way
+   * instead of rejecting a currency the account plainly holds. */
+  const inAccountCurrency = (amount: number, from: string, date: string): number | null => {
+    if (from === currency) return amount;
+    try {
+      return convertCurrency(amount, from, currency, date, input.fxRates);
+    } catch {
+      return null;
+    }
+  };
+  const dates: string[] = [];
+  const ambiguous: CashFlow[] = [];
+  let reported = 0;
+  let movements = 0;
+  let deposits = 0;
+  let withdrawals = 0;
+  let dividendsTotal = 0;
+  let tradesTotal = 0;
+  const breakdown = (residual: number) =>
+    `off by ${residual.toFixed(2)} ${currency} across ${movements} movements (deposits ${deposits.toFixed(2)}, withdrawals ${withdrawals.toFixed(2)}, dividends ${dividendsTotal.toFixed(2)}, trade settlements ${tradesTotal.toFixed(2)}, balance ${balance.amount.toFixed(2)})`;
+  for (const flow of flows) {
+    movements += 1;
+    dates.push(flow.date);
+    if (flow.amount === null) {
+      ambiguous.push(flow);
+      continue;
+    }
+    const converted = inAccountCurrency(flow.amount, flow.currency, flow.date);
+    if (converted === null)
+      return unknown(
+        `Trading 212 movement ${flow.brokerFlowId ?? flow.id} has no FX rate into ${currency}`,
+      );
+    if (converted >= 0) deposits += converted;
+    else withdrawals += converted;
+    reported += converted;
+  }
+  for (const dividend of input.dividends) {
+    movements += 1;
+    dates.push(dividend.date);
+    const converted = inAccountCurrency(dividend.amount, dividend.currency, dividend.date);
+    if (converted === null)
+      return unknown(
+        `Trading 212 dividend ${dividend.brokerDividendId ?? dividend.id} has no FX rate into ${currency}`,
+      );
+    dividendsTotal += converted;
+    reported += converted;
+  }
+  for (const trade of input.trades) {
+    movements += 1;
+    dates.push(trade.date);
+    if (!trade.settlement)
+      return unknown(
+        `Trading 212 trade ${trade.brokerTradeId ?? trade.symbol} on ${trade.date} has no settlement`,
+      );
+    const converted = inAccountCurrency(
+      trade.settlement.amount,
+      trade.settlement.currency,
+      trade.date,
+    );
+    if (converted === null)
+      return unknown(`Trading 212 trade settlement has no FX rate into ${currency}`);
+    tradesTotal += converted;
+    reported += converted;
+  }
+  /* A small drift is conversion rounding: the engine converts a foreign
+   * movement with daily ECB rates, Trading 212 with the rate it traded at.
+   * Allow half a percent of the volume that moved; a missing movement is a
+   * discrete amount far larger than that, and stays unproven. */
+  const gross =
+    Math.abs(deposits) + Math.abs(withdrawals) + Math.abs(dividendsTotal) + Math.abs(tradesTotal);
+  const tolerance = Math.max(movementTolerance(movements), gross * 0.005);
+  if (ambiguous.length > 0) {
+    if (ambiguous.some((flow) => typeof flow.unsignedAmount !== "number"))
+      return unknown("Trading 212 transfer direction is unknown and its size is missing");
+    if (ambiguous.length > 8)
+      return unknown("Trading 212 cash history has too many transfers without a direction");
+    const magnitudes: number[] = [];
+    for (const flow of ambiguous) {
+      const converted = inAccountCurrency(flow.unsignedAmount as number, flow.currency, flow.date);
+      if (converted === null)
+        return unknown(
+          `Trading 212 transfer ${flow.brokerFlowId ?? flow.id} has no FX rate into ${currency}`,
+        );
+      magnitudes.push(converted);
+    }
+    const target = balance.amount - reported;
+    /* A directionless TRANSFER may be an inflow, an outflow, or no wallet
+     * movement at all (a move between the account's own pockets). Let the
+     * balance choose, by trying inflow, exclude and outflow. */
+    const choices = [-1, 0, 1] as const;
+    let best: { residual: number; signs: number[] } | null = null;
+    for (let code = 0; code < 3 ** ambiguous.length; code += 1) {
+      let rest = code;
+      let total = 0;
+      const signs: number[] = [];
+      for (let index = 0; index < ambiguous.length; index += 1) {
+        const sign = choices[rest % 3]!;
+        rest = Math.floor(rest / 3);
+        signs.push(sign);
+        total += sign * magnitudes[index]!;
+      }
+      const residual = Math.abs(total - target);
+      if (!best || residual < best.residual) best = { residual, signs };
+    }
+    if (!best || best.residual > tolerance)
+      return unknown(
+        `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(best?.residual ?? balance.amount)}, ${ambiguous.length} transfers need a direction)`,
+      );
+    for (const [index, flow] of ambiguous.entries())
+      flow.amount = best.signs[index]! * (flow.unsignedAmount as number);
+    reported += best.signs.reduce((total, sign, index) => total + sign * magnitudes[index]!, 0);
+  }
+  const residual = balance.amount - reported;
+  if (Math.abs(residual) > tolerance)
+    return unknown(
+      `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(residual)})`,
+    );
+  const from = [...dates].filter(Boolean).sort()[0] ?? balance.asOf;
+  return {
+    coverage: {
+      entity: input.entity,
+      broker: "trading212",
+      tradeCash: TRADE_CASH_STREAM,
+      status: "complete",
+      from,
+      to: balance.asOf,
+    },
+    cashFlows: flows,
+  };
+}
+
 function transactionKind(type: string): CashFlowKind {
   switch (type) {
     case "DEPOSIT":
@@ -342,6 +508,7 @@ function mapTransaction(
     kind,
     description: `Trading 212 ${sourceType}`,
     brokerFlowId: reference,
+    ...(isAmbiguousTransfer ? { unsignedAmount: sourceAmount } : {}),
   };
   if (isAmbiguousTransfer) {
     return {
@@ -998,13 +1165,6 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       );
       return {
         ...synced,
-        cashHistory: {
-          entity,
-          broker: "trading212",
-          tradeCash: TRADE_CASH_STREAM,
-          status: "unknown",
-          reason: CASH_HISTORY_UNPROVEN,
-        },
         ...(historyPending(inputResume ?? config.resume)
           ? { historyMode: "incremental" as const }
           : {}),

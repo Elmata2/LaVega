@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
 import { computePortfolioValueSeries } from "@lavega/core";
-import { createTrading212Adapter } from "./adapter.js";
+import type { CashBalance, CashFlow, Dividend, TradeWithoutId } from "@lavega/core";
+import { createTrading212Adapter, resolveTrading212CashHistory } from "./adapter.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -586,13 +587,226 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
     },
   ]);
   expect(paths).toContain("/cash-page-2?cursor=opaque");
-  // Complete pagination still leaves past cash unproven: no sanitized payload
-  // yet shows whether transactions also book the fills' wallet impact.
-  expect(result.cashHistory).toMatchObject({
-    entity: "Holding BV",
+  // The adapter reports no window of its own: Trading 212 exposes no statement
+  // period, so the runtime proves it from the merged history on the read path.
+  expect(result.cashHistory).toBeUndefined();
+});
+
+const proofBalance: CashBalance = {
+  entity: "e",
+  broker: "trading212",
+  currency: "EUR",
+  amount: 43.5,
+  asOf: "2026-08-05",
+};
+const proofCashFlows: CashFlow[] = [
+  {
+    id: "d1",
+    entity: "e",
     broker: "trading212",
-    status: "unknown",
+    date: "2026-08-01",
+    currency: "EUR",
+    amount: 100,
+    kind: "deposit",
+  },
+  {
+    id: "w1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-03",
+    currency: "EUR",
+    amount: -10,
+    kind: "withdrawal",
+  },
+];
+const proofDividends: Dividend[] = [
+  {
+    id: "div1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-04",
+    symbol: "AAPL",
+    amount: 3.5,
+    currency: "EUR",
+  },
+];
+const proofTrade: TradeWithoutId = {
+  entity: "e",
+  broker: "trading212",
+  date: "2026-08-02",
+  symbol: "AAPL",
+  side: "buy",
+  quantity: 1,
+  price: 50,
+  amount: 50,
+  currency: "USD",
+  commission: 0,
+  settlement: { currency: "EUR", amount: -50 },
+};
+
+test("proves the cash window when every movement reconciles to the balance", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
   });
+  expect(coverage).toMatchObject({
+    entity: "e",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "complete",
+    from: "2026-08-01",
+    to: "2026-08-05",
+  });
+});
+
+test("resolves an ambiguous transfer from the balance", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 37 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 6.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-1")?.amount).toBe(-6.5);
+});
+
+test("converts a foreign movement into the account currency before reconciling", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: { base: "EUR", date: "2026-08-01", rates: { USD: 1.25 } },
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 63.5 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "usd-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "USD",
+        amount: 25,
+        kind: "deposit",
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+});
+
+test("excludes a directionless transfer the balance says is not a wallet movement", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-2",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 9.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-2")?.amount).toBe(0);
+});
+
+test("leaves cash unknown when the balance does not reconcile to the movements", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 1000 },
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("do not reconcile");
+});
+
+test("leaves cash unknown when a trade settlement is missing", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [{ ...proofTrade, settlement: undefined }],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("has no settlement");
+});
+
+test("leaves cash unknown when an ambiguous transfer has no size", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: [...proofCashFlows, { ...proofCashFlows[0]!, id: "m1", amount: null }],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("size is missing");
+});
+
+test("leaves cash unknown when the balance is missing", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: null,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [],
+  });
+  expect(coverage.status).toBe("unknown");
+});
+
+test("leaves cash unknown while pagination is unfinished", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: false,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("not complete");
 });
 
 test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {
