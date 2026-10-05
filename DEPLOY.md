@@ -274,13 +274,19 @@ locally, create your own Neon branch and put its connection string, a
   recorded spend for today meets or exceeds this.
 - `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend per account, in euro cents.
   Default `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
-- `SENTRY_DSN` — server error reporting (Hono `onError`, flushed before the
-  function returns). `VITE_SENTRY_DSN` — the same for the browser bundles of
-  `apps/web` and `apps/investing-web`; it is read at build time, so redeploy after
-  changing it. Both are optional: unset means Sentry is not initialised and no
-  request is made. Reports are errors only (no tracing, replay, user, request
-  bodies, cookies or query strings; IBANs, emails and long digit runs are scrubbed
-  in `packages/core/src/sentryScrub.ts`). Events are tagged `app`
+- Sentry error reporting. The Vercel Sentry integration provisions this
+  automatically (Preview + Production): `SENTRY_DSN` reaches the server's Hono
+  `onError` (flushed before the function returns) and is forwarded to the
+  browser bundles of `apps/web` and `apps/investing-web` as `VITE_SENTRY_DSN` at
+  build time by `scripts/vercel-build.mjs` — set `VITE_SENTRY_DSN` directly only
+  to override, or for a Docker/local build with no integration. `SENTRY_ORG`,
+  `SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN` enable source-map upload; when all
+  three are present the maps are emitted hidden, uploaded, then deleted from
+  `dist` so the served bundle never exposes original source. All of it is
+  optional: with no `SENTRY_DSN` the SDK is not initialised and no request is
+  made. Reports are errors only (no tracing, replay, user, request bodies,
+  cookies or query strings; IBANs, emails and long digit runs are scrubbed in
+  `packages/core/src/sentryScrub.ts`). Events are tagged `app`
   (`web`, `server`, `investing-web`) and `environment` (`VERCEL_ENV` / Vite mode).
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never

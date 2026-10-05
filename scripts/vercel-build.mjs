@@ -161,10 +161,22 @@ await exec(
   execOptions,
 );
 
-await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);
+/* The Sentry Vercel integration sets SENTRY_DSN for the server, but a Vite
+ * browser bundle only sees variables Vite exposes (VITE_*) and turbo's strict
+ * envMode strips undeclared names. A DSN is public by design — it ships inside
+ * the client bundle — so the integration's DSN is forwarded under the name the
+ * browser code reads. An explicit VITE_SENTRY_DSN, if set, wins; absent DSN
+ * means the SDK stays uninitialised and the bundles make no Sentry request. */
+const sentryDsn = process.env.VITE_SENTRY_DSN ?? process.env.SENTRY_DSN;
+const browserEnv = sentryDsn ? { VITE_SENTRY_DSN: sentryDsn } : {};
+
+await exec("pnpm", ["--filter", "@lavega/web", "build"], {
+  cwd: root,
+  env: { ...process.env, CI: "true", ...browserEnv },
+});
 await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
   cwd: root,
-  env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/" },
+  env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/", ...browserEnv },
 });
 
 const staticDir = `${output}/static`;

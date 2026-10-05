@@ -3,8 +3,11 @@ packages:
   - "apps/*"
   - "scripts/catalog"
 # pnpm 11's build-script approval gate: esbuild's postinstall fetches its
-# platform-specific binary, which vitest/vite need to run.
+# platform-specific binary, which vitest/vite need to run. @sentry/cli's does
+# the same for the source-map upload binary the Sentry Vite plugin shells out
+# to during the Vercel build; without it the upload fails.
 allowBuilds:
+  "@sentry/cli": true
   esbuild: true
 minimumReleaseAgeExclude:
   - "@shadcn/lint@0.1.0"
