@@ -636,6 +636,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
             selectedSymbol: symbol,
             problems: [
               ...new Set([...problems, ...storedBrokerProblems]),
+              ...(trading212?.coverage.status === "unknown"
+                ? [`Trading 212 cash history unproven: ${trading212.coverage.reason}`]
+                : []),
               ...refreshProblems,
               ...priceProblems,
               ...latestFx.problems,
