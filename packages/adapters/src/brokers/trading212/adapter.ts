@@ -386,7 +386,7 @@ export function resolveTrading212CashHistory(input: {
   if (ambiguous.length > 0) {
     if (ambiguous.some((flow) => typeof flow.unsignedAmount !== "number"))
       return unknown("Trading 212 transfer direction is unknown and its size is missing");
-    if (ambiguous.length > 10)
+    if (ambiguous.length > 8)
       return unknown("Trading 212 cash history has too many transfers without a direction");
     const magnitudes: number[] = [];
     for (const flow of ambiguous) {
@@ -398,17 +398,23 @@ export function resolveTrading212CashHistory(input: {
       magnitudes.push(converted);
     }
     const target = balance.amount - reported;
+    /* A directionless TRANSFER may be an inflow, an outflow, or no wallet
+     * movement at all (a move between the account's own pockets). Let the
+     * balance choose, by trying inflow, exclude and outflow. */
+    const choices = [-1, 0, 1] as const;
     let best: { residual: number; signs: number[] } | null = null;
-    for (let mask = 0; mask < 1 << ambiguous.length; mask += 1) {
+    for (let code = 0; code < 3 ** ambiguous.length; code += 1) {
+      let rest = code;
       let total = 0;
-      for (let index = 0; index < ambiguous.length; index += 1)
-        total += (mask & (1 << index)) === 0 ? -magnitudes[index]! : magnitudes[index]!;
+      const signs: number[] = [];
+      for (let index = 0; index < ambiguous.length; index += 1) {
+        const sign = choices[rest % 3]!;
+        rest = Math.floor(rest / 3);
+        signs.push(sign);
+        total += sign * magnitudes[index]!;
+      }
       const residual = Math.abs(total - target);
-      if (!best || residual < best.residual)
-        best = {
-          residual,
-          signs: ambiguous.map((_, index) => ((mask & (1 << index)) === 0 ? -1 : 1)),
-        };
+      if (!best || residual < best.residual) best = { residual, signs };
     }
     if (!best || best.residual > movementTolerance(movements))
       return unknown(

@@ -714,6 +714,32 @@ test("converts a foreign movement into the account currency before reconciling",
   expect(coverage.status).toBe("complete");
 });
 
+test("excludes a directionless transfer the balance says is not a wallet movement", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-2",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 9.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-2")?.amount).toBe(0);
+});
+
 test("leaves cash unknown when the balance does not reconcile to the movements", () => {
   const { coverage } = resolveTrading212CashHistory({
     entity: "e",
