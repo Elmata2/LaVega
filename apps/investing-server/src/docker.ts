@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { serve } from "@hono/node-server";
 import { createRuntimeApp } from "./index.js";
-import { redactProblem } from "./observability.js";
+import { redactProblem } from "@lavega/core";
 import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 import {
   createFileBenchmarkSelectionStore,

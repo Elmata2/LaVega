@@ -29,6 +29,7 @@ import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolutio
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
   benchmarkDisplayName,
+  sentryOptions,
   buildInvestingDashboard,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
@@ -992,7 +993,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }),
     );
   const sentry = await import("@sentry/node");
-  sentry.init({ dsn, environment: process.env.NODE_ENV });
+  const sentryConfig = sentryOptions({
+    dsn,
+    environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
+    app: "investing-server",
+  });
+  if (sentryConfig && !sentry.getClient()) sentry.init(sentryConfig);
   return withPortfolioAgentRoute(
     createApp({
       brokerSync,

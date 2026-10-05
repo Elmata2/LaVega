@@ -15,6 +15,9 @@ import "./styles/blocks.css";
 import "./styles/worldmap.css";
 import "./styles/landing.css";
 import Root from "./Root";
+import { initWebSentry } from "./observability";
+
+initWebSentry();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

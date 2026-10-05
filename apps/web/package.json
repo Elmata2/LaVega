@@ -13,6 +13,7 @@
     "@fontsource/eb-garamond": "^5.3.0",
     "@lavega/adapters": "workspace:*",
     "@lavega/core": "workspace:*",
+    "@sentry/browser": "^10.76.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",

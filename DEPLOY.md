@@ -274,6 +274,14 @@ locally, create your own Neon branch and put its connection string, a
   recorded spend for today meets or exceeds this.
 - `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend per account, in euro cents.
   Default `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
+- `SENTRY_DSN` — server error reporting (Hono `onError`, flushed before the
+  function returns). `VITE_SENTRY_DSN` — the same for the browser bundles of
+  `apps/web` and `apps/investing-web`; it is read at build time, so redeploy after
+  changing it. Both are optional: unset means Sentry is not initialised and no
+  request is made. Reports are errors only (no tracing, replay, user, request
+  bodies, cookies or query strings; IBANs, emails and long digit runs are scrubbed
+  in `packages/core/src/sentryScrub.ts`). Events are tagged `app`
+  (`web`, `server`, `investing-web`) and `environment` (`VERCEL_ENV` / Vite mode).
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.

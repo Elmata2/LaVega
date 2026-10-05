@@ -97,6 +97,7 @@ export const privacyHtml = page(
   <tr><td><strong>Resend</strong></td><td>Je e-mailadres en de inhoud van account-mails (bevestigingslink, wachtwoord resetten, nieuwe inloglink)</td><td>Bij het aanmaken van een account en bij inloggen of resetten</td></tr>
   <tr><td><strong>Frankfurter</strong> (ECB)</td><td>Valutaparen — publiek, niet persoonlijk</td><td>Bij de valutafunctie</td></tr>
   <tr><td><strong>Vercel</strong> (VS)</td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
+  <tr><td><strong>Sentry</strong></td><td>Foutmeldingen ter diagnose; zonder financiële gegevens; IP-adressen worden niet opgeslagen (EU-regio)</td><td>Alleen als er een fout optreedt</td></tr>
   <tr><td><strong>Neon</strong> (VS)</td><td>De database: versleutelde kluis-back-up, beleggingsgegevens, account en voorkeuren</td><td>Altijd</td></tr>
 </table>
 <p>Geen verkoop van gegevens, geen advertenties, geen tracking of analytics.</p>
