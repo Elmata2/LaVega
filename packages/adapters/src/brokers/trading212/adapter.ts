@@ -393,6 +393,13 @@ export function resolveTrading212CashHistory(input: {
     tradesTotal += converted;
     reported += converted;
   }
+  /* A small drift is conversion rounding: the engine converts a foreign
+   * movement with daily ECB rates, Trading 212 with the rate it traded at.
+   * Allow half a percent of the volume that moved; a missing movement is a
+   * discrete amount far larger than that, and stays unproven. */
+  const gross =
+    Math.abs(deposits) + Math.abs(withdrawals) + Math.abs(dividendsTotal) + Math.abs(tradesTotal);
+  const tolerance = Math.max(movementTolerance(movements), gross * 0.005);
   if (ambiguous.length > 0) {
     if (ambiguous.some((flow) => typeof flow.unsignedAmount !== "number"))
       return unknown("Trading 212 transfer direction is unknown and its size is missing");
@@ -426,7 +433,7 @@ export function resolveTrading212CashHistory(input: {
       const residual = Math.abs(total - target);
       if (!best || residual < best.residual) best = { residual, signs };
     }
-    if (!best || best.residual > movementTolerance(movements))
+    if (!best || best.residual > tolerance)
       return unknown(
         `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(best?.residual ?? balance.amount)}, ${ambiguous.length} transfers need a direction)`,
       );
@@ -435,7 +442,7 @@ export function resolveTrading212CashHistory(input: {
     reported += best.signs.reduce((total, sign, index) => total + sign * magnitudes[index]!, 0);
   }
   const residual = balance.amount - reported;
-  if (Math.abs(residual) > movementTolerance(movements))
+  if (Math.abs(residual) > tolerance)
     return unknown(
       `Trading 212 cash movements do not reconcile to the reported balance (${breakdown(residual)})`,
     );
