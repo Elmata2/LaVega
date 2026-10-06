@@ -310,12 +310,7 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
     );
     const data = cache.read();
 
-    expect(result.problems).toEqual(
-      expect.arrayContaining([
-        "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
-        "Trading 212 transactions pagination repeated nextPagePath",
-      ]),
-    );
+    expect(result.problems).toEqual(["Trading 212 transactions pagination repeated nextPagePath"]);
     expect(resolved.coverage.status).toBe("unknown");
     expect(data.cashCoverage).toEqual([
       expect.objectContaining({ broker: "trading212", status: "unknown" }),

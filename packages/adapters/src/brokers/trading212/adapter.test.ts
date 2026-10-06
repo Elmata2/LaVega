@@ -852,16 +852,13 @@ test("counts inPies and reservedForOrders toward the balance instead of discardi
     expect.objectContaining({ broker: "trading212", currency: "EUR", amount: 107 }),
   ]);
   expect(result.sections.cashFlows.rows).toMatchObject([
-    { brokerFlowId: "transfer-1", amount: null, kind: "other" },
+    { brokerFlowId: "transfer-1", amount: null, kind: "other", unsignedAmount: 10 },
     { brokerFlowId: "future-1", amount: -4, kind: "other" },
   ]);
-  expect(result.problems).toEqual(
-    expect.arrayContaining([
-      "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
-      "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
-      "Trading 212 transaction amount is missing or invalid",
-    ]),
-  );
+  expect(result.problems).toEqual([
+    "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
+    "Trading 212 transaction amount is missing or invalid",
+  ]);
 });
 
 test("a negative-amount TRANSFER is unambiguously an outflow and keeps its sign", async () => {
@@ -941,7 +938,8 @@ test("an ambiguous TRANSFER reaches the portfolio series as unknown cash, not as
   const transfer = result.sections.cashFlows.rows.find(
     (flow) => flow.brokerFlowId === "transfer-1",
   );
-  expect(transfer).toMatchObject({ amount: null, kind: "other" });
+  expect(transfer).toMatchObject({ amount: null, kind: "other", unsignedAmount: 10_966.34 });
+  expect(result.problems).toEqual([]);
 
   const series = computePortfolioValueSeries([], [], [], "EUR", undefined, {
     cashBalances: [
