@@ -510,12 +510,6 @@ function mapTransaction(
     brokerFlowId: reference,
     ...(isAmbiguousTransfer ? { unsignedAmount: sourceAmount } : {}),
   };
-  if (isAmbiguousTransfer) {
-    return {
-      flow,
-      problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction`,
-    };
-  }
   return sourceType === "DEPOSIT" ||
     sourceType === "WITHDRAW" ||
     sourceType === "FEE" ||
