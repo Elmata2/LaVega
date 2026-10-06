@@ -153,7 +153,10 @@ test("a failed sign-in keeps the dialog open and keeps the typed email", async (
  * looked like it did nothing. A real navigation re-reads the session. */
 test("submitting valid credentials navigates to the app, not a pushState", async () => {
   vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
-  vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
+  vi.mocked(signIn).mockResolvedValue({
+    ok: true,
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+  });
   const assign = vi.fn();
   Object.defineProperty(window, "location", {
     configurable: true,

@@ -8,6 +8,7 @@ import {
   SUGGESTED_INVOICE_FORWARD_ADDRESS,
 } from "../settings";
 import { fetchForwardAddress, recordForwardAddress } from "../n8n.js";
+import posthog from "../posthog.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 
@@ -110,6 +111,7 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
     if (outcome.kind === "stored") {
       setServerLocalPart(outcome.localPart);
       setRecordNote(c.forwardAddress.server.recorded(displayAddress(outcome.localPart)));
+      posthog.capture("invoice_forward_address_recorded");
       return;
     }
     if (outcome.kind === "taken") return setRecordNote(c.forwardAddress.server.taken);

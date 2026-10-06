@@ -11,7 +11,7 @@ export type AuthState =
   | { kind: "loading" } // the first /api/auth/get-session answer has not arrived yet
   | { kind: "unconfigured" } // /api/auth/get-session answered 503: no auth on this deployment (local dev)
   | { kind: "signed-out" }
-  | { kind: "signed-in"; email: string };
+  | { kind: "signed-in"; id: string; email: string };
 
 /** Why a sign-in did not happen — a KIND and not a sentence.
  *
@@ -48,8 +48,12 @@ export async function getSession(): Promise<AuthState> {
       headers: { accept: "application/json" },
     });
     if (response.status === 503) return { kind: "unconfigured" };
-    const body = (await response.json().catch(() => null)) as { user?: { email: string } } | null;
-    return body?.user ? { kind: "signed-in", email: body.user.email } : { kind: "signed-out" };
+    const body = (await response.json().catch(() => null)) as {
+      user?: { id?: string; email?: string };
+    } | null;
+    return body?.user?.id && body.user.email
+      ? { kind: "signed-in", id: body.user.id, email: body.user.email }
+      : { kind: "signed-out" };
   } catch {
     return { kind: "signed-out" };
   }
@@ -69,8 +73,11 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   }
   if (!response.ok)
     return { ok: false, kind: response.status === 401 ? "wrong-credentials" : "unreachable" };
-  const body = (await response.json().catch(() => null)) as { user?: { email: string } } | null;
-  return { ok: true, state: { kind: "signed-in", email: body?.user?.email ?? email } };
+  const body = (await response.json().catch(() => null)) as {
+    user?: { id?: string; email?: string };
+  } | null;
+  if (!body?.user?.id || !body.user.email) return { ok: false, kind: "unreachable" };
+  return { ok: true, state: { kind: "signed-in", id: body.user.id, email: body.user.email } };
 }
 
 export async function signUp(input: SignUpInput): Promise<SignUpResult> {

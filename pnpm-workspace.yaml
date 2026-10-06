@@ -5,9 +5,12 @@ packages:
 # pnpm 11's build-script approval gate: esbuild's postinstall fetches its
 # platform-specific binary, which vitest/vite need to run. @sentry/cli's does
 # the same for the source-map upload binary the Sentry Vite plugin shells out
-# to during the Vercel build; without it the upload fails.
+# to during the Vercel build; without it the upload fails. core-js arrives with
+# posthog-js and its postinstall only prints a donation notice, so it is
+# explicitly skipped rather than approved.
 allowBuilds:
   "@sentry/cli": true
+  core-js: false
   esbuild: true
 minimumReleaseAgeExclude:
   - "@shadcn/lint@0.1.0"

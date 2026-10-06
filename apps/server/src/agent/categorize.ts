@@ -2,6 +2,7 @@ import { AGENTS, CATEGORY_OPTIONS, scrubPersonalValues, type LearnedFact } from 
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { createAiObservationContext } from "./aiObservability.js";
 import { MISTRAL_SMALL } from "./models.js";
 import { ValidationError } from "./validationError.js";
 
@@ -59,8 +60,13 @@ export async function categorizeTransactions(
   apiKey: string,
   facts: readonly LearnedFact[] = [],
   onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>,
+  userId?: string,
 ): Promise<{ id: string; category: string }[]> {
-  const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
+  const provider = createMistralProvider(
+    apiKey,
+    MISTRAL_SMALL,
+    createAiObservationContext(userId),
+  );
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
   /* A billed 200 with an unexpected body, or a timeout after the tokens were
    * counted, still costs. Recorded at the boundary cap rather than silently. */

@@ -16,6 +16,7 @@ import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
 import { registerNetWorthRoutes, netWorthRouteDependencies } from "./net-worth-routes.js";
 import { initServerSentry, serverErrorResponse } from "./observability.js";
+import { initPosthogLogs, logPosthogInfo } from "./posthogLogs.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
@@ -82,6 +83,7 @@ export function isStaticAssetPath(pathname: string): boolean {
 export const app = new Hono();
 
 initServerSentry();
+initPosthogLogs();
 app.onError((error) => serverErrorResponse(error));
 
 /** One Neon WebSocket pool belongs to one completed HTTP request. */
@@ -123,11 +125,12 @@ app.use(
     referrerPolicy: "no-referrer",
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://*.posthog.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       fontSrc: ["'self'", "data:"],
       connectSrc: ["'self'", "https:"],
+      workerSrc: ["'self'", "blob:"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
@@ -386,5 +389,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   serve({ fetch: serverFetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
     // eslint-disable-next-line no-console
     console.log(`LaVega server listening on 0.0.0.0:${info.port}`);
+    logPosthogInfo("server started", { event: "server_started", transport: "http" });
   });
 }

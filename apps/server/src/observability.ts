@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { HTTPException } from "hono/http-exception";
 import { sentryOptions } from "@lavega/core";
+import { logPosthogError } from "./posthogLogs.js";
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -20,6 +21,10 @@ export function initServerSentry(env: Env = process.env): boolean {
 export async function serverErrorResponse(error: Error): Promise<Response> {
   if (error instanceof HTTPException) return error.getResponse();
   console.error(error);
+  logPosthogError("unexpected server error", {
+    event: "server_request_failed",
+    error_kind: error.name || "Error",
+  });
   if (Sentry.getClient()) {
     Sentry.captureException(error);
     await Sentry.flush(FLUSH_TIMEOUT_MS);

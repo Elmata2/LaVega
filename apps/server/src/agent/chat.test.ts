@@ -36,7 +36,7 @@ test("runChat yields the full text and sends Mistral + tab context", async () =>
   expect(arg.system).toContain("LaVega — basis voor elke agent"); // instruction files, not a literal
   expect(arg.system).not.toContain("WAT LAVEGA AL WEET:"); // nothing learned yet -> no dangling header
   expect(arg.messages).toEqual([{ role: "user", content: "hoi" }]);
-  expect(createMistralProviderMock).toHaveBeenCalledWith("k", "mistral-medium-latest");
+  expect(createMistralProviderMock).toHaveBeenCalledWith("k", "mistral-medium-latest", undefined);
 });
 
 test("chat reads what it has learned about how to answer, and nothing else", async () => {

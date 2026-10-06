@@ -16,8 +16,13 @@ import "./styles/worldmap.css";
 import "./styles/landing.css";
 import Root from "./Root";
 import { initWebSentry } from "./observability";
+import posthog, { posthogConfigured } from "./posthog";
 
 initWebSentry();
+
+if (posthogConfigured) {
+  posthog.logger.info("web client started", { event: "web_client_started", render_mode: "spa" });
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

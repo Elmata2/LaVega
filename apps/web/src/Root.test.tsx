@@ -62,7 +62,7 @@ test("loading on /app renders neither the landing page nor the vault", () => {
 test("signed-in on /app mounts the vault", () => {
   window.history.replaceState({}, "", "/app");
   vi.mocked(useAuthState).mockReturnValue({
-    state: { kind: "signed-in", email: "x@y.nl" },
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
     refresh: vi.fn(),
   });
   const el = render();
@@ -97,7 +97,7 @@ test("legacy #app entry path with no session renders the landing page, not the v
 test("legacy #app entry path with a session mounts the vault", () => {
   window.history.replaceState({}, "", "/#app");
   vi.mocked(useAuthState).mockReturnValue({
-    state: { kind: "signed-in", email: "x@y.nl" },
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
     refresh: vi.fn(),
   });
   const el = render();

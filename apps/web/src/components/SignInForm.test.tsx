@@ -71,7 +71,10 @@ test("with introClassName, the intro uses it instead of cell-sub", () => {
 });
 
 test("submitting calls signIn with the typed email and password", async () => {
-  vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
+  vi.mocked(signIn).mockResolvedValue({
+    ok: true,
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+  });
   const el = render();
   act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
   act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
@@ -93,7 +96,10 @@ test("a wrong-credentials result shows the matching error text and does not call
 });
 
 test("an ok result calls onSuccess once", async () => {
-  vi.mocked(signIn).mockResolvedValue({ ok: true, state: { kind: "signed-in", email: "x@y.nl" } });
+  vi.mocked(signIn).mockResolvedValue({
+    ok: true,
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+  });
   const onSuccess = vi.fn();
   const el = render(onSuccess);
   act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));

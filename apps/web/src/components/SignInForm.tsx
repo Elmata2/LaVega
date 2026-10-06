@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
 import { signIn, type SignInFailure } from "../authClient.js";
 import { shellCopy } from "../copy/shell.js";
+import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 
@@ -48,6 +49,7 @@ export default function SignInForm({
       return;
     }
     setPassword("");
+    posthog.capture("sign_in_succeeded");
     onSuccess();
   }
 

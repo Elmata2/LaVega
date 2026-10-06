@@ -234,11 +234,16 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       );
     }
     try {
-      const result = await extract(input, apiKey, facts, (usage) =>
-        recordUsage(
-          { route: "extract-invoice", model: MISTRAL_SMALL, ...usage },
-          budget.reservation,
-        ),
+      const result = await extract(
+        input,
+        apiKey,
+        facts,
+        (usage) =>
+          recordUsage(
+            { route: "extract-invoice", model: MISTRAL_SMALL, ...usage },
+            budget.reservation,
+          ),
+        sessionUserId(c),
       );
       return c.json(result);
     } catch (e) {
@@ -319,6 +324,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           context,
           facts,
           apiKey,
+          userId: sessionUserId(c),
           onUsage: (usage) =>
             recordUsage(
               { route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 },
@@ -380,8 +386,16 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       );
     }
     try {
-      const result = await categorize(input, apiKey, facts, (usage) =>
-        recordUsage({ route: "categorize", model: MISTRAL_SMALL, ...usage }, budget.reservation),
+      const result = await categorize(
+        input,
+        apiKey,
+        facts,
+        (usage) =>
+          recordUsage(
+            { route: "categorize", model: MISTRAL_SMALL, ...usage },
+            budget.reservation,
+          ),
+        sessionUserId(c),
       );
       return c.json(result);
     } catch (e) {

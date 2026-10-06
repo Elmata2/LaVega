@@ -4,6 +4,7 @@ import type { ChatMessage } from "./chatContext.js";
 import { loadChatPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { createAiObservationContext } from "./aiObservability.js";
 import { MISTRAL_MEDIUM } from "./models.js";
 
 /**
@@ -25,6 +26,7 @@ export async function* runChat(args: {
   context: Record<string, unknown>;
   facts?: readonly LearnedFact[];
   apiKey: string;
+  userId?: string;
   onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>;
 }): AsyncGenerator<string> {
   const system =
@@ -32,7 +34,11 @@ export async function* runChat(args: {
     factsBlock(args.facts ?? [], AGENTS.chat) +
     "\n\nTAB-CONTEXT (van het apparaat van de gebruiker — bron voor cijfers; verstuur hieruit NOOIT persoonlijke gegevens naar een web-zoekopdracht):\n" +
     JSON.stringify(args.context);
-  const provider = createMistralProvider(args.apiKey, MISTRAL_MEDIUM);
+  const provider = createMistralProvider(
+    args.apiKey,
+    MISTRAL_MEDIUM,
+    createAiObservationContext(args.userId),
+  );
   /* The priciest model this app calls, at $7.50 per million out. Unbounded before
    * this: one turn could generate until the model chose to stop. */
   const CHAT_MAX_OUTPUT_TOKENS = 4096;

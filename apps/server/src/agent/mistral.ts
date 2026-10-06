@@ -1,5 +1,6 @@
 import type { LlmProvider } from "./provider.js";
 import { MISTRAL_OCR } from "./models.js";
+import { captureAiGeneration, type AiObservationContext } from "./aiObservability.js";
 
 const BASE_URL = "https://api.mistral.ai/v1";
 const CITATION_KEYS = ["references", "citations", "citation_chunks"] as const;
@@ -110,7 +111,11 @@ function extractSources(outputs: unknown[]): { url: string; title: string }[] {
 // signature has no model field, and different call sites need different models
 // (e.g. mistral-small-latest for categorize/extraction, mistral-medium-latest for
 // travel/chat), so each call site builds its own provider instance.
-export function createMistralProvider(apiKey: string, model: string): LlmProvider {
+export function createMistralProvider(
+  apiKey: string,
+  model: string,
+  observability?: AiObservationContext,
+): LlmProvider {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
@@ -118,6 +123,7 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
 
   return {
     async complete({ system, user, json, maxTokens }) {
+      const startedAt = Date.now();
       const res = await fetchWithTimeout(
         `${BASE_URL}/chat/completions`,
         {
@@ -143,17 +149,22 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         console.error(`mistral chat onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
         throw new Error("onverwachte respons");
       }
-      return {
-        text: content,
-        usage: {
-          input: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens : 0,
-          output:
-            typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
-        },
+      const usage = {
+        input: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens : 0,
+        output: typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
       };
+      await captureAiGeneration(observability, {
+        model,
+        operation: "chat",
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        latencyMs: Date.now() - startedAt,
+      });
+      return { text: content, usage };
     },
 
     async ocrPdf({ pdfBase64, pages }) {
+      const startedAt = Date.now();
       const res = await fetchWithTimeout(
         `${BASE_URL}/ocr`,
         {
@@ -177,18 +188,27 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         console.error(`mistral ocr onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
         throw new Error("onverwachte respons");
       }
+      const pagesProcessed =
+        typeof data.usage_info?.pages_processed === "number"
+          ? data.usage_info.pages_processed
+          : data.pages.length;
+      await captureAiGeneration(observability, {
+        model: MISTRAL_OCR,
+        operation: "ocr",
+        inputTokens: pagesProcessed,
+        outputTokens: 0,
+        latencyMs: Date.now() - startedAt,
+      });
       return {
         markdown: data.pages
           .map((p: { markdown?: unknown }) => (typeof p?.markdown === "string" ? p.markdown : ""))
           .join("\n\n"),
-        pages:
-          typeof data.usage_info?.pages_processed === "number"
-            ? data.usage_info.pages_processed
-            : data.pages.length,
+        pages: pagesProcessed,
       };
     },
 
     async chatWithSearch({ system, messages, onDelta, maxTokens }) {
+      const startedAt = Date.now();
       const body = {
         model,
         instructions: system,
@@ -229,6 +249,13 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
           typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
       };
 
+      await captureAiGeneration(observability, {
+        model,
+        operation: "conversation",
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        latencyMs: Date.now() - startedAt,
+      });
       onDelta(text);
       return { text, sources, usage };
     },

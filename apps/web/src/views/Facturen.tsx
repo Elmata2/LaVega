@@ -13,6 +13,7 @@ import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { apiErrorText } from "../copy/apiErrors.js";
 import { API_BASE } from "../api";
+import posthog from "../posthog.js";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import Badge from "../components/ui/Badge.js";
@@ -603,6 +604,10 @@ export default function Facturen({
     onPendingChange(filtered);
     if (storage) void storage.putPendingInvoices(filtered);
     dropRowError(p.messageId);
+    posthog.capture("invoice_review_confirmed", {
+      direction: result.invoice.direction,
+      duplicate,
+    });
     showN8nNote(
       duplicate
         ? c.n8nNotices.confirmedDuplicate(p.counterparty.trim())
@@ -618,6 +623,7 @@ export default function Facturen({
     onPendingChange(filtered);
     if (storage) void storage.putPendingInvoices(filtered);
     dropRowError(p.messageId);
+    posthog.capture("invoice_review_rejected");
     showN8nNote(c.n8nNotices.rejected);
   }
 
@@ -725,6 +731,11 @@ export default function Facturen({
       return;
     }
     onSaveInvoices([...invoices, inv]);
+    posthog.capture("invoice_added", {
+      direction: inv.direction,
+      source: inv.sourceType,
+      currency: inv.currency,
+    });
     setCounterparty("");
     setInvoiceNumber("");
     setAmount("");
@@ -791,6 +802,9 @@ export default function Facturen({
       }
       const merged = reconcileInvoices([...invoices, ...added], txs);
       onSaveInvoices(merged);
+      if (added.length > 0) {
+        posthog.capture("invoice_file_imported", { invoice_count: added.length });
+      }
       setImportNote(
         added.length > 0
           ? c.importNotices.imported(added.length, parsed.length)

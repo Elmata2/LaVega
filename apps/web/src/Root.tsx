@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import App from "./App";
 import Landing from "./views/Landing";
 import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from "./appRoutes";
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
+import posthog from "./posthog";
 
 /** Public landing at `/`. Vault app at `/app` and `/app/<view>`. Legacy
  *  `/#app` and `/?eb=…` normalise into `/app` so Enable Banking still lands. */
@@ -25,6 +26,18 @@ export default function Root() {
    * edge gate (scripts/vercel-build.mjs) only checks cookie presence, not
    * validity. */
   const { state: authState } = useAuthState();
+  const identifiedUserId = useRef<string | null>(null);
+
+  /* The root session gate is the one place that sees both a freshly returned
+   * Better Auth session and every later page refresh. Keep identity here so
+   * event and error reporting inherit it without each call site re-identifying. */
+  useEffect(() => {
+    if (authState.kind !== "signed-in" || identifiedUserId.current === authState.id) return;
+    if (identifiedUserId.current !== null) posthog.reset();
+    posthog.identify(authState.id, { email: authState.email });
+    identifiedUserId.current = authState.id;
+  }, [authState]);
+
   useEffect(() => {
     const onChange = () => {
       setRoute(routeFor());

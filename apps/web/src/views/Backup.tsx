@@ -6,6 +6,7 @@ import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vault
 import { adminCopy } from "../copy/admin.js";
 import { useAppLocale } from "../appLocale.js";
 import type { Locale } from "../locale.js";
+import posthog from "../posthog.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Field, CheckboxField } from "../components/ui/Field.js";
@@ -82,6 +83,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       setUpdatedAt(result.updatedAt);
       setServerBlob(blob);
       setMessage(c.server.success);
+      posthog.capture("server_backup_uploaded", { overwritten: overwrite });
     } catch {
       setError(c.server.errors.saveFailed);
     } finally {
@@ -98,6 +100,10 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       const touched = report.filter((entry) => entry.rows > 0);
       const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
       setEraseMessage(c.server.erase.success(rows, touched.length));
+      posthog.capture("server_data_erased", {
+        collections_erased: touched.length,
+        rows_erased: rows,
+      });
       await fetchServerBackup()
         .then(applyStatus)
         .catch(() => setState("signed-out"));
@@ -222,6 +228,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
     a.download = backupFilename(asOf);
     a.click();
     URL.revokeObjectURL(url);
+    posthog.capture("backup_downloaded");
   }
 
   async function handleRestore(e: FormEvent) {
@@ -243,6 +250,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
       setFile(null);
       setConfirmed(false);
       onRestored();
+      posthog.capture("backup_restored");
     } catch {
       setError(c.restore.error);
     } finally {

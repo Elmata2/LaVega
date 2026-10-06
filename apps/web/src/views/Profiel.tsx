@@ -30,6 +30,7 @@ import {
 } from "../settings.js";
 import { SCOPE_ORDER } from "../scope.js";
 import { signOut, useAuthState } from "../authClient.js";
+import posthog from "../posthog.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -114,6 +115,7 @@ function AccountBlock() {
 
   async function handleSignOut() {
     await signOut();
+    posthog.reset();
     refresh();
   }
 

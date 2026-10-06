@@ -22,7 +22,7 @@ test("a 200 with no user means signed out", async () => {
   await expect(getSession()).resolves.toEqual({ kind: "signed-out" });
 });
 
-test("a 200 with a user means signed in, with that user's email", async () => {
+test("a 200 with a user means signed in, with that user's stable ID and email", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(
@@ -32,6 +32,7 @@ test("a 200 with a user means signed in, with that user's email", async () => {
   );
   await expect(getSession()).resolves.toEqual({
     kind: "signed-in",
+    id: "u1",
     email: "owner@example.com",
   });
 });

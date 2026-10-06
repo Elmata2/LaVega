@@ -3,6 +3,7 @@ import type { InvoiceExtractInput } from "./redaction.js";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { createAiObservationContext } from "./aiObservability.js";
 import { MISTRAL_SMALL } from "./models.js";
 
 /* WHAT IS PRINTED, NOT WHO THE OWNER IS.
@@ -64,8 +65,13 @@ export async function extractInvoiceFields(
     outputTokens: number;
     pages: number;
   }) => void | Promise<void>,
+  userId?: string,
 ): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
-  const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
+  const provider = createMistralProvider(
+    apiKey,
+    MISTRAL_SMALL,
+    createAiObservationContext(userId),
+  );
 
   let markdown: string | undefined;
   let pages = 0;

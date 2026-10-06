@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
 import { signUp, verificationCallbackUrl, type SignUpFailure } from "../authClient.js";
 import { shellCopy } from "../copy/shell.js";
+import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 
@@ -46,6 +47,7 @@ export default function SignUpForm({
     }
     setPassword("");
     setSentTo(email);
+    posthog.capture("sign_up_requested");
   }
 
   if (sentTo !== null)

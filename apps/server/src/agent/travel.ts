@@ -3,6 +3,7 @@ import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import type { LlmProvider } from "./provider.js";
 import { createMistralProvider } from "./mistral.js";
+import { createAiObservationContext } from "./aiObservability.js";
 import { checkBudget, recordUsage } from "./budget.js";
 import { MISTRAL_MEDIUM } from "./models.js";
 import { ValidationError } from "./validationError.js";
@@ -153,7 +154,9 @@ export async function lookupProviderTerms(
   apiKey: string,
   deps: { provider?: LlmProvider; userId?: string } = {},
 ): Promise<ProviderTerms[]> {
-  const provider = deps.provider ?? createMistralProvider(apiKey, MISTRAL_MEDIUM);
+  const provider =
+    deps.provider ??
+    createMistralProvider(apiKey, MISTRAL_MEDIUM, createAiObservationContext(deps.userId));
   // `_base.md` + `travel.md`, and what the owner has already corrected — the
   // same composition and the same "WAT LAVEGA AL WEET" block the other three
   // agents get, so the learning contract is explained once for all of them.
