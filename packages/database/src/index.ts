@@ -11,6 +11,14 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 /** The pool carries multi-statement transactions; `http` carries the rest. */
 export type Database = Pool & { readonly http: NeonQueryFunction<false, true> };
 
+function poolErrorText(error: unknown): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = error.message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return "connection closed";
+}
+
 export function createDatabase(connectionString = process.env.DATABASE_URL): Database {
   if (!connectionString?.trim()) throw new Error("DATABASE_URL is required");
   const pool = new Pool({
@@ -18,6 +26,13 @@ export function createDatabase(connectionString = process.env.DATABASE_URL): Dat
     max: 5,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 10_000,
+  });
+  /* An idle Neon socket that dies without a close frame emits an ErrorEvent,
+   * not an Error, and the message is empty. This driver throws that as
+   * "Unhandled error. ()" unless the pool is listening. pg-pool has already
+   * discarded the client. */
+  pool.on("error", (error: unknown) => {
+    console.error(`database pool: ${poolErrorText(error)}`);
   });
   return Object.assign(pool, { http: neon(connectionString, { fullResults: true }) });
 }
