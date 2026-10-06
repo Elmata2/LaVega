@@ -13,9 +13,9 @@ const xml = `<FlexStatements><FlexStatement><OpenPositions>
   <CashReportCurrency accountId="U1" currency="Base Summary" toDate="20260818" endingCash="250" />
 </CashReport><StatementOfFunds>
   <StatementOfFundsLine accountId="U1" transactionID="deposit-1" date="20260810" currency="USD" activityCode="DEP" activityDescription="Deposit" amount="100" />
-  <StatementOfFundsLine accountId="U1" transactionID="withdrawal-1" date="20260811" currency="USD" activityCode="WTH" activityDescription="Withdrawal" amount="50" />
+  <StatementOfFundsLine accountId="U1" transactionID="withdrawal-1" date="20260811" currency="USD" activityCode="WTH" activityDescription="Withdrawal" amount="-50" />
   <StatementOfFundsLine accountId="U1" transactionID="interest-1" date="20260812" currency="USD" activityCode="BINT" activityDescription="Broker interest paid" amount="1.25" />
-  <StatementOfFundsLine accountId="U1" transactionID="fee-1" date="20260813" currency="USD" activityCode="FEE" activityDescription="Data fee" amount="3" />
+  <StatementOfFundsLine accountId="U1" transactionID="fee-1" date="20260813" currency="USD" activityCode="FEE" activityDescription="Data fee" amount="-3" />
   <StatementOfFundsLine accountId="U1" transactionID="trade-cash-1" date="20260814" currency="USD" activityCode="BUY" activityDescription="AAPL purchase" amount="-200" />
   <StatementOfFundsLine accountId="U1" transactionID="dividend-1" date="20260815" currency="USD" activityCode="DIV" activityDescription="AAPL dividend" symbol="AAPL" isin="US0378331005" amount="2.50" />
   <StatementOfFundsLine accountId="U1" transactionID="deposit-1" date="20260810" currency="USD" activityCode="DEP" activityDescription="Deposit" amount="100" />
@@ -185,7 +185,7 @@ describe("parseFlexStatement", () => {
     ],
     [
       "not with a partial Statement of Funds",
-      statements(["U1", "20260801", "20260818", body.replace('amount="3"', "")]),
+      statements(["U1", "20260801", "20260818", body.replace('amount="-3"', "")]),
       { status: "unknown" },
     ],
   ])("proves cash history %s", (_, statement, expected) => {

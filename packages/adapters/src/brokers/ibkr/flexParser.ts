@@ -42,6 +42,11 @@ function hasTag(xml: string, tag: string): boolean {
   return new RegExp(`<${tag}(?:[\\s/>])`, "i").test(xml);
 }
 
+/** IBKR names the Statement of Funds container `StmtFunds` in Flex XML. */
+function hasStatementOfFunds(xml: string): boolean {
+  return hasTag(xml, "StmtFunds") || hasTag(xml, "StatementOfFunds");
+}
+
 const numberOrNull = (value: string | undefined): number | null => {
   if (value === undefined || value.trim() === "") return null;
   const parsed = Number(value.replace(/,/g, ""));
@@ -145,24 +150,28 @@ function parseCashBalances(
   return { cashBalances: [...totals.values()], problems };
 }
 
+/** Owner money moves IBKR books without an activity code; the sign says which way. */
+const OWNER_TRANSFER =
+  /ELECTRONIC FUND TRANSFER|^\s*DISBURSEMENT|CASH TRANSFER|INTERNAL TRANSFER|^\s*TRANSFER (TO|FROM) |^\s*(DEPOSIT|WITHDRAWAL)|CASH RECEIPT|WIRE RECEIVED|WIRE SENT/i;
+
 function activityKind(attrs: Attributes): CashFlowKind | "dividend" {
   const code = first(attrs, "activityCode", "code")?.toUpperCase() ?? "";
   const description = first(attrs, "activityDescription", "description") ?? "";
   const activity = `${code} ${description}`;
+  if (/^(BUY|SELL)$/.test(code) || /^\s*(BUY|SELL|BOUGHT|SOLD)\b/i.test(description))
+    return "other";
   if (/(^|\W)(DIV|DIVIDEND)(\W|$)/i.test(activity) && !/(WITHHOLD|TAX)/i.test(activity))
     return "dividend";
-  if (/(^|\W)(DEP|DEPOSIT|CASH RECEIPT|WIRE RECEIVED)(\W|$)/i.test(activity)) return "deposit";
-  if (/(^|\W)(WTH|WITHDRAWAL|CASH DISBURSEMENT|WIRE SENT)(\W|$)/i.test(activity))
-    return "withdrawal";
+  if (/FEE|COMMISSION/i.test(activity)) return "fee";
+  if (/\bOF POSITION\b/i.test(description)) return "other";
   if (/INTEREST|(^|\W)BINT(\W|$)/i.test(activity)) return "interest";
-  if (/FEE|COMMISSION|WITHHOLD|TAX/i.test(activity)) return "fee";
+  if (/^(DEP|WTH|WITH)$/.test(code) || OWNER_TRANSFER.test(description)) {
+    const amount = numberOrNull(first(attrs, "amount"));
+    if (amount !== null && amount > 0) return "deposit";
+    if (amount !== null && amount < 0) return "withdrawal";
+  }
+  if (/WITHHOLD|TAX/i.test(activity)) return "fee";
   return "other";
-}
-
-function normalizedAmount(amount: number, kind: CashFlowKind): number {
-  if (kind === "deposit") return Math.abs(amount);
-  if (kind === "withdrawal" || kind === "fee") return -Math.abs(amount);
-  return amount;
 }
 
 function parseStatementFunds(
@@ -172,7 +181,18 @@ function parseStatementFunds(
   const dividends = new Map<string, Dividend>();
   const cashFlows = new Map<string, CashFlow>();
   const problems: string[] = [];
-  for (const attrs of rows(xml, "StatementOfFundsLine")) {
+  const statements = flexStatements(xml);
+  const scopes = statements.length > 0 ? statements.map(([, , body = ""]) => body) : [xml];
+  const lines = scopes.flatMap((body) => {
+    const seen = new Map<string, number>();
+    return rows(body, "StatementOfFundsLine").map((attrs) => {
+      const content = JSON.stringify(Object.entries(attrs).sort());
+      const occurrence = seen.get(content) ?? 0;
+      seen.set(content, occurrence + 1);
+      return { attrs, occurrence };
+    });
+  });
+  for (const { attrs, occurrence } of lines) {
     try {
       const flowDate = cashDate(attrs, "Statement of Funds date");
       const currency = first(attrs, "currency")?.trim() ?? "";
@@ -182,6 +202,9 @@ function parseStatementFunds(
       const description = first(attrs, "activityDescription", "description");
       const providerId = brokerIdentity(attrs);
       const kind = activityKind(attrs);
+      /* Without a provider id the line's own content is its identity, so two
+       * identical lines must differ by running balance or occurrence. */
+      const lineIdentity = providerId ? [] : [first(attrs, "balance"), occurrence];
 
       if (kind === "dividend") {
         const symbol = first(attrs, "symbol", "underlyingSymbol");
@@ -192,6 +215,7 @@ function parseStatementFunds(
           rawAmount,
           symbol,
           description,
+          ...lineIdentity,
         ]);
         const dedupeKey = providerId ?? id;
         dividends.set(dedupeKey, {
@@ -203,15 +227,22 @@ function parseStatementFunds(
           symbol,
           ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
           ...(description ? { description } : {}),
-          amount: Math.abs(rawAmount),
+          amount: rawAmount,
           currency,
           ...(providerId ? { brokerDividendId: providerId } : {}),
         });
         continue;
       }
 
-      const amount = normalizedAmount(rawAmount, kind);
-      const id = identity("ibkr-cash-flow", attrs, [flowDate, currency, amount, kind, description]);
+      const amount = rawAmount;
+      const id = identity("ibkr-cash-flow", attrs, [
+        flowDate,
+        currency,
+        amount,
+        kind,
+        description,
+        ...lineIdentity,
+      ]);
       const dedupeKey = providerId ?? id;
       cashFlows.set(dedupeKey, {
         id,
@@ -270,7 +301,7 @@ function cashHistory(
   let quantityHistoryProven = true;
   for (const [, attrs = "", body = ""] of flexStatements(xml)) {
     if (!provesQuantityHistory(body)) quantityHistoryProven = false;
-    if (!hasTag(body, "CashReport") || !hasTag(body, "StatementOfFunds"))
+    if (!hasTag(body, "CashReport") || !hasStatementOfFunds(body))
       return unknown("An IBKR Flex account statement lacks its cash report or Statement of Funds");
     const { fromDate, toDate } = attributes(attrs);
     if (!fromDate || !toDate || !/^\d{8}$/.test(fromDate) || !/^\d{8}$/.test(toDate))
@@ -524,9 +555,9 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   const sections: BrokerSections = {
     positions: section(positions, hasTag(xml, "OpenPositions"), positionProblems),
     trades: section(trades, hasTag(xml, "Trades"), tradeProblems),
-    dividends: section(funds.dividends, hasTag(xml, "StatementOfFunds"), funds.problems),
+    dividends: section(funds.dividends, hasStatementOfFunds(xml), funds.problems),
     cashBalances: section(cash.cashBalances, hasTag(xml, "CashReport"), cash.problems),
-    cashFlows: section(funds.cashFlows, hasTag(xml, "StatementOfFunds"), funds.problems),
+    cashFlows: section(funds.cashFlows, hasStatementOfFunds(xml), funds.problems),
   };
   return {
     sections,
