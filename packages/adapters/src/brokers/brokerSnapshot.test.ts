@@ -86,6 +86,7 @@ describe("IBKR backfill and multi-account windows", () => {
     funds?: string;
     positions?: string;
     cash?: string;
+    transfers?: string;
   };
   const statement = (...parts: Part[]): BrokerResult => {
     const xml = `<FlexStatements>${parts
@@ -93,6 +94,7 @@ describe("IBKR backfill and multi-account windows", () => {
         (part) =>
           `<FlexStatement accountId="${part.account ?? "U1"}" fromDate="${part.period[0]}" toDate="${part.period[1]}">` +
           `<OpenPositions>${part.positions ?? ""}</OpenPositions><Trades>${part.trades ?? ""}</Trades>` +
+          `<Transfers>${part.transfers ?? ""}</Transfers><CorporateActions></CorporateActions>` +
           `<CashReport>${part.cash ?? ""}</CashReport><StatementOfFunds>${part.funds ?? ""}</StatementOfFunds></FlexStatement>`,
       )
       .join("")}</FlexStatements>`;
@@ -102,6 +104,108 @@ describe("IBKR backfill and multi-account windows", () => {
     `<OpenPosition accountId="U1" symbol="VUSA" position="${qty}" currency="EUR" reportDate="${day}" />`;
   const cashRow = (amount: number, day: string) =>
     `<CashReportCurrency accountId="U1" currency="EUR" endingCash="${amount}" toDate="${day}" />`;
+
+  const ACATS = '<Transfer accountId="U1" symbol="VUSA" quantity="93" />';
+  const proofOf = (cache: ReturnType<typeof createBrokerDataCache>) =>
+    (cache.read().cashCoverage[0] as { quantityProvenFrom?: string }).quantityProvenFrom;
+  const apply = (...results: BrokerResult[]) => {
+    const cache = createBrokerDataCache();
+    for (const result of results) cache.apply(outcome(result));
+    return cache;
+  };
+  const recent = statement({ period: ["20251001", "20261001"] });
+  const older = statement({ period: ["20240601", "20251001"] });
+  const olderUnproven = statement({ period: ["20240601", "20251001"], transfers: ACATS });
+  const recentUnproven = statement({ period: ["20251001", "20261001"], transfers: ACATS });
+
+  test("the proven start survives merges as one date, taking the earliest when both prove", () => {
+    expect(proofOf(apply(recent))).toBe("2025-10-01");
+    expect(proofOf(apply(recent, older))).toBe("2024-06-01");
+    expect(apply(recent, older).read().cashCoverage[0]).toMatchObject({ from: "2024-06-01" });
+  });
+
+  test("a backfill that is not proven neither adds nor moves the proof", () => {
+    const cache = apply(recent, olderUnproven);
+    expect(cache.read().cashCoverage[0]).toMatchObject({ from: "2024-06-01" });
+    expect(proofOf(cache)).toBe("2025-10-01");
+    expect(proofOf(apply(recentUnproven, older))).toBeUndefined();
+  });
+
+  test("a proven backfill separated from the proof by an unproven one cannot move it", () => {
+    const bars = [{ symbol: "VUSA", date: "2025-01-06", close: 100, currency: "EUR" }];
+    const positions = holding(93, "20261001");
+    const cache = apply(
+      statement({ period: ["20251001", "20261001"], positions }),
+      statement({
+        period: ["20240601", "20251001"],
+        transfers: ACATS,
+        funds: deposit("d1", "20250106"),
+      }),
+      statement({ period: ["20230601", "20240601"] }),
+    );
+    expect(proofOf(cache)).toBe("2025-10-01");
+    const data = cache.read();
+    const point = computePortfolioValueSeries(data.positions, data.trades, bars, "EUR", undefined, {
+      cashBalances: data.cashBalances,
+      cashFlows: data.cashFlows,
+      cashCoverage: data.cashCoverage,
+      today: "2026-10-01",
+    }).find((day) => day.date === "2025-01-06");
+    expect(point?.holdingsUnknown).toEqual(["VUSA"]);
+  });
+
+  test("a proven backfill that reaches the stored proof still extends it", () => {
+    const touching = statement({ period: ["20240601", "20250930"] });
+    expect(proofOf(apply(recent, touching))).toBe("2024-06-01");
+    const chained = apply(recent, older, statement({ period: ["20230601", "20240601"] }));
+    expect(proofOf(chained)).toBe("2023-06-01");
+  });
+
+  test("a proven forward sync activates the proof on stored coverage that has none", () => {
+    const stored = createBrokerDataCache();
+    stored.apply(outcome(recentUnproven));
+    const restored = createBrokerDataCache(structuredClone(stored.snapshot()));
+    expect(proofOf(restored)).toBeUndefined();
+    restored.apply(outcome(statement({ period: ["20260101", "20261101"] })));
+    expect(proofOf(restored)).toBe("2026-01-01");
+  });
+
+  test("a forward sync keeps the proof only while its new end is inside the proven span", () => {
+    const inside = apply(recent, statement({ period: ["20260101", "20260901"], transfers: ACATS }));
+    expect(proofOf(inside)).toBe("2025-10-01");
+    const beyond = apply(recent, statement({ period: ["20260901", "20261101"], transfers: ACATS }));
+    expect(proofOf(beyond)).toBeUndefined();
+  });
+
+  test("shares that arrived by ACATS stay unknown before the anchor instead of reading as owned", () => {
+    const days: string[] = [];
+    for (let at = Date.UTC(2026, 0, 5); at <= Date.UTC(2026, 9, 1); at += 86_400_000) {
+      const day = new Date(at);
+      if (day.getUTCDay() % 6 !== 0) days.push(day.toISOString().slice(0, 10));
+    }
+    const bars = days.map((date) => ({
+      symbol: "VUSA",
+      date,
+      close: 100,
+      currency: "EUR",
+    }));
+    const valueOn = (result: BrokerResult) => {
+      const data = apply(result).read();
+      return computePortfolioValueSeries(data.positions, data.trades, bars, "EUR", undefined, {
+        cashBalances: data.cashBalances,
+        cashFlows: data.cashFlows,
+        cashCoverage: data.cashCoverage,
+        today: "2026-10-01",
+      }).find((point) => point.date === "2026-01-05");
+    };
+    const period: [string, string] = ["20260101", "20261001"];
+    const positions = holding(93, "20261001");
+    const funds = deposit("early", "20260105");
+
+    expect(valueOn(statement({ period, positions, funds }))?.positionsValue).toBe(9300);
+    const acats = valueOn(statement({ period, positions, funds, transfers: ACATS }));
+    expect(acats?.holdingsUnknown).toEqual(["VUSA"]);
+  });
 
   test("an older window does not overwrite the latest positions and cash", () => {
     const cache = createBrokerDataCache();

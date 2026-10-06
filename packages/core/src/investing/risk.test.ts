@@ -564,3 +564,71 @@ test("requires 60 valid daily return observations", () => {
   expect(enough.metrics.observationDays).toBe(60);
   expect(enough.metrics.annualizedVolatility).not.toBeNull();
 });
+
+test("risk is available once the broker's proven trade window makes the holding known", () => {
+  const days: string[] = [];
+  for (let at = new Date("2025-09-29T00:00:00Z"); at <= new Date("2026-10-05T00:00:00Z");) {
+    if (at.getUTCDay() !== 0 && at.getUTCDay() !== 6) days.push(at.toISOString().slice(0, 10));
+    at = new Date(at.getTime() + 86_400_000);
+  }
+  const dates = days.filter((date) => date >= "2025-10-02" && date <= "2026-10-02");
+  const bars = days.map((date, index) => ({
+    symbol: "VUSA",
+    date,
+    close: 100 + (index % 7) - (index % 3),
+    currency: "EUR",
+  }));
+  const data = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        broker: "ibkr",
+        symbol: "VUSA",
+        quantity: 93,
+        averagePrice: 100,
+        marketPrice: 100,
+        marketValue: 9300,
+        currency: "EUR",
+        asOf: "2026-10-02",
+      },
+    ],
+    trades: [],
+    dividends: [],
+    cashBalances: [
+      { entity: "personal", broker: "ibkr", currency: "EUR", amount: 1, asOf: "2026-10-02" },
+    ],
+    cashFlows: [
+      {
+        id: "early-deposit",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2025-09-29",
+        currency: "EUR",
+        amount: 0,
+        kind: "deposit",
+      },
+    ],
+    priceBars: bars,
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: [],
+    today: "2026-10-05",
+    cashCoverage: [
+      {
+        entity: "personal",
+        broker: "ibkr",
+        status: "complete",
+        from: "2025-10-02",
+        to: "2026-10-02",
+        tradeCash: "cash-flows",
+        quantityProvenFrom: "2025-10-02",
+      },
+    ],
+  });
+
+  const report = buildHistoricalRisk(data, "1Y");
+
+  expect(dates.length).toBeGreaterThanOrEqual(250);
+  expect(report.metrics.observationDays).toBeGreaterThanOrEqual(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.metrics.dailyVolatility).not.toBeNull();
+});

@@ -39,7 +39,7 @@ function flexStatements(xml: string): RegExpExecArray[] {
 }
 
 function hasTag(xml: string, tag: string): boolean {
-  return new RegExp(`<${tag}(?:\\s|>)`, "i").test(xml);
+  return new RegExp(`<${tag}(?:[\\s/>])`, "i").test(xml);
 }
 
 const numberOrNull = (value: string | undefined): number | null => {
@@ -234,6 +234,17 @@ function parseStatementFunds(
   return { dividends: [...dividends.values()], cashFlows: [...cashFlows.values()], problems };
 }
 
+/** Quantity moves by executions, but also by account transfers (ACATS,
+ *  internal moves) and corporate actions (mergers, spin-offs, stock
+ *  dividends), which book no cash and which this parser does not read. A
+ *  statement proves its quantity history only if it carries a Trades,
+ *  Transfers and CorporateActions section and the last two hold no rows. */
+function provesQuantityHistory(body: string): boolean {
+  const present = (tag: string) => new RegExp(`<${tag}(?:[\\s/>])`, "i").test(body);
+  if (!present("Trades") || !present("Transfers") || !present("CorporateActions")) return false;
+  return !/<(?:Transfer|CorporateAction)\b/i.test(body);
+}
+
 /** Statement of Funds books every cash movement in the statement period,
  *  trades included, so it is the one trade-cash stream and the period is the
  *  proven window. Accounts share one wallet identity here and their Cash
@@ -242,7 +253,7 @@ function parseStatementFunds(
 function cashHistory(
   xml: string,
   entity: string,
-  sections: Pick<BrokerSections, "cashBalances" | "cashFlows" | "dividends">,
+  sections: Pick<BrokerSections, "cashBalances" | "cashFlows" | "dividends" | "trades">,
 ): CashHistoryCoverage {
   /* Statement of Funds books every cash movement including trades, so that is
    * where IBKR trade cash lives whether or not a window is proven. */
@@ -256,7 +267,9 @@ function cashHistory(
   if (Object.values(sections).some((value) => value.status !== "complete"))
     return unknown("IBKR Flex cash report or Statement of Funds is missing or partial");
   const periods = new Set<string>();
+  let quantityHistoryProven = true;
   for (const [, attrs = "", body = ""] of flexStatements(xml)) {
+    if (!provesQuantityHistory(body)) quantityHistoryProven = false;
     if (!hasTag(body, "CashReport") || !hasTag(body, "StatementOfFunds"))
       return unknown("An IBKR Flex account statement lacks its cash report or Statement of Funds");
     const { fromDate, toDate } = attributes(attrs);
@@ -275,6 +288,9 @@ function cashHistory(
     from: date(fromDate, "statement period start"),
     to: date(toDate, "statement period end"),
     tradeCash: "cash-flows",
+    ...(quantityHistoryProven && sections.trades.status === "complete"
+      ? { quantityProvenFrom: date(fromDate, "statement period start") }
+      : {}),
   };
 }
 

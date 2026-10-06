@@ -498,7 +498,11 @@ function cashLegs(
  *  holding the same instrument for the same entity each report their own dated
  *  snapshots; folded into one holding those dates read as a single timeline and
  *  whichever broker synced last silently replaces the other's anchor. */
-type Holding = { anchors: Map<string, number>; events: CashEvent[] };
+type Holding = {
+  owner: Ownership;
+  anchors: Map<string, number>;
+  events: CashEvent[];
+};
 
 function holdingsBySymbol(
   positions: readonly Position[],
@@ -510,7 +514,11 @@ function holdingsBySymbol(
     const key = `${symbol}\u0000${ownershipKey(owner)}`;
     const existing = byKey.get(key);
     if (existing) return existing;
-    const created: Holding = { anchors: new Map(), events: [] };
+    const created: Holding = {
+      owner: { entity: owner.entity, broker: owner.broker, account: owner.account },
+      anchors: new Map(),
+      events: [],
+    };
     byKey.set(key, created);
     const group = bySymbol.get(symbol) ?? [];
     group.push(created);
@@ -603,6 +611,13 @@ export function computePortfolioValueSeries(
     options.cashCoverage ?? [],
     fxRates,
   );
+  const tradeWindows = new Map(
+    (options.cashCoverage ?? []).flatMap((value) =>
+      value.status === "complete" && value.quantityProvenFrom
+        ? [[ownerKey(value), { from: value.quantityProvenFrom, to: value.to }] as const]
+        : [],
+    ),
+  );
   const lastKnownValue = new Map<string, number>();
 
   return dates.map((date) => {
@@ -624,7 +639,18 @@ export function computePortfolioValueSeries(
         if (!firstAnchor || date >= firstAnchor) continue;
         const inferredOpening =
           holding.anchors.get(firstAnchor)! - sumBetween(holding.events, "", firstAnchor);
-        if (Math.abs(inferredOpening) > 1e-8) {
+        if (Math.abs(inferredOpening) < 1e-8) continue;
+        /* A complete trade list from `from` through the anchor leaves no room
+         * for an unseen execution after `from`, so the walk back from the
+         * anchor is exact there. A negative result contradicts that proof and
+         * stays unknown rather than becoming a short position. */
+        const window = holding.owner.broker
+          ? tradeWindows.get(
+              ownerKey({ entity: holding.owner.entity, broker: holding.owner.broker }),
+            )
+          : undefined;
+        const walked = window && date >= window.from && firstAnchor <= window.to;
+        if (!walked || quantityOnDate(date, [holding]) < 0) {
           holdingsUnknown.add(symbol);
           symbolHoldingUnknown = true;
         }

@@ -1264,3 +1264,182 @@ test("a balance is walked back through recent movements until the wallet would b
   /* Before the deposit the wallet would hold -330: a movement is missing. */
   expect(on("2026-01-02")).toMatchObject({ cashValue: null, cashUnknown: ["trading212:EUR"] });
 });
+
+const proven = (
+  from: string,
+  to: string,
+  quantityProven = true,
+  provenFrom = from,
+): CashHistoryCoverage => ({
+  entity: "personal",
+  broker: "ibkr",
+  status: "complete" as const,
+  from,
+  to,
+  tradeCash: "cash-flows" as const,
+  ...(quantityProven ? { quantityProvenFrom: provenFrom } : {}),
+});
+
+const vusa = (quantity = 93, asOf = "2026-10-02"): Position => ({
+  entity: "personal",
+  broker: "ibkr",
+  symbol: "VUSA",
+  quantity,
+  averagePrice: 100,
+  marketPrice: 100,
+  marketValue: quantity * 100,
+  currency: "EUR",
+  asOf,
+});
+
+const vusaTrade = (side: "buy" | "sell", quantity: number, date: string): Trade => ({
+  id: `${side}-${date}`,
+  entity: "personal",
+  broker: "ibkr",
+  date,
+  symbol: "VUSA",
+  side,
+  quantity,
+  price: 100,
+  amount: quantity * 100,
+  currency: "EUR",
+  commission: 0,
+});
+
+const vusaBars = (): PriceBar[] =>
+  businessDays("2025-09-29", "2026-10-05").map((date) => ({
+    symbol: "VUSA",
+    date,
+    close: 100,
+    currency: "EUR",
+  }));
+
+function businessDays(from: string, to: string): string[] {
+  const days: string[] = [];
+  for (
+    let cursor = new Date(`${from}T00:00:00Z`);
+    cursor.toISOString().slice(0, 10) <= to;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6)
+      days.push(cursor.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+const series = (
+  trades: Trade[],
+  cashCoverage: CashHistoryCoverage[],
+  bars: PriceBar[] = vusaBars(),
+) =>
+  computePortfolioValueSeries([vusa()], trades, bars, "EUR", FX_RATES, {
+    today: "2026-10-05",
+    cashCoverage,
+    cashFlows: [
+      {
+        id: "early-deposit",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2025-09-29",
+        currency: "EUR",
+        amount: 1,
+        kind: "deposit",
+      },
+    ],
+  });
+
+test("a holding is known across the broker's proven trade window with no trades in it", () => {
+  const result = series([], [proven("2025-10-02", "2026-10-02")]);
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(9300);
+    expect(point.unaccountedValue, point.date).toBeUndefined();
+  }
+  const before = result.filter(({ date }) => date < "2025-10-02");
+  expect(before.length).toBeGreaterThan(0);
+  for (const point of before) expect(point.holdingsUnknown, point.date).toEqual(["VUSA"]);
+});
+
+test("walks a buy inside the proven window back from the anchor", () => {
+  const result = series([vusaTrade("buy", 10, "2026-03-02")], [proven("2025-10-02", "2026-10-02")]);
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-03-02" ? 8300 : 9300);
+  }
+});
+
+test("leaves the holding unknown before its anchor when no trade window is proven", () => {
+  for (const coverage of [[], [proven("2025-10-02", "2026-10-02", false)]]) {
+    const result = series([], coverage);
+    for (const point of result.filter(({ date }) => date < "2026-10-02"))
+      expect(point.holdingsUnknown, point.date).toEqual(["VUSA"]);
+    expect(result.find(({ date }) => date === "2026-10-02")?.holdingsUnknown).toBeUndefined();
+  }
+});
+
+test("keeps a date unknown when the derived quantity would be negative", () => {
+  const result = series(
+    [vusaTrade("buy", 100, "2026-03-02")],
+    [proven("2025-10-02", "2026-10-02")],
+  );
+
+  expect(result.find(({ date }) => date === "2026-02-27")?.holdingsUnknown).toEqual(["VUSA"]);
+  expect(result.find(({ date }) => date === "2026-03-02")?.holdingsUnknown).toBeUndefined();
+});
+
+test("a proven window that ends before the anchor does not vouch for the gap", () => {
+  const result = series([], [proven("2025-10-02", "2026-09-01")]);
+
+  expect(result.find(({ date }) => date === "2026-01-05")?.holdingsUnknown).toEqual(["VUSA"]);
+});
+
+test("a sell inside the proven window: before it the holding was anchor plus sold", () => {
+  const result = series(
+    [vusaTrade("sell", 10, "2026-03-02")],
+    [proven("2025-10-02", "2026-10-02")],
+  );
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-03-02" ? 10300 : 9300);
+  }
+});
+
+test("a trade on the first proven day shows its post-trade quantity that day", () => {
+  const result = series([vusaTrade("buy", 10, "2025-10-02")], [proven("2025-10-02", "2026-10-02")]);
+
+  /* Events dated d count on d; the day before the window stays unknown. */
+  expect(result.find(({ date }) => date === "2025-10-02")).toMatchObject({ positionsValue: 9300 });
+  expect(result.find(({ date }) => date === "2025-10-02")?.holdingsUnknown).toBeUndefined();
+  expect(result.find(({ date }) => date === "2025-10-01")?.holdingsUnknown).toEqual(["VUSA"]);
+});
+
+test("the proof starts at quantityProvenFrom, not at the cash coverage start", () => {
+  const coverage = proven("2024-01-01", "2026-10-02", true, "2025-10-02");
+  const result = series([], [coverage]);
+
+  expect(result.find(({ date }) => date === "2025-10-01")?.holdingsUnknown).toEqual(["VUSA"]);
+  expect(result.find(({ date }) => date === "2025-10-02")?.holdingsUnknown).toBeUndefined();
+});
+
+test("a second anchor from a backfill: the nearest anchor still walks within the proof", () => {
+  const result = computePortfolioValueSeries(
+    [vusa(93, "2026-10-02"), vusa(80, "2026-03-02")],
+    [vusaTrade("buy", 13, "2026-06-01")],
+    vusaBars(),
+    "EUR",
+    FX_RATES,
+    {
+      today: "2026-10-05",
+      cashCoverage: [proven("2025-10-02", "2026-10-02")],
+      cashFlows: [],
+    },
+  );
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-06-01" ? 8000 : 9300);
+  }
+});
