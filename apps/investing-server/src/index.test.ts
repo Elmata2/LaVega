@@ -1177,11 +1177,11 @@ test("dashboard surfaces a durable sync problem the invocation did not itself pr
         return json(response, {
           items: [
             {
-              amount: 10966.34,
+              amount: -4,
               currency: "EUR",
               dateTime: "2025-08-11T09:05:00Z",
-              reference: "transfer-1",
-              type: "TRANSFER",
+              reference: "future-1",
+              type: "NEW_KIND",
             },
           ],
         });
@@ -1207,6 +1207,7 @@ test("dashboard surfaces a durable sync problem the invocation did not itself pr
     };
 
     expect(status.status).toBe("problem");
+    expect(status.message).toContain("unknown type NEW_KIND");
     expect(dashboard.problems).toContain(status.message);
   } finally {
     await rm(directory, { recursive: true, force: true });
