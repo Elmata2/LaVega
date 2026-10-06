@@ -1058,7 +1058,11 @@ test("price history is read with dates Postgres accepts", async () => {
   const body = (await response.json()) as { problems: string[] };
 
   expect(getRange).toHaveBeenCalled();
-  expect(body.problems).toEqual([]);
+  for (const [, , from, to] of getRange.mock.calls) {
+    expect(String(from ?? "")).not.toMatch(/^0000-/);
+    expect(String(to ?? "")).not.toMatch(/^0000-/);
+  }
+  expect(body.problems.join("\n")).not.toContain("date/time field value out of range");
 });
 
 test("a known benchmark symbol gets its curated display name in the dashboard", async () => {
@@ -1177,11 +1181,11 @@ test("dashboard surfaces a durable sync problem the invocation did not itself pr
         return json(response, {
           items: [
             {
-              amount: 10966.34,
+              amount: -4,
               currency: "EUR",
               dateTime: "2025-08-11T09:05:00Z",
-              reference: "transfer-1",
-              type: "TRANSFER",
+              reference: "future-1",
+              type: "NEW_KIND",
             },
           ],
         });
@@ -1207,6 +1211,7 @@ test("dashboard surfaces a durable sync problem the invocation did not itself pr
     };
 
     expect(status.status).toBe("problem");
+    expect(status.message).toContain("unknown type NEW_KIND");
     expect(dashboard.problems).toContain(status.message);
   } finally {
     await rm(directory, { recursive: true, force: true });

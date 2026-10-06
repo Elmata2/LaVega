@@ -212,7 +212,9 @@ test("row problems do not condemn the next run to replaying the whole history", 
   const sync = vi.fn(async () =>
     empty({
       positions: [position],
-      problems: ["Trading 212 transaction 87456cce has ambiguous TRANSFER direction"],
+      problems: [
+        "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
+      ],
     }),
   );
 
