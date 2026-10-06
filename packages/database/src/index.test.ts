@@ -4,6 +4,7 @@ import {
   createAgentRunRepository,
   createAiUsageRepository,
   createBrokerRepository,
+  createDatabase,
   createEbFlowRepository,
   createN8nForwardingRepository,
   createOpaqueVaultRepository,
@@ -35,6 +36,26 @@ test("encryption rejects missing or invalid key", () => {
   expect(() => encryptBlob({ value: 1 })).toThrow("LAVEGA_ENCRYPTION_KEY");
   process.env.LAVEGA_ENCRYPTION_KEY = "bad";
   expect(() => encryptBlob({ value: 1 })).toThrow("32 bytes");
+});
+
+test("an idle socket error stays in the pool", async () => {
+  const db = createDatabase("postgres://user:pass@127.0.0.1/lavega");
+  const logged: string[] = [];
+  const write = console.error;
+  console.error = (line?: unknown) => {
+    logged.push(String(line));
+  };
+  try {
+    expect(db.emit("error", { message: "" })).toBe(true);
+    expect(db.emit("error", new Error("Connection terminated unexpectedly"))).toBe(true);
+  } finally {
+    console.error = write;
+    await db.end();
+  }
+  expect(logged).toEqual([
+    "database pool: connection closed",
+    "database pool: Connection terminated unexpectedly",
+  ]);
 });
 
 test("tenant identity is mandatory", () => {
