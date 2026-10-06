@@ -30,20 +30,33 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   Eyebrow `Composition`. Empty copy: `No sector data yet.` The Profile switch that can
   fill missing sectors is `#data` (`Sector inference`). See
   [broker-connect-sync.md](broker-connect-sync.md).
-- portfolio agents card, title `Investor lens` (`data-dashboard-section="agent"`). The
-  persona picker is a radio group with `aria-label="Choose agent"`. See
-  [portfolio-agents.md](portfolio-agents.md).
+- portfolio agents card, title `Investor lens` (`data-dashboard-section="agent"`), below
+  the two-column grid. The persona picker is a radio group with `aria-label="Choose agent"`.
+  See [portfolio-agents.md](portfolio-agents.md).
+- letter card in the aside, same Profile switch as the agent card (widget id `agent`,
+  label `Portfolio agent`). There is no separate letter switch. Accessible name
+  `Letter from Charlie` (`data-dashboard-section="letter"`). The page only reads
+  `GET /api/letters/latest` (`{ letter }` or `{ letter: null }`). It never generates one.
+  Loading copy: `Loading letter…`. Empty copy: title `No letter yet`, then
+  `Charlie writes after your broker data changes. The first letter appears after the next sync.`
+  A stored letter shows `Letter from Charlie · <date>`, the verdict as the title, the
+  observations, and button `Discuss`. `Discuss` opens `/agents/charlie_munger` in this tab
+  and sends the letter as the first message. On the local file server the GET is 200 with
+  `letter: null`, so the empty card is on screen. It does not 503 and it does not hide.
+  `POST /api/letters/ensure` is the writer (503 `Portfolio letters need a database` without
+  a database). The cron calls it. The page does not.
 - status alert, not a chip panel. When the connection is not `online`, broker or price
   status is `problem`, a price problem is set, or the vault is `locked`, Overview shows
-  `Status needs attention` and the link `Review it in Profile` (`/profile#brokers`). The
-  chips live on Profile `#status`.
+  `Status needs attention.` (period included) and the link `Review it in Profile`
+  (`/profile#brokers`). The chips live on Profile `#status`.
   See [prices-and-market-data.md](prices-and-market-data.md).
 - the Overview top bar always has `Add widget`, which opens `/profile#widgets`. Every card
   above can be switched off there. Switching off every card replaces the grid with
   `Every Overview card is switched off. Add one to see your portfolio here.` and another
   `Add widget` button.
 - degraded and empty states: `Dashboard unavailable`, `Refresh failed`, `Reading problems`,
-  `Cached data remains visible`, `Still loading your history`.
+  `Sync problems` (with `Broker sync failed.` when Allow Yahoo Finance's broker POST
+  fails), `Cached data remains visible`, `Still loading your history`.
 - the positions table and the net-worth chart are their own tabs (`/positions`, `/net-worth`),
   not part of this view.
 
@@ -74,6 +87,7 @@ node $C dashboard --target prod --raw           # the exact payload the SPA rece
 node $C summary --target prod                   # the Summary card (risk metrics)
 node $C api GET /api/investing/dashboard --target prod
 node $C api GET /api/investing/personal-net-worth --target prod
+node $C api GET /api/letters/latest --target local   # { letter: null } until a cron write
 node $C browser goto /net-worth --target local  # mounted: /investing/net-worth
 ```
 
