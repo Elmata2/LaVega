@@ -252,13 +252,22 @@ function walkBackUntilOverdrawn(
   anchor: Anchor,
   events: readonly CashEvent[],
 ): number | null {
-  const between = events
-    .filter((event) => event.date > date && event.date <= anchor.asOf)
-    .sort((left, right) => right.date.localeCompare(left.date));
+  const perDay = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    if (event.date <= date || event.date > anchor.asOf) continue;
+    perDay.set(event.date, (perDay.get(event.date) ?? 0) + event.amount);
+    counts.set(event.date, (counts.get(event.date) ?? 0) + 1);
+  }
+  /* Only an end-of-day balance can overdraw: a statement lists a day's lines in
+   * order, and undoing them one by one backwards dips below nothing on a day
+   * whose closing balance never did. */
   let balance = anchor.amount;
-  for (const [index, event] of between.entries()) {
-    balance -= event.amount;
-    if (!Number.isFinite(balance) || balance < -reconciliationTolerance(index + 1)) return null;
+  let seen = 0;
+  for (const day of [...perDay.keys()].sort((left, right) => right.localeCompare(left))) {
+    balance -= perDay.get(day) ?? 0;
+    seen += counts.get(day) ?? 0;
+    if (!Number.isFinite(balance) || balance < -reconciliationTolerance(seen)) return null;
   }
   return balance;
 }
@@ -282,6 +291,31 @@ function walkBackUntilOverdrawn(
  *  beside it. The estimate is only offered where the statements it sits between
  *  agree with the movements reported between them. */
 function cashAmountOnDate(
+  date: string,
+  leg: CashLeg,
+): { amount: number | null; estimated: boolean } {
+  const result = cashAmountFromHistory(date, leg);
+  const { proven } = leg;
+  if (result.amount !== null || !proven || date >= proven.from) return result;
+  /* Before the proven window the broker has stated nothing. When it also moved
+   * nothing before it (no cash events, no trades), the opening balance is the
+   * balance all along, so it stands in, marked estimated. Any earlier movement
+   * would make that a fabricated flat line, so the walk's null stands. */
+  const movedBefore = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+    (day) => day <= proven.from,
+  );
+  if (movedBefore) return result;
+  const opening = anchoredAmountOnDate(
+    proven.from,
+    leg.anchors.filter((anchor) => anchor.asOf >= proven.from && anchor.asOf <= proven.to),
+    leg.events,
+  );
+  return opening === null || !Number.isFinite(opening)
+    ? result
+    : { amount: opening, estimated: true };
+}
+
+function cashAmountFromHistory(
   date: string,
   leg: CashLeg,
 ): { amount: number | null; estimated: boolean } {
