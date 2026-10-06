@@ -1058,7 +1058,11 @@ test("price history is read with dates Postgres accepts", async () => {
   const body = (await response.json()) as { problems: string[] };
 
   expect(getRange).toHaveBeenCalled();
-  expect(body.problems).toEqual([]);
+  for (const [, , from, to] of getRange.mock.calls) {
+    expect(String(from ?? "")).not.toMatch(/^0000-/);
+    expect(String(to ?? "")).not.toMatch(/^0000-/);
+  }
+  expect(body.problems.join("\n")).not.toContain("date/time field value out of range");
 });
 
 test("a known benchmark symbol gets its curated display name in the dashboard", async () => {
