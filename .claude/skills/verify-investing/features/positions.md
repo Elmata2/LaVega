@@ -20,7 +20,8 @@ Empty and missing copy, verbatim:
 
 - no rows: `No positions loaded`
 - description under that title: `Connect a broker or import a statement to see your investments.`
-- unknown symbol: `Position not found`
+- unknown symbol: heading `Position not found`, description
+  `This position is not in the local dashboard model.`
 - URL without a symbol: `No position selected`
 - list, unpriced value cell: `Value unknown`
 - list, forward-filled value: visible `est.`, screen-reader `Estimated price`

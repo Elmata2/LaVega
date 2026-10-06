@@ -27,8 +27,9 @@ The chips are on Profile, `/profile#status`, section `aria-label="Status"`, titl
 - `Connection` renders only when the connection is not online (`Reconnecting` or `Offline`).
 
 When the connection is not `online`, broker or price status is `problem`, a price problem
-is set, or the vault is `locked`, Overview shows `Status needs attention` and
-`Review it in Profile`. That alert is not the chip panel.
+is set, or the vault is `locked`, Overview shows `Status needs attention.` (the period is
+part of the string) and `Review it in Profile`. That alert is not the chip panel. A failed
+Allow click also shows heading `Sync problems` and `Broker sync failed.`
 
 Benchmark search calls `/api/investing/benchmarks/search?q=`.
 
@@ -140,7 +141,8 @@ There is no separate job id. `positionsRead` and `lastSyncedAt` are the refresh 
   `no prices since <date>` to the price-sync `problems` list, which Overview shows under
   `Reading problems`. `delistedSince` is not a field in the API JSON.
 - Without accepted consent the server makes no Yahoo request for prices or benchmark search.
-  Positions stay unpriced. A 428 `fix` names `consent --accept` and `prices sync --wait`.
+  Positions stay unpriced. A 428 `fix` names `consent --accept`, then `sync --wait`, then
+  `prices sync --wait`. Consent alone fetches nothing.
 - `/api/market-data/fx` and `/api/market-data/identifier` answer `503` when every provider
   fails, and `400` on a malformed query. FX does not use the Yahoo consent gate.
 - `prices purge` is destructive and per tenant. It refuses without `--yes`, and on

@@ -11,10 +11,12 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
 - agent catalog: `GET /api/agents/portfolio` lists six personas (`warren_buffett`,
   `charlie_munger`, `bill_ackman`, `ben_graham`, `peter_lynch`, `stanley_druckenmiller`).
 - agent picker: card title `Investor lens`. Radio group `aria-label="Choose agent"`.
-  A click selects that persona and `window.open`s `/agents/:agentId` in a popup named
-  `lavega-agent-workbench`. If the popup is blocked, the same click navigates in-page.
-  Arrow keys move the selection and do not open the conversation. The in-page link then
-  reads `Open conversation with <name>`.
+  A click selects that persona and opens `/agents/:agentId` in a new tab
+  (`window.open(target, "_blank")`). There is no window name. If the browser blocks the
+  tab, the same click navigates in-page. Arrow keys move the selection and do not open
+  the conversation. The in-page link then reads `Open conversation with <name>`.
+  The Overview letter's `Discuss` button is a separate in-page navigation to
+  `charlie_munger`. See [dashboard-overview.md](dashboard-overview.md).
 - one-shot analysis: `Analyse portfolio` (`Agent reading…` while pending) posts
   `/api/agents/portfolio/run` and shows a signal (`bullish` / `bearish` / `neutral` /
   `no_view`) with a confidence.

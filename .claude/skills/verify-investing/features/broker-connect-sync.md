@@ -18,9 +18,16 @@ dividends. This is where most investing reports originate.
 - `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
   vault, then force a sync. Success reads `Vault unlocked. Sync completed.`
 - `Start sync` (`Syncing…` while pending) — force a sync with the vault already open.
-- sync progress: `In progress`, `Ready`, `Completed`, `API pause`. The progress line reads
-  `Waiting for new API capacity`. The Profile `Brokers` chip detail falls back to
-  `Waiting for API capacity`. Failure states: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
+- sync progress card (Profile, only while status is running, waiting, or completed;
+  hidden on idle and on problem). Eyebrow `Broker sync`. The heading is
+  `Trading 212 syncing` or `Trading 212 synced` even when the run is IBKR. Badge:
+  `In progress`, `API pause`, or `Completed`. The waiting line reads
+  `Waiting for new API capacity`, and appends ` · continuing in <n> sec.` while a
+  `waitUntil` is set.
+- Profile `Brokers` chip values, separate from that card: `Ready` (idle), `In progress`,
+  `Waiting`, `Up to date` (completed), `Problem`, `Unknown`. A waiting chip's detail falls
+  back to `Waiting for API capacity`. `Ready` is not a progress-card badge.
+  Failure copy: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
   `Failed to unlock vault.`, `Broker credential storage is unavailable. Try again later.`
 
 ## How to get to it (user POV)
