@@ -29,7 +29,7 @@ const statement = `<FlexStatements><FlexStatement accountId="U1" fromDate="20260
   <OpenPosition accountId="U1" symbol="AAPL" position="2" avgPrice="100.5" markPrice="100" positionValue="200" currency="USD" reportDate="20260109" />
 </OpenPositions><Trades>
   <Trade accountId="U1" symbol="AAPL" transactionID="trade-1" tradeDate="20260107;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="-1" currency="USD" />
-</Trades><CashReport>
+</Trades><Transfers></Transfers><CorporateActions></CorporateActions><CashReport>
   <CashReportCurrency accountId="U1" currency="EUR" toDate="20260109" endingCash="1000" />
   <CashReportCurrency accountId="U1" currency="USD" toDate="20260109" endingCash="49" />
 </CashReport><StatementOfFunds>
@@ -89,6 +89,7 @@ describe("IBKR cash history from adapter to portfolio", () => {
         from: "2026-01-05",
         to: "2026-01-09",
         tradeCash: "cash-flows",
+        quantityProvenFrom: "2026-01-05",
       },
     ]);
     expect(valueSeries(cache)).toEqual(settled);

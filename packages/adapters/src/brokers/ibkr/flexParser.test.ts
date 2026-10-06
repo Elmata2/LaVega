@@ -6,7 +6,7 @@ const xml = `<FlexStatements><FlexStatement><OpenPositions>
   <OpenPosition symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
 </OpenPositions><Trades>
   <Trade symbol="AAPL" transactionID="tx-1" tradeDate="20260818;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="1" currency="USD" />
-</Trades><CashReport>
+</Trades><Transfers></Transfers><CorporateActions></CorporateActions><CashReport>
   <CashReportCurrency accountId="U1" currency="USD" toDate="20260818" endingCash="125.50" />
   <CashReportCurrency accountId="U2" currency="USD" toDate="20260818" endingCash="24.50" />
   <CashReportCurrency accountId="U1" currency="EUR" toDate="20260818" endingCash="80" />
@@ -194,6 +194,44 @@ describe("parseFlexStatement", () => {
       broker: "ibkr",
       ...expected,
     });
+  });
+
+  test("proves quantity history only when every statement lists Trades, Transfers and CorporateActions with no transfer or corporate-action rows", () => {
+    const cash = (flex: string) => parseFlexStatement(flex, "personal").cashHistory;
+    const without = (tag: string) => body.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`), "");
+    const withRows = (tag: string, row: string) =>
+      body.replace(`<${tag}></${tag}>`, `<${tag}>${row}</${tag}>`);
+    const one = (content: string) => cash(statements(["U1", "20260801", "20260818", content]));
+    expect(body).toContain("<Transfers></Transfers><CorporateActions></CorporateActions>");
+
+    expect(one(body)).toMatchObject({ status: "complete", quantityProvenFrom: "2026-08-01" });
+    expect(one(body.replace("<Transfers></Transfers>", "<Transfers />"))).toHaveProperty(
+      "quantityProvenFrom",
+    );
+    for (const missing of ["Trades", "Transfers", "CorporateActions"])
+      expect(one(without(missing)), missing).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      one(withRows("Transfers", '<Transfer symbol="VUSA" quantity="93" direction="IN" />')),
+    ).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      one(withRows("CorporateActions", '<CorporateAction symbol="VUSA" quantity="5" />')),
+    ).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      cash(
+        statements(
+          ["U1", "20260801", "20260818", body],
+          ["U2", "20260801", "20260818", without("CorporateActions")],
+        ),
+      ),
+    ).not.toHaveProperty("quantityProvenFrom");
+  });
+
+  test("recognises self-closed Trades, Transfers and CorporateActions tags", () => {
+    const flex =
+      '<FlexStatements><FlexStatement accountId="U1" fromDate="20260801" toDate="20260818"><OpenPositions></OpenPositions><Trades/><Transfers/><CorporateActions/><CashReport></CashReport><StatementOfFunds></StatementOfFunds></FlexStatement></FlexStatements>';
+    const result = parseFlexStatement(flex, "personal");
+    expect(result.sections.trades.status).toBe("complete");
+    expect(result.cashHistory).toHaveProperty("quantityProvenFrom", "2026-08-01");
   });
 
   test.each(["Base Summary", "BASE_SUMMARY"])(

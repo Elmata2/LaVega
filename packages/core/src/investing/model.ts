@@ -84,12 +84,22 @@ export type CashFlow = {
  *  `status` is the claim about this account. Complete means every cash
  *  movement from `from` through `to` is in the reported events. Unknown means
  *  only a dated broker balance says what cash was; the first retained event
- *  proves nothing about movements before or between. */
+ *  proves nothing about movements before or between.
+ *
+ *  `quantityProvenFrom` is a narrower claim on a complete window: from that
+ *  date through `to` every change of quantity (executions, transfers, corporate
+ *  actions) is in the reported events. A quantity can be walked back from a
+ *  later snapshot only across such a span; complete cash says nothing about
+ *  quantity. It sits on the stored coverage so it survives merges: see
+ *  mergedCoverage in brokerSnapshot.ts. */
 export type CashHistoryCoverage = {
   entity: string;
   broker: string;
   tradeCash: "trade-settlement" | "cash-flows";
-} & ({ status: "complete"; from: string; to: string } | { status: "unknown"; reason: string });
+} & (
+  | { status: "complete"; from: string; to: string; quantityProvenFrom?: string }
+  | { status: "unknown"; reason: string }
+);
 
 export type TradeSide = "buy" | "sell" | "other";
 

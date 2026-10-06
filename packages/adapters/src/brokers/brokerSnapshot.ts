@@ -137,7 +137,41 @@ function mergedCoverage(
   const touches = incoming.from <= addDays(stored.to, 1) && incoming.to >= addDays(stored.from, -1);
   if (!touches) return backfill ? stored : incoming;
   const from = incoming.from < stored.from ? incoming.from : stored.from;
-  return backfill ? { ...stored, from } : { ...incoming, from };
+  const { quantityProvenFrom: storedProof, ...storedRest } = stored;
+  const { quantityProvenFrom: incomingProof, ...incomingRest } = incoming;
+  const proof = mergedProof(storedProof, incomingProof, stored.to, incoming.to, backfill);
+  const base = backfill ? storedRest : incomingRest;
+  return { ...base, from, ...(proof ? { quantityProvenFrom: proof } : {}) };
+}
+
+/* The proven-quantity start is one date, not a flag, so a plain forward sync
+ * cannot erase it. The proven span is [proof, merged end]; it must stay
+ * gapless to that end.
+ *  - both proven: the earlier start, but only if the proven spans join. A
+ *    backfill must reach the stored proof start; a forward sync must start its
+ *    proof no later than the day after the stored end. Otherwise the days
+ *    between are unproven, so a backfill keeps the stored proof and a forward
+ *    sync takes the incoming start;
+ *  - only incoming proven: its start, but a backfill ends before the stored
+ *    span's unproven tail, so a backfill can only extend an existing proof;
+ *  - only stored proven: a backfill leaves it untouched; a forward sync keeps
+ *    it only if the new end is still inside the proven span, otherwise the
+ *    unproven days up to the new end would be vouched for. */
+function mergedProof(
+  stored: string | undefined,
+  incoming: string | undefined,
+  storedTo: string,
+  incomingTo: string,
+  backfill: boolean,
+): string | undefined {
+  if (stored && incoming) {
+    const joined = backfill ? incomingTo >= addDays(stored, -1) : incoming <= addDays(storedTo, 1);
+    if (joined) return stored < incoming ? stored : incoming;
+    return backfill ? stored : incoming;
+  }
+  if (incoming) return backfill ? undefined : incoming;
+  if (stored) return backfill || incomingTo <= storedTo ? stored : undefined;
+  return undefined;
 }
 
 function replacesAll(broker: string, historyMode: string | undefined): boolean {
