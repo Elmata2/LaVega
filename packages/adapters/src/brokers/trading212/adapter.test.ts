@@ -891,9 +891,7 @@ test("a negative-amount TRANSFER is unambiguously an outflow and keeps its sign"
   expect(result.sections.cashFlows.rows).toMatchObject([
     { brokerFlowId: "transfer-out", amount: -75, kind: "withdrawal" },
   ]);
-  expect(result.problems).not.toContain(
-    "Trading 212 transaction transfer-out has ambiguous TRANSFER direction",
-  );
+  expect(result.problems).toEqual([]);
 });
 
 /* Measured on the owner's real account: the balance went from EUR 9.54 to EUR
