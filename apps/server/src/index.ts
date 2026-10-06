@@ -130,7 +130,7 @@ app.use(
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       fontSrc: ["'self'", "data:"],
       connectSrc: ["'self'", "https:"],
-      workerSrc: ["'self'", "blob:"],
+      workerSrc: ["'self'", "blob:", "data:"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
