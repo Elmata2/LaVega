@@ -65,6 +65,24 @@ already. A **new** database — a fresh Neon branch, a self-host — runs
 `pnpm db:migrate` from empty instead; `baseline` on an empty database is
 refused.
 
+Both long-lived branches were at the head of `db/migrations` on 2026-10-05
+(`24/24 applied`, `pnpm db:migrate:check` exits 0 on each); `0024` has been added
+since, so run `pnpm db:migrate:check` for the current state. The project is
+`royal-surf-52181032`; `main` is `br-fragrant-cake-b1ylflhu` and `preview` is
+`br-orange-tree-b1b7kdwm`.
+
+**Renaming an applied migration leaves its old ledger row behind.** `preview`
+was adopted before the portfolio-letter file moved from
+`0022_portfolio_letters.sql` to `0023_portfolio_letters.sql`, and ran an
+`0019_agent_memory.sql` that was committed later as `0020_agent_memory.sql`. Its
+ledger therefore held 26 rows for the 24 files then present: the two old names survive as
+orphans, and each renumbered file ran again under its new name — safe, because
+every migration is rerunnable. The runner matches only the names present in
+`db/migrations`, so it ignores the orphans and reports no drift. `main`, baselined
+after the renumbering, held exactly 24. Orphans are harmless but leave the
+ledger disagreeing with the directory; removing them is a manual `DELETE` from
+`public.schema_migrations`, which the runner never does.
+
 ## What's already wired
 
 - `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
@@ -227,12 +245,12 @@ runs inside `withTenant` so row-level security applies.
 
 ## Environments
 
-|                | Production | Preview   | Local                                                |
-| -------------- | ---------- | --------- | ---------------------------------------------------- |
-| Neon branch    | `main`     | `preview` | none                                                 |
-| Stores         | Neon       | Neon      | files on disk                                        |
-| Authentication | on         | on        | off                                                  |
-| `/api/*` guard | on         | on        | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `pnpm dev`) |
+|                | Production                           | Preview                               | Local                                                |
+| -------------- | ------------------------------------ | ------------------------------------- | ---------------------------------------------------- |
+| Neon branch    | `main` (`br-fragrant-cake-b1ylflhu`) | `preview` (`br-orange-tree-b1b7kdwm`) | none                                                 |
+| Stores         | Neon                                 | Neon                                  | files on disk                                        |
+| Authentication | on                                   | on                                    | off                                                  |
+| `/api/*` guard | on                                   | on                                    | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `pnpm dev`) |
 
 Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
 production's: a leaked preview key must not open production data. It shares one
