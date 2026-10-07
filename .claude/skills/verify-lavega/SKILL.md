@@ -8,7 +8,8 @@ description: Drive the LaVega personal-finance app (apps/server + apps/web, http
 The personal side is one Hono server (`apps/server`) that serves the built SPA
 (`apps/web/dist`) and a handful of `/api/*` routes. It is **local-first**: the vault
 (accounts, transactions, invoices, rules) lives in the browser's IndexedDB, sealed with the
-user's password. The server holds only what cannot live in a browser: the session guard,
+account's vault key (`GET /api/vault/key`, docs/adr/0009-account-held-vault-key.md). There is
+no vault password. The server holds only what cannot live in a browser: the session guard,
 public feeds (savings rates, ECB FX), the Enable Banking flow, the opt-in AI agents (which
 proxy to Mistral), and an opaque encrypted vault backup in Neon.
 
@@ -33,6 +34,7 @@ What differs between the two, and is not a bug:
 | Route                      | local (no DB)                   | prod                    |
 | -------------------------- | ------------------------------- | ----------------------- |
 | `/api/vault/backup`        | route not registered → SPA HTML | 401 without session     |
+| `/api/vault/key`           | route not registered → SPA HTML | 401 without session     |
 | `DELETE /api/account/data` | 404 (needs Neon)                | 401 without session     |
 | `POST /api/agent/*`        | 503 "niet geconfigureerd"       | 401; 503 once signed in |
 | `/api/investing/*`         | off (`INVESTING_MOUNT=0`)       | 401 without session     |
@@ -100,24 +102,21 @@ click and type → `get_page_text` / screenshot to prove state. Load them in one
 
 Stable handles (from source, not guessed):
 
-- Vault gate: password inputs `#unlock-pass`, `#setup-pass1`, `#setup-pass2`,
-  `#setup-restore-pass`; restore file input `#setup-restore-file` (accepts `.lavega`);
-  the labels follow the `lavega_locale` cookie, Dutch or English (`Wachtwoord` /
-  `Password`, `Herhaal wachtwoord` / `Repeat password`). With no cookie and a
-  non-Dutch browser the app renders ENGLISH, so set the cookie before asserting
-  on Dutch text. A new vault
-  password needs ≥12 characters and ≥4 distinct ones (`apps/web/src/vaultPassword.ts`);
-  unlock and restore do not enforce that.
+- Vault gate: none in the normal case; a signed-in user lands on Overzicht. A browser
+  that still holds a pre-account-key password vault shows `#adopt-pass` once. Labels follow
+  the `lavega_locale` cookie, Dutch or English. With no cookie and a non-Dutch browser the
+  app renders ENGLISH, so set the cookie before asserting on Dutch text. See
+  `features/vault-gate.md`.
 - Import: `section#import[aria-label="Importeren"]`, file input
   `aria-label="Kies een bankbestand om te importeren"`.
 - Views are URL-addressable: `/app` (Overzicht), `/app/transactions`, `/app/accounts`,
   `/app/forecast`, `/app/optimalisatie`, `/app/valuta`, `/app/belasting`, `/app/facturen`,
   `/app/punten`, `/app/koppelingen`, `/app/backup`, `/app/profiel`
-  (`apps/web/src/appRoutes.ts`). Each still sits behind the vault gate.
+  (`apps/web/src/appRoutes.ts`). Each needs a session.
 
 Two browser instances against two `up --port` servers are fully isolated: the vault is per
-origin (port), so a second port is a second empty vault. Never drive the user's own
-production vault: their password is theirs, and a verification run has no business inside it.
+origin (port) and per account, so a second port is a second empty vault. Never sign in as the
+user on production: their data is theirs, and a verification run has no business inside it.
 
 ## Evidence
 
@@ -127,7 +126,7 @@ there too, named `<feature>-<step>.png|txt`.
 
 Standards for the proof, not just the pass:
 
-- Exercise the real path. Create the vault through the gate, import through the file input,
+- Exercise the real path. Sign in through the landing page, import through the file input,
   post to the same route the button posts to. Do not seed IndexedDB or call a helper.
 - Capture the action and the resulting state: the screen before, the click, the screen
   after, and the API response where one exists.

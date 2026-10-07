@@ -63,51 +63,24 @@ export type ShellCopy = {
   };
   vaultGate: {
     loading: string;
-    dataLossWarning: string;
     passwordLabel: string;
-    repeatPasswordLabel: string;
-    mismatch: string;
-    passwordProblem: {
-      tooShort: (min: number) => string;
-      lowVariation: string;
-    };
-    understood: string;
-    unlock: {
+    /** Eenmalig: een kluis van vóór accounts de sleutel hielden. */
+    adopt: {
       title: string;
+      intro: string;
+      submit: string;
+      busy: string;
       wrongPassword: string;
-      submit: string;
+      forgotTitle: string;
+      forgotBody: string;
+      startFresh: string;
     };
-    setup: {
+    keyError: {
       title: string;
-      submit: string;
-      haveBackupQuestion: string;
-      restoreFromBackup: string;
-    };
-    restoreOnSetup: {
-      title: string;
-      intro: string;
-      fileLabel: string;
-      submit: string;
-      restoreError: string;
-      back: string;
-    };
-    migrate: {
-      intro: string;
-      title: string;
-      submitIdle: string;
-      submitBusy: string;
-      done: {
-        title: string;
-        body: string;
-        warning: string;
-        backupNow: string;
-        later: string;
-      };
-      /** De kluis liet zich niet teruglezen; de plaintext is bewaard. */
-      verifyFailed: string;
-      /** Iets anders ging mis. `detail` is de onvertaalde tekst van de
-       *  uitzondering — die verzinnen we hier niet opnieuw. */
-      failed: (detail: string) => string;
+      unreachable: string;
+      unreadable: string;
+      retry: string;
+      signOut: string;
     };
   };
   /** De eenmalige instelstap na een verse kluis. */
@@ -377,54 +350,27 @@ const nl: ShellCopy = {
     },
   },
   vaultGate: {
-    loading: "Laden…",
-    dataLossWarning:
-      'Wachtwoord kwijt = data kwijt — geen herstel. Er is geen "wachtwoord vergeten"-optie.',
-    passwordLabel: "Wachtwoord",
-    repeatPasswordLabel: "Herhaal wachtwoord",
-    mismatch: "Wachtwoorden komen niet overeen.",
-    passwordProblem: {
-      tooShort: (min) =>
-        `Gebruik minstens ${min} tekens — je kluis-back-up kan offline onbeperkt geraden worden.`,
-      lowVariation:
-        "Te weinig variatie — gebruik meer verschillende tekens, bijvoorbeeld een zin van een paar woorden.",
+    loading: "Je gegevens openen…",
+    passwordLabel: "Kluiswachtwoord",
+    adopt: {
+      title: "Zet je gegevens over",
+      intro:
+        "Je kluis hoeft niet meer apart ontgrendeld te worden: hij gaat voortaan open met je account. Vul één keer je oude kluiswachtwoord in om je gegevens over te zetten.",
+      submit: "Gegevens overzetten",
+      busy: "Bezig…",
+      wrongPassword: "Dat wachtwoord opent deze kluis niet.",
+      forgotTitle: "Wachtwoord kwijt?",
+      forgotBody:
+        "Begin dan met een lege omgeving. De oude kluis blijft in deze browser staan, maar LaVega vraagt er niet meer naar.",
+      startFresh: "Begin leeg",
     },
-    understood: "Ik begrijp dit",
-    unlock: {
-      title: "Kluis ontgrendelen",
-      wrongPassword: "Onjuist wachtwoord.",
-      submit: "Ontgrendelen",
-    },
-    setup: {
-      title: "Kluis instellen",
-      submit: "Kluis aanmaken",
-      haveBackupQuestion: "Heb je al een back-up?",
-      restoreFromBackup: "Herstel uit back-up",
-    },
-    restoreOnSetup: {
-      title: "Herstel uit back-up",
-      intro: "Kies je back-upbestand (.lavega) en vul het bijbehorende wachtwoord in.",
-      fileLabel: "Back-upbestand",
-      submit: "Herstellen",
-      restoreError: "Onjuist wachtwoord of ongeldig back-upbestand.",
-      back: "Terug",
-    },
-    migrate: {
-      intro: "Je bestaande data wordt versleuteld en verplaatst naar de kluis.",
-      title: "Bestaande data versleutelen",
-      submitIdle: "Versleutelen & doorgaan",
-      submitBusy: "Bezig met versleutelen…",
-      done: {
-        title: "Migratie geslaagd",
-        body: "Je bestaande data is versleuteld opgeslagen in de kluis.",
-        warning:
-          "Maak nu meteen een back-up. Bij een vergeten wachtwoord is je data zonder back-up onherstelbaar verloren.",
-        backupNow: "Maak nu een back-up",
-        later: "Later, naar de app",
-      },
-      verifyFailed:
-        "De kluis liet zich niet teruglezen, dus je onversleutelde data is bewaard gebleven. Er is niets verwijderd — probeer het opnieuw.",
-      failed: (detail) => `Versleutelen mislukt: ${detail}`,
+    keyError: {
+      title: "Je gegevens gaan nu niet open",
+      unreachable: "LaVega is even niet bereikbaar. Probeer het zo opnieuw.",
+      unreadable:
+        "De sleutel van je kluis kan niet worden gelezen. Je gegevens zijn niet weg. Neem contact met ons op.",
+      retry: "Opnieuw proberen",
+      signOut: "Uitloggen",
     },
   },
   onboarding: {
@@ -616,11 +562,11 @@ const nl: ShellCopy = {
         "Rekeningen en transacties in een andere valuta dan euro tellen mee in de totalen, omgerekend via de ECB-koers van de dag. Zet dit uit om ze zoals voorheen apart te houden.",
     },
     lock: {
-      ariaLabel: "Vergrendelen",
-      heading: "Vergrendelen",
+      ariaLabel: "Uitloggen",
+      heading: "Uitloggen",
       description:
-        "Sluit de kluis en wist alles uit het geheugen van deze browser. Je hebt je wachtwoord nodig om weer binnen te komen.",
-      button: "Vergrendel",
+        "Logt je uit en wist alles uit het geheugen van deze browser. Na 15 minuten zonder activiteit gebeurt dit vanzelf.",
+      button: "Uitloggen",
     },
     cashback: {
       ariaLabel: "Cashback corrigeren",
@@ -760,54 +706,26 @@ const en: ShellCopy = {
     },
   },
   vaultGate: {
-    loading: "Loading…",
-    dataLossWarning:
-      'Lose the password, lose the data — there is no recovery. There is no "forgot password" option.',
-    passwordLabel: "Password",
-    repeatPasswordLabel: "Repeat password",
-    mismatch: "Passwords don't match.",
-    passwordProblem: {
-      tooShort: (min) =>
-        `Use at least ${min} characters — your vault backup can be guessed offline without limit.`,
-      lowVariation:
-        "Too little variation — use more different characters, for example a short phrase of a few words.",
+    loading: "Opening your data…",
+    passwordLabel: "Vault password",
+    adopt: {
+      title: "Move your data over",
+      intro:
+        "Your vault no longer needs its own password: it now opens with your account. Enter your old vault password once to move your data over.",
+      submit: "Move data",
+      busy: "Working…",
+      wrongPassword: "That password does not open this vault.",
+      forgotTitle: "Lost the password?",
+      forgotBody:
+        "Then start empty. The old vault stays in this browser, but LaVega will not ask for it again.",
+      startFresh: "Start empty",
     },
-    understood: "I understand",
-    unlock: {
-      title: "Unlock vault",
-      wrongPassword: "Wrong password.",
-      submit: "Unlock",
-    },
-    setup: {
-      title: "Set up vault",
-      submit: "Create vault",
-      haveBackupQuestion: "Already have a backup?",
-      restoreFromBackup: "Restore from backup",
-    },
-    restoreOnSetup: {
-      title: "Restore from backup",
-      intro: "Choose your backup file (.lavega) and enter its password.",
-      fileLabel: "Backup file",
-      submit: "Restore",
-      restoreError: "Wrong password or an invalid backup file.",
-      back: "Back",
-    },
-    migrate: {
-      intro: "Your existing data will be encrypted and moved into the vault.",
-      title: "Encrypt existing data",
-      submitIdle: "Encrypt & continue",
-      submitBusy: "Encrypting…",
-      done: {
-        title: "Migration complete",
-        body: "Your existing data is now encrypted and stored in the vault.",
-        warning:
-          "Make a backup right now. If you forget your password, data with no backup is gone for good.",
-        backupNow: "Make a backup now",
-        later: "Later, go to the app",
-      },
-      verifyFailed:
-        "The vault would not read back, so your unencrypted data has been kept. Nothing was deleted — please try again.",
-      failed: (detail) => `Encrypting failed: ${detail}`,
+    keyError: {
+      title: "Your data cannot be opened right now",
+      unreachable: "LaVega cannot be reached. Try again in a moment.",
+      unreadable: "Your vault key cannot be read. Your data is not lost. Please contact us.",
+      retry: "Try again",
+      signOut: "Sign out",
     },
   },
   onboarding: {
@@ -997,11 +915,11 @@ const en: ShellCopy = {
         "Accounts and transactions in a currency other than euros count toward the totals, converted at the day's ECB rate. Turn this off to keep them separate, as before.",
     },
     lock: {
-      ariaLabel: "Lock",
-      heading: "Lock",
+      ariaLabel: "Sign out",
+      heading: "Sign out",
       description:
-        "Closes the vault and clears everything from this browser's memory. You'll need your password to get back in.",
-      button: "Lock",
+        "Signs you out and clears everything from this browser's memory. This happens by itself after 15 minutes without activity.",
+      button: "Sign out",
     },
     cashback: {
       ariaLabel: "Correct cashback",

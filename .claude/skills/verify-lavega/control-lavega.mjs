@@ -61,6 +61,7 @@ const PROBE_ENDPOINTS = [
  * default). Public ones are listed in apps/server/src/apiGuard.ts. */
 const GUARDED = [
   ["GET", "/api/vault/backup"],
+  ["GET", "/api/vault/key"],
   ["GET", "/api/eb/accounts"],
   ["GET", "/api/eb/aspsps"],
   ["DELETE", "/api/account/data"],

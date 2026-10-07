@@ -4,7 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import { rateOn } from "@lavega/core";
-import { createEncryptedStorage, type VaultStorage } from "@lavega/adapters";
+import { generateVaultKey, createEncryptedStorage, type VaultStorage } from "@lavega/adapters";
 import { syncFxHistory, fxNeedSignature } from "./fxHistory.js";
 
 const acc = (key: string, currency: string): Account => ({
@@ -39,7 +39,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 async function unlocked(dbName: string): Promise<VaultStorage> {
   globalThis.indexedDB = new IDBFactory();
   const v = createEncryptedStorage(dbName);
-  await v.setup("pw");
+  await v.open(await generateVaultKey(), "user:test");
   return v;
 }
 

@@ -44,15 +44,20 @@ vi.mock("./migrate.js", () => ({
   migrateToVault: async () => {},
 }));
 
+// The vault key comes from the server (or this browser's IndexedDB); neither
+// exists here, and the fake storage ignores the key anyway.
+vi.mock("./vaultKey.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./vaultKey.js")>();
+  return { ...actual, loadVaultKey: async () => ({}) as CryptoKey };
+});
+
 vi.mock("@lavega/adapters", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lavega/adapters")>();
   return {
     ...actual,
     createEncryptedStorage: () => ({
-      status: async () => "unlocked",
-      unlock: async () => true,
+      open: async () => "opened",
       lock: () => {},
-      setup: async () => {},
       export: () => null,
       restore: async () => false,
       getAccounts: async () => vault.accounts,

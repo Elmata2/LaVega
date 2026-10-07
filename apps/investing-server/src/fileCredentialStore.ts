@@ -8,7 +8,7 @@ import {
   encryptJSON,
   newSalt,
   PBKDF2_ITERATIONS,
-  type CipherBlob,
+  type PassphraseCipherBlob,
 } from "@lavega/adapters";
 import { runtimeDataFile } from "./jsonFileStore.js";
 import type { AgentRunRecord } from "./fileAgentRunStore.js";
@@ -59,16 +59,16 @@ export function createFileCredentialStore(
   let writeQueue = Promise.resolve();
   let lockGeneration = 0;
 
-  const readBlob = async (): Promise<CipherBlob | null> => {
+  const readBlob = async (): Promise<PassphraseCipherBlob | null> => {
     try {
-      return JSON.parse(await fileSystem.readFile(filePath, "utf8")) as CipherBlob;
+      return JSON.parse(await fileSystem.readFile(filePath, "utf8")) as PassphraseCipherBlob;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
       throw error;
     }
   };
 
-  const writeBlob = async (blob: CipherBlob): Promise<void> => {
+  const writeBlob = async (blob: PassphraseCipherBlob): Promise<void> => {
     await fileSystem.mkdir(dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.tmp`;
     await fileSystem.writeFile(temporaryPath, JSON.stringify(blob), {

@@ -61,7 +61,9 @@ import { API_BASE } from "./api.js";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
-import { hasLegacyData } from "./migrate.js";
+import { hasLegacyData, migrateToVault } from "./migrate.js";
+import { loadVaultKey, vaultOwnerName, VaultKeyUnavailable, type VaultOwner } from "./vaultKey.js";
+import { signOut } from "./authClient.js";
 import useIdleLock from "./useIdleLock";
 import {
   getBufferCents,
@@ -109,7 +111,7 @@ import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import Onboarding from "./components/Onboarding";
-import { isFreshVault, onboardingSeen, showOnboarding } from "./onboarding.js";
+import { onboardingSeen, showOnboarding } from "./onboarding.js";
 import {
   autoRefreshDue,
   everConnectedBank,
@@ -192,8 +194,9 @@ function isN8nNoticeLike(v: unknown): v is N8nNotice {
   );
 }
 
-export default function App() {
+export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
+  const [openAttempt, setOpenAttempt] = useState(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [busy, setBusy] = useState(false);
@@ -514,14 +517,40 @@ export default function App() {
     };
   }, []);
 
-  // Decide which gate screen to show: unlock an existing vault, migrate
-  // existing plaintext data into a fresh vault, or set up a brand-new one.
+  // Open the vault with the owner's key (docs/adr/0009-account-held-vault-key.md).
+  // Nothing to ask in the normal case; the gate only shows for a one-time
+  // password-vault adoption or a key the server could not hand over.
+  const vaultName = vaultOwnerName(owner);
   useEffect(() => {
+    let current = true;
+    setGate("loading");
     (async () => {
-      const [status, legacy] = await Promise.all([storage.status(), hasLegacyData()]);
-      setGate(gateState(status, legacy));
+      try {
+        const result = await storage.open(await loadVaultKey(owner), vaultName);
+        // A vault created just now may inherit data from before the vault existed.
+        if (result === "created" && (await hasLegacyData())) await migrateToVault(storage);
+        if (!current) return;
+        if (result === "created") setFreshVault(true);
+        setGate(gateState(result));
+      } catch (error) {
+        if (!current) return;
+        if (error instanceof VaultKeyUnavailable && error.reason === "signed-out") {
+          window.location.assign("/");
+          return;
+        }
+        setGate({
+          error:
+            error instanceof VaultKeyUnavailable && error.reason === "unreadable"
+              ? "unreadable"
+              : "unreachable",
+        });
+      }
     })();
-  }, []);
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaultName, openAttempt]);
 
   // Load persisted data once the vault is unlocked, so a reload (or a fresh
   // unlock after Vergrendel) shows prior imports. Gated on `gate` — never runs
@@ -876,8 +905,10 @@ export default function App() {
   // putTxs would leave the vault half-written. The timer re-arms when busy ends.
   useIdleLock(gate === "ready" && !busy, handleLock);
 
-  // Sidebar "Vergrendel": drop the derived key + in-memory data (nothing
-  // sensitive stays rendered) and show the unlock screen again.
+  // Sidebar "Vergrendel": drop the key + in-memory data (nothing sensitive
+  // stays rendered), then end the session. The key comes back with the next
+  // sign-in, so locking IS signing out. Without accounts there is no session
+  // to end; the page reopens the vault with this browser's key.
   function handleLock() {
     storage.lock();
     setAccounts([]);
@@ -891,7 +922,9 @@ export default function App() {
     setEntityProfiles([]);
     setPendingInvoices([]);
     setPendingNotices([]);
-    setGate("unlock");
+    setGate("loading");
+    if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
+    else setOpenAttempt((n) => n + 1);
   }
 
   // Rules are UI-owned as a whole list (replace-all persistence), so every
@@ -1471,14 +1504,12 @@ export default function App() {
       <VaultGate
         gate={gate}
         storage={storage}
-        onReady={() => {
-          if (isFreshVault(gate)) setFreshVault(true);
+        onReady={(fresh) => {
+          if (fresh) setFreshVault(true);
           setGate("ready");
         }}
-        onBackup={() => {
-          setGate("ready");
-          setView("backup");
-        }}
+        onRetry={() => setOpenAttempt((n) => n + 1)}
+        onSignOut={() => void signOut().finally(() => window.location.assign("/"))}
       />
     );
   }

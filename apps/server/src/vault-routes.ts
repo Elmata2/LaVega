@@ -1,6 +1,8 @@
 import type { Hono } from "hono";
 import {
   createOpaqueVaultRepository,
+  createVaultKeyRepository,
+  UnreadableVaultKeyError,
   type OpaqueVaultRow,
   type OpaqueVaultWrite,
 } from "@lavega/database";
@@ -20,6 +22,9 @@ const MAX_ITERATIONS = 10_000_000;
 function isSealedVault(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const blob = value as Record<string, unknown>;
+  // Sealed with the account's vault key (GET /api/vault/key): no KDF parameters.
+  if (blob.v === 2)
+    return blob.kdf === "account-key" && typeof blob.iv === "string" && typeof blob.ct === "string";
   return (
     blob.v === 1 &&
     blob.kdf === "PBKDF2-SHA256" &&
@@ -39,6 +44,7 @@ export type VaultRouteDependencies = {
     put(blob: Buffer, expectedUpdatedAt: string | null): Promise<OpaqueVaultWrite>;
     overwrite(blob: Buffer): Promise<{ updatedAt: string }>;
   };
+  vaultKey: (tenantId: string) => { getOrCreate(): Promise<Buffer> };
 };
 
 /**
@@ -54,6 +60,23 @@ export function registerVaultRoutes(app: Hono, dependencies: VaultRouteDependenc
     const tenantId = await dependencies.tenantId(request);
     return tenantId ? dependencies.repository(tenantId) : null;
   };
+
+  /* The key the browser opens the personal vault with. Created on the first
+   * signed-in request, so an account that never opens Personal has none.
+   * no-store: a cached copy of this answer is a copy of the key. */
+  app.get("/api/vault/key", async (c) => {
+    c.header("Cache-Control", "private, no-store");
+    const tenantId = await dependencies.tenantId(c.req.raw);
+    if (!tenantId) return c.json({ problems: ["Authentication is required"] }, 401);
+    try {
+      const key = await dependencies.vaultKey(tenantId).getOrCreate();
+      return c.json({ key: key.toString("base64") });
+    } catch (error) {
+      if (error instanceof UnreadableVaultKeyError)
+        return c.json({ problems: ["Vault key unreadable"], code: "vault-key-unreadable" }, 500);
+      throw error;
+    }
+  });
 
   app.get("/api/vault/backup", async (c) => {
     const repository = await forTenant(c.req.raw);
@@ -102,5 +125,6 @@ export function vaultRouteDependencies(): VaultRouteDependencies | null {
   return {
     tenantId: investingTenantId,
     repository: (tenantId) => createOpaqueVaultRepository(database, tenantId),
+    vaultKey: (tenantId) => createVaultKeyRepository(database, tenantId),
   };
 }

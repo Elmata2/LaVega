@@ -96,8 +96,33 @@ It does not satisfy the logged-in marker.
 - A missing `vercel` CLI blocks preview URL discovery. Pass `--base` or `LAVEGA_PREVIEW_URL`
   when the deploy URL is already known. That does not replace the credentials prerequisite.
 
+## Account mail
+
+Sign-up is open to the public from 2026-10-08. Personal (`/`) and Investing (`/investing/`)
+share one better-auth account, so every mail below serves both apps. All come from
+`apps/server/src/authEmail.ts`, in Dutch or English: the `lavega_locale` cookie decides,
+then `Accept-Language`.
+
+| Trigger                                  | Subject (en)                          | Link goes to                                   |
+| ---------------------------------------- | ------------------------------------- | ---------------------------------------------- |
+| Sign-up, or sign-in while unconfirmed    | `Confirm your LaVega email address`   | the `callbackURL` the app sent                 |
+| `Forgot password`                        | `Reset your LaVega password`          | the `redirectTo` the app sent, plus `?token=`  |
+| Reset completed                          | `Your LaVega password was changed`    | site root                                      |
+| Address confirmed                        | `Welcome to LaVega`                   | site root                                      |
+
+The last two never fail the action that sent them. A Resend outage only logs
+`Auth notice email was not sent`.
+
 ## Gotchas
 
+- `login` answering 403 is `EMAIL_NOT_VERIFIED`, not a wrong password. That same request
+  mailed a new confirmation link. Ask the user to confirm the address; do not sign up a
+  second account.
+- A brand-new account has no broker, no personal vault key, and no net worth share. The
+  dashboard's empty state is the correct result for it, not a sync failure. The personal
+  vault key (`personal.vault_keys`) is created on the first signed-in visit to Personal.
+- Preview must have migration `0024_personal_vault_keys.sql` before Personal opens there;
+  without it `GET /api/vault/key` answers 500.
 - The SPA shell is public, its data is not. A blank-looking dashboard with `401` on every
   `/api/*` is a missing session, not a backend failure.
 - The mount refuses to fall back to the local tenant when it cannot name a user. That 401 is

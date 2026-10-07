@@ -16,21 +16,25 @@ import type {
   N8nAutoBooked,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
-import {
-  newSalt,
-  deriveKey,
-  encryptJSON,
-  decryptJSON,
-  PBKDF2_ITERATIONS,
-} from "../crypto/vaultCrypto.js";
-import type { CipherBlob } from "../crypto/vaultCrypto.js";
+import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
+import type { AccountCipherBlob, CipherBlob, PassphraseCipherBlob } from "../crypto/vaultCrypto.js";
 
 const DEFAULT_DB_NAME = "lavega-vault";
 const DB_VERSION = 1;
 const STORE_NAME = "vault";
 const RECORD_KEY = "blob";
 
-export type VaultStatus = "empty" | "locked" | "unlocked";
+/**
+ * What `open` found.
+ *
+ * - `opened`: this owner's vault exists and the key opened it.
+ * - `created`: this owner had no vault in this browser; an empty one now exists.
+ * - `password-vault`: this owner has no vault yet, but this browser holds one
+ *   sealed with a vault password from before accounts held the key. Nothing is
+ *   written until the owner adopts it (`adoptPasswordVault`) or sets it aside
+ *   (`startFresh`).
+ */
+export type VaultOpenResult = "opened" | "created" | "password-vault";
 
 type VaultData = {
   accounts: Account[];
@@ -65,19 +69,21 @@ type VaultData = {
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
-  status(): Promise<VaultStatus>;
-  setup(
-    passphrase: string,
-    seed?: { accounts: Account[]; txs: Tx[]; rules: Rule[] },
-  ): Promise<void>;
-  unlock(passphrase: string): Promise<boolean>; // false on wrong passphrase (never throws for that)
+  /** Open this owner's vault with its key (docs/adr/0009-account-held-vault-key.md).
+   *  `owner` names the browser database, so two accounts that sign in on the
+   *  same browser never read or overwrite each other's vault. */
+  open(key: CryptoKey, owner: string): Promise<VaultOpenResult>;
+  /** Re-seal the password vault `open` reported under the owner's key, then
+   *  delete the password-sealed copy. False on a wrong password; nothing changes. */
+  adoptPasswordVault(passphrase: string): Promise<boolean>;
+  /** Leave the password vault where it is and start this owner with an empty one. */
+  startFresh(): Promise<void>;
   lock(): void;
-  export(): CipherBlob | null; // the current on-memory-encrypted blob (Task 5 downloads it); null if locked/empty
-  // Adopt an imported CipherBlob (e.g. from a downloaded .lavega back-up) as
-  // THE vault: derive the key from ITS OWN salt/iterations, verify it decrypts,
-  // and only then write it to disk + swap in-memory state. False on wrong
-  // passphrase / malformed / sub-floor iterations — current state untouched.
-  restore(blob: CipherBlob, passphrase: string): Promise<boolean>;
+  export(): CipherBlob | null; // the current sealed blob (Back-up downloads it); null before open
+  /** Adopt a back-up file as THE vault, re-sealed under the owner's key. A file
+   *  from before accounts held the key needs its vault password. False on a
+   *  wrong password or a file another key sealed; current state untouched. */
+  restore(blob: CipherBlob, passphrase?: string): Promise<boolean>;
   getScheduledFlows(): Promise<ScheduledFlow[]>;
   putScheduledFlows(f: ScheduledFlow[]): Promise<void>;
   getVatSettings(): Promise<VatSettings[]>;
@@ -100,9 +106,8 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putFxHistory(h: Record<string, Record<string, number>>): Promise<void>;
 }
 
-// Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
-// string form is public). This is plain byte encoding, not crypto, so
-// duplicating it here does not violate the "reuse Task-2 crypto" constraint.
+// Local base64 decode — not exported by vaultCrypto.ts. Plain byte encoding,
+// not crypto.
 function fromB64(b64: string): Uint8Array {
   const s = atob(b64);
   const out = new Uint8Array(s.length);
@@ -110,17 +115,24 @@ function fromB64(b64: string): Uint8Array {
   return out;
 }
 
+async function openPasswordBlob<T>(blob: PassphraseCipherBlob, passphrase: string): Promise<T> {
+  const candidateKey = await deriveKey(passphrase, fromB64(blob.salt), blob.iterations); // throws below the PBKDF2 floor
+  return decryptJSON<T>(candidateKey, blob); // throws on wrong passphrase / tampered ciphertext
+}
+
 const LOCKED_ERROR = "kluis vergrendeld";
 
 export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultStorage {
   // In-memory-only state. Never persisted. Dropped entirely on lock().
   let key: CryptoKey | null = null;
-  let salt: Uint8Array | null = null;
   let data: VaultData | null = null;
-  let blob: CipherBlob | null = null;
+  let blob: AccountCipherBlob | null = null;
+  // The open owner's database. `dbName` itself holds only a password vault
+  // from before accounts held the key.
+  let ownerDb: string | null = null;
 
-  function openVaultDb(): Promise<IDBPDatabase> {
-    return openDB(dbName, DB_VERSION, {
+  function openVaultDb(name: string): Promise<IDBPDatabase> {
+    return openDB(name, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
@@ -129,26 +141,42 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     });
   }
 
-  async function readBlobFromDisk(): Promise<CipherBlob | null> {
-    const db = await openVaultDb();
+  async function readBlobFromDisk(name: string): Promise<CipherBlob | null> {
+    const db = await openVaultDb(name);
     const record = (await db.get(STORE_NAME, RECORD_KEY)) as CipherBlob | undefined;
-    db.close(); // don't leak a connection per read (opened on every status/get/persist)
+    db.close(); // don't leak a connection per read
     return record ?? null;
   }
 
-  async function writeBlobToDisk(b: CipherBlob): Promise<void> {
-    const db = await openVaultDb();
+  async function writeBlobToDisk(name: string, b: CipherBlob): Promise<void> {
+    const db = await openVaultDb(name);
     await db.put(STORE_NAME, b, RECORD_KEY);
     db.close();
+  }
+
+  async function deleteBlobFromDisk(name: string): Promise<void> {
+    const db = await openVaultDb(name);
+    await db.delete(STORE_NAME, RECORD_KEY);
+    db.close();
+  }
+
+  async function passwordVault(): Promise<PassphraseCipherBlob | null> {
+    const legacy = await readBlobFromDisk(dbName);
+    return legacy?.v === 1 ? legacy : null;
   }
 
   // Re-encrypts the full in-memory data set with a fresh IV and overwrites
   // the single on-disk blob record. Ciphertext only ever leaves memory.
   async function persist(): Promise<void> {
-    if (key == null || salt == null || data == null) throw new Error(LOCKED_ERROR);
-    const fresh = await encryptJSON(key, salt, PBKDF2_ITERATIONS, data);
-    await writeBlobToDisk(fresh);
+    if (key == null || data == null || ownerDb == null) throw new Error(LOCKED_ERROR);
+    const fresh = await sealJSON(key, data);
+    await writeBlobToDisk(ownerDb, fresh);
     blob = fresh;
+  }
+
+  async function adopt(next: VaultData): Promise<void> {
+    data = next;
+    await persist();
   }
 
   // Serialize every write: each put's read-mutate-encrypt-write runs atomically
@@ -165,80 +193,73 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
   }
 
   return {
-    async status(): Promise<VaultStatus> {
-      const onDisk = await readBlobFromDisk();
-      if (onDisk == null) return "empty";
-      return key == null ? "locked" : "unlocked";
-    },
-
-    async setup(passphrase, seed): Promise<void> {
-      const onDisk = await readBlobFromDisk();
-      if (onDisk != null) throw new Error("kluis bestaat al");
-      const freshSalt = newSalt();
-      const freshKey = await deriveKey(passphrase, freshSalt, PBKDF2_ITERATIONS);
-      const freshData: VaultData = seed ?? { accounts: [], txs: [], rules: [] };
-      const freshBlob = await encryptJSON(freshKey, freshSalt, PBKDF2_ITERATIONS, freshData);
-      await writeBlobToDisk(freshBlob);
-      key = freshKey;
-      salt = freshSalt;
-      data = freshData;
-      blob = freshBlob;
-    },
-
-    async unlock(passphrase): Promise<boolean> {
-      try {
-        const onDisk = await readBlobFromDisk();
-        if (onDisk == null) return false;
-        const candidateSalt = fromB64(onDisk.salt);
-        const candidateKey = await deriveKey(passphrase, candidateSalt, onDisk.iterations);
-        const decrypted = await decryptJSON<VaultData>(candidateKey, onDisk); // throws on GCM auth failure
-        key = candidateKey;
-        salt = candidateSalt;
-        data = decrypted;
+    async open(ownerKey, owner): Promise<VaultOpenResult> {
+      if (!owner.trim()) throw new Error("vault owner is required");
+      const name = `${dbName}:${owner}`;
+      const onDisk = await readBlobFromDisk(name);
+      key = ownerKey;
+      ownerDb = name;
+      data = null;
+      blob = null;
+      if (onDisk?.v === 2) {
+        // Throws if another key sealed it. That is not a state to paper over:
+        // the key is per account and never replaced.
+        data = await decryptJSON<VaultData>(ownerKey, onDisk);
         blob = onDisk;
-        return true;
-      } catch {
-        // Wrong passphrase, tampered blob, or sub-floor iterations: stay locked.
-        return false;
+        return "opened";
       }
+      if (await passwordVault()) return "password-vault";
+      await enqueueWrite(() => adopt({ accounts: [], txs: [], rules: [] }));
+      return "created";
+    },
+
+    async adoptPasswordVault(passphrase): Promise<boolean> {
+      const legacy = await passwordVault();
+      if (legacy == null || key == null) return false;
+      let opened: VaultData;
+      try {
+        opened = await openPasswordBlob<VaultData>(legacy, passphrase);
+      } catch {
+        return false; // wrong passphrase, tampered blob, or sub-floor iterations
+      }
+      await enqueueWrite(() => adopt(opened));
+      // Only once the re-sealed copy is on disk is the password copy redundant.
+      await deleteBlobFromDisk(dbName);
+      return true;
+    },
+
+    async startFresh(): Promise<void> {
+      await enqueueWrite(() => adopt({ accounts: [], txs: [], rules: [] }));
     },
 
     lock(): void {
       key = null;
-      salt = null;
       data = null;
-      // `blob` may stay cached — it is ciphertext, safe at rest. Simplest to
-      // just reload it from disk (or re-populate it) on the next unlock/setup.
+      ownerDb = null;
     },
 
     export(): CipherBlob | null {
       return blob;
     },
 
-    async restore(imported: CipherBlob, passphrase: string): Promise<boolean> {
+    async restore(imported: CipherBlob, passphrase?: string): Promise<boolean> {
+      if (key == null) return false;
+      let decrypted: VaultData;
       try {
-        // Verify OUTSIDE the write queue — this only reads the imported blob and
-        // derives/decrypts, touching no vault state or disk.
-        const importedSalt = fromB64(imported.salt);
-        const candidateKey = await deriveKey(passphrase, importedSalt, imported.iterations); // throws below the PBKDF2 floor
-        const decrypted = await decryptJSON<VaultData>(candidateKey, imported); // throws on wrong passphrase / tampered ciphertext
-        // Verified — adopt atomically w.r.t. concurrent puts: the disk write +
-        // state swap go through the SAME serialization queue as every mutator,
-        // so a put's persist() that's still resolving (restore's PBKDF2 pass
-        // takes real time) can't land after the swap and revert disk.
-        await enqueueWrite(async () => {
-          await writeBlobToDisk(imported);
-          key = candidateKey;
-          salt = importedSalt;
-          data = decrypted;
-          blob = imported;
-        });
-        return true;
+        // Verify OUTSIDE the write queue — this only reads the imported blob.
+        decrypted =
+          imported.v === 2
+            ? await decryptJSON<VaultData>(key, imported)
+            : await openPasswordBlob<VaultData>(imported, passphrase ?? "");
       } catch {
-        // Wrong passphrase, malformed blob, or sub-floor iterations: leave
-        // any existing vault (in-memory state + on-disk blob) untouched.
+        // Wrong passphrase, another account's file, malformed blob, or
+        // sub-floor iterations: leave the current vault untouched.
         return false;
       }
+      // Through the same queue as every mutator, so a put still resolving
+      // cannot land after the swap and revert disk.
+      await enqueueWrite(() => adopt(decrypted));
+      return true;
     },
 
     async getAccounts(): Promise<Account[]> {

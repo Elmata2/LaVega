@@ -192,9 +192,7 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
       const path = String(url);
       if (path.includes("/sign-in/email") && init?.method === "POST") {
         loggedIn = true;
-        return new Response(
-          JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }),
-        );
+        return new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }));
       }
       return new Response(
         JSON.stringify(
@@ -404,11 +402,11 @@ test("an entity already classified shows its half as the pressed option", async 
   expect(list.textContent).not.toContain("niet ingedeeld");
 });
 
-test("Vergrendelen moved here from the app bar and still locks", async () => {
+test("Uitloggen (formerly Vergrendelen) lives here and still locks", async () => {
   const onLock = vi.fn();
   await render({ onLock });
-  const button = [...section("Vergrendelen").querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("Vergrendel"),
+  const button = [...section("Uitloggen").querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Uitloggen"),
   );
   expect(button).toBeTruthy();
   act(() => {
@@ -711,9 +709,7 @@ test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async (
 
 test("een mislukte verwijdering na het uitzetten toont de terugval-melding", async () => {
   await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
-  expect(container!.textContent).toContain(
-    "Kon je gedeelde bedragen niet verwijderen",
-  );
+  expect(container!.textContent).toContain("Kon je gedeelde bedragen niet verwijderen");
 });
 
 test("geen terugval-melding zolang er niets mislukt is", async () => {
@@ -801,16 +797,16 @@ test("the page renders in English when the locale cookie says en", async () => {
   await render();
   expect(container!.textContent).toContain("Correct cashback");
   expect(container!.textContent).toContain("Personal or business");
-  expect(container!.textContent).toContain("Lock");
+  expect(container!.textContent).toContain("Sign out");
   expect(container!.textContent).not.toContain("Cashback corrigeren");
   expect(container!.textContent).not.toContain("Persoonlijk of zakelijk");
-  expect(container!.textContent).not.toContain("Vergrendelen");
+  expect(container!.textContent).not.toContain("Uitloggen");
 });
 
 test("the language switch flips the page's copy live, without a remount", async () => {
   await render();
   const switcher = section("Taal / Language");
-  expect(section("Vergrendelen")).toBeTruthy();
+  expect(section("Uitloggen")).toBeTruthy();
 
   const englishButton = [...switcher.querySelectorAll("button")].find(
     (b) => b.textContent === "English",
@@ -820,6 +816,6 @@ test("the language switch flips the page's copy live, without a remount", async 
     englishButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
-  expect(section("Lock")).toBeTruthy();
-  expect(container!.querySelector('[aria-label="Vergrendelen"]')).toBeNull();
+  expect(section("Sign out")).toBeTruthy();
+  expect(container!.querySelector('[aria-label="Uitloggen"]')).toBeNull();
 });

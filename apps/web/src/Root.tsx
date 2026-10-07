@@ -59,8 +59,9 @@ export default function Root() {
     // Self-hosted Docker/Railway with no DATABASE_URL/BETTER_AUTH_SECRET has
     // no accounts at all — LaVega is local-first, so this MUST still mount
     // the app or every self-hoster is locked out of their own vault.
-    if (authState.kind === "unconfigured") return <App />;
-    if (authState.kind === "signed-in") return <App />;
+    if (authState.kind === "unconfigured") return <App owner={{ kind: "device" }} />;
+    if (authState.kind === "signed-in")
+      return <App key={authState.id} owner={{ kind: "account", id: authState.id }} />;
     // Signed out: fall through to the landing page below. Any `?eb=` params
     // normalizeAppLocation already captured stay in appRoutes' module-level
     // handoff untouched — not consumed here — so a sign-in on the landing

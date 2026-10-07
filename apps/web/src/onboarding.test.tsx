@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test } from "vitest";
 import Onboarding from "./components/Onboarding";
-import { isFreshVault, markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
+import { markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
 import {
   getDefaultScope,
   getHomeCountry,
@@ -129,19 +129,6 @@ test("the step shows once for a fresh vault and never again", () => {
   expect(showOnboarding(true, true)).toBe(false);
   expect(showOnboarding(false, false)).toBe(false);
   expect(showOnboarding(false, true)).toBe(false);
-});
-
-/* WIE DE STAP NIET KRIJGT, en dat is de belangrijkere helft. Alexander's eigen
- * kluis bestaat al; als deze regel ooit omslaat krijgt hij een instelscherm dat
- * zijn land en taal met lege velden kan overschrijven. */
-test("only a just-created vault triggers the step — never an existing one", () => {
-  expect(isFreshVault("setup")).toBe(true);
-  // Ontgrendelen is iemand die de kluis al had.
-  expect(isFreshVault("unlock")).toBe(false);
-  // Migreren is per definitie iemand met data van vóór de kluis.
-  expect(isFreshVault("migrate")).toBe(false);
-  expect(isFreshVault("loading")).toBe(false);
-  expect(isFreshVault("ready")).toBe(false);
 });
 
 /* DEZELFDE OPMAAK ALS HET SCHERM ERVÓÓR. Dit stond eerst op een klasse die

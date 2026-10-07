@@ -39,7 +39,9 @@ test("a throttled sign-in says so", async () => {
 test("a reset request sends the link back to this origin's reset page", async () => {
   const fetchMock = respond(200, { status: true });
   await expect(requestPasswordReset("a@b.nl")).resolves.toEqual({ ok: true });
-  expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/request-password-reset");
+  expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe(
+    "/api/auth/request-password-reset",
+  );
   expect(sentBody(fetchMock)).toEqual({
     email: "a@b.nl",
     redirectTo: `${window.location.origin}${RESET_PASSWORD_PATH}`,

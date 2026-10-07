@@ -11,7 +11,7 @@
  * all shipped while the page still said the server only did two things. */
 
 const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
-const UPDATED = "2026-10-05";
+const UPDATED = "2026-10-07";
 
 function page(title: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -49,8 +49,8 @@ export const privacyHtml = page(
 
 <h2>Welke gegevens en waar ze staan</h2>
 <ul>
-  <li>Je financiële gegevens (rekeningen, saldi, transacties) worden <strong>in je eigen browser</strong> bewaard, versleuteld met je wachtwoord (AES-GCM-256, sleutel alleen op je apparaat). Er is geen kopie van je administratie op onze servers: wij bewaren geen rekeningen, saldi of transacties in rust.</li>
-  <li>Je wachtwoord verlaat je apparaat niet en is bij ons niet bekend of herstelbaar.</li>
+  <li>Je financiële gegevens (rekeningen, saldi, transacties) worden <strong>in je eigen browser</strong> bewaard, versleuteld (AES-GCM-256) met een sleutel die bij je account hoort. Er is geen kopie van je administratie op onze servers, tenzij je zelf een back-up maakt.</li>
+  <li>Die sleutel maken wij aan zodra je voor het eerst inlogt. We bewaren hem versleuteld met onze eigen serversleutel en geven hem alleen aan jou, na het inloggen. Daardoor ben je je gegevens niet kwijt als je je wachtwoord vergeet. Het betekent ook dat wij je kluis technisch zouden kunnen openen. Dat doen we niet, en geen enkel deel van onze software doet het.</li>
   <li><strong>Wel passeert er data.</strong> De functies hieronder sturen bepaalde gegevens via onze server naar een verwerker en tonen je het antwoord. Dat is verwerking in doorvoer, geen opslag — maar het is niet hetzelfde als "het verlaat je apparaat nooit", en dat willen we niet mooier opschrijven dan het is.</li>
 </ul>
 
@@ -81,7 +81,7 @@ export const privacyHtml = page(
 <h2>Wat er wél op de server staat</h2>
 <p>Hier stond eerder dat de server je administratie niet bewaart. Sinds we een database (Neon) gebruiken klopt dat niet meer, en we schrijven het liever precies op dan mooi.</p>
 <ul>
-  <li><strong>Een back-up van je kluis — die wij niet kunnen lezen.</strong> Zet je de back-up aan, dan versleutelt je browser de kluis met een sleutel uit jouw wachtwoord en stuurt alleen het resultaat. De sleutel verlaat je apparaat niet. Wij bewaren bytes waar wij niets van kunnen maken; raak je je wachtwoord kwijt, dan kunnen wij de back-up ook niet openen.</li>
+  <li><strong>Een back-up van je kluis.</strong> Zet je de back-up aan, dan stuurt je browser de kluis versleuteld met je accountsleutel. Wij openen hem niet. Verwijder je je account, dan verwijderen we ook de sleutel; elke kopie van je kluis is daarna onleesbaar.</li>
   <li><strong>Beleggingsgegevens — die wij wél kunnen lezen.</strong> Koppel je een broker, dan bewaart de server je brokerkoppeling en de opgehaalde standen versleuteld, maar met <em>onze</em> sleutel: hij moet die koppeling immers zelf kunnen gebruiken om te synchroniseren. Dat is een echt verschil met de regel hierboven en het hoort niet weggeschreven te worden.</li>
   <li><strong>Je account</strong> (e-mailadres en inloggegevens), je voorkeuren, wanneer er voor het laatst gesynchroniseerd is, en een cache van publieke koersen.</li>
 </ul>
@@ -123,7 +123,7 @@ export const termsHtml = page(
 <h2>Jouw verantwoordelijkheid</h2>
 <ul>
   <li>Je gebruikt de app voor je eigen rekeningen en autorisaties.</li>
-  <li>Je bent verantwoordelijk voor je wachtwoord en je back-up. <strong>Wachtwoord kwijt = gegevens kwijt</strong> — herstel is technisch onmogelijk omdat wij de sleutel niet hebben.</li>
+  <li>Je bent verantwoordelijk voor je wachtwoord. Wachtwoord vergeten? Stel een nieuw in via 'Wachtwoord vergeten'; je gegevens blijven bewaard. Je gegevens staan in je browser: wis je die zonder back-up, dan zijn ze weg.</li>
   <li>Banktoegang is alleen-lezen en verloopt via Enable Banking; hun voorwaarden zijn ook van toepassing.</li>
 </ul>
 
