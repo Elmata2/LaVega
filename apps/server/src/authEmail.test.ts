@@ -1,9 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
   authEmailConfig,
+  emailLocale,
+  passwordChangedEmail,
   passwordResetEmail,
   sendAuthEmail,
   verificationEmail,
+  welcomeEmail,
 } from "./authEmail.js";
 
 afterEach(() => {
@@ -65,4 +68,32 @@ test("password reset email includes safe HTML and clear expiry", () => {
   expect(email.text).toContain("expires in one hour");
   expect(email.html).toContain("token=a&amp;next=&quot;b&quot;");
   expect(email.html).toContain("Your password will not change");
+});
+
+test("mail follows the locale cookie first, then the browser language", () => {
+  const request = (headers: Record<string, string>) =>
+    new Request("https://lavega.dev/api/auth/sign-up/email", { headers });
+  expect(emailLocale(undefined)).toBe("en");
+  expect(emailLocale(request({ "accept-language": "nl-NL,nl;q=0.9" }))).toBe("nl");
+  expect(emailLocale(request({ "accept-language": "de-DE" }))).toBe("en");
+  expect(
+    emailLocale(request({ cookie: "a=1; lavega_locale=en", "accept-language": "nl-NL" })),
+  ).toBe("en");
+});
+
+test("every auth mail has a plain-text part, a preheader and its language", () => {
+  const url = "https://lavega.dev/x?token=a";
+  for (const email of [
+    verificationEmail(url, "nl"),
+    passwordResetEmail(url, "nl"),
+    passwordChangedEmail(url, "nl"),
+    welcomeEmail(url, "nl"),
+  ]) {
+    expect(email.html).toContain('<html lang="nl">');
+    expect(email.html).toContain("display:none");
+    expect(email.text).toContain("LaVega");
+    expect(email.text).not.toContain("<");
+  }
+  expect(verificationEmail(url, "nl").subject).toBe("Bevestig je e-mailadres voor LaVega");
+  expect(passwordChangedEmail(url).subject).toBe("Your LaVega password was changed");
 });

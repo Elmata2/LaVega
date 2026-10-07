@@ -11,7 +11,9 @@ import {
   type Locale,
 } from "../locale.js";
 import { APP_BASE } from "../appRoutes.js";
-import { useAuthState } from "../authClient.js";
+import { RESET_PASSWORD_PATH, useAuthState } from "../authClient.js";
+import { NewPasswordForm, RequestResetForm } from "../components/PasswordResetForms.js";
+import { shellCopy } from "../copy/shell.js";
 import SignInForm from "../components/SignInForm.js";
 import SignUpForm from "../components/SignUpForm.js";
 
@@ -42,6 +44,22 @@ const LP_BTN_LIGHT = "bg-[var(--lp-card)]! text-[var(--lp-ink)]! border-[var(--l
 const LP_BTN_TAN =
   "bg-[var(--lp-tan)]! text-[var(--lp-espresso)]! border-transparent! shadow-[0_14px_30px_-14px_rgba(176,127,51,.7)]";
 
+type AuthView = "sign-in" | "sign-up" | "forgot" | "new-password";
+
+/** The emailed reset link lands on /reset-password?token=… (or ?error=… when
+ *  better-auth already refused the token). Read once, then strip the token
+ *  from the address bar so it does not sit in history or a shared screenshot. */
+let resetLinkTaken: { token: string | null } | null | undefined;
+function takeResetLink(): { token: string | null } | null {
+  if (resetLinkTaken !== undefined) return resetLinkTaken;
+  if (typeof window === "undefined" || window.location.pathname !== RESET_PASSWORD_PATH)
+    return null;
+  const params = new URLSearchParams(window.location.search);
+  resetLinkTaken = { token: params.has("error") ? null : params.get("token") };
+  window.history.replaceState({}, "", "/");
+  return resetLinkTaken;
+}
+
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
  *  ondernemers). Every CTA opens the auth dialog on its sign-up view; the header
@@ -58,8 +76,14 @@ export default function Landing({
 }) {
   const c = landingCopy(locale);
   const { state: authState } = useAuthState();
-  const [showSignIn, setShowSignIn] = useState(linkError);
-  const [authView, setAuthView] = useState<"sign-in" | "sign-up">("sign-in");
+  const [resetLink] = useState(takeResetLink);
+  const [showSignIn, setShowSignIn] = useState(linkError || resetLink !== null);
+  const [authView, setAuthView] = useState<AuthView>(resetLink ? "new-password" : "sign-in");
+  /* Carries the typed address from sign-in into "forgot password" and back,
+   * and the "password changed" line onto the sign-in form after a reset. */
+  const [resetEmail, setResetEmail] = useState("");
+  const [signInNotice, setSignInNotice] = useState<string | undefined>(undefined);
+  const account = shellCopy[locale].profiel.account;
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -271,13 +295,39 @@ export default function Landing({
         >
           ×
         </button>
-        <h2>{authView === "sign-up" ? c.login.signUpTitle : c.nav.login}</h2>
+        <h2>
+          {authView === "sign-up"
+            ? c.login.signUpTitle
+            : authView === "forgot"
+              ? account.reset.requestTitle
+              : authView === "new-password"
+                ? account.reset.newTitle
+                : c.nav.login}
+        </h2>
         {linkError && authView === "sign-in" && (
           <p role="alert" className="font-body text-[0.95rem] text-[var(--lp-ink2)]">
             {c.login.linkInvalid}
           </p>
         )}
-        {authView === "sign-up" ? (
+        {authView === "forgot" ? (
+          <RequestResetForm
+            locale={locale}
+            initialEmail={resetEmail}
+            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+            onBack={() => setAuthView("sign-in")}
+          />
+        ) : authView === "new-password" ? (
+          <NewPasswordForm
+            locale={locale}
+            token={resetLink?.token ?? null}
+            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+            onDone={() => {
+              setSignInNotice(account.reset.done);
+              setAuthView("sign-in");
+            }}
+            onRequestNew={() => setAuthView("forgot")}
+          />
+        ) : authView === "sign-up" ? (
           <SignUpForm
             locale={locale}
             intro={c.login.signUpIntro}
@@ -288,6 +338,13 @@ export default function Landing({
             locale={locale}
             intro={c.login.intro}
             introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
+            notice={signInNotice}
+            initialEmail={resetEmail}
+            onForgotPassword={(email) => {
+              setResetEmail(email);
+              setSignInNotice(undefined);
+              setAuthView("forgot");
+            }}
             onSuccess={() => {
               setShowSignIn(false);
               /* A full navigation, not onEnter()'s pushState. Root holds its own
@@ -301,14 +358,16 @@ export default function Landing({
             }}
           />
         )}
-        <button
-          type="button"
-          data-testid="auth-toggle"
-          className="mt-4 bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.9rem]! text-[var(--lp-ink2)] underline"
-          onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
-        >
-          {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
-        </button>
+        {(authView === "sign-in" || authView === "sign-up") && (
+          <button
+            type="button"
+            data-testid="auth-toggle"
+            className="mt-4 bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.9rem]! text-[var(--lp-ink2)] underline"
+            onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
+          >
+            {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
+          </button>
+        )}
       </dialog>
 
       {/* Hero */}

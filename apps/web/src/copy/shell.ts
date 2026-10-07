@@ -1,7 +1,14 @@
 import type { Locale } from "../locale.js";
 import type { View } from "../App.js";
 import type { ModuleId, WidgetId } from "../components/moduleRegistry.js";
-import type { SignInFailure, SignUpFailure } from "../authClient.js";
+import type {
+  MailResult,
+  ResetPasswordFailure,
+  SignInFailure,
+  SignUpFailure,
+} from "../authClient.js";
+
+type MailFailure = Extract<MailResult, { ok: false }>["kind"];
 import type { ImportProblem } from "@lavega/core";
 import type { ShellNotice } from "../shellNotice.js";
 
@@ -146,6 +153,22 @@ export type ShellCopy = {
       signOut: string;
       /** Waarom het inloggen niet doorging, per kind uit `authClient`. */
       signInError: Record<SignInFailure, string>;
+      showPassword: string;
+      hidePassword: string;
+      forgotPassword: string;
+      mailError: Record<MailFailure, string>;
+      reset: {
+        requestTitle: string;
+        requestIntro: string;
+        requestSubmit: string;
+        sentBody: (email: string) => string;
+        backToSignIn: string;
+        newTitle: string;
+        newPasswordLabel: string;
+        save: string;
+        done: string;
+        error: Record<ResetPasswordFailure, string>;
+      };
       signUp: {
         nameLabel: string;
         submit: string;
@@ -156,6 +179,11 @@ export type ShellCopy = {
         termsLink: string;
         doneTitle: string;
         doneBody: (email: string) => string;
+        passwordHint: string;
+        resend: string;
+        resendIn: (seconds: number) => string;
+        resent: string;
+        otherEmail: string;
         error: Record<SignUpFailure, string>;
       };
     };
@@ -475,7 +503,35 @@ const nl: ShellCopy = {
       signOut: "Uitloggen",
       signInError: {
         "wrong-credentials": "Onjuist e-mailadres of wachtwoord.",
+        unverified:
+          "Bevestig eerst je e-mailadres. We hebben je net een nieuwe bevestigingslink gestuurd.",
+        "rate-limited": "Te veel pogingen. Wacht een minuut en probeer het opnieuw.",
         unreachable: "Inloggen lukte niet. Probeer het later opnieuw.",
+      },
+      showPassword: "Toon",
+      hidePassword: "Verberg",
+      forgotPassword: "Wachtwoord vergeten?",
+      mailError: {
+        "rate-limited": "Te veel pogingen. Wacht een minuut en probeer het opnieuw.",
+        unreachable: "Versturen lukte niet. Probeer het later opnieuw.",
+      },
+      reset: {
+        requestTitle: "Wachtwoord vergeten",
+        requestIntro:
+          "Vul het e-mailadres van je account in. We sturen je een link om een nieuw wachtwoord te kiezen.",
+        requestSubmit: "Stuur resetlink",
+        sentBody: (email) =>
+          `Als ${email} bij een LaVega-account hoort, staat er nu een link in je inbox. De link werkt een uur.`,
+        backToSignIn: "Terug naar inloggen",
+        newTitle: "Kies een nieuw wachtwoord",
+        newPasswordLabel: "Nieuw wachtwoord",
+        save: "Wachtwoord opslaan",
+        done: "Je wachtwoord is gewijzigd. Log in met je nieuwe wachtwoord.",
+        error: {
+          "invalid-link": "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.",
+          "weak-password": "Kies een wachtwoord van minimaal 8 tekens.",
+          unreachable: "Opslaan lukte niet. Probeer het later opnieuw.",
+        },
       },
       signUp: {
         nameLabel: "Naam",
@@ -487,7 +543,12 @@ const nl: ShellCopy = {
         termsLink: "voorwaarden",
         doneTitle: "Controleer je e-mail",
         doneBody: (email) =>
-          `We hebben een bevestigingslink gestuurd naar ${email}. Open die link om je account te bevestigen.`,
+          `We hebben een bevestigingslink gestuurd naar ${email}. Open die link om je account te bevestigen. De link werkt een uur.`,
+        passwordHint: "Minimaal 8 tekens.",
+        resend: "Stuur de e-mail opnieuw",
+        resendIn: (seconds) => `Opnieuw sturen kan over ${seconds} s`,
+        resent: "Verstuurd. Kijk ook in je spammap.",
+        otherEmail: "Ander e-mailadres gebruiken",
         error: {
           "weak-password": "Kies een wachtwoord van minimaal 8 tekens.",
           "rate-limited": "Te veel pogingen. Wacht een minuut en probeer het opnieuw.",
@@ -825,7 +886,34 @@ const en: ShellCopy = {
       signOut: "Sign out",
       signInError: {
         "wrong-credentials": "Wrong email address or password.",
+        unverified: "Confirm your email address first. We just sent you a new confirmation link.",
+        "rate-limited": "Too many attempts. Wait a minute and try again.",
         unreachable: "Signing in didn't work. Please try again later.",
+      },
+      showPassword: "Show",
+      hidePassword: "Hide",
+      forgotPassword: "Forgot password?",
+      mailError: {
+        "rate-limited": "Too many attempts. Wait a minute and try again.",
+        unreachable: "Sending didn't work. Please try again later.",
+      },
+      reset: {
+        requestTitle: "Forgot password",
+        requestIntro:
+          "Enter the email address of your account. We will send you a link to choose a new password.",
+        requestSubmit: "Send reset link",
+        sentBody: (email) =>
+          `If ${email} belongs to a LaVega account, a link is now in your inbox. It works for one hour.`,
+        backToSignIn: "Back to sign in",
+        newTitle: "Choose a new password",
+        newPasswordLabel: "New password",
+        save: "Save password",
+        done: "Your password was changed. Sign in with your new password.",
+        error: {
+          "invalid-link": "This link has expired or was already used. Request a new one.",
+          "weak-password": "Choose a password of at least 8 characters.",
+          unreachable: "Saving didn't work. Please try again later.",
+        },
       },
       signUp: {
         nameLabel: "Name",
@@ -837,7 +925,12 @@ const en: ShellCopy = {
         termsLink: "terms",
         doneTitle: "Check your email",
         doneBody: (email) =>
-          `We sent a confirmation link to ${email}. Open it to confirm your account.`,
+          `We sent a confirmation link to ${email}. Open it to confirm your account. The link works for one hour.`,
+        passwordHint: "At least 8 characters.",
+        resend: "Send the email again",
+        resendIn: (seconds) => `You can resend in ${seconds} s`,
+        resent: "Sent. Check your spam folder too.",
+        otherEmail: "Use a different email address",
         error: {
           "weak-password": "Choose a password of at least 8 characters.",
           "rate-limited": "Too many attempts. Wait a minute and try again.",
