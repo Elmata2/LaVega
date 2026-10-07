@@ -43,7 +43,15 @@ test("the policy names where the AI processor handles the data, which is the AVG
 test("the policy still states the things that remained true", () => {
   expect(privacyHtml).toContain("alleen-lezen"); // no payment initiation
   expect(privacyHtml).toContain("AES-GCM"); // vault crypto
-  expect(termsHtml).toContain("Wachtwoord kwijt");
+});
+
+test("the policy and terms say a forgotten password no longer loses the data", () => {
+  // docs/adr/0009: the vault key belongs to the account, so "password lost =
+  // data lost" and "the key never leaves your device" became false.
+  expect(termsHtml).not.toContain("Wachtwoord kwijt = gegevens kwijt");
+  expect(termsHtml).toContain("Wachtwoord vergeten");
+  expect(privacyHtml).not.toContain("sleutel alleen op je apparaat");
+  expect(privacyHtml).toContain("technisch zouden kunnen openen");
 });
 
 test("both pages are complete HTML documents", () => {
@@ -61,10 +69,10 @@ test("the policy does not claim the server stores nothing, now that Neon does", 
   expect(privacyHtml).toContain("Wat er wél op de server staat");
 });
 
-test("the policy separates the vault we cannot read from the broker data we can", () => {
-  // One blanket "your data is yours" would be false for the broker vault, which
-  // is sealed with OUR key because the server has to use it to sync.
-  expect(privacyHtml).toMatch(/die wij niet kunnen lezen/);
+test("the policy does not claim a vault we cannot read", () => {
+  // Both the personal vault key and the broker vault are sealed with OUR key
+  // (docs/adr/0009). Claiming otherwise would be false.
+  expect(privacyHtml).not.toMatch(/die wij niet kunnen lezen/);
   expect(privacyHtml).toMatch(/die wij wél kunnen lezen/);
 });
 
@@ -87,5 +95,5 @@ test("chat context is not listed as sent to Mistral while chat is off", () => {
 });
 
 test("the policy carries today's update date", () => {
-  expect(privacyHtml).toContain("2026-10-05");
+  expect(privacyHtml).toContain("2026-10-07");
 });

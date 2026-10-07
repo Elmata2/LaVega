@@ -1,12 +1,14 @@
-import type { VaultStatus } from "@lavega/adapters";
+import type { VaultOpenResult } from "@lavega/adapters";
 
-export type GateState = "loading" | "setup" | "migrate" | "unlock" | "ready";
+/** What the page shows before the app: nothing to ask in the normal case.
+ *  `password-vault` is a one-time step for a vault from before accounts held
+ *  the key; `key-error` is a key the server could not hand over. */
+export type GateState =
+  | "loading"
+  | "password-vault"
+  | { error: "unreachable" | "unreadable" }
+  | "ready";
 
-/** status "unlocked" => ready. "locked" => unlock. "empty" => migrate if legacy
- *  plaintext data exists, else setup. */
-export function gateState(status: VaultStatus | null, hasLegacyData: boolean): GateState {
-  if (status === null) return "loading";
-  if (status === "unlocked") return "ready";
-  if (status === "locked") return "unlock";
-  return hasLegacyData ? "migrate" : "setup"; // status === "empty"
+export function gateState(result: VaultOpenResult): GateState {
+  return result === "password-vault" ? "password-vault" : "ready";
 }

@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, test, beforeEach } from "vitest";
 import type { Account, Tx, Rule } from "@lavega/core";
-import { createIndexedDbStorage, createEncryptedStorage } from "@lavega/adapters";
+import { createIndexedDbStorage, createEncryptedStorage, generateVaultKey } from "@lavega/adapters";
 import { hasLegacyData, migrateToVault } from "./migrate.js";
 
 const acc = (key: string, balance: number | null = null): Account => ({
@@ -45,21 +45,21 @@ test("hasLegacyData is false on an empty legacy DB, true once seeded", async () 
   expect(await hasLegacyData()).toBe(true);
 });
 
-test("migrateToVault: seeds the vault, verifies, then deletes the plaintext DB", async () => {
+test("migrateToVault: seeds the open vault, verifies, then deletes the plaintext DB", async () => {
   await seedLegacy();
   const vault = createEncryptedStorage();
+  const key = await generateVaultKey();
+  expect(await vault.open(key, "user:a")).toBe("created");
 
-  await migrateToVault(vault, "hunter2");
+  await migrateToVault(vault);
 
-  // The vault (already unlocked from setup+re-verify) holds the migrated data.
   expect(await vault.getAccounts()).toHaveLength(2);
   expect(await vault.getTxs()).toHaveLength(2);
   expect(await vault.getRules()).toHaveLength(1);
 
-  // A wrong passphrase cannot unlock the migrated vault.
+  // It is on disk under the owner's key, not only in memory.
   vault.lock();
-  expect(await vault.unlock("WRONG")).toBe(false);
-  expect(await vault.unlock("hunter2")).toBe(true);
+  expect(await vault.open(key, "user:a")).toBe("opened");
   expect(await vault.getAccounts()).toHaveLength(2);
 
   // The legacy plaintext DB is gone/empty afterward.
@@ -69,14 +69,11 @@ test("migrateToVault: seeds the vault, verifies, then deletes the plaintext DB",
   expect(await legacyAfter.getRules()).toHaveLength(0);
 });
 
-test("failure before verification (setup throws): legacy DB is NOT deleted", async () => {
+test("failure before verification (vault not open): legacy DB is NOT deleted", async () => {
   await seedLegacy();
   const vault = createEncryptedStorage();
-  // Pre-set-up the vault so the migration's vault.setup() call throws
-  // ("kluis bestaat al") before any verification step runs.
-  await vault.setup("already-set-up");
 
-  await expect(migrateToVault(vault, "hunter2")).rejects.toThrow();
+  await expect(migrateToVault(vault)).rejects.toThrow();
 
   // Safety invariant: plaintext must remain fully intact.
   expect(await hasLegacyData()).toBe(true);

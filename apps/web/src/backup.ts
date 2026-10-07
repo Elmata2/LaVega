@@ -16,6 +16,12 @@ export function serializeBackup(blob: CipherBlob): string {
  *  CipherBlob — the actual passphrase check happens later, in vault.restore. */
 export function parseBackup(text: string): CipherBlob {
   const o = JSON.parse(text);
+  // Sealed with the account's vault key: no KDF parameters to bound.
+  if (o?.v === 2) {
+    if (o.kdf !== "account-key" || typeof o.iv !== "string" || typeof o.ct !== "string")
+      throw new Error("ongeldig back-upbestand");
+    return o as CipherBlob;
+  }
   if (
     !o ||
     o.v !== 1 ||

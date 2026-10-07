@@ -4,6 +4,11 @@
 
 Accepted. Schema scaffold only. Authentication and runtime persistence remain deferred.
 
+Amended by [0009](0009-account-held-vault-key.md): the personal vault's key is no longer kept
+off Neon. `personal.vault_keys` stores it sealed with `LAVEGA_ENCRYPTION_KEY`, the same way
+`investing.broker_vaults` is sealed. "Its encryption key is not stored in Neon" below no longer
+holds.
+
 ## Decision
 
 Use one Neon Postgres database with two application schemas:

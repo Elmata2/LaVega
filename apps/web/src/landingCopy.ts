@@ -158,7 +158,7 @@ const nl: LandingCopy = {
     ticks: [
       "Lokaal-first: geen server bewaart je transacties",
       "Alleen-lezen bankkoppeling (geen betalingen)",
-      "Versleutelde kluis met je eigen wachtwoord",
+      "Versleutelde kluis die opengaat met je account",
     ],
   },
   how: {
@@ -293,7 +293,7 @@ const en: LandingCopy = {
     ticks: [
       "Local-first: no server keeps your transactions",
       "Read-only bank access (never payments)",
-      "An encrypted vault, with a password only you hold",
+      "An encrypted vault that opens with your account",
     ],
   },
   how: {

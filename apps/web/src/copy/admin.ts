@@ -1129,8 +1129,7 @@ const nlBackup: BackupCopy = {
   },
   download: {
     title: "Download",
-    description:
-      "Download een versleutelde back-up. Bewaar 'm veilig; je hebt je wachtwoord nodig om 'm te herstellen.",
+    description: "Download een versleutelde back-up. Hij gaat alleen open met jouw LaVega-account.",
     button: "Download back-up",
   },
   server: {
@@ -1169,9 +1168,10 @@ const nlBackup: BackupCopy = {
     title: "Herstel uit back-up",
     warning: "Dit vervangt je huidige data in deze kluis.",
     fileLabel: "Back-upbestand",
-    passwordLabel: "Wachtwoord",
+    passwordLabel: "Kluiswachtwoord (alleen voor een back-up van vóór accountsleutels)",
     confirmLabel: "Ik snap dat dit mijn huidige data in deze kluis vervangt",
-    error: "Onjuist wachtwoord of ongeldig back-upbestand.",
+    error:
+      "Deze back-up hoort niet bij dit account, het wachtwoord klopt niet, of het bestand is ongeldig.",
     success: "Herstel geslaagd.",
     submitButton: "Herstellen",
   },
@@ -1707,8 +1707,7 @@ const enBackup: BackupCopy = {
   },
   download: {
     title: "Download",
-    description:
-      "Download an encrypted backup. Keep it safe; you'll need your password to restore it.",
+    description: "Download an encrypted backup. Only your LaVega account can open it.",
     button: "Download backup",
   },
   server: {
@@ -1747,9 +1746,9 @@ const enBackup: BackupCopy = {
     title: "Restore from backup",
     warning: "This replaces the current data in this vault.",
     fileLabel: "Backup file",
-    passwordLabel: "Password",
+    passwordLabel: "Vault password (only for a back-up from before account keys)",
     confirmLabel: "I understand this replaces the current data in this vault",
-    error: "Incorrect password or invalid backup file.",
+    error: "This backup belongs to another account, the password is wrong, or the file is invalid.",
     success: "Restore successful.",
     submitButton: "Restore",
   },

@@ -16,7 +16,7 @@ import { resetNetWorthShareStateForTests } from "./netWorthShare.js";
 let mockAccounts: unknown[] = [];
 function fakeStorage(): VaultStorage {
   return {
-    status: async () => "unlocked",
+    open: async () => "opened",
     getAccounts: async () => mockAccounts,
     getTxs: async () => [],
     getRules: async () => [],
@@ -47,6 +47,13 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
 vi.mock("./migrate.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./migrate.js")>();
   return { ...actual, hasLegacyData: async () => false };
+});
+
+// The vault key comes from the server (or this browser's IndexedDB); neither
+// exists here, and the fake storage ignores the key anyway.
+vi.mock("./vaultKey.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./vaultKey.js")>();
+  return { ...actual, loadVaultKey: async () => ({}) as CryptoKey };
 });
 
 let App: typeof import("./App.js").default;
@@ -198,7 +205,9 @@ test("another tab switching sharing off is picked up via the storage event — n
   // event itself to simulate this tab receiving it.
   localStorage.setItem("lavega.shareNetWorth", "0");
   await act(async () => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.shareNetWorth", newValue: "0" }));
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: "lavega.shareNetWorth", newValue: "0" }),
+    );
   });
 
   // This tab's own next trigger — an FX-mode change sits in the PUT effect's

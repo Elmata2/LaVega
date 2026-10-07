@@ -233,14 +233,14 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
 
   async function handleRestore(e: FormEvent) {
     e.preventDefault();
-    if (!file || pass.length === 0 || !confirmed) return;
+    if (!file || !confirmed) return;
     setBusy(true);
     setError("");
     setRestored(false);
     try {
       const text = await file.text();
       const blob = parseBackup(text); // throws on malformed/misshaped file
-      const ok = await storage.restore(blob, pass);
+      const ok = await storage.restore(blob, pass || undefined);
       if (!ok) {
         setError(c.restore.error);
         return;
@@ -308,11 +308,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
           </p>
         )}
         {restored && <p>{c.restore.success}</p>}
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={busy || !file || pass.length === 0 || !confirmed}
-        >
+        <Button type="submit" variant="primary" disabled={busy || !file || !confirmed}>
           {c.restore.submitButton}
         </Button>
       </form>

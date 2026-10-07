@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, expect, test, vi } from "vitest";
 import { registerVaultRoutes } from "./vault-routes.js";
-import type { OpaqueVaultWrite } from "@lavega/database";
+import { UnreadableVaultKeyError, type OpaqueVaultWrite } from "@lavega/database";
 
 const blob = {
   v: 1,
@@ -21,14 +21,55 @@ function harness(overrides: Partial<Parameters<typeof registerVaultRoutes>[1]> =
     })),
     overwrite: vi.fn(async () => ({ updatedAt: "2026-08-31T12:00:00.000Z" })),
   };
+  const vaultKey = { getOrCreate: vi.fn(async () => Buffer.alloc(32, 7)) };
   const app = new Hono();
   registerVaultRoutes(app, {
     tenantId: async () => "user-123",
     repository: () => repository,
+    vaultKey: () => vaultKey,
     ...overrides,
   });
-  return { app, repository };
+  return { app, repository, vaultKey };
 }
+
+test("the vault key goes to its signed-in owner, uncached", async () => {
+  const { app, vaultKey } = harness();
+  const response = await app.request("/api/vault/key");
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(await response.json()).toEqual({ key: Buffer.alloc(32, 7).toString("base64") });
+  expect(vaultKey.getOrCreate).toHaveBeenCalledTimes(1);
+});
+
+test("no session, no key — and none is created", async () => {
+  const { app, vaultKey } = harness({ tenantId: async () => null });
+  const response = await app.request("/api/vault/key");
+  expect(response.status).toBe(401);
+  expect(vaultKey.getOrCreate).not.toHaveBeenCalled();
+});
+
+test("a key the server cannot open says so instead of handing out a new one", async () => {
+  const { app } = harness({
+    vaultKey: () => ({
+      getOrCreate: async () => {
+        throw new UnreadableVaultKeyError();
+      },
+    }),
+  });
+  const response = await app.request("/api/vault/key");
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ code: "vault-key-unreadable" });
+});
+
+test("a backup sealed with the account key is accepted", async () => {
+  const { app, repository } = harness();
+  const response = await put(app, {
+    blob: { v: 2, kdf: "account-key", iv: "aXY=", ct: "Y2lwaGVy" },
+    baseUpdatedAt: null,
+  });
+  expect(response.status).toBe(200);
+  expect(repository.put).toHaveBeenCalledTimes(1);
+});
 
 const put = (app: Hono, body: unknown, query = "") =>
   app.request(`/api/vault/backup${query}`, {

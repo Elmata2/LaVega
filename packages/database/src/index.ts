@@ -1088,6 +1088,57 @@ export type OpaqueVaultWrite = { status: "stored"; updatedAt: string } | { statu
  * different vaults is a real situation, and last-write-wins would silently
  * destroy one of them, so a stale write is refused instead.
  */
+/**
+ * The key the browser seals the personal vault with (0024_personal_vault_keys.sql,
+ * docs/adr/0009-account-held-vault-key.md).
+ *
+ * Created on first use, never replaced: a new key would orphan the vault sealed
+ * under the old one. The server hands the key to its signed-in owner and never
+ * uses it itself; nothing here reads `personal.vaults`.
+ */
+export function createVaultKeyRepository(db: Database, userId: string | undefined | null) {
+  const tenantId = requireUserId(userId);
+  const read = () =>
+    withTenantStatement(db, tenantId, async (client) => {
+      const result = await client.query<QueryResultRow>(
+        `WITH created AS (
+           INSERT INTO personal.vault_keys (user_id, wrapped_key)
+           VALUES (current_setting('app.user_id'), $1)
+           ON CONFLICT (user_id) DO NOTHING
+           RETURNING wrapped_key
+         )
+         SELECT wrapped_key FROM created
+         UNION ALL
+         SELECT wrapped_key FROM personal.vault_keys WHERE NOT EXISTS (SELECT 1 FROM created)`,
+        [encryptBlob({ key: randomBytes(32).toString("base64") })],
+      );
+      const row = result.rows[0];
+      return row ? Buffer.from(row.wrapped_key as Buffer) : null;
+    });
+  return {
+    /** The raw 32-byte key. Throws when LAVEGA_ENCRYPTION_KEY cannot open it. */
+    async getOrCreate(): Promise<Buffer> {
+      /* Two first requests at once: the one that loses the insert can run its
+       * SELECT on a snapshot taken before the winner committed and see no row.
+       * The second read sees it. */
+      const wrapped = (await read()) ?? (await read());
+      if (!wrapped) throw new Error("Vault key could not be created");
+      const opened = tryDecryptBlob<{ key: string }>(wrapped);
+      if (!opened.readable) throw new UnreadableVaultKeyError();
+      const key = Buffer.from(opened.value.key, "base64");
+      if (key.length !== 32) throw new UnreadableVaultKeyError();
+      return key;
+    },
+  };
+}
+
+export class UnreadableVaultKeyError extends Error {
+  constructor() {
+    super("The stored vault key cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    this.name = "UnreadableVaultKeyError";
+  }
+}
+
 export function createOpaqueVaultRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
@@ -1208,6 +1259,8 @@ const USER_DATA_TABLES = [
   "investing.dashboard_snapshots",
   "investing.dashboard_sources",
   "personal.vaults",
+  // After the vault: with its key gone, any copy left in a browser is unreadable.
+  "personal.vault_keys",
   "personal.net_worth_totals",
 ] as const;
 

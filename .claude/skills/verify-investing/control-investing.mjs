@@ -1231,7 +1231,11 @@ async function commandLogin({ flags }) {
       fix:
         response.status === 0
           ? `the target is unreachable; run \`${SELF} doctor --target ${targetName(flags)}\``
-          : "the account or password was rejected. credentialsFrom names the source. Do not print the password. Do not write a new auth.preview.json.",
+          : response.status === 403
+            ? "the account exists but its email address is not confirmed (EMAIL_NOT_VERIFIED). Sign-in just mailed a new confirmation link to that address. Ask the user to confirm it; do not sign up another account."
+            : response.status === 429
+              ? "sign-in is rate limited (30 per minute per address). Wait a minute before retrying."
+              : "the account or password was rejected. credentialsFrom names the source. Do not print the password. Do not write a new auth.preview.json.",
     });
     return 1;
   }

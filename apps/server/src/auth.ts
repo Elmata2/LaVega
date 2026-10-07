@@ -70,7 +70,9 @@ export function getAuth(): Auth<any> | null {
   });
 }
 
-const appUrl = () => `${authBaseUrl()}/app`;
+/* The site root, not /app: the same account signs in to Personal and Investing,
+ * and the landing page offers both. */
+const appUrl = () => `${authBaseUrl()}/`;
 
 /**
  * Mail that follows an action which has already happened. The password is

@@ -257,8 +257,10 @@ locally, create your own Neon branch and put its connection string, a
 - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS` — session
   signing and the origins allowed to use it.
 - `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
-  they reach Neon; Neon never sees the key. Losing it loses every stored
-  credential.
+  they reach Neon; Neon never sees the key. It also seals every account's
+  personal vault key (`personal.vault_keys`, docs/adr/0009). Losing it loses
+  every stored credential and every personal vault. Preview and Production
+  must use the same value.
 - `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account mail: email
   confirmation, password reset, password changed, and welcome. Each goes out in
   Dutch or English, chosen by the `lavega_locale` cookie, then

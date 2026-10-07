@@ -369,7 +369,8 @@ real tenant. Prefer it over prod for anything that writes.
   there is no session. A local `doctor` pass does not satisfy this check.
   `pnpm run test:verify-investing:live` skips only when neither a readable
   `auth.preview.json` nor the process env pair is already available. `login` still pulls
-  when you run it yourself.
+  when you run it yourself. `login` answering 403 means the test user's email is not
+  confirmed (see `features/auth-session.md`, Gotchas); it is not a wrong password.
 - **Deployment Protection.** Previews answer without protection today. If it is turned on,
   export `VERCEL_AUTOMATION_BYPASS_SECRET`; the CLI sends it as a header and
   `browser open` sets Vercel's bypass cookie. Neither sends it to prod, and output redacts it.
