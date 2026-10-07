@@ -360,6 +360,11 @@ async function requireAppSession(c: Context, next: Next) {
    * revalidates this path on every request, so `Vary` is what keeps that true
    * if a caching layer is ever put in front. */
   c.header("Vary", "Cookie");
+  /* better-auth sends a failed confirmation link to /app?error=…. Bouncing it
+   * to "/" drops the query, and with it the landing page's "link expired"
+   * notice. The shell is public; Root shows the landing page to a signed-out
+   * visitor. Mirrors the same route in scripts/vercel-build.mjs. */
+  if (c.req.path === "/app" && c.req.query("error") !== undefined) return next();
   const session = await verifiedSession(c.req.raw);
   if (!session) return c.body(null, 302, { Location: "/", "Cache-Control": "private, no-store" });
   return next();

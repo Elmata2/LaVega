@@ -274,6 +274,16 @@ await writeFile(
          * apps/server/src/auth.ts's exact options; see the comment and the
          * parity test at apps/server/src/appGateCookie.vercelParity.test.ts,
          * which reads this literal array and fails if the two diverge. */
+        /* An expired or reused confirmation link: better-auth sends a
+         * signed-out visitor to /app?error=…. The gate below would 302 that
+         * to "/" and drop the query, so the landing page never learned the
+         * link failed. The shell is public, and Root shows the landing page
+         * with the "link expired" notice. */
+        {
+          src: "/app",
+          has: [{ type: "query", key: "error" }],
+          dest: "/index.html",
+        },
         // APP_GATE_ROUTES_START
         {
           src: "/app/(.*)",
@@ -292,6 +302,9 @@ await writeFile(
         { src: "/app", dest: "/index.html" },
         /* The English landing page. Same SPA; `Root` reads the locale off the
          * path, so this only needs to reach index.html like any other view. */
+        /* Where the emailed password-reset link lands (authClient.ts,
+         * RESET_PASSWORD_PATH). Public: the token in the query is the proof. */
+        { src: "/reset-password", dest: "/index.html" },
         { src: "/en", dest: "/index.html" },
         { src: "/en/", dest: "/index.html" },
       ],

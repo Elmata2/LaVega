@@ -6,6 +6,7 @@ import { shellCopy } from "../copy/shell.js";
 import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
+import PasswordInput from "./ui/PasswordInput.js";
 
 /* Extracted from Profiel's AccountBlock so the same sign-in UI can also render
  * on the public landing page. `locale` is a prop rather than read via
@@ -24,6 +25,12 @@ export type SignInFormProps = {
    *  the intro paragraph. Defaults to `cell-sub` so Profiel's call site is
    *  unchanged. */
   introClassName?: string;
+  /** Shown only where a reset flow exists. Receives the typed email so the
+   *  reset form does not ask for it twice. */
+  onForgotPassword?: (email: string) => void;
+  /** A status line above the button, e.g. "your password was changed". */
+  notice?: string;
+  initialEmail?: string;
 };
 
 export default function SignInForm({
@@ -31,9 +38,12 @@ export default function SignInForm({
   intro,
   onSuccess,
   introClassName = "cell-sub",
+  onForgotPassword,
+  notice,
+  initialEmail = "",
 }: SignInFormProps) {
   const c = shellCopy[locale];
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<SignInFailure | null>(null);
@@ -70,15 +80,30 @@ export default function SignInForm({
         </Field>
         <Field>
           <label htmlFor="account-password">{c.profiel.account.passwordLabel}</label>
-          <input
+          <PasswordInput
             id="account-password"
-            type="password"
             value={password}
             disabled={busy}
             autoComplete="current-password"
+            showLabel={c.profiel.account.showPassword}
+            hideLabel={c.profiel.account.hidePassword}
             onChange={(e) => setPassword(e.target.value)}
           />
+          {onForgotPassword && (
+            <button
+              type="button"
+              className="self-start bg-transparent! border-0! p-0! text-[0.85rem] text-muted underline cursor-pointer"
+              onClick={() => onForgotPassword(email)}
+            >
+              {c.profiel.account.forgotPassword}
+            </button>
+          )}
         </Field>
+        {notice && failure === null && (
+          <p role="status" className={introClassName}>
+            {notice}
+          </p>
+        )}
         {failure !== null && (
           <p role="alert" className="text-warn">
             {c.profiel.account.signInError[failure]}

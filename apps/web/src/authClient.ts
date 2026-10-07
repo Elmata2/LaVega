@@ -24,7 +24,7 @@ export type AuthState =
  *  Deliberately NOT the server's own text: better-auth answers 401 with
  *  "invalid credentials", and echoing an upstream error string into the UI is
  *  how an implementation detail becomes user-facing copy. */
-export type SignInFailure = "wrong-credentials" | "unreachable";
+export type SignInFailure = "wrong-credentials" | "unverified" | "rate-limited" | "unreachable";
 
 export type SignInResult = { ok: true; state: AuthState } | { ok: false; kind: SignInFailure };
 
@@ -71,8 +71,20 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   } catch {
     return { ok: false, kind: "unreachable" };
   }
+  /* 403 is better-auth's EMAIL_NOT_VERIFIED. With sendOnSignIn on, that same
+   * request has already mailed a fresh confirmation link. */
   if (!response.ok)
-    return { ok: false, kind: response.status === 401 ? "wrong-credentials" : "unreachable" };
+    return {
+      ok: false,
+      kind:
+        response.status === 401
+          ? "wrong-credentials"
+          : response.status === 403
+            ? "unverified"
+            : response.status === 429
+              ? "rate-limited"
+              : "unreachable",
+    };
   const body = (await response.json().catch(() => null)) as {
     user?: { id?: string; email?: string };
   } | null;
@@ -100,6 +112,63 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   const body = (await response.json().catch(() => null)) as { code?: string } | null;
   if (body?.code === "PASSWORD_TOO_SHORT" || body?.code === "PASSWORD_TOO_LONG")
     return { ok: false, kind: "weak-password" };
+  return { ok: false, kind: "unreachable" };
+}
+
+/** Where the emailed reset link lands. better-auth appends `?token=` or `?error=`. */
+export const RESET_PASSWORD_PATH = "/reset-password";
+
+export type MailResult = { ok: true } | { ok: false; kind: "rate-limited" | "unreachable" };
+
+async function postAuth(path: string, body: unknown): Promise<Response | null> {
+  try {
+    return await fetch(`/api/auth/${path}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function mailResult(response: Response | null): MailResult {
+  if (response?.ok) return { ok: true };
+  return { ok: false, kind: response?.status === 429 ? "rate-limited" : "unreachable" };
+}
+
+/** Sends a new confirmation link. better-auth answers the same for an unknown
+ *  or already-confirmed address, so this reveals nothing about who has an account. */
+export async function resendVerification(email: string): Promise<MailResult> {
+  return mailResult(
+    await postAuth("send-verification-email", { email, callbackURL: verificationCallbackUrl() }),
+  );
+}
+
+/** Same answer whether or not the address has an account. */
+export async function requestPasswordReset(email: string): Promise<MailResult> {
+  return mailResult(
+    await postAuth("request-password-reset", {
+      email,
+      redirectTo: `${window.location.origin}${RESET_PASSWORD_PATH}`,
+    }),
+  );
+}
+
+export type ResetPasswordFailure = "invalid-link" | "weak-password" | "unreachable";
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; kind: ResetPasswordFailure }> {
+  const response = await postAuth("reset-password", { token, newPassword });
+  if (response?.ok) return { ok: true };
+  if (!response) return { ok: false, kind: "unreachable" };
+  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  if (body?.code === "PASSWORD_TOO_SHORT" || body?.code === "PASSWORD_TOO_LONG")
+    return { ok: false, kind: "weak-password" };
+  if (body?.code === "INVALID_TOKEN") return { ok: false, kind: "invalid-link" };
   return { ok: false, kind: "unreachable" };
 }
 

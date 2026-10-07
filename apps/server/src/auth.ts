@@ -1,7 +1,15 @@
 import { betterAuth, type Auth } from "better-auth";
 import { type Database } from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { passwordResetEmail, sendAuthEmail, verificationEmail } from "./authEmail.js";
+import {
+  emailLocale,
+  passwordChangedEmail,
+  passwordResetEmail,
+  sendAuthEmail,
+  verificationEmail,
+  welcomeEmail,
+  type AuthEmail,
+} from "./authEmail.js";
 
 const origin = (host: string | undefined) => (host?.trim() ? `https://${host.trim()}` : null);
 
@@ -62,6 +70,21 @@ export function getAuth(): Auth<any> | null {
   });
 }
 
+const appUrl = () => `${authBaseUrl()}/app`;
+
+/**
+ * Mail that follows an action which has already happened. The password is
+ * already changed and the address already confirmed, so a Resend outage must
+ * not turn either into an error page for the person who did it.
+ */
+async function sendNotice(to: string, email: AuthEmail): Promise<void> {
+  try {
+    await sendAuthEmail({ to, ...email });
+  } catch (error) {
+    console.error("Auth notice email was not sent", error);
+  }
+}
+
 /** Five new accounts per IP per 10 minutes. Better Auth's own default is 3 per
  *  10 seconds, which still allows a script to create accounts all day. */
 export const SIGN_UP_RATE_LIMIT = { window: 600, max: 5 };
@@ -88,8 +111,17 @@ export function authOptions() {
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true,
       resetPasswordTokenExpiresIn: 60 * 60,
-      sendResetPassword: async (data: { user: { email: string }; url: string }) => {
-        await sendAuthEmail({ to: data.user.email, ...passwordResetEmail(data.url) });
+      sendResetPassword: async (
+        data: { user: { email: string }; url: string },
+        request?: Request,
+      ) => {
+        await sendAuthEmail({
+          to: data.user.email,
+          ...passwordResetEmail(data.url, emailLocale(request)),
+        });
+      },
+      onPasswordReset: async (data: { user: { email: string } }, request?: Request) => {
+        await sendNotice(data.user.email, passwordChangedEmail(appUrl(), emailLocale(request)));
       },
     },
     emailVerification: {
@@ -97,11 +129,17 @@ export function authOptions() {
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60,
-      sendVerificationEmail: async (data: { user: { email: string }; url: string }) => {
+      sendVerificationEmail: async (
+        data: { user: { email: string }; url: string },
+        request?: Request,
+      ) => {
         await sendAuthEmail({
           to: data.user.email,
-          ...verificationEmail(data.url),
+          ...verificationEmail(data.url, emailLocale(request)),
         });
+      },
+      afterEmailVerification: async (user: { email: string }, request?: Request) => {
+        await sendNotice(user.email, welcomeEmail(appUrl(), emailLocale(request)));
       },
     },
     /* Better Auth's own limiter keys on a client IP it will refuse to guess

@@ -259,9 +259,13 @@ locally, create your own Neon branch and put its connection string, a
 - `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
   they reach Neon; Neon never sees the key. Losing it loses every stored
   credential.
-- `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account-confirmation mail.
-  Both are required in production. `AUTH_EMAIL_FROM` is a verified Resend
-  sender, for example `LaVega <accounts@lavega.dev>`.
+- `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account mail: email
+  confirmation, password reset, password changed, and welcome. Each goes out in
+  Dutch or English, chosen by the `lavega_locale` cookie, then
+  `Accept-Language`. Both are required in production. `AUTH_EMAIL_FROM` is a
+  verified Resend sender, for example `LaVega <accounts@lavega.dev>`. The
+  sending domain needs SPF, DKIM, and DMARC records, or Gmail and Outlook file
+  the mail as spam.
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
