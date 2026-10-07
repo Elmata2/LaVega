@@ -40,6 +40,18 @@ export function runtimeDatabase(): Database | null {
 }
 
 /**
+ * The current request's Neon pool. Throws outside a request or without a
+ * database: a route factory that runs at module load must call this inside the
+ * handler, because `runtimeDatabase()` is `null` there and a factory that
+ * checks it at load silently never registers its routes.
+ */
+export function requireRuntimeDatabase(): Database {
+  const database = runtimeDatabase();
+  if (!database) throw new Error("geen database in dit verzoek");
+  return database;
+}
+
+/**
  * Where one tenant's broker credentials live.
  *
  * With `DATABASE_URL` set they go to Neon, one row per user and broker, so a

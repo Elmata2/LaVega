@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { beforeEach, expect, test, vi } from "vitest";
-import { registerVaultRoutes } from "./vault-routes.js";
+import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
+import { accountRouteDependencies } from "./account-routes.js";
+import { netWorthRouteDependencies } from "./net-worth-routes.js";
 import { UnreadableVaultKeyError, type OpaqueVaultWrite } from "@lavega/database";
 
 const blob = {
@@ -166,4 +168,30 @@ test("anything that is not a sealed vault envelope is refused", async () => {
     expect((await put(app, bad)).status, JSON.stringify(bad)).toBe(400);
   }
   expect(repository.put).not.toHaveBeenCalled();
+});
+
+/* The routes were mounted by asking for the database at module load, where no
+ * request scope exists, so a deployed server answered 404 for /api/vault/key
+ * and nobody could open the vault. Mounting follows DATABASE_URL instead. */
+test("database-backed routes mount at module load, outside any request", () => {
+  const before = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = "postgres://example.invalid/lavega";
+  try {
+    expect(vaultRouteDependencies()).not.toBeNull();
+    expect(accountRouteDependencies()).not.toBeNull();
+    expect(netWorthRouteDependencies()).not.toBeNull();
+  } finally {
+    if (before === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = before;
+  }
+});
+
+test("without DATABASE_URL the database-backed routes are not mounted", () => {
+  const before = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  try {
+    expect(vaultRouteDependencies()).toBeNull();
+  } finally {
+    if (before !== undefined) process.env.DATABASE_URL = before;
+  }
 });

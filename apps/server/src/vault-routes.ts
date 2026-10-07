@@ -6,7 +6,10 @@ import {
   type OpaqueVaultRow,
   type OpaqueVaultWrite,
 } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import {
+  credentialsArePerTenant,
+  requireRuntimeDatabase,
+} from "@lavega/investing-server/src/credentialStore.js";
 import { PBKDF2_ITERATIONS } from "@lavega/adapters";
 import { investingTenantId } from "./investing-mount.js";
 
@@ -118,13 +121,16 @@ export function registerVaultRoutes(app: Hono, dependencies: VaultRouteDependenc
   });
 }
 
+/* Whether to mount is decided by DATABASE_URL, which exists at module load; the
+ * pool itself is resolved per request, because `runtimeDatabase()` is request
+ * scoped and is null here. Checking it at load skipped these routes entirely —
+ * see the note in eb-routes.ts. */
 /** Wiring for the real server: session identity, Neon storage. */
 export function vaultRouteDependencies(): VaultRouteDependencies | null {
-  const database = runtimeDatabase();
-  if (!database) return null;
+  if (!credentialsArePerTenant()) return null;
   return {
     tenantId: investingTenantId,
-    repository: (tenantId) => createOpaqueVaultRepository(database, tenantId),
-    vaultKey: (tenantId) => createVaultKeyRepository(database, tenantId),
+    repository: (tenantId) => createOpaqueVaultRepository(requireRuntimeDatabase(), tenantId),
+    vaultKey: (tenantId) => createVaultKeyRepository(requireRuntimeDatabase(), tenantId),
   };
 }
