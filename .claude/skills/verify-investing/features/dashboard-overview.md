@@ -6,9 +6,12 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
 
 - headline figures widget (`Key figures`, section `aria-label="Portfolio KPIs"`,
   `data-dashboard-section="kpis"`) in the aside (`aria-label="Portfolio overview"`):
-  `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when some
-  positions are unpriced. A missing amount reads `Value unknown`. A missing percent reads
-  `Return unknown`.
+  `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when the
+  latest point has unpriced holdings (`No usable price: …`) or unknown cash
+  (`Cash history unknown: …`). The same status names a wallet shortfall when movements
+  do not add up. A separate line, outside that status, reads
+  `Estimated cash: <names>. Walked from movements your broker reported without proving the history complete.`
+  A missing amount reads `Value unknown`. A missing percent reads `Return unknown`.
 - portfolio chart widget (`Performance`) in the main column
   (`data-dashboard-section="performance"`), not in the aside. With no benchmark selected
   the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
@@ -65,7 +68,8 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
 Nav `Net worth`, route `/net-worth`. One card, title `Investments and cash`. An empty book
 reads `No net worth history` and `Net worth appears once broker and price data are available.`
 
-With history, the chart stacks `Investments` and `Cash`. `GET /api/investing/personal-net-worth`
+With history, the chart stacks `Investments` and `Cash`. Estimated cash adds
+`Cash estimated from unproven history: <n> accounts`. `GET /api/investing/personal-net-worth`
 returns `{ totals: [] }` when the owner has shared nothing. When `presentationCurrency` is
 `EUR` and `totals` is non-empty, a third band reads `Bank accounts (Personal, as of <date>)`.
 A non-EUR presentation currency skips that merge. Preset pills use the same labels as the
