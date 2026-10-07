@@ -1,6 +1,9 @@
 import type { Hono } from "hono";
 import { eraseUserData, type ErasureReport } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import {
+  credentialsArePerTenant,
+  requireRuntimeDatabase,
+} from "@lavega/investing-server/src/credentialStore.js";
 import { investingTenantId } from "./investing-mount.js";
 
 export type AccountRouteDependencies = {
@@ -44,7 +47,9 @@ export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDepen
 
 /** Wiring for the real server: session identity, Neon storage. */
 export function accountRouteDependencies(): AccountRouteDependencies | null {
-  const database = runtimeDatabase();
-  if (!database) return null;
-  return { tenantId: investingTenantId, erase: (tenantId) => eraseUserData(database, tenantId) };
+  if (!credentialsArePerTenant()) return null;
+  return {
+    tenantId: investingTenantId,
+    erase: (tenantId) => eraseUserData(requireRuntimeDatabase(), tenantId),
+  };
 }

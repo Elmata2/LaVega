@@ -1,6 +1,9 @@
 import type { Hono } from "hono";
 import { createPersonalNetWorthRepository } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import {
+  credentialsArePerTenant,
+  requireRuntimeDatabase,
+} from "@lavega/investing-server/src/credentialStore.js";
 import { investingTenantId } from "./investing-mount.js";
 
 /** A generous bound, matching 0019_personal_net_worth_totals.sql's CHECK: only
@@ -24,7 +27,11 @@ function parseIsoDate(raw: unknown): string | null {
   const month = Number(m[2]);
   const day = Number(m[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day)
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
     return null;
   return raw;
 }
@@ -73,12 +80,14 @@ export function registerNetWorthRoutes(app: Hono, dependencies: NetWorthRouteDep
 
     const date = parseIsoDate(body.date);
     if (!date) return c.json({ problems: ["date must be YYYY-MM-DD"] }, 400);
-    if (isInFuture(date, today())) return c.json({ problems: ["date must not be in the future"] }, 400);
+    if (isInFuture(date, today()))
+      return c.json({ problems: ["date must not be in the future"] }, 400);
     if (isBeforeMinDate(date))
       return c.json({ problems: [`date must not be before ${MIN_DATE}`] }, 400);
     if (body.currency !== "EUR") return c.json({ problems: ["currency must be EUR"] }, 400);
     const totalCents = parseTotalCents(body.totalCents);
-    if (totalCents === null) return c.json({ problems: ["totalCents must be a bounded integer"] }, 400);
+    if (totalCents === null)
+      return c.json({ problems: ["totalCents must be a bounded integer"] }, 400);
 
     await dependencies.repository(tenantId).put(date, totalCents);
     return c.json({ stored: true });
@@ -96,10 +105,9 @@ export function registerNetWorthRoutes(app: Hono, dependencies: NetWorthRouteDep
  *  database there is nowhere to put a total, so the route is not mounted at
  *  all — matching account-routes.ts and vault-routes.ts. */
 export function netWorthRouteDependencies(): NetWorthRouteDependencies | null {
-  const database = runtimeDatabase();
-  if (!database) return null;
+  if (!credentialsArePerTenant()) return null;
   return {
     tenantId: investingTenantId,
-    repository: (tenantId) => createPersonalNetWorthRepository(database, tenantId),
+    repository: (tenantId) => createPersonalNetWorthRepository(requireRuntimeDatabase(), tenantId),
   };
 }
