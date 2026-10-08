@@ -29,10 +29,11 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
   The body is `{ agentId, messages }`. When agent memory is configured, it also needs a UUID
   `id` (the thread id). The reply streams (`text/event-stream`).
 - saved threads: with memory, the conversation shows eyebrow `Memory`, heading `Conversations`,
-  and `New conversation`. Profile shows `Agent memory` (`aria-label="Agent memory"`): risk
-  tolerance, theses, and goals. Both stay hidden when `GET /api/memory/threads` does not
-  succeed. The local file server answers 503 `Agent memory needs a database`, so neither
-  block is on screen.
+  and `New conversation`. That block stays hidden when `GET /api/memory/threads` does not
+  succeed. Profile shows `Agent memory` (`aria-label="Agent memory"`): risk
+  tolerance, theses, and goals. That block stays hidden when `GET /api/memory` does not
+  succeed. The local file server answers 503 `Agent memory needs a database` on both
+  routes, so neither block is on screen.
 - failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
   the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
 available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
@@ -49,8 +50,10 @@ When memory is on, saved conversation headers wrap on narrow screens so **New co
 remains inside the card. The conversation layout uses one constrained grid column below the
 desktop breakpoint; long content must not expand the card beyond the viewport.
 
-The `Investor lens` card is on the overview. A radio click selects that persona and opens
-the conversation popup. Press `Analyse portfolio` for the one-shot judgment, or follow
+The `Investor lens` card is on the overview when the Profile widget `agent` is on. A radio
+click selects that persona and opens the conversation in a new tab
+(`window.open(target, "_blank")`). If the browser blocks the tab, the same click navigates
+in-page. Press `Analyse portfolio` for the one-shot judgment, or follow
 `Open conversation with <name>` for the in-page route. Deep links work:
 `/investing/agents/warren_buffett`.
 

@@ -3,8 +3,10 @@
 Route: `/investing/agents/research` on mounted previews, `/agents/research` standalone.
 Reach it from **Agents → Research Stock** (card heading `One stock. All six agents.`).
 The page itself is eyebrow `Research Stock`, heading `One company. Six perspectives.`,
-back link `← All agents`. Requires signed-in session, enabled Agents
-module, accepted Yahoo market-data consent, `TYPESAFE_API_KEY` for the report, and
+back link `← All agents`. The mounted app requires a signed-in session. Local standalone
+(`control-investing.mjs up`) answers `/api/auth/*` with 503, so `RequireAuth` does not
+redirect and this page loads with no session. It also needs the Agents
+module enabled, accepted Yahoo market-data consent, `TYPESAFE_API_KEY` for the report, and
 `LAVEGA_AGENT_API_KEY` or `OPENROUTER_API_KEY` for lens chat and the per-lens reasons.
 Without the chat key the report still loads, but every lens shows the same generic rubric
 text for its signal; that is a gap, not a pass. Preview and production also
@@ -49,10 +51,12 @@ signature, tenant binding and expiry in server tests; browser checks verify real
 data and model calls. Static page rendering alone does not prove this feature works.
 
 Provider outage, missing consent, missing API keys or blocked preview auth are explicit
-verification gaps, not passing checks. Before consent, `POST /api/agents/research/run`
-answers 403 `Allow Yahoo Finance market data before researching a stock` (not the prices
-route's 428). A local run that has consent and no `TYPESAFE_API_KEY` answers 502, and the
-page shows `TYPESAFE_API_KEY is not set; configure TypeSafe System One`.
+verification gaps, not passing checks. The run POST body field is `symbol` (the textbox
+name is `Stock ticker`). A body that omits `symbol` answers 400 `Ticker is required`
+before the consent check. Before consent, `POST /api/agents/research/run` with
+`{"symbol":"AAPL"}` answers 403 `Allow Yahoo Finance market data before researching a stock`
+(not the prices route's 428). A local run that has consent and no `TYPESAFE_API_KEY`
+answers 502, and the page shows `TYPESAFE_API_KEY is not set; configure TypeSafe System One`.
 That is a gap, not a pass. A broker-related doctor failure can coexist with
 a working stock research report; record it separately.
 

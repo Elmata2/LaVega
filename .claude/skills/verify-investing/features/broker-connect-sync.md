@@ -16,7 +16,9 @@ dividends. This is where most investing reports originate.
   Do not expect `Unlock vault` on preview or prod.
 - `Save and sync` (`Saving and syncing…` while pending) — save credentials, then force a sync.
 - `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
-  vault, then force a sync. Success reads `Vault unlocked. Sync completed.`
+  vault, then force a sync. Success reads `Vault unlocked. Sync completed.` When that sync
+  POST returns no result, the status reads
+  `Vault unlocked. Sync continues in the background; progress is shown above.`
 - `Start sync` (`Syncing…` while pending) — force a sync with the vault already open.
 - sync progress card (Profile, only while status is running, waiting, or completed;
   hidden on idle and on problem). Eyebrow `Broker sync`. The heading is
@@ -36,10 +38,12 @@ Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#br
 profile button in the top bar. `/brokers/connect` redirects to `/profile#brokers`.
 
 Pick a broker, paste the credentials, and press `Save and sync`. Trading 212 needs both
-`API key` and `API secret`. On the local file vault, also enter `Vault password`. On a later
-local visit the form is `Unlock vault` with `Unlock and sync`. Hosted preview and prod keep
-the Neon vault unlocked (`passphrase: unused`), so that unlock form is not the later-visit
-path there.
+`API key` and `API secret`. On the local file vault, also enter `Vault password`. The
+`Save credentials` form stays on the page after a vault exists. `Unlock vault` with
+`Unlock and sync` is an extra block above that form, and only when credential status is
+`locked` (a later local visit after a restart). An empty vault does not show `Unlock vault`.
+Hosted preview and prod keep the Neon vault unlocked (`passphrase: unused`), so that unlock
+block is not on the page there.
 
 The same page holds the other settings sections:
 
