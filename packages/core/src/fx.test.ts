@@ -3,7 +3,6 @@ import {
   crossRate,
   normalizeCurrencyCode,
   parseFxRatePayload,
-  FX_RATE_FALLBACK,
   rateOn,
   toEur,
   UnknownCurrencyError,
@@ -61,11 +60,6 @@ test("parseFxRatePayload accepts a Frankfurter-shaped payload and rejects junk",
   expect(parseFxRatePayload({ base: "EUR" })).toBeNull();
   expect(parseFxRatePayload(null)).toBeNull();
   expect(parseFxRatePayload({ base: "EUR", date: "x", rates: { USD: "nope" } })).toBeNull();
-});
-
-test("fallback rate is well-formed", () => {
-  expect(FX_RATE_FALLBACK.base).toBe("EUR");
-  expect(FX_RATE_FALLBACK.rates.USD).toBeGreaterThan(0);
 });
 
 const HISTORY = {

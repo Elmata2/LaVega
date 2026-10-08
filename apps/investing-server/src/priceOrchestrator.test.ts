@@ -263,28 +263,6 @@ test("elapsed time forces progress renewal before symbol count threshold", async
   expect(put.mock.calls.length).toBeGreaterThan(2);
 });
 
-test("memory progress store rejects writes from old or absent lease", async () => {
-  const store = createInMemoryPriceSyncProgressStore();
-  const first = {
-    status: "running" as const,
-    total: 0,
-    completed: 0,
-    remainingSymbols: [] as string[],
-    currentSymbol: null,
-    waitUntil: null,
-    updatedAt: new Date(0).toISOString(),
-    message: null,
-    problems: [] as string[],
-    leaseId: "first",
-  };
-  await store.claim("tenant", first, new Date(-1).toISOString());
-  const next = { ...first, status: "completed" as const };
-  await expect(store.put("tenant", next, "")).resolves.toBe(false);
-  await expect(store.put("tenant", next, "stale")).resolves.toBe(false);
-  await expect(store.get("tenant")).resolves.toEqual(first);
-  await expect(store.put("tenant", next, "first")).resolves.toBe(true);
-});
-
 test("run stops on the host budget and names what is left instead of continuing past it", async () => {
   const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
   let clock = 0;

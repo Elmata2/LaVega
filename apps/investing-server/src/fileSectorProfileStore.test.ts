@@ -154,21 +154,3 @@ test("an inferred write never overwrites an existing provider profile on disk", 
 
   expect(await store.get("AAPL")).toMatchObject({ sector: "Technology", source: "provider" });
 });
-
-test("set() strips a fund profile's invalid weights before persisting", async () => {
-  const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
-  const store = createFileSectorProfileStore(filePath);
-  await store.set("VFEM.L", {
-    kind: "fund",
-    weights: [
-      { sector: "Whatever", weight: 0.4 },
-      { sector: "Technology", weight: 0.6 },
-    ],
-    source: "provider",
-  });
-  expect(await store.get("VFEM.L")).toEqual({
-    kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.6 }],
-    source: "provider",
-  });
-});

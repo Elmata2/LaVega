@@ -205,12 +205,3 @@ test("een doorgestuurde mail zonder leesbare inhoud wordt een melding, geen stil
   // Geen Gmail-link, want dit is geen Gmail-bericht.
   expect(notice.mailUrl).toBe("");
 });
-
-test("een tweede run op dezelfde mailbox stuurt niets opnieuw naar het model", () => {
-  const store: Record<string, unknown> = { seenIds: ["m-pdf", "m-html", "m-link", "m-leeg"] };
-  const seen = new Set(store.seenIds as string[]);
-  const again = [run(RAW_PDF_INVOICE, "m-pdf"), run(RAW_HTML_ONLY, "m-html")].filter(
-    (m) => !seen.has(m.messageId),
-  );
-  expect(again).toEqual([]);
-});

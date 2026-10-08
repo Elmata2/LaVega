@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { categorize } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import StatistiekBlock, { customWindow, STAT_PERIODS } from "./StatistiekBlock";
-import { freshTxs, own, rules, txs } from "./fixtures";
+import StatistiekBlock, { customWindow } from "./StatistiekBlock";
+import { own, rules, txs } from "./fixtures";
 
 /** Today's default and every existing test's mode: a non-EUR row is left out
  *  exactly as it always was, never converted. */
@@ -14,39 +13,6 @@ const render = (t = txs) =>
   renderToStaticMarkup(
     <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
   );
-
-test("StatistiekBlock leads with the per-category-per-month view from the reference", () => {
-  const html = render();
-  expect(html).toContain("Statistieken");
-  // Both reference views are offered.
-  expect(html).toContain("Categorieën");
-  expect(html).toContain("Weekdagen");
-  // Grouped bars: three months of fixture data × three spend categories.
-  expect(html).toContain('class="lv-bars-xaxis"');
-  expect(html).toContain(">jun<");
-  expect(html).toContain(">jul<");
-  expect(html).toContain(">aug<");
-  expect(html.match(/class="lv-bar"/g)?.length).toBe(9);
-  // The categories are the ones the rules engine derived, not invented labels.
-  expect(html).toContain("Inkoop"); // manual label on t3/t6
-  expect(html).toContain("Energie"); // user rule on t5
-  expect(html).toContain(categorize(txs[1], rules, own)); // Dutch default on t2
-});
-
-test("StatistiekBlock offers his five periods plus a real custom range", () => {
-  const html = render();
-  expect(STAT_PERIODS.map((p) => p.label)).toEqual([
-    "1 week",
-    "1 maand",
-    "3 maanden",
-    "6 maanden",
-    "12 maanden",
-    "Aangepast",
-  ]);
-  for (const p of STAT_PERIODS) expect(html).toContain(`>${p.label}<`);
-  // "Aangepast" is not selected, so its two date fields are not on screen yet.
-  expect(html).not.toContain('type="date"');
-});
 
 test("customWindow refuses to turn half a range into a window", () => {
   expect(customWindow("2026-06-01", "2026-08-01")).toEqual({
@@ -75,15 +41,6 @@ test("StatistiekBlock states the window every figure in it belongs to", () => {
   expect(html).toContain("Uitgaven in deze periode");
   expect(html).toContain(formatEuro(12_000 + 9_500));
   expect(html).toContain(formatEuro(420.5 + 1_880 + 250 + 1_100));
-});
-
-test("StatistiekBlock carries no note line under it any more", () => {
-  const html = render();
-  // The footer explaining what Δ meant is gone (UI review round 2) — with it
-  // went the per-month averages it was explaining.
-  expect(html).not.toContain("module-foot");
-  expect(html).not.toContain("Δ = ");
-  expect(html).not.toContain("Gem. inkomsten p/m");
 });
 
 test("the 'smaller categories' line names the window and the floor it is true for", () => {
@@ -151,12 +108,6 @@ test("StatistiekBlock never draws a month it has no statement for", () => {
   expect(html).not.toContain(">jan<");
 });
 
-test("StatistiekBlock renders an empty state instead of a chart with no transactions", () => {
-  const html = render([]);
-  expect(html).toContain("Nog geen transacties");
-  expect(html).not.toContain("lv-bar");
-});
-
 test("StatistiekBlock names what it left out for being in a foreign currency", () => {
   const revolutHufSpend = {
     ...txs[0],
@@ -170,18 +121,6 @@ test("StatistiekBlock names what it left out for being in a foreign currency", (
   };
   const html = render([...txs, revolutHufSpend]);
   expect(html).toContain("Buiten deze cijfers: 1 transactie in vreemde valuta (HUF 300.000).");
-});
-
-test("StatistiekBlock says nothing about foreign currency when there is none excluded", () => {
-  const html = render();
-  expect(html).not.toContain("vreemde valuta");
-});
-
-test("StatistiekBlock still renders with two days of history", () => {
-  // The weekday view is the one that refuses (see statistics.test.ts); the
-  // block itself must not crash on a nearly-empty vault.
-  const html = render(freshTxs);
-  expect(html).toContain("Statistieken");
 });
 
 /* ───────────────────────── FX-omrekening: convert versus separate */

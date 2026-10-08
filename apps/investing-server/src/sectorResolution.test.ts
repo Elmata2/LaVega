@@ -32,18 +32,6 @@ test("stored profiles classify priced positions and weight the exposure", async 
   ]);
 });
 
-test("without a fetch fallback nothing is fetched and nothing is written", async () => {
-  const store = createInMemorySectorProfileStore();
-  const set = vi.spyOn(store, "set");
-  const fetchProfile = vi.fn();
-
-  const { exposure } = await resolvePortfolioSectors(positions, { store });
-
-  expect(fetchProfile).not.toHaveBeenCalled();
-  expect(set).not.toHaveBeenCalled();
-  expect(exposure).toEqual([{ sector: UNKNOWN_SECTOR, weight: 1 }]);
-});
-
 test("the fetch fallback persists what it resolves and degrades to Unknown on failure", async () => {
   const store = createInMemorySectorProfileStore();
   const fetchProfile = vi.fn(async (symbol: string) => {

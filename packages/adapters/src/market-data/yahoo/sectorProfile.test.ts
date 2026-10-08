@@ -95,18 +95,6 @@ test("a bond fund returns an explicit empty-weights fund profile, not null", asy
   expect(result).toEqual({ kind: "fund", weights: [], source: "provider" });
 });
 
-test("a stock still returns a single-sector profile (existing behavior preserved)", async () => {
-  const result = await fetchYahooSectorProfile("acme", {
-    fetchJsonWithCrumb: vi.fn().mockResolvedValue(fixture),
-  } as never);
-  expect(result).toEqual({
-    kind: "stock",
-    sector: "Technology",
-    industry: "Consumer Electronics",
-    source: "provider",
-  });
-});
-
 test("continues after a missing sector listing", async () => {
   const fetchJsonWithCrumb = vi
     .fn()

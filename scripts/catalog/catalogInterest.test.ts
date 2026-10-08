@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTEREST_TOOL, buildInterestPrompt, parseInterestReply } from "./catalogInterest.js";
+import { parseInterestReply } from "./catalogInterest.js";
 
 /** Written the way the sweep sees these documents: an FID header, then rows. */
 const ABN = [
@@ -39,28 +39,6 @@ const reply = (over: Record<string, unknown>) => ({
   quote: "€ 0 t/m € 500.000                1,25%",
   documentScope: "ABN AMRO Direct Sparen",
   ...over,
-});
-
-describe("INTEREST_TOOL", () => {
-  it("forces the split between the standard rate and the promo", () => {
-    const schema = INTEREST_TOOL.input_schema as { required: string[] };
-    expect(schema.required).toEqual([
-      "standardPct",
-      "promoPct",
-      "promoUntil",
-      "conditions",
-      "conditionsKnown",
-      "freeWithdrawal",
-      "quote",
-      "documentScope",
-    ]);
-  });
-
-  it("tells the model in the prompt which number ranks accounts wrongly", () => {
-    const { system } = buildInterestPrompt(req(BUNQ, "bunq Spaarrekening"));
-    expect(system).toContain("1,50%");
-    expect(system).toMatch(/teaser|promo/i);
-  });
 });
 
 describe("parseInterestReply", () => {

@@ -9,19 +9,6 @@ test("a multi-line data record reconstructs the chunk with its newline", () => {
   expect(onChunk).toHaveBeenCalledWith("regel1\nregel2");
 });
 
-test("event: error / done route to their handlers, never to onChunk", () => {
-  const onChunk = vi.fn();
-  const onError = vi.fn();
-  const onDone = vi.fn();
-  dispatchSseRecord("event: error\ndata: kapot", { onChunk, onError, onDone });
-  // No `code:` line in this record, so the second argument is undefined —
-  // see api.test.ts for the record that carries one.
-  expect(onError).toHaveBeenCalledWith("kapot", undefined);
-  dispatchSseRecord("event: done\ndata: ", { onChunk, onError, onDone });
-  expect(onDone).toHaveBeenCalledTimes(1);
-  expect(onChunk).not.toHaveBeenCalled();
-});
-
 test("a plain data chunk keeps a single leading space of content", () => {
   const onChunk = vi.fn();
   // SSE strips one space after 'data:'; content that itself began with a space

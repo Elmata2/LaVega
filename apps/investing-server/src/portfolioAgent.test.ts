@@ -1,10 +1,6 @@
 import { expect, test } from "vitest";
 import type { InvestingDashboardData } from "@lavega/core";
-import {
-  composePortfolioJudgments,
-  portfolioJudgmentQuestions,
-  runPortfolioAgent,
-} from "./portfolioAgent.js";
+import { portfolioJudgmentQuestions, runPortfolioAgent } from "./portfolioAgent.js";
 
 function dashboard(): InvestingDashboardData {
   return {
@@ -98,23 +94,4 @@ test("no view remains distinct from neutral and one missing answer leaves other 
   });
   expect(result.judgments[0]?.signal?.choice).toBe("no_view");
   expect(result.judgments.find((item) => item.agentId === "charlie_munger")?.signal).toBeNull();
-});
-
-test("composition reweights typed judgments without provider call", () => {
-  const judgments = [
-    {
-      agentId: "warren_buffett" as const,
-      displayName: "Warren Buffett",
-      signal: choice("bullish"),
-      conviction: score(),
-    },
-    {
-      agentId: "charlie_munger" as const,
-      displayName: "Charlie Munger",
-      signal: choice("bearish"),
-      conviction: score(),
-    },
-  ];
-  expect(composePortfolioJudgments(judgments).signal).toBe("neutral");
-  expect(composePortfolioJudgments(judgments, { charlie_munger: 2 }).signal).toBe("bearish");
 });

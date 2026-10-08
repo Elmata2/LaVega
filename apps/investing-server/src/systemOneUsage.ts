@@ -78,7 +78,3 @@ export async function recordSystemOneUsage(
   memory.set(`day:${userId}:${day}`, (memory.get(`day:${userId}:${day}`) ?? 0) + costCents);
   memory.set(`month:${userId}:${month}`, (memory.get(`month:${userId}:${month}`) ?? 0) + costCents);
 }
-
-export function resetSystemOneUsageMemory(): void {
-  memory.clear();
-}

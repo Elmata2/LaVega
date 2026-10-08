@@ -1,14 +1,9 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { fileURLToPath, URL as NodeURL } from "node:url";
-import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import KaartenBlock, { bankLogo, ibanTail } from "./KaartenBlock";
-import { resolved } from "../../test-support/resolveStyle.js";
 import { BANK_LOGOS } from "../../assets/bank-logos.generated";
 import { accounts } from "./fixtures";
 
@@ -26,31 +21,10 @@ const amex: Account = {
   balance: null,
 };
 
-test("KaartenBlock renders one card per account with the holder and the bank", () => {
-  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).toContain("Kaarten");
-  expect(html).toContain("bank-card");
-  expect(html).toContain("ING");
-  expect(html).toContain("Rabobank");
-  expect(html).toContain("Holding BV");
-  expect(html).toContain("Betaalrekening");
-  expect(html).toContain(formatEuro(182_310));
-  // The tail of the REAL IBAN goes where the reference prints a card number.
-  expect(html).toContain("0001");
-});
-
 test("KaartenBlock never renders a card number it does not have", () => {
   const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
   // No sixteen-digit PAN, and no four-group filler.
   expect(html).not.toMatch(/\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}/);
-});
-
-test("KaartenBlock carries no note line under it", () => {
-  // The explanation that used to sit under the strip is gone (UI review round
-  // 2): the faces already show only what LaVega holds, so the paragraph was
-  // repeating the picture.
-  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).not.toContain("module-foot");
 });
 
 test("KaartenBlock states what is missing instead of filling it in", () => {
@@ -62,12 +36,6 @@ test("KaartenBlock states what is missing instead of filling it in", () => {
   expect(html).not.toContain(formatEuro(0));
   // And it is recognised as a card, so it sorts to the front of the strip.
   expect(html).toContain("Creditcard");
-});
-
-test("KaartenBlock renders an empty state with nothing connected", () => {
-  const html = renderToStaticMarkup(<KaartenBlock accounts={[]} onNavigate={() => {}} />);
-  expect(html).toContain("Nog geen rekeningen gekoppeld");
-  expect(html).not.toContain("bank-card");
 });
 
 test("ibanTail returns the real last four, or null", () => {
@@ -119,110 +87,4 @@ test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
   }
   const totaal = BANK_LOGOS.reduce((n, l) => n + l.dataUri.length, 0);
   expect(totaal).toBeLessThan(250_000);
-});
-
-/* --- Review 4, punt 10: "a bit more gradient, and that I can hover over it" -
- *
- * Twee wensen met één ondergrens eronder: het saldo moet leesbaar blijven. Die
- * ondergrens wordt in brandFace.test.ts per merk doorgerekend (elke stop tegen
- * de tekst die de kaart echt draagt); hier staat wat dáárvan op de kaart
- * terechtkomt — hoe diep het verloop is, en dat de hover een TOESTAND is en
- * geen overgang. */
-
-const cardCss = readFileSync(
-  fileURLToPath(new NodeURL("../../styles/blocks.css", import.meta.url)),
-  "utf8",
-).replace(/\s+/g, " ");
-
-/** Eén CSS-regel uit blocks.css, opgezocht op zijn selector.
- *
- *  Twee dingen die deze functie moet kunnen, en allebei zijn ze hier misgegaan:
- *  `.bank-card` mag NIET `.bank-card-top` opleveren (de selector moet aflopen op
- *  een spatie, een komma of de accolade), en een selector mag deel zijn van een
- *  GROEP — de hover-regel staat als `.bank-card:hover, .bank-card:focus-within`
- *  en werd door de eerste versie helemaal niet gevonden. Een test die zijn eigen
- *  regel niet vindt, meldt "geen hover-toestand" terwijl die er wel is. */
-function rule(selector: string): string {
-  /* DERDE KEER RAAK, dus nu geen tekstzoektocht meer maar een vergelijking van de
-   * hele selectorlijst. De vorige versie liet na de selector een spatie toe (voor
-   * `.bank-card {`), en een spatie is ook de nakomeling-combinator: zodra
-   * `.bank-card:hover .bank-card-sheen` erbij kwam, vond hij DIE en meldde dat de
-   * hover-toestand geen box-shadow had. Een test die de verkeerde regel pakt
-   * klaagt over iets dat wél klopt, en dat kost meer tijd dan een echte fout. */
-  /* Commentaar eerst eruit: dit bestand legt keuzes uit met CSS-fragmenten IN de
-   * toelichting, en een accolade in een comment laat elke regel daarna een stap
-   * verschuiven. Zo verdween .card-strip, die er gewoon staat. */
-  const zonderCommentaar = cardCss.replace(/\/\*[\s\S]*?\*\//g, " ");
-  for (const [, selectors, body] of zonderCommentaar.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const namen = selectors.split(",").map((x) => x.trim());
-    if (namen.includes(selector)) return `${selectors.trim()} {${body}}`;
-  }
-  return "";
-}
-
-test("het tokenvlak is een verloop met bereik, niet twee naburige kleuren", () => {
-  /* De kaarten zonder eigen huisstijlkleur vallen terug op FACES. Twee van die
-   * vier liepen van accent naar chart-blue en van teal naar accent: kleuren die
-   * zo dicht bij elkaar liggen dat er nauwelijks een verloop te zien was. Ze
-   * beginnen nu allemaal op --ink, zodat het bereik er wél is. */
-  const vreemd: Account[] = ["A", "B", "C", "D"].map((n) => ({
-    ...amex,
-    key: `Z${n}`,
-    bank: `Bank Van Nergens ${n}`,
-  }));
-  const html = renderToStaticMarkup(<KaartenBlock accounts={vreemd} onNavigate={() => {}} />);
-  const vlakken = [...html.matchAll(/background:(linear-gradient\([^"]*?\))"/g)].map((m) => m[1]);
-  expect(vlakken.length).toBe(4);
-  for (const vlak of vlakken) {
-    // Drie stops in plaats van twee, en de eerste is het donkerste token dat de
-    // app heeft. Donkerder is gratis contrast; lichter kost precies het saldo.
-    expect(vlak.split("var(--").length - 1).toBeGreaterThanOrEqual(3);
-    expect(vlak).toContain("var(--ink) 0%");
-  }
-  // Vier verschillende vlakken, want vier kaarten naast elkaar in één kleur is
-  // geen strip maar één groot vlak.
-  expect(new Set(vlakken).size).toBe(4);
-});
-
-test("de kaart heeft een hover-toestand, en die raakt de leesbaarheid niet", () => {
-  const hover = rule(".bank-card:hover");
-  expect(hover).not.toBe("");
-  // :focus-within hoort erbij: de kaart is geen knop, maar wie met het
-  // toetsenbord door de strip loopt moet zien welke kaart hij leest.
-  expect(cardCss).toContain(".bank-card:focus-within");
-  // Wat er verandert is diepte, geen kleur. Een lichtende sluier over het vlak
-  // zou het contrast opeten dat brandFace.ts er net in heeft gerekend — dan wint
-  // de hover van het saldo, en dat is de verkeerde volgorde.
-  expect(hover).toContain("box-shadow");
-  expect(hover).not.toContain("background:");
-  expect(hover).not.toContain("opacity:");
-});
-
-test("geen animatie op de kaart — een toestand mag, een overgang niet", () => {
-  for (const selector of [".bank-card", ".bank-card:hover"]) {
-    const body = rule(selector);
-    expect(body, `${selector} staat niet in blocks.css`).not.toBe("");
-    expect(body).not.toContain("transition");
-    expect(body).not.toContain("animation");
-  }
-  // .card-strip converted to Tailwind (docs/adr/0005): resolved against the
-  // classes the strip's own DOM element actually carries once mounted, not a
-  // hand-typed list or the exported constant — either of those would keep
-  // matching even after a future conditional class merge changed what the div
-  // renders, which is the vacuous-assertion failure resolved() exists to stop.
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  });
-  const strip = container.querySelector(".bank-card")!.parentElement!;
-  const stripClasses = strip.className.split(" ").filter(Boolean);
-  expect(resolved(stripClasses, "transition")).toBeUndefined();
-  // Tailwind's transition-* utilities emit transition-property, not the
-  // shorthand — checked separately or a transition-all would go undetected.
-  expect(resolved(stripClasses, "transition-property")).toBeUndefined();
-  expect(resolved(stripClasses, "animation")).toBeUndefined();
-  act(() => root.unmount());
-  container.remove();
 });

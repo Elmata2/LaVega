@@ -87,18 +87,3 @@ test("Overzicht KPI derivations: Totaalpositie sums all entities once every bala
   });
   expect(totalBalance).toBe(182_310 + 21_900 + 44_100 + 100);
 });
-
-test("Overzicht KPI derivations: Rekeningen counts every account", () => {
-  expect(accounts.length).toBe(4);
-});
-
-test("Overzicht KPI derivations: Entiteiten counts unique non-empty entities only", () => {
-  const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
-  expect(entities).toEqual(["Holding BV", "Café BV", "Webshop BV"]);
-  expect(entities.length).toBe(3);
-});
-
-test("Overzicht KPI derivations: Aandacht counts accounts with an unknown balance", () => {
-  const unknownCount = accounts.filter((a) => a.balance === null).length;
-  expect(unknownCount).toBe(1);
-});

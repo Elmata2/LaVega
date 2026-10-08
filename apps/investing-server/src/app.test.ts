@@ -767,24 +767,6 @@ test("broker sync starts server-side price orchestration despite broker problems
   expect(provider.get).toHaveBeenCalledOnce();
 });
 
-test("broker sync status route exposes safe progress counters", async () => {
-  const progress = {
-    status: "waiting" as const,
-    pages: 6,
-    ordersRead: 300,
-    positionsRead: 0,
-    waitUntil: "2026-08-19T14:00:00.000Z",
-    remaining: 0,
-    updatedAt: "2026-08-19T13:59:00.000Z",
-    message: null,
-    history: null,
-  };
-  const investingApp = createApp({ brokerSyncStatus: () => progress });
-  const response = await investingApp.request("/api/brokers/sync/status");
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual(progress);
-});
-
 test("broker sync route converts unexpected failures into a useful response", async () => {
   const investingApp = createApp({
     brokerSync: vi.fn().mockRejectedValue(new Error("adapter failed")),
@@ -1312,43 +1294,6 @@ test("health answers under /api/ too, because that is the only path a mount forw
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
-});
-
-test("detailed health exposes durable broker state without exposing broker data", async () => {
-  const runtime = createApp({
-    healthCheck: async () => ({
-      status: "ok",
-      storage: "neon",
-      checks: {
-        database: "ok",
-        migrationLedger: "ok",
-        tenantIsolation: "enforced",
-        vault: "ok",
-        trading212Credentials: "configured",
-        trading212Sync: "fresh",
-        snapshot: "loaded",
-      },
-      trading212: { lastSyncedAt: "2026-09-20T12:00:00.000Z", positions: 3 },
-    }),
-  });
-
-  const response = await runtime.request("/api/investing/health/detail");
-
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    status: "ok",
-    storage: "neon",
-    checks: {
-      database: "ok",
-      migrationLedger: "ok",
-      tenantIsolation: "enforced",
-      vault: "ok",
-      trading212Credentials: "configured",
-      trading212Sync: "fresh",
-      snapshot: "loaded",
-    },
-    trading212: { lastSyncedAt: "2026-09-20T12:00:00.000Z", positions: 3 },
-  });
 });
 
 test("detailed health fails when Trading 212 data is stale", async () => {

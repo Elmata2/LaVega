@@ -1,28 +1,16 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import SpendPie, { sliceAtPoint } from "./SpendPie";
-import { resolved } from "../test-support/resolveStyle.js";
-
-/** The classes an ACTUAL element in the mounted tree carries, so an assertion
- *  never drifts from what SpendPie.tsx renders. */
-function classesOf(el: Element): string[] {
-  return el.className.split(/\s+/).filter(Boolean);
-}
 
 /* Item 12 for the pie: every slice's exact euro has to be readable by hover, by
  * tap and by keyboard, and the ring itself has to answer when you point at it —
  * a legend row and an arc of the same colour should not be two different
  * conversations.
  *
- * jsdom, because half of this is interaction; the stylesheet is read from the
- * package root because import.meta.url resolves against the jsdom document. */
-
-const css = readFileSync(resolve(process.cwd(), "src/styles/charts.css"), "utf8");
+ * jsdom, because half of this is interaction. */
 
 const slices = [
   { category: "Boodschappen", cents: 45_000, share: 0.5 },
@@ -77,12 +65,6 @@ function point(el: HTMLElement, type: string, clientX: number, clientY: number) 
     el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, clientY }));
   });
 }
-
-test("the hole holds the period's total until a slice is asked about", () => {
-  const html = renderToStaticMarkup(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  expect(html).toContain("€900");
-  expect(html).toContain("uitgaven");
-});
 
 test("every slice is a control, so its exact amount is reachable without a mouse", () => {
   const html = renderToStaticMarkup(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
@@ -225,86 +207,4 @@ test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twe
   // Shares that do not quite sum to 1 (rounded upstream) still map the tail to
   // the last slice, because that is what the gradient draws there.
   expect(sliceAtPoint([0.5, 0.49], 0.1, 0.5)).toBe(1);
-});
-
-test("charts.css dresses the state the reading depends on", () => {
-  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  const item = classesOf(el.querySelector(".spend-pie-item")!);
-  const hole = classesOf(el.querySelector(".spend-pie-hole")!);
-
-  expect(resolved(item, "background-color", undefined, ":focus-visible")).toBe("#0000000a");
-  expect(resolved(item, "background-color", undefined, "[data-active=on]")).toBe("#0000000a");
-  // A row that filters points; a row that only highlights must not pretend to.
-  expect(resolved(item, "cursor", undefined, "[data-filter=yes]")).toBe("pointer");
-  // Tailwind's rounded-full uses an oversized radius rather than 50%, which
-  // draws identically on a fixed-size box but never flattens into an ellipse
-  // if the box ever stops being square.
-  expect(resolved(hole, "border-radius")).toBe("3.40282e38px");
-});
-
-/* Item 5: the number in the middle was centred while a slice was being read and
- * sitting high in the total view. The cause was the grid, not the state — with
- * `align-content` left at its default the auto rows stretch, so two rows put the
- * amount in the top half and three rows put it in the middle by accident. Packing
- * the rows centres the group at any number of lines. */
-test("the hole centres its contents whether it holds two lines or three", () => {
-  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  const hole = classesOf(el.querySelector(".spend-pie-hole")!);
-  expect(resolved(hole, "align-content")).toBe("center");
-});
-
-/* Item 6: an arc opens its category, so it has to point — and only where a click
- * actually goes somewhere. */
-test("the ring points only where an arc can be opened", () => {
-  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  const ring = classesOf(el.querySelector(".spend-pie-ring")!);
-  expect(resolved(ring, "cursor")).toBe("default");
-  expect(resolved(ring, "cursor", undefined, "[data-open=yes]")).toBe("pointer");
-});
-
-/* Item 8: "V…" names nothing. The row being read un-clips its name, and it is
- * reachable by hover, by tap (data-active) and by keyboard (focus-visible) — a
- * `title` alone would have answered only the mouse. */
-/* The un-clip is a PARENT-state → CHILD-style rule (.spend-pie-item:hover
- * .spend-pie-name), which no CSS-utility variant can express without the same
- * descendant selector `resolveStyle` refuses by design — see the WHY comment
- * on this rule in charts.css. It stays hand-written and is asserted as CSS
- * text, unchanged from before the conversion. */
-test("a clipped legend name un-clips while it is being read, by any of the three ways", () => {
-  const flat = css.replace(/\s+/g, " ");
-  for (const selector of [
-    ".spend-pie-item:hover .spend-pie-name",
-    ".spend-pie-item:focus-visible .spend-pie-name",
-    '.spend-pie-item[data-active="on"] .spend-pie-name',
-  ]) {
-    expect(flat).toContain(selector);
-  }
-  const revealed = flat.match(/\.spend-pie-item:hover \.spend-pie-name,[^{]*\{[^}]*\}/)?.[0] ?? "";
-  expect(revealed).toContain("white-space: normal");
-
-  // And the name in the hole wraps rather than ellipsising into nothing —
-  // moved onto SpendPie.tsx's own utilities, so this reads the render instead
-  // of the stylesheet text.
-  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
-  act(() => rows[0].focus());
-  const slice = classesOf(el.querySelector(".spend-pie-slice")!);
-  expect(resolved(slice, "text-overflow")).toBeUndefined();
-  expect(resolved(slice, "white-space")).toBe("normal");
-});
-
-/* Item 8 for the bar charts: the axis cell keeps its slot (the row stays aligned
- * with the bars), and the full name — which the cell already carries in `title` —
- * grows out of it to the right on hover, the way he suggested. */
-test("a clipped axis label reveals its full name to the right", () => {
-  const flat = css.replace(/\s+/g, " ");
-  const chip = flat.match(/\.lv-bars-xaxis span\[title\]::after \{[^}]*\}/)?.[0] ?? "";
-  expect(chip).toContain("content: attr(title)");
-  expect(chip).toContain("left: 0");
-  expect(flat).toContain(".lv-bars-xaxis span:hover[title]::after");
-  // The rightmost label grows the other way, so it does not hang off the card.
-  expect(flat).toContain(".lv-bars-xaxis span:last-child[title]::after");
-  // And nothing pops up over the weekday axis, whose labels are never clipped:
-  // a chip repeating "vr" would be noise on a chart he called fine.
-  expect(flat).toContain(".weekday-bars .lv-bars-xaxis span[title]::after { content: none; }");
 });

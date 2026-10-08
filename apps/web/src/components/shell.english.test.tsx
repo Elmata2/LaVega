@@ -47,9 +47,3 @@ test("the same component renders Dutch when the cookie says so", () => {
   const html = nav();
   expect(html).toContain(shellCopy.nl.nav.moduleLabels.overview);
 });
-
-test("the two languages do not render the same nav", () => {
-  const en = nav();
-  setCookie("nl");
-  expect(nav()).not.toBe(en);
-});

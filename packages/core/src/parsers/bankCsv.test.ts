@@ -2,36 +2,6 @@ import { describe, expect, test } from "vitest";
 import { parseBankCsv } from "./bankCsv.js";
 import { parseIngCsv } from "./csv.js";
 
-/* --- ING: fold-in regression — parseBankCsv must produce the exact same txs
- * as the standalone parseIngCsv wrapper for the same ING fixture. --- */
-const ING = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
-"20260102";"Albert Heijn";"NL01INGB0001";"";"BA";"Af";"12,34";"Betaalautomaat";"Boodschappen"
-"20260103";"Salaris";"NL01INGB0001";"NL99";"OV";"Bij";"2.500,00";"Overschrijving";"Loon"`;
-
-test("ING: parseBankCsv detects the ING profile and matches parseIngCsv's txs (accountKey aside)", () => {
-  const engineResult = parseBankCsv(ING, "NL01INGB0001");
-  const wrapperTxs = parseIngCsv(ING, "NL01INGB0001");
-
-  expect(engineResult.profile).toBe("ING");
-  expect(engineResult.txs).toHaveLength(2);
-  expect(wrapperTxs).toHaveLength(2);
-
-  // Byte-identical field-by-field (both were tagged with the same accountKey here,
-  // since the CSV's own "Rekening" column also happens to be NL01INGB0001).
-  expect(engineResult.txs).toEqual(wrapperTxs);
-  expect(wrapperTxs[0]).toMatchObject({
-    date: "2026-01-02",
-    amount: -12.34,
-    counterparty: "Albert Heijn",
-    accountKey: "NL01INGB0001",
-  });
-  expect(wrapperTxs[1]).toMatchObject({
-    date: "2026-01-03",
-    amount: 2500,
-    counterparty: "Salaris",
-  });
-});
-
 test("ING: long free-text fields are preserved in full (no 80/300 truncation) — the old parseIngCsv never truncated", () => {
   const longCp = "Stichting " + "Langlopende Naam ".repeat(6).trim(); // > 80 chars
   const longMemo = "SEPA batchincasso ".repeat(30).trim(); // > 300 chars

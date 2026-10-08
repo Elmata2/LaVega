@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
 import {
-  CATEGORY_OPTIONS,
   uncategorizedTxs,
   applyCategorizations,
   recategorize,
@@ -158,12 +157,6 @@ test("uncategorizedByMonth shrinks as rules improve", () => {
   expect(uncategorizedByMonth(stored, [])[0].txs).toHaveLength(2);
   const rules: Rule[] = [{ id: "r1", match: "Mystery Holding", category: "Abonnementen" }];
   expect(uncategorizedByMonth(stored, rules)[0].txs.map((t) => t.id)).toEqual(["b"]);
-});
-
-test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () => {
-  expect(CATEGORY_OPTIONS).toContain("Boodschappen");
-  expect(CATEGORY_OPTIONS).toContain("Overboekingen");
-  expect(CATEGORY_OPTIONS.length).toBeGreaterThan(10);
 });
 
 /* ---------------------------------------------------------------------------

@@ -132,6 +132,8 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 
 Port Kasoverzicht's parser suite into Vitest: synthetic export fixtures per bank + MT940, asserting DBIT/CRDT sign, value-date fallback, merged remittance info, CLBD balance, pagination. Run after any parser/mapping change; add a fixture _before_ a new bank profile.
 
+**One contract, one test owner (2026-10 audit).** Core owns domain rules; `adapters` owns parsers, providers and storage; servers own routes, tenancy, consent and security; the UI owns only interaction and presentation invariants. A layer must not replay a lower layer's contract: `apps/*` does not re-test `packages/core`, and an in-memory store does not re-test a contract its file/Neon sibling already guards. Tests that grep source strings, restate declared constants/flags, assert a mock's own behaviour, or exist only to keep a test-only export alive are removed, not maintained. Judge a test by its assertions, not its name.
+
 ## Roadmap
 
 1. **Feature #1 (this build):** aggregation dashboard — port the engine + five views, IndexedDB storage, file-import + Enable Banking (sandbox).

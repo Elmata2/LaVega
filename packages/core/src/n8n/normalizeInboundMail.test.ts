@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  normalizeInboundMail,
-  readAuthResult,
-  readSenderChecks,
-  senderCheckOf,
-} from "./normalizeInboundMail.js";
+import { normalizeInboundMail, senderCheckOf } from "./normalizeInboundMail.js";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
 import {
   INBOUND_HTML_ONLY,
@@ -107,23 +102,6 @@ test("geen auth-header betekent 'unknown', nooit 'pass'", () => {
   expect(m.senderCheck).toBe("unknown");
 });
 
-test("readAuthResult kent alleen de RFC-uitslagen; de rest is unknown", () => {
-  expect(readAuthResult("PASS")).toBe("pass");
-  expect(readAuthResult(" softfail ")).toBe("softfail");
-  expect(readAuthResult("ja hoor")).toBe("unknown");
-  expect(readAuthResult(undefined)).toBe("unknown");
-  expect(readAuthResult(true)).toBe("unknown");
-});
-
-test("readSenderChecks maakt van een kapot object drie keer unknown", () => {
-  expect(readSenderChecks(null)).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
-  expect(readSenderChecks({ spf: "pass" })).toEqual({
-    spf: "pass",
-    dkim: "unknown",
-    dmarc: "unknown",
-  });
-});
-
 test("senderCheckOf: 'passed' vereist een echte pass, niet de afwezigheid van een fail", () => {
   expect(senderCheckOf({ spf: "pass", dkim: "pass", dmarc: "pass" })).toBe("passed");
   expect(senderCheckOf({ spf: "pass", dkim: "none", dmarc: "none" })).toBe("passed");
@@ -189,21 +167,4 @@ test("een korte tekst zonder bijlage noemt het aantal tekens, niet 'geen factuur
   const m = normalizeInboundMail({ ...INBOUND_PLAIN_TEXT, text: "Zie bijlage." });
   expect(m.ok).toBe(false);
   expect(m.reason).toBe("Maar 12 tekens tekst en geen PDF-bijlage in de doorgestuurde mail.");
-});
-
-test("een korte text/plain naast een lange HTML: de langste wint, net als bij Gmail", () => {
-  const m = normalizeInboundMail({
-    ...INBOUND_PLAIN_TEXT,
-    text: "Bekijk uw factuur online.",
-    html: "<p>Factuurnummer 99</p><p>Totaal EUR 240,00 inclusief 21% btw, te voldoen voor 1 september.</p>",
-  });
-  expect(m.textSource).toBe("html");
-  expect(m.text).toContain("240,00");
-});
-
-test("bij gelijke lengte wint text/plain: '10 < 12' mag niet door een tagfilter", () => {
-  const zelfde = "Verbruik was 10 < 12 kWh en het totaal is EUR 42,00 voor deze maand.";
-  const m = normalizeInboundMail({ ...INBOUND_PLAIN_TEXT, text: zelfde, html: zelfde });
-  expect(m.textSource).toBe("text");
-  expect(m.text).toContain("10 < 12 kWh");
 });

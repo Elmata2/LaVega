@@ -40,11 +40,6 @@ test("the policy names where the AI processor handles the data, which is the AVG
   expect(privacyHtml).toMatch(/binnen de EU/i);
 });
 
-test("the policy still states the things that remained true", () => {
-  expect(privacyHtml).toContain("alleen-lezen"); // no payment initiation
-  expect(privacyHtml).toContain("AES-GCM"); // vault crypto
-});
-
 test("the policy and terms say a forgotten password no longer loses the data", () => {
   // docs/adr/0009: the vault key belongs to the account, so "password lost =
   // data lost" and "the key never leaves your device" became false.
@@ -52,13 +47,6 @@ test("the policy and terms say a forgotten password no longer loses the data", (
   expect(termsHtml).toContain("Wachtwoord vergeten");
   expect(privacyHtml).not.toContain("sleutel alleen op je apparaat");
   expect(privacyHtml).toContain("technisch zouden kunnen openen");
-});
-
-test("both pages are complete HTML documents", () => {
-  for (const html of [privacyHtml, termsHtml]) {
-    expect(html.startsWith("<!doctype html>")).toBe(true);
-    expect(html.trimEnd().endsWith("</html>")).toBe(true);
-  }
 });
 
 test("the policy does not claim the server stores nothing, now that Neon does", () => {
@@ -88,12 +76,4 @@ test("the policy names Resend for account mail and no longer names the retired w
   expect(privacyHtml).toContain("Resend");
   expect(privacyHtml).not.toContain("Apps Script");
   expect(privacyHtml).not.toMatch(/wachtlijst/i);
-});
-
-test("chat context is not listed as sent to Mistral while chat is off", () => {
-  expect(privacyHtml).not.toMatch(/chatcontext/i);
-});
-
-test("the policy carries today's update date", () => {
-  expect(privacyHtml).toContain("2026-10-07");
 });

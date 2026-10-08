@@ -45,40 +45,6 @@ const STATIC_APP_ROUTES: StaticAppRoute[] = [
   { src: "/app", dest: "/index.html" },
 ];
 
-function readCookie(cookieHeader: string | null | undefined, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const pair of cookieHeader.split(";")) {
-    const eq = pair.indexOf("=");
-    if (eq === -1) continue;
-    if (pair.slice(0, eq).trim() === name) return pair.slice(eq + 1).trim();
-  }
-  return null;
-}
-
-/** What scripts/vercel-build.mjs's `routes` array does with these route
- *  objects, for a request to `pathname` carrying `cookieHeader`: "bounce" if
- *  a gate route's `src` matches and its cookie is missing, else "serve" once
- *  a static route's `src` matches. Routes are evaluated in array order, the
- *  same as Vercel's routing engine. */
-function evaluateAppRoutes(
-  routes: Array<AppGateRoute | StaticAppRoute>,
-  request: { pathname: string; cookieHeader: string | null | undefined },
-): "bounce" | "serve" | "unmatched" {
-  const matches = (src: string) => new RegExp(`^${src}$`).test(request.pathname);
-  for (const route of routes) {
-    if (!matches(route.src)) continue;
-    if ("missing" in route) {
-      const stillMissing = route.missing.every(
-        (cond) => readCookie(request.cookieHeader, cond.key) === null,
-      );
-      if (!stillMissing) continue; // cookie present — this gate route does not apply, keep looking
-      return "bounce";
-    }
-    return "serve";
-  }
-  return "unmatched";
-}
-
 // Proven empirically against better-auth 1.7.1's getCookies() with the exact
 // options apps/server/src/auth.ts passes (baseURL from authBaseUrl(), the
 // pinned advanced.defaultCookieAttributes, no cookiePrefix override): an
@@ -101,39 +67,4 @@ test("the missing-cookie bounce is ordered ahead of the static /app route, for b
   expect(gateIndex("/app/(.*)")).toBeGreaterThanOrEqual(0);
   expect(gateIndex("/app")).toBeLessThan(staticIndex("/app"));
   expect(gateIndex("/app/(.*)")).toBeLessThan(staticIndex("/app/(.*)"));
-});
-
-test("no session cookie at all bounces /app to /", async () => {
-  const routes = [...(await readAppGateRoutes()), ...STATIC_APP_ROUTES];
-  expect(evaluateAppRoutes(routes, { pathname: "/app", cookieHeader: undefined })).toBe("bounce");
-});
-
-test("no session cookie at all bounces a deep /app/<view> path to /", async () => {
-  const routes = [...(await readAppGateRoutes()), ...STATIC_APP_ROUTES];
-  expect(evaluateAppRoutes(routes, { pathname: "/app/transacties", cookieHeader: undefined })).toBe(
-    "bounce",
-  );
-});
-
-test("other cookies present but not the session cookie still bounces", async () => {
-  const routes = [...(await readAppGateRoutes()), ...STATIC_APP_ROUTES];
-  expect(
-    evaluateAppRoutes(routes, { pathname: "/app", cookieHeader: "lavega_locale=nl; other=1" }),
-  ).toBe("bounce");
-});
-
-test("the session cookie present, even with a garbage value, serves the static shell (presence, not validity)", async () => {
-  const routes = [...(await readAppGateRoutes()), ...STATIC_APP_ROUTES];
-  expect(
-    evaluateAppRoutes(routes, {
-      pathname: "/app",
-      cookieHeader: `${APP_SESSION_COOKIE}=not-a-real-token`,
-    }),
-  ).toBe("serve");
-  expect(
-    evaluateAppRoutes(routes, {
-      pathname: "/app/transacties",
-      cookieHeader: `${APP_SESSION_COOKIE}=not-a-real-token`,
-    }),
-  ).toBe("serve");
 });

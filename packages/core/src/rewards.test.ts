@@ -29,11 +29,6 @@ test("isStale: true past maxDays, false within", () => {
   expect(isStale(amex, "2026-10-01", 90)).toBe(true); // ~122 days
 });
 
-test("reference table is non-empty and well-formed", () => {
-  expect(REWARD_PROGRAMS.length).toBeGreaterThan(5);
-  expect(REWARD_PROGRAMS.every((p) => p.name && p.category)).toBe(true);
-});
-
 /* ══════════════ DE ING-REGEL, GETOETST AAN DE BRON EN NIET AAN ZICHZELF ══════
  *
  * Een test die de note met een letterlijke kopie van diezelfde note vergelijkt

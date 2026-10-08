@@ -87,13 +87,3 @@ test("putEntityProfiles is replace-all: dropping a row returns that entity to th
   expect(await s.getEntityProfiles()).toEqual([{ entity: "BV1", scope: "business" }]);
   expect(entityScope("BV2", await s.getEntityProfiles())).toBe("personal");
 });
-
-test("accounts and txs survive the store being added (the upgrade is additive, not a migration)", async () => {
-  globalThis.indexedDB = new IDBFactory();
-  const s = createIndexedDbStorage();
-  await s.putAccounts([acc("A")]);
-  await s.putTxs([tx("a1", "A")]);
-  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }]);
-  expect(await s.getAccounts()).toHaveLength(1);
-  expect(await s.getTxs()).toHaveLength(1);
-});

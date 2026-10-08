@@ -20,7 +20,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  AMEX_MATCH,
   AMEX_BRON,
   AANBOD_OUD_NA_DAGEN,
   AANBOD_TE_OUD_NA_DAGEN,
@@ -40,7 +39,6 @@ import {
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
-import { padIsSpecifiek, ontleedMatch } from "./bronnen.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const NU = "2026-08-22";
@@ -58,15 +56,6 @@ function aanbieding(p: Partial<Aanbieding> & { winkel: string }): Aanbieding {
 /* ─────────────────────── waar de extensie mag kijken ─────────────────────── */
 
 describe("het adres waar dit op rust", () => {
-  it("wijst een PAD aan en niet een heel domein", () => {
-    /* Zonder deze eis staat er in Chrome's toestemmingsvenster "alles op
-     * global.americanexpress.com" — inclusief het rekeningoverzicht met zijn
-     * saldo en zijn transacties. De build weigert zo'n patroon ook (controle 4
-     * in copy-static.mjs); dit is dezelfde eis, op de plek waar hij te lezen is. */
-    expect(padIsSpecifiek(AMEX_MATCH)).toBe(true);
-    expect(ontleedMatch(AMEX_MATCH)?.padPrefix).toBe("/offers/eligible");
-  });
-
   it("laat alleen de aanbiedingenpagina door, en niets anders op dat domein", () => {
     expect(amexUrlIsAanbiedingen("https://global.americanexpress.com/offers/eligible")).toBe(true);
     expect(amexUrlIsAanbiedingen("https://global.americanexpress.com/offers/eligible?loc=nl")).toBe(

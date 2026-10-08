@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildClaudeRequest, requestSize, INVOICE_SYSTEM } from "./buildClaudeRequest.js";
+import { buildClaudeRequest, requestSize } from "./buildClaudeRequest.js";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
 import {
   encodeBase64Url,
@@ -90,13 +90,6 @@ test("dezelfde mail vóór de fix: nul documenten en een lege bijlagenlijst", ()
   expect(starved.pdfs).toEqual([]);
   expect(size.documents).toBe(1);
   expect(size.textChars).toBeGreaterThan(legacyText.length);
-});
-
-test("de systeemprompt vraagt om een soort, en verbiedt een verzonnen valuta", () => {
-  expect(INVOICE_SYSTEM).toContain('"kind"');
-  expect(INVOICE_SYSTEM).toContain("notification");
-  expect(INVOICE_SYSTEM).toContain("staat er geen valuta, zet dan null");
-  expect(INVOICE_SYSTEM).toContain("je ziet alleen wat je is meegegeven");
 });
 
 test("een afgekapte mail zegt dat tegen het model", () => {

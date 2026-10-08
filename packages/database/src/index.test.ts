@@ -379,19 +379,6 @@ test("agent run status is mapped onto the values the table allows", async () => 
   });
 });
 
-test("agent run terminal update checks current run ownership", async () => {
-  const { db, calls } = fakeDatabase();
-  await createAgentRunRepository(db, "user-123").finish({
-    id: "run-1",
-    startedAt: "2026-01-02T00:00:00.000Z",
-    finishedAt: "2026-01-02T00:01:00.000Z",
-    status: "done",
-    summary: null,
-    error: null,
-  });
-  expect(executed(calls).at(-1)?.sql).toContain("WHERE run_id = $1 AND status = 'running'");
-});
-
 test("agent runs are read back in the runtime's own vocabulary", async () => {
   const { db } = fakeDatabase([
     {
@@ -709,30 +696,6 @@ test("AiUsage.record inserts all 8 columns in order", async () => {
       values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2, "user-a"],
     },
   ]);
-});
-
-test("AiUsage.spentCents reads back day and month totals", async () => {
-  const { db, calls } = fakeDatabase([{ total: 150 }]);
-  const spent = await createAiUsageRepository(db).spentCents({
-    userId: "user-a",
-    day: "2026-09-08",
-    month: "2026-09",
-  });
-  expect(spent).toEqual({ dayCents: 150, monthCents: 150 });
-  // The freshness clause (see RESERVATION_FRESH_SQL) excludes a reservation's
-  // worst-case placeholder from the total once it goes stale, unreconciled —
-  // covered behaviourally in aiUsageReservation.test.ts against a real
-  // Postgres; this only checks the SQL text this fake driver received.
-  const freshness =
-    "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
-  expect(calls[0]).toEqual({
-    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE day = $1 AND user_id = $2 AND ${freshness}`,
-    values: ["2026-09-08", "user-a"],
-  });
-  expect(calls[1]).toEqual({
-    sql: `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage\n           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${freshness}`,
-    values: ["2026-09", "user-a"],
-  });
 });
 
 /* listSessions returns EVERY row it is allowed to see, which is what makes it

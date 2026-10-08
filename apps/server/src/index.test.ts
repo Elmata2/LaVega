@@ -33,7 +33,7 @@ vi.mock("./fxHistory.js", async () => {
   return { ...actual, getFxHistory: getFxHistoryMock };
 });
 
-const { app, isStaticAssetPath } = await import("./index.js");
+const { app } = await import("./index.js");
 
 beforeEach(() => {
   verifiedSessionMock.mockResolvedValue(null); // nobody is logged in
@@ -249,23 +249,6 @@ test("LAVEGA_ALLOW_UNAUTHENTICATED=1 bypasses the /app gate", async () => {
   process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
   const res = await app.request("/app");
   expect(res.status).not.toBe(302);
-});
-
-test("isStaticAssetPath asks for a file extension, not merely for a dot", () => {
-  // Everything Vite emits is under /assets/, whatever it is called.
-  expect(isStaticAssetPath("/assets/index-DQzV9ttd.js")).toBe(true);
-  expect(isStaticAssetPath("/assets/logo-a1b2c3")).toBe(true);
-  expect(isStaticAssetPath("/favicon.ico")).toBe(true);
-  expect(isStaticAssetPath("/service-worker.js")).toBe(true);
-  expect(isStaticAssetPath("/fonts/Inter.woff2")).toBe(true);
-
-  // Views must keep reaching index.html. The dotted ticker is the reason this is
-  // an extension allowlist and not "does the path contain a dot": the investing
-  // SPA routes /positions/:symbol, and BRK.B is a real symbol.
-  expect(isStaticAssetPath("/app/rekeningen")).toBe(false);
-  expect(isStaticAssetPath("/investing/positions/BRK.B")).toBe(false);
-  expect(isStaticAssetPath("/privacy")).toBe(false);
-  expect(isStaticAssetPath("/")).toBe(false);
 });
 
 test("GET / redirects an English device to /en", async () => {

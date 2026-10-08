@@ -1,23 +1,15 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import TrendChart, { axisIndices, keyToIndex } from "./TrendChart";
-import { resolved } from "../test-support/resolveStyle.js";
 
-/* Real renders via renderToStaticMarkup (no render library in this repo), plus
- * a read of styles/charts.css so a class rename on either side fails here. The
+/* Real renders via renderToStaticMarkup (no render library in this repo). The
  * keyboard tests mount the chart for real with React's own root API — arrow-key
  * scrubbing cannot be checked from static markup.
  *
- * This file runs in jsdom, where import.meta.url resolves against the jsdom
- * document rather than the disk, so the stylesheet is read from the package
- * root (vitest's working directory). */
-
-const css = readFileSync(resolve(process.cwd(), "src/styles/charts.css"), "utf8");
+ * This file runs in jsdom. */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -42,14 +34,6 @@ function mount(ui: ReactElement): HTMLDivElement {
   return el;
 }
 
-/** The classes an ACTUAL element in the mounted tree carries, so an assertion
- *  never drifts from what TrendChart.tsx renders — a hand-typed class list
- *  would still resolve against the built stylesheet even if the component
- *  stopped emitting it. */
-function classesOf(el: Element): string[] {
-  return el.className.split(/\s+/).filter(Boolean);
-}
-
 function press(el: HTMLElement, key: string) {
   act(() => {
     el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -64,21 +48,6 @@ const points = [
 ];
 
 const format = (v: number) => `€${v}`;
-
-test("TrendChart draws one smooth path and opens its readout on the last point", () => {
-  const html = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="Testtrend" readoutLabel="Saldo" />,
-  );
-  expect(html).toContain('aria-label="Testtrend"');
-  expect(html).toContain("Saldo · week 3");
-  expect(html).toContain("€950");
-  // A cubic path, not a polyline: the line is smoothed.
-  expect(html).toContain("<path");
-  expect(html).not.toContain("<polyline");
-  // Strokes must not thicken when the 0–100 box is stretched to the card width.
-  expect(html).toContain('vector-effect="non-scaling-stroke"');
-  expect(html).toContain('preserveAspectRatio="none"');
-});
 
 test("TrendChart puts every label in HTML, never in the SVG", () => {
   const html = renderToStaticMarkup(
@@ -132,10 +101,6 @@ test("TrendChart marks a named point and skips an out-of-range one", () => {
     />,
   );
   expect(outside).not.toContain("lv-chart-mark");
-});
-
-test("TrendChart renders nothing rather than an empty axis with no points", () => {
-  expect(renderToStaticMarkup(<TrendChart points={[]} format={format} ariaLabel="A" />)).toBe("");
 });
 
 test("axisIndices keeps every label while they fit and thins them out when they don't", () => {
@@ -211,61 +176,4 @@ test("keyToIndex moves one step at a time and never walks off the series", () =>
   expect(keyToIndex(4, 2, "Tab")).toBeNull();
   expect(keyToIndex(4, 2, "a")).toBeNull();
   expect(keyToIndex(0, 0, "ArrowLeft")).toBeNull();
-});
-
-test("every class TrendChart emits has a rule in charts.css", () => {
-  // lv-chart-readout and lv-chart-readout-value are NOT in this list any more:
-  // they are now class hooks over Tailwind utilities (see TrendChart.tsx), so
-  // reading charts.css for them would pass while describing dead CSS — the
-  // class name still turns up, but only in the comment explaining the
-  // conversion. The next test proves the styling itself instead.
-  for (const cls of [
-    "lv-chart",
-    "lv-chart-withaxis",
-    "lv-chart-plot",
-    "lv-chart-area",
-    "lv-chart-svg",
-    "lv-chart-grid",
-    "lv-chart-tick",
-    "lv-chart-cursor",
-    "lv-chart-dot",
-    "lv-chart-mark",
-    "lv-chart-reflabel",
-    "lv-chart-hit",
-    "lv-chart-xaxis",
-    "lv-chart-xlabel",
-  ]) {
-    expect(css, `.${cls} missing from charts.css`).toContain(`.${cls}`);
-  }
-});
-
-test("the readout's layout and register survive the Tailwind conversion", () => {
-  const el = mount(
-    <TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />,
-  );
-  const readout = classesOf(el.querySelector(".lv-chart-readout")!);
-  const value = classesOf(el.querySelector(".lv-chart-readout-value")!);
-
-  expect(resolved(readout, "display")).toBe("flex");
-  expect(resolved(readout, "flex-direction")).toBe("column");
-  expect(resolved(readout, "min-height")).toBe("3rem");
-
-  expect(resolved(value, "font-size")).toBe("1.6rem");
-  expect(resolved(value, "font-weight")).toBe("var(--font-weight-bold)");
-  // The mobile reference's big-number register: one column, full width, so
-  // the readout grows rather than staying laptop-sized.
-  expect(resolved(value, "font-size", 900)).toBe("1.9rem");
-});
-
-test("the scrubber shows where the keyboard is", () => {
-  // A focusable surface with no visible focus state is a trap for anyone who
-  // cannot see the cursor line move.
-  expect(css.replace(/\s+/g, " ")).toContain(".lv-chart-hit:focus-visible");
-});
-
-test("the axis gutter is a variable the drawing area subtracts, so a tick never shifts the data", () => {
-  expect(css).toContain("--lv-axis-w: 0px");
-  expect(css.replace(/\s+/g, " ")).toContain(
-    ".lv-chart-area { position: absolute; inset: 0 0 0 var(--lv-axis-w); }",
-  );
 });

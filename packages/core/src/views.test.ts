@@ -192,14 +192,6 @@ const rules: Rule[] = [
   { id: "r2", match: "klant", category: "Inkomen" },
 ];
 
-test("categorize: first matching rule wins (case-insensitive over counterparty+description); else 'onbekend'; manual tx.category wins", () => {
-  expect(categorize(txsForMonths[0], rules)).toBe("Inkomen");
-  expect(categorize(txsForMonths[1], rules)).toBe("Boodschappen");
-  expect(categorize(txsForMonths[2], rules)).toBe("onbekend");
-  const manual: Tx = { ...txsForMonths[2], category: "Handmatig" };
-  expect(categorize(manual, rules)).toBe("Handmatig");
-});
-
 test("categorize: a whitespace-only rule match does NOT match everything (guards on normalized match)", () => {
   const bad: Rule[] = [{ id: "r0", match: "   ", category: "Alles" }];
   // Use a tx that matches no user rule AND no built-in NL default, so this

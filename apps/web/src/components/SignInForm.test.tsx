@@ -52,24 +52,6 @@ function submit(form: HTMLFormElement) {
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 }
 
-test("renders the intro prop", () => {
-  const el = render();
-  expect(el.textContent).toContain("Log in om verder te gaan.");
-});
-
-test("without introClassName, the intro keeps the default cell-sub class (Profiel's call site)", () => {
-  const el = render();
-  const intro = el.querySelector("p");
-  expect(intro?.className).toBe("cell-sub");
-});
-
-test("with introClassName, the intro uses it instead of cell-sub", () => {
-  const el = render(() => {}, "custom-class");
-  const intro = el.querySelector("p");
-  expect(intro?.className).toBe("custom-class");
-  expect(intro?.className).not.toContain("cell-sub");
-});
-
 test("submitting calls signIn with the typed email and password", async () => {
   vi.mocked(signIn).mockResolvedValue({
     ok: true,

@@ -29,22 +29,6 @@ test("rules store: put then get round-trips; putRules replaces the whole set", a
   expect(after[0]).toMatchObject({ id: "r2", category: "Loon" });
 });
 
-test("existing accounts/txs stores still work after the v2 upgrade adds the rules store", async () => {
-  const storage = createIndexedDbStorage();
-  await storage.putAccounts([
-    {
-      key: "A1",
-      iban: "A1",
-      name: "ING",
-      bank: "ING",
-      entity: "BV1",
-      currency: "EUR",
-      balance: null,
-    },
-  ]);
-  expect(await storage.getAccounts()).toHaveLength(1);
-});
-
 test("REAL v1->v2 upgrade: a pre-existing v1 DB's accounts/txs survive the schema bump (no data loss for returning users)", async () => {
   // Fresh IndexedDB factory so this test starts from a truly empty slate,
   // independent of the DBs the earlier tests left open (deleteDB would block on

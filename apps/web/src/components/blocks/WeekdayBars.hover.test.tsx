@@ -1,7 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -160,24 +157,6 @@ test("the plot is a group, not an image — an image would hide every bar again"
  * charts.css die hem de volle hoogte geven — jsdom heeft geen opmaakmotor, dus
  * de pixels zelf zijn hier niet na te meten. */
 
-const chartsCss = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), "../../styles/charts.css"),
-  "utf8",
-);
-/** Zonder commentaar: er staat het woord "pointer-events" ook in een uitleg, en
- *  een test die op proza slaagt bewijst niets over de opmaak. */
-const chartsRules = chartsCss.replace(/\/\*[\s\S]*?\*\//g, "");
-
-/** Het regelblok van één selector, of null. `{` en `}` zijn genoeg om te
- *  splitsen omdat charts.css geen geneste at-regels binnen deze selectors heeft. */
-function ruleBlock(selector: string): string | null {
-  const re = new RegExp(
-    `(^|[},])\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`,
-    "m",
-  );
-  return re.exec(chartsRules)?.[2] ?? null;
-}
-
 test("de stippellijn ligt ná de staven in de DOM — daar komt het probleem vandaan", () => {
   const html = renderToStaticMarkup(
     <WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />,
@@ -191,85 +170,4 @@ test("de stippellijn ligt ná de staven in de DOM — daar komt het probleem van
   // verdwijnt hij erachter), dus deze volgorde blijft — en daarom moet de svg
   // de aanwijzer doorlaten in plaats van hem te vangen.
   expect(svg).toBeGreaterThan(groups);
-});
-
-test("charts.css laat die stippellijn de aanwijzer doorgeven", () => {
-  const block = ruleBlock(".lv-chart-svg");
-  expect(block, "charts.css heeft geen .lv-chart-svg-regel meer").not.toBeNull();
-  // Zonder deze ene declaratie is geen enkele staaf met muis of vinger te
-  // bereiken. Gemeten, niet beredeneerd — zie de kop van deze sectie.
-  expect(block).toMatch(/pointer-events:\s*none/);
-});
-
-test("de knop is de hele kolom en de staaf zit erin — niet andersom", () => {
-  const html = renderToStaticMarkup(
-    <WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />,
-  );
-  // Zeven kolommen, zeven knoppen. De staaf is tekening geworden: geen <button>
-  // draagt nog `lv-bar`, want dán is het tikdoel weer 42 bij 6 pixels.
-  expect(html.match(/<button [^>]*class="weekday-column"/g)?.length).toBe(7);
-  expect(html).not.toMatch(/<button[^>]*class="[^"]*\blv-bar\b/);
-  // En de staaf staat ín die knop, met zijn chip erin — de chip hoort net boven
-  // de STAAF te hangen, niet bovenaan een kolom van volle plothoogte.
-  expect(html).toMatch(
-    /<button [^>]*class="weekday-column"[^>]*>\s*<span class="lv-bar weekday-bar[^"]*"[^>]*>\s*<span class="lv-tip/,
-  );
-
-  // De maat waar dit allemaal om begonnen is, komt uit charts.css: zonder deze
-  // twee declaraties is de knop weer zo groot als zijn inhoud en is er niets
-  // gewonnen. `height: 100%` is de plothoogte, `flex: 1` de dagbreedte.
-  const kolom = ruleBlock(".weekday-column");
-  expect(kolom, "charts.css mist de .weekday-column-regel").not.toBeNull();
-  expect(kolom).toMatch(/height:\s*100%/);
-  expect(kolom).toMatch(/flex:\s*1/);
-});
-
-test("muis, vinger en toetsenbord openen de chip via diezelfde ene knop", () => {
-  // Eén selectorblok voor alle drie: dat is de hele winst van deze opzet. Toen
-  // de muis via `.lv-bars-group:hover` liep en de tik via de knop, viel de
-  // telefoon tussen de twee door zonder dat een test dat merkte.
-  for (const weg of [
-    ".weekday-column:hover",
-    ".weekday-column:focus",
-    '.weekday-column[data-tip="on"]',
-  ]) {
-    expect(chartsRules, `charts.css mist ${weg} .lv-tip`).toContain(`${weg} .lv-tip`);
-  }
-  // De drie delen die selectorlijst staan in één blok; `[data-tip="on"]` is het
-  // laatste deel, dus dáár hangt het blok aan — en dat blok moet de chip echt
-  // tonen en niet alleen genoemd worden.
-  const blok = ruleBlock('.weekday-column[data-tip="on"] .lv-tip');
-  expect(blok, "de chip-tonende regel is niet gevonden").not.toBeNull();
-  expect(blok).toMatch(/visibility:\s*visible/);
-  expect(blok).toMatch(/opacity:\s*1/);
-
-  // De oude muis-only regel mag niet terugkomen, en al helemaal niet ongebonden:
-  // in CategoryBars staan twee of drie staven in één groep, en dan zou één
-  // beweging alle chips van die groep over elkaar heen openen.
-  expect(chartsRules).not.toMatch(/\.lv-bars-group:hover/);
-});
-
-test("de focusring verdwijnt niet met de knopopmaak mee", () => {
-  // `.weekday-column` zet `outline: none` om geen kader van de volle plothoogte
-  // te tekenen. Dat is alleen toegestaan zolang de ring een regel verderop om de
-  // STAAF terugkomt; zonder die tweede regel is de grafiek met het toetsenbord
-  // onvindbaar en is dit een a11y-regressie in plaats van opmaak.
-  expect(ruleBlock(".weekday-column:focus-visible")).toMatch(/outline:\s*none/);
-  const ring = ruleBlock(".weekday-column:focus-visible > .lv-bar");
-  expect(ring, "de focusring om de staaf is weg").not.toBeNull();
-  expect(ring).toMatch(/outline:\s*2px solid/);
-});
-
-test("een dag zonder meting krijgt ook geen kolom om aan te wijzen", () => {
-  // De kolomregel hangt aan `.lv-tip`, en die bestaat alleen binnen een staaf.
-  // Een niet-gemeten dag heeft geen staaf, dus daar valt niets te openen — geen
-  // lege chip, geen "€ 0". Onbekend blijft onbekend, ook nu de kolom meedoet.
-  const partial = [
-    { label: "ma", value: null },
-    { label: "di", value: 20 },
-    { label: "wo", value: null },
-  ];
-  const el = mount(<WeekdayBars days={partial} format={euro} ariaLabel="Uitgaven" />);
-  expect(el.querySelectorAll(".lv-bars-group")).toHaveLength(3);
-  expect(el.querySelectorAll(".lv-tip")).toHaveLength(1);
 });

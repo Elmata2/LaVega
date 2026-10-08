@@ -1,17 +1,9 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import CategoryBars from "./CategoryBars";
-
-/* This file runs in the jsdom environment (it mounts the component for real),
- * where import.meta.url resolves against the jsdom document rather than the
- * disk — so the stylesheet is read from the package root, which is vitest's
- * working directory. */
-const css = readFileSync(resolve(process.cwd(), "src/styles/charts.css"), "utf8");
 
 const series = [
   { label: "Vorige periode", color: "var(--muted)" },
@@ -51,23 +43,6 @@ function mount(ui: ReactElement): HTMLDivElement {
   });
   return el;
 }
-
-test("CategoryBars draws one bar per series per group, legend and labels included", () => {
-  const html = renderToStaticMarkup(
-    <CategoryBars
-      groups={groups}
-      series={series}
-      format={format}
-      ariaLabel="Uitgaven per categorie"
-    />,
-  );
-  expect(html.match(/class="lv-bar"/g)?.length).toBe(4);
-  expect(html).toContain('aria-label="Uitgaven per categorie"');
-  expect(html).toContain("Vorige periode");
-  expect(html).toContain("Deze periode");
-  expect(html).toContain(">Boodschappen<");
-  expect(html).toContain(">Transport<");
-});
 
 test("CategoryBars scales both series against one shared maximum", () => {
   const html = renderToStaticMarkup(
@@ -159,54 +134,4 @@ test("a tap opens the reading and a second tap closes it — a phone has no hove
   act(() => bars[3].click());
   expect(bars[0].dataset.tip).toBe("off");
   expect(bars[3].dataset.tip).toBe("on");
-});
-
-test("CategoryBars shows the value axis only when asked", () => {
-  const off = renderToStaticMarkup(
-    <CategoryBars groups={groups} series={series} format={format} ariaLabel="A" />,
-  );
-  expect(off).not.toContain("lv-chart-tick");
-  expect(off).not.toContain("lv-chart-withaxis");
-
-  const on = renderToStaticMarkup(
-    <CategoryBars groups={groups} series={series} format={format} ariaLabel="A" showAxis />,
-  );
-  expect(on).toContain("lv-chart-withaxis");
-  expect(on).toContain('class="lv-chart-tick"');
-});
-
-test("CategoryBars renders nothing rather than an empty plot with no groups", () => {
-  expect(
-    renderToStaticMarkup(
-      <CategoryBars groups={[]} series={series} format={format} ariaLabel="A" />,
-    ),
-  ).toBe("");
-});
-
-test("every class CategoryBars emits has a rule in charts.css", () => {
-  for (const cls of [
-    "lv-bars",
-    "lv-bars-plot",
-    "lv-bars-groups",
-    "lv-bars-group",
-    "lv-bar",
-    "lv-bars-xaxis",
-  ]) {
-    expect(css, `.${cls} missing from charts.css`).toContain(`.${cls}`);
-  }
-  // A zero-height bar would disappear entirely; the hairline says "measured".
-  expect(css.replace(/\s+/g, " ")).toContain("min-height: 2px");
-});
-
-test("the reading is revealed by hover, by focus and by tap — all three", () => {
-  const flat = css.replace(/\s+/g, " ");
-  expect(flat).toContain(".lv-bar:hover > .lv-tip");
-  expect(flat).toContain(".lv-bar:focus > .lv-tip"); // a tap that does focus
-  expect(flat).toContain(".lv-bar:focus-visible > .lv-tip"); // keyboard
-  expect(flat).toContain('.lv-bar[data-tip="on"] > .lv-tip'); // a tap that does not
-  // Idle chips must not swallow the pointer or be read out twice.
-  expect(flat).toContain("visibility: hidden");
-  expect(flat).toContain("pointer-events: none");
-  // A button carries UA chrome; the bar has to stay a bar.
-  expect(flat).toContain("appearance: none");
 });

@@ -38,9 +38,6 @@ const start = css.indexOf(MARKER);
 // Zonder deze regel zou een hernoemde kop `slice(-1)` opleveren — één teken CSS
 // waarin niets meer te vinden is, en dan faalt alles hieronder met een raadsel.
 if (start === -1) throw new Error(`modules.css heeft geen sectie ${MARKER}`);
-const section = css.slice(start);
-/** Zonder commentaar, anders telt een woord uit een uitleg mee als regel. */
-const rules = section.replace(/\/\*[\s\S]*?\*\//g, "");
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;
@@ -151,12 +148,6 @@ test("de samenvatting is met Tab te bereiken en houdt de focus", () => {
   expect(document.activeElement).toBe(summary);
 });
 
-test("de focus is ook te zíen: modules.css geeft de samenvatting een eigen ring", () => {
-  // base.css doet dat alleen voor button:focus-visible; een <summary> is geen
-  // button, dus zonder deze regel tabt iemand blind door het scherm.
-  expect(rules).toMatch(/\.toonmeer-summary:focus-visible\s*\{[^}]*outline:/);
-});
-
 test("het teken naast de tekst is verborgen voor een schermlezer", () => {
   // De <details> vertelt de stand al; "plus" erachteraan is dubbelop.
   const { summary } = render();
@@ -193,30 +184,4 @@ test("de volle regel krijgt géén tooltip: die zou de zichtbare tekst herhalen"
 test("een eigen klasse komt erachteraan, zonder de vorm te verdringen", () => {
   const { details } = render({ className: "overzicht-categorieen" });
   expect(details.className).toBe("toonmeer toonmeer-regel overzicht-categorieen");
-});
-
-/* ── de opmaak: elke klasse die we beloven bestaat, en beweegt niet ────── */
-
-test("elke klasse uit TOONMEER_CLASS en beide varianten hebben een regel in modules.css", () => {
-  const classes = [...Object.values(TOONMEER_CLASS), "toonmeer-regel", "toonmeer-info"];
-  for (const cls of classes) {
-    expect(rules, `.${cls} heeft geen regel in modules.css`).toMatch(
-      new RegExp(`\\.${cls}[\\s,{:\\[]`),
-    );
-  }
-});
-
-test("de stand van de volle regel komt uit CSS, want React houdt hem niet bij", () => {
-  expect(rules).toMatch(/\.toonmeer-regel\s+\.toonmeer-mark::after\s*\{\s*content:\s*"\+"/);
-  expect(rules).toMatch(/\.toonmeer-regel\[open\]\s+\.toonmeer-mark::after\s*\{\s*content:/);
-});
-
-test("het driehoekje van de browser is in beide motoren weggehaald", () => {
-  // list-style dekt Chrome en Firefox, ::-webkit-details-marker dekt Safari.
-  expect(rules).toMatch(/\.toonmeer-summary\s*\{[^}]*list-style:\s*none/);
-  expect(rules).toContain(".toonmeer-summary::-webkit-details-marker");
-});
-
-test("er beweegt niets: geen transition, animation of keyframes (huisregel 12)", () => {
-  expect(rules).not.toMatch(/transition|animation|@keyframes/);
 });

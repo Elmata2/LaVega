@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  INVESTING_MODULE_IDS,
-  INVESTING_WIDGET_IDS,
-  type InvestingModuleId,
-  type InvestingWidgetId,
-} from "@lavega/core";
+import { type InvestingModuleId, type InvestingWidgetId } from "@lavega/core";
 
 /* The module and widget registry — the one place a tab or Overview card is
  * declared, mirroring apps/web/src/components/moduleRegistry.tsx. Investing
@@ -133,8 +128,6 @@ export function investingModulePath(id: ModuleOrHome): string {
   return MODULES.find((m) => m.id === id)?.path ?? "/";
 }
 
-const KNOWN_MODULES = new Set<string>(INVESTING_MODULE_IDS);
-
 /** Resolve stored module choices into the tabs the top bar shows, always in
  *  registry order with Overview first and never removable. */
 export function resolveModules(
@@ -146,15 +139,6 @@ export function resolveModules(
     return explicit ?? true; // every module defaults on (spec §1)
   }).map((m) => m.id);
   return chosen;
-}
-
-export function toggleModule(
-  enabled: Partial<Record<InvestingModuleId, boolean>>,
-  id: InvestingModuleId,
-  on: boolean,
-): Partial<Record<InvestingModuleId, boolean>> {
-  if (!KNOWN_MODULES.has(id)) return enabled;
-  return { ...enabled, [id]: on };
 }
 
 /** In the order they appear on Overview: left column, then right column,
@@ -246,20 +230,9 @@ export const WIDGETS: InvestingWidgetDef[] = [
   },
 ];
 
-const KNOWN_WIDGETS = new Set<string>(INVESTING_WIDGET_IDS);
-
 /** Every widget defaults on (spec §3's table); an absent key means "on". */
 export function resolveWidgets(
   stored: Partial<Record<InvestingWidgetId, boolean>>,
 ): InvestingWidgetId[] {
   return WIDGETS.filter((w) => stored[w.id] ?? true).map((w) => w.id);
-}
-
-export function toggleWidget(
-  enabled: Partial<Record<InvestingWidgetId, boolean>>,
-  id: InvestingWidgetId,
-  on: boolean,
-): Partial<Record<InvestingWidgetId, boolean>> {
-  if (!KNOWN_WIDGETS.has(id)) return enabled;
-  return { ...enabled, [id]: on };
 }

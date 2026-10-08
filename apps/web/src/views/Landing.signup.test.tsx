@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Landing from "./Landing";
-import { landingCopy } from "../landingCopy.js";
 import { useAuthState } from "../authClient.js";
 import type { Locale } from "../locale.js";
 
@@ -45,20 +44,6 @@ function click(el: Element | null | undefined) {
 function dialog(el: HTMLElement): HTMLDialogElement {
   return el.querySelector("dialog") as HTMLDialogElement;
 }
-
-test.each(["nl", "en"] as const)("%s: no waitlist form, anchor or copy remains", (locale) => {
-  const el = render(locale);
-  expect(el.querySelector("#wachtlijst")).toBeNull();
-  expect(el.querySelector('[data-testid="waitlist-form"]')).toBeNull();
-  expect(el.querySelector('a[href="#wachtlijst"]')).toBeNull();
-  expect(el.textContent).not.toMatch(/wachtlijst|waitlist/i);
-  expect("waitlist" in landingCopy(locale)).toBe(false);
-});
-
-test.each(["nl", "en"] as const)("%s: the AI-assistant marketing is gone", (locale) => {
-  const el = render(locale);
-  expect(el.textContent).not.toMatch(/assistent|assistant/i);
-});
 
 test.each([
   ["nl", "Account aanmaken"],

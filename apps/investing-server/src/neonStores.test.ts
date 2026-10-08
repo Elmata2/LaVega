@@ -3,7 +3,6 @@ import {
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
-  createNeonPersonalNetWorthStore,
   createNeonPriceStore,
   createNeonSectorCorrectionStore,
   createNeonSectorInferenceSettingStore,
@@ -90,11 +89,6 @@ test("investing layout is validated on the way in and out", async () => {
   expect(write.values).toEqual([JSON.stringify({ modules: {}, widgets: { sectors: false } })]);
 });
 
-test("a tenant with no preferences row reads an empty layout from Neon", async () => {
-  const store = createNeonInvestingLayoutStore(fakeDatabase().db);
-  await expect(store.get("user-123")).resolves.toEqual({ modules: {}, widgets: {} });
-});
-
 test("consent given to an older disclosure does not count as consent to this one", async () => {
   const stale = fakeDatabase([
     {
@@ -131,98 +125,10 @@ test("consent to the current disclosure is read back as given", async () => {
   });
 });
 
-test("a stored sector correction is read back for its own symbol", async () => {
-  const { db } = fakeDatabase([{ sector_corrections: { AAPL: "Healthcare" } }]);
-  const store = createNeonSectorCorrectionStore(db);
-
-  expect(await store.get("user-a", "AAPL")).toBe("Healthcare");
-  expect(await store.get("user-a", "MSFT")).toBeNull();
-});
-
-test("setting a sector correction writes to the preferences row under the caller's tenant", async () => {
-  const { db, calls } = fakeDatabase([{ sector_corrections: {} }]);
-  const store = createNeonSectorCorrectionStore(db);
-
-  await store.set("user-a", "aapl", "Healthcare");
-
-  expect(identities(calls)).toContain("user-a");
-  const write = executed(calls).at(-1)!;
-  expect(write.sql).toContain("sector_corrections");
-  expect(write.values).toEqual([JSON.stringify({ AAPL: "Healthcare" })]);
-});
-
-test("getAll reads every correction for the tenant in one call", async () => {
-  const { db, calls } = fakeDatabase([
-    { sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } },
-  ]);
-  const store = createNeonSectorCorrectionStore(db);
-
-  expect(await store.getAll("user-a")).toEqual({ AAPL: "Healthcare", MSFT: "Technology" });
-  expect(executed(calls)).toHaveLength(1);
-});
-
-test("clearing a sector correction writes the row without that symbol", async () => {
-  const { db, calls } = fakeDatabase([
-    { sector_corrections: { AAPL: "Healthcare", MSFT: "Technology" } },
-  ]);
-  const store = createNeonSectorCorrectionStore(db);
-
-  await store.clear("user-a", "AAPL");
-
-  const write = executed(calls).at(-1)!;
-  expect(write.values).toEqual([JSON.stringify({ MSFT: "Technology" })]);
-});
-
-test("the sector-inference setting defaults to disabled and round-trips once set", async () => {
-  const { db: unset } = fakeDatabase([{ sector_inference_enabled: null }]);
-  expect(await createNeonSectorInferenceSettingStore(unset).get("user-a")).toBe(false);
-
-  const { db, calls } = fakeDatabase([{ sector_inference_enabled: true }]);
-  const store = createNeonSectorInferenceSettingStore(db);
-  expect(await store.get("user-a")).toBe(true);
-
-  await store.set("user-a", false);
-  const write = executed(calls).at(-1)!;
-  expect(write.sql).toContain("sector_inference_enabled");
-  expect(write.values).toEqual([false]);
-});
-
 test("sector corrections and the inference setting run under the caller's tenant, not another one's", async () => {
   const { db, calls } = fakeDatabase([{ sector_corrections: {} }]);
   await createNeonSectorCorrectionStore(db).set("user-a", "AAPL", "Healthcare");
   await createNeonSectorInferenceSettingStore(db).set("user-b", true);
 
   expect(identities(calls)).toEqual(["user-a", "user-a", "user-b"]);
-});
-
-test("a tenant with no preferences row has no benchmarks and no consent", async () => {
-  const { db } = fakeDatabase();
-
-  expect(await createNeonBenchmarkSelectionStore(db).get("user-a")).toEqual({
-    tenantId: "user-a",
-    symbols: [],
-  });
-  expect(await createNeonMarketDataConsentStore(db).get("user-a")).toMatchObject({
-    accepted: false,
-  });
-});
-
-test("personal net worth totals are read under the caller's own tenant", async () => {
-  const { db, calls } = fakeDatabase([
-    { date: "2026-01-02", total_cents: "150000" },
-    { date: "2026-01-03", total_cents: "-500" },
-  ]);
-
-  const totals = await createNeonPersonalNetWorthStore(db).list("user-a");
-
-  expect(totals).toEqual([
-    { date: "2026-01-02", totalCents: 150_000 },
-    { date: "2026-01-03", totalCents: -500 },
-  ]);
-  expect(identities(calls)).toEqual(["user-a"]);
-});
-
-test("a tenant who has never shared a total reads an empty list, not an error", async () => {
-  const { db } = fakeDatabase();
-  expect(await createNeonPersonalNetWorthStore(db).list("user-a")).toEqual([]);
 });

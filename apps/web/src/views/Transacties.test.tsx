@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import Transacties from "./Transacties";
-import { moneyCopy } from "../copy/money";
 
 /* The FX amount cell: original-currency amount stays primary in every mode, a
  * "approx € x" secondary figure appears only for a non-EUR row in "convert"
@@ -106,21 +105,4 @@ test("a non-EUR row in convert mode with no resolvable rate shows no approx figu
   );
   expect(html).toContain("SEK");
   expect(html).not.toContain(APPROX);
-});
-
-test("switches to English copy when the locale cookie says en, including the heading, a filter label and the uncategorised badge", () => {
-  document.cookie = "lavega_locale=en; Path=/";
-  const en = moneyCopy.en.transacties;
-  const html = renderToStaticMarkup(<Transacties {...props([tx("t1", -25, "EUR")], "separate")} />);
-  expect(html).toContain(en.heading);
-  expect(html).toContain(en.rekeningLabel);
-  expect(html).toContain(en.onbekendLabel);
-  expect(html).not.toContain("Transacties");
-});
-
-test("shows the English empty state when there are no rows", () => {
-  document.cookie = "lavega_locale=en; Path=/";
-  const en = moneyCopy.en.transacties;
-  const html = renderToStaticMarkup(<Transacties {...props([], "separate")} />);
-  expect(html).toContain(en.geenTransacties);
 });

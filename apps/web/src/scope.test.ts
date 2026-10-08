@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { shellCopy } from "./copy/shell.js";
 import { expect, test } from "vitest";
 import type { Account, EntityProfile, ScheduledFlow, Tx } from "@lavega/core";
@@ -102,17 +101,6 @@ test("an unclassified vault opens on the half that holds everything it has", () 
   expect(accountsInScope(accounts, "business", [])).toEqual([]);
 });
 
-test("the shell scopes on the classification, not on a second axis of its own", () => {
-  const src = readFileSync(new URL("./scope.ts", import.meta.url), "utf8");
-  expect(src).toContain('from "@lavega/core"');
-  expect(src).toContain("entityScope(f.entity, profiles)");
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  expect(app).toContain("accountsInScope(accounts, scope, entityProfiles)");
-  // The classification is persisted in the vault, not invented per session.
-  expect(app).toContain("storage.putEntityProfiles(profiles)");
-  expect(app).toContain("storage.getEntityProfiles()");
-});
-
 /* --- The screen each half is left on -------------------------------------- */
 
 const screen = (
@@ -149,50 +137,4 @@ test("an emptied filter is a state that was left, not an unopened half", () => {
   // "he cleared them" and "he has never been here" are different answers.
   const parked = { business: unfilteredScreen("belasting") };
   expect(screenOnSwitch(parked, "business", screen("overview")).view).toBe("belasting");
-});
-
-test("the import files new accounts under the personal half, not under a BV nobody asked for", () => {
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  // De naam komt uit de copy en niet meer als letterlijke "Persoonlijk" uit de
-  // code: wie de app in het Engels opent kreeg anders een Nederlands woord als
-  // naam op elke rekening die hij importeert.
-  expect(app).toContain("getDefaultEntity(shellCopy[locale].scope.personal)");
-  expect(app).not.toContain('useState("Persoonlijk")');
-  expect(app).not.toContain('useState("BV1")');
-});
-
-/* DE REGELS STAAN BIJ DE TRANSACTIES. Zijn verzoek bij de UI-ronde van
- * 21 september: niet in de instellingenkaart, maar bij de stap waar je een
- * verkeerd ingedeelde transactie ziet. Een bronlezing en geen render, in de
- * geest van de andere App.tsx-controles in dit bestand: wat hier misgaat is
- * dat iemand hem terugverhuist, en dat is aan de montageplek te zien. */
-test("the rules are mounted with the transactions view, not with the profile", () => {
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  const profiel = readFileSync(new URL("./views/Profiel.tsx", import.meta.url), "utf8");
-  // Waar hij NIET meer staat is het deel dat kan terugglijden, en dat is een
-  // gewone aanwezigheidsvraag in plaats van een positievergelijking.
-  expect(profiel).not.toContain("<Regels");
-  expect(app).toContain("<Regels");
-  // En waar hij wel staat: achter de transactie-guard. De regex eist de guard
-  // en de montage in één blok, zodat herindenteren hem niet omgooit.
-  expect(app).toMatch(/view === "transactions" &&[\s\S]{0,400}?<Regels/);
-});
-
-/* DE KLOK VAN HET OPHAALMOMENT MAG NIET DIE VAN DE SESSIE ZIJN.
- *
- * `asOf` in App.tsx wordt één keer bij het monteren gezet en daarna nooit meer,
- * zodat de prognose binnen een sessie niet verschuift. Dat is daar goed en hier
- * fout: dit blok bestaat om een tabblad dat DAGEN openstaat te verversen, en
- * met `asOf` zou "opgehaald op" de dag noemen waarop het tabblad openging.
- * Dezelfde fout die dit veld moest wegnemen, één as verderop.
- *
- * Een bronlezing, in de geest van de andere App.tsx-controles in deze suite:
- * wat hier misgaat is dat iemand `asOf` terugzet omdat het "consistenter" oogt,
- * en dat is aan de toewijzing te zien. */
-test("the fetched-on stamp reads the clock, not the session's frozen asOf", () => {
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  expect(app).toContain("acc.balanceFetchedAt = fetchedOn;");
-  expect(app).not.toContain("acc.balanceFetchedAt = asOf;");
-  // En `fetchedOn` komt echt van de klok, niet van een tweede alias van asOf.
-  expect(app).toMatch(/const fetchedOn = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/);
 });

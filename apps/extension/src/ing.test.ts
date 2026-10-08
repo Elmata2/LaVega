@@ -48,7 +48,6 @@ import {
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
-import { padIsSpecifiek } from "./bronnen.js";
 import { BRONNEN } from "./bronnen.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
@@ -75,13 +74,6 @@ function artikel(p: Partial<Aanbieding> & { winkel: string }): Aanbieding {
 /* ─────────────────────── waar de extensie mag kijken ─────────────────────── */
 
 describe("het adres waar dit op rust", () => {
-  it("wijst een PAD aan en niet een heel domein", () => {
-    /* Zonder deze eis zou `https://www.ing.nl/*` erin kunnen glijden, en dan
-     * mag de extensie zijn hele bank lezen terwijl er onder het vinkje staat dat
-     * het om de winkel gaat. copy-static.mjs weigert zo'n patroon ook. */
-    expect(padIsSpecifiek(ING_MATCH)).toBe(true);
-  });
-
   it("laat alleen de winkel door, en niets anders op ing.nl", () => {
     /* HET ADRES DAT DE EIGENAAR MAT: dit is de pagina waar hij stond terwijl de
      * lezer nooit draaide. Zie ING_MATCH in ing.ts voor waarom het eerst fout

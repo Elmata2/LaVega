@@ -43,7 +43,6 @@ export type PortfolioAgentDefinition = {
   criteria: string;
 };
 
-export type PortfolioJudgmentChoice = PortfolioAgentSignal | "no_view";
 export type PortfolioJudgment = {
   agentId: PortfolioAgentId;
   displayName: string;
@@ -54,11 +53,6 @@ export type PortfolioJudgmentRun = {
   judgments: PortfolioJudgment[];
   model: string;
   snapshotHash: string;
-};
-export type PortfolioJudgmentComposition = {
-  signal: PortfolioJudgmentChoice;
-  confidence: number;
-  contributingAgents: number;
 };
 
 const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
@@ -220,41 +214,6 @@ function scoreAnswer(answer: unknown): ScoreResponse | null {
   return answer && typeof answer === "object" && (answer as { type?: unknown }).type === "score"
     ? (answer as ScoreResponse)
     : null;
-}
-
-export function composePortfolioJudgments(
-  judgments: readonly PortfolioJudgment[],
-  weights: Partial<Record<PortfolioAgentId, number>> = {},
-): PortfolioJudgmentComposition {
-  let totalWeight = 0;
-  let weightedSignal = 0;
-  let weightedConfidence = 0;
-  let contributingAgents = 0;
-  for (const judgment of judgments) {
-    const choice = judgment.signal?.choice;
-    if (choice !== "bullish" && choice !== "bearish" && choice !== "neutral") continue;
-    const weight = Math.max(0, weights[judgment.agentId] ?? 1);
-    if (weight === 0) continue;
-    const confidence = probabilityForChoice(judgment.signal!);
-    const direction = choice === "bullish" ? 1 : choice === "bearish" ? -1 : 0;
-    totalWeight += weight;
-    weightedSignal += direction * weight;
-    weightedConfidence += confidence * weight;
-    contributingAgents += 1;
-  }
-  if (totalWeight === 0) return { signal: "no_view", confidence: 0, contributingAgents: 0 };
-  return {
-    signal: weightedSignal > 0 ? "bullish" : weightedSignal < 0 ? "bearish" : "neutral",
-    confidence: Number(((weightedConfidence / totalWeight) * 100).toFixed(2)),
-    contributingAgents,
-  };
-}
-
-function probabilityForChoice(answer: ChoiceResponse): number {
-  const probability = answer.probabilities[answer.choice];
-  return typeof probability === "number" && Number.isFinite(probability)
-    ? Math.max(0, Math.min(1, probability))
-    : 0;
 }
 
 export function renderPortfolioSnapshot(

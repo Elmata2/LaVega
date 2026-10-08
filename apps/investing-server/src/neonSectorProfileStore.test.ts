@@ -115,20 +115,3 @@ test("a provider write still replaces an existing provider profile", async () =>
 
   expect(await store.get("MSFT")).toMatchObject({ sector: "Healthcare", source: "provider" });
 });
-
-test("a fund weight outside the GICS taxonomy is dropped on write, not the whole profile", async () => {
-  const store = createNeonSectorProfileStore(db);
-  await store.set("BOGUS.L", {
-    kind: "fund",
-    weights: [
-      { sector: "Technology", weight: 0.5 },
-      { sector: "Not A Real Sector", weight: 0.5 },
-    ],
-    source: "provider",
-  });
-  expect(await store.get("BOGUS.L")).toEqual({
-    kind: "fund",
-    weights: [{ sector: "Technology", weight: 0.5 }],
-    source: "provider",
-  });
-});

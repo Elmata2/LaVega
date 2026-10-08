@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildExtractPrompt,
-  EXTRACT_TOOL,
-  parseExtractReply,
-  type ExtractRequest,
-} from "./catalogExtract.js";
+import { EXTRACT_TOOL, parseExtractReply, type ExtractRequest } from "./catalogExtract.js";
 
 const SWEEP = "2026-08-18";
 
@@ -104,75 +99,6 @@ Wij brengen 1,50% koersopslag in rekening op alle transacties in vreemde valuta,
 function req(product: string, text: string): ExtractRequest {
   return { product, sourceUrl: "https://example.test/tarieven", text };
 }
-
-describe("buildExtractPrompt", () => {
-  it("names the product being asked about and carries the page as data", () => {
-    const { system, user } = buildExtractPrompt(req("Knab creditcard", KNAB));
-    expect(system).toContain(EXTRACT_TOOL.name);
-    expect(user).toContain("Product: Knab creditcard");
-    expect(user).toContain("2% koersopslag");
-    expect(user).toContain("https://example.test/tarieven");
-  });
-
-  it("tells the model that failing to establish the conditions is a correct answer", () => {
-    const { system } = buildExtractPrompt(req("ASN betaalpas", ASN));
-    expect(system).toContain("conditionsKnown");
-    expect(system).toMatch(/do NOT call the tool/);
-  });
-
-  it("teaches what silence about a cap is worth, and that marketing silence is worth nothing", () => {
-    const { system } = buildExtractPrompt(req("ING betaalpas", TARIFF_CAPPED));
-    // The three fields the rule turns on are named and explained, not just listed.
-    for (const field of ["documentKind", "capsExpressedElsewhere", "unconditionalBasis"]) {
-      expect(system).toContain(field);
-    }
-    expect(system).toContain("tariff-schedule");
-    expect(system).toContain("exhaustive-document");
-    // The exclusion has to be stated as an exclusion, since a model that thinks
-    // "this marketing page is thorough enough" is the bug that shipped.
-    expect(system).toMatch(/may NOT use 'exhaustive-document' on a marketing page/);
-    // And the reply must know that guessing here is not rewarded.
-    expect(system).toMatch(/comes back as conditionsKnown false/);
-  });
-});
-
-describe("EXTRACT_TOOL", () => {
-  it("requires the figure, the section that attributes it, and the four fields that read its silence", () => {
-    const schema = EXTRACT_TOOL.input_schema as {
-      required: string[];
-      properties: Record<string, { description: string; enum?: unknown[] }>;
-    };
-    expect(schema.required).toEqual([
-      "fxFeePct",
-      "conditions",
-      "conditionsKnown",
-      "quote",
-      "section",
-      "documentKind",
-      "documentScope",
-      "capsExpressedElsewhere",
-      "unconditionalBasis",
-    ]);
-    // Each field carries its reason, because a schema without one gets filled in
-    // carelessly — the descriptions are part of the extractor, not decoration.
-    for (const key of schema.required) {
-      expect(schema.properties[key].description.length).toBeGreaterThan(60);
-    }
-    // Closed sets, so "probably a tariff page" cannot arrive as a free string the
-    // parser then has to interpret.
-    expect(schema.properties.documentKind.enum).toEqual([
-      "tariff-schedule",
-      "terms",
-      "marketing",
-      "other",
-    ]);
-    expect(schema.properties.unconditionalBasis.enum).toEqual([
-      "stated",
-      "exhaustive-document",
-      null,
-    ]);
-  });
-});
 
 describe("parseExtractReply", () => {
   it("takes an unconditional rate the page positively states as unconditional", () => {

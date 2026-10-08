@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { ladderOrder, partialOrder, runLadder, type RouteAttempt } from "./catalogRoutes.js";
+import { runLadder, type RouteAttempt } from "./catalogRoutes.js";
 import { isCovered, type CatalogValue } from "@lavega/core";
 
 const value = (route: CatalogValue["route"]): CatalogValue => ({
@@ -9,16 +9,6 @@ const value = (route: CatalogValue["route"]): CatalogValue => ({
   checkedAt: "2026-08-18",
   conditions: null,
   conditionsKnown: true,
-});
-
-test("the ladder prefers the provider's own document over anything derived", () => {
-  expect(ladderOrder()).toEqual([
-    "provider-page",
-    "provider-pdf",
-    "wayback",
-    "comparison",
-    "agent",
-  ]);
 });
 
 test("the first route that answers wins, and later ones are not run", async () => {
@@ -205,22 +195,6 @@ test("when nothing is covered the best-EVIDENCED partial is kept, not the highes
   expect(out.reason).toBe(
     "provider-page: conditions not established · agent: conditions not established",
   );
-});
-
-test("the partial order is by evidence, and the caller can read it", () => {
-  // The quote-checked rungs first (the model's reply is rejected unless the
-  // sentence is in the page, the number is in that sentence, and the heading
-  // stands at or before it), then the tariff-PDF parser, then the two that
-  // pattern-match a percentage with nothing tying it to the product asked about.
-  expect(partialOrder()).toEqual([
-    "wayback",
-    "agent",
-    "provider-pdf",
-    "provider-page",
-    "comparison",
-  ]);
-  // And it is NOT the ladder order — if these ever coincide, one of them is wrong.
-  expect(partialOrder()).not.toEqual(ladderOrder());
 });
 
 test("a covered answer still beats a better-evidenced partial, and stops the ladder", async () => {

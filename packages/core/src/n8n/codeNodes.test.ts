@@ -123,34 +123,3 @@ test("de tweede ingang deelt het pad van Gmail en dupliceert het niet", () => {
   expect(codeNodes.filter((n) => n === "Bouw Claude-verzoek")).toHaveLength(1);
   expect(workflow.nodes.filter((n) => n.name === "Lees de factuur")).toHaveLength(1);
 });
-
-test("de binnengekomen-mail-node draagt de herkomst door tot in de wachtrij", () => {
-  const request = node("b1000000-0000-4000-8000-000000000008").parameters.jsCode as string;
-  const toLaVega = node("b1000000-0000-4000-8000-00000000000a").parameters.jsCode as string;
-  for (const field of ["deliveredTo", "queueKey", "senderCheck", "senderChecks"]) {
-    expect(request).toContain(field + ": message." + field);
-    expect(toLaVega).toContain(field + ": src." + field);
-  }
-});
-
-test("de binnengekomen-mail-node valt om op een lege body in plaats van hem te slikken", () => {
-  const code = node("b1000000-0000-4000-8000-000000000011").parameters.jsCode as string;
-  expect(code).toContain("throw new Error(");
-  expect(code).toContain("normalizeInboundMail(body)");
-  // Geen seenIds-filter: een mail die hij opnieuw doorstuurt hoort opnieuw
-  // verwerkt te worden.
-  expect(code).not.toContain("seen.has(");
-});
-
-test("de webhook leegt alleen de sleutel die gevraagd werd, en geeft die terug", () => {
-  const serve = node("b1000000-0000-4000-8000-00000000000e");
-  const code = serve.parameters.jsCode as string;
-  // De sleutel komt uit de query van de GET, niet uit iets dat om te raden is.
-  expect(code).toContain("trigger.json.query");
-  expect(code).toContain("drainQueue(store, key");
-  // queue.js leegt per sleutel — geen `store.queue = []` meer dat de HELE rij
-  // zou platslaan voor iedereen die ooit doorstuurde.
-  expect(code).toContain("delete maps.queueByKey[");
-  expect(code).toContain("delete maps.noticesByKey[");
-  expect(code).toContain("invoices, notices, servedAt");
-});

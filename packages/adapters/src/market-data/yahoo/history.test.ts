@@ -197,17 +197,6 @@ test("uses the broker ticker when ISIN search returns no listing", async () => {
   expect(charts).toEqual(["MASI"]);
 });
 
-test.each([
-  ["MASI_US_EQ", "MASI", "MASI.MI"],
-  ["SKX_US_EQ", "SKX", "SKX.F"],
-])("does not accept another company for %s", async (ticker, primary, unrelated) => {
-  const { client, charts } = stubClient({ [unrelated]: { currency: "EUR", closes: [10] } });
-  await expect(
-    loadYahooPriceHistory({ ticker, exchange: "UNKNOWN", client }),
-  ).rejects.toBeInstanceOf(YahooNoListingError);
-  expect(charts).toEqual([primary]);
-});
-
 test("permits an alternate venue returned by Yahoo ISIN lookup", async () => {
   const { client, charts } = stubClient(
     { "BY6.VI": { currency: "EUR", closes: [10, 11] } },

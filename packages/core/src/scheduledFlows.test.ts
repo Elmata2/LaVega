@@ -241,5 +241,4 @@ test("rebuildTaxFlows replaces both tax sources for the shown entities in one pa
 
   const result = rebuildTaxFlows([oldVat, oldPrepay, invoice], ["BV1"], [fresh]);
   expect(result).toEqual([invoice, fresh]);
-  expect(rebuildVatFlows).toBe(rebuildTaxFlows); // the old name is the same door
 });
