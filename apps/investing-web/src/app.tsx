@@ -706,6 +706,19 @@ function AgentView() {
     }))
     .filter((message) => message.text.length > 0);
 
+  /* The first full-name tag in the last question answers it; a short
+   * handle typed by hand still reaches the server but keeps this label. */
+  const lastQuestion = bubbles.filter((message) => message.role === "user").at(-1)?.text ?? "";
+  const responder =
+    agents
+      .filter((item) => item.id !== agentId)
+      .map((item) => ({
+        item,
+        at: lastQuestion.toLowerCase().indexOf(`@${item.displayName.toLowerCase()}`),
+      }))
+      .filter(({ at }) => at >= 0)
+      .sort((left, right) => left.at - right.at)[0]?.item ?? agent;
+
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = input.trim();
@@ -783,7 +796,7 @@ function AgentView() {
           ))}
           {sending && bubbles.at(-1)?.role !== "assistant" && (
             <p role="status" className="text-sm text-muted-foreground">
-              {agent.displayName} is reading positions…
+              {responder?.displayName ?? agent.displayName} is reading positions…
             </p>
           )}
         </div>
