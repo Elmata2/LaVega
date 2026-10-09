@@ -78,6 +78,17 @@
   transition: opacity 160ms ease-out;
 }
 
+@keyframes mention-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+
+@utility mention-menu {
+  animation: mention-menu-in 120ms ease-out;
+}
+
 @utility net-worth-hatch {
   background: repeating-linear-gradient(
     135deg,
@@ -142,5 +153,8 @@
   .axis-label,
   .pressable {
     transition: none;
+  }
+  .mention-menu {
+    animation: none;
   }
 }

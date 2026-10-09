@@ -20,6 +20,7 @@ import {
 } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AgentMessageText } from "./components/AgentMessageText";
+import { MentionInput, MentionText } from "./components/MentionInput.js";
 import { AllocationDonut } from "./components/AllocationDonut";
 import {
   AuthForm,
@@ -694,6 +695,13 @@ function AgentView() {
     .map((message) => ({
       id: message.id,
       role: message.role,
+      /* A tagged agent's reply is named; the page's own agent is not. */
+      speaker:
+        agents.find(
+          (item) =>
+            item.id === (message.metadata as { agentId?: unknown } | undefined)?.agentId &&
+            item.id !== agentId,
+        )?.displayName ?? null,
       text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
     }))
     .filter((message) => message.text.length > 0);
@@ -761,10 +769,13 @@ function AgentView() {
             >
               {message.role === "user" ? (
                 <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
-                  {message.text}
+                  <MentionText text={message.text} agents={agents} />
                 </p>
               ) : (
                 <div className="max-w-[86%] rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                  {message.speaker && (
+                    <p className="mb-1 text-xs font-semibold text-primary">{message.speaker}</p>
+                  )}
                   <AgentMessageText text={message.text} />
                 </div>
               )}
@@ -781,11 +792,13 @@ function AgentView() {
             Ask {agent.displayName}
           </label>
           <div className="flex gap-2 rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
-            <input
+            <MentionInput
               id="agent-message"
               value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about your positions…"
+              onChange={setInput}
+              agents={agents}
+              selfId={agent.id}
+              placeholder="Ask about your positions… or @ another agent"
               className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-hidden"
               disabled={sending}
             />
