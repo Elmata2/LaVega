@@ -159,3 +159,60 @@ test("conversation rejects an unknown persona or a missing user message", async 
   expect((await conversation(app, { agentId: "nobody", messages: [] })).status).toBe(400);
   expect((await conversation(app, { agentId: "warren_buffett", messages: [] })).status).toBe(400);
 });
+
+test("a tagged agent answers in its own persona with the thread labelled by speaker", async () => {
+  const chatModel = streamingModel("Price matters more than I hear from you.");
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    chatModel,
+    agentRunStore: agentRunStore(),
+  });
+
+  const response = await conversation(app, {
+    agentId: "charlie_munger",
+    messages: [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "Is ASML too pricey?" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        metadata: { agentId: "charlie_munger" },
+        parts: [{ type: "text", text: "Invert it first." }],
+      },
+      {
+        id: "u2",
+        role: "user",
+        parts: [{ type: "text", text: "@Warren Buffett what do you think?" }],
+      },
+    ],
+  });
+
+  expect(await response.text()).toContain('"messageMetadata":{"agentId":"warren_buffett"}');
+  const prompt = JSON.stringify(chatModel.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Warren Buffett");
+  expect(prompt).not.toContain("You are Charlie Munger");
+  expect(prompt).toContain("tagged into the owner's conversation with Charlie Munger");
+  expect(prompt).toContain("[Charlie Munger]: Invert it first.");
+});
+
+test("a turn that tags nobody keeps the host's persona and an unlabelled thread", async () => {
+  const chatModel = streamingModel("Fine.");
+  const app = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    chatModel,
+    agentRunStore: agentRunStore(),
+  });
+
+  const response = await conversation(app, {
+    agentId: "charlie_munger",
+    messages: [
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "Ask me." }] },
+      { id: "u1", role: "user", parts: [{ type: "text", text: "mail a@buffett.com" }] },
+    ],
+  });
+  await response.text();
+
+  const prompt = JSON.stringify(chatModel.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Charlie Munger");
+  expect(prompt).not.toContain("tagged into");
+  expect(prompt).not.toContain("[Charlie Munger]:");
+});

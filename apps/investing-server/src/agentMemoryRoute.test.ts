@@ -134,6 +134,29 @@ test("a conversation is saved as a thread of its agent and reopens with the repl
   );
 });
 
+test("a tagged agent's reply is stored in the host's thread and writes no memory", async () => {
+  const model = scriptedModel([
+    { tool: "save_goal", input: { text: "Should not be saved" } },
+    { text: "Own it for the moat." },
+  ]);
+  const app = await runtime(model);
+  await turn(app, "@Warren Buffett is ASML a good business?");
+
+  const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Warren Buffett");
+  expect(prompt).not.toContain("Risk tolerance");
+  expect(await json(app, "/api/memory/threads?agentId=warren_buffett")).toEqual({ threads: [] });
+  const { thread } = (await json(app, `/api/memory/threads/${THREAD}`)) as {
+    thread: { agentId: string; messages: Array<{ role: string; metadata?: unknown }> };
+  };
+  expect(thread.agentId).toBe("charlie_munger");
+  expect(thread.messages[1]).toMatchObject({
+    role: "assistant",
+    metadata: { agentId: "warren_buffett" },
+  });
+  expect(await json(app, "/api/memory")).toMatchObject({ goals: [] });
+});
+
 test("the agent asks for a missing thesis and stores the one the owner confirms", async () => {
   const first = scriptedModel([{ text: "Why do you own ASML?" }]);
   const app = await runtime(first);

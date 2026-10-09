@@ -22,6 +22,7 @@ import {
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import { attributeHistory, findMentions } from "./agentMentions.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
 import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
@@ -957,7 +958,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           ? last.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
           : "";
       if (!message.trim()) return c.json({ problems: ["Conversation message is required"] }, 400);
-      const agentId = body.agentId;
+      const host = body.agentId;
+      /* The first tagged agent answers inside the host's thread. Storage
+       * stays under the host, and a guest turn reads and writes no memory. */
+      const responder = findMentions(message)[0] ?? host;
       /* The chat id is the thread id. The client's copy of the history feeds
        * the model; only this turn's user message and the reply are stored. */
       const repository = agentMemory?.(await resolveTenantId()) ?? null;
@@ -969,27 +973,31 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         const [agent] = await Promise.all([
           portfolioChatContext().then((context) =>
             createPortfolioChatAgent({
-              agentId,
+              agentId: responder,
+              host,
               message,
               context,
-              ...(repository && threadId ? { memory: { repository, agentId, threadId } } : {}),
+              ...(repository && threadId && responder === host
+                ? { memory: { repository, agentId: host, threadId } }
+                : {}),
               ...(options.chatModel ? { model: options.chatModel } : {}),
             }),
           ),
           repository && threadId
-            ? repository.appendMessages(threadId, agentId, title, [last])
+            ? repository.appendMessages(threadId, host, title, [last])
             : undefined,
         ]);
         return await createAgentUIStreamResponse({
           agent,
-          uiMessages: messages,
+          uiMessages: attributeHistory(messages, responder, host),
+          messageMetadata: () => ({ agentId: responder }),
           abortSignal: c.req.raw.signal,
           onError: () => "The agent could not answer. Try again.",
           generateMessageId: () => crypto.randomUUID(),
           onEnd: async ({ responseMessage }) => {
             if (!repository || !threadId || responseMessage.parts.length === 0) return;
             await repository
-              .appendMessages(threadId, agentId, title, [responseMessage])
+              .appendMessages(threadId, host, title, [responseMessage])
               .catch((error: unknown) => console.error("[memory] reply not saved", error));
           },
         });
