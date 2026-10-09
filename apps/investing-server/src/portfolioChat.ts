@@ -18,7 +18,7 @@ import {
   type SectorExposure,
   type Trade,
 } from "@lavega/core";
-import type { PortfolioAgentId } from "./portfolioAgent.js";
+import { getPortfolioAgent, type PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
 import { memoryTools, renderMemoryBrief, type ThreadMemory } from "./chatMemory.js";
 
@@ -131,6 +131,9 @@ async function fundamentalsSection(provider: FundamentalsProvider, symbol: strin
   }
 }
 
+const guestSection = (host: PortfolioAgentId) =>
+  `You were tagged into the owner's conversation with ${getPortfolioAgent(host).displayName}. Lines starting [Name] come from other agents; unlabelled lines are from the owner. Read the thread, then give your own view in your own voice. Disagree with ${getPortfolioAgent(host).displayName} when your lens says so. Do not repeat what was already said.`;
+
 /** One agent per conversation. The portfolio brief and fundamentals for
  *  the named and largest holdings are fetched in parallel before the model
  *  is called, so the first answer rarely waits on a tool round trip. */
@@ -141,6 +144,8 @@ export async function createPortfolioChatAgent(input: {
   /** Absent without a database: the turn then runs without memory. */
   memory?: ThreadMemory;
   model?: LanguageModel;
+  /** Owner of the thread when `agentId` was tagged into it. */
+  host?: PortfolioAgentId;
 }): Promise<Agent<never, ToolSet>> {
   const { context, memory } = input;
   const symbols = prefetchSymbols(input.message, context.dashboard);
@@ -169,6 +174,7 @@ export async function createPortfolioChatAgent(input: {
     model: input.model ?? resolvePortfolioChatModel(),
     instructions: [
       PORTFOLIO_CHAT_PROFILES[input.agentId],
+      input.host && input.host !== input.agentId ? guestSection(input.host) : "",
       `Portfolio brief:\n${renderPortfolioBrief(context.dashboard, context.sectors)}`,
       sections.length > 0 ? `Company fundamentals:\n\n${sections.join("\n\n")}` : "",
       summary ? renderMemoryBrief(summary, named) : "",
