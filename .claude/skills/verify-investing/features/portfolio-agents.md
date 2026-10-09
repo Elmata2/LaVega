@@ -37,6 +37,10 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
 - failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
   the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
 available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
+- tagging: typing `@` in the chat input (`#agent-message`, a combobox) lists the other five
+  agents above the input; Enter or Tab inserts `@<Display Name> `. A sent message that tags
+  another agent is answered by that agent, shown with its name above the reply. The first tag
+  answers; the thread stays listed under the page's agent.
 - while a chat reply streams and no assistant bubble is in yet, the status is
   `<displayName> is reading positions…`. The analyse control still reads `Agent reading…`.
 
