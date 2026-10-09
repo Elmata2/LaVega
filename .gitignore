@@ -26,7 +26,8 @@ state.json
 !.claude/skills/
 .vercel
 
-# The pnpm store is pinned to the repo (.npmrc) so an install never has to
-# purge node_modules when the global store moves.
+# The pnpm store is global (pnpm's default) and shared by every worktree.
+# .githooks/post-checkout links it into a fresh worktree. A stale repo-local
+# store from an older install is still ignored.
 .pnpm-store/
 .env.local

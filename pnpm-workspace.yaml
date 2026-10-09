@@ -2,6 +2,10 @@ packages:
   - "packages/*"
   - "apps/*"
   - "scripts/catalog"
+# The pnpm store is global (pnpm's default) and shared by every git worktree.
+# Prefer cached metadata so a fresh worktree links offline instead of hitting
+# the registry. .githooks/post-checkout runs the install on `git worktree add`.
+preferOffline: true
 # pnpm 11's build-script approval gate: esbuild's postinstall fetches its
 # platform-specific binary, which vitest/vite need to run. @sentry/cli's does
 # the same for the source-map upload binary the Sentry Vite plugin shells out

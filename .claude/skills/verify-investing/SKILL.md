@@ -246,7 +246,7 @@ node $C browser screenshot --png /tmp/lavega-verify-investing/evidence/page.png
 node $C browser console --errors
 node $C browser network
 node $C browser perf
-node $C browser eval "document.title"
+node $C browser js "document.title"
 node $C browser raw -- viewport 390x844     # any browse command not wrapped
 node $C browser stop
 ```

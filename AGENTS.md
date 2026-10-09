@@ -55,6 +55,11 @@ web UI, macOS daemon); `packages/*` for shared libraries and config. Root script
 `pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
 `pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
+Git worktrees share one global pnpm store. `.githooks/post-checkout` (installed by the
+root `prepare` script via `core.hooksPath`) runs `pnpm install --frozen-lockfile
+--prefer-offline` when a fresh worktree has no `node_modules`, so `git worktree add`
+provisions itself offline. Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out.
+
 ### TypeScript: Effect
 
 All new TypeScript logic uses Effect 4 (`effect@4.0.1`). Read `repos/effect/LLMS.md`

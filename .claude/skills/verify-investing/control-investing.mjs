@@ -2741,14 +2741,14 @@ const COMMANDS = [
     run: ({ args }) => browseAndPrint(args[0] ? ["scroll", args[0]] : ["scroll"]),
   },
   {
-    name: "browser eval",
+    name: "browser js",
     group: "Browser",
     summary: "Evaluate a JavaScript expression in the page",
     args: [{ name: "expression", required: true }],
     effect: "browser-action",
     plan: ({ args }) => ({ browse: ["js", args[0]] }),
     run: ({ args }) => browseAndPrint(["js", args[0]]),
-    examples: ['browser eval "document.title"'],
+    examples: ['browser js "document.title"'],
   },
   {
     name: "browser wait-settle",
