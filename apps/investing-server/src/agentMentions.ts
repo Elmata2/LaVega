@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import { findMentions as matchAgents } from "@lavega/core";
 import {
   getPortfolioAgent,
   isPortfolioAgentId,
@@ -6,28 +7,16 @@ import {
   type PortfolioAgentId,
 } from "./portfolioAgent.js";
 
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/* The tag rule lives in `@lavega/core` so the web app names the same agent
+ * the server picks. Here it is bound to the six personas. */
+const MENTION_AGENTS = PORTFOLIO_AGENT_IDS.map((id) => ({
+  id,
+  displayName: getPortfolioAgent(id).displayName,
+}));
 
-/* One matcher per agent: "@Warren Buffett", "@Warren" and "@Buffett". The
- * full name comes first so "@Warren Buffett" is not read as "@Warren". */
-const MATCHERS = PORTFOLIO_AGENT_IDS.map((id) => {
-  const [first = "", ...rest] = getPortfolioAgent(id).displayName.split(/\s+/);
-  const last = rest.at(-1) ?? first;
-  const names = [`${escape(first)}\\s+${escape(last)}`, escape(first), escape(last)];
-  return { id, pattern: new RegExp(`^(?:${names.join("|")})(?![\\p{L}\\p{N}_])`, "iu") };
-});
-
-/** Agents tagged in `text`, in the order first tagged. A tag starts at the
- *  beginning of the text or after whitespace, so an address such as
- *  `a@buffett.com` is not a tag. */
+/** Agents tagged in `text`, in the order first tagged. */
 export function findMentions(text: string): PortfolioAgentId[] {
-  const found: PortfolioAgentId[] = [];
-  for (const tag of text.matchAll(/(?<!\S)@/g)) {
-    const rest = text.slice(tag.index + 1);
-    const match = MATCHERS.find(({ pattern }) => pattern.test(rest));
-    if (match && !found.includes(match.id)) found.push(match.id);
-  }
-  return found;
+  return matchAgents(text, MENTION_AGENTS).map((agent) => agent.id);
 }
 
 /** Prefixes each assistant turn with its speaker so the responder can tell

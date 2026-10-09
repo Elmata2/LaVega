@@ -33,18 +33,18 @@ function render(onSubmit?: () => void) {
   const container = document.createElement("div");
   document.body.append(container);
   act(() => createRoot(container).render(<Harness onSubmit={onSubmit} />));
-  return container.querySelector("input")!;
+  return container.querySelector("textarea")!;
 }
 
-function type(input: HTMLInputElement, text: string) {
+function type(input: HTMLTextAreaElement, text: string) {
   act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, text);
     input.setSelectionRange(text.length, text.length);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
-function press(input: HTMLInputElement, key: string) {
+function press(input: HTMLTextAreaElement, key: string) {
   const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
   act(() => {
     input.dispatchEvent(event);
@@ -112,12 +112,32 @@ test("Tab and a click also choose", () => {
   expect(input.value).toBe("@Warren Buffett ");
 });
 
-test("Escape closes the list, and Enter then falls through to the form", () => {
-  const input = render();
+test("Escape closes the list, and Enter then sends the form", () => {
+  const submit = vi.fn();
+  const input = render(submit);
   type(input, "@");
   press(input, "Escape");
   expect(document.querySelector('[role="listbox"]')).toBeNull();
-  expect(press(input, "Enter").defaultPrevented).toBe(false);
+  const enter = press(input, "Enter");
+  expect(enter.defaultPrevented).toBe(true);
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+
+test("Shift+Enter starts a new line instead of sending", () => {
+  const submit = vi.fn();
+  const input = render(submit);
+  type(input, "line one");
+  const event = new KeyboardEvent("keydown", {
+    key: "Enter",
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    input.dispatchEvent(event);
+  });
+  expect(event.defaultPrevented).toBe(false);
+  expect(submit).not.toHaveBeenCalled();
 });
 
 test("MentionText sets only whole agent names in bold", () => {

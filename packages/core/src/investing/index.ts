@@ -20,3 +20,4 @@ export * from "./sectorTaxonomy.js";
 export * from "./personalNetWorth.js";
 export * from "./fundamentals.js";
 export * from "./portfolioBrief.js";
+export * from "./mentions.js";

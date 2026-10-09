@@ -34,7 +34,7 @@ export function MentionInput({
   className?: string;
 }) {
   const listId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(value.length);
   const [active, setActive] = useState(0);
   /* Where the dismissed tag began; typing a different tag opens the list again. */
@@ -47,6 +47,15 @@ export function MentionInput({
   const open = !disabled && tag !== null && options.length > 0 && dismissedAt !== tag.index;
   const activeIndex = Math.min(active, Math.max(options.length - 1, 0));
   const optionId = (agentId: string) => `${listId}-${agentId}`;
+
+  /* Grow the field to fit its text, from the top, so long questions are
+   * visible instead of scrolling inside a one-line box. */
+  useLayoutEffect(() => {
+    const field = inputRef.current;
+    if (!field) return;
+    field.style.height = "0px";
+    field.style.height = `${field.scrollHeight}px`;
+  });
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;
@@ -64,26 +73,34 @@ export function MentionInput({
     onChange(next);
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open) return;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+  function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (open) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        setActive((activeIndex + step + options.length) % options.length);
+      } else if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        choose(options[activeIndex]!);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedAt(tag!.index);
+      }
+      return;
+    }
+    /* Enter sends; Shift+Enter starts a new line, as in any chat field. */
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      setActive((activeIndex + step + options.length) % options.length);
-    } else if (event.key === "Enter" || event.key === "Tab") {
-      event.preventDefault();
-      choose(options[activeIndex]!);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      setDismissedAt(tag!.index);
+      event.currentTarget.form?.requestSubmit();
     }
   }
 
   return (
-    <div className="relative min-w-0 flex-1">
-      <input
+    <div className="relative w-full">
+      <textarea
         ref={inputRef}
         id={id}
+        rows={1}
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={open}

@@ -14,6 +14,7 @@ import {
 } from "react-router-dom";
 import {
   buildIndexedSeries,
+  findMentions,
   type InvestingDashboardData,
   type InvestingPositionDetail,
   type RiskRange,
@@ -706,18 +707,11 @@ function AgentView() {
     }))
     .filter((message) => message.text.length > 0);
 
-  /* The first full-name tag in the last question answers it; a short
-   * handle typed by hand still reaches the server but keeps this label. */
+  /* The first tag in the last question answers it, by the same rule the
+   * server uses to pick the responder — full, first or last name. */
   const lastQuestion = bubbles.filter((message) => message.role === "user").at(-1)?.text ?? "";
-  const responder =
-    agents
-      .filter((item) => item.id !== agentId)
-      .map((item) => ({
-        item,
-        at: lastQuestion.toLowerCase().indexOf(`@${item.displayName.toLowerCase()}`),
-      }))
-      .filter(({ at }) => at >= 0)
-      .sort((left, right) => left.at - right.at)[0]?.item ?? agent;
+  const responderId = findMentions(lastQuestion, agents)[0]?.id;
+  const responder = agents.find((item) => item.id === responderId) ?? agent;
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -804,7 +798,7 @@ function AgentView() {
           <label htmlFor="agent-message" className="sr-only">
             Ask {agent.displayName}
           </label>
-          <div className="flex gap-2 rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
             <MentionInput
               id="agent-message"
               value={input}
@@ -812,12 +806,14 @@ function AgentView() {
               agents={agents}
               selfId={agent.id}
               placeholder="Ask about your positions… or @ another agent"
-              className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-hidden"
+              className="block max-h-40 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 outline-hidden"
               disabled={sending}
             />
-            <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
-              Send
-            </Button>
+            <div className="mt-1 flex justify-end">
+              <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
+                Send
+              </Button>
+            </div>
           </div>
           {error && (
             <p role="alert" className="mt-3 text-sm text-negative">
