@@ -16,11 +16,14 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   (`data-dashboard-section="performance"`), not in the aside. With no benchmark selected
   the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
   selected the title is `Comparison` and the axis is `Indexed return`; portfolio and
-  benchmark are percents (`packages/core` `deriveChartMode`). Period group `Choose period`:
+  benchmark are percents (`packages/core` `deriveChartMode`). Empty chart: title
+  `No portfolio data`, then `The value chart is built from your transaction history. While your
+  broker provides no transactions for it, it stays empty.` Period group `Choose period`:
   `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
   search.
 - allocation donut widget (`Allocation`, `data-dashboard-section="allocation"`) in that
-  same main column.
+  same main column. Empty book: title `No positions`, then
+  `Your allocation appears after the first broker sync.`
 - summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
@@ -33,8 +36,9 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   Eyebrow `Composition`. Empty copy: `No sector data yet.` The Profile switch that can
   fill missing sectors is `#data` (`Sector inference`). See
   [broker-connect-sync.md](broker-connect-sync.md).
-- portfolio agents card, title `Investor lens` (`data-dashboard-section="agent"`), below
-  the two-column grid. The persona picker is a radio group with `aria-label="Choose agent"`.
+- portfolio agents card, eyebrow `Agent`, title `Investor lens`
+  (`data-dashboard-section="agent"`), below the two-column grid. The persona picker is a radio
+  group with `aria-label="Choose agent"`.
   See [portfolio-agents.md](portfolio-agents.md).
 - letter card in the aside, same Profile switch as the agent card (widget id `agent`,
   label `Portfolio agent`). There is no separate letter switch. Accessible name

@@ -138,8 +138,8 @@ There is no separate job id. `positionsRead` and `lastSyncedAt` are the refresh 
   Sync can finish `completed` with Price history `Up to date`, and later runs skip that
   symbol. A held position with the same not-found still reports a problem, and the Price
   history chip reads `Problem`. A held symbol that stays quiet after its last bar adds
-  `no prices since <date>` to the price-sync `problems` list, which Overview shows under
-  `Reading problems`. `delistedSince` is not a field in the API JSON.
+  `no prices since <date>` to the price-sync `problems` list. Overview shows that list under
+  `Sync problems`. `delistedSince` is not a field in the API JSON.
 - Without accepted consent the server makes no Yahoo request for prices or benchmark search.
   Positions stay unpriced. A 428 `fix` names `consent --accept`, then `sync --wait`, then
   `prices sync --wait`. Consent alone fetches nothing.

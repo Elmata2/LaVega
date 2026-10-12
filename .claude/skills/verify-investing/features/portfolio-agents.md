@@ -22,9 +22,10 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
   `no_view`) with a confidence.
 - conversation: `Open conversation with <name>` opens `/agents/:agentId`. Back link:
   `← Back to overview`. Eyebrow `Portfolio agent`, then the display name. Input label
-  `Ask <displayName>`, placeholder `Ask about your positions…`, button `Send`. The positions
-  panel's accessible name is `Conversation context`. Its eyebrow is `Context` and the visible
-  heading is `Your positions`. Empty copy is `No positions available.` Each turn posts
+  `Ask <displayName>`, placeholder `Ask about your positions… or @ another agent`, button `Send`.
+  The field is a textarea (`#agent-message`, role `combobox`) that grows with the text.
+  The positions panel's accessible name is `Conversation context`. Its eyebrow is `Context` and the
+  visible heading is `Your positions`. Empty copy is `No positions available.` Each turn posts
   `/api/agents/portfolio/conversation`.
   The body is `{ agentId, messages }`. When agent memory is configured, it also needs a UUID
   `id` (the thread id). The reply streams (`text/event-stream`).
@@ -37,12 +38,15 @@ an OpenAI-compatible chat, OpenRouter by default (`LAVEGA_AGENT_API_KEY`, then
 - failure states: overview catalog error `Failed to load agents.`. The `/agents` list and
   the conversation shell use the title `Agents unavailable`. Also `No portfolio agents
 available.`, `Agent not found`, `Agent run failed.`, `Agent reply failed.`
-- tagging: typing `@` in the chat input (`#agent-message`, a combobox) lists the other five
-  agents above the input; Enter or Tab inserts `@<Display Name> `. A sent message that tags
-  another agent is answered by that agent, shown with its name above the reply. The first tag
-  answers; the thread stays listed under the page's agent.
+- tagging: typing `@` in `#agent-message` opens listbox `Tag an agent` with the other five
+  agents (the page's own agent is not listed). Enter or Tab inserts `@<Display Name> `.
+  Escape closes the list. With the list closed, Enter sends and Shift+Enter starts a new line.
+  A sent message that tags another agent is answered by that agent, shown with its name above
+  the reply. The first tag answers; the thread stays listed under the page's agent.
 - while a chat reply streams and no assistant bubble is in yet, the status is
-  `<displayName> is reading positions…`. The analyse control still reads `Agent reading…`.
+  `<name> is reading positions…`. `<name>` is the tagged agent's display name when the last
+  question contains a tag, and the page agent's display name otherwise. The analyse control
+  still reads `Agent reading…`.
 
 ## How to get to it (user POV)
 
