@@ -19,7 +19,10 @@ dividends. This is where most investing reports originate.
   vault, then force a sync. Success reads `Vault unlocked. Sync completed.` When that sync
   POST returns no result, the status reads
   `Vault unlocked. Sync continues in the background; progress is shown above.`
-- `Start sync` (`Syncing…` while pending) — force a sync with the vault already open.
+- `Start sync` (`Syncing…` while pending) — the block stays on the page for an empty vault.
+  Heading `Data saved?`. Copy: `Start a new broker sync now. This bypasses the daily sync cache.`
+  The button force-posts sync. An empty vault then ends in `problem` /
+  `credential vault is locked`.
 - sync progress card (Profile, only while status is running, waiting, or completed;
   hidden on idle and on problem). Eyebrow `Broker sync`. The heading is
   `Trading 212 syncing` or `Trading 212 synced` even when the run is IBKR. Badge:
