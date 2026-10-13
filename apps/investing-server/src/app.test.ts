@@ -9,7 +9,7 @@ import {
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
-import { emptyInvestingDashboard } from "@lavega/core";
+import { buildRiskProjection, emptyInvestingDashboard } from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
@@ -923,7 +923,11 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
     },
   );
   const investingApp = createApp({
-    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    dashboardReader: vi.fn(async () => ({
+      ...dashboard,
+      risk: buildRiskProjection(dashboard),
+      problems: [],
+    })),
     sectorProfile: vi.fn(async (symbol: string) =>
       symbol === "MYST"
         ? null
@@ -1155,34 +1159,111 @@ test("summary route reports failures as 503 problem payload", async () => {
   expect(response.status).toBe(503);
 });
 
-test("summary removes deposits and rejects invalid risk selectors", async () => {
-  const dashboard = emptyInvestingDashboard();
-  const cursor = new Date("2026-01-01T00:00:00Z");
-  const dates: string[] = [];
-  while (dates.length < 61) {
-    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6)
-      dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  dashboard.portfolio["1Y"] = dates.map((date, index) => ({
-    date,
-    value: index < 30 ? 100 : 200,
-    positionsValue: 0,
-    cashValue: index < 30 ? 100 : 200,
-    unpriced: [],
-    cashUnknown: [],
-    forwardFilled: [],
-  }));
-  dashboard.externalCashFlows = [{ date: dates[30]!, amount: 100 }];
+test("summary reads the dashboard's risk projection and rejects invalid risk selectors", async () => {
+  const report = {
+    metrics: {
+      dailyVolatility: 0.01,
+      annualizedVolatility: 0.16,
+      beta: 1.1,
+      alpha: 0.02,
+      maxDrawdown: -0.2,
+      observationDays: 60,
+      excludedIntervals: 0,
+      pairedObservationDays: 60,
+      startDate: "2026-01-01",
+      endDate: "2026-04-01",
+    },
+    risk: {
+      status: "estimate" as const,
+      range: "1Y" as const,
+      from: "2026-01-01",
+      to: "2026-04-01",
+      drawdownFrom: null,
+      minimumObservations: 60,
+      benchmark: null,
+      benchmarks: [],
+      reasons: [],
+      missingHoldings: [],
+      missingPrices: [],
+      coverage: 1,
+      currency: "EUR",
+    },
+  };
+  const dashboard = {
+    ...emptyInvestingDashboard(),
+    risk: {
+      byBenchmark: { "": { "6M": report, "1Y": report, All: report } },
+      defaultBenchmark: null,
+    },
+  };
   const app = createApp({ dashboardReader: async () => dashboard });
   const response = await app.request("/api/investing/summary?range=1Y");
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    metrics: { annualizedVolatility: 0, maxDrawdown: 0, beta: null, observationDays: 60 },
+    metrics: { annualizedVolatility: 0.16, maxDrawdown: -0.2, beta: 1.1, observationDays: 60 },
     risk: { status: "estimate", range: "1Y", benchmark: null },
   });
   expect((await app.request("/api/investing/summary?range=invalid")).status).toBe(400);
   expect((await app.request("/api/investing/summary?benchmark=NOT_SELECTED")).status).toBe(400);
+});
+
+test("summary reads a configured benchmark's projection entry for that benchmark", async () => {
+  const report = {
+    metrics: {
+      dailyVolatility: null,
+      annualizedVolatility: null,
+      beta: null,
+      alpha: null,
+      maxDrawdown: null,
+      observationDays: 0,
+      excludedIntervals: 0,
+      pairedObservationDays: 0,
+      startDate: null,
+      endDate: null,
+    },
+    risk: {
+      status: "unavailable" as const,
+      range: "6M" as const,
+      from: null,
+      to: null,
+      drawdownFrom: null,
+      minimumObservations: 60,
+      benchmark: { symbol: "SP500", name: "S&P 500", currency: "EUR" },
+      benchmarks: [],
+      reasons: [],
+      missingHoldings: [],
+      missingPrices: [],
+      coverage: null,
+      currency: "EUR",
+    },
+  };
+  const empty = emptyInvestingDashboard();
+  const dashboard = {
+    ...empty,
+    benchmarks: [
+      {
+        symbol: "SP500",
+        name: "S&P 500",
+        exchange: "NYSE Arca",
+        currency: "EUR",
+        converted: false,
+        points: [],
+      },
+    ],
+    risk: {
+      byBenchmark: { SP500: { "6M": report, "1Y": report, All: report } },
+      defaultBenchmark: "SP500",
+    },
+  };
+  const app = createApp({ dashboardReader: async () => dashboard });
+  const selected = await app.request("/api/investing/summary?range=6M&benchmark=SP500");
+  expect(selected.status).toBe(200);
+  expect(await selected.json()).toMatchObject({
+    risk: { status: "unavailable", range: "6M", benchmark: { symbol: "SP500" } },
+  });
+  const defaulted = await app.request("/api/investing/summary?range=6M");
+  expect(defaulted.status).toBe(200);
+  expect(await defaulted.json()).toMatchObject({ risk: { benchmark: { symbol: "SP500" } } });
 });
 
 test("tenant-scoped routes read and write under the resolved tenant, not the local default", async () => {

@@ -32,6 +32,7 @@ function dashboard(): InvestingDashboardData {
     positions: [],
     position: null,
     problems: [],
+    risk: { byBenchmark: {}, defaultBenchmark: null },
   };
 }
 

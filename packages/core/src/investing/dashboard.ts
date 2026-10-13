@@ -30,6 +30,7 @@ import {
 import { valuePosition } from "./valuation.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { orderTrades, tradeDelta } from "./quantity.js";
+import { buildRiskProjection, type InvestingRiskProjection } from "./risk.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -99,6 +100,9 @@ export type InvestingDashboardData = {
   positions: InvestingDashboardPosition[];
   position: InvestingPositionDetail | null;
   problems: string[];
+  /** Risk, projected from this read model at build time: the summary endpoint
+   *  and the chat tool read it instead of re-running the metrics pass. */
+  risk: InvestingRiskProjection;
 };
 
 export type InvestingDashboardInput = {
@@ -135,6 +139,7 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     positions: [],
     position: null,
     problems: [],
+    risk: { byBenchmark: {}, defaultBenchmark: null },
   };
 }
 
@@ -244,7 +249,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     );
   }
 
-  return {
+  const dashboard: InvestingDashboardData = {
     dataVersion: input.dataVersion ?? 0,
     presentationCurrency: input.presentationCurrency,
     portfolio,
@@ -287,7 +292,9 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     positions,
     position,
     problems: [...(input.problems ?? []), ...positionProblems],
+    risk: { byBenchmark: {}, defaultBenchmark: null },
   };
+  return { ...dashboard, risk: buildRiskProjection(dashboard) };
 }
 
 function buildPositionDetail(input: {

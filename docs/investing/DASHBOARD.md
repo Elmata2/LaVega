@@ -184,6 +184,8 @@ Render cached partial data while backfill continues. A failed symbol retries on 
 
 Maintain an in-memory `dataVersion`. Increment it after broker data is applied and after a price-store upsert completes. Cache the last `InvestingDashboardData` with its version. Recompute only when the version changes.
 
+Risk is a projection of the read model, not a per-request computation. `buildInvestingDashboard` calls `buildHistoricalRisk` once for every configured benchmark symbol and each risk range (`6M`, `1Y`, `All`) over the series it has already built, and stores the results on `InvestingDashboardData.risk` as `byBenchmark[symbol][range]` plus a `defaultBenchmark`. `/api/investing/summary` returns the projection entry for its range and benchmark, and the portfolio chat's `get_risk` reads the same entry; neither calls `buildHistoricalRisk` on the request path. The projection travels in the dashboard snapshot, so it is version-keyed with the rest of the read model and rebuilt only when `dataVersion` changes.
+
 ### Dashboard latency and resumed history
 
 The Neon dashboard reads all requested price histories in one tenant-scoped transaction.

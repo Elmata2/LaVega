@@ -9,7 +9,6 @@ import {
   type ToolSet,
 } from "ai";
 import {
-  buildHistoricalRisk,
   renderFundamentalsBrief,
   renderPortfolioBrief,
   type FundamentalsProvider,
@@ -257,7 +256,12 @@ export async function createPortfolioChatAgent(input: {
           properties: { range: { type: "string", enum: ["6M", "1Y", "All"] } },
           additionalProperties: false,
         }),
-        execute: async ({ range }) => buildHistoricalRisk(context.dashboard, range ?? "1Y").risk,
+        execute: async ({ range }) => {
+          /* Risk is a projection of the dashboard read (#216), read here for
+           * the default benchmark — the same report the summary endpoint uses. */
+          const defaultBenchmark = context.dashboard.risk.defaultBenchmark ?? "";
+          return context.dashboard.risk.byBenchmark[defaultBenchmark]?.[range ?? "1Y"]?.risk;
+        },
       }),
       get_trades: tool({
         description: `The owner's trades, newest first, at most ${MAX_TRADES}, optionally for one symbol.`,

@@ -3,13 +3,13 @@ import {
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
   LOCAL_TENANT_ID,
-  buildHistoricalRisk,
   validateBenchmarkSymbols,
   validateInvestingLayout,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
   type InvestingLayoutStore,
+  type RiskRange,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import {
@@ -320,13 +320,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   );
   investingApp.get("/api/investing/summary", async (c) => {
     try {
-      const range = c.req.query("range") ?? "1Y";
-      if (range !== "6M" && range !== "1Y" && range !== "All")
+      const requestedRange = c.req.query("range") ?? "1Y";
+      if (requestedRange !== "6M" && requestedRange !== "1Y" && requestedRange !== "All")
         return c.json({ message: "Invalid risk range" }, 400);
+      const range = requestedRange as RiskRange;
       const data = await dashboardReader({});
       const benchmark = c.req.query("benchmark");
       if (benchmark && !data.benchmarks.some((item) => item.symbol === benchmark))
         return c.json({ message: "Select a configured benchmark" }, 400);
+      /* Risk is a projection of the read model (#216): read the entry the
+       * dashboard already carries instead of re-running the metrics pass. */
+      const riskKey = benchmark ?? data.risk.defaultBenchmark ?? "";
       const priced = data.positions.filter(
         (position): position is typeof position & { marketValue: number } =>
           position.marketValue !== null && position.marketValue > 0,
@@ -364,7 +368,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
-        ...buildHistoricalRisk(data, range, benchmark),
+        ...data.risk.byBenchmark[riskKey]?.[range],
         sectors: exposure,
         sectorCoverage: coverage,
         topPositions,

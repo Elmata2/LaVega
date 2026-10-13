@@ -5,6 +5,7 @@ import {
   type InvestingDashboardInput,
 } from "./dashboard.js";
 import { convertCurrency } from "./portfolio.js";
+import { buildHistoricalRisk } from "./risk.js";
 import {
   BENCHMARK_BARS,
   FX_RATES,
@@ -27,6 +28,7 @@ test("empty dashboard has every range and no invented records", () => {
     positions: [],
     position: null,
     problems: [],
+    risk: { byBenchmark: {}, defaultBenchmark: null },
   });
 });
 
@@ -733,4 +735,44 @@ test("a benchmark already in the presentation currency is left unconverted", () 
     { date: "2026-01-02", value: 100 },
     { date: "2026-01-05", value: 105 },
   ]);
+});
+
+test("the read model carries a risk projection per configured benchmark and risk range", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: BENCHMARK_BARS,
+    benchmarkInstruments: [
+      { symbol: "SP500", name: "S&P 500", exchange: "NYSE Arca", currency: "EUR" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  expect(dashboard.risk.defaultBenchmark).toBe("SP500");
+  for (const range of ["6M", "1Y", "All"] as const)
+    expect(dashboard.risk.byBenchmark["SP500"]?.[range]).toEqual(
+      buildHistoricalRisk(dashboard, range, "SP500"),
+    );
+});
+
+test("with no configured benchmark the projection carries the one no-benchmark entry", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  expect(dashboard.risk.defaultBenchmark).toBeNull();
+  expect(Object.keys(dashboard.risk.byBenchmark)).toEqual([""]);
+  for (const range of ["6M", "1Y", "All"] as const)
+    expect(dashboard.risk.byBenchmark[""]?.[range]).toEqual(buildHistoricalRisk(dashboard, range));
 });

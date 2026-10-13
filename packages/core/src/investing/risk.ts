@@ -1,6 +1,6 @@
 import { businessDaysAfter } from "./calendar.js";
 import type { InvestingDashboardData } from "./dashboard.js";
-import { computePortfolioMetrics } from "./summary.js";
+import { computePortfolioMetrics, type PortfolioMetrics } from "./summary.js";
 
 export const RISK_MINIMUM_OBSERVATIONS = 60;
 /** 0.5% of the date's portfolio value. An unaccounted slice this small
@@ -195,3 +195,43 @@ export function buildHistoricalRisk(
 }
 
 export type HistoricalRisk = ReturnType<typeof buildHistoricalRisk>["risk"];
+
+/** The whole answer `buildHistoricalRisk` produces: the metrics plus the risk
+ *  report. The summary endpoint returns both, so both travel in the
+ *  projection rather than being recomputed on the request path. */
+export type HistoricalRiskReport = {
+  metrics: PortfolioMetrics;
+  risk: HistoricalRisk;
+};
+
+/** Risk is a projection of the dashboard read model, not a per-request
+ *  computation: one report per configured benchmark and risk range, built once
+ *  with the read model and carried in its snapshot. */
+export type InvestingRiskProjection = {
+  /** One entry per configured benchmark symbol, per risk range. The empty
+   *  string is the no-benchmark entry, used when none is configured. */
+  byBenchmark: Record<string, Partial<Record<RiskRange, HistoricalRiskReport>>>;
+  /** The benchmark a fresh dashboard shows when the owner has chosen none. */
+  defaultBenchmark: string | null;
+};
+
+/** Every range risk is estimated for. `PORTFOLIO_RANGES` also carries `1M` and
+ *  `YTD`, but those are chart ranges: risk is not computed over them. */
+const RISK_RANGES: readonly RiskRange[] = ["6M", "1Y", "All"];
+
+/** The whole projection, computed from an already-built read model over the
+ *  series it holds: one call per configured benchmark — or one no-benchmark
+ *  entry when none is set — for each `RiskRange`. */
+export function buildRiskProjection(data: InvestingDashboardData): InvestingRiskProjection {
+  const defaultBenchmark = data.benchmarks[0]?.symbol ?? null;
+  const symbols =
+    defaultBenchmark === null ? [""] : data.benchmarks.map((benchmark) => benchmark.symbol);
+  const byBenchmark: Record<string, Partial<Record<RiskRange, HistoricalRiskReport>>> = {};
+  for (const symbol of symbols) {
+    const perRange: Partial<Record<RiskRange, HistoricalRiskReport>> = {};
+    for (const range of RISK_RANGES)
+      perRange[range] = buildHistoricalRisk(data, range, symbol || undefined);
+    byBenchmark[symbol] = perRange;
+  }
+  return { byBenchmark, defaultBenchmark };
+}
