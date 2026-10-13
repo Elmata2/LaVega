@@ -15,10 +15,11 @@ const decimal = (value: number | null): string =>
     ? "Unavailable"
     : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
-/** Presentational: Overview owns the range/benchmark selection and the single
- *  `usePortfolioSummary` read shared with SectorAllocationCard (the endpoint
- *  is the slowest call on the page), so this card only renders `state` and
- *  reports the reader's choices back through `onRangeChange`/`onBenchmarkChange`. */
+/** Presentational: Overview owns the range/benchmark selection and reads the
+ *  risk projection from the shared dashboard read model, while the composition
+ *  parts (largest positions, composition counts) come from the summary read it
+ *  shares with SectorAllocationCard. This card only renders `state` and reports
+ *  the reader's choices back through `onRangeChange`/`onBenchmarkChange`. */
 export function PortfolioSummaryCard({
   currency,
   stillLoading = false,

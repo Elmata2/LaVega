@@ -45,10 +45,10 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { longDate } from "./lib/dates.js";
-import { useDashboard } from "./lib/dashboardResource";
+import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
-import { usePortfolioSummary } from "./lib/summaryResource.js";
+import { usePortfolioSummary, type SummaryState } from "./lib/summaryResource.js";
 import { PortfolioLetterCard } from "./components/PortfolioLetterCard.js";
 import { letterToText, useLatestLetter } from "./lib/portfolioLetter.js";
 import {
@@ -1252,10 +1252,13 @@ function Overview() {
   const widgets = new Set(layoutReady ? layout.widgets : []);
   const showRisk = widgets.has("risk");
   const showSectors = widgets.has("sectors");
-  /* Overview owns the range/benchmark selection and the one summary read
-   * shared between PortfolioSummaryCard (risk) and SectorAllocationCard
-   * (sectors): /api/investing/summary is the slowest call on the page, so
-   * neither widget may mount a second copy of this fetch. */
+  /* Overview owns the range/benchmark selection. Risk is a projection of the
+   * dashboard read (#216), so the controls select from the model already held
+   * and switching a range or benchmark does not fetch. The one summary read
+   * stays, shared with SectorAllocationCard, only for the composition parts it
+   * alone carries (sectors, largest positions, composition counts) — sectors
+   * come from tenant stores whose changes are not keyed to `dataVersion`, so
+   * they cannot ride the version-keyed dashboard snapshot. */
   const dashboardReady = state.status === "ready" && gate.kind === "ready";
   const dataVersion = dashboardReady ? state.data.dataVersion : 0;
   const benchmarksRevision = dashboardReady
@@ -1269,11 +1272,30 @@ function Overview() {
   const benchmark =
     benchmarkSelection.revision === benchmarksRevision ? benchmarkSelection.value : "";
   const { state: summaryState, refresh: refreshSummary } = usePortfolioSummary(
-    range,
-    benchmark,
+    "1Y",
+    "",
     `${dataVersion}:${benchmarksRevision}`,
     dashboardReady && (showRisk || showSectors),
   );
+  /* The range/benchmark the reader picked, resolved against the projection's
+   * default exactly as the summary route resolves it, and read from the held
+   * dashboard payload. Falls back to the summary state for a payload recorded
+   * before risk was projected, so an old cached overview still renders. */
+  const riskProjection = state.status === "ready" ? state.data.risk : undefined;
+  const riskKey = benchmark || riskProjection?.defaultBenchmark || "";
+  const riskReport = riskProjection?.byBenchmark?.[riskKey]?.[range];
+  const riskState: SummaryState =
+    summaryState.status === "ready" && riskReport
+      ? {
+          status: "ready",
+          data: { ...summaryState.data, metrics: riskReport.metrics, risk: riskReport.risk },
+        }
+      : summaryState;
+  const refreshRisk = () => {
+    refreshSummary();
+    readDashboard();
+  };
+
   const showLetter = widgets.has("agent");
   const letter = useLatestLetter(dashboardReady && showLetter);
   function discussLetter() {
@@ -1358,8 +1380,8 @@ function Overview() {
                         (price?.remainingSymbols?.length ?? 0) > 0
                       }
                       currency={state.data.presentationCurrency}
-                      state={summaryState}
-                      refresh={refreshSummary}
+                      state={riskState}
+                      refresh={refreshRisk}
                       range={range}
                       onRangeChange={setRange}
                       benchmark={benchmark}

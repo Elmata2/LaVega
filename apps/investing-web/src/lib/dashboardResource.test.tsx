@@ -265,3 +265,122 @@ test("unmounting aborts the request in flight so a late resolution cannot update
   });
   expect(states).toHaveLength(countBeforeUnmount);
 });
+
+function Consumer({
+  querySymbol,
+  states,
+}: {
+  querySymbol: string | undefined;
+  states: DashboardState[];
+}) {
+  states.push(useDashboard(querySymbol));
+  return null;
+}
+
+function mountTwo(first: string | undefined, second: string | undefined) {
+  const a: DashboardState[] = [];
+  const b: DashboardState[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  return { root, a, b, container, first, second };
+}
+
+test("two consumers of one identity share one request and one model", async () => {
+  const pending = deferred<Response>();
+  const fetcher = vi.fn(() => pending.promise);
+  vi.stubGlobal("fetch", fetcher);
+  const { root, a, b, first, second } = mountTwo(undefined, undefined);
+  await act(async () => {
+    root.render(
+      <>
+        <Consumer querySymbol={first} states={a} />
+        <Consumer querySymbol={second} states={b} />
+      </>,
+    );
+    await Promise.resolve();
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    pending.resolve(new Response(JSON.stringify(dashboardWithVersion(4))));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(a.at(-1)?.status).toBe("ready");
+  const finalA = a.at(-1)!;
+  const finalB = b.at(-1)!;
+  expect(finalA.status === "ready" && finalA.data.dataVersion).toBe(4);
+  expect(finalB.status === "ready" && finalB.data.dataVersion).toBe(4);
+  await act(async () => {
+    await Promise.resolve();
+    root.unmount();
+  });
+});
+
+test("a consumer of a different identity makes its own request", async () => {
+  const fetcher = vi.fn((input: RequestInfo | URL) =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify(dashboardWithVersion(String(input).includes("BBB") ? 2 : 1)),
+      ),
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const { root, a, b, first, second } = mountTwo("AAA", "BBB");
+  await act(async () => {
+    root.render(
+      <>
+        <Consumer querySymbol={first} states={a} />
+        <Consumer querySymbol={second} states={b} />
+      </>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const finalA = a.at(-1)!;
+  const finalB = b.at(-1)!;
+  expect(finalA.status === "ready" && finalA.data.dataVersion).toBe(1);
+  expect(finalB.status === "ready" && finalB.data.dataVersion).toBe(2);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    root.unmount();
+  });
+});
+
+test("one refresh event reloads a shared identity once and updates every subscriber", async () => {
+  let version = 0;
+  const fetcher = vi.fn(() => {
+    version += 1;
+    return Promise.resolve(new Response(JSON.stringify(dashboardWithVersion(version))));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const { root, a, b, first, second } = mountTwo(undefined, undefined);
+  await act(async () => {
+    root.render(
+      <>
+        <Consumer querySymbol={first} states={a} />
+        <Consumer querySymbol={second} states={b} />
+      </>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const finalA = a.at(-1)!;
+  const finalB = b.at(-1)!;
+  expect(finalA.status === "ready" && finalA.data.dataVersion).toBe(2);
+  expect(finalB.status === "ready" && finalB.data.dataVersion).toBe(2);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    root.unmount();
+  });
+});

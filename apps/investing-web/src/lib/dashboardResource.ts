@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import {
   PORTFOLIO_RANGES,
   type Allocation,
@@ -106,6 +106,113 @@ function shownOrLoading(symbol: string | undefined): DashboardState {
   return data ? { status: "ready", data } : { status: "loading" };
 }
 
+/* One read model per query identity (the optional position symbol). Every
+ * consumer of the same identity reads this one entry, so mounting a second
+ * consumer starts no second request and every subscriber sees the same
+ * payload. The cancellation/generation rules from #121 live here now: each
+ * identity has one controller and one generation, and only the newest request
+ * for that identity may write the entry. */
+type DashboardEntry = {
+  state: DashboardState;
+  controller: AbortController | null;
+  generation: number;
+  symbol: string | undefined;
+};
+
+const entries = new Map<string, DashboardEntry>();
+const listeners = new Map<string, Set<() => void>>();
+
+function entryFor(symbol: string | undefined): DashboardEntry {
+  const key = queryKey(symbol);
+  let entry = entries.get(key);
+  if (!entry) {
+    entry = { state: shownOrLoading(symbol), controller: null, generation: 0, symbol };
+    entries.set(key, entry);
+  }
+  return entry;
+}
+
+function notify(key: string): void {
+  const set = listeners.get(key);
+  if (!set) return;
+  for (const listener of set) listener();
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
+}
+
+function load(symbol: string | undefined): void {
+  const entry = entryFor(symbol);
+  entry.controller?.abort();
+  const controller = new AbortController();
+  entry.controller = controller;
+  const generation = (entry.generation += 1);
+  if (entry.state.status === "error") entry.state = shownOrLoading(symbol);
+  notify(queryKey(symbol));
+  void fetchDashboard(symbol, controller.signal)
+    .then((data) => {
+      if (controller.signal.aborted || generation !== entry.generation) return;
+      remember(symbol, data);
+      entry.state = { status: "ready", data };
+      notify(queryKey(symbol));
+    })
+    .catch((reason: unknown) => {
+      if (controller.signal.aborted || generation !== entry.generation || isAbortError(reason))
+        return;
+      const message = reason instanceof Error ? reason.message : "Failed to load dashboard";
+      entry.state =
+        entry.state.status === "ready"
+          ? { ...entry.state, refreshError: message }
+          : { status: "error", message };
+      notify(queryKey(symbol));
+    });
+}
+
+/** Subscribe one consumer to one query identity. The first subscriber for an
+ * identity starts its read; the last one to leave aborts the request in flight
+ * so a late completion cannot populate the next mount. This is the function
+ * `useSyncExternalStore` drives. */
+export function subscribeToDashboard(
+  symbol: string | undefined,
+  listener: () => void,
+): () => void {
+  const key = queryKey(symbol);
+  let set = listeners.get(key);
+  if (!set) {
+    set = new Set();
+    listeners.set(key, set);
+  }
+  set.add(listener);
+  if (set.size === 1) load(symbol);
+  return () => {
+    const current = listeners.get(key);
+    if (!current) return;
+    current.delete(listener);
+    if (current.size > 0) return;
+    listeners.delete(key);
+    entries.get(key)?.controller?.abort();
+    entries.delete(key);
+  };
+}
+
+/** The read action: reload the query identity from the network. A refresh
+ * fired for the whole app reloads each identity that has a subscriber once,
+ * not once per mount. */
+export function readDashboard(symbol?: string): void {
+  load(symbol);
+}
+
+function refreshAll(): void {
+  for (const [key, set] of listeners) {
+    if (set.size === 0) continue;
+    load(key === "" ? undefined : key);
+  }
+}
+
+if (typeof window !== "undefined")
+  window.addEventListener(DASHBOARD_REFRESH_EVENT, () => refreshAll());
+
 export function setDashboardOwner(userId: string | null): void {
   if (userId === owner) return;
   owner = userId;
@@ -122,6 +229,8 @@ export function setDashboardOwner(userId: string | null): void {
 export function forgetDashboards(): void {
   owner = null;
   lastShown.clear();
+  for (const entry of entries.values()) entry.controller?.abort();
+  entries.clear();
   try {
     for (const key of Object.keys(localStorage))
       if (key.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key);
@@ -140,54 +249,18 @@ function remember(symbol: string | undefined, data: InvestingDashboardData) {
   }
 }
 
-function isAbortError(reason: unknown): boolean {
-  return reason instanceof DOMException && reason.name === "AbortError";
+function snapshotFor(symbol: string | undefined): DashboardState {
+  return entryFor(symbol).state;
 }
 
-/** Owns the dashboard's read model for one query identity (the optional
- * position symbol). Only the latest request for that identity may update
- * state: switching identity or firing a refresh aborts the request in
- * flight, so a slower, older response can never overwrite a newer one. */
+/** Reads one query identity's shared read model. Every consumer of the same
+ * symbol subscribes to the same entry: two of them share one request and one
+ * cached model. */
 export function useDashboard(symbol?: string): DashboardState {
-  const [state, setState] = useState<DashboardState>(() => shownOrLoading(symbol));
-  const queryRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const queryChanged = queryRef.current !== symbol;
-    queryRef.current = symbol;
-    let cancelled = false;
-    let queryChangedForNextLoad = queryChanged;
-    let activeController: AbortController | null = null;
-    const load = () => {
-      activeController?.abort();
-      const controller = new AbortController();
-      activeController = controller;
-      setState((previous) =>
-        !queryChangedForNextLoad && previous.status === "ready" ? previous : shownOrLoading(symbol),
-      );
-      queryChangedForNextLoad = false;
-      void fetchDashboard(symbol, controller.signal)
-        .then((data) => {
-          if (cancelled || controller.signal.aborted) return;
-          remember(symbol, data);
-          setState({ status: "ready", data });
-        })
-        .catch((reason: unknown) => {
-          if (cancelled || controller.signal.aborted || isAbortError(reason)) return;
-          const message = reason instanceof Error ? reason.message : "Failed to load dashboard";
-          setState((previous) =>
-            previous.status === "ready"
-              ? { ...previous, refreshError: message }
-              : { status: "error", message },
-          );
-        });
-    };
-    load();
-    window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
-    return () => {
-      cancelled = true;
-      activeController?.abort();
-      window.removeEventListener(DASHBOARD_REFRESH_EVENT, load);
-    };
-  }, [symbol]);
-  return state;
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeToDashboard(symbol, listener),
+    [symbol],
+  );
+  const getSnapshot = useCallback(() => snapshotFor(symbol), [symbol]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

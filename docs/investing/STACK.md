@@ -12,7 +12,7 @@ The former v1 ruling against zoom, pan, and brush was deliberately overturned by
 
 ## UI framework, routing, styling
 
-`apps/investing-web` inherits the personal side's **React + Vite** pattern — no SSR; hosted-tier auth and multi-tenancy stay in the Hono API server, the same client/server split as today. Revisit only if hosting concretely needs server-rendering. Routing is **React Router**, library mode, decided now since the dashboard will have multiple views. Data fetching/caching (TanStack Query) is deliberately deferred — local reads go through `StorageAdapter`/IndexedDB, no remote server-state to cache yet; add it when hosted-tier sync introduces real remote fetching ([investing-web UI framework](https://github.com/Elmata2/LaVega/issues/17)).
+`apps/investing-web` inherits the personal side's **React + Vite** pattern — no SSR; hosted-tier auth and multi-tenancy stay in the Hono API server, the same client/server split as today. Revisit only if hosting concretely needs server-rendering. Routing is **React Router**, library mode, decided now since the dashboard will have multiple views. Data fetching/caching (TanStack Query) is deliberately deferred — local reads go through `StorageAdapter`/IndexedDB, no remote server-state to cache yet; add it when hosted-tier sync introduces real remote fetching ([investing-web UI framework](https://github.com/Elmata2/LaVega/issues/17)). The dashboard's shared read model (`dashboardResource.ts`) is hand-rolled over `useSyncExternalStore` and is not a query library.
 
 Account creation, confirmation, sign-in, and password recovery are documented in [Account access](./AUTH.md).
 

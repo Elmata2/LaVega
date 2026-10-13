@@ -145,11 +145,11 @@ function useSectorInference(state: SummaryState, refresh: () => void): void {
   }, [enabled, state]);
 }
 
-/** Presentational: `/api/investing/summary` is the slowest call on the page,
- *  so Overview reads it once and shares the result with PortfolioSummaryCard
- *  (risk) rather than mounting a second copy of this fetch here. Sectors
- *  describe current holdings rather than a period, so this card is happy
- *  with whichever range that shared read happens to use. */
+/** Presentational: Overview owns the single summary read and shares it here
+ *  for the composition facts the dashboard read does not carry. Risk no longer
+ *  travels this way: it is a projection of the dashboard read model now.
+ *  Sectors describe current holdings rather than a period, so this card is
+ *  happy with whichever range that shared read happens to use. */
 export function SectorAllocationCard({
   currency,
   state,

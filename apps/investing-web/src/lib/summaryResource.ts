@@ -88,11 +88,13 @@ async function fetchPortfolioSummary(
  * when those, the benchmark revision or an explicit refresh change: broker and
  * price updates are left to the user's Refresh risk, by design.
  *
- * `/api/investing/summary` is the slowest call on the page (over 40s observed
- * in production), so callers with more than one summary-driven widget (risk,
- * sectors) call this once and share the result — never mount it twice. `enabled`
- * lets a caller skip the request entirely while nothing on screen needs it,
- * without breaking the rules of hooks. */
+ * `/api/investing/summary` supplies the composition facts the dashboard read
+ * does not carry (sectors, sector coverage, largest positions, composition),
+ * so callers with more than one of those widgets call this once and share the
+ * result — never mount it twice. Risk itself no longer comes from here: it is
+ * read from the dashboard read model's projection (#216/#217). `enabled` lets
+ * a caller skip the request entirely while nothing on screen needs it, without
+ * breaking the rules of hooks. */
 export function usePortfolioSummary(
   range: RiskRange,
   benchmark: string,
