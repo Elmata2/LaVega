@@ -29,12 +29,9 @@ import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
-  benchmarkDisplayName,
   sentryOptions,
-  buildInvestingDashboard,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
-  type InvestingDashboardData,
   type InvestingLayoutStore,
 } from "@lavega/core";
 import {
@@ -44,7 +41,6 @@ import {
   createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
-  resolveTrading212CashHistory,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
@@ -98,7 +94,6 @@ import {
   createInMemoryPriceSyncProgressStore,
   discoverPriceSyncTargets,
 } from "./priceOrchestrator.js";
-import { readPriceBars } from "./priceReader.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import {
   createAgentMemoryRepository,
@@ -112,6 +107,8 @@ import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.j
 import { createStoredFxProvider } from "./storedFxProvider.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
+import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
+import { ManagedRuntime } from "effect";
 import { createAgentRunController } from "./agentRun.js";
 
 export { app };
@@ -495,182 +492,30 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         throw error;
       }
     };
-    const dashboardReader: InvestingDashboardReader = async ({ symbol, timing = untimed }) => {
-      const storedKey = symbol?.trim().toUpperCase() ?? "";
-      const stored = await timing.measure("stored", () =>
-        dashboardSnapshots?.get(storedKey).catch(() => null),
+    const benchmarkSymbols = options.benchmarkSymbols;
+    const portfolioRead = ManagedRuntime.make(
+      portfolioReadLayer({
+        priceStore,
+        loadBrokerData,
+        brokerData,
+        brokerSnapshot,
+        dashboardSnapshots,
+        dashboardCache,
+        syncState: syncStateStore,
+        fxProvider,
+        benchmarks: benchmarkSymbols
+          ? (id) => Promise.resolve(benchmarkSymbols(id))
+          : async (id) => (await benchmarkSelectionStore.get(id)).symbols,
+        priceDataVersion: () => priceDataVersion,
+      }),
+    );
+    /* The dashboard read is one module with one method (portfolioRead.ts). This
+     * adapter only resolves the tenant and runs the read; it holds no behaviour
+     * of its own, so the read is testable without HTTP and this stays wiring. */
+    const dashboardReader: InvestingDashboardReader = ({ symbol, timing = untimed }) =>
+      portfolioRead.runPromise(
+        PortfolioRead.use((read) => read.read({ tenantId, symbol, timing })),
       );
-      if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
-      const refreshProblems: string[] = [];
-      try {
-        await timing.measure("broker", async () => {
-          await loadBrokerData();
-          await brokerSnapshot.read("cached");
-        });
-      } catch (error) {
-        const snapshot = brokerData.read();
-        if (
-          snapshot.positions.length +
-            snapshot.trades.length +
-            snapshot.dividends.length +
-            snapshot.cashBalances.length +
-            snapshot.cashFlows.length ===
-          0
-        )
-          throw error;
-        refreshProblems.push("Broker data could not be refreshed. Showing the last loaded data.");
-      }
-      const {
-        positions,
-        trades,
-        dividends,
-        cashBalances,
-        cashFlows,
-        cashCoverage,
-        problems,
-        dataVersion,
-      } = brokerData.read();
-      // `problems` above lives only in this invocation's in-memory cache: a sync's
-      // row-level problem (an unclassifiable transaction, say) never reaches a
-      // later invocation that did not run that sync. The sync's own durable
-      // progress record does survive, so a stored "problem" status is read back
-      // here the same way `/api/brokers/sync/status` already reads it.
-      const storedBrokerProblems = (
-        await Promise.all(SCHEDULED_BROKERS.map((broker) => syncStateStore.progress(broker)))
-      ).flatMap((entry) => (entry?.status === "problem" && entry.message ? [entry.message] : []));
-      const version = dataVersion + priceDataVersion;
-      const selectedBenchmarks = options.benchmarkSymbols
-        ? await options.benchmarkSymbols(tenantId)
-        : (await benchmarkSelectionStore.get(tenantId)).symbols;
-      const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
-      const cached = dashboardCache.get({ tenantId, key: cacheKey });
-      if (cached) {
-        if (refreshProblems.length > 0)
-          return { ...cached, problems: [...cached.problems, ...refreshProblems] };
-        return cached;
-      }
-      const buildDashboard = async () => {
-        const symbols = [
-          ...new Set([
-            ...positions.map((position) => position.symbol),
-            ...trades.map((trade) => trade.symbol),
-          ]),
-        ];
-        const [prices, benches] = await timing.measure("prices", async () => [
-          await readPriceBars(priceStore, tenantId, symbols),
-          await readPriceBars(priceStore, tenantId, selectedBenchmarks),
-        ]);
-        const priceProblems =
-          prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
-        const today = new Date().toISOString().slice(0, 10);
-        const historyDates = [
-          ...positions.map((position) => position.asOf),
-          ...trades.map((trade) => trade.date),
-          ...dividends.map((dividend) => dividend.date),
-          ...cashBalances.map((balance) => balance.asOf),
-          ...cashFlows.map((flow) => flow.date),
-          ...prices.bars.map((bar) => bar.date),
-        ].filter((date) => date <= today);
-        const historyFrom = historyDates.sort()[0] ?? today;
-        const [latestFx, historicalFx] = await timing.measure("fx", () =>
-          Promise.all([
-            fxProvider
-              .getLatestRate()
-              .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
-            fxProvider
-              .getHistoricalRates(historyFrom, today)
-              .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
-          ]),
-        );
-        /* Trading 212 reports no statement period, so its cash window is proven
-         * from the merged history here, where every resumed page has landed.
-         * The adapter sees one page-set per invocation and cannot reconcile.
-         * Only a finished pagination may prove: a short read can look complete. */
-        const trading212SyncState = await syncStateStore.get("trading212");
-        const trading212Balances = cashBalances.filter(
-          (balance) => balance.broker === "trading212",
-        );
-        const trading212Flows = cashFlows.filter((flow) => flow.broker === "trading212");
-        const trading212Dividends = dividends.filter(
-          (dividend) => dividend.broker === "trading212",
-        );
-        const trading212Trades = trades.filter((trade) => trade.broker === "trading212");
-        const trading212 =
-          trading212Balances.length +
-            trading212Flows.length +
-            trading212Dividends.length +
-            trading212Trades.length ===
-          0
-            ? null
-            : resolveTrading212CashHistory({
-                entity:
-                  trading212Balances[0]?.entity ??
-                  trading212Flows[0]?.entity ??
-                  trading212Dividends[0]?.entity ??
-                  trading212Trades[0]!.entity,
-                historyComplete:
-                  trading212SyncState.lastSyncedAt != null && trading212SyncState.resume == null,
-                balance: trading212Balances[0] ?? null,
-                cashFlows: trading212Flows,
-                dividends: trading212Dividends,
-                trades: trading212Trades,
-                fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
-              });
-        const effectiveCashFlows = trading212
-          ? [...cashFlows.filter((flow) => flow.broker !== "trading212"), ...trading212.cashFlows]
-          : cashFlows;
-        const effectiveCashCoverage = trading212
-          ? [...cashCoverage.filter((entry) => entry.broker !== "trading212"), trading212.coverage]
-          : cashCoverage;
-        const dashboard = await timing.measure("build", () =>
-          buildInvestingDashboard({
-            positions,
-            trades,
-            dividends,
-            cashBalances,
-            cashFlows: effectiveCashFlows,
-            cashCoverage: effectiveCashCoverage,
-            priceBars: prices.bars,
-            benchmarkBars: benches.bars,
-            benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({
-              symbol: benchmark,
-              name: benchmarkDisplayName(benchmark),
-              exchange: "Yahoo Finance",
-              currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR",
-            })),
-            presentationCurrency: "EUR",
-            fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
-            selectedSymbol: symbol,
-            problems: [
-              ...new Set([...problems, ...storedBrokerProblems]),
-              ...(trading212?.coverage.status === "unknown"
-                ? [`Trading 212 cash history unproven: ${trading212.coverage.reason}`]
-                : []),
-              ...refreshProblems,
-              ...priceProblems,
-              ...latestFx.problems,
-              ...historicalFx.problems,
-            ],
-            dataVersion: version,
-          }),
-        );
-        /* A failed price or FX read is a problem of this moment, not of the
-         * data; storing it would show it until the next sync. */
-        const transientProblems =
-          refreshProblems.length +
-          priceProblems.length +
-          latestFx.problems.length +
-          historicalFx.problems.length;
-        if (stored && transientProblems === 0)
-          await timing.measure("store", () =>
-            dashboardSnapshots?.put(storedKey, stored.version, dashboard).catch(() => undefined),
-          );
-        return dashboard;
-      };
-      return refreshProblems.length > 0
-        ? buildDashboard()
-        : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
-    };
     const healthCheck = async (): Promise<InvestingHealth> => {
       const checks: InvestingHealth["checks"] = {
         database: database ? "ok" : "not-configured",

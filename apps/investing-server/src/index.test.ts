@@ -449,25 +449,6 @@ test("runtime broker cache persists cash facts and increments data version", () 
   });
 });
 
-test("runtime dashboard recomputes only after data version changes", async () => {
-  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
-  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const store = createInMemoryPriceStore();
-  const getRange = vi.spyOn(store, "getRange");
-  const runtimeApp = await createRuntimeApp({ priceStore: store });
-
-  const first = await runtimeApp.request("/api/investing/dashboard");
-  const callsAfterFirst = getRange.mock.calls.length;
-  const second = await runtimeApp.request("/api/investing/dashboard");
-  expect(first.status).toBe(200);
-  expect(second.status).toBe(200);
-  expect(getRange).toHaveBeenCalledTimes(callsAfterFirst);
-
-  await runtimeApp.request("/api/prices/cache", { method: "DELETE" });
-  await runtimeApp.request("/api/investing/dashboard");
-  expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
-});
-
 test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", async () => {
   vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
   vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
@@ -529,25 +510,6 @@ test("portfolio chat context resolves a renamed holding's sector through its pri
   const context = await runtimeApp.portfolioChatContext();
 
   expect(context.sectors?.some((exposure) => exposure.sector === "Real Estate")).toBe(true);
-});
-
-test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
-  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
-  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const store = createInMemoryPriceStore();
-  const runtimeApp = await createRuntimeApp({ priceStore: store });
-
-  const selected = await runtimeApp.request("/api/investing/dashboard?symbol=aapl");
-  const unknown = await runtimeApp.request("/api/investing/dashboard?symbol=closed-unknown");
-  const selectedData = (await selected.json()) as {
-    position: { symbol: string; status: string } | null;
-  };
-  const unknownData = (await unknown.json()) as { position: unknown };
-
-  expect(selected.status).toBe(200);
-  expect(selectedData.position).toMatchObject({ symbol: "AAPL", status: "open" });
-  expect(unknown.status).toBe(200);
-  expect(unknownData.position).toBeNull();
 });
 
 test("a partial result with fresh broker data updates the snapshot, a null result does not", () => {
@@ -1036,47 +998,6 @@ test("a tenant's broker sync status is its own, not the last caller's", async ()
   expect(untouched.status).toBe("idle");
 });
 
-test("price history is read with dates Postgres accepts", async () => {
-  const priceStore = createInMemoryPriceStore();
-  const getRange = vi
-    .spyOn(priceStore, "getRange")
-    .mockImplementation(async (_tenantId, _symbol, from, to) => {
-      // Postgres has no year zero, so `0000-01-01` fails the query outright
-      // instead of standing for "from the beginning" the way a string compare does.
-      for (const date of [from, to])
-        if (date?.startsWith("0000-"))
-          throw new Error(`date/time field value out of range: "${date}"`);
-      return [];
-    });
-  const runtimeApp = await createRuntimeApp({
-    priceStore,
-    benchmarkSymbols: () => ["^GSPC"],
-    resolveTenantId: () => "user-a",
-  });
-
-  const response = await runtimeApp.request("/api/investing/dashboard");
-  const body = (await response.json()) as { problems: string[] };
-
-  expect(getRange).toHaveBeenCalled();
-  for (const [, , from, to] of getRange.mock.calls) {
-    expect(String(from ?? "")).not.toMatch(/^0000-/);
-    expect(String(to ?? "")).not.toMatch(/^0000-/);
-  }
-  expect(body.problems.join("\n")).not.toContain("date/time field value out of range");
-});
-
-test("a known benchmark symbol gets its curated display name in the dashboard", async () => {
-  const runtimeApp = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
-    benchmarkSymbols: () => ["^GDAXI"],
-  });
-
-  const response = await runtimeApp.request("/api/investing/dashboard");
-  const body = (await response.json()) as { benchmarks: Array<{ name: string }> };
-
-  expect(body.benchmarks[0]?.name).toBe("DAX");
-});
-
 test("IBKR missing plus a paused T212 result still keeps T212 positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({
@@ -1133,87 +1054,4 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
   expect(cache.read().positions).toMatchObject([{ symbol: "AAPL" }]);
   expect(cache.snapshot().trading212?.positions).toHaveLength(1);
   expect(cache.snapshot().ibkr).toBeUndefined();
-});
-
-test("dashboard keeps positions when price history reads fail", async () => {
-  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
-  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const priceStore = createInMemoryPriceStore();
-  vi.spyOn(priceStore, "getRange").mockRejectedValue(
-    new Error("timeout exceeded when trying to connect"),
-  );
-  const runtimeApp = await createRuntimeApp({ priceStore });
-
-  const response = await runtimeApp.request("/api/investing/dashboard");
-  const body = (await response.json()) as { positions: unknown[]; problems: string[] };
-
-  expect(response.status).toBe(200);
-  expect(body.positions.length).toBeGreaterThan(0);
-  expect(body.problems).toContain("Price data could not be fully loaded");
-});
-
-/* A row-level sync problem (an unclassifiable transaction, say) reached
- * `/api/brokers/sync/status` from durable state, but not the dashboard: the
- * in-memory broker cache that carries it is rebuilt empty on every
- * invocation that did not itself run the sync, so `/api/investing/dashboard`
- * came back with `problems: []` even though the sync knew better. */
-test("dashboard surfaces a durable sync problem the invocation did not itself produce", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-dashboard-problem-"));
-  try {
-    const credentialsFile = join(directory, "credentials.json");
-    const store = createFileCredentialStore(credentialsFile);
-    await store.setup("vault-passphrase");
-    await store.putCredentials({
-      broker: "trading212",
-      tenantId: "local",
-      token: "api-key",
-      secret: "api-secret",
-    });
-    const baseUrl = await serve((request, response) => {
-      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders"))
-        return json(response, { items: [] });
-      if (request.url === "/api/v0/equity/account/summary")
-        return json(response, {
-          currency: "EUR",
-          cash: { availableToTrade: 11116.34, inPies: 0, reservedForOrders: 0 },
-        });
-      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions"))
-        return json(response, {
-          items: [
-            {
-              amount: -4,
-              currency: "EUR",
-              dateTime: "2025-08-11T09:05:00Z",
-              reference: "future-1",
-              type: "NEW_KIND",
-            },
-          ],
-        });
-      if ((request.url ?? "").startsWith("/api/v0/equity/history/dividends"))
-        return json(response, { items: [] });
-      return json(response, []);
-    });
-    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
-    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
-    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
-    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
-
-    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
-    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
-
-    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
-    const status = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
-      status: string;
-      message: string | null;
-    };
-    const dashboard = (await (await restarted.request("/api/investing/dashboard")).json()) as {
-      problems: string[];
-    };
-
-    expect(status.status).toBe("problem");
-    expect(status.message).toContain("unknown type NEW_KIND");
-    expect(dashboard.problems).toContain(status.message);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
 });

@@ -238,53 +238,6 @@ test("warm dashboard instances reload shared broker and price data after fifteen
   expect(priceReads.mock.calls.length).toBeGreaterThan(initialPriceReads);
 });
 
-test("a stored dashboard is served by any instance without reading the vault", async () => {
-  persistence.dashboards = new Map();
-  persistence.snapshots.set("tenant", snapshot(1));
-  const priceStore = createInMemoryPriceStore();
-  const read = async () => {
-    const app = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
-    const response = await app.request("/api/investing/dashboard");
-    return ((await response.json()) as InvestingDashboardData).positions[0]?.quantity;
-  };
-
-  expect(await read()).toBe(1);
-  expect(persistence.reads).toHaveBeenCalledTimes(1);
-
-  expect(await read()).toBe(1);
-  expect(persistence.reads).toHaveBeenCalledTimes(1);
-
-  persistence.snapshots.set("tenant", snapshot(2));
-  persistence.sourceVersion += 1;
-  expect(await read()).toBe(2);
-  expect(persistence.reads).toHaveBeenCalledTimes(2);
-});
-
-test("Server-Timing tells a built dashboard from a stored one", async () => {
-  persistence.dashboards = new Map();
-  persistence.snapshots.set("tenant", snapshot(1));
-  const priceStore = createInMemoryPriceStore();
-  const phases = async () => {
-    const app = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
-    const response = await app.request("/api/investing/dashboard");
-    return [...(response.headers.get("Server-Timing") ?? "").matchAll(/(\w+);dur=/g)].map(
-      (match) => match[1],
-    );
-  };
-
-  expect(await phases()).toEqual([
-    "runtime",
-    "stored",
-    "broker",
-    "prices",
-    "fx",
-    "build",
-    "store",
-    "total",
-  ]);
-  expect(await phases()).toEqual(["runtime", "stored", "total"]);
-});
-
 test("requests that never show positions do not read the broker snapshots", async () => {
   persistence.snapshots.set("tenant", snapshot(1));
   const app = await createRuntimeApp({
