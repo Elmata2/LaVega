@@ -21,8 +21,14 @@ dividends. This is where most investing reports originate.
   `Vault unlocked. Sync continues in the background; progress is shown above.`
 - `Start sync` (`Syncing…` while pending) — the block stays on the page for an empty vault.
   Heading `Data saved?`. Copy: `Start a new broker sync now. This bypasses the daily sync cache.`
-  The button force-posts sync. An empty vault then ends in `problem` /
-  `credential vault is locked`.
+  The button force-posts `/api/brokers/sync?force=true`. On the local file vault an empty
+  vault sets sync status to `problem` and `message` to `credential vault is locked`
+  (the Brokers chip detail). The POST answers 503
+  `{ problems: ["Broker synchronization failed"] }`, so the alert under the button is
+  `Sync not completed` and `Broker synchronization failed`. That alert does not contain
+  `credential vault is locked`. Hosted Neon does not use this file-vault lock. Missing
+  keys come back as `credentials are not configured`, and Profile hides those problems,
+  so this lock alert is not the hosted empty-account result.
 - sync progress card (Profile, only while status is running, waiting, or completed;
   hidden on idle and on problem). Eyebrow `Broker sync`. The heading is
   `Trading 212 syncing` or `Trading 212 synced` even when the run is IBKR. Badge:
@@ -32,8 +38,10 @@ dividends. This is where most investing reports originate.
 - Profile `Brokers` chip values, separate from that card: `Ready` (idle), `In progress`,
   `Waiting`, `Up to date` (completed), `Problem`, `Unknown`. A waiting chip's detail falls
   back to `Waiting for API capacity`. `Ready` is not a progress-card badge.
-  Failure copy: `Broker sync failed.`, `Sync not completed`, `Sync problems`,
-  `Failed to unlock vault.`, `Broker credential storage is unavailable. Try again later.`
+  Failure copy, by surface: Overview after Allow Yahoo Finance shows heading
+  `Sync problems` and `Broker sync failed.` Profile Start sync shows `Sync not completed`
+  and `Broker synchronization failed`. Also `Failed to unlock vault.` and
+  `Broker credential storage is unavailable. Try again later.`
 
 ## How to get to it (user POV)
 

@@ -11,9 +11,10 @@ module enabled, accepted Yahoo market-data consent, `TYPESAFE_API_KEY` for the r
 Without the chat key the report still loads, but every lens shows the same generic rubric
 text for its signal; that is a gap, not a pass. Preview and production also
 need `LAVEGA_ENCRYPTION_KEY` to sign the report. A missing key throws
-`Research report signing requires LAVEGA_ENCRYPTION_KEY`. Standalone local uses a built-in
-signing secret when `VERCEL` is unset and `NODE_ENV` is not `production`. `doctor` still
-runs health, dashboard, credentials, and broker checks. Its `config` keys are `llm` and
+`Research report signing requires LAVEGA_ENCRYPTION_KEY`. Standalone local, when that key
+is absent, `VERCEL` is unset, and `NODE_ENV` is not `production`, signs with a random
+secret created at process start. A restart invalidates tokens from the previous process.
+`doctor` still runs health, dashboard, credentials, and broker checks. Its `config` keys are `llm` and
 `marketData` only. A green doctor does not prove the TypeSafe key or the chat key.
 No broker positions are required for this feature.
 
