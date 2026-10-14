@@ -86,6 +86,24 @@ export type PositionActivity = {
   sourceOrder: number;
 };
 
+/** One of the largest held positions, weighted against the priced total. */
+export type CompositionTopPosition = {
+  symbol: string;
+  weight: number;
+  description?: string;
+};
+
+/** Current composition, projected from this read model at build time: the
+ *  largest positions and the priced / missing / estimated holding counts.
+ *  Pure over `positions`, so it rides the version-keyed snapshot exactly as
+ *  `risk` does and no caller recomputes it on the request path. */
+export type InvestingComposition = {
+  topPositions: CompositionTopPosition[];
+  pricedHoldings: number;
+  missingHoldings: number;
+  estimatedHoldings: number;
+};
+
 /** Finished, serializable read model consumed by investing-web. */
 export type InvestingDashboardData = {
   dataVersion: number;
@@ -103,6 +121,9 @@ export type InvestingDashboardData = {
   /** Risk, projected from this read model at build time: the summary endpoint
    *  and the chat tool read it instead of re-running the metrics pass. */
   risk: InvestingRiskProjection;
+  /** Composition, projected from this read model at build time: the Overview
+   *  reads it from the shared dashboard instead of a second summary request. */
+  composition: InvestingComposition;
 };
 
 export type InvestingDashboardInput = {
@@ -123,6 +144,45 @@ export type InvestingDashboardInput = {
   dataVersion?: number;
 };
 
+/** The most the composition projection ever names. */
+const COMPOSITION_TOP_POSITIONS = 5;
+
+/** Positions ordered by current market value, largest first; an unpriced
+ *  position (a null value) sorts last. One ordering shared by the composition
+ *  projection and the portfolio-agent snapshot, so the two never disagree. */
+export function positionsByMarketValueDesc<T extends { marketValue: number | null }>(
+  positions: readonly T[],
+): T[] {
+  return [...positions].sort((left, right) => (right.marketValue ?? -1) - (left.marketValue ?? -1));
+}
+
+/** The largest priced positions and the priced / missing / estimated holding
+ *  counts, over an already-built position set. Pure: the same positions always
+ *  produce the same composition. */
+export function buildCompositionProjection(
+  positions: readonly InvestingDashboardPosition[],
+): InvestingComposition {
+  const priced = positions.filter(
+    (position): position is InvestingDashboardPosition & { marketValue: number } =>
+      position.marketValue !== null && position.marketValue > 0,
+  );
+  const totalValue = priced.reduce((sum, position) => sum + position.marketValue, 0);
+  const topPositions = positionsByMarketValueDesc(priced)
+    .slice(0, COMPOSITION_TOP_POSITIONS)
+    .map((position) => ({
+      symbol: position.symbol,
+      weight: totalValue > 0 ? position.marketValue / totalValue : 0,
+      ...(position.description ? { description: position.description } : {}),
+    }));
+  return {
+    topPositions,
+    pricedHoldings: priced.length,
+    missingHoldings: positions.filter((position) => position.marketValue === null).length,
+    estimatedHoldings: positions.filter((position) => position.priceStatus === "forward-filled")
+      .length,
+  };
+}
+
 export function emptyInvestingDashboard(presentationCurrency = "EUR"): InvestingDashboardData {
   const portfolio = {} as Record<PortfolioRange, PortfolioValuePoint[]>;
   for (const range of PORTFOLIO_RANGES) portfolio[range] = [];
@@ -140,6 +200,7 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     position: null,
     problems: [],
     risk: { byBenchmark: {}, defaultBenchmark: null },
+    composition: buildCompositionProjection([]),
   };
 }
 
@@ -293,6 +354,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     position,
     problems: [...(input.problems ?? []), ...positionProblems],
     risk: { byBenchmark: {}, defaultBenchmark: null },
+    composition: buildCompositionProjection(positions),
   };
   return { ...dashboard, risk: buildRiskProjection(dashboard) };
 }

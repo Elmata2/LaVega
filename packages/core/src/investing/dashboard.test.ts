@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
 import {
+  buildCompositionProjection,
   buildInvestingDashboard,
   emptyInvestingDashboard,
   type InvestingDashboardInput,
+  type InvestingDashboardPosition,
 } from "./dashboard.js";
 import { convertCurrency } from "./portfolio.js";
 import { buildHistoricalRisk } from "./risk.js";
@@ -29,6 +31,12 @@ test("empty dashboard has every range and no invented records", () => {
     position: null,
     problems: [],
     risk: { byBenchmark: {}, defaultBenchmark: null },
+    composition: {
+      topPositions: [],
+      pricedHoldings: 0,
+      missingHoldings: 0,
+      estimatedHoldings: 0,
+    },
   });
 });
 
@@ -775,4 +783,70 @@ test("with no configured benchmark the projection carries the one no-benchmark e
   expect(Object.keys(dashboard.risk.byBenchmark)).toEqual([""]);
   for (const range of ["6M", "1Y", "All"] as const)
     expect(dashboard.risk.byBenchmark[""]?.[range]).toEqual(buildHistoricalRisk(dashboard, range));
+});
+
+test("the read model carries a composition projection over its positions", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: BENCHMARK_BARS,
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  expect(dashboard.composition).toEqual(buildCompositionProjection(dashboard.positions));
+  expect(dashboard.composition.pricedHoldings).toBe(
+    dashboard.positions.filter((position) => position.marketValue !== null).length,
+  );
+  expect(dashboard.composition.topPositions.length).toBeLessThanOrEqual(5);
+  for (const position of dashboard.composition.topPositions)
+    expect(dashboard.positions.some((entry) => entry.symbol === position.symbol)).toBe(true);
+});
+
+test("composition counts priced, missing and estimated holdings and never invents one", () => {
+  const empty = buildCompositionProjection([]);
+  expect(empty).toEqual({
+    topPositions: [],
+    pricedHoldings: 0,
+    missingHoldings: 0,
+    estimatedHoldings: 0,
+  });
+  const position = (symbol: string, marketValue: number | null, priceStatus: string) =>
+    ({
+      symbol,
+      entity: "personal",
+      quantity: 1,
+      marketValue,
+      portfolioWeight: null,
+      priceStatus,
+      currency: "EUR",
+      asOf: "2026-08-18",
+      returns: {
+        status: "unpriced",
+        remainingCostBasis: 0,
+        realizedCostBasisRemoved: 0,
+        unrealizedGain: 0,
+        realizedGain: 0,
+        dividendsReceived: 0,
+        totalReturn: 0,
+        totalReturnPercentage: null,
+        sinceFirstBuyPercentage: null,
+        firstBuyDate: null,
+      },
+    }) as unknown as InvestingDashboardPosition;
+  const composition = buildCompositionProjection([
+    position("BIG", 300, "priced"),
+    position("SMALL", 100, "forward-filled"),
+    position("DARK", null, "unpriced"),
+  ]);
+  expect(composition.pricedHoldings).toBe(2);
+  expect(composition.missingHoldings).toBe(1);
+  expect(composition.estimatedHoldings).toBe(1);
+  expect(composition.topPositions).toEqual([
+    { symbol: "BIG", weight: 0.75 },
+    { symbol: "SMALL", weight: 0.25 },
+  ]);
 });

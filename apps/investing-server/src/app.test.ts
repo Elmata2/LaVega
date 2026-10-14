@@ -9,7 +9,7 @@ import {
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
-import { buildRiskProjection, emptyInvestingDashboard } from "@lavega/core";
+import { buildCompositionProjection, buildRiskProjection, emptyInvestingDashboard } from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
@@ -926,6 +926,7 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
     dashboardReader: vi.fn(async () => ({
       ...dashboard,
       risk: buildRiskProjection(dashboard),
+      composition: buildCompositionProjection(dashboard.positions),
       problems: [],
     })),
     sectorProfile: vi.fn(async (symbol: string) =>
@@ -1055,7 +1056,11 @@ test("summary route includes a position's description in top positions when set"
     },
   });
   const investingApp = createApp({
-    dashboardReader: async () => ({ ...dashboard, problems: [] }),
+    dashboardReader: async () => ({
+      ...dashboard,
+      composition: buildCompositionProjection(dashboard.positions),
+      problems: [],
+    }),
     sectorProfile: vi.fn(async () => ({
       kind: "stock" as const,
       sector: "Technology",
@@ -1426,6 +1431,7 @@ test("summary stays 200 when sector lookup fails after a priced dashboard", asyn
       firstBuyDate: "2026-01-02",
     },
   });
+  dashboard.composition = buildCompositionProjection(dashboard.positions);
   const investingApp = createApp({
     dashboardReader: async () => dashboard,
     sectorProfile: vi.fn().mockRejectedValue(new Error("yahoo down")),
@@ -2399,4 +2405,59 @@ test("GET sector-inference reports availability based on whether a classifier is
   ).toMatchObject({
     available: false,
   });
+});
+
+test("GET sectors returns the value-weighted exposure and coverage from the sector read", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("AAPL", 100));
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
+  const investingApp = createApp({ dashboardReader: async () => dashboard, sectorStore });
+
+  const response = await investingApp.request("/api/investing/sectors");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    sectors: [{ sector: "Technology", weight: 1 }],
+    sectorCoverage: { provider: 1, inferred: 0, correction: 0, unknown: 0 },
+    revision: 0,
+  });
+});
+
+test("a correction write raises the sector revision so the very next sector read shows it", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("AAPL", 100));
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
+  const investingApp = createApp({ dashboardReader: async () => dashboard, sectorStore });
+
+  const before = (await (await investingApp.request("/api/investing/sectors")).json()) as {
+    sectors: Array<{ sector: string }>;
+    revision: number;
+  };
+  expect(before.sectors).toEqual([{ sector: "Technology", weight: 1 }]);
+  expect(before.revision).toBe(0);
+
+  await investingApp.request("/api/investing/positions/AAPL/sector", {
+    method: "PUT",
+    body: JSON.stringify({ sector: "Healthcare" }),
+    headers: { "content-type": "application/json" },
+  });
+
+  const after = (await (await investingApp.request("/api/investing/sectors")).json()) as {
+    sectors: Array<{ sector: string; weight: number }>;
+    revision: number;
+  };
+  expect(after.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
+  expect(after.revision).toBe(1);
 });

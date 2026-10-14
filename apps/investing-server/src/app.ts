@@ -66,6 +66,11 @@ import {
   createInMemorySectorInferenceSettingStore,
   type SectorInferenceSettingStore,
 } from "./sectorInferenceSetting.js";
+import {
+  createInMemorySectorRevisionStore,
+  type SectorRevisionStore,
+} from "./sectorRevision.js";
+import { createSectorReader, type SectorReader } from "./sectorRead.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
 
 /** Bounds one /sectors/infer call to this many classifier invocations, so a
@@ -168,6 +173,12 @@ type PriceDependencies = {
   sectorStore: SectorProfileStore;
   sectorCorrectionStore: SectorCorrectionStore;
   sectorInferenceSettingStore: SectorInferenceSettingStore;
+  /** Raised by a correction or inference-setting write; the sector read keys
+   *  its resolution cache on it, independently of `dataVersion`. */
+  sectorRevisionStore: SectorRevisionStore;
+  /** The tenant-scoped sector read seam. Built from the stores above when the
+   *  caller does not inject one. */
+  sectorReader: SectorReader;
   sectorClassifier?: SectorClassifier;
   resolveTenantId: () => string | Promise<string>;
   passphraseMode: () => PassphraseMode;
@@ -279,6 +290,22 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     (await marketDataConsentStore.get(tenantId)).accepted;
   const resolveSectorListingSymbol = (tenantId: string, symbol: string) =>
     resolveSectorListing(store, tenantId, symbol);
+  const sectorRevisionStore = dependencies.sectorRevisionStore ?? createInMemorySectorRevisionStore();
+  /* The sector read is a sibling of the dashboard read (portfolioRead.ts):
+   * one tenant-scoped method, keyed on the sector-store revision, so a
+   * correction appears at once and no component needs the summary endpoint. */
+  const sectorReader =
+    dependencies.sectorReader ??
+    createSectorReader({
+      dashboard: async () => dashboardReader({}),
+      store: sectorStore,
+      fetchProfile: sectorProfile,
+      corrections: sectorCorrectionStore,
+      inferenceSetting: sectorInferenceSettingStore,
+      consent: marketDataConsentStore,
+      revision: (tenantId) => sectorRevisionStore.get(tenantId),
+      resolveListing: resolveSectorListingSymbol,
+    });
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
@@ -331,19 +358,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       /* Risk is a projection of the read model (#216): read the entry the
        * dashboard already carries instead of re-running the metrics pass. */
       const riskKey = benchmark ?? data.risk.defaultBenchmark ?? "";
-      const priced = data.positions.filter(
-        (position): position is typeof position & { marketValue: number } =>
-          position.marketValue !== null && position.marketValue > 0,
-      );
-      const totalValue = priced.reduce((sum, position) => sum + position.marketValue, 0);
-      const topPositions = [...priced]
-        .sort((left, right) => right.marketValue - left.marketValue)
-        .slice(0, 5)
-        .map((position) => ({
-          symbol: position.symbol,
-          weight: totalValue > 0 ? position.marketValue / totalValue : 0,
-          ...(position.description ? { description: position.description } : {}),
-        }));
+      /* Composition is a projection of the read model (#223): the top
+       * positions and the priced/missing/estimated counts ride the dashboard
+       * snapshot, so this route never recomputes them. */
+      const composition = data.composition;
       /* Same classification rule as the portfolio-agent snapshot, which
        * passes no fetchProfile. This route keeps the fetch-and-persist
        * fallback; only the resolution itself is shared. Without consent,
@@ -371,18 +389,23 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         ...data.risk.byBenchmark[riskKey]?.[range],
         sectors: exposure,
         sectorCoverage: coverage,
-        topPositions,
+        topPositions: composition.topPositions,
         composition: {
-          pricedHoldings: priced.length,
-          missingHoldings: data.positions.filter((position) => position.marketValue === null)
-            .length,
-          estimatedHoldings: data.positions.filter(
-            (position) => position.priceStatus === "forward-filled",
-          ).length,
+          pricedHoldings: composition.pricedHoldings,
+          missingHoldings: composition.missingHoldings,
+          estimatedHoldings: composition.estimatedHoldings,
         },
       });
     } catch {
       return c.json({ problems: ["Portfolio summary could not be assembled"] }, 503);
+    }
+  });
+  investingApp.get("/api/investing/sectors", async (c) => {
+    const tenantId = await resolveTenantId();
+    try {
+      return c.json(await sectorReader({ tenantId }));
+    } catch {
+      return c.json({ problems: ["Sector data could not be assembled"] }, 503);
     }
   });
   investingApp.get("/api/investing/positions/:symbol/sector", async (c) => {
@@ -432,10 +455,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         422,
       );
     await sectorCorrectionStore.set(tenantId, symbol, body.sector);
+    await sectorRevisionStore.raise(tenantId);
     return c.body(null, 204);
   });
   investingApp.delete("/api/investing/positions/:symbol/sector", async (c) => {
-    await sectorCorrectionStore.clear(await resolveTenantId(), c.req.param("symbol"));
+    const tenantId = await resolveTenantId();
+    await sectorCorrectionStore.clear(tenantId, c.req.param("symbol"));
+    await sectorRevisionStore.raise(tenantId);
     return c.body(null, 204);
   });
   investingApp.get("/api/investing/sector-inference", async (c) =>
@@ -452,6 +478,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (typeof body.enabled !== "boolean")
       return c.json({ message: "enabled must be boolean" }, 400);
     await sectorInferenceSettingStore.set(await resolveTenantId(), body.enabled);
+    await sectorRevisionStore.raise(await resolveTenantId());
     return c.json({ enabled: body.enabled });
   });
   investingApp.post("/api/investing/sectors/infer", async (c) => {

@@ -1,7 +1,24 @@
-import type { RiskRange } from "@lavega/core";
-import type { SummaryState } from "../lib/summaryResource.js";
+import type {
+  HistoricalRisk,
+  InvestingComposition,
+  PortfolioMetrics,
+  RiskRange,
+} from "@lavega/core";
 import { shortDate } from "../lib/dates.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+
+/** The view this card renders: the risk projection's metrics and report plus
+ *  the composition projection, both read from the one dashboard. */
+export type PortfolioSummaryView = {
+  metrics: PortfolioMetrics;
+  risk: HistoricalRisk;
+  composition: InvestingComposition;
+};
+
+export type SummaryState =
+  | { status: "loading" }
+  | { status: "ready"; data: PortfolioSummaryView }
+  | { status: "error"; message: string };
 
 const percent = (value: number | null | undefined): string =>
   value === null || value === undefined || !Number.isFinite(value)
@@ -16,10 +33,9 @@ const decimal = (value: number | null): string =>
     : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
 /** Presentational: Overview owns the range/benchmark selection and reads the
- *  risk projection from the shared dashboard read model, while the composition
- *  parts (largest positions, composition counts) come from the summary read it
- *  shares with SectorAllocationCard. This card only renders `state` and reports
- *  the reader's choices back through `onRangeChange`/`onBenchmarkChange`. */
+ *  risk and composition projections from the shared dashboard read model. This
+ *  card only renders `state` and reports the reader's choices back through
+ *  `onRangeChange`/`onBenchmarkChange`. */
 export function PortfolioSummaryCard({
   currency,
   stillLoading = false,
@@ -60,7 +76,8 @@ export function PortfolioSummaryCard({
         </CardContent>
       </Card>
     );
-  const { metrics, topPositions, risk, composition } = state.data;
+  const { metrics, risk, composition } = state.data;
+  const topPositions = composition.topPositions;
   const drawdownCaption =
     risk.drawdownFrom && risk.drawdownFrom !== risk.from
       ? `since ${shortDate(risk.drawdownFrom)}`
@@ -216,8 +233,7 @@ export function PortfolioSummaryCard({
         </details>
         <p className="text-xs text-muted-foreground">
           Current composition · percentages of priced investments, excluding cash.
-          {composition &&
-            ` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
+          {` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
         </p>
         <div>
           <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>

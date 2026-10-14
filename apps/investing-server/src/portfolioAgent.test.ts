@@ -33,6 +33,12 @@ function dashboard(): InvestingDashboardData {
     position: null,
     problems: [],
     risk: { byBenchmark: {}, defaultBenchmark: null },
+    composition: {
+      topPositions: [],
+      pricedHoldings: 0,
+      missingHoldings: 0,
+      estimatedHoldings: 0,
+    },
   };
 }
 

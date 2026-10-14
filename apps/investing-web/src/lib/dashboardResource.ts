@@ -34,6 +34,16 @@ function isAllocationBucket(value: unknown): value is Allocation["buckets"][numb
   );
 }
 
+function isComposition(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.topPositions) &&
+    typeof value.pricedHoldings === "number" &&
+    typeof value.missingHoldings === "number" &&
+    typeof value.estimatedHoldings === "number"
+  );
+}
+
 /** Decodes the network contract; rejects a payload missing a required field. */
 function isDashboardData(value: unknown): value is InvestingDashboardData {
   if (!isRecord(value)) return false;
@@ -47,6 +57,7 @@ function isDashboardData(value: unknown): value is InvestingDashboardData {
   if (!Array.isArray(value.externalCashFlows)) return false;
   if (!Array.isArray(value.positions)) return false;
   if (!Array.isArray(value.problems)) return false;
+  if (!isComposition(value.composition)) return false;
   if (value.position !== null && !isRecord(value.position)) return false;
   return true;
 }

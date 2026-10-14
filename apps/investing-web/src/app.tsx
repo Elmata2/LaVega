@@ -42,13 +42,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
-import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
+import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { longDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
-import { usePortfolioSummary, type SummaryState } from "./lib/summaryResource.js";
+import { useSectors } from "./lib/sectorResource.js";
 import { PortfolioLetterCard } from "./components/PortfolioLetterCard.js";
 import { letterToText, useLatestLetter } from "./lib/portfolioLetter.js";
 import {
@@ -1252,13 +1252,12 @@ function Overview() {
   const widgets = new Set(layoutReady ? layout.widgets : []);
   const showRisk = widgets.has("risk");
   const showSectors = widgets.has("sectors");
-  /* Overview owns the range/benchmark selection. Risk is a projection of the
-   * dashboard read (#216), so the controls select from the model already held
-   * and switching a range or benchmark does not fetch. The one summary read
-   * stays, shared with SectorAllocationCard, only for the composition parts it
-   * alone carries (sectors, largest positions, composition counts) — sectors
-   * come from tenant stores whose changes are not keyed to `dataVersion`, so
-   * they cannot ride the version-keyed dashboard snapshot. */
+  /* Overview owns the range/benchmark selection. Risk and composition are
+   * projections of the one dashboard read (#216/#223), so the controls select
+   * from the model already held and switching a range or benchmark does not
+   * fetch. Sectors come from their own tenant-scoped read (#223), keyed on the
+   * sector-store revision server-side, so the page makes one dashboard read
+   * plus the sector read only while a sector widget is on screen. */
   const dashboardReady = state.status === "ready" && gate.kind === "ready";
   const dataVersion = dashboardReady ? state.data.dataVersion : 0;
   const benchmarksRevision = dashboardReady
@@ -1271,30 +1270,31 @@ function Overview() {
   });
   const benchmark =
     benchmarkSelection.revision === benchmarksRevision ? benchmarkSelection.value : "";
-  const { state: summaryState, refresh: refreshSummary } = usePortfolioSummary(
-    "1Y",
-    "",
-    `${dataVersion}:${benchmarksRevision}`,
-    dashboardReady && (showRisk || showSectors),
-  );
   /* The range/benchmark the reader picked, resolved against the projection's
    * default exactly as the summary route resolves it, and read from the held
-   * dashboard payload. Falls back to the summary state for a payload recorded
-   * before risk was projected, so an old cached overview still renders. */
+   * dashboard payload. */
   const riskProjection = state.status === "ready" ? state.data.risk : undefined;
   const riskKey = benchmark || riskProjection?.defaultBenchmark || "";
-  const riskReport = riskProjection?.byBenchmark?.[riskKey]?.[range];
-  const riskState: SummaryState =
-    summaryState.status === "ready" && riskReport
+  const riskReport =
+    riskProjection?.byBenchmark?.[riskKey]?.[range] ?? riskProjection?.byBenchmark?.[""]?.[range];
+  const summaryState: SummaryState =
+    state.status === "ready" && riskReport
       ? {
           status: "ready",
-          data: { ...summaryState.data, metrics: riskReport.metrics, risk: riskReport.risk },
+          data: {
+            metrics: riskReport.metrics,
+            risk: riskReport.risk,
+            composition: state.data.composition,
+          },
         }
-      : summaryState;
-  const refreshRisk = () => {
-    refreshSummary();
-    readDashboard();
-  };
+      : state.status === "error"
+        ? { status: "error", message: state.message }
+        : { status: "loading" };
+  const refreshRisk = () => readDashboard();
+  const { state: sectorState, refresh: refreshSectors } = useSectors(
+    dashboardReady && showSectors,
+    `${dataVersion}`,
+  );
 
   const showLetter = widgets.has("agent");
   const letter = useLatestLetter(dashboardReady && showLetter);
@@ -1380,7 +1380,7 @@ function Overview() {
                         (price?.remainingSymbols?.length ?? 0) > 0
                       }
                       currency={state.data.presentationCurrency}
-                      state={riskState}
+                      state={summaryState}
                       refresh={refreshRisk}
                       range={range}
                       onRangeChange={setRange}
@@ -1396,8 +1396,8 @@ function Overview() {
               {showSectors && (
                 <SectorAllocationCard
                   currency={state.data.presentationCurrency}
-                  state={summaryState}
-                  refresh={refreshSummary}
+                  state={sectorState}
+                  refresh={refreshSectors}
                 />
               )}
               {widgets.has("agent") && <PortfolioAgentCard />}

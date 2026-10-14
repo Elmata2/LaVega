@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import {
   benchmarkDisplayName,
+  buildCompositionProjection,
   buildInvestingDashboard,
   type InvestingDashboardData,
 } from "@lavega/core";
@@ -120,6 +121,14 @@ type PortfolioReadRequirements =
   | PortfolioReadBenchmarks
   | PortfolioReadPriceVersion;
 
+/** A dashboard stored before the composition projection existed still carries
+ *  the fields the web app now requires. Returns the same reference when the
+ *  projection is already there, so a current snapshot is not rebuilt. */
+function withComposition(dashboard: InvestingDashboardData): InvestingDashboardData {
+  if (dashboard.composition) return dashboard;
+  return { ...dashboard, composition: buildCompositionProjection(dashboard.positions) };
+}
+
 /**
  * The investing dashboard read, as one module with one method.
  *
@@ -162,7 +171,7 @@ export class PortfolioRead extends Context.Service<
           const stored = await timing.measure("stored", () =>
             dashboardSnapshots?.get(storedKey).catch(() => null),
           );
-          if (stored?.dashboard) return stored.dashboard as InvestingDashboardData;
+          if (stored?.dashboard) return withComposition(stored.dashboard as InvestingDashboardData);
           const refreshProblems: string[] = [];
           try {
             await timing.measure("broker", async () => {

@@ -4,7 +4,7 @@ import type {
   ScoreQuestion,
   ScoreResponse,
 } from "@typesafe-ai/sdk";
-import type { InvestingDashboardData, SectorExposure } from "@lavega/core";
+import { positionsByMarketValueDesc, type InvestingDashboardData, type SectorExposure } from "@lavega/core";
 import {
   createSystemOneProvider,
   type SystemOneProvider,
@@ -223,8 +223,7 @@ export function renderPortfolioSnapshot(
   const latestValue = dashboard.portfolio.All.at(-1);
   const priced = dashboard.positions.filter((position) => position.marketValue !== null);
   const totalValue = priced.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);
-  const topPositions = [...dashboard.positions]
-    .sort((left, right) => (right.marketValue ?? -1) - (left.marketValue ?? -1))
+  const topPositions = positionsByMarketValueDesc(dashboard.positions)
     .slice(0, 12)
     .map((position) => ({
       symbol: position.symbol,

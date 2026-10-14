@@ -2,13 +2,12 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import type { PortfolioSummary, SummaryState } from "../lib/summaryResource";
-import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
+import { PortfolioSummaryCard, type PortfolioSummaryView, type SummaryState } from "./PortfolioSummaryCard";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-const summary: PortfolioSummary = {
+const summary: PortfolioSummaryView = {
   metrics: {
     dailyVolatility: 0.01,
     annualizedVolatility: 0.1587,
@@ -36,8 +35,12 @@ const summary: PortfolioSummary = {
     coverage: 1,
     currency: "EUR",
   },
-  sectors: [{ sector: "Technology", weight: 0.6 }],
-  topPositions: [{ symbol: "AAPL", weight: 0.6 }],
+  composition: {
+    topPositions: [{ symbol: "AAPL", weight: 0.6 }],
+    pricedHoldings: 1,
+    missingHoldings: 0,
+    estimatedHoldings: 0,
+  },
 };
 
 const readyState: SummaryState = { status: "ready", data: summary };
@@ -176,10 +179,13 @@ test("shows a position's name above its ticker, and just the ticker when there i
           status: "ready",
           data: {
             ...summary,
-            topPositions: [
-              { symbol: "AAPL", weight: 0.6, description: "Apple Inc." },
-              { symbol: "MYST", weight: 0.4 },
-            ],
+            composition: {
+              ...summary.composition,
+              topPositions: [
+                { symbol: "AAPL", weight: 0.6, description: "Apple Inc." },
+                { symbol: "MYST", weight: 0.4 },
+              ],
+            },
           },
         },
       }),
@@ -272,7 +278,7 @@ test("clicking Refresh risk calls refresh", () => {
   expect(refresh).toHaveBeenCalledTimes(1);
 });
 
-test("renders a loading placeholder while the shared summary is in flight", () => {
+test("renders a loading placeholder while the risk projection is assembled", () => {
   const { container, root } = render();
   act(() => root.render(card({ state: { status: "loading" } })));
   expect(
@@ -280,7 +286,7 @@ test("renders a loading placeholder while the shared summary is in flight", () =
   ).toBe("true");
 });
 
-test("renders the shared summary's error", () => {
+test("renders the risk projection's error", () => {
   const { container, root } = render();
   act(() => root.render(card({ state: { status: "error", message: "503" } })));
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("503");
@@ -298,7 +304,7 @@ test("renders the shared summary's error", () => {
  * instrumenten zou een verzonnen getal opleveren, dus weigeren is juist. Wat
  * fout was, is dat het scherm "dit kan niet" zei waar "dit kan nog niet" gold —
  * het verschil tussen iets repareren en even wachten. */
-const loadingSummary: PortfolioSummary = {
+const loadingSummary: PortfolioSummaryView = {
   ...summary,
   metrics: { ...summary.metrics, annualizedVolatility: null, beta: null, observationDays: 0 },
   risk: {

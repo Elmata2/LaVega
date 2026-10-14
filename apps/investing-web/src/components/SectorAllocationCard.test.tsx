@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SectorCoverage } from "@lavega/core";
-import type { SummaryState } from "../lib/summaryResource.js";
+import type { SectorState } from "../lib/sectorResource.js";
 import { SectorAllocationCard } from "./SectorAllocationCard.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -30,45 +30,19 @@ function render() {
   return { container, root };
 }
 
-const readyState: SummaryState = {
+const readyState: SectorState = {
   status: "ready",
   data: {
-    metrics: {
-      dailyVolatility: 0.01,
-      annualizedVolatility: 0.1587,
-      beta: 1.1,
-      alpha: 0.02,
-      maxDrawdown: -0.25,
-      observationDays: 252,
-      excludedIntervals: 0,
-      pairedObservationDays: 252,
-      startDate: "2025-09-10",
-      endDate: "2026-09-10",
-    },
-    risk: {
-      status: "estimate",
-      range: "1Y",
-      from: "2025-09-10",
-      to: "2026-09-10",
-      drawdownFrom: null,
-      minimumObservations: 60,
-      benchmark: null,
-      benchmarks: [],
-      reasons: [],
-      missingHoldings: [],
-      missingPrices: [],
-      coverage: 1,
-      currency: "EUR",
-    },
     sectors: [
       { sector: "Technology", weight: 0.6 },
       { sector: "Unknown", weight: 0.4 },
     ],
-    topPositions: [],
+    sectorCoverage: { provider: 0.6, inferred: 0, correction: 0, unknown: 0.4 },
+    revision: 0,
   },
 };
 
-test("renders sector bars from the shared summary state", () => {
+test("renders sector bars from the shared sector read", () => {
   const { container, root } = render();
   act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));
   expect(container.textContent).toContain("Technology");
@@ -99,7 +73,7 @@ test("renders a loading placeholder without claiming an outcome", () => {
   ).toBe("true");
 });
 
-test("renders the shared summary error instead of a second one", () => {
+test("renders the sector read's error", () => {
   const { container, root } = render();
   act(() =>
     root.render(
@@ -207,12 +181,6 @@ test("three equal thirds round to sum to 100 instead of dropping a point", () =>
   expect(container.textContent).toContain(
     "34% from provider data · 33% inferred · 33% your corrections",
   );
-});
-
-test("shows no coverage line when the summary predates sectorCoverage", () => {
-  const { container, root } = render();
-  act(() => root.render(<SectorAllocationCard state={readyState} refresh={noRefresh} />));
-  expect(container.textContent).not.toMatch(/from provider data/);
 });
 
 test("classifies unknown positions once inference is enabled, then refreshes", async () => {
@@ -330,7 +298,7 @@ test("an unrelated re-render mid-run, handing a new refresh closure, doesn't can
       throw new Error(`unexpected fetch: ${url}`);
     }),
   );
-  const state: SummaryState = {
+  const state: SectorState = {
     ...readyState,
     data: { ...readyState.data, sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }) },
   };
@@ -395,7 +363,7 @@ test("stops the infer loop on 428 without refreshing when nothing was classified
   expect(refresh).not.toHaveBeenCalled();
 });
 
-test("a classifier that always fails triggers at most the capped number of POSTs across many summary refreshes, and never refreshes", async () => {
+test("a classifier that always fails triggers at most the capped number of POSTs across many refreshes, and never refreshes", async () => {
   let calls = 0;
   vi.stubGlobal(
     "fetch",
@@ -415,7 +383,7 @@ test("a classifier that always fails triggers at most the capped number of POSTs
   const refresh = vi.fn();
   const { root } = render();
   // Simulates something outside this hook's control handing back a brand-new
-  // summary object on every render, each still reporting unknown coverage —
+  // sector object on every render, each still reporting unknown coverage —
   // the shape of the pre-fix endless loop, minus this hook's own refresh.
   for (let round = 0; round < 6; round += 1) {
     await act(async () => {
@@ -426,7 +394,7 @@ test("a classifier that always fails triggers at most the capped number of POSTs
             data: {
               ...readyState.data,
               sectorCoverage: coverage({ provider: 0.5, unknown: 0.5 }),
-              topPositions: [{ symbol: `ROUND${round}`, weight: 0 }],
+              sectors: [{ sector: `ROUND${round}`, weight: 0 }],
             },
           }}
           refresh={refresh}
