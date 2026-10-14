@@ -27,9 +27,26 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
 - summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
-  `Valid daily returns`, `Benchmark pairs`, from `GET /api/investing/summary`. When
-  `risk.to` is before today, the line `Historical account risk · …` appends ` (as of <date>)`.
-  The card title stays `Summary`. Controls:
+  `Valid daily returns`, `Benchmark pairs`. Those figures, and the line
+  `Historical account risk · …`, come from the dashboard payload
+  `risk.byBenchmark[<benchmark>][<range>]` (`6M`, `1Y`, `All`). The key is the selected
+  benchmark, or `defaultBenchmark` when none is selected. An empty book has
+  `defaultBenchmark: null` and the key `""`. Switching
+  `Risk period` or `Risk benchmark` does not fetch. The status word is `Unavailable`
+  (empty or short history), `Still loading` while a broker or price sync is in flight,
+  or `Estimate, currency moves excluded` when an estimate exists. When `risk.to` is
+  before today, that line appends ` (as of <date>)`. The card title stays `Summary`.
+  When history is not still loading, the next line is
+  `Use Refresh risk after broker or price updates.`
+  `GET /api/investing/summary` returns that same projection entry plus composition
+  (`sectors`, `topPositions`, `composition`). The page requests it with `range=1Y` and no
+  benchmark query, and stays on that call's loading or error state until it is ready.
+  It then overlays the selected range from the dashboard payload. `Refresh risk` reloads
+  the dashboard and that `range=1Y` summary call. `summary` with no query is the `1Y`
+  default-benchmark entry. It matches the card only while `Risk period` is `1 year` and
+  the card is on the default benchmark. Another range is
+  `api GET /api/investing/summary?range=6M` (or `All`), or `dashboard --raw` field
+  `risk.byBenchmark`. Controls:
   `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`), `Risk benchmark`.
 - `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
   `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
@@ -92,7 +109,8 @@ the main navigation returns to it.
 C=".claude/skills/verify-investing/control-investing.mjs"
 node $C dashboard --target prod                 # summarized: problems, counts, shape
 node $C dashboard --target prod --raw           # the exact payload the SPA receives
-node $C summary --target prod                   # the Summary card (risk metrics)
+node $C summary --target prod                   # 1Y projection plus composition, not a changed Risk period
+node $C api GET '/api/investing/summary?range=6M' --target local
 node $C api GET /api/investing/dashboard --target prod
 node $C api GET /api/investing/personal-net-worth --target prod
 node $C api GET /api/letters/latest --target local   # { letter: null } until a cron write
