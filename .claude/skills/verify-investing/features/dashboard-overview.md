@@ -37,20 +37,22 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   or `Estimate, currency moves excluded` when an estimate exists. When `risk.to` is
   before today, that line appends ` (as of <date>)`. The card title stays `Summary`.
   When history is not still loading, the next line is
-  `Use Refresh risk after broker or price updates.`
-  `GET /api/investing/summary` returns that same projection entry plus composition
-  (`sectors`, `topPositions`, `composition`). The page requests it with `range=1Y` and no
-  benchmark query, and stays on that call's loading or error state until it is ready.
-  It then overlays the selected range from the dashboard payload. `Refresh risk` reloads
-  the dashboard and that `range=1Y` summary call. `summary` with no query is the `1Y`
-  default-benchmark entry. It matches the card only while `Risk period` is `1 year` and
-  the card is on the default benchmark. Another range is
-  `api GET /api/investing/summary?range=6M` (or `All`), or `dashboard --raw` field
-  `risk.byBenchmark`. Controls:
+  `Use Refresh risk after broker or price updates.` The page never requests
+  `/api/investing/summary`: the metrics, the `Historical account risk · …` line,
+  `Current composition · …` (`priced`/`unpriced`/`estimated` counts) and the
+  `Largest positions` list all read the dashboard payload's projections
+  (`risk.byBenchmark` and `composition`). `Refresh risk` reloads the dashboard.
+  `GET /api/investing/summary` still answers server-side with that same `risk.byBenchmark`
+  entry plus `sectors`, `topPositions` and `composition`, but no component calls it.
+  `summary` with no query is the `1Y` default-benchmark entry. Controls:
   `Refresh risk`, `Risk period` (`6 months`, `1 year`, `Account history`), `Risk benchmark`.
 - `Sector allocation` is its own widget (`data-dashboard-section="sectors"`,
   `SectorAllocationCard`), below the two-column grid, and it can be hidden on its own.
-  Eyebrow `Composition`. Empty copy: `No sector data yet.` The Profile switch that can
+  Eyebrow `Composition`. Empty copy: `No sector data yet.` It reads its own tenant-scoped
+  endpoint, `GET /api/investing/sectors` (`{ sectors, sectorCoverage, revision }`), only
+  while the widget is on screen; the resolution cache is keyed on the `revision`, so a
+  correction or inference-setting write appears on the next read while a broker or price
+  write does not invalidate it. The Profile switch that can
   fill missing sectors is `#data` (`Sector inference`). See
   [broker-connect-sync.md](broker-connect-sync.md).
 - portfolio agents card, eyebrow `Agent`, title `Investor lens`
@@ -109,9 +111,10 @@ the main navigation returns to it.
 C=".claude/skills/verify-investing/control-investing.mjs"
 node $C dashboard --target prod                 # summarized: problems, counts, shape
 node $C dashboard --target prod --raw           # the exact payload the SPA receives
-node $C summary --target prod                   # 1Y projection plus composition, not a changed Risk period
+node $C summary --target prod                   # 1Y risk projection plus composition (server-side; no component calls it)
 node $C api GET '/api/investing/summary?range=6M' --target local
 node $C api GET /api/investing/dashboard --target prod
+node $C api GET /api/investing/sectors --target local   # sector read: sectors, sectorCoverage, revision
 node $C api GET /api/investing/personal-net-worth --target prod
 node $C api GET /api/letters/latest --target local   # { letter: null } until a cron write
 node $C browser goto /net-worth --target local  # mounted: /investing/net-worth
