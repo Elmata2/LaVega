@@ -1,5 +1,7 @@
+import { Schema } from "effect";
 import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
-import { bucketPricedAllocation, type Allocation } from "./allocation.js";
+import type { DeepMutable } from "./schema.js";
+import { bucketPricedAllocation } from "./allocation.js";
 import {
   computePortfolioValueSeries,
   filterPortfolioValueRange,
@@ -17,7 +19,7 @@ import type {
   PriceBar,
   Trade,
 } from "./model.js";
-import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
+import type { BenchmarkInstrument } from "./benchmarks.js";
 import {
   brokerCostCoverage,
   buildCurrentPositions,
@@ -30,7 +32,7 @@ import {
 import { valuePosition } from "./valuation.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { orderTrades, tradeDelta } from "./quantity.js";
-import { buildRiskProjection, type InvestingRiskProjection } from "./risk.js";
+import { buildRiskProjection } from "./risk.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -104,27 +106,230 @@ export type InvestingComposition = {
   estimatedHoldings: number;
 };
 
-/** Finished, serializable read model consumed by investing-web. */
-export type InvestingDashboardData = {
-  dataVersion: number;
-  presentationCurrency: string;
-  portfolio: Record<PortfolioRange, PortfolioValuePoint[]>;
-  benchmarks: BenchmarkSeries[];
-  externalCashFlows: Array<{ date: string; amount: number | null }>;
-  allocation: {
-    instrument: Allocation;
-    entity: Allocation;
-  };
-  positions: InvestingDashboardPosition[];
-  position: InvestingPositionDetail | null;
-  problems: string[];
-  /** Risk, projected from this read model at build time: the summary endpoint
-   *  and the chat tool read it instead of re-running the metrics pass. */
-  risk: InvestingRiskProjection;
-  /** Composition, projected from this read model at build time: the Overview
-   *  reads it from the shared dashboard instead of a second summary request. */
-  composition: InvestingComposition;
-};
+const NullableNumber = Schema.NullOr(Schema.Number);
+const NullableString = Schema.NullOr(Schema.String);
+const StringList = Schema.Array(Schema.String);
+const PositionReturnStatusSchema = Schema.Union([
+  Schema.Literal("available"),
+  Schema.Literal("broker-unrealized"),
+  Schema.Literal("missing-cost"),
+  Schema.Literal("missing-fx"),
+  Schema.Literal("unpriced"),
+]);
+const PositionPriceStatusSchema = Schema.Union([
+  Schema.Literal("priced"),
+  Schema.Literal("forward-filled"),
+  Schema.Literal("unpriced"),
+  Schema.Literal("missing-fx"),
+]);
+
+const AllocationBucketSchema = Schema.Struct({
+  key: Schema.String,
+  label: Schema.String,
+  value: NullableNumber,
+  unpriced: Schema.Boolean,
+});
+const AllocationSchema = Schema.Struct({
+  buckets: Schema.Array(AllocationBucketSchema),
+  unpriced: StringList,
+});
+const PortfolioValuePointSchema = Schema.Struct({
+  date: Schema.String,
+  positionsValue: NullableNumber,
+  cashValue: NullableNumber,
+  value: NullableNumber,
+  unpriced: StringList,
+  forwardFilled: StringList,
+  cashUnknown: StringList,
+  cashEstimated: Schema.optional(StringList),
+  cashShortfall: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  holdingsUnknown: Schema.optional(StringList),
+  unaccountedValue: Schema.optional(NullableNumber),
+});
+const BenchmarkSeriesSchema = Schema.Struct({
+  symbol: Schema.String,
+  name: Schema.String,
+  exchange: Schema.String,
+  currency: Schema.String,
+  points: Schema.Array(Schema.Struct({ date: Schema.String, value: NullableNumber })),
+  converted: Schema.optional(Schema.Boolean),
+});
+const ExternalCashFlowSchema = Schema.Struct({ date: Schema.String, amount: NullableNumber });
+const PositionReturnSchema = Schema.Struct({
+  status: PositionReturnStatusSchema,
+  remainingCostBasis: NullableNumber,
+  realizedCostBasisRemoved: NullableNumber,
+  unrealizedGain: NullableNumber,
+  realizedGain: NullableNumber,
+  dividendsReceived: NullableNumber,
+  totalReturn: NullableNumber,
+  totalReturnPercentage: NullableNumber,
+  sinceFirstBuyPercentage: NullableNumber,
+  firstBuyDate: NullableString,
+  problem: Schema.optional(Schema.String),
+});
+const CurrentPositionSchema = Schema.Struct({
+  symbol: Schema.String,
+  entity: Schema.String,
+  isin: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  quantity: Schema.Number,
+  currency: Schema.String,
+  asOf: Schema.String,
+  marketValue: NullableNumber,
+  portfolioWeight: NullableNumber,
+  priceStatus: PositionPriceStatusSchema,
+  returns: PositionReturnSchema,
+});
+const PositionMarkerSchema = Schema.Struct({
+  kind: Schema.Union([Schema.Literal("buy"), Schema.Literal("sell"), Schema.Literal("dividend")]),
+  eventDate: Schema.String,
+  label: Schema.String,
+  quantity: Schema.optional(Schema.Number),
+  executionPrice: Schema.optional(NullableNumber),
+  amount: Schema.optional(Schema.Number),
+  commission: Schema.optional(NullableNumber),
+  dividendAmount: Schema.optional(Schema.Number),
+  currency: Schema.optional(Schema.String),
+});
+const PositionPricePointSchema = Schema.Struct({
+  symbol: Schema.String,
+  date: Schema.String,
+  close: Schema.Number,
+  currency: Schema.String,
+  split: Schema.optional(Schema.Number),
+  markers: Schema.Array(PositionMarkerSchema),
+});
+const PositionQuantityChangeSchema = Schema.Struct({
+  date: Schema.String,
+  quantity: Schema.Number,
+  delta: Schema.Number,
+  reason: Schema.Union([Schema.Literal("buy"), Schema.Literal("sell")]),
+  sourceOrder: Schema.Number,
+});
+const PositionActivitySchema = Schema.Struct({
+  date: Schema.String,
+  executionAt: Schema.optional(Schema.String),
+  kind: Schema.Union([Schema.Literal("buy"), Schema.Literal("sell"), Schema.Literal("dividend")]),
+  quantity: Schema.optional(Schema.Number),
+  executionPrice: Schema.optional(NullableNumber),
+  amount: Schema.optional(NullableNumber),
+  commission: Schema.optional(NullableNumber),
+  dividendAmount: Schema.optional(Schema.Number),
+  currency: Schema.String,
+  sourceOrder: Schema.Number,
+});
+const PositionDetailSchema = Schema.Struct({
+  symbol: Schema.String,
+  description: Schema.optional(Schema.String),
+  currency: Schema.String,
+  priceCurrency: Schema.String,
+  status: Schema.Union([Schema.Literal("open"), Schema.Literal("closed")]),
+  quantity: Schema.Number,
+  currentValue: NullableNumber,
+  dailyChange: NullableNumber,
+  dailyChangePercentage: NullableNumber,
+  currentPrice: NullableNumber,
+  priceStatus: PositionPriceStatusSchema,
+  quoteDate: NullableString,
+  averageCost: NullableNumber,
+  returns: PositionReturnSchema,
+  returnStatus: PositionReturnStatusSchema,
+  firstBuyDate: NullableString,
+  quantityHistory: Schema.Array(PositionQuantityChangeSchema),
+  activity: Schema.Array(PositionActivitySchema),
+  points: Schema.Array(PositionPricePointSchema),
+});
+const CompositionTopPositionSchema = Schema.Struct({
+  symbol: Schema.String,
+  weight: Schema.Number,
+  description: Schema.optional(Schema.String),
+});
+const CompositionSchema = Schema.Struct({
+  topPositions: Schema.Array(CompositionTopPositionSchema),
+  pricedHoldings: Schema.Number,
+  missingHoldings: Schema.Number,
+  estimatedHoldings: Schema.Number,
+});
+const RiskRangeSchema = Schema.Union([
+  Schema.Literal("6M"),
+  Schema.Literal("1Y"),
+  Schema.Literal("All"),
+]);
+const PortfolioMetricsSchema = Schema.Struct({
+  dailyVolatility: NullableNumber,
+  annualizedVolatility: NullableNumber,
+  beta: NullableNumber,
+  alpha: NullableNumber,
+  maxDrawdown: NullableNumber,
+  observationDays: Schema.Number,
+  excludedIntervals: Schema.Number,
+  pairedObservationDays: Schema.Number,
+  startDate: NullableString,
+  endDate: NullableString,
+});
+const HistoricalRiskSchema = Schema.Struct({
+  status: Schema.Union([Schema.Literal("estimate"), Schema.Literal("unavailable")]),
+  range: RiskRangeSchema,
+  from: NullableString,
+  to: NullableString,
+  drawdownFrom: NullableString,
+  minimumObservations: Schema.Number,
+  benchmark: Schema.NullOr(
+    Schema.Struct({ symbol: Schema.String, name: Schema.String, currency: Schema.String }),
+  ),
+  benchmarks: Schema.Array(
+    Schema.Struct({ symbol: Schema.String, name: Schema.String, currency: Schema.String }),
+  ),
+  reasons: StringList,
+  missingHoldings: StringList,
+  missingPrices: StringList,
+  coverage: NullableNumber,
+  currency: Schema.String,
+});
+const HistoricalRiskReportSchema = Schema.Struct({
+  metrics: PortfolioMetricsSchema,
+  risk: HistoricalRiskSchema,
+});
+const RiskByRangeSchema = Schema.Struct({
+  "6M": Schema.optional(HistoricalRiskReportSchema),
+  "1Y": Schema.optional(HistoricalRiskReportSchema),
+  All: Schema.optional(HistoricalRiskReportSchema),
+});
+const RiskProjectionSchema = Schema.Struct({
+  byBenchmark: Schema.Record(Schema.String, RiskByRangeSchema),
+  defaultBenchmark: NullableString,
+});
+
+/** Finished, serializable read model consumed by investing-web. Defined once as
+ *  an Effect schema, so the server encodes and the client decodes the same
+ *  contract and the TypeScript type cannot drift from it. */
+export const InvestingDashboardDataSchema = Schema.Struct({
+  dataVersion: Schema.Number,
+  presentationCurrency: Schema.String,
+  portfolio: Schema.Record(
+    Schema.Union([
+      Schema.Literal("1M"),
+      Schema.Literal("6M"),
+      Schema.Literal("1Y"),
+      Schema.Literal("YTD"),
+      Schema.Literal("All"),
+    ]),
+    Schema.Array(PortfolioValuePointSchema),
+  ),
+  benchmarks: Schema.Array(BenchmarkSeriesSchema),
+  externalCashFlows: Schema.Array(ExternalCashFlowSchema),
+  allocation: Schema.Struct({ instrument: AllocationSchema, entity: AllocationSchema }),
+  positions: Schema.Array(CurrentPositionSchema),
+  position: Schema.NullOr(PositionDetailSchema),
+  problems: StringList,
+  risk: RiskProjectionSchema,
+  composition: CompositionSchema,
+});
+
+export type InvestingDashboardData = DeepMutable<
+  Schema.Schema.Type<typeof InvestingDashboardDataSchema>
+>;
 
 export type InvestingDashboardInput = {
   positions: readonly Position[];

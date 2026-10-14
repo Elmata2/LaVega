@@ -1,3 +1,4 @@
+export * from "./schema.js";
 export * from "./model.js";
 export * from "./ownership.js";
 export * from "./quantity.js";

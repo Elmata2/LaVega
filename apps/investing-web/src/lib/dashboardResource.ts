@@ -1,5 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
+import { Predicate, Result, Schema } from "effect";
 import {
+  InvestingDashboardDataSchema,
   PORTFOLIO_RANGES,
   type Allocation,
   type InvestingDashboardData,
@@ -12,21 +14,9 @@ export type DashboardState =
   | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
   | { status: "error"; message: string };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isPortfolioRanges(value: unknown): value is Record<PortfolioRange, unknown[]> {
-  return isRecord(value) && PORTFOLIO_RANGES.every((range) => Array.isArray(value[range]));
-}
-
-function isAllocation(value: unknown): value is { buckets: unknown[]; unpriced: unknown[] } {
-  return isRecord(value) && Array.isArray(value.buckets) && Array.isArray(value.unpriced);
-}
-
 function isAllocationBucket(value: unknown): value is Allocation["buckets"][number] {
   return (
-    isRecord(value) &&
+    Predicate.isObject(value) &&
     typeof value.key === "string" &&
     typeof value.label === "string" &&
     (typeof value.value === "number" || value.value === null) &&
@@ -34,31 +24,35 @@ function isAllocationBucket(value: unknown): value is Allocation["buckets"][numb
   );
 }
 
-function isComposition(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.topPositions) &&
-    typeof value.pricedHoldings === "number" &&
-    typeof value.missingHoldings === "number" &&
-    typeof value.estimatedHoldings === "number"
-  );
-}
-
-/** Decodes the network contract; rejects a payload missing a required field. */
-function isDashboardData(value: unknown): value is InvestingDashboardData {
-  if (!isRecord(value)) return false;
+/** The envelope `isDashboardData` used to check: every required top-level field
+ *  is present and typed. The shared schema is stricter (it validates each entry
+ *  of every array), so this only backs the repair path a malformed entry falls
+ *  through to, exactly as the hand-written guard did. */
+function isDashboardEnvelope(value: unknown): value is InvestingDashboardData {
+  if (!Predicate.isObject(value)) return false;
   if (typeof value.presentationCurrency !== "string") return false;
   if (typeof value.dataVersion !== "number") return false;
-  if (!isPortfolioRanges(value.portfolio)) return false;
-  if (!isRecord(value.allocation)) return false;
-  if (!isAllocation(value.allocation.instrument) || !isAllocation(value.allocation.entity))
-    return false;
+  if (!Predicate.isObject(value.portfolio)) return false;
+  const portfolio = value.portfolio;
+  if (!PORTFOLIO_RANGES.every((range) => Array.isArray(portfolio[range]))) return false;
+  if (!Predicate.isObject(value.allocation)) return false;
+  const allocation = value.allocation;
+  const isAllocation = (entry: unknown) =>
+    Predicate.isObject(entry) && Array.isArray(entry.buckets) && Array.isArray(entry.unpriced);
+  if (!isAllocation(allocation.instrument) || !isAllocation(allocation.entity)) return false;
   if (!Array.isArray(value.benchmarks)) return false;
   if (!Array.isArray(value.externalCashFlows)) return false;
   if (!Array.isArray(value.positions)) return false;
   if (!Array.isArray(value.problems)) return false;
-  if (!isComposition(value.composition)) return false;
-  if (value.position !== null && !isRecord(value.position)) return false;
+  if (
+    !Predicate.isObject(value.composition) ||
+    !Array.isArray(value.composition.topPositions) ||
+    typeof value.composition.pricedHoldings !== "number" ||
+    typeof value.composition.missingHoldings !== "number" ||
+    typeof value.composition.estimatedHoldings !== "number"
+  )
+    return false;
+  if (value.position !== null && !Predicate.isObject(value.position)) return false;
   return true;
 }
 
@@ -70,7 +64,8 @@ function normalizeDashboardData(data: InvestingDashboardData): InvestingDashboar
     PortfolioRange,
     InvestingDashboardData["portfolio"][PortfolioRange]
   >;
-  for (const range of PORTFOLIO_RANGES) portfolio[range] = data.portfolio[range].filter(isRecord);
+  for (const range of PORTFOLIO_RANGES)
+    portfolio[range] = data.portfolio[range].filter(Predicate.isObject);
   const normalizeAllocation = (allocation: {
     buckets: unknown[];
     unpriced: unknown[];
@@ -81,13 +76,22 @@ function normalizeDashboardData(data: InvestingDashboardData): InvestingDashboar
   return {
     ...data,
     portfolio,
-    benchmarks: data.benchmarks.filter(isRecord),
-    positions: data.positions.filter(isRecord),
+    benchmarks: data.benchmarks.filter(Predicate.isObject),
+    positions: data.positions.filter(Predicate.isObject),
     allocation: {
       instrument: normalizeAllocation(data.allocation.instrument),
       entity: normalizeAllocation(data.allocation.entity),
     },
   };
+}
+
+/** Decodes the shared contract, then repairs an array entry the schema rejects
+ *  through the envelope guard, so a malformed entry still renders. */
+function decodeDashboardData(payload: unknown): InvestingDashboardData | null {
+  const decoded = Schema.decodeUnknownResult(InvestingDashboardDataSchema)(payload);
+  if (Result.isSuccess(decoded))
+    return normalizeDashboardData(decoded.success as InvestingDashboardData);
+  return isDashboardEnvelope(payload) ? normalizeDashboardData(payload) : null;
 }
 
 async function fetchDashboard(
@@ -98,8 +102,9 @@ async function fetchDashboard(
   const response = await fetch(`/api/investing/dashboard${query}`, { signal });
   if (!response.ok) throw new Error(`Failed to load dashboard: ${response.status}`);
   const payload: unknown = await response.json();
-  if (!isDashboardData(payload)) throw new Error("Dashboard data has an invalid format.");
-  return normalizeDashboardData(payload);
+  const data = decodeDashboardData(payload);
+  if (!data) throw new Error("Dashboard data has an invalid format.");
+  return data;
 }
 
 const STORAGE_PREFIX = "lavega.investing.dashboard.";
@@ -184,10 +189,7 @@ function load(symbol: string | undefined): void {
  * identity starts its read; the last one to leave aborts the request in flight
  * so a late completion cannot populate the next mount. This is the function
  * `useSyncExternalStore` drives. */
-export function subscribeToDashboard(
-  symbol: string | undefined,
-  listener: () => void,
-): () => void {
+export function subscribeToDashboard(symbol: string | undefined, listener: () => void): () => void {
   const key = queryKey(symbol);
   let set = listeners.get(key);
   if (!set) {
@@ -231,7 +233,8 @@ export function setDashboardOwner(userId: string | null): void {
   if (!userId) return;
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_PREFIX + userId) ?? "null");
-    if (isDashboardData(stored)) lastShown.set("", normalizeDashboardData(stored));
+    const data = decodeDashboardData(stored);
+    if (data) lastShown.set("", data);
   } catch {
     // Unreadable storage only costs the head start; the request still loads the page.
   }

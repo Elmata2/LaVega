@@ -225,6 +225,28 @@ test("a refresh failure after a valid response keeps the data and reports the er
   root.unmount();
 });
 
+test("a non-object entry inside an array still renders through the repair path", async () => {
+  const payload = {
+    ...emptyInvestingDashboard(),
+    positions: [null, { symbol: "KEPT" }],
+  } as unknown;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(payload))),
+  );
+  const states: DashboardState[] = [];
+  const { root, Probe } = mount(undefined, states);
+  await act(async () => {
+    root.render(<Probe querySymbol={undefined} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const state = states.at(-1)!;
+  expect(state.status).toBe("ready");
+  expect(state.status === "ready" && state.data.positions).toEqual([{ symbol: "KEPT" }]);
+  root.unmount();
+});
+
 test("a payload missing a required field is rejected instead of crashing the page", async () => {
   const { benchmarks: _benchmarks, ...withoutBenchmarks } = dashboardWithVersion(1);
   vi.stubGlobal(
@@ -320,9 +342,7 @@ test("two consumers of one identity share one request and one model", async () =
 test("a consumer of a different identity makes its own request", async () => {
   const fetcher = vi.fn((input: RequestInfo | URL) =>
     Promise.resolve(
-      new Response(
-        JSON.stringify(dashboardWithVersion(String(input).includes("BBB") ? 2 : 1)),
-      ),
+      new Response(JSON.stringify(dashboardWithVersion(String(input).includes("BBB") ? 2 : 1))),
     ),
   );
   vi.stubGlobal("fetch", fetcher);
