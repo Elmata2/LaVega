@@ -6,6 +6,7 @@ import type {
   BrokerSyncState,
   ScheduledBroker,
 } from "@lavega/adapters";
+import { isBrokerLeaseStale } from "@lavega/adapters";
 import { createJsonFileStore, runtimeDataFile } from "./jsonFileStore.js";
 
 /** Where the broker data itself lives, since this file keeps no holdings. */
@@ -22,11 +23,6 @@ type StoredOperation = {
 type StoredOperations = Partial<Record<ScheduledBroker, StoredOperation>>;
 
 const EMPTY: BrokerSyncState = { lastSyncedAt: null, retryAfter: null };
-
-/* Timestamps are compared as instants, not as text: ISO strings only sort
- * correctly while every one of them has four digits of year and the same zone. */
-const expired = (heartbeatAt: string, staleBefore: string) =>
-  Date.parse(heartbeatAt) < Date.parse(staleBefore);
 
 export function runtimeBrokerSyncStateFile(): string {
   return runtimeDataFile("LAVEGA_BROKER_SYNC_STATE_FILE", "broker-sync-state.json");
@@ -99,7 +95,7 @@ export function createFileBrokerSyncStateStore(
         const current = operations[broker];
         state = current?.state ?? EMPTY;
         const lease = current?.lease ?? null;
-        claimed = lease == null || expired(lease.heartbeatAt, input.staleBefore);
+        claimed = lease == null || isBrokerLeaseStale(lease.heartbeatAt, input.staleBefore);
         if (!claimed) return operations;
         return {
           ...operations,

@@ -2,7 +2,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import type { BrokerSyncOperationStore, BrokerSyncState } from "@lavega/adapters";
+import type {
+  BrokerDataSnapshot,
+  BrokerSyncOperationStore,
+  BrokerSyncState,
+} from "@lavega/adapters";
+import {
+  brokerSyncCommitContract,
+  brokerSyncLeaseContract,
+} from "@lavega/adapters/src/brokers/brokerSyncLease.contract.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
 
 const progress = { status: "completed" as const, message: null, updatedAt: null, leaseId: null };
@@ -205,3 +213,17 @@ test("a resume cursor survives a restart", async () => {
     resume,
   });
 });
+
+async function contractStore(): Promise<BrokerSyncOperationStore> {
+  const filePath = await statePath();
+  let data: BrokerDataSnapshot = {};
+  return createFileBrokerSyncStateStore(filePath, {
+    read: async () => data,
+    write: async (snapshot) => {
+      data = snapshot;
+    },
+  });
+}
+
+brokerSyncLeaseContract("file broker sync", contractStore);
+brokerSyncCommitContract("file broker sync", contractStore);

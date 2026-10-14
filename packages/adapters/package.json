@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./src/prices/priceStore.contract.js": "./src/prices/priceStore.contract.ts",
+    "./src/brokers/brokerSyncLease.contract.js": "./src/brokers/brokerSyncLease.contract.ts",
     "./credentials/localKeySource": "./src/credentials/localKeySource.ts"
   },
   "scripts": {

@@ -11,6 +11,7 @@ import {
   type BrokerSyncRequest,
   type BrokerSyncResume,
 } from "./BrokerAccessAdapter.js";
+import { isBrokerLeaseStale } from "./brokerSyncLease.js";
 
 /** The brokers a scheduled sync knows how to drive. The type is derived from
  *  this list so a broker can only be added in one place. */
@@ -98,9 +99,7 @@ export function createMemoryBrokerSyncStateStore(): BrokerSyncOperationStore {
     },
     async claim(broker, input) {
       const held = leases.get(broker);
-      /* Compared as instants: ISO strings only sort correctly while every one
-       * of them has four digits of year and the same zone. */
-      const live = held != null && Date.parse(held.heartbeatAt) >= Date.parse(input.staleBefore);
+      const live = held != null && !isBrokerLeaseStale(held.heartbeatAt, input.staleBefore);
       if (!live) {
         leases.set(broker, {
           id: input.leaseId,
