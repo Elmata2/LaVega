@@ -155,6 +155,7 @@ node $C whoami --target prod
 # read the dashboard the way the frontend does
 node $C dashboard --target prod
 node $C dashboard --target prod --symbol AAPL
+# 1Y projection plus composition. The Summary card reads dashboard `risk`, not this call.
 node $C summary --target prod
 
 # broker + price sync and the vault behind them
