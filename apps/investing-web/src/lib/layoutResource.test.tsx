@@ -416,6 +416,18 @@ test("after a failed initial fetch, a toggle retries the fetch instead of saving
   act(() => root.unmount());
 });
 
+test("an unrecognisable layout payload surfaces a load error instead of silently defaulting", async () => {
+  const { bodies } = stubGets([
+    () => Promise.resolve(new Response(JSON.stringify({ modules: 5, widgets: {} }))),
+  ]);
+  const { container, root } = await mountReady();
+  expect(text(container, "save-error")).toBe(LOAD_ERROR);
+
+  await step(() => click(container, "toggle-agents"));
+  expect(bodies).toEqual([]);
+  act(() => root.unmount());
+});
+
 test("an empty 200 is a real load, so a toggle saves straight away", async () => {
   const { bodies, getCount } = stubGets([
     () => Promise.resolve(new Response(JSON.stringify({ modules: {}, widgets: {} }))),

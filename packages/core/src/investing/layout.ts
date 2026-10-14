@@ -1,3 +1,6 @@
+import { Predicate, Schema } from "effect";
+import type { DeepMutable } from "./schema.js";
+
 /** The tabs a switched-off module hides. "overview" is the home module: it is
  *  always on and is not part of this union (Extract-style pattern would need a
  *  route union this package does not own; the id list below is the single
@@ -32,10 +35,24 @@ export const INVESTING_WIDGET_IDS: readonly InvestingWidgetId[] = [
 /** Only the choices a reader explicitly made. An absent key means "use the
  *  registry default" — never "off" — so a default changed later still reaches
  *  everyone who never touched that switch. */
-export type InvestingLayout = {
-  modules: Partial<Record<InvestingModuleId, boolean>>;
-  widgets: Partial<Record<InvestingWidgetId, boolean>>;
-};
+const optionalBoolean = Schema.optional(Schema.Boolean);
+export const InvestingLayoutSchema = Schema.Struct({
+  modules: Schema.Struct({
+    positions: optionalBoolean,
+    "net-worth": optionalBoolean,
+    agents: optionalBoolean,
+  }),
+  widgets: Schema.Struct({
+    performance: optionalBoolean,
+    allocation: optionalBoolean,
+    kpis: optionalBoolean,
+    risk: optionalBoolean,
+    sectors: optionalBoolean,
+    agent: optionalBoolean,
+  }),
+});
+
+export type InvestingLayout = DeepMutable<Schema.Schema.Type<typeof InvestingLayoutSchema>>;
 
 export type InvestingLayoutSelection = { tenantId: string } & InvestingLayout;
 
@@ -44,15 +61,11 @@ export interface InvestingLayoutStore {
   set(selection: InvestingLayoutSelection): Promise<void>;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function pickBooleans<Id extends string>(
   value: unknown,
   knownIds: readonly Id[],
 ): Partial<Record<Id, boolean>> {
-  if (!isRecord(value)) return {};
+  if (!Predicate.isObject(value)) return {};
   const result: Partial<Record<Id, boolean>> = {};
   for (const id of knownIds) {
     const entry = value[id];
@@ -66,7 +79,7 @@ function pickBooleans<Id extends string>(
  *  this way; PUT sanitizes the incoming body the same way before persisting,
  *  so the two never disagree about what "valid" means. */
 export function validateInvestingLayout(input: unknown): InvestingLayout {
-  const record = isRecord(input) ? input : {};
+  const record: { readonly [key: PropertyKey]: unknown } = Predicate.isObject(input) ? input : {};
   return {
     modules: pickBooleans(record.modules, INVESTING_MODULE_IDS),
     widgets: pickBooleans(record.widgets, INVESTING_WIDGET_IDS),

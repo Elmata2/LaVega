@@ -1,8 +1,22 @@
+import { Schema } from "effect";
 import type { PortfolioValuePoint } from "./portfolio.js";
+import type { DeepMutable } from "./schema.js";
 
 /** One day's opted-in Personal total, as apps/server's
  *  personal.net_worth_totals row reports it. */
-export type PersonalNetWorthTotal = { date: string; totalCents: number };
+export const PersonalNetWorthTotalSchema = Schema.Struct({
+  date: Schema.String,
+  totalCents: Schema.Number,
+});
+
+export type PersonalNetWorthTotal = DeepMutable<
+  Schema.Schema.Type<typeof PersonalNetWorthTotalSchema>
+>;
+
+/** The read-model payload `/api/investing/personal-net-worth` answers with. */
+export const PersonalNetWorthTotalsSchema = Schema.Struct({
+  totals: Schema.Array(PersonalNetWorthTotalSchema),
+});
 
 export type NetWorthPoint = PortfolioValuePoint & {
   /** Personal's total in EUR, carried forward from the latest total on or

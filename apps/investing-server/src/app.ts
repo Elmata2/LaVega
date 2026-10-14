@@ -1,13 +1,18 @@
 import { Hono } from "hono";
+import { Schema } from "effect";
 import {
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
+  InvestingDashboardDataSchema,
+  InvestingLayoutSchema,
   LOCAL_TENANT_ID,
+  PersonalNetWorthTotalsSchema,
   validateBenchmarkSymbols,
   validateInvestingLayout,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
+  type InvestingLayout,
   type InvestingLayoutStore,
   type RiskRange,
 } from "@lavega/core";
@@ -66,10 +71,7 @@ import {
   createInMemorySectorInferenceSettingStore,
   type SectorInferenceSettingStore,
 } from "./sectorInferenceSetting.js";
-import {
-  createInMemorySectorRevisionStore,
-  type SectorRevisionStore,
-} from "./sectorRevision.js";
+import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./sectorRevision.js";
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
 
@@ -81,6 +83,13 @@ const SECTOR_INFERENCE_BATCH_SIZE = 10;
 /** Bounds the `exclude` list a caller may send: a page session's own
  *  accumulated failed symbols, never an unbounded client-supplied array. */
 const MAX_SECTOR_INFERENCE_EXCLUDE = 200;
+
+/** The read model crosses the wire through its shared schema, so a field the
+ *  contract declares is always present in the response. */
+const encodeDashboard = (dashboard: InvestingDashboardData) =>
+  Schema.encodeSync(InvestingDashboardDataSchema)(dashboard);
+
+const encodeLayout = (layout: InvestingLayout) => Schema.encodeSync(InvestingLayoutSchema)(layout);
 
 export type InvestingDashboardReader = (input: {
   symbol?: string;
@@ -290,7 +299,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     (await marketDataConsentStore.get(tenantId)).accepted;
   const resolveSectorListingSymbol = (tenantId: string, symbol: string) =>
     resolveSectorListing(store, tenantId, symbol);
-  const sectorRevisionStore = dependencies.sectorRevisionStore ?? createInMemorySectorRevisionStore();
+  const sectorRevisionStore =
+    dependencies.sectorRevisionStore ?? createInMemorySectorRevisionStore();
   /* The sector read is a sibling of the dashboard read (portfolioRead.ts):
    * one tenant-scoped method, keyed on the sector-store revision, so a
    * correction appears at once and no component needs the summary endpoint. */
@@ -581,39 +591,45 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       const symbol = c.req.query("symbol")?.trim() || undefined;
       const dashboard = await timing.measure("total", () => dashboardReader({ symbol, timing }));
       c.header("Server-Timing", timing.header());
-      if (!dependencies.brokerReadability) return c.json(dashboard);
+      if (!dependencies.brokerReadability) return c.json(encodeDashboard(dashboard));
       try {
         const readability = await dependencies.brokerReadability();
         const unreadable = (["ibkr", "trading212"] as const).filter(
           (broker) => readability?.[broker] === "unreadable",
         );
-        return c.json({
-          ...dashboard,
-          problems: [
-            ...dashboard.problems,
-            ...unreadable.map(
-              (broker) =>
-                `${broker === "ibkr" ? "IBKR" : "Trading 212"} credentials cannot be read. Reconnect broker to restore data.`,
-            ),
-          ],
-        });
+        return c.json(
+          encodeDashboard({
+            ...dashboard,
+            problems: [
+              ...dashboard.problems,
+              ...unreadable.map(
+                (broker) =>
+                  `${broker === "ibkr" ? "IBKR" : "Trading 212"} credentials cannot be read. Reconnect broker to restore data.`,
+              ),
+            ],
+          }),
+        );
       } catch {
-        return c.json({
-          ...dashboard,
-          problems: [
-            ...dashboard.problems,
-            "Broker connection status could not be checked. Showing available data.",
-          ],
-        });
+        return c.json(
+          encodeDashboard({
+            ...dashboard,
+            problems: [
+              ...dashboard.problems,
+              "Broker connection status could not be checked. Showing available data.",
+            ],
+          }),
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dashboard data could not be loaded";
       problemReporter({ source: "dashboard-read", problems: [message] });
       c.header("Server-Timing", timing.header());
-      return c.json({
-        ...emptyInvestingDashboard(),
-        problems: ["Dashboard data could not be loaded"],
-      });
+      return c.json(
+        encodeDashboard({
+          ...emptyInvestingDashboard(),
+          problems: ["Dashboard data could not be loaded"],
+        }),
+      );
     }
   });
   investingApp.get("/api/investing/benchmarks", async (c) =>
@@ -643,7 +659,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     return c.json(await benchmarkSearch(query));
   });
   investingApp.get("/api/investing/layout", async (c) =>
-    c.json(await investingLayoutStore.get(await resolveTenantId())),
+    c.json(encodeLayout(await investingLayoutStore.get(await resolveTenantId()))),
   );
   investingApp.put("/api/investing/layout", async (c) => {
     const body: unknown = await c.req.json().catch(() => undefined);
@@ -652,7 +668,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const layout = validateInvestingLayout(body);
     const tenantId = await resolveTenantId();
     await investingLayoutStore.set({ tenantId, ...layout });
-    return c.json(layout);
+    return c.json(encodeLayout(layout));
   });
   /* The owner's opt-in Personal totals, read-only here — Personal owns the
    * only write, through apps/server's PUT/DELETE /api/personal/net-worth-total.
@@ -660,7 +676,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * cheap to read fresh on every request, and folding it into the dashboard's
    * cache/version machinery would risk a stale total surviving a new one. */
   investingApp.get("/api/investing/personal-net-worth", async (c) =>
-    c.json({ totals: await personalNetWorthStore.list(await resolveTenantId()) }),
+    c.json(
+      Schema.encodeSync(PersonalNetWorthTotalsSchema)({
+        totals: await personalNetWorthStore.list(await resolveTenantId()),
+      }),
+    ),
   );
   investingApp.get("/api/market-data/consent", async (c) =>
     c.json(await marketDataConsentStore.get(await resolveTenantId())),

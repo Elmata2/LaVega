@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
-import type { PersonalNetWorthTotal } from "@lavega/core";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isPersonalNetWorthTotal(value: unknown): value is PersonalNetWorthTotal {
-  return isRecord(value) && typeof value.date === "string" && typeof value.totalCents === "number";
-}
+import { Predicate, Result, Schema } from "effect";
+import { PersonalNetWorthTotalSchema, type PersonalNetWorthTotal } from "@lavega/core";
 
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === "AbortError";
@@ -25,8 +18,11 @@ async function fetchPersonalNetWorthTotals(signal: AbortSignal): Promise<Persona
     const response = await fetch("/api/investing/personal-net-worth", { signal });
     if (!response.ok) return [];
     const payload: unknown = await response.json().catch(() => undefined);
-    if (!isRecord(payload) || !Array.isArray(payload.totals)) return [];
-    return payload.totals.filter(isPersonalNetWorthTotal);
+    if (!Predicate.isObject(payload) || !Array.isArray(payload.totals)) return [];
+    return payload.totals.flatMap((entry) => {
+      const decoded = Schema.decodeUnknownResult(PersonalNetWorthTotalSchema)(entry);
+      return Result.isSuccess(decoded) ? [decoded.success as PersonalNetWorthTotal] : [];
+    });
   } catch (reason) {
     if (isAbortError(reason)) throw reason;
     return [];

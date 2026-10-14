@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
+import { Result, Schema } from "effect";
 import {
   buildCompositionProjection,
   buildInvestingDashboard,
   emptyInvestingDashboard,
+  InvestingDashboardDataSchema,
   type InvestingDashboardInput,
   type InvestingDashboardPosition,
 } from "./dashboard.js";
@@ -849,4 +851,45 @@ test("composition counts priced, missing and estimated holdings and never invent
     { symbol: "BIG", weight: 0.75 },
     { symbol: "SMALL", weight: 0.25 },
   ]);
+});
+
+test("the read model round-trips through its shared schema, so no field can silently drop", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [
+      {
+        id: "dividend",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2026-01-05",
+        symbol: "AAPL",
+        amount: 1.5,
+        currency: "USD",
+      },
+    ],
+    priceBars: PRICE_BARS,
+    benchmarkBars: BENCHMARK_BARS,
+    benchmarkInstruments: [
+      { symbol: "SP500", name: "S&P 500", exchange: "Yahoo Finance", currency: "EUR" },
+    ],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    selectedSymbol: "aapl",
+    today: "2026-02-02",
+  });
+  const encoded = Schema.encodeSync(InvestingDashboardDataSchema)(dashboard);
+  expect(encoded).toEqual(dashboard);
+  expect(Schema.decodeUnknownSync(InvestingDashboardDataSchema)(encoded)).toEqual(dashboard);
+});
+
+test("the read model schema accepts the empty dashboard and rejects a missing required field", () => {
+  const empty = emptyInvestingDashboard();
+  expect(Result.isSuccess(Schema.decodeUnknownResult(InvestingDashboardDataSchema)(empty))).toBe(
+    true,
+  );
+  const { benchmarks: _benchmarks, ...withoutBenchmarks } = empty;
+  expect(
+    Result.isSuccess(Schema.decodeUnknownResult(InvestingDashboardDataSchema)(withoutBenchmarks)),
+  ).toBe(false);
 });

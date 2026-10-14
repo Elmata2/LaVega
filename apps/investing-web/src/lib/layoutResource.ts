@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from "react";
-import type { InvestingLayout, InvestingModuleId, InvestingWidgetId } from "@lavega/core";
+import { Result, Schema } from "effect";
+import {
+  InvestingLayoutSchema,
+  type InvestingLayout,
+  type InvestingModuleId,
+  type InvestingWidgetId,
+} from "@lavega/core";
 import { HOME_MODULE, resolveModules, resolveWidgets } from "./investingRegistry.js";
 
 const SAVE_ERROR_MESSAGE = "Couldn't save — try again.";
@@ -8,19 +14,13 @@ const LOAD_TIMEOUT_MS = 8_000;
 
 const EMPTY_LAYOUT: InvestingLayout = { modules: {}, widgets: {} };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-/** Decodes only as much of the contract as this app reads. A shape it
- *  doesn't recognise resolves to registry defaults, exactly like a tenant
- *  who never chose. */
-function decodeLayout(payload: unknown): InvestingLayout {
-  if (!isRecord(payload)) return EMPTY_LAYOUT;
-  return {
-    modules: isRecord(payload.modules) ? (payload.modules as InvestingLayout["modules"]) : {},
-    widgets: isRecord(payload.widgets) ? (payload.widgets as InvestingLayout["widgets"]) : {},
-  };
+/** Decodes the shared contract through its schema. A payload this app does not
+ *  recognise is unknown, not empty: returning null keeps the store from saving
+ *  over choices a shape change hid from us (a silent default here would
+ *  overwrite the owner's real layout on the next toggle). */
+function decodeLayout(payload: unknown): InvestingLayout | null {
+  const decoded = Schema.decodeUnknownResult(InvestingLayoutSchema)(payload);
+  return Result.isSuccess(decoded) ? (decoded.success as InvestingLayout) : null;
 }
 
 /** Returns the stored layout, or null when the server's answer is unknown
