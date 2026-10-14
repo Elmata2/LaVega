@@ -62,6 +62,11 @@ import {
   resolvedStockSector,
   UNKNOWN_SECTOR,
 } from "./sectorResolution.js";
+import {
+  inferSectorBatch,
+  MAX_SECTOR_INFERENCE_EXCLUDE,
+  SECTOR_INFERENCE_BATCH_SIZE,
+} from "./sectorInferenceBatch.js";
 import type { SectorClassifier } from "./sectorClassifier.js";
 import {
   createInMemorySectorCorrectionStore,
@@ -75,22 +80,12 @@ import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./s
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
 
-/** Bounds one /sectors/infer call to this many classifier invocations, so a
- *  portfolio with many unknown symbols can't run one request past a
- *  serverless deadline — the client re-calls for what's left. */
-const SECTOR_INFERENCE_BATCH_SIZE = 10;
-
-/** Bounds the `exclude` list a caller may send: a page session's own
- *  accumulated failed symbols, never an unbounded client-supplied array. */
-const MAX_SECTOR_INFERENCE_EXCLUDE = 200;
-
 /** The read model crosses the wire through its shared schema, so a field the
  *  contract declares is always present in the response. */
 const encodeDashboard = (dashboard: InvestingDashboardData) =>
   Schema.encodeSync(InvestingDashboardDataSchema)(dashboard);
 
 const encodeLayout = (layout: InvestingLayout) => Schema.encodeSync(InvestingLayoutSchema)(layout);
-
 export type InvestingDashboardReader = (input: {
   symbol?: string;
   timing?: ServerTiming;
@@ -517,73 +512,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         position.marketValue !== null && position.marketValue > 0,
     );
     const corrections = await sectorCorrectionStore.getAll(tenantId);
-    const seen = new Set<string>();
-    const candidates: typeof priced = [];
-    /* A renamed holding's lookup key (its price-resolved listing, same as
-     * resolveWeights would use), kept per candidate so the classifier isn't
-     * asked to reclassify a symbol a provider profile already answers for
-     * under its listing, and so "cached this round" below can be read back
-     * under the same key the write actually landed on. Computed once here
-     * and handed to resolvePortfolioSectors below (rather than re-resolved
-     * from tenantId+symbol) so a single PriceStore read decides both this
-     * round's candidate list and the round's actual cache key — two reads
-     * per candidate could otherwise land on different coverage rows if a
-     * price sync updates PriceStore between them, reporting a symbol this
-     * round successfully classified as failed. */
-    const lookupSymbols = new Map<string, string>();
-    /* Two broker symbols resolving to the same listing (a renamed holding
-     * held under both its old and new code, or via two brokers) must not
-     * both become candidates: resolvePortfolioSectors dedupes its own
-     * pending list by raw symbol, not by resolved listing, so both would
-     * race sectorStore.get(lookupSymbol) as empty and both would pay for a
-     * classification of the same instrument. The second claimant is simply
-     * left off `candidates` — once the first's classification lands, the
-     * per-position cache check above picks it up next round for free. */
-    const seenLookups = new Set<string>();
-    for (const position of priced) {
-      const key = position.symbol.toUpperCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      /* A symbol the caller already saw fail this page session (the client
-       * fills `exclude` with it) is skipped so the same head-of-line
-       * candidates aren't retried forever ahead of ones that might succeed. */
-      if (excluded.has(key)) continue;
-      if (corrections[key]) continue;
-      const lookupSymbol =
-        (await resolveSectorListingSymbol(tenantId, position.symbol)) ?? position.symbol;
-      if (await sectorStore.get(lookupSymbol)) continue;
-      if (seenLookups.has(lookupSymbol)) continue;
-      seenLookups.add(lookupSymbol);
-      lookupSymbols.set(key, lookupSymbol);
-      candidates.push(position);
-    }
-    const batch = candidates.slice(0, SECTOR_INFERENCE_BATCH_SIZE);
-    await resolvePortfolioSectors(batch, {
-      store: sectorStore,
-      classifier: dependencies.sectorClassifier,
-      resolveListing: async (symbol) => lookupSymbols.get(symbol.toUpperCase()) ?? symbol,
-    });
-    /* classified counts symbols actually cached this round (classified or
-     * no-match), never batch.length — a classifier failure leaves the
-     * symbol uncached, and reporting it as classified anyway is what let
-     * the client refresh forever on the same always-failing symbols
-     * (#135 final review, C1). The candidate filter above guarantees each
-     * batch entry's lookup key was empty before this call, so finding a
-     * profile there now means this round wrote it. */
-    const cachedThisRound = new Set<string>();
-    for (const position of batch) {
-      const key = position.symbol.toUpperCase();
-      if (await sectorStore.get(lookupSymbols.get(key)!)) cachedThisRound.add(key);
-    }
-    const failedSymbols = batch
-      .map((position) => position.symbol.toUpperCase())
-      .filter((symbol) => !cachedThisRound.has(symbol));
-    return c.json({
-      classified: cachedThisRound.size,
-      failed: failedSymbols.length,
-      failedSymbols,
-      remaining: candidates.length - batch.length,
-    });
+    return c.json(
+      await inferSectorBatch({
+        tenantId,
+        priced,
+        exclude: excluded,
+        corrections,
+        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
+        store: sectorStore,
+        classifier: dependencies.sectorClassifier,
+        batchSize: SECTOR_INFERENCE_BATCH_SIZE,
+      }),
+    );
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     const timing = createServerTiming();
