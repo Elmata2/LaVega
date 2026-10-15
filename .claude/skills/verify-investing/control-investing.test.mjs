@@ -13,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -25,6 +26,25 @@ import { fileURLToPath } from "node:url";
 
 const cli = join(dirname(fileURLToPath(import.meta.url)), "control-investing.mjs");
 const loginShim = join(dirname(fileURLToPath(import.meta.url)), "browser-login.mjs");
+
+/**
+ * The screenshot tests write PNGs, and the CLI only accepts a PNG under
+ * realpath("/tmp") (see PNG_PATH_FIX). `os.tmpdir()` is not under /tmp on
+ * macOS ($TMPDIR = /var/folders/...), so a state dir there makes the CLI
+ * reject the path on purpose and both screenshot tests fail for the sandbox
+ * rule, not the behaviour under test. Put the state dir where the tool can
+ * write, exactly as the docs require.
+ */
+function stateRoot() {
+  const underTmp = (candidate) => {
+    try {
+      return realpathSync(candidate).startsWith(`${realpathSync("/tmp")}`);
+    } catch {
+      return false;
+    }
+  };
+  return underTmp(tmpdir()) ? tmpdir() : "/tmp";
+}
 
 let server;
 let port;
@@ -75,7 +95,7 @@ afterEach(() => rmSync(stateDir, { recursive: true, force: true }));
 beforeEach(() => {
   routes = new Map();
   received = [];
-  stateDir = mkdtempSync(join(tmpdir(), "control-investing-test-"));
+  stateDir = mkdtempSync(join(stateRoot(), "control-investing-test-"));
   browseLog = join(stateDir, "browse.log");
   fakeBrowse = join(stateDir, "browse");
   writeFileSync(
