@@ -2096,15 +2096,18 @@ function commandBrowserSnapshot({ flags }) {
 }
 
 /**
- * browse `validateOutputPath` (gstack browse/src/path-security.ts) allows a
- * write only under realpath(/tmp), under os.tmpdir() when that dir is not
- * `/`, `$HOME`, or a parent of the daemon cwd, or under the daemon cwd. The
- * daemon cwd is the git root from when that process started, not this shell.
+ * browse `validateOutputPath` (gstack browse/src/path-security.ts) checks the
+ * write against SAFE_DIRECTORIES, which is realpath(TEMP_DIR) and realpath of
+ * the daemon's cwd. TEMP_DIR is `/tmp` on macOS and Linux and os.tmpdir() on
+ * Windows (browse/src/platform.ts), so on macOS `$TMPDIR` — `/var/folders/...`
+ * — is not a safe directory even though it is the OS temp dir. The daemon cwd
+ * is the git root from when that process started, not this shell.
  * The check realpaths the parent, and if that is missing, the grandparent
  * only. `/tmp/lavega-verify-investing/evidence/shot.png` is rejected when
  * neither directory exists, even though the path is under /tmp. Agents then
  * retry a file directly in /tmp. Create the parent here, and refuse anything
- * that is not under /tmp, so the first path is one browse accepts.
+ * that is not under /tmp, so the first path is one browse accepts. This CLI
+ * does not use browse's daemon-cwd allowance; /tmp is the only root it plans.
  */
 const PNG_PATH_FIX = `use \`${SELF} browser screenshot --png /tmp/lavega-verify-investing/evidence/<name>.png\`. browse writes a PNG only under /tmp (after realpath) or the daemon git root from when that daemon started — not this shell's cwd, not the repo, not $TMPDIR, and not os.tmpdir() when that is outside /tmp. A path under /tmp is also rejected when its parent directory does not exist, because browse realpaths only one level up. This command creates /tmp/lavega-verify-investing/evidence before it calls browse. Do not retry a different folder.`;
 
