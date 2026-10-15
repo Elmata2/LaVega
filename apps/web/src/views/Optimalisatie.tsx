@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type {
+  BusinessSavingsOffer,
+  EntityScope,
   Account,
   Tx,
   AccountRate,
@@ -14,6 +16,10 @@ import type {
   Subscription,
 } from "@lavega/core";
 import {
+  activePromo,
+  BUSINESS_SAVINGS_OFFERS,
+  businessSavingsOffersFor,
+  planRateRange,
   merchantTallies,
   accountCosts,
   accountLabel,
@@ -57,6 +63,9 @@ import { useAppLocale } from "../appLocale.js";
 import {
   optimiseCopy,
   formatPercentIn,
+  formatPercentRangeIn,
+  formatEuroWholeIn,
+  formatIsoDateIn,
   type Segment,
   heldCashbackSentence,
 } from "../copy/optimise.js";
@@ -114,6 +123,10 @@ type OptimalisatieProps = {
   rules: Rule[];
   own: OwnAccounts;
   asOf: string;
+  /** Which half the shell is in. Business-only content (curated business savings) shows in "business". */
+  entityScope?: EntityScope;
+  /** Injectable for tests; the bundled curated list is the default. */
+  businessOffers?: readonly BusinessSavingsOffer[];
   busy: boolean;
   /** What the agents have learned, for the cashback figures. Keyed by
    *  productOf(), the same key the travel agent uses. */
@@ -684,6 +697,8 @@ export default function Optimalisatie({
   rules,
   own,
   asOf,
+  entityScope = "personal",
+  businessOffers = BUSINESS_SAVINGS_OFFERS,
   busy,
   facts,
   entries = CATALOGUE_ENTRIES,
@@ -692,6 +707,7 @@ export default function Optimalisatie({
 }: OptimalisatieProps) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].optimalisatie;
+  const shownBusinessOffers = businessSavingsOffersFor(entityScope, businessOffers);
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
@@ -1985,6 +2001,52 @@ export default function Optimalisatie({
             </p>
           </details>
         </Module>
+
+        {shownBusinessOffers.length > 0 && (
+          <Module span={2} title={c.businessSavings.title}>
+            {shownBusinessOffers.map((o) => {
+              const promo = activePromo(o, asOf);
+              const { minPct, maxPct } = planRateRange(o);
+              const range = formatPercentRangeIn(locale, minPct, maxPct);
+              return (
+                <div key={o.id} style={{ marginBottom: "var(--sp-2)" }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {o.bank} {o.product}
+                  </div>
+                  <p>
+                    {promo
+                      ? c.businessSavings.promo({
+                          rate: formatPercentIn(locale, promo.ratePct),
+                          until: formatIsoDateIn(locale, promo.signupUntil),
+                          months: promo.durationMonths,
+                          cap: formatEuroWholeIn(locale, promo.capAmount),
+                          range,
+                        })
+                      : c.businessSavings.planRatesOnly({ range })}
+                  </p>
+                  <p className="cell-sub">
+                    {c.businessSavings.access} {c.businessSavings.variableNote}
+                  </p>
+                  <p className="cell-sub">
+                    {c.businessSavings.deposit(c.businessSavings.depositSchemes[o.depositScheme])}
+                  </p>
+                  <p className="cell-sub">
+                    {o.sourceUrls.map((u, i) => (
+                      <Fragment key={u}>
+                        {i > 0 && " · "}
+                        <a href={u} target="_blank" rel="noopener noreferrer">
+                          {c.businessSavings.sourceLink}
+                          {o.sourceUrls.length > 1 ? ` ${i + 1}` : ""}
+                        </a>
+                      </Fragment>
+                    ))}{" "}
+                    · {c.businessSavings.checkedOn(formatIsoDateIn(locale, o.checkedOn))}
+                  </p>
+                </div>
+              );
+            })}
+          </Module>
+        )}
 
         {/* ── Cashback: het antwoord vooraan, de onderbouwing in één plooi ─── *
             De drie beats uit review 2 staan er nog — wat je eigen kaart zou

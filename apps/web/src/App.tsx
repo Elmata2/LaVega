@@ -1714,6 +1714,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {view === "optimalisatie" && (
             <Optimalisatie
               txs={scopedTxs}
+              entityScope={scope}
               accounts={currentScopedAccounts}
               rules={rules}
               own={own}
