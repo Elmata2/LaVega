@@ -92,7 +92,15 @@ node $C prices sync --wait        # POST /api/prices/sync until completed or pro
 ```
 
 `prices sync` without `--wait` is one slice. HTTP 202 or body `status` `paused`, `running`,
-or `waiting` means symbols remain. `--wait` posts again, up to 40 rounds.
+or `waiting` means symbols remain. `--wait` posts again, up to 40 rounds, and reports what
+each slice did: every round carries `ms`, `completed`, `total`, and `symbols` (the delta
+from the previous slice, baselined on a stored `paused` row so a resumed run counts only the
+symbols it added), and the result carries `throughput` (`rounds`, `ms`, `symbols`,
+`symbolsPerSecond`). That is the measurement for "is a warm-cache run actually fast" — a run
+whose symbols are all priced for today finishes in one short slice, while slices that are
+still fetching Yahoo approach the 45s budget. A `paused` round with a small `symbols` count
+means provider fetches, not cache hits: a cache hit makes no request and so pays no 300ms
+pace wait.
 
 ## Observable success
 

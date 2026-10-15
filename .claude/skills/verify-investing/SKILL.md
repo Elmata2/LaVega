@@ -170,7 +170,7 @@ node $C unlock --target preview --passphrase <passphrase>
 node $C consent --accept --dry-run
 node $C consent --accept
 node $C sync --wait
-node $C prices sync --wait          # repeats the POST until completed or problem
+node $C prices sync --wait          # repeats the POST until completed or problem; reports per-slice symbols/ms and throughput
 node $C wait-settle --timeout 300000
 node $C dashboard                   # doctor positionsPriced is the priced check
 

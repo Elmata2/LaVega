@@ -1515,13 +1515,47 @@ async function commandPricesSync({ flags }) {
   const deadline = Date.now() + Number(flags.timeout ?? 300_000);
   const maxRounds = Number(flags.rounds ?? 40);
   const rounds = [];
+  const startedAt = Date.now();
   let last = null;
+  /* A stored `paused` row is the one non-zero baseline: the POST resumes it
+   * from its own `completed`. A stale `completed` row from an earlier run is
+   * not a baseline, because the run this POST starts begins at symbol zero.
+   * This GET is the only extra request: it makes `symbols` per slice honest on
+   * a resumed run, and it is what turns this command into a throughput read. */
+  const stored = await request(flags, "GET", "/api/prices/sync/status");
+  let previous = stored.json?.status === "paused" ? Number(stored.json.completed ?? 0) || 0 : 0;
+  const baseline = previous;
+  const throughput = (body) => {
+    const completed = typeof body?.completed === "number" ? body.completed : null;
+    const ms = Date.now() - startedAt;
+    return {
+      rounds: rounds.length,
+      ms,
+      symbols: completed === null ? null : completed - baseline,
+      symbolsPerSecond:
+        completed === null || ms === 0
+          ? null
+          : Number(((completed - baseline) / (ms / 1000)).toFixed(2)),
+    };
+  };
   for (let round = 1; round <= maxRounds; round += 1) {
     if (Date.now() >= deadline) break;
+    const sliceStartedAt = Date.now();
     const response = await request(flags, "POST", path);
+    const ms = Date.now() - sliceStartedAt;
     last = response;
     const progress = response.json ?? null;
-    rounds.push({ round, http: response.status, status: progress?.status ?? null });
+    const completed = typeof progress?.completed === "number" ? progress.completed : null;
+    rounds.push({
+      round,
+      http: response.status,
+      status: progress?.status ?? null,
+      ms,
+      completed,
+      total: typeof progress?.total === "number" ? progress.total : null,
+      symbols: completed === null ? null : completed - previous,
+    });
+    if (completed !== null) previous = completed;
     if (response.status === 428) return consentRequiredResult(response);
     if (!response.ok && response.status !== 202) {
       print({
@@ -1539,6 +1573,7 @@ async function commandPricesSync({ flags }) {
         status: response.status,
         settled: state === "completed",
         rounds,
+        throughput: throughput(progress),
         body: progress,
       });
       return state === "problem" ? 1 : 0;
@@ -1553,6 +1588,7 @@ async function commandPricesSync({ flags }) {
           status: response.status,
           settled: polledBody.status === "completed",
           rounds,
+          throughput: throughput(polledBody),
           body: polledBody,
         });
         return polledBody.status === "problem" ? 1 : 0;
@@ -1561,13 +1597,20 @@ async function commandPricesSync({ flags }) {
       break;
     }
     if (state === "paused") continue;
-    print({ status: response.status, settled: true, rounds, body: progress });
+    print({
+      status: response.status,
+      settled: true,
+      rounds,
+      throughput: throughput(progress),
+      body: progress,
+    });
     return response.ok ? 0 : 1;
   }
   const lastRound = rounds[rounds.length - 1];
   print({
     settled: false,
     rounds,
+    throughput: throughput(last?.json ?? null),
     body: last?.json ?? last?.text,
     fix: `price sync is still ${lastRound?.status ?? "unfinished"}. Rerun \`${SELF} prices sync --wait\` or raise --timeout. A paused run resumes on the next POST.`,
   });
@@ -2551,7 +2594,7 @@ const COMMANDS = [
     group: "Write",
     summary: "Fetch prices from Yahoo Finance into the price store",
     description:
-      "One POST is one slice. 202 or status paused/running/waiting means symbols remain: run --wait. --wait keeps posting /api/prices/sync until completed or problem (40 rounds, the SPA cap). This is the continuation after consent --accept. 428 means consent is missing; the fix names consent --accept. --force refetches recent bars.",
+      "One POST is one slice. 202 or status paused/running/waiting means symbols remain: run --wait. --wait keeps posting /api/prices/sync until completed or problem (40 rounds, the SPA cap) and reports `throughput` plus per-round `symbols`/`ms`, so a warm-cache run's pace is measurable. This is the continuation after consent --accept. 428 means consent is missing; the fix names consent --accept. --force refetches recent bars.",
     flags: {
       force: { type: "boolean", description: "refetch even recent bars" },
       wait: {

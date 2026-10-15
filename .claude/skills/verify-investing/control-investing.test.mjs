@@ -465,6 +465,63 @@ describe("dry-run and the prod guard", () => {
     assert.equal(result.json.body.status, "completed");
   });
 
+  test("prices sync --wait reports per-slice symbols and a throughput summary", async () => {
+    let posts = 0;
+    route("GET", "/api/prices/sync/status", 200, {
+      status: "completed",
+      completed: 215,
+      total: 215,
+    });
+    route(
+      "POST",
+      "/api/prices/sync",
+      () => (posts === 0 ? 202 : 200),
+      () => {
+        posts += 1;
+        return posts === 1
+          ? { status: "paused", completed: 100, total: 215, remainingSymbols: ["SYM100"] }
+          : { status: "completed", completed: 215, total: 215, remainingSymbols: [] };
+      },
+    );
+    const result = await run(["prices", "sync", "--wait", ...local()]);
+    assert.equal(result.code, 0, result.stderr);
+    // A stale `completed` row from an earlier run is not a baseline: the run
+    // restarts at symbol zero, so slice one is +100 and slice two +115.
+    assert.deepEqual(
+      result.json.rounds.map((round) => round.symbols),
+      [100, 115],
+    );
+    assert.deepEqual(
+      result.json.rounds.map((round) => typeof round.ms),
+      ["number", "number"],
+    );
+    assert.equal(result.json.throughput.symbols, 215);
+    assert.ok(result.json.throughput.ms >= 0);
+  });
+
+  test("prices sync --wait baselines on a paused row so a resumed run counts only new symbols", async () => {
+    let posts = 0;
+    route("GET", "/api/prices/sync/status", 200, {
+      status: "paused",
+      completed: 210,
+      total: 215,
+      remainingSymbols: ["SYM210"],
+    });
+    route(
+      "POST",
+      "/api/prices/sync",
+      () => 200,
+      () => {
+        posts += 1;
+        return { status: "completed", completed: 215, total: 215, remainingSymbols: [] };
+      },
+    );
+    const result = await run(["prices", "sync", "--wait", ...local()]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.json.rounds[0].symbols, 5);
+    assert.equal(result.json.throughput.symbols, 5);
+  });
+
   test("prices purge refuses without --yes", async () => {
     const result = await run(["prices", "purge", ...local()]);
     assert.equal(result.code, 2);
