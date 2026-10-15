@@ -1,7 +1,9 @@
 import { expect, test, vi } from "vitest";
+import { MockLanguageModelV4 } from "ai/test";
 import type { AgentMemoryRepository, PortfolioLetter } from "@lavega/database";
 import type { InvestingDashboardData } from "@lavega/core";
 import {
+  createLetterGenerator,
   ensureLetter,
   LETTER_INTERVAL_MS,
   letterHashes,
@@ -122,4 +124,50 @@ test("a malformed draft stores nothing", async () => {
     }),
   ).rejects.toThrow("no usable letter");
   expect(await memory.latestLetter()).toBeNull();
+});
+
+const letterJson = JSON.stringify({
+  verdict: "Too concentrated.",
+  observations: [{ title: "ASML", body: "ASML is 30%.", figures: ["30%"] }],
+});
+
+function scriptedModel(handler: () => Promise<unknown>): MockLanguageModelV4 {
+  return new MockLanguageModelV4({
+    doGenerate: async () => {
+      const text = await handler();
+      return {
+        content: [{ type: "text", text: String(text) }],
+        finishReason: { unified: "stop" as const, raw: undefined },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 5, text: 5, reasoning: undefined },
+        },
+        warnings: [],
+      };
+    },
+  });
+}
+
+test("a queued first attempt is abandoned and the letter is tried again", async () => {
+  const calls = vi.fn(async () => {
+    if (calls.mock.calls.length === 1) throw new Error("upstream is slow");
+    return letterJson;
+  });
+  const letter = await createLetterGenerator(scriptedModel(() => calls()))({
+    dashboard: dashboard(position("ASML", 2)),
+    sectors: null,
+  });
+  expect(letter.verdict).toBe("Too concentrated.");
+  expect(letter.observations).toHaveLength(1);
+});
+
+test("when every attempt fails the letter is not returned", async () => {
+  const generator = createLetterGenerator(
+    scriptedModel(async () => {
+      throw new Error("provider down");
+    }),
+  );
+  await expect(
+    generator({ dashboard: dashboard(position("ASML", 2)), sectors: null }),
+  ).rejects.toThrow("provider down");
 });

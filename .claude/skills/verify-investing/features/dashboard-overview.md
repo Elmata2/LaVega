@@ -71,7 +71,9 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   and sends the letter as the first message. On the local file server the GET is 200 with
   `letter: null`, so the empty card is on screen. It does not 503 and it does not hide.
   `POST /api/letters/ensure` is the writer (503 `Portfolio letters need a database` without
-  a database). The cron calls it. The page does not.
+  a database). The cron calls it. The page does not. A write that fails — the model provider
+  rate-limited or slow — answers 502 and leaves the stored letter unchanged; the next sync
+  retries. There is no generate button and no page-load generation.
 - status alert, not a chip panel. When the connection is not `online`, broker or price
   status is `problem`, a price problem is set, or the vault is `locked`, Overview shows
   `Status needs attention.` (period included) and the link `Review it in Profile`

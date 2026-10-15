@@ -74,6 +74,13 @@ export function resolvePortfolioChatModel(): LanguageModel {
     name: "lavega-agent",
     baseURL,
     apiKey,
+    /* `Output.object` is the letter and stock-research contract, and this flag
+     * is what makes it real: without it the provider drops the schema and warns
+     * `responseFormat ... only supported with structuredOutputs`, so the model
+     * answers in prose and a caller that needs an object (the letter's
+     * observations) gets strings it has to throw away. The provider then sends
+     * `response_format: json_schema`. */
+    supportsStructuredOutputs: true,
     /* Mistral's shared OpenRouter pool answers 429 often. OpenRouter moves
      * to the next model in `models` itself, with no extra round trip. */
     transformRequestBody: (body) =>

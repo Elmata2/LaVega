@@ -17,7 +17,14 @@ import { resolvePortfolioChatModel } from "./portfolioChat.js";
 
 export const MAX_LETTER_OBSERVATIONS = 3;
 export const LETTER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-const GENERATE_TIMEOUT_MS = 60_000;
+/* The persona prompt makes a full letter a slow generation on Mistral's shared
+ * pool: measured 4-27s when it answers, and minutes when it queues. One 90s
+ * bound discarded those queued calls and stored nothing, so the letter is
+ * attempted twice with a shorter per-attempt bound. A queued attempt is
+ * abandoned early and started fresh, which is what returned the fast answer in
+ * practice. Worst case 2 x 45s = 90s, far inside the cron function's 300s. */
+export const LETTER_ATTEMPTS = 2;
+const ATTEMPT_TIMEOUT_MS = 45_000;
 
 export type LetterDraft = { verdict: string; observations: LetterObservation[] };
 export type LetterGenerator = (input: {
@@ -115,23 +122,39 @@ const LETTER_SCHEMA = jsonSchema<unknown>({
 
 export function createLetterGenerator(model?: LanguageModel): LetterGenerator {
   return async ({ dashboard, sectors }) => {
-    const { output } = await generateText({
-      model: model ?? resolvePortfolioChatModel(),
-      abortSignal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
-      output: Output.object({ schema: LETTER_SCHEMA }),
-      instructions: `${PORTFOLIO_CHAT_PROFILES.charlie_munger}
+    const languageModel = model ?? resolvePortfolioChatModel();
+    const instructions = `${PORTFOLIO_CHAT_PROFILES.charlie_munger}
 
 You are now writing a short letter to the owner about their whole portfolio. Rules:
 - Give the verdict first: one or two sentences in plain text, without Markdown.
 - Then give at most ${MAX_LETTER_OBSERVATIONS} observations. Each has a short title, a body of at most three sentences, and a figures list.
 - Cite the owner's own numbers from the brief in every body. Copy each figure you cite, exactly as written in the brief, into that observation's figures list. Never invent a number.
 - Pick the largest avoidable risks or the clearest strengths, not a tour of every holding.
-Return one JSON object with the keys verdict and observations.`,
-      prompt: `Portfolio brief:\n${renderPortfolioBrief(dashboard, sectors)}`,
-    });
-    const draft = normalizeLetterDraft(output);
-    if (!draft) throw new Error("The model returned no usable letter");
-    return draft;
+Return one JSON object with the keys verdict and observations.`;
+    const prompt = `Portfolio brief:\n${renderPortfolioBrief(dashboard, sectors)}`;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= LETTER_ATTEMPTS; attempt += 1) {
+      try {
+        const { output } = await generateText({
+          model: languageModel,
+          abortSignal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+          /* One attempt at a time, not the SDK's default inner retries: a
+           * generation that overruns the abort has to be abandoned and
+           * started fresh, not re-spent. OpenRouter's `models` fallback covers
+           * a dead provider, and the loop below covers a slow or queued one. */
+          maxRetries: 0,
+          output: Output.object({ schema: LETTER_SCHEMA }),
+          instructions,
+          prompt,
+        });
+        const draft = normalizeLetterDraft(output);
+        if (draft) return draft;
+        lastError = new Error("The model returned no usable letter");
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("The model returned no usable letter");
   };
 }
 

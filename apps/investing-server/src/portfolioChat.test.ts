@@ -1,7 +1,12 @@
 import { expect, test, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import type { CompanyFundamentals, InvestingDashboardData } from "@lavega/core";
-import { createPortfolioChatAgent, namedSymbols, prefetchSymbols } from "./portfolioChat.js";
+import {
+  createPortfolioChatAgent,
+  namedSymbols,
+  prefetchSymbols,
+  resolvePortfolioChatModel,
+} from "./portfolioChat.js";
 
 const holding = (symbol: string, marketValue: number | null, description?: string) => ({
   symbol,
@@ -29,6 +34,18 @@ const dashboard = {
     holding("PEP", 50, "PepsiCo Inc"),
   ],
 } as unknown as InvestingDashboardData;
+
+test("the model provider enforces output schemas for Output.object callers", () => {
+  const previous = process.env.LAVEGA_AGENT_API_KEY;
+  process.env.LAVEGA_AGENT_API_KEY = "test-key";
+  try {
+    const model = resolvePortfolioChatModel() as unknown as { supportsStructuredOutputs: boolean };
+    expect(model.supportsStructuredOutputs).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.LAVEGA_AGENT_API_KEY;
+    else process.env.LAVEGA_AGENT_API_KEY = previous;
+  }
+});
 
 test("resolves holdings named by symbol or by name, and tickers the owner does not hold", () => {
   expect(namedSymbols("How does apple compare with NVDA?", dashboard)).toEqual(["AAPL", "NVDA"]);
