@@ -1,4 +1,4 @@
-import type { LetterState } from "../lib/portfolioLetter.js";
+import type { LetterState, LetterWriteState } from "../lib/portfolioLetter.js";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -9,14 +9,19 @@ const letterDate = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 
-/** Presentational: Overview owns the read and the Discuss action. There is no
- *  generate button; the broker-sync cron writes the letter. */
+/** Presentational: Overview owns the read and the two actions. The write button
+ *  asks the server for a letter now; the server's gate still refuses one when
+ *  nothing changed, so a click is never a model call for its own sake. */
 export function PortfolioLetterCard({
   state,
+  writeState,
   onDiscuss,
+  onWrite,
 }: {
   state: LetterState;
+  writeState: LetterWriteState;
   onDiscuss: () => void;
+  onWrite: () => void;
 }) {
   if (state.status === "loading")
     return (
@@ -41,11 +46,12 @@ export function PortfolioLetterCard({
           <p className="text-sm font-medium text-muted-foreground">Letter from Charlie</p>
           <CardTitle size="md">No letter yet</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent spacing="loose">
           <p className="text-sm text-muted-foreground">
-            Charlie writes after your broker data changes. The first letter appears after the next
-            sync.
+            Charlie writes after your broker data changes. Write the first letter now, or wait for
+            the next sync.
           </p>
+          <WriteControl writeState={writeState} onWrite={onWrite} />
         </CardContent>
       </Card>
     );
@@ -72,10 +78,38 @@ export function PortfolioLetterCard({
             </li>
           ))}
         </ol>
-        <Button type="button" variant="outline" onClick={onDiscuss}>
-          Discuss
-        </Button>
+        <div className="flex flex-wrap items-start gap-3">
+          <Button type="button" onClick={onDiscuss}>
+            Discuss
+          </Button>
+          <WriteControl writeState={writeState} onWrite={onWrite} />
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function WriteControl({
+  writeState,
+  onWrite,
+}: {
+  writeState: LetterWriteState;
+  onWrite: () => void;
+}) {
+  const writing = writeState.status === "writing";
+  return (
+    <div className="space-y-2">
+      <Button type="button" variant="outline" onClick={onWrite} disabled={writing}>
+        {writing ? "Writing…" : "Write letter now"}
+      </Button>
+      {writeState.status === "unchanged" && (
+        <p className="text-xs text-muted-foreground">Nothing changed since the last letter.</p>
+      )}
+      {writeState.status === "error" && (
+        <p role="alert" className="text-xs text-negative">
+          {writeState.message}
+        </p>
+      )}
+    </div>
   );
 }

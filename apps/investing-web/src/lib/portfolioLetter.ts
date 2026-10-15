@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-/* Client side of /api/letters. The page only reads: the letter is written by
- * the broker-sync cron, never on page load. The type mirrors PortfolioLetter in
- * @lavega/database, which a browser bundle cannot import. */
+/* Client side of /api/letters. The page reads the stored letter and never
+ * generates one on load; `Write letter now` posts to the same writer the cron
+ * uses. The type mirrors PortfolioLetter in @lavega/database, which a browser
+ * bundle cannot import. */
 
 export type PortfolioLetter = {
   id: string;
@@ -18,6 +19,20 @@ export type LetterState =
   | { status: "ready"; letter: PortfolioLetter }
   | { status: "empty" }
   | { status: "error"; message: string };
+
+/** A deliberate write, separate from the read: `writing` while the request is
+ *  in flight, `unchanged` when the server's gate refused a new one. */
+export type LetterWriteState =
+  | { status: "idle" }
+  | { status: "writing" }
+  | { status: "unchanged" }
+  | { status: "error"; message: string };
+
+export type LetterResource = {
+  state: LetterState;
+  writeState: LetterWriteState;
+  write: () => void;
+};
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
@@ -57,9 +72,38 @@ async function fetchLatestLetter(signal: AbortSignal): Promise<PortfolioLetter |
   return letter;
 }
 
-/** Reads the stored letter once per mount. It never asks the server to make one. */
-export function useLatestLetter(enabled = true): LetterState {
+/** Asks the server to write a letter now. The server still applies its gate,
+ *  so an unchanged snapshot returns the stored letter with `generated: false`
+ *  and makes no model call. */
+export async function requestLetter(): Promise<{
+  letter: PortfolioLetter;
+  generated: boolean;
+}> {
+  let response: Response;
+  try {
+    response = await fetch("/api/letters/ensure", { method: "POST" });
+  } catch {
+    throw new Error("Failed to write letter: network error.");
+  }
+  const payload: unknown = await response.json().catch(() => undefined);
+  const problems = (payload as { problems?: unknown } | undefined)?.problems;
+  if (!response.ok)
+    throw new Error(
+      Array.isArray(problems) && typeof problems[0] === "string"
+        ? problems[0]
+        : `Failed to write letter: ${response.status}`,
+    );
+  const result = payload as { letter?: unknown; generated?: unknown } | undefined;
+  if (!result || typeof result.generated !== "boolean" || !isPortfolioLetter(result.letter))
+    throw new Error("Letter has an invalid format.");
+  return { letter: result.letter, generated: result.generated };
+}
+
+/** Reads the stored letter once per mount, and writes one on demand. The read
+ *  never asks the server to make one. */
+export function useLatestLetter(enabled = true): LetterResource {
   const [state, setState] = useState<LetterState>({ status: "loading" });
+  const [writeState, setWriteState] = useState<LetterWriteState>({ status: "idle" });
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
@@ -77,7 +121,21 @@ export function useLatestLetter(enabled = true): LetterState {
       });
     return () => controller.abort();
   }, [enabled]);
-  return state;
+  const write = useCallback(() => {
+    setWriteState({ status: "writing" });
+    void requestLetter()
+      .then(({ letter, generated }) => {
+        setState({ status: "ready", letter });
+        setWriteState(generated ? { status: "idle" } : { status: "unchanged" });
+      })
+      .catch((reason: unknown) => {
+        setWriteState({
+          status: "error",
+          message: reason instanceof Error ? reason.message : "Failed to write letter",
+        });
+      });
+  }, []);
+  return { state, writeState, write };
 }
 
 /** The letter as plain text, the first message of a Munger thread. */

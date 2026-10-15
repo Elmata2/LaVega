@@ -62,18 +62,22 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   See [portfolio-agents.md](portfolio-agents.md).
 - letter card in the aside, same Profile switch as the agent card (widget id `agent`,
   label `Portfolio agent`). There is no separate letter switch. Accessible name
-  `Letter from Charlie` (`data-dashboard-section="letter"`). The page only reads
-  `GET /api/letters/latest` (`{ letter }` or `{ letter: null }`). It never generates one.
-  Loading copy: `Loading letter…`. Empty copy: title `No letter yet`, then
-  `Charlie writes after your broker data changes. The first letter appears after the next sync.`
+  `Letter from Charlie` (`data-dashboard-section="letter"`). The page reads
+  `GET /api/letters/latest` (`{ letter }` or `{ letter: null }`) and never generates one on
+  load. Loading copy: `Loading letter…`. Empty copy: title `No letter yet`, then
+  `Charlie writes after your broker data changes. Write the first letter now, or wait for the next sync.`
   A stored letter shows `Letter from Charlie · <date>`, the verdict as the title, the
-  observations, and button `Discuss`. `Discuss` opens `/agents/charlie_munger` in this tab
-  and sends the letter as the first message. On the local file server the GET is 200 with
-  `letter: null`, so the empty card is on screen. It does not 503 and it does not hide.
-  `POST /api/letters/ensure` is the writer (503 `Portfolio letters need a database` without
-  a database). The cron calls it. The page does not. A write that fails — the model provider
-  rate-limited or slow — answers 502 and leaves the stored letter unchanged; the next sync
-  retries. There is no generate button and no page-load generation.
+  observations, button `Discuss`, and button `Write letter now`. `Discuss` opens
+  `/agents/charlie_munger` in this tab and sends the letter as the first message.
+  `Write letter now` posts `POST /api/letters/ensure`; it reads `Writing…` while the request
+  is in flight. The server's gate still applies: when nothing changed the route returns the
+  stored letter and the card adds `Nothing changed since the last letter.` On the local file
+  server the GET is 200 with `letter: null`, so the empty card is on screen with the write
+  button; it does not 503 and it does not hide. `POST /api/letters/ensure` is the writer
+  (503 `Portfolio letters need a database` without a database); the cron also calls it after
+  each tenant's sync. A write that fails — the model provider rate-limited or slow — answers
+  502 and leaves the stored letter unchanged; the next sync retries. There is no page-load
+  generation.
 - status alert, not a chip panel. When the connection is not `online`, broker or price
   status is `problem`, a price problem is set, or the vault is `locked`, Overview shows
   `Status needs attention.` (period included) and the link `Review it in Profile`
@@ -119,7 +123,8 @@ node $C api GET '/api/investing/summary?range=6M' --target local
 node $C api GET /api/investing/dashboard --target prod
 node $C api GET /api/investing/sectors --target local   # sector read: sectors, sectorCoverage, revision
 node $C api GET /api/investing/personal-net-worth --target prod
-node $C api GET /api/letters/latest --target local   # { letter: null } until a cron write
+node $C api GET /api/letters/latest --target local   # { letter: null } until a write
+node $C api POST /api/letters/ensure --target preview # the card's `Write letter now`; 503 without a database
 node $C browser goto /net-worth --target local  # mounted: /investing/net-worth
 ```
 

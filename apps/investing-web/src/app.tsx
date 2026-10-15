@@ -1299,10 +1299,10 @@ function Overview() {
   const showLetter = widgets.has("agent");
   const letter = useLatestLetter(dashboardReady && showLetter);
   function discussLetter() {
-    if (letter.status !== "ready") return;
+    if (letter.state.status !== "ready") return;
     const threadId = startNewThread(LETTER_AGENT_ID);
     void portfolioChat(LETTER_AGENT_ID, threadId).sendMessage({
-      text: letterToText(letter.letter),
+      text: letterToText(letter.state.letter),
     });
     navigate(`/agents/${LETTER_AGENT_ID}`);
   }
@@ -1390,7 +1390,14 @@ function Overview() {
                       }
                     />
                   )}
-                  {showLetter && <PortfolioLetterCard state={letter} onDiscuss={discussLetter} />}
+                  {showLetter && (
+                    <PortfolioLetterCard
+                      state={letter.state}
+                      writeState={letter.writeState}
+                      onDiscuss={discussLetter}
+                      onWrite={letter.write}
+                    />
+                  )}
                 </aside>
               </div>
               {showSectors && (

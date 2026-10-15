@@ -6,16 +6,16 @@ Accepted.
 
 ## Decision
 
-Charlie Munger writes one letter per broker-sync snapshot. The letter is stored in `investing.portfolio_letters` (migration `0023`), encrypted like agent memory (ADR 0007). Only the broker-sync cron triggers generation. Loading the dashboard reads the stored letter and never calls the model.
+Charlie Munger writes one letter per broker-sync snapshot. The letter is stored in `investing.portfolio_letters` (migration `0023`), encrypted like agent memory (ADR 0007). The broker-sync cron writes it, and the owner can also ask for one with `Write letter now` on the card. Loading the dashboard reads the stored letter and never calls the model.
 
 ## Trigger and gate
 
-After each tenant's broker and price sync, `runInvestingCron` calls `POST /api/letters/ensure`. The route asks the model at most twice — a second attempt only when the first produces nothing — and only when all of these hold:
+After each tenant's broker and price sync, `runInvestingCron` calls `POST /api/letters/ensure`. The card's `Write letter now` button calls the same route. The route asks the model at most twice — a second attempt only when the first produces nothing — and only when all of these hold:
 
 - No letter exists yet, or holdings changed (a symbol or its quantity), or the latest letter is at least seven days old.
 - The snapshot hash differs from the latest letter's. The hash covers quantity, cost basis, realized gain, and dividends per holding, never prices, so a market move alone never triggers a call.
 
-`UNIQUE (user_id, snapshot_hash)` makes two racing calls store one letter. A failed letter call is reported as `letterStatus` and never fails the sync. The existing daily cron is the only scheduler; there is no new schedule.
+`UNIQUE (user_id, snapshot_hash)` makes two racing calls store one letter. A failed letter call is reported as `letterStatus` and never fails the sync. The existing daily cron is the only scheduler; there is no new schedule. An explicit click does not bypass the gate: when nothing changed the route returns the stored letter with `generated: false` and makes no model call, and the card says `Nothing changed since the last letter.`
 
 ## Consequences
 
