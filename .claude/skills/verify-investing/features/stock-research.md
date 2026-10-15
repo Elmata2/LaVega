@@ -32,7 +32,8 @@ Use `control-investing.mjs` from the skill directory:
 5. The textbox accessible name is **Stock ticker** (it starts as `AAPL`). Click **Research stock**
    (`Researching…` while pending). Wait for an actual report.
 6. Confirm company symbol, fetched time, forward P/E, ROE and net margin render. Compare
-   displayed values to the research response. Null values must say unavailable.
+   displayed values to the research response. A null metric cell says `Unavailable`.
+   The company overview sentence uses lowercase `unavailable`.
 7. Confirm six **Investor views** (aside `aria-label` `Six investor views`) display typed signals and clearly labeled probabilities.
    No view must remain distinct from neutral. Each card's reason must be specific to
    its lens and company (cites figures), not the shared rubric sentence. Record model

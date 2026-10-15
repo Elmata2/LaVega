@@ -73,7 +73,7 @@ const PROBE_ENDPOINTS = [
 /** The reads the dashboard page makes on open; `perf` times these by default. */
 const PERF_ENDPOINTS = [
   "/api/investing/dashboard",
-  "/api/investing/summary",
+  "/api/investing/sectors",
   "/api/investing/benchmarks",
 ];
 
@@ -2369,7 +2369,7 @@ const COMMANDS = [
       runs: { type: "number", description: "requests per endpoint (default 5)" },
       path: {
         type: "string",
-        description: "comma-separated paths (default: dashboard,summary,benchmarks)",
+        description: "comma-separated paths (default: dashboard,sectors,benchmarks)",
       },
     },
     run: commandPerf,

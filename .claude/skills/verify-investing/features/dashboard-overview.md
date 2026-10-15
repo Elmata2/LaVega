@@ -21,9 +21,10 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   broker provides no transactions for it, it stays empty.` Period group `Choose period`:
   `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
   search.
-- allocation donut widget (`Allocation`, `data-dashboard-section="allocation"`) in that
-  same main column. Empty book: title `No positions`, then
-  `Your allocation appears after the first broker sync.`
+- allocation donut widget (`data-dashboard-section="allocation"`) in that
+  same main column. Eyebrow `Allocation`, title `Portfolio`. Group
+  `Holding` / `Entity` (`aria-label="Group allocation"`). Empty book: title
+  `No positions`, then `Your allocation appears after the first broker sync.`
 - summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
@@ -131,9 +132,12 @@ status 200 with `body.totals` an array. `[]` means the owner shared nothing.
   and logs the redacted cause as `investing.dashboard_read.problems`. A `200` is therefore
   not a pass — read the problems array. `dashboard` flags this as
   `shape: "degraded (empty + problems)"`.
-- `/api/investing/summary` still answers `503` on failure. The Summary card then shows
-  `Failed to load summary: 503`. Key figures come from the dashboard payload, so they can
-  still render.
+- `/api/investing/summary` still answers `503` with
+  `Portfolio summary could not be assembled` when that route fails. No component calls it.
+  A failed dashboard read shows `Dashboard unavailable` and
+  `Failed to load dashboard: <status>` on the first load. A later refresh that fails shows
+  `Refresh failed` and `Cached data remains visible.` The Summary card reads the dashboard
+  payload, so it does not show `Failed to load summary: 503`.
 - A dashboard with zero positions and no problems is honest: nothing has synced yet. Check
   `sync-status` before calling it a bug.
 - Sector exposure calls Yahoo per symbol on a cache miss, so the first request after a purge
