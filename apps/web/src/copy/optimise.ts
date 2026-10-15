@@ -1,5 +1,5 @@
 import type { Locale } from "../locale.js";
-import type { HeldCashbackDescription } from "@lavega/core";
+import type { BusinessDepositScheme, HeldCashbackDescription } from "@lavega/core";
 import type {
   CrossScopeEvidence,
   CrossScopeKind,
@@ -191,6 +191,24 @@ export type OptimalisatieCopy = {
     };
   };
 
+  businessSavings: {
+    title: string;
+    /** Shown only in Zakelijk. `until` is a formatted date, amounts are formatted. */
+    promo: (p: {
+      rate: string;
+      until: string;
+      months: number;
+      cap: string;
+      range: string;
+    }) => string;
+    planRatesOnly: (p: { range: string }) => string;
+    access: string;
+    sourceLink: string;
+    checkedOn: (date: string) => string;
+    variableNote: string;
+    deposit: (scheme: string) => string;
+    depositSchemes: Record<BusinessDepositScheme, string>;
+  };
   interest: {
     title: string;
     footerNone: string;
@@ -661,6 +679,21 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     },
   },
 
+  businessSavings: {
+    title: "Zakelijk sparen",
+    promo: ({ rate, until, months, cap, range }) =>
+      `${rate} actierente voor nieuwe klanten die zich aanmelden tot en met ${until}: ${months} maanden, over de eerste ${cap}. Daarna ${range}, afhankelijk van je Revolut-abonnement.`,
+    planRatesOnly: ({ range }) => `${range} afhankelijk van je abonnement`,
+    access: "Direct opneembaar, variabel tarief.",
+    sourceLink: "Bron",
+    checkedOn: (date) => `gecontroleerd op ${date}`,
+    variableNote: "Variabel tarief; rente wordt dagelijks berekend en uitbetaald.",
+    deposit: (scheme) => `Depositogarantie: ${scheme}`,
+    depositSchemes: {
+      "lt-revolut-bank-uab-nl-branch":
+        "Litouws depositogarantiestelsel (Revolut Bank UAB, Nederlands filiaal)",
+    },
+  },
   interest: {
     title: "Rente",
     footerNone: "Geen vergelijkingsrente beschikbaar.",
@@ -1145,6 +1178,21 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     },
   },
 
+  businessSavings: {
+    title: "Business savings",
+    promo: ({ rate, until, months, cap, range }) =>
+      `${rate} promotional rate for new customers who sign up by ${until}: ${months} months, on the first ${cap}. Afterwards ${range}, depending on your Revolut plan.`,
+    planRatesOnly: ({ range }) => `${range} depending on your plan`,
+    access: "Instant access, variable rate.",
+    sourceLink: "Source",
+    checkedOn: (date) => `checked on ${date}`,
+    variableNote: "Variable rate; interest is calculated and paid daily.",
+    deposit: (scheme) => `Deposit protection: ${scheme}`,
+    depositSchemes: {
+      "lt-revolut-bank-uab-nl-branch":
+        "Lithuanian deposit insurance scheme (Revolut Bank UAB, Dutch branch)",
+    },
+  },
   interest: {
     title: "Interest",
     footerNone: "No comparison rate available.",
@@ -4293,4 +4341,22 @@ export function heldCashbackSentence(d: HeldCashbackDescription, locale: Locale)
     case "unknown":
       return hc.unknown(noAssumptionReason[d.reason]);
   }
+}
+
+/** ISO date as dd-mm-yyyy (nl) or dd/mm/yyyy (en). */
+export function formatIsoDateIn(locale: Locale, iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return locale === "nl" ? `${d}-${m}-${y}` : `${d}/${m}/${y}`;
+}
+
+/** "1,25–2,50%": one percent sign for the whole range. */
+export function formatPercentRangeIn(locale: Locale, minPct: number, maxPct: number): string {
+  const f = (p: number) =>
+    p.toLocaleString(localeTag(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${f(minPct)}–${f(maxPct)}%`;
+}
+
+/** Whole euros without decimals ("€100.000"), for caps and limits. */
+export function formatEuroWholeIn(locale: Locale, euros: number): string {
+  return `€${euros.toLocaleString(localeTag(locale), { maximumFractionDigits: 0 })}`;
 }
