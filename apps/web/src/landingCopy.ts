@@ -196,7 +196,7 @@ const nl: LandingCopy = {
       },
       {
         q: "Kan ik mijn account en gegevens verwijderen?",
-        a: "Je gegevens op de server verwijder je zelf onder Back-up met de knop Servergegevens verwijderen: back-up, bank- en brokerkoppelingen, koersgeschiedenis, AI-runs en instellingen. Ook de kluissleutel gaat weg, dus de kluis in je browser is daarna onleesbaar. Je inlogaccount zelf kun je in de app nog niet verwijderen.",
+        a: "Je gegevens op de server verwijder je zelf onder Back-up met de knop Servergegevens verwijderen: back-up, bank- en brokerkoppelingen, koersgeschiedenis, AI-runs en instellingen. Ook de kluissleutel gaat weg, dus de kluis in je browser en elke gedownloade back-up zijn daarna onleesbaar. Je inlogaccount zelf kun je in de app nog niet verwijderen.",
       },
     ],
   },
@@ -341,7 +341,7 @@ const en: LandingCopy = {
       },
       {
         q: "Can I delete my account and data?",
-        a: "You delete the data on the server yourself under Backup with the Delete server data button: backup, bank and broker connections, price history, AI runs and settings. The vault key goes too, so the vault in your browser is unreadable afterwards. You cannot yet delete the sign-in account itself from within the app.",
+        a: "You delete the data on the server yourself under Backup with the Delete server data button: backup, bank and broker connections, price history, AI runs and settings. The vault key goes too, so the vault in your browser and every downloaded backup are unreadable afterwards. You cannot yet delete the sign-in account itself from within the app.",
       },
     ],
   },

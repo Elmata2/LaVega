@@ -160,7 +160,7 @@ test("clicking the erase control reveals an inline confirmation, not a browser d
     button("Servergegevens verwijderen")!.click();
   });
 
-  expect(container!.textContent).toContain("blijft staan");
+  expect(container!.textContent).toContain("Dit kun je niet terugdraaien");
   expect(button("Ja, verwijder")).toBeDefined();
   expect(button("Annuleer")).toBeDefined();
 });

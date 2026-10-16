@@ -134,183 +134,9 @@
     margin-bottom: 14px;
   }
 
-  /* ---- Kern-tegels (waarom LaVega) ---- */
   .lp-strengths-title {
     text-align: left;
     margin: 0;
-  }
-  .lp-ill {
-    position: relative;
-    height: 150px;
-    display: grid;
-    place-items: center;
-  }
-  /* fast — overlapping circles (individual translate/scale props avoid clashes) */
-  .lp-ill-fast .c {
-    position: absolute;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: 1.5px solid var(--lp-line);
-  }
-  .lp-ill-fast .c1 {
-    translate: -48px 16px;
-  }
-  .lp-ill-fast .c2 {
-    translate: -24px 6px;
-  }
-  .lp-ill-fast .c3 {
-    translate: 0 -4px;
-  }
-  .lp-ill-fast .c4 {
-    translate: 30px -14px;
-    background: var(--lp-tan);
-    border-color: var(--lp-tan-deep);
-    box-shadow: 0 8px 20px -8px rgba(176, 127, 51, 0.6);
-    animation: lp-breathe 3.2s ease-in-out infinite;
-  }
-  @keyframes lp-breathe {
-    0%,
-    100% {
-      scale: 1;
-    }
-    50% {
-      scale: 1.09;
-    }
-  }
-  /* toggles — connect all accounts */
-  .lp-ill-toggles {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .lp-ill-toggles .tg {
-    width: 116px;
-    height: 26px;
-    border-radius: 999px;
-    border: 1.5px dashed var(--lp-line);
-    position: relative;
-  }
-  .lp-ill-toggles .tg::after {
-    content: "";
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--lp-ink2);
-  }
-  .lp-ill-toggles .tg.on {
-    border: 1.5px solid var(--lp-tan-deep);
-    background: rgba(207, 159, 94, 0.18);
-  }
-  .lp-ill-toggles .tg.on::after {
-    background: var(--lp-tan-deep);
-    animation: lp-toggle 2.8s ease-in-out infinite;
-  }
-  @keyframes lp-toggle {
-    0%,
-    28% {
-      left: calc(100% - 23px);
-    }
-    58%,
-    70% {
-      left: 3px;
-    }
-    100% {
-      left: calc(100% - 23px);
-    }
-  }
-  /* rings — encryption.
- *
- * `.lp-ring`, not `.ring`: `ring` is a real Tailwind utility, so the moment any
- * file in the scanned tree writes it as a class token Tailwind GENERATES
- * `.ring{--tw-ring-shadow:… 0 0 0 1px currentcolor; box-shadow:…}` into
- * @layer utilities. That layer beats @layer components regardless of
- * specificity, so these rings were being drawn with an extra 1px currentColor
- * ring that no stylesheet asks for. See trap 10 in docs/adr/0005. */
-  .lp-ill-rings .lp-ring,
-  .lp-ill-rings .core,
-  .lp-ill-rings .orbit {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    translate: -50% -50%;
-  }
-  .lp-ill-rings .lp-ring {
-    border-radius: 50%;
-    border: 1.5px solid var(--lp-line);
-  }
-  .lp-ill-rings .r1 {
-    width: 120px;
-    height: 120px;
-  }
-  .lp-ill-rings .r2 {
-    width: 80px;
-    height: 80px;
-  }
-  .lp-ill-rings .core {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: var(--lp-tan);
-  }
-  .lp-ill-rings .orbit {
-    width: 120px;
-    height: 120px;
-    animation: lp-spin 7s linear infinite;
-  }
-  .lp-ill-rings .odot {
-    position: absolute;
-    top: -6px;
-    left: calc(50% - 6px);
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--lp-ink);
-  }
-  @keyframes lp-spin {
-    to {
-      rotate: 360deg;
-    }
-  }
-  /* tree — overview */
-  .lp-ill-tree svg {
-    overflow: visible;
-  }
-  .lp-ill-tree .tree-node {
-    fill: rgba(207, 159, 94, 0.18);
-    stroke: var(--lp-tan-deep);
-    stroke-width: 1.5;
-  }
-  .lp-ill-tree .tree-core {
-    fill: var(--lp-ink);
-  }
-  .lp-ill-tree .tree-branch {
-    fill: none;
-    stroke: var(--lp-ink2);
-    stroke-width: 1.5;
-    stroke-dasharray: 3 4;
-  }
-  .lp-ill-tree .tree-leaf {
-    fill: var(--lp-tan-deep);
-    animation: lp-pulse 2.4s ease-in-out infinite;
-  }
-  .lp-ill-tree .tree-leaf:nth-of-type(2) {
-    animation-delay: 0.4s;
-  }
-  .lp-ill-tree .tree-leaf:nth-of-type(3) {
-    animation-delay: 0.8s;
-  }
-  @keyframes lp-pulse {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 1;
-    }
   }
 
   /* ---- Agents feature carousel ---- */
@@ -371,14 +197,6 @@
     padding: 34px 30px;
     box-shadow: 0 30px 60px -40px rgba(43, 33, 23, 0.35);
   }
-  .lp-feature-art {
-    height: 170px;
-    display: grid;
-    place-items: center;
-    margin-bottom: 18px;
-    border-radius: 16px;
-    background: rgba(207, 159, 94, 0.08);
-  }
   .lp-feature-medallion {
     width: 64px;
     height: 64px;
@@ -388,7 +206,7 @@
     color: var(--lp-tan-deep);
     background: rgba(207, 159, 94, 0.16);
     border: 1px solid var(--lp-line);
-    margin-bottom: 0;
+    margin-bottom: 18px;
   }
   .lp-feature-medallion svg {
     width: 30px;
@@ -583,12 +401,6 @@
       opacity: 1;
       transform: none;
       transition: none;
-    }
-    .lp-ill-fast .c4,
-    .lp-ill-toggles .tg.on::after,
-    .lp-ill-rings .orbit,
-    .lp-ill-tree .tree-leaf {
-      animation: none;
     }
     /* .lp-btn:hover's transform:none is now LP_BTN's own
    * `motion-safe:hover:-translate-y-px` in Landing.tsx: the hover lift only
