@@ -1138,7 +1138,8 @@ const nlBackup: BackupCopy = {
       "Log in om je versleutelde kluis ook op de server te bewaren, bij Account hierboven. Handig voor een tweede apparaat.",
     noBackupYet: "Nog geen back-up op de server.",
     lastBackup: (date) => `Laatste back-up: ${date}.`,
-    encryptionNote: "De server bewaart alleen versleutelde bytes en kan je gegevens niet lezen.",
+    encryptionNote:
+      "De server bewaart je kluis versleuteld. De sleutel hoort bij je account en staat ook op de server, dus technisch kunnen wij erbij; onze code leest je kluis niet.",
     backupNowButton: "Nu back-uppen",
     conflict: {
       message: (date) =>
@@ -1157,7 +1158,7 @@ const nlBackup: BackupCopy = {
     erase: {
       button: "Servergegevens verwijderen",
       warning:
-        "Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up, bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs en je instellingen. De lokale kluis in deze browser blijft staan.",
+        "Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up, bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs, je instellingen en de sleutel van je kluis. Zonder die sleutel kan niemand je kluis nog openen: niet in deze browser en niet uit een gedownloade back-up. Dit kun je niet terugdraaien.",
       confirmButton: "Ja, verwijder",
       cancelButton: "Annuleer",
       success: (rows, tables) => `Verwijderd: ${rows} rijen over ${tables} tabellen.`,
@@ -1716,7 +1717,8 @@ const enBackup: BackupCopy = {
       "Sign in to also keep your encrypted vault on the server, under Account above. Handy for a second device.",
     noBackupYet: "No backup on the server yet.",
     lastBackup: (date) => `Last backup: ${date}.`,
-    encryptionNote: "The server only stores encrypted bytes and can't read your data.",
+    encryptionNote:
+      "The server stores your vault encrypted. The key belongs to your account and is also held on the server, so technically we can access it; our code does not read your vault.",
     backupNowButton: "Back up now",
     conflict: {
       message: (date) =>
@@ -1735,7 +1737,7 @@ const enBackup: BackupCopy = {
     erase: {
       button: "Delete server data",
       warning:
-        "This deletes everything the server holds about you: the encrypted backup, bank connections and broker vaults, price history, AI runs and your settings. The local vault in this browser is untouched.",
+        "This deletes everything the server holds about you: the encrypted backup, bank connections and broker vaults, price history, AI runs, your settings and your vault key. Without that key nobody can open your vault again: not in this browser and not from a downloaded backup. This cannot be undone.",
       confirmButton: "Yes, delete",
       cancelButton: "Cancel",
       success: (rows, tables) => `Deleted: ${rows} rows across ${tables} tables.`,

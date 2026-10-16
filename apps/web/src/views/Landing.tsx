@@ -511,18 +511,6 @@ export default function Landing({
                   <path d="M9 12l2 2 4-4" />
                 </svg>
               ),
-              art: (
-                <div className="lp-ill lp-ill-tree" aria-hidden="true">
-                  <svg viewBox="0 0 160 120" width="100%" height="120">
-                    <circle cx="80" cy="28" r="15" className="tree-node" />
-                    <circle cx="80" cy="28" r="5" className="tree-core" />
-                    <path d="M80,43 V66 M32,96 V80 H128 V96 M80,80 V96" className="tree-branch" />
-                    <circle cx="32" cy="100" r="4" className="tree-leaf" />
-                    <circle cx="80" cy="100" r="4" className="tree-leaf" />
-                    <circle cx="128" cy="100" r="4" className="tree-leaf" />
-                  </svg>
-                </div>
-              ),
               t: c.agents.cards[1]!.t,
               d: c.agents.cards[1]!.d,
             },
@@ -539,14 +527,6 @@ export default function Landing({
                   <path d="M4 8h13M17 8l-3-3M17 8l-3 3" />
                   <path d="M20 16H7M7 16l3 3M7 16l3-3" />
                 </svg>
-              ),
-              art: (
-                <div className="lp-ill lp-ill-fast" aria-hidden="true">
-                  <span className="c c1" />
-                  <span className="c c2" />
-                  <span className="c c3" />
-                  <span className="c c4" />
-                </div>
               ),
               t: c.agents.cards[2]!.t,
               d: c.agents.cards[2]!.d,
@@ -581,16 +561,6 @@ export default function Landing({
                   <path d="M7 15l4-4 3 3 5-6" />
                 </svg>
               ),
-              art: (
-                <div className="lp-ill lp-ill-rings" aria-hidden="true">
-                  <span className="lp-ring r1" />
-                  <span className="lp-ring r2" />
-                  <span className="orbit">
-                    <span className="odot" />
-                  </span>
-                  <span className="core" />
-                </div>
-              ),
               t: c.agents.cards[4]!.t,
               d: c.agents.cards[4]!.d,
             },
@@ -608,26 +578,13 @@ export default function Landing({
                   <path d="M12 8v8M9.5 10.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.6c0 2-5 1.2-5 3.4 0 1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5" />
                 </svg>
               ),
-              art: (
-                <div className="lp-ill lp-ill-toggles" aria-hidden="true">
-                  <span className="tg" />
-                  <span className="tg on" />
-                  <span className="tg" />
-                </div>
-              ),
               t: c.agents.cards[5]!.t,
               d: c.agents.cards[5]!.d,
             },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
-              <div className="lp-feature-art">
-                {"art" in a ? (
-                  a.art
-                ) : (
-                  <div className="lp-feature-medallion" aria-hidden="true">
-                    {a.icon}
-                  </div>
-                )}
+              <div className="lp-feature-medallion" aria-hidden="true">
+                {a.icon}
               </div>
               <h3 className="lp-feature-title">{a.t}</h3>
               <p className="lp-feature-text">{a.d}</p>
