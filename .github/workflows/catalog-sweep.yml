@@ -3,8 +3,8 @@ on:
   schedule:
     - cron: "0 5 * * 1" # Monday 05:00 UTC — terms move yearly, not daily
   workflow_dispatch: # and on demand, because the first runs need watching
-permissions:
-  contents: write
+# No top-level permissions: each job asks for exactly what it needs.
+permissions: {}
 # A manual dispatch racing the Monday cron would give two jobs committing and
 # pushing the same two files; the second push then fails on a branch that moved
 # under it. One at a time, and never cancel a run mid-sweep — a cancelled sweep
@@ -16,6 +16,8 @@ concurrency:
 jobs:
   sweep:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # The sweep's own worst case is ~80 minutes (98 routes x a 20s timeout, plus
     # pdftotext). The default is six hours, which is a long time to hold a runner
     # for a job that has already hung.
@@ -35,3 +37,20 @@ jobs:
           git add docs/catalog/catalog.json docs/catalog/state.json
           git diff --staged --quiet || git commit -m "chore(catalog): weekly sweep"
           git push
+  # Independent of `sweep`: a failed sweep must not skip this, and this only
+  # ever writes a GitHub issue, never the repo.
+  business-savings:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm business-savings:watch
