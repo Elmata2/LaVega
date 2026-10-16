@@ -46,6 +46,9 @@ test("the English copy is not just the Dutch copy", () => {
     "faq.eyebrow",
     "footer.product",
     "footer.privacy",
+    // Product name and the bare copyright line.
+    "agents.cards[4].t",
+    "footer.rights",
   ]);
   const untranslated = [...nl.entries()].filter(([k, v]) => !SHARED.has(k) && en.get(k) === v);
   expect(untranslated.map(([k]) => k)).toEqual([]);
