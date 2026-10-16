@@ -604,6 +604,40 @@ export default function Landing({
               t: c.agents.cards[3]!.t,
               d: c.agents.cards[3]!.d,
             },
+            {
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 19V5M4 19h16" />
+                  <path d="M7 15l4-4 3 3 5-6" />
+                </svg>
+              ),
+              t: c.agents.cards[4]!.t,
+              d: c.agents.cards[4]!.d,
+            },
+            {
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M12 8v8M9.5 10.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.6c0 2-5 1.2-5 3.4 0 1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5" />
+                </svg>
+              ),
+              t: c.agents.cards[5]!.t,
+              d: c.agents.cards[5]!.d,
+            },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
               <div className="lp-feature-medallion" aria-hidden="true">

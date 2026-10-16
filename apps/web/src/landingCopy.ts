@@ -75,7 +75,7 @@ const nl: LandingCopy = {
   meta: {
     title: "LaVega – Al je rekeningen, één helder getal.",
     description:
-      "Bundel al je rekeningen bij elke bank in één overzicht, reserveer je belasting en haal het meeste uit je punten — lokaal-first en versleuteld.",
+      "Al je rekeningen en beleggingen in één overzicht: forecast, btw apart, abonnementen en rentes vergeleken. Alleen-lezen en versleuteld.",
   },
   nav: {
     agents: "Agents",
@@ -100,7 +100,7 @@ const nl: LandingCopy = {
   hero: {
     titleTop: "Al je rekeningen,",
     titleBottom: "één helder getal.",
-    sub: "LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment precies hoeveel je hebt en waar je geld heen gaat, reserveer je belasting, en haal het meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.",
+    sub: "LaVega bundelt al je rekeningen, bij elke bank, in één overzicht. Je ziet wat je hebt en waar je geld heen gaat, zet je btw apart en vindt met Optimalisatie abonnementen en betere rentes. Met LaVega Investing volg je ook je beleggingen. Alle koppelingen zijn alleen-lezen.",
     ctaPrimary: "Account aanmaken",
     ctaSecondary: "Bekijk hoe het werkt",
   },
@@ -111,21 +111,21 @@ const nl: LandingCopy = {
     savedLabel: "Deze maand gespaard",
     forecastLabel: "Forecast · 13 weken",
     forecastValue: "geen tekort",
-    lockChip: "Lokaal & versleuteld",
+    lockChip: "Versleuteld & alleen-lezen",
   },
   spiral: {
     ariaLabel: "Slimmer met je geld",
-    tagline: "Niet méér uitgeven — slimmer met je geld.",
+    tagline: "Niet méér uitgeven, maar slimmer met je geld.",
   },
   strengths: {
     title: "Al je geldzaken, samen op één plek",
-    sub: "We doen er alles aan om je een naadloze ervaring te geven — snel, veilig en compleet. Eén helder beeld van al je rekeningen, waar je ook bankiert.",
+    sub: "Je rekeningen van elke bank, je beleggingen en de plekken waar je geld laat liggen: in één overzicht, met één account.",
     cta: "Ontdek meer",
     tiles: [
-      "Snel & soepel",
-      "Al je rekeningen gekoppeld",
-      "Sterke versleuteling",
-      "Eén compleet overzicht",
+      "Alle rekeningen, met forecast",
+      "Beleggingen: rendement en risico",
+      "Optimalisatie van je kosten",
+      "Btw apart, deadlines bewaakt",
     ],
   },
   agents: {
@@ -136,36 +136,47 @@ const nl: LandingCopy = {
     cards: [
       {
         t: "Facturen-agent",
-        d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt.",
+        d: "Voeg facturen toe met een CSV, een UBL-bestand of een PDF. Zet je de AI-optie aan, dan leest de agent bedragen en vervaldata uit de PDF. Je ziet ze meteen in je cashflow en bevestigt ze eerst zelf.",
       },
       {
         t: "Belasting-agent",
-        d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan.",
+        d: "Zet je btw apart en houdt elke aangifte-deadline in de gaten, zodat je niet voor verrassingen komt te staan.",
       },
       {
         t: "Koersen-agent",
-        d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank).",
+        d: "Moet je wisselen of overmaken in vreemde valuta? De agent rangschikt banken op wat het wisselen echt kost, inclusief de kosten van de rekening, met de actuele ECB-koers als maatstaf.",
       },
       {
         t: "Punten-agent",
-        d: "Houdt je punten bij en zoekt live op wat ze écht waard zijn en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen.",
+        d: "Houdt de saldi van je spaarpunten en reisprogramma's bij op één plek. Jij vult de saldi in. LaVega geeft er geen geldwaarde aan, behalve waar het saldo zelf in euro's is, zoals cashback.",
+      },
+      {
+        t: "LaVega Investing",
+        d: "Koppel Trading 212 en Interactive Brokers (via een Flex-query), alleen-lezen. Je ziet je posities, je tijdgewogen totaalrendement, je risico (volatiliteit en maximale daling) en een vergelijking met een benchmark.",
+      },
+      {
+        t: "Optimalisatie",
+        d: "Vindt abonnementen, prijsstijgingen en dubbele diensten in je transacties. Vergelijkt je spaarrente met actuele rentes en laat zien wat overstappen oplevert. In Zakelijk ook spaaraanbiedingen voor bedrijven, plus cashback per kaart.",
       },
     ],
   },
   privacy: {
-    title: "Jouw data blijft van jou.",
-    sub: "Alles staat versleuteld op je eigen apparaat. Bankkoppelingen zijn alleen-lezen. Geen cloud, geen meekijken — tenzij jij een agent expliciet aanzet. Zo simpel is het.",
+    title: "Duidelijk over waar je data staat.",
+    sub: "Bank- en brokerkoppelingen zijn alleen-lezen. In het persoonlijke deel staan AI-functies uit tot jij ze aanzet en krijgen ze alleen geredigeerde tekst. De Investing-agents sturen je posities naar een AI-aanbieder zodra jij ze start.",
     ticks: [
-      "Lokaal-first: geen server bewaart je transacties",
-      "Alleen-lezen bankkoppeling (geen betalingen)",
-      "Versleutelde kluis die opengaat met je account",
+      "Persoonlijk (rekeningen en transacties): je transacties staan versleuteld in je browser. Een back-up op de server is optioneel. Je bank loopt via onze server, maar transacties slaan we daar niet op.",
+      "LaVega Investing (je beleggingen): posities en transacties van je broker staan versleuteld op onze server, per account afgeschermd.",
+      "Wij bewaren de sleutels voor beide delen, dus technisch kunnen wij erbij. Onder Back-up verwijder je zelf wat de server van je bewaart.",
     ],
   },
   how: {
     eyebrow: "Hoe het werkt",
     title: "In een paar minuten opgezet",
     steps: [
-      { t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
+      {
+        t: "Importeer of koppel",
+        d: "Sleep je bankexports erin, of koppel je bank of broker alleen-lezen.",
+      },
       { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
       {
         t: "Blijf vooruit",
@@ -179,11 +190,19 @@ const nl: LandingCopy = {
     items: [
       {
         q: "Is mijn data veilig?",
-        a: "Ja. Alles staat versleuteld op je eigen apparaat — er is geen cloud die je transacties bewaart. Bankkoppelingen zijn altijd alleen-lezen.",
+        a: "Ja, met een kanttekening: wij bewaren de sleutels, dus technisch kunnen wij erbij. Je transacties staan versleuteld in je browser. Je beleggingsdata staat versleuteld op onze server, per account afgeschermd. Je bank loopt via onze server, maar transacties slaan we daar niet op. Bank en broker zijn alleen-lezen.",
       },
       {
         q: "Moet ik mijn bank koppelen?",
         a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
+      },
+      {
+        q: "Kan LaVega geld verplaatsen?",
+        a: "Nee. LaVega leest alleen mee. De app heeft geen functie om betalingen te doen of orders te plaatsen.",
+      },
+      {
+        q: "Is het gratis?",
+        a: "Ja, op dit moment kost LaVega niets. Er zit geen betaalfunctie in de app.",
       },
       {
         q: "Voor wie is LaVega?",
@@ -191,19 +210,27 @@ const nl: LandingCopy = {
       },
       {
         q: "Werkt het met meerdere rekeningen en BV's?",
-        a: "Ja — LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
+        a: "Ja. LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
+      },
+      {
+        q: "Welke brokers kan ik koppelen in LaVega Investing?",
+        a: "Trading 212 en Interactive Brokers (IBKR, via een Flex-query). De koppeling is alleen-lezen. Eén LaVega-account geeft je het persoonlijke deel én Investing.",
+      },
+      {
+        q: "Kan ik mijn account en gegevens verwijderen?",
+        a: "Je gegevens op de server verwijder je zelf onder Back-up met de knop Servergegevens verwijderen: back-up, bank- en brokerkoppelingen, koersgeschiedenis, AI-runs en instellingen. Ook de kluissleutel gaat weg, dus de kluis in je browser is daarna onleesbaar. Je inlogaccount zelf kun je in de app nog niet verwijderen.",
       },
     ],
   },
   footer: {
     ctaTitle: "Klaar om grip te krijgen op je geld?",
     cta: "Account aanmaken",
-    note: "Lokaal-first personal finance — van student tot ondernemer.",
+    note: "Personal finance en beleggen in één account, van student tot ondernemer.",
     product: "Product",
     legal: "Juridisch",
     privacy: "Privacy",
     terms: "Voorwaarden",
-    rights: "© 2026 LaVega · lokaal-first",
+    rights: "© 2026 LaVega",
   },
 };
 
@@ -211,7 +238,7 @@ const en: LandingCopy = {
   meta: {
     title: "LaVega – Every account, one clear number.",
     description:
-      "See every account, at any bank, in one clear view — set aside your tax and get the most from your points, local-first and encrypted.",
+      "Every account and investment in one view: forecast, VAT set aside, subscriptions and savings rates compared. Read-only and encrypted.",
   },
   nav: {
     agents: "Agents",
@@ -235,7 +262,7 @@ const en: LandingCopy = {
   hero: {
     titleTop: "Every account,",
     titleBottom: "one clear number.",
-    sub: "LaVega brings every account you hold — at any bank — into a single view. Know exactly what you have and where it is going, set aside your tax, and get the most out of your points. Local-first: your figures stay on your own device.",
+    sub: "LaVega brings every account you hold, at any bank, into a single view. You see what you have and where it is going, set your VAT aside, and use Optimise to find subscriptions and better savings rates. With LaVega Investing you follow your investments too. Every connection is read-only.",
     ctaPrimary: "Create account",
     ctaSecondary: "See how it works",
   },
@@ -246,21 +273,21 @@ const en: LandingCopy = {
     savedLabel: "Saved this month",
     forecastLabel: "Forecast · 13 weeks",
     forecastValue: "no shortfall",
-    lockChip: "Local & encrypted",
+    lockChip: "Encrypted & read-only",
   },
   spiral: {
     ariaLabel: "Smarter with your money",
-    tagline: "Not spending more — being smarter with your money.",
+    tagline: "Not spending more, but being smarter with your money.",
   },
   strengths: {
     title: "Your whole financial life, in one place",
-    sub: "Fast, secure and complete — one clear picture of every account, whoever you bank with.",
+    sub: "Your accounts at any bank, your investments and the places your money sits idle: in one view, with one account.",
     cta: "See the agents",
     tiles: [
-      "Fast & fluid",
-      "Every account connected",
-      "Strong encryption",
-      "One complete overview",
+      "All accounts, with a forecast",
+      "Investments: return and risk",
+      "Optimise: costs and interest",
+      "VAT aside, deadlines watched",
     ],
   },
   agents: {
@@ -271,36 +298,47 @@ const en: LandingCopy = {
     cards: [
       {
         t: "Invoice agent",
-        d: "Drop in a PDF invoice and the agent reads out the amounts and due dates — visible in your cash flow straight away, and you confirm it.",
+        d: "Add invoices from a CSV, a UBL file or a PDF. Switch the AI option on and the agent reads amounts and due dates from the PDF. You see them in your cash flow straight away, and you confirm them first.",
       },
       {
         t: "Tax agent",
-        d: "Sets aside your VAT automatically and watches every filing deadline, so an assessment never arrives as a surprise.",
+        d: "Sets your VAT aside and watches every filing deadline, so an assessment never arrives as a surprise.",
       },
       {
         t: "Currency agent",
-        d: "Converting or sending money abroad? The agent finds the cheapest route in real time (Wise, Revolut, your own bank).",
+        d: "Converting or sending money abroad? The agent ranks banks by what converting really costs, account costs included, with the current ECB rate as the yardstick.",
       },
       {
         t: "Points agent",
-        d: "Tracks your reward balances and looks up what they are actually worth, and the smartest way to spend them — on travel, for instance.",
+        d: "Keeps your reward and travel balances in one place. You enter the balances. LaVega puts no money value on them, except where the balance is itself in euros, such as cashback.",
+      },
+      {
+        t: "LaVega Investing",
+        d: "Connect Trading 212 and Interactive Brokers (through a Flex query), read-only. You see your positions, your time-weighted total return, your risk (volatility and maximum drawdown) and a comparison with a benchmark.",
+      },
+      {
+        t: "Optimise",
+        d: "Finds subscriptions, price increases and overlapping services in your transactions. Compares your savings rate with current rates and shows what switching would earn you. In Business mode it also lists business savings offers, plus cashback per card.",
       },
     ],
   },
   privacy: {
-    title: "Your data stays yours.",
-    sub: "Everything is encrypted on your own device. Bank connections are read-only. No cloud, nobody looking over your shoulder — unless you switch an agent on yourself. That is the whole of it.",
+    title: "Clear about where your data lives.",
+    sub: "Bank and broker connections are read-only. In the personal part, AI features stay off until you switch them on and only get redacted text. The Investing agents send your positions to an AI provider when you start them.",
     ticks: [
-      "Local-first: no server keeps your transactions",
-      "Read-only bank access (never payments)",
-      "An encrypted vault that opens with your account",
+      "Personal (accounts and transactions): your transactions are encrypted in your browser. A backup on the server is optional. Your bank connection runs through our server, but we do not store transactions there.",
+      "LaVega Investing (your investments): your broker positions and transactions are stored encrypted on our server, shielded per account.",
+      "We hold the keys for both parts, so technically we can access the data. Under Backup you delete what the server holds about you yourself.",
     ],
   },
   how: {
     eyebrow: "How it works",
     title: "Set up in a few minutes",
     steps: [
-      { t: "Import or connect", d: "Drop in your bank exports, or connect your bank read-only." },
+      {
+        t: "Import or connect",
+        d: "Drop in your bank exports, or connect your bank or broker read-only.",
+      },
       {
         t: "LaVega does the maths",
         d: "Categorises automatically and forecasts your cash position ahead.",
@@ -317,11 +355,19 @@ const en: LandingCopy = {
     items: [
       {
         q: "Is my data safe?",
-        a: "Yes. Everything is encrypted on your own device — there is no cloud holding your transactions. Bank connections are always read-only.",
+        a: "Yes, with one caveat: we hold the keys, so technically we can access your data. Your transactions are encrypted in your browser. Your investing data is encrypted on our server, shielded per account. Your bank connection runs through our server, but we do not store transactions there. Bank and broker connections are read-only.",
       },
       {
         q: "Do I have to connect my bank?",
-        a: "No. You can simply import your bank exports. Connecting is available, and when you do it is read-only — never payments.",
+        a: "No. You can simply import your bank exports. Connecting is available, and when you do it is read-only, never payments.",
+      },
+      {
+        q: "Can LaVega move money?",
+        a: "No. LaVega only reads. The app has no function to make payments or place orders.",
+      },
+      {
+        q: "Is it free?",
+        a: "Yes, LaVega costs nothing at the moment. There is no payment feature in the app.",
       },
       {
         q: "Who is LaVega for?",
@@ -329,14 +375,22 @@ const en: LandingCopy = {
       },
       {
         q: "Does it handle multiple accounts and entities?",
-        a: "Yes — LaVega brings every account together, personal and business, both per entity and consolidated.",
+        a: "Yes. LaVega brings every account together, personal and business, both per entity and consolidated.",
+      },
+      {
+        q: "Which brokers can I connect in LaVega Investing?",
+        a: "Trading 212 and Interactive Brokers (IBKR, through a Flex query). The connection is read-only. One LaVega account gives you both Personal and Investing.",
+      },
+      {
+        q: "Can I delete my account and data?",
+        a: "You delete the data on the server yourself under Backup with the Delete server data button: backup, bank and broker connections, price history, AI runs and settings. The vault key goes too, so the vault in your browser is unreadable afterwards. You cannot yet delete the sign-in account itself from within the app.",
       },
     ],
   },
   footer: {
     ctaTitle: "Ready to get a grip on your money?",
     cta: "Create account",
-    note: "Local-first personal finance, for people whose income does not arrive neatly.",
+    note: "Personal finance and investing in one account, for people whose income does not arrive neatly.",
     /* The policy and terms themselves stay Dutch: they are legal documents for a
      * Dutch company and the Dutch text is the operative one. Translating them
      * would invite someone to rely on a version that is not. */
@@ -344,7 +398,7 @@ const en: LandingCopy = {
     legal: "Legal",
     privacy: "Privacy",
     terms: "Terms",
-    rights: "© 2026 LaVega · local-first",
+    rights: "© 2026 LaVega",
   },
 };
 
