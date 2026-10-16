@@ -48,7 +48,6 @@ export type LandingCopy = {
     lockChip: string;
   };
   spiral: { ariaLabel: string; tagline: string };
-  strengths: { title: string; sub: string; cta: string; tiles: [string, string, string, string] };
   agents: {
     eyebrow: string;
     title: string;
@@ -56,7 +55,6 @@ export type LandingCopy = {
     next: string;
     cards: Array<{ t: string; d: string }>;
   };
-  privacy: { title: string; sub: string; ticks: [string, string, string] };
   how: { eyebrow: string; title: string; steps: [HowStep, HowStep, HowStep] };
   faq: { eyebrow: string; title: string; items: Array<{ q: string; a: string }> };
   footer: {
@@ -117,17 +115,6 @@ const nl: LandingCopy = {
     ariaLabel: "Al je geld in beeld",
     tagline: "Al je geld in beeld, ook wat het laat liggen.",
   },
-  strengths: {
-    title: "Al je geldzaken, samen op één plek",
-    sub: "Je rekeningen van elke bank, je beleggingen en de plekken waar je geld laat liggen: in één overzicht, met één account.",
-    cta: "Ontdek meer",
-    tiles: [
-      "Alle rekeningen, met forecast",
-      "Beleggingen: rendement en risico",
-      "Optimalisatie van je kosten",
-      "Btw apart, deadlines bewaakt",
-    ],
-  },
   agents: {
     eyebrow: "De agents",
     title: "Slimme agents die het werk doen",
@@ -158,15 +145,6 @@ const nl: LandingCopy = {
         t: "Optimalisatie",
         d: "Vindt abonnementen, prijsstijgingen en dubbele diensten in je transacties. Vergelijkt je spaarrente met actuele rentes en laat zien wat overstappen oplevert. In Zakelijk ook spaaraanbiedingen voor bedrijven, plus cashback per kaart.",
       },
-    ],
-  },
-  privacy: {
-    title: "Duidelijk over waar je data staat.",
-    sub: "Bank- en brokerkoppelingen zijn alleen-lezen. In het persoonlijke deel staan AI-functies uit tot jij ze aanzet en krijgen ze alleen geredigeerde tekst. De Investing-agents sturen je posities naar een AI-aanbieder zodra jij ze start.",
-    ticks: [
-      "Persoonlijk (rekeningen en transacties): je transacties staan versleuteld in je browser. Een back-up op de server is optioneel. Je bank loopt via onze server, maar transacties slaan we daar niet op.",
-      "LaVega Investing (je beleggingen): posities en transacties van je broker staan versleuteld op onze server, per account afgeschermd.",
-      "Wij bewaren de sleutels voor beide delen, dus technisch kunnen wij erbij. Onder Back-up verwijder je zelf wat de server van je bewaart.",
     ],
   },
   how: {
@@ -279,17 +257,6 @@ const en: LandingCopy = {
     ariaLabel: "All your money in view",
     tagline: "All your money in view, including what it leaves on the table.",
   },
-  strengths: {
-    title: "Your whole financial life, in one place",
-    sub: "Your accounts at any bank, your investments and the places your money sits idle: in one view, with one account.",
-    cta: "See the agents",
-    tiles: [
-      "All accounts, with a forecast",
-      "Investments: return and risk",
-      "Optimise: costs and interest",
-      "VAT aside, deadlines watched",
-    ],
-  },
   agents: {
     eyebrow: "The agents",
     title: "Agents that do the work",
@@ -320,15 +287,6 @@ const en: LandingCopy = {
         t: "Optimise",
         d: "Finds subscriptions, price increases and overlapping services in your transactions. Compares your savings rate with current rates and shows what switching would earn you. In Business mode it also lists business savings offers, plus cashback per card.",
       },
-    ],
-  },
-  privacy: {
-    title: "Clear about where your data lives.",
-    sub: "Bank and broker connections are read-only. In the personal part, AI features stay off until you switch them on and only get redacted text. The Investing agents send your positions to an AI provider when you start them.",
-    ticks: [
-      "Personal (accounts and transactions): your transactions are encrypted in your browser. A backup on the server is optional. Your bank connection runs through our server, but we do not store transactions there.",
-      "LaVega Investing (your investments): your broker positions and transactions are stored encrypted on our server, shielded per account.",
-      "We hold the keys for both parts, so technically we can access the data. Under Backup you delete what the server holds about you yourself.",
     ],
   },
   how: {
