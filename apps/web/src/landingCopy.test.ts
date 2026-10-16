@@ -79,7 +79,7 @@ test("no landing component hardcodes Dutch copy instead of reading it from landi
   // Found by rendering /en and grepping the output for Dutch: CardSpiral's section
   // aria-label and its tagline were literals, not `landingCopy` lookups, so they
   // never switched with the locale.
-  const dutchLeaks = ["Slimmer met je geld", "Niet méér uitgeven"];
+  const dutchLeaks = ["Al je geld in beeld", "wat het laat liggen"];
   for (const file of componentFiles) {
     const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
     for (const leak of dutchLeaks) {
