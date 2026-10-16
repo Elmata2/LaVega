@@ -100,7 +100,7 @@ const nl: LandingCopy = {
   hero: {
     titleTop: "Al je rekeningen,",
     titleBottom: "één helder getal.",
-    sub: "LaVega bundelt al je rekeningen, bij elke bank, in één overzicht. Je ziet wat je hebt en waar je geld heen gaat, zet je btw apart en vindt met Optimalisatie abonnementen en betere rentes. Met LaVega Investing volg je ook je beleggingen. Alle koppelingen zijn alleen-lezen.",
+    sub: "LaVega bundelt al je rekeningen, bij elke bank, in één overzicht. Met LaVega Investing volg je ook je beleggingen.",
     ctaPrimary: "Account aanmaken",
     ctaSecondary: "Bekijk hoe het werkt",
   },
@@ -114,8 +114,8 @@ const nl: LandingCopy = {
     lockChip: "Versleuteld & alleen-lezen",
   },
   spiral: {
-    ariaLabel: "Slimmer met je geld",
-    tagline: "Niet méér uitgeven, maar slimmer met je geld.",
+    ariaLabel: "Al je geld in beeld",
+    tagline: "Al je geld in beeld, ook wat het laat liggen.",
   },
   strengths: {
     title: "Al je geldzaken, samen op één plek",
@@ -262,7 +262,7 @@ const en: LandingCopy = {
   hero: {
     titleTop: "Every account,",
     titleBottom: "one clear number.",
-    sub: "LaVega brings every account you hold, at any bank, into a single view. You see what you have and where it is going, set your VAT aside, and use Optimise to find subscriptions and better savings rates. With LaVega Investing you follow your investments too. Every connection is read-only.",
+    sub: "LaVega brings every account you hold, at any bank, into a single view. With LaVega Investing you follow your investments too.",
     ctaPrimary: "Create account",
     ctaSecondary: "See how it works",
   },
@@ -276,8 +276,8 @@ const en: LandingCopy = {
     lockChip: "Encrypted & read-only",
   },
   spiral: {
-    ariaLabel: "Smarter with your money",
-    tagline: "Not spending more, but being smarter with your money.",
+    ariaLabel: "All your money in view",
+    tagline: "All your money in view, including what it leaves on the table.",
   },
   strengths: {
     title: "Your whole financial life, in one place",
