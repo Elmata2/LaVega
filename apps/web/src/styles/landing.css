@@ -168,20 +168,14 @@
     padding: 34px 30px;
     box-shadow: 0 30px 60px -40px rgba(43, 33, 23, 0.35);
   }
-  .lp-feature-medallion {
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
-    display: grid;
-    place-items: center;
-    color: var(--lp-tan-deep);
-    background: rgba(207, 159, 94, 0.16);
-    border: 1px solid var(--lp-line);
-    margin-bottom: 18px;
-  }
-  .lp-feature-medallion svg {
-    width: 30px;
-    height: 30px;
+  .lp-feature-card::before {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--lp-tan-deep);
+    margin-bottom: 20px;
   }
   .lp-feature-title {
     font-family: var(--font-display);
