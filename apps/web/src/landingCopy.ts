@@ -15,12 +15,12 @@ export type LandingCopy = {
   meta: { title: string; description: string };
   nav: {
     agents: string;
-    privacy: string;
     how: string;
     signUp: string;
     investing: string;
     login: string;
   };
+  beta: { lead: string; link: string };
   login: {
     intro: string;
     close: string;
@@ -40,9 +40,11 @@ export type LandingCopy = {
   };
   device: {
     eyebrow: string;
+    total: string;
     delta: string;
-    rows: [string, string, string];
-    savedLabel: string;
+    rows: [{ label: string; value: string }, { label: string; value: string }];
+    returnLabel: string;
+    returnValue: string;
     forecastLabel: string;
     forecastValue: string;
     lockChip: string;
@@ -51,8 +53,6 @@ export type LandingCopy = {
   agents: {
     eyebrow: string;
     title: string;
-    prev: string;
-    next: string;
     cards: Array<{ t: string; d: string }>;
   };
   how: { eyebrow: string; title: string; steps: [HowStep, HowStep, HowStep] };
@@ -77,11 +77,14 @@ const nl: LandingCopy = {
   },
   nav: {
     agents: "Agents",
-    privacy: "Privacy",
     how: "Hoe het werkt",
     signUp: "Account aanmaken",
     investing: "Investing",
     login: "Inloggen",
+  },
+  beta: {
+    lead: "LaVega is in testfase. Iets onduidelijk of klopt er iets niet?",
+    link: "Laat het ons weten.",
   },
   login: {
     intro: "Log in met je LaVega-account.",
@@ -104,9 +107,14 @@ const nl: LandingCopy = {
   },
   device: {
     eyebrow: "Totaalpositie",
+    total: "€12.480",
     delta: "▲ 4,6% deze maand",
-    rows: ["Boodschappen", "Vaste lasten", "Sparen"],
-    savedLabel: "Deze maand gespaard",
+    rows: [
+      { label: "Bankrekeningen", value: "€8.130" },
+      { label: "Beleggingen", value: "€4.350" },
+    ],
+    returnLabel: "Rendement · 1 jaar",
+    returnValue: "+15,4%",
     forecastLabel: "Forecast · 13 weken",
     forecastValue: "geen tekort",
     lockChip: "Versleuteld & alleen-lezen",
@@ -116,34 +124,32 @@ const nl: LandingCopy = {
     tagline: "Al je geld in beeld, ook wat het laat liggen.",
   },
   agents: {
-    eyebrow: "De agents",
-    title: "Slimme agents die het werk doen",
-    prev: "Vorige",
-    next: "Volgende",
+    eyebrow: "Wat LaVega doet",
+    title: "Wat LaVega voor je doet",
     cards: [
       {
-        t: "Facturen-agent",
-        d: "Voeg facturen toe met een CSV, een UBL-bestand of een PDF. Zet je de AI-optie aan, dan leest de agent bedragen en vervaldata uit de PDF. Je ziet ze meteen in je cashflow en bevestigt ze eerst zelf.",
+        t: "Facturen",
+        d: "Voeg facturen toe via CSV, UBL of PDF. Met de AI-optie leest LaVega de PDF uit; jij bevestigt.",
       },
       {
-        t: "Belasting-agent",
-        d: "Zet je btw apart en houdt elke aangifte-deadline in de gaten, zodat je niet voor verrassingen komt te staan.",
+        t: "Belasting",
+        d: "Houdt je btw apart en elke aangifte-deadline in de gaten.",
       },
       {
-        t: "Koersen-agent",
-        d: "Moet je wisselen of overmaken in vreemde valuta? De agent rangschikt banken op wat het wisselen echt kost, inclusief de kosten van de rekening, met de actuele ECB-koers als maatstaf.",
+        t: "Valuta",
+        d: "Rangschikt banken op wat wisselen echt kost, met de actuele ECB-koers als maatstaf.",
       },
       {
-        t: "Punten-agent",
-        d: "Houdt de saldi van je spaarpunten en reisprogramma's bij op één plek. Jij vult de saldi in. LaVega geeft er geen geldwaarde aan, behalve waar het saldo zelf in euro's is, zoals cashback.",
+        t: "Punten",
+        d: "Houdt de saldi bij die jij invult, van spaarpunten tot reisprogramma's, op één plek.",
       },
       {
         t: "LaVega Investing",
-        d: "Koppel Trading 212 en Interactive Brokers (via een Flex-query), alleen-lezen. Je ziet je posities, je tijdgewogen totaalrendement, je risico (volatiliteit en maximale daling) en een vergelijking met een benchmark.",
+        d: "Koppel Trading 212 en Interactive Brokers alleen-lezen en zie je echte rendement en risico.",
       },
       {
         t: "Optimalisatie",
-        d: "Vindt abonnementen, prijsstijgingen en dubbele diensten in je transacties. Vergelijkt je spaarrente met actuele rentes en laat zien wat overstappen oplevert. In Zakelijk ook spaaraanbiedingen voor bedrijven, plus cashback per kaart.",
+        d: "Vindt abonnementen en betere spaarrentes in je transacties.",
       },
     ],
   },
@@ -158,7 +164,7 @@ const nl: LandingCopy = {
       { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
       {
         t: "Blijf vooruit",
-        d: "Een seintje als je buffer krap wordt, je btw al apart gezet en je volgende maanden in beeld.",
+        d: "Een seintje als je buffer krap wordt, je btw al apart gezet en je beleggingen met je echte rendement in beeld.",
       },
     ],
   },
@@ -167,32 +173,32 @@ const nl: LandingCopy = {
     title: "Veelgestelde vragen",
     items: [
       {
-        q: "Is mijn data veilig?",
-        a: "Ja, met een kanttekening: wij bewaren de sleutels, dus technisch kunnen wij erbij. Je transacties staan versleuteld in je browser. Je beleggingsdata staat versleuteld op onze server, per account afgeschermd. Je bank loopt via onze server, maar transacties slaan we daar niet op. Bank en broker zijn alleen-lezen.",
+        q: "Is het gratis?",
+        a: "Ja, op dit moment kost LaVega niets. Er zit geen betaalfunctie in de app.",
       },
       {
-        q: "Moet ik mijn bank koppelen?",
-        a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
+        q: "Is mijn data veilig?",
+        a: "Ja, met een kanttekening: wij bewaren de sleutels, dus technisch kunnen wij erbij. Je transacties staan versleuteld in je browser. Je beleggingsdata staat versleuteld op onze server, per account afgeschermd. Je bank loopt via onze server, maar transacties slaan we daar niet op. Bank en broker zijn alleen-lezen.",
       },
       {
         q: "Kan LaVega geld verplaatsen?",
         a: "Nee. LaVega leest alleen mee. De app heeft geen functie om betalingen te doen of orders te plaatsen.",
       },
       {
-        q: "Is het gratis?",
-        a: "Ja, op dit moment kost LaVega niets. Er zit geen betaalfunctie in de app.",
+        q: "Moet ik mijn bank koppelen?",
+        a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
       },
       {
-        q: "Voor wie is LaVega?",
-        a: "Van studenten die grip willen op hun budget tot werkenden en ondernemers die hun rekeningen, cashflow en btw willen beheren.",
+        q: "Welke brokers kan ik koppelen in LaVega Investing?",
+        a: "Trading 212 en Interactive Brokers (IBKR, via een Flex-query). De koppeling is alleen-lezen. Eén LaVega-account geeft je het persoonlijke deel én Investing.",
       },
       {
         q: "Werkt het met meerdere rekeningen en BV's?",
         a: "Ja. LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
       },
       {
-        q: "Welke brokers kan ik koppelen in LaVega Investing?",
-        a: "Trading 212 en Interactive Brokers (IBKR, via een Flex-query). De koppeling is alleen-lezen. Eén LaVega-account geeft je het persoonlijke deel én Investing.",
+        q: "Voor wie is LaVega?",
+        a: "Voor iedereen die rekeningen bij meer dan één bank heeft of belegt bij Trading 212 of IBKR, en het overzicht kwijt is. Met Zakelijk ook voor zzp'ers en BV's: btw apart, privé en zakelijk gescheiden.",
       },
       {
         q: "Kan ik mijn account en gegevens verwijderen?",
@@ -201,7 +207,7 @@ const nl: LandingCopy = {
     ],
   },
   footer: {
-    ctaTitle: "Klaar om grip te krijgen op je geld?",
+    ctaTitle: "Begin gratis.",
     cta: "Account aanmaken",
     note: "Personal finance en beleggen in één account, van student tot ondernemer.",
     product: "Product",
@@ -220,12 +226,12 @@ const en: LandingCopy = {
   },
   nav: {
     agents: "Agents",
-    privacy: "Privacy",
     how: "How it works",
     signUp: "Create account",
     investing: "Investing",
     login: "Sign in",
   },
+  beta: { lead: "LaVega is in beta. Something unclear or wrong?", link: "Let us know." },
   login: {
     intro: "Sign in with your LaVega account.",
     close: "Close",
@@ -246,9 +252,14 @@ const en: LandingCopy = {
   },
   device: {
     eyebrow: "Total position",
+    total: "€12,480",
     delta: "▲ 4.6% this month",
-    rows: ["Groceries", "Fixed costs", "Savings"],
-    savedLabel: "Saved this month",
+    rows: [
+      { label: "Bank accounts", value: "€8,130" },
+      { label: "Investments", value: "€4,350" },
+    ],
+    returnLabel: "Return · 1 year",
+    returnValue: "+15.4%",
     forecastLabel: "Forecast · 13 weeks",
     forecastValue: "no shortfall",
     lockChip: "Encrypted & read-only",
@@ -258,34 +269,32 @@ const en: LandingCopy = {
     tagline: "All your money in view, including what it leaves on the table.",
   },
   agents: {
-    eyebrow: "The agents",
-    title: "Agents that do the work",
-    prev: "Previous",
-    next: "Next",
+    eyebrow: "What LaVega does",
+    title: "What LaVega does for you",
     cards: [
       {
-        t: "Invoice agent",
-        d: "Add invoices from a CSV, a UBL file or a PDF. Switch the AI option on and the agent reads amounts and due dates from the PDF. You see them in your cash flow straight away, and you confirm them first.",
+        t: "Invoices",
+        d: "Add invoices via CSV, UBL or PDF. With the AI option LaVega reads the PDF and you confirm it.",
       },
       {
-        t: "Tax agent",
-        d: "Sets your VAT aside and watches every filing deadline, so an assessment never arrives as a surprise.",
+        t: "Tax",
+        d: "Sets your VAT aside and watches every filing deadline.",
       },
       {
-        t: "Currency agent",
-        d: "Converting or sending money abroad? The agent ranks banks by what converting really costs, account costs included, with the current ECB rate as the yardstick.",
+        t: "Currency",
+        d: "Ranks banks by what converting really costs, with the current ECB rate as the yardstick.",
       },
       {
-        t: "Points agent",
-        d: "Keeps your reward and travel balances in one place. You enter the balances. LaVega puts no money value on them, except where the balance is itself in euros, such as cashback.",
+        t: "Points",
+        d: "Keeps the reward and travel balances you enter in one place.",
       },
       {
         t: "LaVega Investing",
-        d: "Connect Trading 212 and Interactive Brokers (through a Flex query), read-only. You see your positions, your time-weighted total return, your risk (volatility and maximum drawdown) and a comparison with a benchmark.",
+        d: "Connect Trading 212 and Interactive Brokers read-only and see your real return and risk.",
       },
       {
         t: "Optimise",
-        d: "Finds subscriptions, price increases and overlapping services in your transactions. Compares your savings rate with current rates and shows what switching would earn you. In Business mode it also lists business savings offers, plus cashback per card.",
+        d: "Finds subscriptions and better savings rates in your transactions.",
       },
     ],
   },
@@ -303,7 +312,7 @@ const en: LandingCopy = {
       },
       {
         t: "Stay ahead",
-        d: "A heads-up when your buffer runs low, your VAT already set aside, and the months ahead in view.",
+        d: "A heads-up when your buffer runs low, your VAT already set aside, and your investments in view with your real return.",
       },
     ],
   },
@@ -312,32 +321,32 @@ const en: LandingCopy = {
     title: "Frequently asked questions",
     items: [
       {
-        q: "Is my data safe?",
-        a: "Yes, with one caveat: we hold the keys, so technically we can access your data. Your transactions are encrypted in your browser. Your investing data is encrypted on our server, shielded per account. Your bank connection runs through our server, but we do not store transactions there. Bank and broker connections are read-only.",
+        q: "Is it free?",
+        a: "Yes, LaVega costs nothing at the moment. There is no payment feature in the app.",
       },
       {
-        q: "Do I have to connect my bank?",
-        a: "No. You can simply import your bank exports. Connecting is available, and when you do it is read-only, never payments.",
+        q: "Is my data safe?",
+        a: "Yes, with one caveat: we hold the keys, so technically we can access your data. Your transactions are encrypted in your browser. Your investing data is encrypted on our server, shielded per account. Your bank connection runs through our server, but we do not store transactions there. Bank and broker connections are read-only.",
       },
       {
         q: "Can LaVega move money?",
         a: "No. LaVega only reads. The app has no function to make payments or place orders.",
       },
       {
-        q: "Is it free?",
-        a: "Yes, LaVega costs nothing at the moment. There is no payment feature in the app.",
+        q: "Do I have to connect my bank?",
+        a: "No. You can simply import your bank exports. Connecting is available, and when you do it is read-only, never payments.",
       },
       {
-        q: "Who is LaVega for?",
-        a: "People whose money does not arrive neatly: freelancers, owner-directors and anyone running personal and business finances side by side.",
+        q: "Which brokers can I connect in LaVega Investing?",
+        a: "Trading 212 and Interactive Brokers (IBKR, through a Flex query). The connection is read-only. One LaVega account gives you both Personal and Investing.",
       },
       {
         q: "Does it handle multiple accounts and entities?",
         a: "Yes. LaVega brings every account together, personal and business, both per entity and consolidated.",
       },
       {
-        q: "Which brokers can I connect in LaVega Investing?",
-        a: "Trading 212 and Interactive Brokers (IBKR, through a Flex query). The connection is read-only. One LaVega account gives you both Personal and Investing.",
+        q: "Who is LaVega for?",
+        a: "Anyone with accounts at more than one bank, or investing through Trading 212 or IBKR, who has lost the overview. With Business mode also for freelancers and limited companies: VAT set aside, personal and business kept apart.",
       },
       {
         q: "Can I delete my account and data?",
@@ -346,7 +355,7 @@ const en: LandingCopy = {
     ],
   },
   footer: {
-    ctaTitle: "Ready to get a grip on your money?",
+    ctaTitle: "Start for free.",
     cta: "Create account",
     note: "Personal finance and investing in one account, for people whose income does not arrive neatly.",
     /* The policy and terms themselves stay Dutch: they are legal documents for a

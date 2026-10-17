@@ -139,58 +139,29 @@
     margin: 0;
   }
 
-  /* ---- Agents feature carousel ---- */
+  /* ---- Agents feature grid ---- */
   .lp-eyebrow-left {
     text-align: left;
   }
-  .lp-carousel-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
+  .lp-feature-head {
     margin-bottom: 30px;
   }
-  .lp-carousel-nav {
-    display: flex;
-    gap: 10px;
-    flex: none;
-  }
-  .lp-carousel-nav button {
-    width: 48px;
-    height: 48px;
-    border-radius: 999px;
-    border: 1px solid var(--lp-line);
-    background: var(--lp-card);
-    font-size: 1.2rem;
-    color: var(--lp-ink);
-    cursor: pointer;
-    transition:
-      transform 0.12s ease,
-      background 0.12s ease;
-  }
-  .lp-carousel-nav button:hover {
-    transform: translateY(-1px);
-  }
-  .lp-carousel-nav button.accent {
-    background: var(--lp-tan);
-    border-color: var(--lp-tan-deep);
-    color: var(--lp-espresso);
-  }
-  .lp-carousel {
-    display: flex;
+  .lp-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    padding: 4px 4px 16px;
-    scrollbar-width: none;
   }
-  .lp-carousel::-webkit-scrollbar {
-    display: none;
+  @media (max-width: 860px) {
+    .lp-feature-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 560px) {
+    .lp-feature-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   .lp-feature-card {
-    flex: 0 0 min(380px, 82vw);
-    scroll-snap-align: start;
     background: var(--lp-card);
     border: 1px solid var(--lp-line);
     border-radius: 24px;
@@ -298,9 +269,9 @@
     top: 22%;
     margin: 0;
     padding: 0 24px;
-    text-align: center;
-    font-size: clamp(1rem, 2vw, 1.4rem);
-    color: var(--lp-ink2);
+    max-width: 22ch;
+    text-wrap: balance;
+    /* size, family, weight, centring come from .lp-h2 */
   }
   .lp-spiral-cards {
     position: absolute;

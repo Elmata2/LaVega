@@ -62,7 +62,7 @@ export default function CardSpiral({ locale = DEFAULT_LOCALE }: { locale?: Local
           (ScrollTrigger as typeof import("gsap/ScrollTrigger").ScrollTrigger).create({
             trigger: sectionRef.current!,
             start: "top top",
-            end: "+=170%",
+            end: "+=100%", // one extra viewport of pinned scroll (was 170%)
             pin: stageRef.current!,
             scrub: 0.6,
             onUpdate: (self: { progress: number }) => apply(self.progress),
@@ -85,7 +85,7 @@ export default function CardSpiral({ locale = DEFAULT_LOCALE }: { locale?: Local
         <div className="lp-spiral-word" aria-hidden="true">
           LaVega
         </div>
-        <p className="lp-spiral-tag">{c.spiral.tagline}</p>
+        <h2 className="lp-h2 lp-spiral-tag">{c.spiral.tagline}</h2>
         <div className="lp-spiral-cards" aria-hidden="true">
           {Array.from({ length: N }).map((_, i) => (
             <div
