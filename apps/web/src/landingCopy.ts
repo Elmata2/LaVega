@@ -96,7 +96,7 @@ const nl: LandingCopy = {
     linkInvalid:
       "Deze bevestigingslink is ongeldig of verlopen. Log in met je e-mailadres en wachtwoord: we sturen dan een nieuwe link.",
   },
-  langSwitch: { label: "English", to: "Switch to English" },
+  langSwitch: { label: "EN", to: "Switch to English" },
   hero: {
     titleTop: "Al je rekeningen,",
     titleBottom: "één helder getal.",
@@ -172,10 +172,6 @@ const nl: LandingCopy = {
     title: "Veelgestelde vragen",
     items: [
       {
-        q: "Is het gratis?",
-        a: "Ja, op dit moment kost LaVega niets. Er zit geen betaalfunctie in de app.",
-      },
-      {
         q: "Is mijn data veilig?",
         a: "Ja, met een kanttekening: wij bewaren de sleutels, dus technisch kunnen wij erbij. Je transacties staan versleuteld in je browser. Je beleggingsdata staat versleuteld op onze server, per account afgeschermd. Je bank loopt via onze server, maar transacties slaan we daar niet op. Bank en broker zijn alleen-lezen.",
       },
@@ -240,7 +236,7 @@ const en: LandingCopy = {
     linkInvalid:
       "This confirmation link is invalid or has expired. Sign in with your email and password and we will send you a new one.",
   },
-  langSwitch: { label: "Nederlands", to: "Bekijk deze pagina in het Nederlands" },
+  langSwitch: { label: "NL", to: "Bekijk deze pagina in het Nederlands" },
   hero: {
     titleTop: "Every account,",
     titleBottom: "one clear number.",
@@ -318,10 +314,6 @@ const en: LandingCopy = {
     eyebrow: "FAQ",
     title: "Frequently asked questions",
     items: [
-      {
-        q: "Is it free?",
-        a: "Yes, LaVega costs nothing at the moment. There is no payment feature in the app.",
-      },
       {
         q: "Is my data safe?",
         a: "Yes, with one caveat: we hold the keys, so technically we can access your data. Your transactions are encrypted in your browser. Your investing data is encrypted on our server, shielded per account. Your bank connection runs through our server, but we do not store transactions there. Bank and broker connections are read-only.",
