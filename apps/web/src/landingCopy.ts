@@ -58,7 +58,6 @@ export type LandingCopy = {
   how: { eyebrow: string; title: string; steps: [HowStep, HowStep, HowStep] };
   faq: { eyebrow: string; title: string; items: Array<{ q: string; a: string }> };
   footer: {
-    ctaTitle: string;
     cta: string;
     note: string;
     product: string;
@@ -207,7 +206,6 @@ const nl: LandingCopy = {
     ],
   },
   footer: {
-    ctaTitle: "Begin gratis.",
     cta: "Account aanmaken",
     note: "Personal finance en beleggen in één account, van student tot ondernemer.",
     product: "Product",
@@ -355,7 +353,6 @@ const en: LandingCopy = {
     ],
   },
   footer: {
-    ctaTitle: "Start for free.",
     cta: "Create account",
     note: "Personal finance and investing in one account, for people whose income does not arrive neatly.",
     /* The policy and terms themselves stay Dutch: they are legal documents for a

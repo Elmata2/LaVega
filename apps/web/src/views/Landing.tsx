@@ -260,19 +260,6 @@ export default function Landing({
         </div>
       </header>
 
-      <p
-        data-testid="beta-note"
-        className="lp-reveal-none w-fit max-w-[calc(100%-56px)] mx-auto mt-[4px] mb-0 px-[14px] py-[6px] rounded-pill border border-[var(--lp-line)] text-center font-mono text-[0.78rem] tracking-[0.02em] text-[var(--lp-ink2)]"
-      >
-        {c.beta.lead}{" "}
-        <a
-          className="text-[var(--lp-ink)] underline underline-offset-2"
-          href="mailto:alexander.steunenberg@gmail.com"
-        >
-          {c.beta.link}
-        </a>
-      </p>
-
       <dialog
         ref={dialogRef}
         className="lp-signin-dialog"
@@ -621,9 +608,6 @@ export default function Landing({
       {/* Footer */}
       <footer className="bg-[var(--lp-espresso)] text-[var(--lp-cream)] mt-[24px]">
         <div className="lp-reveal max-w-[1100px] mx-auto pt-[64px] px-[28px] pb-[40px] text-center">
-          <h2 className="font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[24px]! text-[var(--lp-cream)]!">
-            {c.footer.ctaTitle}
-          </h2>
           <button
             type="button"
             className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_TAN}`}
@@ -680,8 +664,17 @@ export default function Landing({
             </a>
           </div>
         </div>
-        <div className="max-w-[1100px] mx-auto pt-[20px] px-[28px] pb-[48px] text-[color-mix(in_srgb,var(--lp-cream)_50%,transparent)] text-[0.85rem]">
-          {c.footer.rights}
+        <div className="max-w-[1100px] mx-auto pt-[20px] px-[28px] pb-[48px] flex flex-wrap justify-between gap-[12px] text-[color-mix(in_srgb,var(--lp-cream)_50%,transparent)] text-[0.85rem]">
+          <span>{c.footer.rights}</span>
+          <p data-testid="beta-note" className="m-0">
+            {c.beta.lead}{" "}
+            <a
+              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! underline underline-offset-2 hover:text-[var(--lp-cream)]!"
+              href="mailto:alexander.steunenberg@gmail.com"
+            >
+              {c.beta.link}
+            </a>
+          </p>
         </div>
       </footer>
     </div>
