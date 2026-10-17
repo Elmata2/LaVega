@@ -221,15 +221,6 @@ export default function Landing({
             </a>
           )}
         </nav>
-        <a
-          className="lp-lang text-[var(--lp-ink2)] no-underline text-[0.85rem] font-medium tracking-[0.02em] px-[10px] py-[6px] rounded-pill border border-[var(--lp-line)] mr-[10px] whitespace-nowrap [transition:color_140ms_ease,border-color_140ms_ease] hover:text-[var(--lp-ink)] hover:border-[var(--lp-ink2)] [@media(max-width:720px)]:hidden"
-          href={alternatePath(locale)}
-          hrefLang={otherLocale}
-          title={c.langSwitch.to}
-          onClick={() => rememberLocale(otherLocale)}
-        >
-          {c.langSwitch.label}
-        </a>
         <div className="flex items-center gap-[18px]">
           <button
             ref={triggerRef}
@@ -257,6 +248,16 @@ export default function Landing({
           >
             {c.nav.signUp}
           </button>
+          <a
+            className="lp-lang text-[var(--lp-ink2)] no-underline text-[0.85rem] font-medium tracking-[0.02em] px-[10px] py-[6px] rounded-pill border border-[var(--lp-line)] whitespace-nowrap [transition:color_140ms_ease,border-color_140ms_ease] hover:text-[var(--lp-ink)] hover:border-[var(--lp-ink2)]"
+            href={alternatePath(locale)}
+            hrefLang={otherLocale}
+            title={c.langSwitch.to}
+            aria-label={c.langSwitch.to}
+            onClick={() => rememberLocale(otherLocale)}
+          >
+            {c.langSwitch.label}
+          </a>
         </div>
       </header>
 
