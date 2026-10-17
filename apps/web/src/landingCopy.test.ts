@@ -41,7 +41,6 @@ test("the English copy is not just the Dutch copy", () => {
   // Some strings are legitimately identical across both — brand and loanwords.
   const SHARED = new Set([
     "nav.agents",
-    "nav.privacy",
     "nav.investing",
     "faq.eyebrow",
     "footer.product",

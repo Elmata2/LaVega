@@ -141,16 +141,6 @@ export default function Landing({
   }, [locale]);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const agentsRef = useRef<HTMLDivElement | null>(null);
-
-  function scrollAgents(dir: 1 | -1) {
-    const track = agentsRef.current;
-    if (!track) return;
-    const card = track.querySelector<HTMLElement>(".lp-feature-card");
-    const step = card ? card.offsetWidth + 20 : track.clientWidth * 0.8;
-    track.scrollBy({ left: dir * step, behavior: "smooth" });
-  }
-
   // Let the whole window scroll (the app frame otherwise pins body overflow).
   // Restored on unmount so the dashboard frame behaves again. Window-scrolling
   // also lets GSAP ScrollTrigger track with its default scroller.
@@ -215,23 +205,10 @@ export default function Landing({
           </a>
           <a
             className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
-            href="/privacy"
-          >
-            {c.nav.privacy}
-          </a>
-          <a
-            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
             href="#how"
           >
             {c.nav.how}
           </a>
-          <button
-            type="button"
-            className="text-[var(--lp-ink2)] bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.95rem]! font-medium hover:text-[var(--lp-ink)]"
-            onClick={openSignUp}
-          >
-            {c.nav.signUp}
-          </button>
           {INVESTING_URL && (
             <a
               className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
@@ -253,26 +230,48 @@ export default function Landing({
         >
           {c.langSwitch.label}
         </a>
-        <button
-          ref={triggerRef}
-          type="button"
-          className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
-          onClick={() => {
-            if (authState.kind === "signed-in") {
-              onEnter();
-              return;
-            }
-            if (showSignIn && authView === "sign-in") {
-              setShowSignIn(false);
-              return;
-            }
-            setAuthView("sign-in");
-            setShowSignIn(true);
-          }}
-        >
-          {c.nav.login}
-        </button>
+        <div className="flex items-center gap-[18px]">
+          <button
+            ref={triggerRef}
+            type="button"
+            className="text-[var(--lp-ink2)] bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.95rem]! font-medium hover:text-[var(--lp-ink)]"
+            onClick={() => {
+              if (authState.kind === "signed-in") {
+                onEnter();
+                return;
+              }
+              if (showSignIn && authView === "sign-in") {
+                setShowSignIn(false);
+                return;
+              }
+              setAuthView("sign-in");
+              setShowSignIn(true);
+            }}
+          >
+            {c.nav.login}
+          </button>
+          <button
+            type="button"
+            className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
+            onClick={openSignUp}
+          >
+            {c.nav.signUp}
+          </button>
+        </div>
       </header>
+
+      <p
+        data-testid="beta-note"
+        className="lp-reveal-none w-fit max-w-[calc(100%-56px)] mx-auto mt-[4px] mb-0 px-[14px] py-[6px] rounded-pill border border-[var(--lp-line)] text-center font-mono text-[0.78rem] tracking-[0.02em] text-[var(--lp-ink2)]"
+      >
+        {c.beta.lead}{" "}
+        <a
+          className="text-[var(--lp-ink)] underline underline-offset-2"
+          href="mailto:alexander.steunenberg@gmail.com"
+        >
+          {c.beta.link}
+        </a>
+      </p>
 
       <dialog
         ref={dialogRef}
@@ -399,7 +398,7 @@ export default function Landing({
               {c.device.eyebrow}
             </div>
             <div className="text-[2.4rem] font-bold tracking-[-0.02em] tabular-nums mt-[2px]">
-              €12.480
+              {c.device.total}
             </div>
             <div className="text-[var(--lp-pos)] text-[0.9rem] font-semibold mb-2">
               {c.device.delta}
@@ -418,28 +417,28 @@ export default function Landing({
             </div>
             <div>
               <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
-                <span>{c.device.rows[0]}</span>
-                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">28%</span>
+                <span>{c.device.rows[0].label}</span>
+                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">
+                  {c.device.rows[0].value}
+                </span>
               </div>
               <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
-                <span>{c.device.rows[1]}</span>
-                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">34%</span>
-              </div>
-              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
-                <span>{c.device.rows[2]}</span>
-                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">18%</span>
+                <span>{c.device.rows[1].label}</span>
+                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">
+                  {c.device.rows[1].value}
+                </span>
               </div>
             </div>
           </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 [@media(max-width:560px)]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 [@media(max-width:760px)]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
-              {c.device.savedLabel}
+              {c.device.returnLabel}
             </div>
             <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">
-              +€420
+              {c.device.returnValue}
             </div>
           </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 [@media(max-width:560px)]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
+          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 [@media(max-width:760px)]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
             <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
               {c.device.forecastLabel}
             </div>
@@ -456,28 +455,15 @@ export default function Landing({
       {/* Signature scroll section (GSAP card spiral + tagline) */}
       <CardSpiral locale={locale} />
 
-      {/* Agents — feature carousel (SS2-style, our fonts + warm palet) */}
+      {/* Agents — feature grid (id kept for the nav anchor) */}
       <section className="lp-section" id="agents">
-        <div className="lp-carousel-head lp-reveal">
+        <div className="lp-feature-head lp-reveal">
           <div>
             <p className="lp-eyebrow lp-eyebrow-left">{c.agents.eyebrow}</p>
             <h2 className="lp-h2 lp-strengths-title">{c.agents.title}</h2>
           </div>
-          <div className="lp-carousel-nav">
-            <button type="button" aria-label={c.agents.prev} onClick={() => scrollAgents(-1)}>
-              ←
-            </button>
-            <button
-              type="button"
-              aria-label={c.agents.next}
-              className="accent"
-              onClick={() => scrollAgents(1)}
-            >
-              →
-            </button>
-          </div>
         </div>
-        <div className="lp-carousel lp-reveal" ref={agentsRef}>
+        <div className="lp-feature-grid lp-reveal">
           {[
             {
               icon: (
