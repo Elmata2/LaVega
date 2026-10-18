@@ -217,14 +217,41 @@ function resolveSecret(secret?: string): string {
 export function assertResearchSigningConfigured(secret?: string): void {
   resolveSecret(secret);
 }
-function signingKey(secret?: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
+/* The HMAC key is DERIVED from the root secret, never the root secret itself.
+ *
+ * `LAVEGA_ENCRYPTION_KEY` is the deployment's root key: it seals every tenant's
+ * broker credentials, snapshots and vault keys (`encryptBlob` in
+ * packages/database). Handing that same byte string to HMAC here made one
+ * secret do two unrelated jobs — if either use ever leaked its key material the
+ * other fell with it, and neither could be changed without the other. HKDF with
+ * a fixed domain salt and a purpose label gives this use its own subkey while
+ * the deployment keeps configuring exactly one secret, so nothing about
+ * operations changes.
+ *
+ * Purpose separation only: this is not rotation, and the AES envelope is
+ * untouched (see the note on encryptBlob's version byte). The one effect is
+ * that report tokens signed before this change no longer verify — acceptable
+ * because they live at most an hour (REPORT_LIFETIME_MS below), so the cost is
+ * one re-run for whoever was mid-conversation, not a data migration. */
+const HKDF_SALT = encoder.encode("lavega:stock-research:v1");
+const HKDF_INFO = encoder.encode("lavega:stock-research-hmac:v1");
+async function signingKey(secret?: string): Promise<CryptoKey> {
+  const root = await crypto.subtle.importKey(
     "raw",
     encoder.encode(resolveSecret(secret)),
-    { name: "HMAC", hash: "SHA-256" },
+    "HKDF",
     false,
-    ["sign", "verify"],
+    ["deriveBits"],
   );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: HKDF_SALT, info: HKDF_INFO },
+    root,
+    256,
+  );
+  return crypto.subtle.importKey("raw", bits, { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+    "verify",
+  ]);
 }
 export async function signResearchReport(
   report: StockResearchReport,

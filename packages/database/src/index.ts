@@ -1262,6 +1262,23 @@ const USER_DATA_TABLES = [
   // After the vault: with its key gone, any copy left in a browser is unreadable.
   "personal.vault_keys",
   "personal.net_worth_totals",
+  // 0013 made this ledger per-account, so an erasure has to take it too. It was
+  // missing here because 0005 had declared it aggregate owner spend; 0025 gives
+  // it the same forced RLS as every other table in `personal` for the same reason.
+  "personal.ai_usage",
+] as const;
+
+/* The Better Auth identity, which 0002_auth.sql keeps in `public` — deliberately
+ * outside the tenant schemas — so its scoping column is not `user_id` and one
+ * `WHERE user_id = $1` shape does not cover it. `session` and `account` both
+ * carry `"userId"` and both cascade from `public."user"`; they are still deleted
+ * explicitly so the erasure report can evidence them. `verification` has no user
+ * column at all: its `identifier` is whatever a token was minted for, which is
+ * the address for an email confirmation and the account id for other flows, so
+ * both are matched. */
+const AUTH_IDENTITY_DELETES = [
+  { table: "public.session", sql: `DELETE FROM public.session WHERE "userId" = $1` },
+  { table: "public.account", sql: `DELETE FROM public.account WHERE "userId" = $1` },
 ] as const;
 
 export type ErasureReport = { table: string; rows: number }[];
@@ -1275,20 +1292,27 @@ export type ErasureReport = { table: string; rows: number }[];
  * because nothing could remove their rows.
  *
  * It runs in ONE transaction inside `withTenant`, and every DELETE below
- * carries an explicit `WHERE user_id = $1`. RLS is a second belt, not the
+ * carries an explicit `WHERE user_id = $1` (or `"userId"`/`identifier` for the
+ * Better Auth tables, which live in `public`). RLS is a second belt, not the
  * only one: `personal.eb_pending_auth` deliberately has no RLS policy at all
  * (`0003_eb_flow.sql`), so an unqualified `DELETE FROM` against it would
  * empty every user's pending bank authorisations, not just this one's.
  * Either every table is cleared or none is; a half-erased account
  * is worse than a failed request, because the caller is told they are gone.
  *
+ * The Better Auth identity is part of this transaction, not a second step
+ * someone has to remember. Clearing application data alone left the person
+ * forgotten but able to sign back in with the same password, which recreated a
+ * vault under the same account id — the erasure appeared to succeed and did
+ * not. Deleting `public."user"` takes `session` and `account` with it by
+ * cascade, so the old cookie stops resolving and the old credentials stop
+ * authenticating in the same commit that removed the rows. Doing the two in
+ * separate transactions would reopen exactly the half-erased window this doc
+ * warns about, so there is one transaction and no ordering to get wrong.
+ *
  * It returns what it deleted per table. An erasure you cannot evidence is one
  * you cannot answer a regulator about, and "0 rows" is a legitimate result that
  * needs to be distinguishable from "never ran".
- *
- * NOTE: this clears application data. The Better Auth identity itself (the user
- * and session rows from `0002_auth.sql`) is separate and must be deleted
- * through Better Auth, or the person is forgotten but can still sign in.
  */
 export async function eraseUserData(
   db: Database,
@@ -1301,6 +1325,29 @@ export async function eraseUserData(
       const result = await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [identity]);
       report.push({ table, rows: result.rowCount ?? 0 });
     }
+
+    /* `verification` is keyed by `identifier`, which is the email for a
+     * confirmation token and the account id elsewhere, so read the address
+     * back before its row is gone and match on both. A missing user row simply
+     * yields no email; the id is still matched. */
+    const found = await client.query<QueryResultRow>(
+      'SELECT email FROM public."user" WHERE id = $1',
+      [identity],
+    );
+    const email = (found.rows[0]?.email as string | undefined) ?? null;
+
+    for (const { table, sql } of AUTH_IDENTITY_DELETES) {
+      const result = await client.query(sql, [identity]);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
+    const verification = await client.query(
+      "DELETE FROM public.verification WHERE identifier = $1 OR identifier = $2",
+      [identity, email ?? identity],
+    );
+    report.push({ table: "public.verification", rows: verification.rowCount ?? 0 });
+    const user = await client.query('DELETE FROM public."user" WHERE id = $1', [identity]);
+    report.push({ table: 'public."user"', rows: user.rowCount ?? 0 });
+
     return report;
   });
 }
@@ -1509,8 +1556,14 @@ const RESERVATION_FRESH_SQL =
  * budget guard in front of the agent routes. One model key, one cap per
  * account: `userId` is the session user, and sums never cross accounts.
  * Rows with a NULL `user_id` are the pre-signup ledger and count toward no
- * account. This uses `db.connect()` directly, the same shape as
- * `createEbFlowRepository`'s non-tenant methods.
+ * account.
+ *
+ * Every method here runs as the account it names: `reserve` sets
+ * `app.user_id` transaction-locally, the rest go through `withTenantStatement`,
+ * and `reconcile`/`release` also carry an explicit `user_id` predicate. That is
+ * belt and braces for the same reason `eraseUserData` writes its own predicate:
+ * 0025 forces row-level security on this table, and a query that named another
+ * account's row would match nothing even if the predicate were ever dropped.
  */
 export function createAiUsageRepository(db: Database) {
   return {
@@ -1539,6 +1592,12 @@ export function createAiUsageRepository(db: Database) {
       const client = await db.connect();
       try {
         await client.query("BEGIN");
+        /* 0025 puts `personal.ai_usage` under FORCE row security scoped to
+         * `app.user_id`. Set it here, transaction-local, before the sums and
+         * the INSERT below read or write a row. The identity is the ACCOUNT
+         * this reservation is for — `aiAccountId()` substitutes "unscoped"
+         * when there is no session — never a value a request supplied. */
+        await client.query("SELECT set_config('app.user_id', $1, true)", [params.userId]);
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           `ai_budget:${params.userId}:${params.month}`,
         ]);
@@ -1582,15 +1641,24 @@ export function createAiUsageRepository(db: Database) {
      *  place rather than adding a second row on top of the first. A no-op
      *  once the row is already reconciled (or already released out from
      *  under it), which is what makes calling this safe even from a path
-     *  that cannot know whether a release already ran. */
-    async reconcile(usage: Omit<AiUsage, "day" | "route"> & { id: number }): Promise<void> {
-      const client = await db.connect();
-      try {
+     *  that cannot know whether a release already ran.
+     *
+     *  `userId` is the account that reserved the row, not a value chosen here.
+     *  The id alone used to be enough to reach any account's reservation
+     *  (`id` is server-side, so that was latent rather than reachable); the
+     *  predicate now says whose row it may be, and RLS says the same thing
+     *  again in the transaction `withTenantStatement` opens. */
+    async reconcile(
+      usage: Omit<AiUsage, "day" | "route"> & { id: number },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
         await client.query(
           `UPDATE personal.ai_usage
            SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
                cost_cents = $7, reconciled_at = CURRENT_TIMESTAMP
-           WHERE id = $1 AND reconciled_at IS NULL`,
+           WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
           [
             usage.id,
             usage.model,
@@ -1599,11 +1667,10 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            identity,
           ],
         );
-      } finally {
-        client.release();
-      }
+      });
     },
 
     /** The call this reservation was holding room for never reached
@@ -1611,22 +1678,21 @@ export function createAiUsageRepository(db: Database) {
      *  reconciling it to 0, so a failed call leaves exactly the same trace it
      *  left before this reservation step existed: none. Guarded the same way
      *  as `reconcile`, so whichever of the two runs first on a given row
-     *  wins and the other is a no-op. */
-    async release(id: number): Promise<void> {
-      const client = await db.connect();
-      try {
+     *  wins and the other is a no-op. Scoped to the reserving account the same
+     *  way `reconcile` is, and for the same reason. */
+    async release(id: number, userId: string): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "DELETE FROM personal.ai_usage WHERE id = $1 AND reconciled_at IS NULL",
-          [id],
+          "DELETE FROM personal.ai_usage WHERE id = $1 AND user_id = $2 AND reconciled_at IS NULL",
+          [id, identity],
         );
-      } finally {
-        client.release();
-      }
+      });
     },
 
     async record(usage: AiUsage & { userId: string }): Promise<void> {
-      const client = await db.connect();
-      try {
+      const identity = requireUserId(usage.userId);
+      await withTenantStatement(db, identity, async (client) => {
         await client.query(
           "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
           [
@@ -1638,37 +1704,35 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
-            usage.userId,
+            identity,
           ],
         );
-      } finally {
-        client.release();
-      }
+      });
     },
 
     async spentCents(range: { userId: string; day: string; month: string }): Promise<{
       dayCents: number;
       monthCents: number;
     }> {
-      const client = await db.connect();
-      try {
+      /* Two statements, so a tenant transaction rather than a single tenant
+       * statement — the same reason `eraseUserData` uses `withTenant`. */
+      const identity = requireUserId(range.userId);
+      return withTenant(db, identity, async (client) => {
         const dayResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
            WHERE day = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
-          [range.day, range.userId],
+          [range.day, identity],
         );
         const monthResult = await client.query<QueryResultRow>(
           `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
            WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
-          [range.month, range.userId],
+          [range.month, identity],
         );
         return {
           dayCents: Number(dayResult.rows[0]?.total ?? 0),
           monthCents: Number(monthResult.rows[0]?.total ?? 0),
         };
-      } finally {
-        client.release();
-      }
+      });
     },
   };
 }

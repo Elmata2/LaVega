@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createHmac } from "node:crypto";
+import { createHmac, hkdfSync } from "node:crypto";
 import { Hono } from "hono";
 import { MockLanguageModelV4 } from "ai/test";
 import { simulateReadableStream } from "ai";
@@ -128,7 +128,25 @@ test("signed reports preserve exact facts and reject tampering, another tenant, 
   const token = await signResearchReport(report, "alice", "test-secret");
   await expect(verifyResearchReport(token, "alice", "test-secret", now)).resolves.toEqual(report);
   const [payload, signature] = token.split(".");
+  /* The signing key is HKDF-derived from the secret with the purpose label the
+   * module fixes (see stockResearch.ts), NOT the secret itself — the same
+   * derivation node's own hkdfSync performs, asserted here so the two cannot
+   * drift apart. */
+  const subkey = Buffer.from(
+    hkdfSync(
+      "sha256",
+      Buffer.from("test-secret"),
+      Buffer.from("lavega:stock-research:v1"),
+      Buffer.from("lavega:stock-research-hmac:v1"),
+      32,
+    ),
+  );
   expect(signature).toBe(
+    createHmac("sha256", subkey).update(`lavega-stock-research-v1:${payload}`).digest("base64url"),
+  );
+  /* The raw secret must NOT verify: cross-protocol reuse is the thing this
+   * separation removed. */
+  expect(signature).not.toBe(
     createHmac("sha256", "test-secret")
       .update(`lavega-stock-research-v1:${payload}`)
       .digest("base64url"),
