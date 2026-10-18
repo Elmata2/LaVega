@@ -126,6 +126,45 @@ test("a callback whose state this server never issued does not exchange the code
   expect(res.headers.get("location")).toContain("eb_error");
 });
 
+/* A5 (2026-10-17): the private-key errors name an ABSOLUTE PATH
+ * (`Enable Banking: private key not found at /…/key.pem`), and the raw message
+ * used to go straight to the browser. The detail is logged; the caller gets a
+ * fixed sentence. */
+test("an Enable Banking failure does not leak the private-key filesystem path", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  ebMock.mockRejectedValueOnce(
+    new Error("Enable Banking: private key not found at /srv/lavega/secrets/eb-key.pem"),
+  );
+
+  const res = await app.request("/api/eb/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "ING", country: "NL" }),
+  });
+
+  const body = await res.text();
+  expect(res.status).toBe(502);
+  expect(body).not.toContain("/srv/lavega/secrets");
+  expect(body).not.toContain("eb-key.pem");
+  expect(body).toContain("Enable Banking gaf een fout");
+  // The operator still gets the real cause, server-side.
+  expect(spy.mock.calls.flat().join(" ")).toContain("eb-key.pem");
+  spy.mockRestore();
+});
+
+test("a failing callback reports a fixed message, never the key path", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const state = await issueState();
+  ebMock.mockRejectedValueOnce(new Error("Enable Banking: private key not found at /etc/k.pem"));
+
+  const res = await app.request(`/api/eb/callback?code=real-code&state=${state}`);
+
+  const location = res.headers.get("location") ?? "";
+  expect(location).not.toContain("/etc/k.pem");
+  expect(decodeURIComponent(location)).toContain("Enable Banking gaf een fout");
+  spy.mockRestore();
+});
+
 test("a callback with no state at all does not exchange the code", async () => {
   const res = await app.request("/api/eb/callback?code=attacker-code");
   expect(ebMock).not.toHaveBeenCalled();

@@ -104,8 +104,11 @@ test("rewriteInvestingRequest strips /investing for static and health paths", ()
 });
 
 test("forwardInvesting builds an investing runtime per request", async () => {
-  const first = await forwardInvesting(new Request("https://lavega.dev/investing/health"));
-  const second = await forwardInvesting(new Request("https://lavega.dev/api/investing/dashboard"));
+  const first = await forwardInvesting(new Request("https://lavega.dev/investing/health"), "local");
+  const second = await forwardInvesting(
+    new Request("https://lavega.dev/api/investing/dashboard"),
+    "user-1",
+  );
   expect(await first.text()).toBe("path:/health");
   expect(await second.text()).toBe("path:/api/investing/dashboard");
   expect(createRuntimeAppMock).toHaveBeenCalledTimes(2);

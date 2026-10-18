@@ -216,11 +216,19 @@ export function parseQueue(
 }
 
 /**
- * GET the queue via LaVega's own server (`/api/n8n/queue`), never n8n
+ * POST the queue via LaVega's own server (`/api/n8n/queue`), never n8n
  * directly. The server holds the n8n credential and derives `queueKey` from
  * the caller's session — there is no `key` parameter here anymore, and that
  * is deliberate: a client that could choose its own key could read anyone's
  * queue (see the route's own comment, apps/server/src/n8n-routes.ts).
+ *
+ * POST, not GET: the webhook EMPTIES its queue as it responds, so this request
+ * destroys what it returns. A GET is reachable from another site by a plain
+ * link or an `<img>`, and the session cookie (`sameSite:"lax"`) rides along on
+ * that top-level navigation — a cross-site page could drain and destroy the
+ * owner's invoice queue (security review 2026-10-17, M4). A POST is not a
+ * simple cross-site request, and the server refuses a cross-site one outright.
+ * There is no body: the server derives everything from the session.
  *
  * `fetchImpl` is injectable so the review flow can be tested without a
  * network; production uses the browser's own `fetch`, which sends the
@@ -231,7 +239,7 @@ export async function fetchQueue(
 ): Promise<FetchOutcome> {
   let res: Response;
   try {
-    res = await fetchImpl(`${API_BASE}/api/n8n/queue`, { method: "GET" });
+    res = await fetchImpl(`${API_BASE}/api/n8n/queue`, { method: "POST" });
   } catch {
     return { kind: "network" };
   }

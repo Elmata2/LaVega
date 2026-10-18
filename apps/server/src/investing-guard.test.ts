@@ -11,7 +11,7 @@ const {
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
   forwardInvestingMock: vi.fn(
-    async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`),
+    async (_request: Request, tenantId: string) => new Response(`tenant:${tenantId}`),
   ),
   runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
   investingOwnsApiPathMock: vi.fn(async (path: string) =>
@@ -119,7 +119,9 @@ test("the investing SPA shell stays reachable without a session", async () => {
   const response = await app.request("/investing/positions");
 
   expect(response.status).toBe(200);
-  expect(await response.text()).toBe("tenant:none");
+  // Static SPA paths carry no tenant data, so they name the local tenant
+  // explicitly rather than depending on a silent default (H1, 2026-10-17).
+  expect(await response.text()).toBe("tenant:local");
 });
 
 test("the health line is answered without a session, and by the investing runtime", async () => {
@@ -130,8 +132,39 @@ test("the health line is answered without a session, and by the investing runtim
   const response = await app.request("/api/investing/health");
 
   expect(response.status).toBe(200);
-  expect(await response.text()).toBe("tenant:none");
+  expect(await response.text()).toBe("tenant:local");
   expect(investingTenantIdMock).not.toHaveBeenCalled();
+});
+
+/* --- H1: the `/investing/api/*` alias is the same API surface, so it is behind
+ * the same guard. Before this, apiGuard was mounted on `/api/*` alone and
+ * `app.all("/investing/*", …)` forwarded the alias straight to the investing
+ * app with no session and the local tenant. --- */
+
+test("the /investing/api/* alias is refused with no session, for reads and writes", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  for (const [method, path] of [
+    ["GET", "/investing/api/investing/summary"],
+    ["DELETE", "/investing/api/prices/cache"],
+    ["POST", "/investing/api/brokers/credentials"],
+  ] as const) {
+    const response = await app.request(path, { method });
+    expect(response.status, `${method} ${path}`).toBe(401);
+  }
+  expect(forwardInvestingMock).not.toHaveBeenCalled();
+});
+
+test("the /investing/api/* alias serves a signed-in caller under THEIR OWN tenant, not the local one", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });
+  investingTenantIdMock.mockResolvedValue("user-123");
+  const app = await investingApp();
+
+  const response = await app.request("/investing/api/investing/summary");
+
+  expect(await response.text()).toBe("tenant:user-123");
 });
 
 test("investing cron route uses cron handler instead of browser session auth", async () => {

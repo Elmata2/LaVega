@@ -1,9 +1,35 @@
 import { expect, test } from "vitest";
-import { app } from "./index.js";
+import { app, isHttpsRequest } from "./index.js";
 
-test("responses carry HSTS, so a downgraded first hop cannot read the session cookie", async () => {
-  const res = await app.request("/health");
+/* HSTS is only emitted for an https request (security review 2026-10-17, A6):
+ * over plaintext a browser ignores it at best, and the unconditional
+ * `includeSubDomains` pinned the whole registrable domain the first time any
+ * response came back over https. Behind a proxy the scheme arrives in
+ * `x-forwarded-proto`. */
+test("an https response carries HSTS with includeSubDomains", async () => {
+  const res = await app.request("/health", { headers: { "x-forwarded-proto": "https" } });
   expect(res.headers.get("strict-transport-security")).toMatch(/max-age=\d{7,}/);
+  expect(res.headers.get("strict-transport-security")).toContain("includeSubDomains");
+});
+
+test("a plaintext request gets no HSTS header", async () => {
+  const res = await app.request("/health", { headers: { "x-forwarded-proto": "http" } });
+  expect(res.headers.get("strict-transport-security")).toBeNull();
+});
+
+test("isHttpsRequest trusts the forwarded scheme, then the request URL", () => {
+  expect(isHttpsRequest("https", "http://internal/health")).toBe(true);
+  expect(isHttpsRequest("https, http", "http://internal/health")).toBe(true);
+  expect(isHttpsRequest("http", "https://lavega.dev/health")).toBe(false);
+  expect(isHttpsRequest(undefined, "https://lavega.dev/health")).toBe(true);
+  expect(isHttpsRequest(undefined, "http://localhost:8787/health")).toBe(false);
+});
+
+test("the response carries a restrictive Permissions-Policy", async () => {
+  const policy = (await app.request("/health")).headers.get("permissions-policy") ?? "";
+  expect(policy).toContain("camera=()");
+  expect(policy).toContain("microphone=()");
+  expect(policy).toContain("geolocation=()");
 });
 
 test("responses refuse MIME sniffing", async () => {

@@ -22,10 +22,11 @@ import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { getBankNlTable } from "./bankNl.js";
-import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
+import { createRateLimiter, clientIp, rateLimitKey, type RateLimiter } from "./agent/rateLimit.js";
 import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
 import { ValidationError } from "./agent/validationError.js";
+import { secretsMatch } from "./secrets.js";
 
 /* Agent proxy routes. The server holds the Mistral key (it never reaches the
  * client) and is the ONLY place that talks to Mistral. `deps.extract`/`deps.chat`
@@ -38,12 +39,32 @@ type Deps = {
   travelFacts?: typeof lookupProviderTerms;
   /** The bank.nl koersopslag comparison table. Injected so a test never fetches. */
   cardComparison?: () => Promise<BankNlTable>;
+  /** The process-wide ceiling across every AI route. Injected so a test can pin it. */
+  globalLimit?: RateLimiter;
 };
 
-// 20 requests/min per CALLER per route. The key comes from `rateLimitKey`,
-// which prefers the verified session's user id and falls back to the caller's
-// address; see the note there for why it is not the route name alone.
+/* 20 requests/min per CALLER per route. The key comes from `rateLimitKey`,
+ * which prefers the verified session's user id and falls back to the caller's
+ * address; see the note there for why it is not the route name alone. */
 const limit = createRateLimiter(20, 60_000);
+
+/* ONE ceiling across every AI route, whatever the caller and whatever the
+ * bucket. On Vercel each serverless instance keeps its own counters and a cold
+ * start resets them, so `limit` above is per-instance, not global — the real
+ * spend cap is the Neon-backed daily/monthly budget in agent/budget.ts. What
+ * this adds is the cheap thing that budget check cannot: a single instance
+ * cannot be drained by a burst of calls spread across routes or addresses
+ * faster than one batched budget read can see them. 120/min is well above a
+ * person (20/min on four routes) and well below a runaway loop that would burn
+ * the Mistral key before the next budget read.
+ *
+ * Accepted trade-off, stated out loud: this is per-process, so N warm
+ * instances allow up to N×120/min. The alternative — a shared counter — is a
+ * database round trip on every AI request to save a single-user app from its
+ * own retry loop. Multi-instance abuse is bounded by the budget reservation
+ * that every route already takes before spending. */
+const GLOBAL_LIMIT_PER_MINUTE = 120;
+const allCallers = createRateLimiter(GLOBAL_LIMIT_PER_MINUTE, 60_000);
 
 // Mistral's error text (up to 2000 chars of its raw response body, per
 // mistral.ts) must never reach the browser — it can carry more detail about
@@ -154,8 +175,8 @@ async function requireBudget(
 }
 
 /* This request's rate-limit bucket for `route`. */
-function bucket(c: { req: { header(name: string): string | undefined } }, route: string): string {
-  return rateLimitKey(route, sessionUserId(c as never), c.req.header("x-forwarded-for"));
+function bucket(c: { req: { header(name: string): string | undefined; raw: Request } }, route: string): string {
+  return rateLimitKey(route, sessionUserId(c as never), clientIp(c.req.raw.headers));
 }
 
 export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
@@ -164,6 +185,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const categorize = deps.categorize ?? categorizeTransactions;
   const travelFacts = deps.travelFacts ?? lookupProviderTerms;
   const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
+  const globalLimit = deps.globalLimit ?? allCallers;
+
+  /* Per-caller first (its own code, so a client can tell "you" from "the
+   * server"), then the process-wide ceiling. */
+  const rateCheck = (c: Parameters<typeof bucket>[0], route: string): "ok" | "caller" | "global" => {
+    if (!limit(bucket(c, route))) return "caller";
+    if (!globalLimit("all")) return "global";
+    return "ok";
+  };
 
   // Whether AI extraction is available server-side (does the key exist?). The
   // key itself is never returned. Lives here, not in index.ts (Task 1 deferred).
@@ -208,9 +238,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         },
         503,
       );
-    if (!limit(bucket(c, "extract")))
+    const rate = rateCheck(c, "extract");
+    if (rate !== "ok")
       return c.json(
-        { error: "Even wachten — te veel AI-verzoeken.", code: "extract-rate-limited-local" },
+        {
+          error: "Even wachten — te veel AI-verzoeken.",
+          code: rate === "global" ? "ai-rate-limited-global" : "extract-rate-limited-local",
+        },
         429,
       );
     const budget = await requireBudget(c, "extract-invoice");
@@ -267,9 +301,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" },
         503,
       );
-    if (!limit(bucket(c, "chat")))
+    const chatRate = rateCheck(c, "chat");
+    if (chatRate !== "ok")
       return c.json(
-        { error: "Even wachten — te veel verzoeken.", code: "chat-rate-limited-local" },
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code: chatRate === "global" ? "ai-rate-limited-global" : "chat-rate-limited-local",
+        },
         429,
       );
     let tab = "";
@@ -360,9 +398,14 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-categorisatie is niet geconfigureerd.", code: "categorize-not-configured" },
         503,
       );
-    if (!limit(bucket(c, "categorize")))
+    const categorizeRate = rateCheck(c, "categorize");
+    if (categorizeRate !== "ok")
       return c.json(
-        { error: "Even wachten — te veel verzoeken.", code: "categorize-rate-limited-local" },
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code:
+            categorizeRate === "global" ? "ai-rate-limited-global" : "categorize-rate-limited-local",
+        },
         429,
       );
     const budget = await requireBudget(c, "categorize");
@@ -421,9 +464,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-reisadvies is niet geconfigureerd.", code: "travel-not-configured" },
         503,
       );
-    if (!limit(bucket(c, "travel")))
+    const travelRate = rateCheck(c, "travel");
+    if (travelRate !== "ok")
       return c.json(
-        { error: "Even wachten — te veel verzoeken.", code: "travel-rate-limited-local" },
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code: travelRate === "global" ? "ai-rate-limited-global" : "travel-rate-limited-local",
+        },
         429,
       );
     const budget = await requireBudget(c, "travel");
@@ -469,13 +516,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // and extracts the numbers — no searching, so no flaky "couldn't find it".
   // Shared-secret auth: without CARD_TERMS_INGEST_TOKEN the endpoint is closed,
   // and a wrong token is refused, because this writes into the cache every user
-  // reads. Constant-time-ish compare: reject on length first, then value.
+  // reads. The compare is constant-time (sha256 both sides, then timingSafeEqual)
+  // so the response time cannot be used to recover the token a byte at a time.
   app.post("/api/card-terms/ingest", async (c) => {
     const { configured, token } = loadIngestConfig();
     if (!configured || !token) return c.json({ error: "Ingest is niet geconfigureerd." }, 503);
     const given = c.req.header("x-ingest-token") ?? "";
-    if (given.length !== token.length || given !== token)
-      return c.json({ error: "Ongeldige token." }, 401);
+    if (!secretsMatch(given, token)) return c.json({ error: "Ongeldige token." }, 401);
 
     let body: { homeCountry?: unknown; currency?: unknown; terms?: unknown };
     try {

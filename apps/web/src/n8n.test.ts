@@ -62,10 +62,11 @@ function fakeFetch(
   body: unknown,
   opts: { throws?: boolean; badJson?: boolean } = {},
 ) {
-  const calls: Array<{ url: string; token: string | undefined }> = [];
+  const calls: Array<{ url: string; method: string | undefined; token: string | undefined }> = [];
   const impl = (async (url: string, init?: RequestInit) => {
     calls.push({
       url,
+      method: init?.method,
       token: (init?.headers as Record<string, string> | undefined)?.["x-lavega-token"],
     });
     if (opts.throws) throw new TypeError("Failed to fetch");
@@ -123,6 +124,15 @@ test("fetchQueue calls LaVega's own server, never n8n directly", async () => {
   expect(out.kind).toBe("ok");
   expect(out.kind === "ok" && out.rows).toHaveLength(1);
   expect(calls[0].url).toBe(`${API_BASE}/api/n8n/queue`);
+});
+
+/* M4 (2026-10-17): the drain DELETES what it returns, and a GET is reachable
+ * from another site through the lax session cookie. The client must ask with
+ * POST so the server's same-origin check applies and a link cannot drain. */
+test("fetchQueue POSTs the drain — a GET was CSRF-able", async () => {
+  const { impl, calls } = fakeFetch(200, { invoices: [] });
+  await fetchQueue(impl);
+  expect(calls[0].method).toBe("POST");
 });
 
 /* Which queueKey the server sends to n8n is now a server-side decision, made

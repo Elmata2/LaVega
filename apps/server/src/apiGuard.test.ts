@@ -144,3 +144,45 @@ test("LAVEGA_ALLOW_UNAUTHENTICATED=1 opens the guard for local development", asy
   });
   expect(res.status).not.toBe(401);
 });
+
+/* A1 / #253 (security review 2026-10-17): the flag switches off BOTH guards,
+ * so a stray value in a platform's environment UI would publish the vault and
+ * the broker API. A hosted deployment refuses it. */
+test("the escape hatch is refused on a hosted deployment, whatever the env UI says", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  process.env.NODE_ENV = "production";
+  try {
+    const res = await app.request("/api/agent/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [] }),
+    });
+    expect(res.status).toBe(401);
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
+
+test("a Vercel deployment marker also refuses the escape hatch", async () => {
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  process.env.VERCEL_ENV = "production";
+  try {
+    expect((await app.request("/api/agent/budget")).status).toBe(401);
+  } finally {
+    delete process.env.VERCEL_ENV;
+  }
+});
+
+/* The old guard blanket-passed every OPTIONS, on the theory that a preflight
+ * carries no cookies. But the loopback CORS middleware already answers a
+ * preflight before the guard runs, so the bypass only ever let a non-browser
+ * probe through the one place that is meant to be closed by default. */
+test("a non-loopback OPTIONS is not a free pass through the guard", async () => {
+  const res = await app.request("/api/agent/budget", {
+    method: "OPTIONS",
+    headers: { Origin: "https://evil.example" },
+  });
+  expect(res.status).toBe(401);
+});
