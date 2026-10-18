@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createRateLimiter } from "./rateLimit.js";
 
 test("allows up to max requests per key, then blocks the next", () => {
@@ -98,15 +98,23 @@ test("a user id is preferred over the address, because it cannot be spoofed", ()
  * and trusting the rotatable one is how a caller minted a fresh bucket per
  * request (security review 2026-10-17, H3). --- */
 
-test("cf-connecting-ip wins over x-forwarded-for, which a caller can forge", () => {
-  const headers = new Headers({
-    "cf-connecting-ip": "203.0.113.7",
-    "x-forwarded-for": "9.9.9.9, 203.0.113.7",
-  });
-  expect(clientIp(headers)).toBe("203.0.113.7");
+test("cf-connecting-ip is ignored by default: off Cloudflare a caller sets it themselves", () => {
+  const headers = new Headers({ "cf-connecting-ip": "6.6.6.6", "x-real-ip": "198.51.100.4" });
+  expect(clientIp(headers)).toBe("198.51.100.4");
+  expect(clientIp(new Headers({ "cf-connecting-ip": "6.6.6.6" }))).toBe("unknown");
 });
 
-test("x-real-ip is the next trusted header", () => {
+test("cf-connecting-ip wins over x-real-ip once the deployment opts in", () => {
+  vi.stubEnv("LAVEGA_TRUST_CF_CONNECTING_IP", "1");
+  try {
+    const headers = new Headers({ "cf-connecting-ip": "203.0.113.7", "x-real-ip": "172.70.0.1" });
+    expect(clientIp(headers)).toBe("203.0.113.7");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test("x-real-ip beats a forgeable x-forwarded-for", () => {
   const headers = new Headers({ "x-real-ip": "198.51.100.4", "x-forwarded-for": "9.9.9.9" });
   expect(clientIp(headers)).toBe("198.51.100.4");
 });

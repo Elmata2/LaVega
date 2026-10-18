@@ -7,7 +7,7 @@ import { createPublicAuthLimiter } from "./authLimits.js";
  * one — an account-enumeration oracle AND a verification-bombing amplifier. */
 
 const post = (path: string, ip: string) =>
-  new Headers({ "cf-connecting-ip": ip, "content-type": "application/json" });
+  new Headers({ "x-real-ip": ip, "content-type": "application/json" });
 
 test("one address cannot hammer one limited endpoint", () => {
   const allow = createPublicAuthLimiter(60_000, 5, 1_000);

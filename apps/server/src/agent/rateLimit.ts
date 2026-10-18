@@ -93,12 +93,19 @@ export type HeaderBag = { get(name: string): string | null | undefined };
  * the RIGHTMOST — but that still trusted a header nothing verifies, and a
  * rotating value minted a fresh rate-limit bucket per request.
  *
- * Cloudflare (`cf-connecting-ip`) and most platforms (`x-real-ip`) set a
- * single, edge-owned value that a caller cannot forge through the proxy, so
- * those win. XFF is only the fallback, and then only its rightmost entry.
+ * `x-real-ip` is set (overwritten) by Vercel and Railway, so it wins.
+ * `cf-connecting-ip` is only trustworthy when Cloudflare actually proxies the
+ * app; on any other host a caller sends it themselves and picks their own
+ * bucket. It is therefore read first only when `LAVEGA_TRUST_CF_CONNECTING_IP=1`
+ * says the deployment sits behind Cloudflare, and ignored otherwise. XFF is the
+ * last fallback, and then only its rightmost entry.
  */
 export function clientIp(headers: HeaderBag): string {
-  for (const name of ["cf-connecting-ip", "x-real-ip"]) {
+  const trusted =
+    process.env.LAVEGA_TRUST_CF_CONNECTING_IP === "1"
+      ? ["cf-connecting-ip", "x-real-ip"]
+      : ["x-real-ip"];
+  for (const name of trusted) {
     const value = headers.get(name)?.trim();
     if (value) return value;
   }
