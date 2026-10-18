@@ -9,9 +9,10 @@ import {
   checkAttachmentCaps,
   handleInboundEmail,
 } from "../src/handler.js";
-import { parseMail } from "../src/parseMail.js";
+import { MAX_PARTS, MAX_PART_DEPTH, parseMail } from "../src/parseMail.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
 import {
+  RAW_FORGED_AUTH_RESULTS,
   RAW_FORWARDED_INVOICE,
   RAW_IMAGE_ONLY,
   RAW_PDF_INVOICE,
@@ -324,11 +325,11 @@ test("een te grote PDF komt niet bij n8n aan en levert een bounce met de naam op
   expect(http.calls).toEqual([]);
 });
 
-test("buildPayload gebruikt de From:-header en valt terug op de envelop-afzender", () => {
+test("buildPayload laat alleen het ADRES van de afzender staan, niet de weergavenaam", () => {
   const withHeader = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "envelop@voorbeeld.nl" });
-  expect(buildPayload(withHeader, parseMail(RAW_PLAIN_TEXT)).from).toBe(
-    "Hosting Noord <facturen@hostingnoord.nl>",
-  );
+  // De weergavenaam is te verzinnen en belandt in de wachtrij; hij verdwijnt
+  // hier (bevinding A5). Wat overblijft is nog steeds ONGECONTROLEERD.
+  expect(buildPayload(withHeader, parseMail(RAW_PLAIN_TEXT)).from).toBe("facturen@hostingnoord.nl");
 
   const zonderHeader = fakeMessage({
     raw: "Subject: x\r\n\r\ntekst",
@@ -370,4 +371,145 @@ test("een doorgestuurde factuur (SPF zakt, DKIM klopt) gaat er nog steeds door",
 
   expect(verdict.kind).toBe("queued");
   expect(http.calls).toHaveLength(1);
+});
+
+/* ── H2: een meegegeven Authentication-Results verslaat de poort niet ──────── */
+
+test("een genagde Authentication-Results die dmarc=pass belooft houdt de mail NIET tegen", async () => {
+  // De afzender plakt zijn eigen uitslag vóór die van Cloudflare. Cloudflare's
+  // echte uitslag (fail) moet winnen; anders staat de nep-ING gewoon in de rij.
+  const message = fakeMessage({ raw: RAW_FORGED_AUTH_RESULTS, from: "nep@elders.example" });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("reject");
+  expect(verdict.kind === "reject" && verdict.reason).toContain("DMARC fail");
+  expect(http.calls).toHaveLength(0);
+});
+
+/* ── M12: onbegrensde multipart-recursie krijgt een benoemde uitgang ───────── */
+
+/** Een mail die `depth` lagen multipart/mixed nest, met één tekstdeel onderin.
+ *  De boundaries zijn even lang en geen van hen is een prefix van een ander:
+ *  `split("--b1")` zou anders ook op `--b10` knippen en dan test je de fixture
+ *  in plaats van de parser. */
+function nestedMultipart(depth: number): string {
+  let part = "Content-Type: text/plain\r\n\r\ntekst";
+  for (let level = depth - 1; level >= 0; level--) {
+    const boundary = "b" + String(level).padStart(4, "0");
+    part =
+      'Content-Type: multipart/mixed; boundary="' +
+      boundary +
+      '"\r\n\r\n--' +
+      boundary +
+      "\r\n" +
+      part +
+      "\r\n--" +
+      boundary +
+      "--";
+  }
+  return (
+    [
+      "From: leverancier@voorbeeld.nl",
+      "To: alexander-7f3a@invoices.lavega.dev",
+      "Subject: diep genest",
+      "Message-ID: <diep@voorbeeld.nl>",
+    ].join("\r\n") +
+    "\r\n" +
+    part
+  );
+}
+
+test("de parser meldt dat hij een grens raakte in plaats van stil te stoppen", () => {
+  expect(parseMail(nestedMultipart(MAX_PART_DEPTH + 5)).partsCapped).toBe(true);
+  // Een gewone, ondiepe mail raakt de grens niet.
+  expect(parseMail(RAW_PDF_INVOICE).partsCapped).toBe(false);
+});
+
+test("te diep genest: een BENOEMDE weigering (bounce), geen stil verlies", async () => {
+  const message = fakeMessage({ raw: nestedMultipart(MAX_PART_DEPTH + 5) });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("reject");
+  expect(verdict.kind === "reject" && verdict.reason).toContain("te diep genest");
+  expect(http.calls).toHaveLength(0);
+
+  // En de uitgang is er echt één: de afzender krijgt de weigering te horen.
+  await applyVerdict(message, verdict, { fetch: http.fetch });
+  expect(message.rejected).toHaveLength(1);
+});
+
+test("te veel delen: dezelfde benoemde uitgang", () => {
+  const parts = Array.from(
+    { length: MAX_PARTS + 5 },
+    (_, i) => "Content-Type: text/plain\r\n\r\nregel " + i,
+  ).join("\r\n--b\r\n");
+  const raw = [
+    "From: leverancier@voorbeeld.nl",
+    "To: alexander-7f3a@invoices.lavega.dev",
+    "Subject: veel delen",
+    'Content-Type: multipart/mixed; boundary="b"',
+    "",
+    "--b\r\n" + parts + "\r\n--b--",
+    "",
+  ].join("\r\n");
+  expect(parseMail(raw).partsCapped).toBe(true);
+});
+
+/* ── M13: niet antwoorden op een automaat of op onszelf ────────────────────── */
+
+test("applyVerdict antwoordt NIET op een no-reply-afzender: dat wordt een bounce", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "no-reply@elders.example" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+  expect(message.rejected[0]).toContain("niet geantwoord");
+});
+
+test("applyVerdict antwoordt NIET op ons eigen domein", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "iets@invoices.lavega.dev" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+});
+
+test("applyVerdict antwoordt NIET op een bulkbericht (Precedence: bulk)", async () => {
+  const raw = "From: nieuwsbrief@elders.example\r\nPrecedence: bulk\r\n\r\ntekst";
+  const message = fakeMessage({ raw, from: "nieuwsbrief@elders.example" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+});
+
+/* ── A5: de bestandsnaam komt van buiten en gaat terug naar buiten ─────────── */
+
+test("een bestandsnaam met stuurtekens vervuilt de bounce niet", () => {
+  const mail = parseMail(RAW_PLAIN_TEXT);
+  mail.attachments = [
+    {
+      fileName: "kwaad\r\nBcc: slachtoffer@elders.example.pdf",
+      mimeType: "application/pdf",
+      data: "",
+      bytes: MAX_PDF_BYTES + 1,
+    },
+  ];
+  const problem = checkAttachmentCaps(mail) as string;
+  expect(problem).not.toContain("\r");
+  expect(problem).not.toContain("\n");
+  expect(problem).toContain("kwaad Bcc: slachtoffer@elders.example.pdf");
 });

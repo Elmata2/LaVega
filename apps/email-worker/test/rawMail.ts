@@ -193,3 +193,23 @@ export const RAW_FORWARDED_INVOICE = RAW_PDF_INVOICE.replace(
   "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
     " spf=fail smtp.mailfrom=gmail.com; dmarc=pass header.from=vandijk-installatie.nl",
 );
+
+/** G — de nep-ING, maar nu met een door de AFZENDER meegegeven
+ *  `Authentication-Results` die `dmarc=pass` belooft (bevinding H2). Cloudflare
+ *  zet zijn eigen uitslag erachter; die zegt fail en moet winnen. Vóór de fix
+ *  las de Worker de eerste uitslag — en dat was precies die van de aanvaller. */
+export const RAW_FORGED_AUTH_RESULTS = [
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=ing.nl; spf=pass smtp.mailfrom=ing.nl; dmarc=pass header.from=ing.nl",
+  "Authentication-Results: mx.cloudflare.net; dkim=fail header.d=elders.example; spf=fail smtp.mailfrom=elders.example; dmarc=fail header.from=ing.nl",
+  "From: ING Bank <facturen@ing.nl>",
+  "To: alexander-7f3a@invoices.lavega.dev",
+  "Subject: Openstaande factuur - direct betalen",
+  "Date: Sun, 16 Aug 2026 03:11:00 +0200",
+  "Message-ID: <nep-2@elders.example>",
+  "MIME-Version: 1.0",
+  'Content-Type: text/plain; charset="utf-8"',
+  "",
+  "U heeft een openstaande factuur van EUR 4.200,00. Betaal binnen 24 uur op",
+  "rekening NL00 XXXX 0000 0000 00 om kosten te voorkomen.",
+  "",
+].join("\r\n");

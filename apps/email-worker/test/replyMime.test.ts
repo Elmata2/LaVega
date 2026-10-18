@@ -63,3 +63,39 @@ test("een nieuwe regel in een header wordt platgeslagen: geen header-injectie", 
   expect(headerLines.filter((line) => /^bcc:/i.test(line))).toEqual([]);
   expect(headerLines.filter((line) => line.startsWith("Subject:"))).toHaveLength(1);
 });
+
+/* ── M11: een losse CR in Message-ID is geen antwoord, maar een injectie ───── */
+
+test("een losse CR of LF in de Message-ID levert GEEN antwoord: bouncen", () => {
+  // parseMail ziet een losse \r niet als regelscheiding, dus zo'n Message-ID
+  // komt hier heel aan — en zou een `Bcc:` in onze eigen mail zetten. Weigeren,
+  // niet repareren: dan valt de aanroeper terug op een bounce.
+  expect(
+    buildReplyMime({ ...FIELDS, inReplyTo: "<a\rBcc: slachtoffer@elders.example>" }),
+  ).toBeNull();
+  expect(
+    buildReplyMime({ ...FIELDS, inReplyTo: "<a\nBcc: slachtoffer@elders.example>" }),
+  ).toBeNull();
+});
+
+test("een regelovergang in From levert GEEN antwoord: bouncen", () => {
+  expect(buildReplyMime({ ...FIELDS, from: "ons@invoices.lavega.dev\r\nBcc: x@y" })).toBeNull();
+});
+
+test("een regelovergang in To wordt platgeslagen in plaats van doorgelaten", () => {
+  const raw = buildReplyMime({
+    ...FIELDS,
+    to: "afzender@elders.example\r\nBcc: slachtoffer@elders.example",
+  }) as string;
+  const headerLines = raw.split("\r\n\r\n")[0].split("\r\n");
+  expect(headerLines.filter((line) => /^bcc:/i.test(line))).toEqual([]);
+  expect(headerLines.filter((line) => line.startsWith("To:"))).toHaveLength(1);
+});
+
+/* ── M13: het antwoord zegt dat het een automaat is ────────────────────────── */
+
+test("het antwoord draagt Auto-Submitted en Precedence, tegen een mail-lus", () => {
+  const raw = buildReplyMime(FIELDS) as string;
+  expect(raw).toContain("Auto-Submitted: auto-replied");
+  expect(raw).toContain("Precedence: bulk");
+});

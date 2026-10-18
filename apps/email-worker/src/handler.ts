@@ -20,8 +20,20 @@
  * afzender ziet die tekst in zijn bounce en moet er iets mee kunnen.
  */
 
-import { localPartOf, parseAuthResults, senderHardFail, type SenderChecks } from "./authResults.js";
-import { parseMail, type ParsedMail } from "./parseMail.js";
+import {
+  domainOf,
+  localPartOf,
+  parseAuthResults,
+  senderHardFail,
+  type SenderChecks,
+} from "./authResults.js";
+import {
+  MAX_PARTS,
+  MAX_PART_DEPTH,
+  parseMail,
+  sanitizeFileName,
+  type ParsedMail,
+} from "./parseMail.js";
 import { buildReplyMime } from "./replyMime.js";
 import type { Env, ForwardableEmailMessage } from "./types.js";
 
@@ -92,6 +104,19 @@ function mb(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1) + " MB";
 }
 
+/**
+ * Alleen het ADRES uit een From-regel, zonder de weergavenaam. De naam is door
+ * de afzender te verzinnen en verdwijnt hier met opzet (bevinding A5): die naam
+ * komt in de wachtrij terecht, en `ING Bank <nep@elders.example>` leest daar als
+ * een echte afzender terwijl het adres dat niet is. Het adres zelf is nog steeds
+ * `ongeverifieerd` — dat verandert hier niets aan.
+ */
+export function addressOnly(value: string): string {
+  const matches = String(value || "").match(/<[^<>]*>/g);
+  const address = matches ? matches[matches.length - 1].slice(1, -1) : String(value || "");
+  return address.trim();
+}
+
 async function readRaw(stream: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
@@ -140,7 +165,7 @@ export function checkAttachmentCaps(mail: ParsedMail): string | null {
     if (pdf.bytes > MAX_PDF_BYTES) {
       return (
         "de bijlage " +
-        (pdf.fileName || "(zonder naam)") +
+        (sanitizeFileName(pdf.fileName) || "(zonder naam)") +
         " is " +
         mb(pdf.bytes) +
         "; de grens is " +
@@ -165,18 +190,26 @@ export function buildPayload(message: ForwardableEmailMessage, mail: ParsedMail)
   return {
     to: message.to,
     queueKey: localPartOf(message.to),
-    // De From:-header als die er is, anders de envelop-afzender. Let op wat dit
-    // BETEKENT bij doorsturen: dan is dit zijn eigen adres, niet dat van de
-    // leverancier. De leverancier komt uit de factuur zelf (`counterparty`).
-    from: mail.from || message.from,
+    // Alleen het ADRES, niet de weergavenaam: zie addressOnly (bevinding A5). Let
+    // op wat dit BETEKENT bij doorsturen: dan is dit zijn eigen adres, niet dat
+    // van de leverancier. De leverancier komt uit de factuur zelf
+    // (`counterparty`).
+    from: addressOnly(mail.from || message.from),
     subject: mail.subject,
     date: mail.date,
     messageId: mail.messageId,
     text: mail.text,
     html: mail.html,
-    auth: parseAuthResults(message.headers.get("Authentication-Results")),
+    // Het From-domein gaat mee zodat een `dkim=pass`/`dmarc=pass` voor een ánder
+    // domein niet als pass doorgaat (bevinding H2).
+    auth: parseAuthResults(
+      message.headers.get("Authentication-Results"),
+      domainOf(mail.from || message.from),
+    ),
     attachments: mail.attachments.map((a) => ({
-      fileName: a.fileName,
+      // Defensief nog een keer: de parser saneert al, maar dit veld gaat de
+      // wachtrij in en moet nooit ruwe stuurtekens dragen.
+      fileName: sanitizeFileName(a.fileName),
       mimeType: a.mimeType,
       data: a.data,
     })),
@@ -243,8 +276,17 @@ export async function handleInboundEmail(
    * geheugen, geen webhook-aanroep, geen wachtrij-item en vooral geen
    * Claude-extractie op de sleutel van de eigenaar. De uitslagen komen uit de
    * header die de ontvangende MTA zet, dus daar is de mail zelf niet voor
-   * nodig. Alleen een GEMETEN mislukking gaat terug — zie senderHardFail. */
-  const spoofed = senderHardFail(parseAuthResults(message.headers.get("Authentication-Results")));
+   * nodig. Alleen een GEMETEN mislukking gaat terug — zie senderHardFail.
+   *
+   * De From:-header gaat mee zodat een `dkim=pass`/`dmarc=pass` voor een ander
+   * domein als mislukking telt (H2). Die header staat in `message.headers`, dus
+   * dit kost nog steeds geen parse van de hele mail. */
+  const spoofed = senderHardFail(
+    parseAuthResults(
+      message.headers.get("Authentication-Results"),
+      domainOf(message.headers.get("From") || ""),
+    ),
+  );
   if (spoofed) {
     return { kind: "reject", reason: "LaVega heeft deze mail niet aangenomen: " + spoofed };
   }
@@ -260,6 +302,22 @@ export async function handleInboundEmail(
         "LaVega kon deze mail niet lezen: " +
         short(error instanceof Error ? error.message : String(error), 200) +
         ". Er is niets opgeslagen.",
+    };
+  }
+
+  /* De mail nestte dieper of had meer delen dan de parser aankan (M12). Er
+   * ontbreken dan delen, dus dit mag geen "verwerkt" worden: een BENOEMDE
+   * weigering met de reden, zodat de afzender het hoort. */
+  if (mail.partsCapped) {
+    return {
+      kind: "reject",
+      reason:
+        "LaVega heeft deze mail niet aangenomen: hij is te diep genest of heeft te veel delen " +
+        "(meer dan " +
+        MAX_PART_DEPTH +
+        " lagen of " +
+        MAX_PARTS +
+        " delen). Stuur de factuur als één PDF in een gewone mail.",
     };
   }
 
@@ -386,6 +444,46 @@ export async function handleInboundEmail(
 }
 
 /**
+ * Waarom we NIET op deze afzender mogen antwoorden (M13), of null als het mag.
+ *
+ * Een antwoord op een automaat is het begin van een lus: die automaat antwoordt
+ * terug, wij antwoorden weer, en dat loopt door tot iemand het merkt — op de
+ * kosten van de eigenaar, want elke ronde kost n8n en een Claude-extractie. Drie
+ * soorten afzenders komen hier in beeld:
+ *   1. onszelf — iets onder `lavega.dev`, want dan mailt het systeem zichzelf;
+ *   2. een automaat dat het zelf zegt (`Auto-Submitted`, `Precedence`,
+ *      `List-Id`);
+ *   3. een adres dat per afspraak niet leest: `no-reply`, `noreply`,
+ *      `mailer-daemon`, `postmaster`, `bounce`, … .
+ */
+export function replyWouldLoop(from: string, headers: Headers): string | null {
+  const domain = domainOf(from);
+  if (domain === "lavega.dev" || domain.endsWith(".lavega.dev")) {
+    return "de afzender hoort bij LaVega zelf";
+  }
+  const autoSubmitted = (headers.get("Auto-Submitted") || "").trim().toLowerCase();
+  if (autoSubmitted && autoSubmitted !== "no") {
+    return "het bericht zegt zelf dat het automatisch is (Auto-Submitted)";
+  }
+  const precedence = (headers.get("Precedence") || "").trim().toLowerCase();
+  if (precedence === "bulk" || precedence === "list" || precedence === "junk") {
+    return "het bericht is een bulk- of lijstbericht (Precedence: " + precedence + ")";
+  }
+  if (headers.get("List-Id")) {
+    return "het bericht komt van een mailinglijst (List-Id)";
+  }
+  const local = localPartOf(from);
+  if (
+    /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounce[rs]?|notifications?|automated)/i.test(
+      local,
+    )
+  ) {
+    return "het adres (" + local + "@…) leest niet";
+  }
+  return null;
+}
+
+/**
  * Het oordeel uitvoeren. Kort gehouden met opzet: alles hierin kan alleen in
  * Cloudflare zelf falen.
  *
@@ -401,6 +499,15 @@ export async function applyVerdict(
   if (verdict.kind === "queued") return;
   if (verdict.kind === "reject") {
     message.setReject(short(verdict.reason, 400));
+    return;
+  }
+
+  // Antwoorden op een automaat of op onszelf start een lus (M13). Dan liever
+  // dezelfde terugval als wanneer Cloudflare het antwoord weigert: een bounce
+  // met de uitleg erin. Er verdwijnt nog steeds niets.
+  const loop = replyWouldLoop(message.from, message.headers);
+  if (loop) {
+    message.setReject(short(verdict.body.split("\n")[0] + " (niet geantwoord: " + loop + ")", 400));
     return;
   }
 

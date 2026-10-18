@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { localPartOf, parseAuthResults, UNKNOWN_CHECKS } from "../src/authResults.js";
+import {
+  domainOf,
+  localPartOf,
+  parseAuthResults,
+  TRUSTED_AUTHSERV_ID,
+  UNKNOWN_CHECKS,
+} from "../src/authResults.js";
 
 test("de vorm die Cloudflare zet, over meerdere regels uitgevouwen", () => {
   expect(
@@ -24,7 +30,9 @@ test("geen header betekent drie keer unknown", () => {
 });
 
 test("softfail, temperror en permerror worden letterlijk doorgegeven", () => {
-  expect(parseAuthResults("mx; spf=softfail; dkim=temperror; dmarc=permerror")).toEqual({
+  expect(
+    parseAuthResults("mx.cloudflare.net; spf=softfail; dkim=temperror; dmarc=permerror"),
+  ).toEqual({
     spf: "softfail",
     dkim: "temperror",
     dmarc: "permerror",
@@ -32,14 +40,85 @@ test("softfail, temperror en permerror worden letterlijk doorgegeven", () => {
 });
 
 test("een uitslag die niet in RFC 7601 staat wordt unknown", () => {
-  expect(parseAuthResults("mx; spf=prima; dkim=pass; dmarc=none").spf).toBe("unknown");
+  expect(parseAuthResults("mx.cloudflare.net; spf=prima; dkim=pass; dmarc=none").spf).toBe(
+    "unknown",
+  );
 });
 
 test("een domeinnaam die op een mechanisme lijkt wordt niet voor een uitslag aangezien", () => {
   // `header.d=dkim-only.nl` mag niet als `dkim=only` gelezen worden.
   expect(
-    parseAuthResults("mx; spf=pass header.d=dkim-only.nl smtp.mailfrom=dmarc-test.nl").dkim,
+    parseAuthResults(
+      "mx.cloudflare.net; spf=pass header.d=dkim-only.nl smtp.mailfrom=dmarc-test.nl",
+    ).dkim,
   ).toBe("unknown");
+});
+
+/* ── H2: alleen het segment van de vertrouwde MTA telt ─────────────────────── */
+
+test("een header zonder de vertrouwde authserv-id levert nooit een pass op", () => {
+  // Precies de aanval: de afzender verzint zijn eigen Authentication-Results en
+  // belooft daarin een pass. Zonder `mx.cloudflare.net` is dat niets waard.
+  expect(parseAuthResults("sender.example; dkim=pass; spf=pass; dmarc=pass")).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
+  expect(
+    parseAuthResults("Authentication-Results: mx.cloudflare.net.evil.example; dmarc=pass"),
+  ).toEqual(UNKNOWN_CHECKS);
+});
+
+test("een genagde header VÓÓR de echte van Cloudflare verslaat de poort niet", () => {
+  // Zoals `Headers.get()` twee headers plakt: eerst die van de afzender, dan de
+  // echte van Cloudflare. De echte zegt dmarc=fail; die moet winnen — ook als de
+  // nagemaakte zich voordoet als de vertrouwde MTA.
+  const joined =
+    "mx.cloudflare.net; dkim=pass header.d=ing.nl; spf=pass smtp.mailfrom=ing.nl; dmarc=pass header.from=ing.nl, " +
+    "mx.cloudflare.net; dkim=fail header.d=elders.example; spf=fail smtp.mailfrom=elders.example; dmarc=fail header.from=ing.nl";
+  expect(parseAuthResults(joined)).toEqual({ spf: "fail", dkim: "fail", dmarc: "fail" });
+});
+
+test("ook andersom (echte eerst, genagde erna) wint de meest wantrouwende uitslag", () => {
+  const joined =
+    "mx.cloudflare.net; dmarc=fail header.from=ing.nl, " +
+    "mx.cloudflare.net; dmarc=pass header.from=ing.nl";
+  expect(parseAuthResults(joined).dmarc).toBe("fail");
+});
+
+test("een pass voor een ánder domein dan From: is een mislukking (alignment)", () => {
+  const header =
+    "mx.cloudflare.net; dkim=pass header.d=elders.example; dmarc=pass header.from=elders.example";
+  expect(parseAuthResults(header, "ing.nl")).toEqual({
+    spf: "unknown",
+    dkim: "fail",
+    dmarc: "fail",
+  });
+  // En een pass die WEL aansluit blijft pass.
+  const aligned = "mx.cloudflare.net; dkim=pass header.d=ing.nl; dmarc=pass header.from=ing.nl";
+  expect(parseAuthResults(aligned, "ing.nl")).toEqual({
+    spf: "unknown",
+    dkim: "pass",
+    dmarc: "pass",
+  });
+  // Een subdomein telt als alignment (relaxed, RFC 7489).
+  expect(
+    parseAuthResults("mx.cloudflare.net; dmarc=pass header.from=e.ing.nl", "ing.nl").dmarc,
+  ).toBe("pass");
+});
+
+test("zonder From-domein wordt alignment niet getoetst", () => {
+  expect(parseAuthResults("mx.cloudflare.net; dmarc=pass header.from=elders.example").dmarc).toBe(
+    "pass",
+  );
+});
+
+test("domainOf haalt het domein uit een adresheader", () => {
+  expect(domainOf("Hosting Noord <facturen@hostingnoord.nl>")).toBe("hostingnoord.nl");
+  expect(domainOf("facturen@ing.nl")).toBe("ing.nl");
+  expect(domainOf("Facturen@ING.NL.")).toBe("ing.nl");
+  expect(domainOf("zonder adres")).toBe("");
+  expect(TRUSTED_AUTHSERV_ID).toBe("mx.cloudflare.net");
 });
 
 test("localPartOf: het lokale deel, in kleine letters", () => {

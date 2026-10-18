@@ -19,6 +19,19 @@
  * encoded-word. Niet uit netheid: de tekst is Nederlands, en een 8-bits byte in
  * een SMTP-header of -body is precies hoe zo'n antwoord alsnog onleesbaar
  * aankomt.
+ *
+ * ELKE HEADER GAAT DOOR `encodeHeaderValue`, en From/Message-ID worden geweigerd
+ * als er een regelovergang in staat. Reden (bevinding M11): `Message-ID` en de
+ * envelop-afzender komen van buiten, en `parseMail` ziet een LOSSE `\r` niet als
+ * regelscheiding. Een `Message-ID` met zo'n `\r` zet anders een eigen `Bcc:` in
+ * een mail die wij namens invoices.lavega.dev versturen. Weigeren betekent: geen
+ * antwoord mogelijk → de aanroeper bouncet, en er verdwijnt nog steeds niets.
+ *
+ * `Auto-Submitted: auto-replied` en `Precedence: bulk` staan er met opzet in
+ * (bevinding M13): zonder die twee kan een antwoord op een automatisch bericht
+ * een mail-lus starten, en dat verbrandt de n8n- en Claude-budgetten van de
+ * eigenaar. Ze zijn niet genoeg op zichzelf — de aanroeper weigert ook al te
+ * antwoorden op een afzender die zelf een automaat is.
  */
 
 import { bytesToBase64 } from "./parseMail.js";
@@ -61,15 +74,23 @@ function wrap76(text: string): string {
 export function buildReplyMime(fields: ReplyFields): string | null {
   const inReplyTo = fields.inReplyTo.trim();
   if (!inReplyTo) return null;
+  // Een regelovergang in From of Message-ID is geen adres of id maar een poging
+  // er een header bij te smokkelen (M11). Geen antwoord mogelijk: bouncen.
+  if (/[\r\n]/.test(fields.from) || /[\r\n]/.test(inReplyTo)) return null;
 
   const subject = fields.subject.trim();
   const lines = [
-    "From: " + fields.from,
-    "To: " + fields.to,
-    "In-Reply-To: " + inReplyTo,
-    "References: " + inReplyTo,
+    "From: " + encodeHeaderValue(fields.from),
+    // `To` is de envelop-afzender en dus van buiten; encodeHeaderValue haalt er
+    // elke regelovergang uit. Een antwoord hoort een antwoord te zijn, geen
+    // doorgeefluik voor headers van de afzender.
+    "To: " + encodeHeaderValue(fields.to),
+    "In-Reply-To: " + encodeHeaderValue(inReplyTo),
+    "References: " + encodeHeaderValue(inReplyTo),
     "Subject: " +
       encodeHeaderValue(subject.toLowerCase().startsWith("re:") ? subject : "Re: " + subject),
+    "Auto-Submitted: auto-replied",
+    "Precedence: bulk",
     'Content-Type: text/plain; charset="utf-8"',
     "Content-Transfer-Encoding: base64",
     "MIME-Version: 1.0",

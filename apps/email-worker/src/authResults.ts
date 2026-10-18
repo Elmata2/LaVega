@@ -17,13 +17,27 @@
  *     spf=pass smtp.mailfrom=hostingnoord.nl;
  *     dmarc=pass header.from=hostingnoord.nl
  *
- * EERLIJK OVER DE GRENS: als er méér dan één van deze headers in de mail staat
- * — een upstream-MTA kan er al één hebben toegevoegd — dan leest dit de eerste
- * uitslag die het tegenkomt, en die hoeft niet van Cloudflare te zijn. Ik kan
- * hier niet nagaan welke header Cloudflare precies meestuurt; dat is een van de
- * dingen die pas bij de eerste echte doorgestuurde mail blijkt (zie
- * docs/n8n/DOORSTUURADRES.md). Ontbreekt de header, dan is de uitslag
- * `unknown` — nooit `pass`.
+ * EERLIJK OVER DE GRENS: een afzender kan ZELF een `Authentication-Results`
+ * meesturen, en `Headers.get()` plakt die vóór de echte van Cloudflare. Wie hier
+ * simpelweg de eerste `spf=|dkim=|dmarc=` pakt, leest dus de uitslag die de
+ * AFZENDER verzon — en een verzonnen `dmarc=pass` zette de poort van M6 open
+ * (bevinding H2). Daarom leest dit nu alleen de segmenten waarvan de
+ * `authserv-id` de vertrouwde MTA is, `mx.cloudflare.net`; die naam staat in
+ * Cloudflare's eigen voorbeelden en in de MX-/SPF-namen `*.mx.cloudflare.net`
+ * (zie docs/n8n/DOORSTUURADRES.md). Telt er méér dan één zo'n segment, dan wint
+ * de MEEST wantrouwende uitslag per mechanisme: de volgorde waarin
+ * `Headers.get()` de headers plakt is niets om op te bouwen. Staat er geen
+ * enkel vertrouwd segment in, dan is de uitslag `unknown` — nooit `pass`.
+ *
+ * WAT NOG STEEDS NIET VASTSTAAT: welke header Cloudflare precies meestuurt. In
+ * de praktijk zet Email Routing ook (of alleen) `ARC-Authentication-Results`;
+ * dat is een andere header dan deze parser leest, en dan blijft de uitslag
+ * `unknown`. Zie docs/n8n/DOORSTUURADRES.md, "Wat hier niet getest is".
+ *
+ * ALIGNMENT: een `dkim=pass`/`dmarc=pass` waarvan `header.d=`/`header.from=`
+ * niet spoort met het domein in `From:` geldt als mislukking. Zonder die
+ * controle bewijst zo'n `pass` niets over de afzender in `From:` — precies waar
+ * de spook-factuur op leunt.
  */
 
 export type AuthResult =
@@ -51,25 +65,121 @@ const KNOWN: AuthResult[] = [
 /** Drie keer 'unknown' — de eerlijke uitkomst als er geen header was. */
 export const UNKNOWN_CHECKS: SenderChecks = { spf: "unknown", dkim: "unknown", dmarc: "unknown" };
 
-function resultFor(header: string, mechanism: "spf" | "dkim" | "dmarc"): AuthResult {
+/** De authserv-id van de MTA die de mail bij ons aflevert. Zie de kop: dit is
+ *  Cloudflare's naam (`mx.cloudflare.net`, ook de MX- en SPF-naam), en alleen
+ *  een segment dat hiermee begint wordt geloofd. */
+export const TRUSTED_AUTHSERV_ID = "mx.cloudflare.net";
+
+/** Rangorde voor het samenvoegen van meerdere vertrouwde segmenten: hoe hoger,
+ *  hoe wantrouwender. `unknown` staat onderaan, zodat een mechanisme dat een
+ *  segment niet noemde nooit een `pass` uit een ander segment wegdrukt. */
+const SUSPICION: Record<AuthResult, number> = {
+  fail: 6,
+  permerror: 5,
+  softfail: 4,
+  temperror: 3,
+  neutral: 2,
+  none: 1,
+  pass: 0,
+  unknown: -1,
+};
+
+function worse(a: AuthResult, b: AuthResult): AuthResult {
+  return SUSPICION[b] > SUSPICION[a] ? b : a;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Splits de headerwaarde in de segmenten waarvan de authserv-id de vertrouwde
+ * MTA is. `Headers.get()` plakt meerdere `Authentication-Results`-headers aan
+ * elkaar met ", ", dus de echte van Cloudflare staat niet per se vooraan. Elk
+ * segment loopt tot het volgende vertrouwde segment.
+ */
+function trustedSegments(header: string): string[] {
+  const id = TRUSTED_AUTHSERV_ID.toLowerCase();
+  const pattern = new RegExp("(?:^|[,\\s])(" + escapeRegExp(TRUSTED_AUTHSERV_ID) + ")\\s*;", "gi");
+  const starts: number[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(header)) !== null) {
+    starts.push(match.index + match[0].toLowerCase().indexOf(id));
+  }
+  return starts.map((start, index) =>
+    header.slice(start, index + 1 < starts.length ? starts[index + 1] : undefined),
+  );
+}
+
+/** Het domein uit `header.d=` (DKIM) of `header.from=` (DMARC) in dit segment. */
+function declaredDomain(segment: string, mechanism: "dkim" | "dmarc"): string {
+  const name = mechanism === "dkim" ? "d" : "from";
+  const match = segment.match(new RegExp("header\\.(" + name + ")\\s*=\\s*([^;\\s]+)", "i"));
+  return match ? match[2].trim().toLowerCase().replace(/\.$/, "") : "";
+}
+
+/** Relaxed alignment (RFC 7489): gelijk, of de één is een subdomein van de
+ *  ander. Strikt vergelijken zou een `_dmarc`-record met een `sp=`-subdomein
+ *  onterecht laten zakken. */
+function aligns(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.endsWith("." + b) || b.endsWith("." + a);
+}
+
+/** Het domein uit een adresheader: `Naam <a@voorbeeld.nl>` → `voorbeeld.nl`. */
+export function domainOf(value: string): string {
+  const matches = String(value || "").match(/<[^<>]*>/g);
+  const address = (matches ? matches[matches.length - 1].slice(1, -1) : String(value || "")).trim();
+  const at = address.lastIndexOf("@");
+  return at >= 0
+    ? address
+        .slice(at + 1)
+        .trim()
+        .toLowerCase()
+        .replace(/\.$/, "")
+    : "";
+}
+
+function resultFor(
+  segment: string,
+  mechanism: "spf" | "dkim" | "dmarc",
+  fromDomain: string,
+): AuthResult {
   // `(?:^|[;\s])` voorkomt dat `header.d=...` of een domeinnaam die op "spf"
   // eindigt voor een uitslag wordt aangezien.
-  const match = header.match(new RegExp("(?:^|[;\\s])" + mechanism + "\\s*=\\s*([A-Za-z]+)", "i"));
+  const match = segment.match(new RegExp("(?:^|[;\\s])" + mechanism + "\\s*=\\s*([A-Za-z]+)", "i"));
   if (!match) return "unknown";
   const value = match[1].toLowerCase() as AuthResult;
-  return KNOWN.includes(value) ? value : "unknown";
+  if (!KNOWN.includes(value)) return "unknown";
+  // Alleen een `pass` wordt aan alignment getoetst. Een gemeten mislukking mag
+  // niet opgetild worden, en een ontbrekend domein is geen reden om te zakken.
+  if (value === "pass" && fromDomain && mechanism !== "spf") {
+    const declared = declaredDomain(segment, mechanism);
+    if (declared && !aligns(declared, fromDomain)) return "fail";
+  }
+  return value;
 }
 
 /**
  * @param header de waarde van `Authentication-Results`, of null als die er niet was
+ * @param fromDomain het domein uit `From:`, waartegen DKIM/DMARC-pass moet
+ *   aansluiten. Leeg betekent: niet toetsen (de poort leest de From:-header
+ *   vóór het parsen, dus dit is er altijd als de afzender er één stuurde).
  */
-export function parseAuthResults(header: string | null | undefined): SenderChecks {
+export function parseAuthResults(header: string | null | undefined, fromDomain = ""): SenderChecks {
   if (typeof header !== "string" || header.trim() === "") return { ...UNKNOWN_CHECKS };
-  return {
-    spf: resultFor(header, "spf"),
-    dkim: resultFor(header, "dkim"),
-    dmarc: resultFor(header, "dmarc"),
-  };
+  const segments = trustedSegments(header);
+  // Geen enkel segment van de vertrouwde MTA: dan weten we niets. Dat is geen
+  // `pass` maar `unknown` — de poort laat een ongemeten mail door, gemarkeerd,
+  // maar een verzonnen `dmarc=pass` kan er niet meer doorheen komen.
+  if (segments.length === 0) return { ...UNKNOWN_CHECKS };
+  const checks: SenderChecks = { ...UNKNOWN_CHECKS };
+  for (const segment of segments) {
+    checks.spf = worse(checks.spf, resultFor(segment, "spf", fromDomain));
+    checks.dkim = worse(checks.dkim, resultFor(segment, "dkim", fromDomain));
+    checks.dmarc = worse(checks.dmarc, resultFor(segment, "dmarc", fromDomain));
+  }
+  return checks;
 }
 
 /** Het lokale deel van een adres: `alexander-7f3a@invoices.lavega.dev` →
