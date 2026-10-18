@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import BankLink from "./BankLink";
+import BankLink, { isHttpsUrl } from "./BankLink";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -143,5 +143,45 @@ test("connecting a bank after switching to Particulier sends psuType personal", 
     expect(body).toEqual({ name: "ING", country: "NL", psuType: "personal" });
   } finally {
     mock.restore();
+  }
+});
+
+test("isHttpsUrl allows the https authorisation page and nothing else", () => {
+  expect(isHttpsUrl("https://bank.example/auth")).toBe(true);
+  expect(isHttpsUrl("http://bank.example/auth")).toBe(false);
+  expect(isHttpsUrl("javascript:alert(1)")).toBe(false);
+  expect(isHttpsUrl("data:text/html,<script>x</script>")).toBe(false);
+  expect(isHttpsUrl("//bank.example/auth")).toBe(false);
+  expect(isHttpsUrl("not a url")).toBe(false);
+  expect(isHttpsUrl("https://")).toBe(false);
+});
+
+test("an authorisation URL that is not https is refused instead of navigated to", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    if (String(url).includes("/api/eb/auth")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ url: "javascript:alert(1)" }),
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ aspsps: [{ name: "ING", country: "NL" }] }),
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+  try {
+    await render();
+    click(byText("button", "Koppel bank (Enable Banking)"));
+    await flush();
+    const before = window.location.href;
+    click(byText("button", "Autoriseer"));
+    await flush();
+    expect(window.location.href).toBe(before);
+    expect(container!.textContent).toContain("niet met https begint");
+  } finally {
+    globalThis.fetch = original;
   }
 });

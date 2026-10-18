@@ -509,6 +509,7 @@ type BankLinkCopy = {
   bankkoppelingError: (message: string) => string;
   alleenLezenToegang: string;
   bankGeenAutorisatiepagina: string;
+  bankOnveiligeAutorisatiepagina: string;
 };
 
 type BetaalschemaCopy = {
@@ -1181,6 +1182,8 @@ const nl: MoneyCopy = {
     alleenLezenToegang:
       "Alleen-lezen toegang via Enable Banking — je autoriseert bij je eigen bank; gegevens komen versleuteld in je eigen kluis.",
     bankGeenAutorisatiepagina: "De bank gaf geen autorisatiepagina terug.",
+    bankOnveiligeAutorisatiepagina:
+      "De bank gaf een autorisatiepagina terug die niet met https begint. LaVega stuurt je daar niet heen.",
   },
   betaalschema: {
     title: "Betaalagenda",
@@ -1821,6 +1824,8 @@ const en: MoneyCopy = {
     alleenLezenToegang:
       "Read-only access via Enable Banking — you authorise with your own bank; data arrives encrypted in your own vault.",
     bankGeenAutorisatiepagina: "The bank did not return an authorisation page.",
+    bankOnveiligeAutorisatiepagina:
+      "The bank returned an authorisation page that does not start with https. LaVega will not send you there.",
   },
   betaalschema: {
     title: "Payment schedule",

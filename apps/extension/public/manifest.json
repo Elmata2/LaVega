@@ -38,7 +38,7 @@
   "host_permissions": [],
 
   "optional_host_permissions": [
-    "<all_urls>",
+    "https://www.ikea.com/nl/nl/p/*",
     "https://global.americanexpress.com/offers/eligible*",
     "https://mijn.ing.nl/punten*"
   ],
