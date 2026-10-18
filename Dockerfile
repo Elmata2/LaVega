@@ -2,7 +2,10 @@
 # Node 22 — pnpm 11.18.0 requires it (crashes on 18/20). pnpm is installed
 # directly via npm, not corepack, to avoid corepack's signature check on newer
 # pnpm versions.
-FROM node:22-slim
+# Two stages: the build stage needs the devDependencies (Vite, turbo, the
+# vitest-driven base check below); the runtime stage installs only the
+# production dependency tree, so no dev/test advisory ships in the image.
+FROM node:22-slim AS build
 WORKDIR /app
 
 RUN npm install -g pnpm@11.18.0
@@ -41,9 +44,34 @@ RUN pnpm build
 # with the broken build.
 RUN LAVEGA_EXPECT_INVESTING_BASE=/investing/ pnpm --filter @lavega/investing-web run verify:base
 
+# The runtime stage installs its own production tree from the lockfile, so the
+# build tree is dropped here — otherwise its devDependencies (vitest, tinypool,
+# …) would ride along into the copied image layer.
+RUN find . -type d -name node_modules -prune -exec rm -rf {} +
+
+# Runtime stage: only the production dependency tree, no compiler/test tooling.
+FROM node:22-slim
+WORKDIR /app
+
+RUN npm install -g pnpm@11.18.0
+
 ENV NODE_ENV=production
 ENV INVESTING_WEB_DIST=/app/apps/investing-web/dist
 ENV INVESTING_MOUNT=1
+
+# Source + built assets (apps/web/dist, apps/investing-web/dist and the server
+# entry tsx runs) come from the build stage. `pnpm start` still runs from the
+# workspace root, so the root package.json and its start script travel too.
+# Owned by `node` so the non-root runtime can write its runtime state (the
+# .lavega fallback lives under the working directory).
+COPY --from=build --chown=node:node /app /app
+
+# Production dependencies only — this is what keeps the dev/test advisories out
+# of the image. --frozen-lockfile reuses the exact versions the build verified.
+RUN CI=true pnpm install --prod --frozen-lockfile
+
 # Railway provides PORT at runtime; the server reads it (defaults to 8787).
 EXPOSE 8787
+# Drop root: nothing in the image needs privileged access.
+USER node
 CMD ["pnpm", "start"]

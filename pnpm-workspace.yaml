@@ -2,6 +2,16 @@ packages:
   - "packages/*"
   - "apps/*"
   - "scripts/catalog"
+# Force the patched undici releases (M9 / GHSA-2gqq-gqf2-x968, GHSA-8436-99hf-9mmv).
+# undici reaches the runtime image transitively via the AI SDK
+# (@ai-sdk/provider-utils → undici), so there is no direct dependency to bump.
+# Scoped override keys keep the two majors apart: a consumer pinned to 7.x must
+# not be forced across a major boundary that could change its fetch semantics.
+# pnpm 11 no longer reads `pnpm.overrides` from package.json; this file is its
+# settings home.
+overrides:
+  "undici@7": "7.29.1"
+  "undici@8": ">=8.10.2"
 # The pnpm store is global (pnpm's default) and shared by every git worktree.
 # Prefer cached metadata so a fresh worktree links offline instead of hitting
 # the registry. .githooks/post-checkout runs the install on `git worktree add`.
