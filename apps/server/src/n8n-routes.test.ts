@@ -123,7 +123,7 @@ test("a request's own ?key= is never sent to n8n — the session's own local par
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  await app.request("/api/n8n/queue?key=someone-elses-local-part");
+  await app.request("/api/n8n/queue?key=someone-elses-local-part", { method: "POST" });
 
   expect(calls).toHaveLength(1);
   const url = new URL(calls[0]!.url);
@@ -135,11 +135,25 @@ test("no session: 401, and n8n is never called", async () => {
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(401);
   expect(calls).toHaveLength(0);
   expect((await res.json()).code).toBe("n8n-queue-unauthenticated");
+});
+
+/* M4 (2026-10-17): the drain is a state change — the upstream DELETES what it
+ * returns — so a GET made it reachable from another site by a plain link or an
+ * <img>, with the `sameSite:"lax"` session cookie riding along. GET must no
+ * longer be a way in at all. */
+test("GET does not drain the queue any more — the drain is POST only", async () => {
+  const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/queue");
+
+  expect(res.status).toBe(404);
+  expect(calls).toHaveLength(0);
 });
 
 test("no address on file: 200 with an explicitly-flagged empty queue, and n8n is never called", async () => {
@@ -151,7 +165,7 @@ test("no address on file: 200 with an explicitly-flagged empty queue, and n8n is
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ invoices: [], notices: [], noAddress: true });
@@ -163,7 +177,7 @@ test("server not configured: 503, and n8n is never called", async () => {
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(503);
   expect(calls).toHaveLength(0);
@@ -179,7 +193,7 @@ test("n8n-URL on the server is malformed: 503 with code n8n-misconfigured-url, a
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(503);
   expect(calls).toHaveLength(0);
@@ -196,7 +210,7 @@ test("n8n answering 401 (bad shared token) comes back as this route's 502, not 4
   const { impl } = fakeFetchQueue(401, { error: "bad token" });
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({
@@ -211,7 +225,7 @@ test("n8n unreachable (fetch itself throws): 502 with code n8n-unreachable", asy
   }) as typeof fetch;
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({ error: "Kon n8n niet bereiken.", code: "n8n-unreachable" });
@@ -225,7 +239,7 @@ test("n8n responds 200 with an unreadable (non-JSON) body: 502 with code n8n-unr
     })) as typeof fetch;
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({
@@ -238,7 +252,10 @@ test("the x-lavega-token header sent to n8n is the server's configured secret, n
   const { impl, calls } = fakeFetchQueue(200, { invoices: [] });
   const app = buildApp(impl);
 
-  await app.request("/api/n8n/queue", { headers: { "x-lavega-token": "attacker-supplied" } });
+  await app.request("/api/n8n/queue", {
+    method: "POST",
+    headers: { "x-lavega-token": "attacker-supplied" },
+  });
 
   expect(calls[0]!.headers["x-lavega-token"]).toBe("shh-shared-secret");
 });
@@ -248,7 +265,7 @@ test("a healthy response relays n8n's JSON body unchanged", async () => {
   const { impl } = fakeFetchQueue(200, body);
   const app = buildApp(impl);
 
-  const res = await app.request("/api/n8n/queue");
+  const res = await app.request("/api/n8n/queue", { method: "POST" });
 
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual(body);

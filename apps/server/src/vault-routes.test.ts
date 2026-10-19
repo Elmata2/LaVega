@@ -115,6 +115,16 @@ test("a stored vault comes back exactly as it went in", async () => {
   expect(await response.json()).toEqual({ blob, updatedAt: "2026-08-31T00:00:00.000Z" });
 });
 
+/* A3 (2026-10-17): the sibling /api/vault/key already said no-store; the backup
+ * read did not, and a cached copy of it is a copy of the sealed vault. */
+test("the backup read is marked uncacheable, like the vault key", async () => {
+  const { app } = harness();
+
+  const response = await app.request("/api/vault/backup");
+
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+});
+
 test("the write is conditional on the copy the client last saw", async () => {
   const { app, repository } = harness();
 

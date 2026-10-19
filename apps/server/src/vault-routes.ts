@@ -82,6 +82,11 @@ export function registerVaultRoutes(app: Hono, dependencies: VaultRouteDependenc
   });
 
   app.get("/api/vault/backup", async (c) => {
+    /* The same treatment /api/vault/key already gets: a cached copy of this
+     * answer is a copy of the sealed vault, and a shared cache does not know
+     * the body depends on the caller's session (security review 2026-10-17,
+     * A3). */
+    c.header("Cache-Control", "private, no-store");
     const repository = await forTenant(c.req.raw);
     if (!repository) return c.json({ problems: ["Authentication is required"] }, 401);
     const stored = await repository.get();

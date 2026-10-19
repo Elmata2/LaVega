@@ -10,6 +10,7 @@ import { syncBudgets } from "@lavega/investing-server/src/priceOrchestrator.js";
 import { createProblemReporter } from "@lavega/investing-server/src/observability.js";
 import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
+import { secretsMatch } from "./secrets.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import {
   createFileBenchmarkSelectionStore,
@@ -113,7 +114,8 @@ const reportCronProblems = (problems: string[]) =>
 
 export function authorizedCronRequest(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
-  return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
+  if (!secret) return false;
+  return secretsMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
 }
 
 /**
@@ -195,10 +197,17 @@ export function rewriteInvestingRequest(request: Request): Request {
   return new Request(url, request);
 }
 
-export async function forwardInvesting(
-  request: Request,
-  tenantId = LOCAL_TENANT_ID,
-): Promise<Response> {
+/**
+ * Hand one request to the investing app under `tenantId`.
+ *
+ * `tenantId` is REQUIRED, deliberately. It used to default to `LOCAL_TENANT_ID`
+ * and `toInvestingStatic` omitted it, which is how `/investing/api/*` came to
+ * be served as the local tenant with no session (security review 2026-10-17,
+ * H1): a default that looks convenient is a default a future call site will
+ * silently inherit. Every caller now has to name the tenant, and the SPA/static
+ * callers name `LOCAL_TENANT_ID` out loud because they carry no tenant data.
+ */
+export async function forwardInvesting(request: Request, tenantId: string): Promise<Response> {
   const runtime = await getInvestingFetch();
   /* initServerSentry runs once for the shared process and tags everything
    * app=server. Anything captured while the investing app handles the request

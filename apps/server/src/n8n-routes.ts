@@ -45,7 +45,14 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
    * server has one. Never the URL, never the token, never whose queue. */
   app.get("/api/n8n/status", (c) => c.json({ configured: loadN8nQueueConfig().configured }));
 
-  app.get("/api/n8n/queue", async (c) => {
+  /* POST, not GET. The upstream DELETES what it returns (see `drainQueue` in
+   * packages/core/src/n8n/queue.js), so this route is a state change that
+   * destroys data — and a `GET` is reachable from another site by a plain
+   * link or image tag, with the `sameSite:"lax"` session cookie riding along
+   * on a top-level navigation (security review 2026-10-17, M4). `GET` was the
+   * only method that made the drain CSRF-able; POST does not, and the
+   * same-origin guard in index.ts refuses a cross-site POST outright. */
+  app.post("/api/n8n/queue", async (c) => {
     const cfg = loadN8nQueueConfig();
     if (!cfg.configured || !cfg.url || !cfg.token)
       return c.json(

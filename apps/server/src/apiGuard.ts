@@ -2,7 +2,10 @@ import type { Context, MiddlewareHandler } from "hono";
 import { verifiedSession } from "./auth.js";
 
 /**
- * The session guard for /api/*.
+ * The session guard for `/api/*` — and for `/investing/api/*`, which is the
+ * same API reached through the investing SPA's own prefix (see
+ * `INVESTING_API_ALIAS` below; falling to close that alias is security review
+ * 2026-10-17, H1).
  *
  * Until this existed, `verifiedSession` was defined in auth.ts and called from
  * nowhere: Better Auth was wired to Neon but guarded no route, so every API —
@@ -30,8 +33,34 @@ const PUBLIC_API_PATHS = new Set([
   "/api/investing/health", // { ok, service } only, no personal data
 ]);
 
+/* The investing SPA reaches the SAME API surface through `/investing/api/*`:
+ * `toInvestingStatic`/`rewriteInvestingRequest` strip `/investing` before the
+ * investing app sees the request, so `/investing/api/<ns>/…` is byte-for-byte
+ * `/api/<ns>/…`. The guard was mounted on `/api/*` alone, which left that alias
+ * entirely unguarded — an anonymous `curl` could read and write the investing
+ * API under the local tenant. Mapping the alias onto the canonical path keeps
+ * ONE public list instead of a second copy that drifts. */
+export const INVESTING_API_ALIAS = "/investing/api";
+
+/** Is `path` part of the API surface this guard owns (canonical or alias)? */
+export function isGuardedApiPath(path: string): boolean {
+  return (
+    path.startsWith("/api/") ||
+    path === INVESTING_API_ALIAS ||
+    path.startsWith(`${INVESTING_API_ALIAS}/`)
+  );
+}
+
 export function isPublicApiPath(path: string): boolean {
-  if (path.startsWith("/api/auth/")) return true; // how you log in
+  const viaAlias = path === INVESTING_API_ALIAS || path.startsWith(`${INVESTING_API_ALIAS}/`);
+  const canonical = viaAlias
+    ? `/api/${path.slice(INVESTING_API_ALIAS.length).replace(/^\//, "")}`
+    : path;
+  if (PUBLIC_API_PATHS.has(canonical)) return true;
+  /* `/api/auth/*` and `/api/eb/callback` are mounted on `/api/*` only, so under
+   * the alias they are not "public" — they are simply not routes at all. */
+  if (viaAlias) return false;
+  if (canonical.startsWith("/api/auth/")) return true; // how you log in
   /* The bank redirects the user's browser here from its own domain. Whether a
    * session cookie survives that hop is decided by SameSite behaviour we do not
    * control, and a bank connection that breaks on a browser default is worse
@@ -39,8 +68,22 @@ export function isPublicApiPath(path: string): boolean {
    * requires a `state` this server issued for a signed-in user, unguessable,
    * single-use and valid for minutes, and it takes the user's identity from
    * that row rather than from anything the caller sends. */
-  if (path === "/api/eb/callback") return true;
-  return PUBLIC_API_PATHS.has(path);
+  return canonical === "/api/eb/callback";
+}
+
+/**
+ * Is this a hosted deployment, where the escape hatch below must never apply?
+ *
+ * `NODE_ENV=production` is what the long-lived Docker/Railway image runs with;
+ * Vercel sets `VERCEL_ENV` on every deployment (production and preview alike).
+ * Either is a marker that this process serves real users.
+ */
+export function isHostedDeployment(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.VERCEL_ENV) ||
+    process.env.VERCEL === "1"
+  );
 }
 
 /**
@@ -53,19 +96,29 @@ export function isPublicApiPath(path: string): boolean {
  * send the session cookie unless it asks (`credentials: "include"`), which none
  * of the client's fetches do. Production serves the app from this same origin,
  * where cookies are sent by default, and sets nothing.
+ *
+ * On a hosted deployment the flag is REFUSED. It switches off both guards, so a
+ * stray `LAVEGA_ALLOW_UNAUTHENTICATED=1` in a platform's environment UI would
+ * publish the vault and the broker API to anyone who finds the URL — a switch
+ * whose failure mode is total. A self-host or `pnpm dev` is not a hosted
+ * deployment and keeps the escape hatch.
  */
 export function guardIsDisabled(): boolean {
-  return process.env.LAVEGA_ALLOW_UNAUTHENTICATED === "1";
+  if (process.env.LAVEGA_ALLOW_UNAUTHENTICATED !== "1") return false;
+  return !isHostedDeployment();
 }
 
 export function apiGuard(): MiddlewareHandler {
   return async (c, next) => {
-    if (!c.req.path.startsWith("/api/")) return next();
+    if (!isGuardedApiPath(c.req.path)) return next();
     if (isPublicApiPath(c.req.path)) return next();
-    // A CORS preflight carries no cookies by definition, so judging it would
-    // refuse every cross-origin POST before the real request could identify
-    // itself. The real request that follows is still guarded.
-    if (c.req.method === "OPTIONS") return next();
+    /* There is deliberately no `OPTIONS` bypass here anymore. It existed so a
+     * CORS preflight — which carries no cookies by definition — was not judged.
+     * But a preflight never reaches this middleware: the loopback-only CORS
+     * middleware above answers it (204) before the guard runs, and a preflight
+     * from anywhere else is a cross-origin caller this API does not serve. A
+     * blanket `OPTIONS` pass was latency with no benefit: it let any method-less
+     * probe through the one place that is supposed to be closed by default. */
     if (guardIsDisabled()) return next();
 
     const session = await verifiedSession(c.req.raw);

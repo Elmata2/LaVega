@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context, type Next } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -25,12 +26,13 @@ import {
   runInvestingCron,
   shouldMountInvesting,
 } from "./investing-mount.js";
-import { getAuth, SIGN_UP_RATE_LIMIT, verifiedSession } from "./auth.js";
+import { authTrustedOrigins, getAuth, verifiedSession } from "./auth.js";
 import { authEmailConfig } from "./authEmail.js";
-import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
-import { apiGuard, guardIsDisabled } from "./apiGuard.js";
+import { createPublicAuthLimiter } from "./authLimits.js";
+import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
+import { sameOriginGuard } from "./sameOrigin.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { localeRedirectTarget } from "@lavega/core";
+import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -115,11 +117,41 @@ loadCatalogue();
  * a base URL the user types in themselves, so an enumerated list would break
  * shipped features the first time someone used their own instance. `style-src`
  * allows inline because that is what React renders a `style={{…}}` prop as.
+ *
+ * HSTS is emitted only over https (below), and a restrictive Permissions-Policy
+ * names the browser features this app does not use, so a stray third-party
+ * script cannot reach the camera, the microphone or the clipboard without
+ * permission (security review 2026-10-17, A6).
  */
 app.use(
   "*",
   secureHeaders({
-    strictTransportSecurity: "max-age=31536000; includeSubDomains",
+    // Off here; set conditionally by the middleware below. `secureHeaders`
+    // cannot know the request's scheme, and HSTS sent over plaintext is either
+    // ignored (browsers) or, worse, pins `includeSubDomains` for a host once
+    // reached over https by accident.
+    strictTransportSecurity: false,
+    permissionsPolicy: {
+      camera: ["none"],
+      microphone: ["none"],
+      geolocation: ["none"],
+      payment: ["none"],
+      usb: ["none"],
+      serial: ["none"],
+      hid: ["none"],
+      midi: ["none"],
+      bluetooth: ["none"],
+      magnetometer: ["none"],
+      gyroscope: ["none"],
+      accelerometer: ["none"],
+      displayCapture: ["none"],
+      idleDetection: ["none"],
+      autoplay: ["none"],
+      fullscreen: ["none"],
+      // The one the app genuinely uses: the copy-to-clipboard button next to
+      // the forwarding address (apps/web/src/views/Koppelingen.tsx).
+      clipboardWrite: ["self"],
+    },
     xContentTypeOptions: "nosniff",
     xFrameOptions: "DENY",
     referrerPolicy: "no-referrer",
@@ -138,6 +170,27 @@ app.use(
     },
   }),
 );
+
+/** Is this request arriving over TLS, as far as the proxy tells us? */
+export function isHttpsRequest(protoHeader: string | undefined, url: string): boolean {
+  /* Behind Vercel/Cloudflare the function sees `http://<internal>`; the edge
+   * states the original scheme in `x-forwarded-proto`. Direct (a local host
+   * with a TLS cert) falls back to the request's own URL. */
+  const forwarded = protoHeader?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === "https";
+  return new URL(url).protocol === "https:";
+}
+
+/* HSTS ONLY WHERE IT MEANS SOMETHING. `secureHeaders` emitted it unconditionally
+ * (also on plaintext) with `includeSubDomains`, which a browser would latch onto
+ * for the whole registrable domain the first time any response came back over
+ * https — including a dev tunnel or a preview host that also serves http
+ * (security review 2026-10-17, A6). */
+app.use("*", async (c, next) => {
+  if (isHttpsRequest(c.req.header("x-forwarded-proto"), c.req.url))
+    c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  await next();
+});
 
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -171,22 +224,62 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
-/* Session guard for /api/*. Registered BEFORE every API route below, so a
- * route added later is closed by default rather than open by omission — which
- * is exactly how `verifiedSession` came to guard nothing at all. */
-app.use("/api/*", apiGuard());
+/* A CEILING ON EVERY REQUEST BODY, before any route reads one. Without it a
+ * large POST to a public JSON endpoint (`/api/auth/*`, `/api/eb/callback`,
+ * `/api/card-terms/ingest`) was buffered whole into memory — a plain
+ * unauthenticated memory-exhaustion vector (security review 2026-10-17, M1).
+ *
+ * 8 MB, chosen from both sides. The largest body this API legitimately accepts
+ * is the sealed personal-vault back-up (`PUT /api/vault/backup`), which stores
+ * every account, statement and invoice as one encrypted JSON blob — kilobytes
+ * for a normal user, and an order of magnitude under this even for a busy
+ * multi-year ledger. Everything else here is a small JSON object. 8 MB caps
+ * the attack long before the platform's own (Vercel's function body limit is
+ * 4.5 MB, so the platform refuses first in production; this is what protects
+ * the long-lived Docker/Railway path, which has no such ceiling). */
+const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
+
+/* The two paths that carry the API surface: the canonical prefix and the
+ * investing SPA's alias. Every guard below is registered on BOTH — an alias
+ * that skips one is exactly how H1 shipped. */
+const API_SURFACES = ["/api/*", `${INVESTING_API_ALIAS}/*`];
+
+const limitBody = bodyLimit({
+  maxSize: MAX_REQUEST_BODY_BYTES,
+  onError: (c) => c.json({ error: "Het verzoek is te groot.", code: "payload-too-large" }, 413),
+});
+for (const path of API_SURFACES) app.use(path, limitBody);
+
+/* Cross-site state-changing requests are refused. Inert-but-latent CSRF was a
+ * real hole here: `GET /api/n8n/queue` drained and destroyed the caller's
+ * invoice queue, and the `sameSite:"lax"` cookie rode along on that top-level
+ * navigation (security review 2026-10-17, M4). Applied BEFORE the session
+ * guard, so a cross-site call is refused on its own merits rather than only
+ * when it happens to be signed out. */
+const crossSite = sameOriginGuard(authTrustedOrigins());
+for (const path of API_SURFACES) app.use(path, crossSite);
+
+/* Session guard for /api/* and its `/investing/api/*` alias. Registered BEFORE
+ * every API route below, so a route added later is closed by default rather
+ * than open by omission — which is exactly how `verifiedSession` came to guard
+ * nothing at all, and how the investing alias came to be unguarded. */
+const sessionGuard = apiGuard();
+for (const path of API_SURFACES) app.use(path, sessionGuard);
 
 app.get("/health", (c) => c.json({ ok: true }));
 
-const signUpAttempts = createRateLimiter(SIGN_UP_RATE_LIMIT.max, SIGN_UP_RATE_LIMIT.window * 1000);
+/* One limiter for the three mail/account endpoints, per address AND across all
+ * callers. `send-verification-email` and `request-password-reset` were open and
+ * unlimited: they answered differently for a known and an unknown address
+ * (account enumeration) and could be made to mail a stranger repeatedly
+ * (security review 2026-10-17, A1 / #253). The reply is the same generic 429
+ * for every one of them, so the response does not itself say which endpoint
+ * was hit or whether the address exists. */
+const publicAuthLimits = createPublicAuthLimiter();
 
 app.all("/api/auth/*", async (c) => {
-  if (c.req.method === "POST" && c.req.path === "/api/auth/sign-up/email") {
-    const allowed = signUpAttempts(
-      rateLimitKey("sign-up", undefined, c.req.header("x-forwarded-for")),
-    );
-    if (!allowed) return c.json({ message: "Too many sign-up attempts. Try again later." }, 429);
-  }
+  if (!publicAuthLimits(c.req.method, c.req.path, c.req.raw.headers))
+    return c.json({ message: "Too many attempts. Try again later." }, 429);
   const auth = getAuth();
   if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
   if (
@@ -314,7 +407,13 @@ if (shouldMountInvesting()) {
       return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
     return forwardInvesting(c.req.raw, tenantId);
   };
-  const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Static/health forwarding has no tenant of its own to name — the SPA shell
+   * is HTML, and `health` names the runtime. It names `LOCAL_TENANT_ID`
+   * EXPLICITLY: the old `forwardInvesting` default did this silently, which is
+   * how `/investing/api/*` ended up served as the local tenant with no session
+   * (security review 2026-10-17, H1). */
+  const toInvestingStatic = (c: { req: { raw: Request } }) =>
+    forwardInvesting(c.req.raw, LOCAL_TENANT_ID);
   /* Ahead of the wildcard, and without a session: the health line names the
    * runtime, not a tenant, and the footer that shows it renders before anyone
    * has signed in. */
@@ -331,6 +430,13 @@ if (shouldMountInvesting()) {
   /* The SPA shell itself is public: it has to load before anyone can sign in.
    * Its data comes from the /api routes above, which are not. */
   app.get("/investing", (c) => c.redirect("/investing/"));
+  /* `/investing/api/*` is the same API surface through the SPA's own prefix
+   * (`rewriteInvestingRequest` strips `/investing`, so it becomes `/api/*`).
+   * It goes to `toInvesting`, NOT `toInvestingStatic`: the guard above already
+   * refuses an unauthenticated caller, and this keeps an authenticated one on
+   * their OWN tenant rather than the local one. Registered before the SPA
+   * wildcard so the two do not overlap. */
+  app.all(`${INVESTING_API_ALIAS}/*`, toInvesting);
   app.all("/investing/*", toInvestingStatic);
 }
 

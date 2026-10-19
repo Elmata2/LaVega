@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createRateLimiter, rateLimitKey, type RateLimiter } from "./agent/rateLimit.js";
+import { createRateLimiter, clientIp, rateLimitKey, type RateLimiter } from "./agent/rateLimit.js";
 import type { Hono } from "hono";
 import { loadConfig, type EbConfig, type PsuType } from "./config.js";
 import { createEbFlowRepository } from "@lavega/database";
@@ -98,6 +98,20 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * A bank-flow failure as the caller may see it.
+ *
+ * `errMsg` used to be returned straight to the browser, and the private-key
+ * errors it can carry name an ABSOLUTE PATH (`Enable Banking: private key not
+ * found at /…/key.pem`) — a filesystem layout disclosure to anyone who can
+ * trigger an EB call (security review 2026-10-17, A5). The detail is logged
+ * here, where the operator can read it; the caller gets one fixed sentence.
+ */
+function ebFailure(context: string, e: unknown): string {
+  console.error(`eb/${context}: ${errMsg(e)}`);
+  return "Enable Banking gaf een fout. Probeer het later opnieuw.";
+}
+
 export type EbRouteDependencies = {
   /** Defaults to EB_REFRESH_PER_MINUTE per caller per minute. */
   refreshLimit?: RateLimiter;
@@ -146,7 +160,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       }));
       return c.json({ aspsps });
     } catch (e) {
-      return c.json({ error: errMsg(e) }, 502);
+      return c.json({ error: ebFailure("aspsps", e) }, 502);
     }
   });
 
@@ -194,7 +208,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       await store.startAuth(state, { userId, name, country });
       return c.json({ url: data.url });
     } catch (e) {
-      return c.json({ error: errMsg(e) }, 502);
+      return c.json({ error: ebFailure("auth", e) }, 502);
     }
   });
 
@@ -257,7 +271,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       }
       return c.redirect(`/?eb=${encodeURIComponent(data.session_id)}`);
     } catch (e) {
-      return c.redirect(`/?eb_error=${encodeURIComponent(errMsg(e))}`);
+      return c.redirect(`/?eb_error=${encodeURIComponent(ebFailure("callback", e))}`);
     }
   });
 
@@ -286,7 +300,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
          succeeding. */
       return c.json({ aspsp: session.aspsp, items });
     } catch (e) {
-      return c.json({ error: errMsg(e) }, 502);
+      return c.json({ error: ebFailure("accounts", e) }, 502);
     }
   });
 
@@ -309,7 +323,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     const userId = await tenantId(c.req.raw);
     if (!userId) return c.json({ error: "Log in om je rekeningen te verversen." }, 401);
-    if (!refreshLimit(rateLimitKey("eb-refresh", userId, c.req.header("x-forwarded-for"))))
+    if (!refreshLimit(rateLimitKey("eb-refresh", userId, clientIp(c.req.raw.headers))))
       return c.json(
         { error: "Even wachten — te veel verversverzoeken.", code: "eb-rate-limited" },
         429,

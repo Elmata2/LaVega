@@ -55,3 +55,22 @@ test("an anonymous caller cannot read the portfolio or wipe the price cache", as
   expect((await app.request("/api/investing/health/detail")).status).toBe(401);
   expect((await app.request("/api/prices/cache", { method: "DELETE" })).status).toBe(401);
 });
+
+/* H1 (2026-10-17): `/investing/api/*` is the SAME API surface, reached through
+ * the investing SPA's own prefix — `rewriteInvestingRequest` strips
+ * `/investing`, so it becomes `/api/*`. apiGuard was mounted on `/api/*` alone,
+ * which left this alias entirely open. This asserts against the REAL mount
+ * (no investing-mount mock), so a guard registered on the wrong prefix fails. */
+test("the /investing/api/* alias is closed to an anonymous caller, read and write", async () => {
+  expect((await app.request("/investing/api/investing/summary")).status).toBe(401);
+  expect((await app.request("/investing/api/prices/cache", { method: "DELETE" })).status).toBe(401);
+  expect(
+    (
+      await app.request("/investing/api/brokers/credentials", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ passphrase: "attacker-chosen-value" }),
+      })
+    ).status,
+  ).toBe(401);
+});

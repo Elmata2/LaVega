@@ -107,7 +107,10 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   before the first live EB connection, alongside `0003_eb_flow.sql`.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
 - Better Auth is mounted at `/api/auth/*`, and `apiGuard` (`apps/server/src/apiGuard.ts`)
-  puts **every** `/api/*` route behind it — not just investing. Closed unless the
+  puts **every** `/api/*` route behind it — not just investing. **The investing SPA's
+  `/investing/api/*` prefix is the same API surface and is behind the same guard**
+  (`rewriteInvestingRequest` strips `/investing`, so `/investing/api/<ns>/…` becomes
+  `/api/<ns>/…`; security review 2026-10-17, H1). Closed unless the
   path is on the public list (`/api/auth/*`, `/api/rates`, `/api/fx/rate`, the two
   `status` probes, `/api/investing/health`, and the two machine endpoints that
   carry their own secret: the card-terms ingest and `/api/cron/investing-sync`)
@@ -115,7 +118,9 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
   Investing keeps a second, later check on top: `investingTenantId` decides
-  _which tenant_ the request is served under. The `/investing/*` SPA shell and
+  _which tenant_ the request is served under, and `forwardInvesting` requires that
+  tenant explicitly — there is no `LOCAL_TENANT_ID` default for a future call site
+  to inherit. The `/investing/*` SPA shell and
   the personal SPA stay public — they have to load before anyone can sign in.
 - **The guard fails closed.** Without `DATABASE_URL` and `BETTER_AUTH_SECRET`
   there are no sessions to verify, so a deployment with those unset refuses every
@@ -123,7 +128,10 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   reproduce the hole the guard exists to close. A run that genuinely has no
   authentication — `pnpm dev`, or a single-user self-host — opens it explicitly
   with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `pnpm dev` already sets it; `pnpm start`
-  deliberately does not.
+  deliberately does not. **A hosted deployment refuses the flag outright**
+  (`NODE_ENV=production`, or Vercel's `VERCEL_ENV`/`VERCEL`), so a value left in
+  a platform's environment UI cannot publish the vault (security review
+  2026-10-17, A1).
 
 ### Investing health
 

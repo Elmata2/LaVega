@@ -63,3 +63,17 @@ test("without a DSN the error response is unchanged and nothing is captured", as
   expect(sentry.captureException).not.toHaveBeenCalled();
   expect(sentry.flush).not.toHaveBeenCalled();
 });
+
+/* A3 (2026-10-17): the console line went out RAW, ahead of the only channel
+ * that scrubs. A stack trace of an unhandled error can quote a token, an IBAN,
+ * an amount or a JSON body. */
+test("the console line is scrubbed before it is logged", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const error = new Error("fetch https://api.example/x failed: access_token=sk-live-secret");
+  await serverErrorResponse(error);
+
+  const logged = spy.mock.calls.flat().join(" ");
+  expect(logged).not.toContain("sk-live-secret");
+  expect(logged).toContain("[REDACTED]");
+  spy.mockRestore();
+});
