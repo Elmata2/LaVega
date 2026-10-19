@@ -59,9 +59,10 @@ const limit = createSharedRateLimiter({ max: 20, windowMs: 60_000 });
  * bucket. 120/min is well above a person (20/min on four routes) and well below
  * a runaway loop that would burn the Mistral key before the next budget read.
  *
- * It is also what bounds the shared table: the global row is spent BEFORE a
- * per-caller row is created, so a caller who rotates addresses can add at most
- * 120 rows a minute. The budget reservation remains the real spend cap.
+ * A caller who rotates addresses gets a fresh per-caller bucket every request,
+ * so this bucket is what stops the spread, and the per-caller rows it lets
+ * through are deleted one window later (0026). The budget reservation remains
+ * the real spend cap.
  */
 const GLOBAL_LIMIT_PER_MINUTE = 120;
 const allCallers = createSharedRateLimiter({
@@ -193,17 +194,20 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
   const globalLimit = deps.globalLimit ?? allCallers;
 
-  /* Shared ceiling first, then the caller's own bucket. The order is what
-   * bounds the table: a request refused by the shared ceiling must not create a
-   * per-caller row first, or a caller rotating addresses could grow the table
-   * at request rate. Either refusal still answers 429; the code says which
-   * ceiling fired. */
+  /* Per-caller first, then the shared ceiling. The order matters for
+   * availability: a caller already over its own limit must not spend a unit of
+   * the shared ceiling, or one client in a retry loop would lock every caller
+   * (including the owner) out of every AI route for the rest of the window.
+   *
+   * The table stays bounded anyway: one row per distinct caller per window, and
+   * the prune inside the same statement drops every row from a previous window,
+   * so its size tracks callers in the current window, not total history. */
   const rateCheck = async (
     c: Parameters<typeof bucket>[0],
     route: string,
   ): Promise<"ok" | "caller" | "global"> => {
-    if (!(await globalLimit("all"))) return "global";
     if (!(await limit(bucket(c, route)))) return "caller";
+    if (!(await globalLimit("all"))) return "global";
     return "ok";
   };
 
