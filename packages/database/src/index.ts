@@ -1817,3 +1817,4 @@ export function createN8nForwardingRepository(db: Database) {
 }
 
 export * from "./agentMemory.js";
+export * from "./rateLimit.js";

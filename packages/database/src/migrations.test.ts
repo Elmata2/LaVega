@@ -155,6 +155,15 @@ test("investing.sector_profiles deliberately has neither RLS nor FORCE — a sym
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
+test("personal.rate_limit_buckets deliberately has neither RLS nor FORCE — the limiter has to count a caller before a session exists", async () => {
+  const rows = await db.query<{ enabled: boolean; forced: boolean }>(
+    `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'personal' AND c.relname = 'rate_limit_buckets'`,
+  );
+  expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
+});
+
 test("personal.net_worth_totals has the shape opting into Investing's net worth relies on", async () => {
   const columns = await db.query<{
     column_name: string;
