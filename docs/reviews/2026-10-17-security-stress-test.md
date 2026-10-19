@@ -18,6 +18,7 @@ re-checks are marked **(lead-verified)**.
 ## High
 
 ### H1. Unauthenticated investing API via the `/investing/api/*` alias
+
 - File: `apps/server/src/index.ts:317,334`; `apps/investing-mount.ts:198-201`
 - Evidence: `app.all("/investing/*", toInvestingStatic)` where
   `toInvestingStatic = (c) => forwardInvesting(c.req.raw)` and
@@ -41,6 +42,7 @@ re-checks are marked **(lead-verified)**.
   `= LOCAL_TENANT_ID` default from `forwardInvesting`.
 
 ### H2. Spoof gate bypassable — sender-injected `Authentication-Results`, first match wins
+
 - File: `apps/email-worker/src/authResults.ts:54-73`; `apps/email-worker/src/handler.ts:247`
 - Evidence: `resultFor` matches the **first** `spf=|dkim=|dmarc=` anywhere in the
   **whole** header value; the sender's own `Authentication-Results` header is
@@ -61,6 +63,7 @@ re-checks are marked **(lead-verified)**.
   as a mismatch.
 
 ### H3. Rate limiter — unbounded key growth + per-key bypass (unauth DoS)
+
 - File: `apps/server/src/agent/rateLimit.ts:19-34`; `apps/server/src/index.ts:181-189`
 - Evidence: `hits` is a process-lifetime `Map`; `guard` scans **every** entry on
   **every** call (`for (const [k, arr] of hits) … hits.delete(k)`, line 24) → O(n)
@@ -80,6 +83,7 @@ re-checks are marked **(lead-verified)**.
 ## Medium
 
 ### M1. No request-body size limit on any route (DoS)
+
 - `apps/server/src/agent-routes.ts:221` and other JSON handlers;
   `apps/server/src/index.ts` registers no `bodyLimit`. Public handlers parse
   bodies (`/api/auth/*`, `/api/eb/callback`, `/api/card-terms/ingest`).
@@ -88,6 +92,7 @@ re-checks are marked **(lead-verified)**.
   (Found independently by A2 and A6.)
 
 ### M2. GDPR erasure misses `personal.ai_usage` **(lead-verified)**
+
 - `packages/database/src/index.ts:1242-1265` — `USER_DATA_TABLES` has 20 entries
   and no `personal.ai_usage`. That table gained `user_id` in
   `db/migrations/0013_ai_usage_user_id.sql:24`, so it is per-user data now, but
@@ -98,6 +103,7 @@ re-checks are marked **(lead-verified)**.
   add RLS, and update the migration test's rationale.
 
 ### M3. "Erase my data" does not erase the account **(lead-verified)**
+
 - `apps/server/src/account-routes.ts:29-45`; note at
   `packages/database/src/index.ts:1289-1292`. The route deletes application rows
   only; the Better Auth `user`/`session`/`account` rows survive, the password
@@ -107,6 +113,7 @@ re-checks are marked **(lead-verified)**.
   "deletion pending" state.
 
 ### M4. Destructive GET reachable cross-site — `GET /api/n8n/queue` **(lead-verified)**
+
 - `apps/server/src/n8n-routes.ts:48,92` — the route's own comment calls it "the
   only outbound call whose upstream deletes what it returns"; the cookie is
   `sameSite:"lax"` (`auth.ts:67`) and Lax still sends it on a top-level GET.
@@ -116,6 +123,7 @@ re-checks are marked **(lead-verified)**.
   check on state-changing requests.
 
 ### M5. `personal.ai_usage` has no RLS; `reconcile`/`release` match by `id` alone **(lead-verified)**
+
 - `packages/database/src/index.ts:1590-1593`, `1618-1621` — `UPDATE … WHERE id = $1`
   and `DELETE … WHERE id = $1`, no `user_id` predicate, no RLS backstop.
   `id` is server-side today (from `reserve()`), so this is **latent**, not
@@ -123,6 +131,7 @@ re-checks are marked **(lead-verified)**.
 - Fix: add `AND user_id = $2` (or enable+force RLS with a `user_id` policy).
 
 ### M6. `LAVEGA_ENCRYPTION_KEY` is one non-rotatable, dual-purpose root key
+
 - `packages/database/src/index.ts:104-151`; `apps/investing-server/src/stockResearch.ts:211`.
   One secret encrypts every tenant's broker credentials, snapshots, agent memory
   and per-user vault keys, **and** is reused (raw form) as the HMAC signing key
@@ -133,6 +142,7 @@ re-checks are marked **(lead-verified)**.
   envelope, add old-read/new-write rotation; at minimum stop cross-protocol reuse.
 
 ### M7. PostHog web exception capture bypasses the Sentry redaction allowlist
+
 - `apps/web/src/posthog.ts:19-31` sets `capture_exceptions` with no `before_send`
   sanitizer, no `disable_session_recording`, no text masking, and `Root.tsx:37`
   sends the account email. The repo's scrubber (`packages/core/src/sentryScrub.ts`)
@@ -142,18 +152,21 @@ re-checks are marked **(lead-verified)**.
   text, and reconsider sending `email` in `identify`.
 
 ### M8. Rate-limit state is per-process → ineffective on serverless
+
 - `apps/server/src/agent-routes.ts:46` (`createRateLimiter(20, 60_000)` at module
   scope) on the Vercel serverless build: effective ceiling = 20/min × instance
   count, and cold starts reset it. Bursts can overspend the Mistral key.
 - Fix: shared store, or document the single-user acceptance.
 
 ### M9. Runtime dependency `undici@7.29.0` below its security fixes
+
 - `pnpm-lock.yaml:3203` via `@ai-sdk/provider-utils` (runtime AI SDK path).
   `pnpm audit` lists TLS-certificate-validation-bypass `>=7.24.1 <7.29.1` and DoS
   `>=7.0.0 <7.29.1`. The lock resolves `7.29.0`.
 - Fix: pnpm `overrides` forcing `undici >=7.29.1` (and `>=8.10.2` for the v8 line).
 
 ### M10. Containers run as root and ship the dev dependency tree
+
 - `Dockerfile:6,25-34`, `Dockerfile.investing:19` — no `USER`; `COPY . .` +
   full `pnpm install` puts dev/test advisories (3 critical: vitest, tinypool×2)
   into the image.
@@ -161,6 +174,7 @@ re-checks are marked **(lead-verified)**.
   stage.
 
 ### M11. Reply MIME header injection — a bare CR in `Message-ID`
+
 - `apps/email-worker/src/replyMime.ts:66-74` (`To`/`In-Reply-To`/`References` are
   not sanitized) and `apps/email-worker/src/parseMail.ts:185-187` (a lone `\r` is
   not a line separator). A `Message-ID` containing a bare CR injects a header into
@@ -169,6 +183,7 @@ re-checks are marked **(lead-verified)**.
   CR/LF in `Message-ID`/`From`.
 
 ### M12. Unbounded multipart recursion → Worker CPU/memory exhaustion
+
 - `apps/email-worker/src/parseMail.ts:241-253` — `parsePart` recurses on every
   `multipart/*` with no depth/part cap; each level re-splits its whole body. A
   ≤17 MB message nests thousands of levels. Realistic outcome: a silent drop of
@@ -176,6 +191,7 @@ re-checks are marked **(lead-verified)**.
 - Fix: cap depth (~10) and total parts (~50).
 
 ### M13. Auto-reply to the untrusted envelope sender, no loop guard
+
 - `apps/email-worker/src/handler.ts:356-375,407-416` — replies go to
   `message.from` with no `Auto-Submitted: auto-replied` / `Precedence: bulk` and
   no self-domain check. Unauthenticated mail reflector from LaVega's domain; a
@@ -184,6 +200,7 @@ re-checks are marked **(lead-verified)**.
   sender is under `invoices.lavega.dev` or looks auto-generated.
 
 ### M14. Extension "Kassa overal" reads arbitrary https page text under `<all_urls>`
+
 - `apps/extension/src/background.ts:320` (also `:311,:340`);
   `apps/extension/public/manifest.json:38-44`. With the toggle on and
   `<all_urls>` granted, any https tab that messages the worker is scraped
@@ -223,6 +240,31 @@ re-checks are marked **(lead-verified)**.
   plaintext) with `includeSubDomains`.
 
 ---
+
+## Resolution of the #253 low backlog (2026-10-19)
+
+Re-verified against `414cee44` on `fix/253-hardening-backlog`. Two Low claims
+were wrong when filed, and most server and email items were closed by PRs #255,
+#257 and #258.
+
+| Item                                                     | Status                                          | Evidence                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idle lock bounds the tab, not the session                | **Open, accepted risk**                         | `apps/web/src/useIdleLock.ts:16-31` states the residual risk. `apps/server/src/auth.ts:61` keeps `expiresIn` at 30 days. No server-side idle clock exists.                                                                                                                                                                                                                                               |
+| `LAVEGA_ALLOW_UNAUTHENTICATED=1` has no `NODE_ENV` guard | Fixed #255                                      | `apps/server/src/apiGuard.ts:80-109` refuses the flag on `NODE_ENV=production`, `VERCEL_ENV` or `VERCEL=1`.                                                                                                                                                                                                                                                                                              |
+| `OPTIONS` bypass in `apiGuard`                           | Fixed #255                                      | `apps/server/src/apiGuard.ts:60-69`: no `OPTIONS` branch remains.                                                                                                                                                                                                                                                                                                                                        |
+| Sign-up enumeration                                      | Not a defect                                    | `requireEmailVerification: true` (`apps/server/src/auth.ts:111`) selects better-auth's generic duplicate response and equalises the password hash (`better-auth@1.7.1` `sign-up.mjs:163,203-211`). `send-verification-email` has a 500 ms floor and answers `{status:true}`. Password reset always answers `{status:true}`. #255 added per-address and global limits in `apps/server/src/authLimits.ts`. |
+| `/app` edge gate checks cookie presence only             | Not a defect; the cited file never existed      | Layer 2 is the route table in `scripts/vercel-build.mjs:315-328`, held by `apps/server/src/appGateCookie.vercelParity.test.ts`. Layer 3 (`requireAppSession`, `apps/server/src/index.ts:460-479`) verifies the session. `/api/*` always verifies.                                                                                                                                                        |
+| Non-constant-time shared-secret compares                 | Fixed #255                                      | `apps/server/src/secrets.ts:16-20` hashes both sides and calls `timingSafeEqual`. Used at `agent-routes.ts:525` and `investing-mount.ts:118`.                                                                                                                                                                                                                                                            |
+| `console.error(error)` before Sentry                     | Fixed #255                                      | `apps/server/src/observability.ts:29` runs `scrubText`.                                                                                                                                                                                                                                                                                                                                                  |
+| `/api/vault/backup` lacks `Cache-Control`                | Fixed #255                                      | `apps/server/src/vault-routes.ts:89`.                                                                                                                                                                                                                                                                                                                                                                    |
+| `.env.example` omissions                                 | Fixed #255                                      | `apps/server/.env.example` documents `POSTHOG_API_KEY`, `POSTHOG_HOST`, `MARKET_DATA_API_KEY` and `LAVEGA_ALLOW_UNAUTHENTICATED`.                                                                                                                                                                                                                                                                        |
+| Extension stores scraped offers unencrypted              | **Open, accepted risk**                         | `apps/extension/src/store.ts:414-425` stores `winkel`, `prijsTekst`, `tot` and `gelezenOp` per enabled source. MV3 has no key that survives the service worker without a passphrase. The reasoning is at `store.ts:44-64` and the data is described in `apps/extension/README.md`.                                                                                                                       |
+| BankLink redirect has no scheme allowlist                | Fixed #258                                      | `isHttpsUrl` at `apps/web/src/components/BankLink.tsx:25-36`, enforced at `:108-114`.                                                                                                                                                                                                                                                                                                                    |
+| Web CSP has no meta fallback                             | Fixed #258                                      | `apps/web/src/csp.ts`, injected by `apps/web/vite.config.ts`. Parity test `apps/web/src/csp.test.ts`.                                                                                                                                                                                                                                                                                                    |
+| EB error paths leak the private-key path                 | Fixed #255                                      | `apps/server/src/eb-routes.ts:110-113` returns a fixed message. The cause goes to `console.error` only.                                                                                                                                                                                                                                                                                                  |
+| Attachment `fileName` echoed into bounce and n8n payload | Fixed #257                                      | `apps/email-worker/src/handler.ts:168` and `:212` run `sanitizeFileName`.                                                                                                                                                                                                                                                                                                                                |
+| No `Permissions-Policy` header                           | Fixed #255 on the server, fixed here on the CDN | `apps/server/src/index.ts:134-155`. CDN table `scripts/vercel-build.mjs:220-243`. Parity test `apps/server/src/secureHeaders.test.ts`.                                                                                                                                                                                                                                                                   |
+| HSTS emitted unconditionally                             | Fixed #255                                      | `apps/server/src/index.ts:175-193` gates on `x-forwarded-proto` or the request URL. The CDN table only answers https because Vercel redirects plain http before it applies.                                                                                                                                                                                                                              |
 
 ## Verified clean — do not re-open
 
