@@ -50,9 +50,9 @@ type Deps = {
  * address; see the note there for why it is not the route name alone.
  *
  * The store is shared, so the ceiling no longer multiplies by the number of
- * warm serverless instances. Without a database the limiter logs once and keeps
- * the bounded in-process Map from #238; see sharedRateLimit.ts for why that is
- * the fallback rather than a 503. */
+ * warm serverless instances. Without a database the limiter warns once a minute
+ * and keeps the bounded in-process Map from #238; see sharedRateLimit.ts for
+ * why that is the fallback rather than a 503. */
 const limit = createSharedRateLimiter({ max: 20, windowMs: 60_000 });
 
 /* ONE ceiling across every AI route, whatever the caller and whatever the

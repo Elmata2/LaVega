@@ -82,8 +82,8 @@ const WARN_INTERVAL_MS = 60_000;
  * A limiter whose ceiling holds across instances.
  *
  * With a database it counts in Postgres. Without one, or when Postgres throws,
- * it counts in the process-local Map and SAYS SO once. That is deliberate and
- * it is a fallback, not a silent second mode:
+ * it counts in the process-local Map and says so, at most once a minute. That
+ * is deliberate and it is a fallback, not a silent second mode:
  *
  *  - fail closed (503 on every AI route while Neon is down) adds an outage the
  *    app does not need. These routes already fail closed at the budget check,
