@@ -217,6 +217,34 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
+  /* The same policy the Hono server sets (apps/server/src/index.ts). The CDN
+   * serves the shell without ever reaching that server, so leaving this out
+   * here meant the pages that hold the vault had no Permissions-Policy at all
+   * (security review 2026-10-17, A6 / #253). Byte-for-byte parity is asserted
+   * by apps/server/src/secureHeaders.test.ts. */
+  "Permissions-Policy": [
+    "camera=()",
+    "microphone=()",
+    "geolocation=()",
+    "payment=()",
+    "usb=()",
+    "serial=()",
+    "hid=()",
+    "midi=()",
+    "bluetooth=()",
+    "magnetometer=()",
+    "gyroscope=()",
+    "accelerometer=()",
+    "display-capture=()",
+    "idle-detection=()",
+    "autoplay=()",
+    "fullscreen=()",
+    "clipboard-write=(self)",
+  ].join(", "),
+  /* Vercel terminates TLS in front of every deployment hostname and answers a
+   * plain-http request with a redirect before this table applies, so HSTS here
+   * is only ever attached to an https response. The Hono server cannot make
+   * that assumption and gates HSTS on the request scheme instead. */
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 };
 
