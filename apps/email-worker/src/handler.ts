@@ -20,13 +20,7 @@
  * afzender ziet die tekst in zijn bounce en moet er iets mee kunnen.
  */
 
-import {
-  domainOf,
-  localPartOf,
-  parseAuthResults,
-  senderHardFail,
-  type SenderChecks,
-} from "./authResults.js";
+import { domainOf, localPartOf, UNKNOWN_CHECKS, type SenderChecks } from "./authResults.js";
 import {
   MAX_PARTS,
   MAX_PART_DEPTH,
@@ -200,12 +194,10 @@ export function buildPayload(message: ForwardableEmailMessage, mail: ParsedMail)
     messageId: mail.messageId,
     text: mail.text,
     html: mail.html,
-    // Het From-domein gaat mee zodat een `dkim=pass`/`dmarc=pass` voor een ánder
-    // domein niet als pass doorgaat (bevinding H2).
-    auth: parseAuthResults(
-      message.headers.get("Authentication-Results"),
-      domainOf(mail.from || message.from),
-    ),
+    // Cloudflare meet authenticatie vóór Worker delivery, maar geeft de uitslag
+    // niet als vertrouwde metadata door. Headers zijn afzendertekst: ook een
+    // `mx.cloudflare.net`-regel mag hier nooit "pass" opleveren (H2).
+    auth: { ...UNKNOWN_CHECKS },
     attachments: mail.attachments.map((a) => ({
       // Defensief nog een keer: de parser saneert al, maar dit veld gaat de
       // wachtrij in en moet nooit ruwe stuurtekens dragen.
@@ -270,25 +262,6 @@ export async function handleInboundEmail(
         mb(MAX_MESSAGE_BYTES) +
         " aan (drie PDF's van 4 MB). Stuur de facturen los door.",
     };
-  }
-
-  /* De afzendercontrole, VÓÓR het parsen. Een nagespeelde afzender kost zo geen
-   * geheugen, geen webhook-aanroep, geen wachtrij-item en vooral geen
-   * Claude-extractie op de sleutel van de eigenaar. De uitslagen komen uit de
-   * header die de ontvangende MTA zet, dus daar is de mail zelf niet voor
-   * nodig. Alleen een GEMETEN mislukking gaat terug — zie senderHardFail.
-   *
-   * De From:-header gaat mee zodat een `dkim=pass`/`dmarc=pass` voor een ander
-   * domein als mislukking telt (H2). Die header staat in `message.headers`, dus
-   * dit kost nog steeds geen parse van de hele mail. */
-  const spoofed = senderHardFail(
-    parseAuthResults(
-      message.headers.get("Authentication-Results"),
-      domainOf(message.headers.get("From") || ""),
-    ),
-  );
-  if (spoofed) {
-    return { kind: "reject", reason: "LaVega heeft deze mail niet aangenomen: " + spoofed };
   }
 
   let mail: ParsedMail;
