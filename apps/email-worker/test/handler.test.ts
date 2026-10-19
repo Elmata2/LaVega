@@ -44,7 +44,7 @@ test("een factuur met PDF gaat naar de webhook, met het geheim en de wachtrijsle
   expect(payload.queueKey).toBe("alexander-7f3a");
   expect(payload.to).toBe("alexander-7f3a@invoices.lavega.dev");
   expect(payload.subject).toBe("Factuur 2026-0207 — meterkast");
-  expect(payload.auth).toEqual({ spf: "pass", dkim: "pass", dmarc: "pass" });
+  expect(payload.auth).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
   expect((payload.attachments as unknown[]).length).toBe(2);
 });
 
@@ -58,7 +58,7 @@ test("een geslaagde mail wordt NIET geweigerd en er wordt niet geantwoord", asyn
   expect(message.replied).toEqual([]);
 });
 
-test("een domein zonder DKIM- of DMARC-beleid gaat er WEL door, gemarkeerd", async () => {
+test("mail zonder vertrouwde authenticatiemetadata gaat door, gemarkeerd als onbekend", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const http = fakeFetch({ body: { ...QUEUED, addedNotices: 1 } });
 
@@ -66,19 +66,13 @@ test("een domein zonder DKIM- of DMARC-beleid gaat er WEL door, gemarkeerd", asy
 
   expect(verdict.kind).toBe("queued");
   expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
-    spf: "pass",
-    dkim: "none",
-    dmarc: "none",
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
   });
-  // Wegfilteren zou betekenen dat een ECHTE factuur van een domein met een
-  // slecht ingericht record verdwijnt. Dat blijft de regel voor alles wat NIET
-  // gemeten kon worden — "none", "unknown", "temperror" en een gezakte SPF met
-  // geldige DKIM gaan er allemaal doorheen, gemarkeerd.
-  //
-  // WAT HIER VERANDERD IS (M6, 31-08-2026): één geval is uitgezonderd. Een
-  // GEMETEN mislukking zonder geldige DKIM — de nep-ING in RAW_SPOOFED — wordt
-  // sinds deze wijziging wél geweigerd, met een bounce die de reden noemt. Dat
-  // verdwijnt dus ook niet; zie de M6-tests onderaan dit bestand.
+  // Een lokale bounce op basis van sender-controlled headers zou echte
+  // doorgestuurde facturen kunnen weigeren. Cloudflare beslist bij SMTP-ingang
+  // over SPF, DKIM en DMARC; de Worker krijgt die uitslagen niet vertrouwd mee.
   expect(message.rejected).toEqual([]);
 });
 
@@ -340,25 +334,23 @@ test("buildPayload laat alleen het ADRES van de afzender staan, niet de weergave
   );
 });
 
-/* ── M6: een nagespeelde afzender komt de wachtrij niet in ─────────────────── */
+/* ── M6: de testfake kan Cloudflare's SMTP-controle niet nabouwen ──────────── */
 
-test("een nagespeelde afzender wordt geweigerd en bereikt n8n NIET", async () => {
+test("de Worker verzint geen gemeten uitslag voor een nagemaakte afzender", async () => {
   const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
   const http = fakeFetch({ body: QUEUED });
 
   const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
 
-  expect(verdict.kind).toBe("reject");
-  // Het punt van de poort: geen webhook, dus geen wachtrij-item en geen
-  // Claude-extractie op de sleutel van de eigenaar.
-  expect(http.calls).toHaveLength(0);
-});
-
-test("de weigering noemt de gemeten uitslagen, zodat de bounce bruikbaar is", async () => {
-  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
-  const http = fakeFetch({ body: QUEUED });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
-  expect(verdict.kind === "reject" && verdict.reason).toContain("DMARC fail");
+  // Deze fake omzeilt de echte SMTP-ingang; hij kan dus geen Cloudflare-reject
+  // bewijzen. Als Cloudflare hem toch doorgeeft, mag de Worker geen `pass`
+  // claimen op basis van de door de afzender geschreven headers.
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
 });
 
 test("een doorgestuurde factuur (SPF zakt, DKIM klopt) gaat er nog steeds door", async () => {
@@ -375,17 +367,38 @@ test("een doorgestuurde factuur (SPF zakt, DKIM klopt) gaat er nog steeds door",
 
 /* ── H2: een meegegeven Authentication-Results verslaat de poort niet ──────── */
 
-test("een genagde Authentication-Results die dmarc=pass belooft houdt de mail NIET tegen", async () => {
-  // De afzender plakt zijn eigen uitslag vóór die van Cloudflare. Cloudflare's
-  // echte uitslag (fail) moet winnen; anders staat de nep-ING gewoon in de rij.
+test("sender-supplied Cloudflare-looking auth results never become verified payload data", async () => {
+  const raw = RAW_PLAIN_TEXT.replace(
+    "Authentication-Results: mx.cloudflare.net; spf=pass smtp.mailfrom=hostingnoord.nl; dkim=none; dmarc=none",
+    "Authentication-Results: mx.cloudflare.net; spf=fail; dkim=pass header.d=hostingnoord.nl; dmarc=pass header.from=hostingnoord.nl",
+  );
+  const message = fakeMessage({ raw });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
+});
+
+test("samengevoegde Authentication-Results blijven eveneens onbekend", async () => {
+  // Geen van beide regels bewijst wie haar schreef. Een parser kan de echte
+  // Cloudflare-uitslag niet herkennen door de authserv-id of de volgorde.
   const message = fakeMessage({ raw: RAW_FORGED_AUTH_RESULTS, from: "nep@elders.example" });
   const http = fakeFetch({ body: QUEUED });
 
   const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
 
-  expect(verdict.kind).toBe("reject");
-  expect(verdict.kind === "reject" && verdict.reason).toContain("DMARC fail");
-  expect(http.calls).toHaveLength(0);
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
 });
 
 /* ── M12: onbegrensde multipart-recursie krijgt een benoemde uitgang ───────── */

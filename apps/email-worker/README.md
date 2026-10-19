@@ -14,7 +14,7 @@ src/
   index.ts             het enige bestand dat het platform aanraakt
   handler.ts           het oordeel over één mail — geen platform-API
   parseMail.ts         MIME → {subject, from, date, text, html, attachments[]}   PUUR
-  authResults.ts       Authentication-Results → {spf, dkim, dmarc}               PUUR
+  authResults.ts       onbekende auth-uitslag + adreshelpers (geen headertrust)   PUUR
   replyMime.ts         een antwoordmail in elkaar zetten                         PUUR
   types.d.ts           de vier velden en drie methodes van Cloudflare die we gebruiken
   cloudflare-email.d.ts  de ambient declaratie van `cloudflare:email`
