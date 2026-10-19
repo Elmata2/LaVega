@@ -14,7 +14,10 @@
  *   - headers uitvouwen (een regel die met spatie of tab begint hoort bij de
  *     vorige) en op naam opzoeken, hoofdletterongevoelig;
  *   - multipart recursief doorlopen, inclusief nesting
- *     (multipart/mixed → multipart/alternative);
+ *     (multipart/mixed → multipart/alternative), met een grens op de diepte
+ *     (MAX_PART_DEPTH) en op het totale aantal delen (MAX_PARTS); raakt een mail
+ *     die grens, dan komt dat als `partsCapped` naar buiten en maakt de Worker er
+ *     een bounce van — nooit een stil verlies;
  *   - base64 en quoted-printable decoderen, 7bit/8bit/binary ongemoeid laten;
  *   - text/plain en text/html apart bijhouden en met de juiste charset naar
  *     tekst omzetten;
@@ -53,6 +56,10 @@ export type ParsedMail = {
   attachments: ParsedAttachment[];
   /** Alle top-level headers, kleine letters, uitgevouwen. */
   headers: Record<string, string>;
+  /** Waar als de multipart-recursie een grens raakte (diepte of aantal delen).
+   *  Er ontbreken dan delen, dus de aanroeper MOET hier een benoemde uitgang van
+   *  maken — een bounce met de reden. Stilte zou de enige echte fout zijn. */
+  partsCapped: boolean;
 };
 
 const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -196,6 +203,30 @@ export function parseHeaders(block: string): Record<string, string> {
   return headers;
 }
 
+/** Hoe diep een multipart mag nesten. Elke laag splitst zijn HELE body opnieuw
+ *  op de boundary; zonder grens kost één bericht van 17 MB de Worker zijn CPU en
+ *  zijn geheugen (bevinding M12). Tien lagen is meer dan elke echte factuurmail
+ *  gebruikt — mixed → alternative → related is er drie. */
+export const MAX_PART_DEPTH = 10;
+
+/** Het maximum aantal delen in één bericht, over alle lagen. Vijftig laat elke
+ *  echte mail toe (een nieuwsbrief met honderd regels is geen factuur). */
+export const MAX_PARTS = 50;
+
+/** Bestandsnamen komen van buiten en gaan terug naar buiten: naar de bounce
+ *  ("de bijlage X is te groot") én naar n8n. Stuurtekens en regelovergangen
+ *  horen daar niet in — een naam met een `\r\n` zet anders een eigen regel in
+ *  een bounce, en een naam van 40 kB in een melding is een eigen probleem
+ *  (bevinding A5). */
+export function sanitizeFileName(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  const controls = /[\u0000-\u001f\u007f]+/g;
+  const clean = String(name || "")
+    .replace(controls, " ")
+    .trim();
+  return clean.length > 200 ? clean.slice(0, 200) + "…" : clean;
+}
+
 type Part = {
   headers: Record<string, string>;
   contentType: string;
@@ -208,6 +239,12 @@ type Part = {
   parts: Part[];
 };
 
+/** De teller die de nesting en het totaal aantal delen in de gaten houdt. `capped`
+ *  gaat op het moment dat er een ECHT deel wordt overgeslagen — niet wanneer een
+ *  lege of sluitende boundary langskomt. `parseMail` geeft dat door zodat de
+ *  aanroeper er een benoemde uitgang van kan maken in plaats van stilte. */
+type PartBudget = { count: number; capped: boolean };
+
 function splitHeaderAndBody(message: string): { headerBlock: string; body: string } {
   const match = message.match(/\r?\n\r?\n/);
   if (!match || match.index === undefined) return { headerBlock: message, body: "" };
@@ -217,7 +254,8 @@ function splitHeaderAndBody(message: string): { headerBlock: string; body: strin
   };
 }
 
-function parsePart(message: string): Part {
+function parsePart(message: string, depth: number, budget: PartBudget): Part {
+  budget.count++;
   const { headerBlock, body } = splitHeaderAndBody(message);
   const headers = parseHeaders(headerBlock);
   const contentTypeHeader = headers["content-type"] || "text/plain";
@@ -236,7 +274,7 @@ function parsePart(message: string): Part {
     body: "",
     parts: [],
   };
-  if (part.fileName) part.fileName = decodeEncodedWords(part.fileName);
+  if (part.fileName) part.fileName = sanitizeFileName(decodeEncodedWords(part.fileName));
 
   if (part.contentType.startsWith("multipart/")) {
     const boundary = headerParam(contentTypeHeader, "boundary");
@@ -249,7 +287,13 @@ function parsePart(message: string): Part {
       if (chunk.startsWith("--")) break; // de sluitende boundary
       const child = chunk.replace(/^\r?\n/, "").replace(/\r?\n$/, "");
       if (!child.trim()) continue;
-      part.parts.push(parsePart(child));
+      // Hier, en niet eerder: een echte deel-overgeslagen is het enige dat
+      // `capped` mag zetten. Diep genoeg of te veel delen: stoppen en MELDEN.
+      if (depth >= MAX_PART_DEPTH || budget.count >= MAX_PARTS) {
+        budget.capped = true;
+        break;
+      }
+      part.parts.push(parsePart(child, depth + 1, budget));
     }
     return part;
   }
@@ -276,7 +320,8 @@ function walk(part: Part, visit: (p: Part) => void): void {
  * @param rawLatin1 het hele RFC-5322-bericht, één teken per byte.
  */
 export function parseMail(rawLatin1: string): ParsedMail {
-  const root = parsePart(rawLatin1);
+  const budget: PartBudget = { count: 0, capped: false };
+  const root = parsePart(rawLatin1, 0, budget);
 
   const textParts: string[] = [];
   const htmlParts: string[] = [];
@@ -321,5 +366,6 @@ export function parseMail(rawLatin1: string): ParsedMail {
     html: htmlParts.join("\n").trim(),
     attachments,
     headers: root.headers,
+    partsCapped: budget.capped,
   };
 }
