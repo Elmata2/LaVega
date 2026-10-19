@@ -39,8 +39,8 @@ test("platte tekst: van ruwe mail tot genormaliseerd bericht, in één keer", ()
   expect(m.text).toContain("10 < 12 maanden");
   expect(m.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
   expect(m.queueKey).toBe("alexander-7f3a");
-  expect(m.senderChecks).toEqual({ spf: "pass", dkim: "none", dmarc: "none" });
-  expect(m.senderCheck).toBe("passed");
+  expect(m.senderChecks).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
+  expect(m.senderCheck).toBe("unknown");
 });
 
 test("alleen HTML: de Worker stuurt de HTML rauw mee, core maakt er tekst van", () => {
@@ -70,10 +70,10 @@ test("een gescande afbeelding levert een melding met een uitvoerbare instructie"
   expect(m.reason).toContain("stuur de PDF door");
 });
 
-test("een gezakte afzender komt door tot in het bericht, gemarkeerd", () => {
+test("ontrusted Authentication-Results becomes unknown end to end", () => {
   const m = through(RAW_SPOOFED);
-  expect(m.senderCheck).toBe("failed");
-  expect(m.senderChecks).toEqual({ spf: "softfail", dkim: "fail", dmarc: "fail" });
+  expect(m.senderCheck).toBe("unknown");
+  expect(m.senderChecks).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
   expect(m.ok).toBe(true);
 });
 

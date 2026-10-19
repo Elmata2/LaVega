@@ -165,7 +165,8 @@ export const RAW_IMAGE_ONLY = [
   "",
 ].join("\r\n");
 
-/** E — een afzender die SPF en DKIM niet haalt. Wordt gemarkeerd, niet geweerd. */
+/** E — een nagemaakte ING-mail met afzendergestuurde auth-headers. De fake
+ *  omzeilt Cloudflare's SMTP-controle, dus dit bewijst geen echte aflevering. */
 export const RAW_SPOOFED = [
   "Authentication-Results: mx.cloudflare.net; dkim=fail header.d=ing.nl; spf=softfail smtp.mailfrom=ing.nl; dmarc=fail header.from=ing.nl",
   "From: ING Bank <facturen@ing.nl>",
@@ -181,12 +182,9 @@ export const RAW_SPOOFED = [
   "",
 ].join("\r\n");
 
-/** F — dezelfde factuur, maar DOORGESTUURD vanuit Gmail. SPF zakt (de
- *  verzendende server is nu Gmail en niet meer die van de leverancier) terwijl
- *  DKIM blijft staan (die ondertekent het bericht, en dat is niet gewijzigd).
- *  Dit is het hoofdgebruik van het doorstuuradres en moet er dus doorheen
- *  komen — het is precies het patroon dat `forwardedNotSpoofed` in n8n.ts
- *  beschrijft. */
+/** F — dezelfde factuur, maar DOORGESTUURD vanuit Gmail. De header claimt een
+ *  SPF-fail en DKIM-pass; de Worker vertrouwt die tekst niet. Het hoofdgebruik
+ *  van het doorstuuradres moet zonder lokale header-poort blijven werken. */
 export const RAW_FORWARDED_INVOICE = RAW_PDF_INVOICE.replace(
   "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
     " spf=pass smtp.mailfrom=vandijk-installatie.nl; dmarc=pass header.from=vandijk-installatie.nl",
@@ -194,10 +192,9 @@ export const RAW_FORWARDED_INVOICE = RAW_PDF_INVOICE.replace(
     " spf=fail smtp.mailfrom=gmail.com; dmarc=pass header.from=vandijk-installatie.nl",
 );
 
-/** G — de nep-ING, maar nu met een door de AFZENDER meegegeven
- *  `Authentication-Results` die `dmarc=pass` belooft (bevinding H2). Cloudflare
- *  zet zijn eigen uitslag erachter; die zegt fail en moet winnen. Vóór de fix
- *  las de Worker de eerste uitslag — en dat was precies die van de aanvaller. */
+/** G — twee tegenstrijdige `Authentication-Results`-regels. De afzender kan
+ *  beide schrijven, inclusief `mx.cloudflare.net`; de Worker mag geen van
+ *  beide als Cloudflare's gemeten uitslag behandelen (bevinding H2). */
 export const RAW_FORGED_AUTH_RESULTS = [
   "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=ing.nl; spf=pass smtp.mailfrom=ing.nl; dmarc=pass header.from=ing.nl",
   "Authentication-Results: mx.cloudflare.net; dkim=fail header.d=elders.example; spf=fail smtp.mailfrom=elders.example; dmarc=fail header.from=ing.nl",
