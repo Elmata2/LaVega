@@ -219,16 +219,25 @@ gangbare Nederlandse kaarten cijfers krijgt.
 
 ## Op welke sites hij werkt, en wat dat vinkje wel en niet dekt
 
-Tot 26 augustus 2026 stond hier een tabel met precies één rij: IKEA Nederland,
-`https://www.ikea.com/nl/nl/p/*`, de enige winkel die eerst gemeten en
-goedgekeurd was voor het paneel er mocht draaien. Die curatie is vervangen
-door **één brede, optionele toestemming**: `<all_urls>` in
-`optional_host_permissions`, aan- of uitgezet met het vinkje "Paneel op
-winkelpagina's" in de opties (`kassaOveralAan` in `chrome.storage.local`, zie
-`src/store.ts`). Staat het vinkje aan **en** heeft Chrome de toestemming
-gegeven, dan probeert het paneel te lezen op elke `https:`-pagina — niet meer
-op een lijst die per winkel is goedgekeurd. Staat één van de twee uit, dan
-nergens.
+Het paneel draait op een korte, per winkel gemeten lijst: `src/sites.ts`. Daar
+staat vandaag één regel in — IKEA Nederland, `https://www.ikea.com/nl/nl/p/*`.
+Vink je die winkel aan in de opties, dan vraagt Chrome je apart om toestemming
+voor dat ene adres (`optional_host_permissions` in het manifest, met een pad en
+geen heel domein); je kunt die toestemming in `chrome://extensions` altijd weer
+intrekken. Staat het vinkje van die winkel uit **of** heeft Chrome de toestemming
+niet, dan draait er daar niets.
+
+**Van 26 augustus tot 18 oktober 2026 was die lijst weg** en stond er één brede
+`<all_urls>`-toestemming voor het kassa-paneel in de plaats: vinkje aan +
+toestemming gegeven, en het paneel probeerde op ELKE `https:`-pagina te lezen.
+De security-review van 17 oktober 2026 (M14) liet zien wat dat kost — elke
+https-pagina die de worker aansprak werd gelezen (prijzen, productnamen, host)
+zonder dat er ergens een grens stond, want de per-winkel-sitelijst was precies de
+laag die dat tegenhield. Die laag is daarom terug, en `siteForUrl` in
+`src/sites.ts` is weer de plek waar "deze winkel wel, die niet" wordt
+afgedwongen — in code, en niet alleen in de tekst onder het vinkje.
+`manifest.json` vraagt nu de drie specifieke patronen (IKEA + ING + Amex) en geen
+`<all_urls>` meer.
 
 Wat daarbij niet is veranderd: de lezer zelf. `src/read.ts`
 (`collectEvidence`/`readCheckout`) was al volledig generiek — hij leest
@@ -242,7 +251,7 @@ productgegevens die een winkel zelf op de pagina zet** — dezelfde gegevens die
 zoekmachines gebruiken voor hun productkaarten. Nooit de rest van de pagina,
 nooit de zichtbare tekst, nooit een titel of omschrijving.
 
-### Wat dat vinkje niet dekt, en waarom dat een bewuste keuze is
+### Wat deze lezing niet dekt, en waarom de lijst kort is
 
 Machineleesbare opmaak kan geldig zijn en toch over het VERKEERDE artikel
 gaan. Op 21 augustus 2026 gaf Coolblue keurige JSON-LD (schema.org) met een
@@ -260,19 +269,14 @@ daar een percentage over uit, en er rolt een aanbeveling uit die nergens op
 slaat, zonder dat er ergens twijfel in beeld komt. **Een winkel waar je het
 verkeerde bedrag leest, is erger dan een winkel waar je zwijgt.**
 
-Onder het oude, per-site gemeten model was precies dit de reden om Coolblue
-buiten de lijst te houden. Onder `<all_urls>` bestaat die lijst niet meer, en
-dus ook niet de mogelijkheid om één winkel op deze grond uit te sluiten. Dat
-is geen oversight: het is een bewuste risico-acceptatie voor persoonlijk
-gebruik, expliciet zo besloten op 26 augustus 2026 (zie
-`docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md`) —
-alles gaat mee, en wat in de praktijk fout blijkt wordt gaandeweg gesignaleerd
-in plaats van vooraf dichtgetimmerd. `read.test.ts` legt dit nu vast als een
-GEDOCUMENTEERDE, GEACCEPTEERDE beperking (de Coolblue-fixture geeft
-`{ ok: true }` terug met het bekend-verkeerde bedrag) en niet meer als "deze
-winkel staat er niet in". Bol.com is om een andere reden geen bijzonder geval:
-die geeft opmaak zonder prijs, dus daar komt sowieso niets uit — met of zonder
-lijst.
+Onder het per-site gemeten model is precies dit de reden om Coolblue buiten de
+lijst te houden: een winkel waar je het verkeerde bedrag leest, is erger dan een
+winkel waar je zwijgt, dus een winkel die dat doet krijgt geen leestoestemming.
+`read.test.ts` legt vast dat de lezer op de Coolblue-fixture `{ ok: true }`
+teruggeeft met het bekend-verkeerde bedrag — dat is de beperking die de lijst moet
+opvangen, niet iets wat de lezer zelf kan zien. Bol.com is om een andere reden
+geen bijzonder geval: die geeft opmaak zonder prijs, dus daar komt sowieso niets
+uit — met of zonder lijst.
 
 Dezelfde kwetsbaarheid geldt voor een `AggregateOffer`-actieprijs — een
 IKEA-productpagina met een Family-actieprijs naast de gewone prijs geeft de
@@ -284,26 +288,23 @@ jou geldt, en de lezer pakt dan de laagste in plaats van te zwijgen. Zie de tak
 puntensaldi. Die hangen niet van het bedrag op de pagina af, dus daar is de
 leestoestemming niet voor nodig.
 
-### De build-controle op een heel domein geldt nu alleen nog voor ING/Amex
+### De build-controle op een heel domein geldt voor élk patroon
 
-Vroeger weigerde de build een matchpatroon dat alleen een domein aanwees
-(`https://www.ikea.com/*` liet `pnpm build` omvallen) — dat gold voor de ene
-winkel die er stond, en het dwong af dat de goedkeuring niet verder reikte dan
-het gemeten pad. Die controle bestaat nog, maar geldt nu alleen voor de
-accountpatronen van ING en Amex in `src/bronnen.ts` (`padIsSpecifiek`,
-gecontroleerd door `scripts/copy-static.mjs`) — niet voor de kassa-registratie.
-`<all_urls>` is geen `https:`-patroon met een pad om op te controleren, dus die
-controle is voor de brede toestemming niet van toepassing: er is geen pad meer
-dat afgedwongen kan worden, en de enige begrenzing die voor het kassa-paneel
-overblijft is het vinkje zelf plus wat `read.ts` weigert te lezen.
+`pnpm build` weigert een matchpatroon dat alleen een domein aanwijst
+(`https://www.ikea.com/*` laat `scripts/copy-static.mjs` omvallen) en controleert
+dat de hostrechten in het manifest LETTERLIJK gelijk zijn aan `SITE_MATCHES` uit
+`src/sites.ts` plus `BRON_MATCHES` uit `src/bronnen.ts`. Zo kan een winkel niet
+zonder pad en niet zonder toestemmingsregel in de bundel glijden: wat
+`siteForUrl` niet goedkeurt, wordt niet geregistreerd en niet gelezen. Die twee
+controles zijn dezelfde die het verwijderen van de lijst in augustus 2026
+doorstond; ze zijn toen niet weggehaald, alleen hun invoer veranderde.
 
 Wat er voor de kassa-lezing wel overblijft, en dat hoort hier te staan:
-navigeert het tabblad in de milliseconden tussen de vraag van het content
-script en de lezing naar een andere pagina op dezelfde host, dan gaat de
-lezing over die andere pagina. Na de lezing wordt de host nog één keer
-gecontroleerd tegen `hostVanAfzender` in `src/background.ts` (schema, poort,
-en of `sender.origin`/het tabblad hetzelfde https-origin dragen), dus dat
-blijft binnen hetzelfde origin. Helemaal dicht is het met `documentIds` bij
+navigeert het tabblad in de milliseconden tussen de vraag van het content script
+en de lezing naar een ander pad op dezelfde host, dan gaat de lezing over dat
+andere pad. Na de lezing wordt de host uit het bewijsmateriaal nog één keer tegen
+`ontleedMatch(site.match)?.host` in `src/background.ts` gelegd, dus dat blijft
+binnen de goedgekeurde host. Helemaal dicht is het met `documentIds` bij
 `executeScript`; dat staat niet in `src/chrome.d.ts` en dat bestand is met
 opzet de complete lijst van wat deze extensie mag aanroepen.
 
@@ -339,20 +340,22 @@ opzet de complete lijst van wat deze extensie mag aanroepen.
 - **Geen leestoestemming zonder dat jij hem geeft.** `host_permissions` in het
   manifest is leeg — de extensie krijgt bij installatie nul toegang tot enige
   pagina. Alles loopt via `optional_host_permissions`
-  (`<all_urls>` voor het kassa-paneel, plus de aparte ING/Amex-patronen), en
-  elk van die drie vraagt apart om toestemming: het aanzetten van het ene
-  vinkje zet niet ook de andere twee aan. Sinds 26 augustus 2026 is de
-  kassa-toestemming zelf breed — `<all_urls>`, niet meer per winkel gemeten —
-  maar ze blijft **optioneel en herroepbaar**: jij zet het vinkje om, Chrome
+  (`https://www.ikea.com/nl/nl/p/*` voor het kassa-paneel, plus de aparte
+  ING/Amex-patronen), en elk van die drie vraagt apart om toestemming: het
+  aanzetten van het ene vinkje zet niet ook de andere twee aan. De
+  kassa-toestemming is per winkel en per pad, niet breed — sinds de
+  security-review van 17 oktober 2026 staat `<all_urls>` er niet meer in — en ze
+  blijft **optioneel en herroepbaar**: jij zet het vinkje om, Chrome
   vraagt het, en trek je de toestemming in `chrome://extensions` weer in, dan
   gaat het vinkje in de opties vanzelf uit. Zie [Op welke sites hij
   werkt](#op-welke-sites-hij-werkt-en-wat-dat-vinkje-wel-en-niet-dekt) voor
-  wat die brede toestemming wel en niet dekt.
+  wat die toestemming wel en niet dekt.
 - **Geen bedragen of ordergegevens bewaren.** In de opslag staan drie dingen:
-  welke kaarten je hebt, of het paneel op winkelpagina's mag verschijnen (één
-  aan/uit-vinkje, `kassaOveralAan` — geen lijst van winkels meer), en de
-  puntensaldi die je zelf hebt ingetypt. Niets dat aan een BEZOEK vastzit —
-  geen bedragen van een pagina, geen artikelen, geen hosts, geen tijdstippen.
+  welke kaarten je hebt, op welke winkels het paneel mag verschijnen
+  (`enabledSiteIds`: de aangevinkte winkel-id's uit `src/sites.ts`, niet meer dan
+  dat), en de punten saldi die je zelf hebt ingetypt. Niets dat aan een BEZOEK
+  vastzit — geen bedragen van een pagina, geen artikelen, geen hosts, geen
+  tijdstippen.
 
   Dat derde lijstje verdient een aparte zin, want het lijkt een uitzondering op
   de eerste. Wat er niet in mag is alles wat ONTSTAAT doordat je ergens kijkt;
@@ -438,10 +441,11 @@ Chrome zou afwijzen of die stilletjes niets doet:
 2. is `content.js` per ongeluk een ES-module geworden?
 3. staat er iets in de bundel dat het netwerk op gaat? (alles in `dist/`, niet
    alleen `.js`)
-4. staat `<all_urls>` plus de accountpagina's van `src/bronnen.ts` in het
-   manifest, en wijst elk accountpatroon (ING/Amex) een pad aan in plaats van
-   een heel domein? (Vóór 26 augustus 2026 stond hier een lijst met
-   individueel gemeten winkels in plaats van `<all_urls>`.)
+4. loopt de hostrechtenlijst gelijk met `SITE_MATCHES` uit `src/sites.ts` +
+   `BRON_MATCHES` uit `src/bronnen.ts`, en wijst elk patroon (IKEA + ING/Amex)
+   een pad aan in plaats van een heel domein? (Van 26 augustus tot 18 oktober
+   2026 stond hier één brede `<all_urls>`; de security-review van 17 oktober
+   heeft die teruggedraaid — zie de kop van `src/sites.ts`.)
 5. heeft de CSP een `default-src`, staan `img-src`, `font-src`, `media-src` en
    `connect-src` op `'none'`, en staat `style-src` op `'self'` zonder
    `'unsafe-inline'`?

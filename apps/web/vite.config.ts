@@ -1,6 +1,27 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { CSP_FALLBACK_META } from "./src/csp.js";
+
+/* A <meta http-equiv="Content-Security-Policy"> fallback for the built shell,
+ * mirroring the header that `scripts/vercel-build.mjs` sets on the CDN (see
+ * src/csp.ts for why it is the exact same policy). Build-only: applying it in
+ * `vite dev` would block Vite's inline React Refresh preamble. */
+function cspMetaPlugin() {
+  return {
+    name: "lavega-csp-meta",
+    apply: "build" as const,
+    transformIndexHtml() {
+      return [
+        {
+          tag: "meta",
+          attrs: { "http-equiv": "Content-Security-Policy", content: CSP_FALLBACK_META },
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
 
 /* Which build is this tab running? Vercel sets VERCEL_GIT_COMMIT_SHA at build
  * time; a local build says "dev". Shown at the foot of Profiel so a stale
@@ -22,6 +43,7 @@ const uploadSourceMaps = Boolean(sentryOrg && sentryProject && sentryAuthToken);
 export default defineConfig({
   plugins: [
     react(),
+    cspMetaPlugin(),
     ...(uploadSourceMaps
       ? sentryVitePlugin({
           org: sentryOrg,

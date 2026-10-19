@@ -1,5 +1,15 @@
 # Brede kassa-toestemming: van curatie per site naar één vinkje
 
+> **INGETROKKEN OP 18 OKTOBER 2026.** De security-review van 17 oktober 2026
+> (M14 in `docs/reviews/2026-10-17-security-stress-test.md`) liet zien dat
+> `<all_urls>` de lezer op ELKE https-pagina laat draaien die de worker
+> aanspreekt, zonder sitelijst. Dat is een grotere grens dan "persoonlijk
+> gebruik" kan dragen: de per-site-lijst was precies de laag die winkel van
+> niet-winkel onderscheidde. `sites.ts`, `siteForUrl` en de per-winkel-toestemming
+> zijn daarom terug; `manifest.json` vraagt IKEA + ING + Amex en geen
+> `<all_urls>` meer. De rest van dit document blijft staan als de motivering
+> van toen, en als de plek waar de meetgegevens (Coolblue) bewaard zijn.
+
 26 augustus 2026. Vervolg op de V10-melding (`docs/BACKLOG.md`) — tijdens het
 testen daarvan bleek dat de kassa-paneel-lezer alleen op IKEA-productpagina's
 draait, omdat elke site in `sites.ts` handmatig gemeten en goedgekeurd moet

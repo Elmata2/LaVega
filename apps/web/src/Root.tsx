@@ -34,7 +34,11 @@ export default function Root() {
   useEffect(() => {
     if (authState.kind !== "signed-in" || identifiedUserId.current === authState.id) return;
     if (identifiedUserId.current !== null) posthog.reset();
-    posthog.identify(authState.id, { email: authState.email });
+    /* The account id is what analytics groups by; the e-mail is not sent. It is
+     * personal data with no analytical value here, and a hash of it would still
+     * be a stable cross-dataset identifier — so it is dropped rather than
+     * hashed, and posthog.ts's allowlist never carries it. */
+    posthog.identify(authState.id);
     identifiedUserId.current = authState.id;
   }, [authState]);
 

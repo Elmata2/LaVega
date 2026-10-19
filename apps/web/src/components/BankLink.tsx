@@ -13,6 +13,25 @@ type PsuType = "business" | "personal";
 
 const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
 
+/** `https:` with a host, and nothing else.
+ *
+ *  The bank's authorisation URL is the one place in this component that
+ *  navigates to something a third party chose, so it gets an explicit scheme
+ *  allowlist before it can move the browser. `data.url` comes from our own
+ *  server today, but a value that is not https (a `javascript:` or `data:`
+ *  URL) would run in our origin if a server or proxy ever returned one; a
+ *  scheme check is the cheapest place to make that impossible. Exported so a
+ *  unit test can hold the allowlist itself, not just the happy path. */
+export function isHttpsUrl(value: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(value);
+  } catch {
+    return false;
+  }
+  return u.protocol === "https:" && u.hostname !== "";
+}
+
 export default function BankLink({
   busy,
   onRefresh,
@@ -83,6 +102,12 @@ export default function BankLink({
       const data = await res.json();
       if (!data.url) {
         setError(data.error || c.bankLink.bankGeenAutorisatiepagina);
+        setLoading(false);
+        return;
+      }
+      /* A scheme allowlist, not just "looks like a URL": see `isHttpsUrl`. */
+      if (typeof data.url !== "string" || !isHttpsUrl(data.url)) {
+        setError(c.bankLink.bankOnveiligeAutorisatiepagina);
         setLoading(false);
         return;
       }
