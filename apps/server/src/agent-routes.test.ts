@@ -876,6 +876,10 @@ function withForwardedFor(body: unknown, ip: string): RequestInit {
   return { ...jsonPost(body), headers: { ...jsonPost(body).headers, "x-forwarded-for": ip } };
 }
 
+/* These four tests prove the CALLER's own code. The shared ceiling has its own
+ * test (agent-routes.global-limit.test.ts), so it is pinned open here: the 80
+ * requests below would otherwise spend it, and the last test would answer with
+ * the global code instead of the local one it is about. */
 async function exhaustLocalRateLimit(
   app: Hono,
   path: string,
@@ -889,7 +893,7 @@ async function exhaustLocalRateLimit(
 test("extract-invoice: the 21st request in a minute from the same caller is rate-limited locally", async () => {
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
-    registerAgentRoutes(app, { extract: async () => FAKE_RESULT });
+    registerAgentRoutes(app, { extract: async () => FAKE_RESULT, globalLimit: async () => true });
     const res = await exhaustLocalRateLimit(
       app,
       "/api/agent/extract-invoice",
@@ -907,7 +911,7 @@ test("extract-invoice: the 21st request in a minute from the same caller is rate
 test("categorize: the 21st request in a minute from the same caller is rate-limited locally", async () => {
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
-    registerAgentRoutes(app, { categorize: async () => [] });
+    registerAgentRoutes(app, { categorize: async () => [], globalLimit: async () => true });
     const res = await exhaustLocalRateLimit(
       app,
       "/api/agent/categorize",
@@ -929,6 +933,7 @@ test("chat: the 21st request in a minute from the same caller is rate-limited lo
       chat: async function* () {
         yield "hoi";
       },
+      globalLimit: async () => true,
     });
     const res = await exhaustLocalRateLimit(
       app,
@@ -947,7 +952,7 @@ test("chat: the 21st request in a minute from the same caller is rate-limited lo
 test("travel-facts: the 21st request in a minute from the same caller is rate-limited locally", async () => {
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
-    registerAgentRoutes(app, { travelFacts: async () => [] });
+    registerAgentRoutes(app, { travelFacts: async () => [], globalLimit: async () => true });
     const res = await exhaustLocalRateLimit(
       app,
       "/api/agent/travel-facts",
