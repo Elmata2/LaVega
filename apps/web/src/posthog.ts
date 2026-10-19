@@ -1,5 +1,5 @@
 import posthog, { type CaptureResult } from "posthog-js";
-import { normalisePath, scrubText } from "@lavega/core";
+import { normalisePath } from "@lavega/core";
 
 const apiKey = import.meta.env.VITE_POSTHOG_KEY;
 const apiHost = import.meta.env.VITE_POSTHOG_HOST;
@@ -14,11 +14,8 @@ const runningTests = import.meta.env.MODE === "test";
  * Sentry's `scrubEvent` (packages/core/src/sentryScrub.ts) gast op SENTRY's
  * eventvorm, niet op PostHog's `CaptureResult`; hetzelfde allowlist-denken
  * opnieuw toepassen is de enige manier om "er gaat niets mee wat we niet
- * noemen" hier ook waar te maken. Wat er wél hergebruikt wordt is de
- * REDACTOR: `scrubText` maskeert e-mails, IBAN's, bedragen en lange
- * cijferreeksen, en `redactProblem` eronder pakt een credential in een
- * JSON.parse-melding. Dat is precies het deel dat een bedrag of een
- * rekeningnummer tegenhoudt.
+ * noemen" hier ook waar te maken. Vrije tekst uit foutmeldingen valt weg:
+ * een tegenpartijnaam valt niet betrouwbaar te maskeren.
  *
  * DE REBUILD IS DE BELOFTE. Alles wat niet in ALLOWED_OF_URL staat valt weg,
  * inclusief `$set`/`$set_once` (persoonskenmerken), `$elements` (DOM-tekst en
@@ -80,12 +77,21 @@ const HOST_KEYS = new Set<string>(["$host", "$referring_domain"]);
 const PATH_KEYS = new Set<string>(["$pathname", "$initial_pathname"]);
 
 const FRAME_KEYS: Record<string, true> = {
-  filename: true,
-  function: true,
   lineno: true,
   colno: true,
   in_app: true,
 };
+
+const EXCEPTION_TYPES = new Set([
+  "Error",
+  "TypeError",
+  "ReferenceError",
+  "RangeError",
+  "SyntaxError",
+  "URIError",
+  "EvalError",
+  "AggregateError",
+]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -119,8 +125,7 @@ function scrubbedPathOnly(value: unknown): string | undefined {
   );
 }
 
-/** Eén stackframe uit `$exception_list`, teruggebracht tot de velden die een
- *  crash aanwijzen. Bestandsnamen verliezen hun query; de rest wordt gemaskeerd. */
+/** Keep numeric stack locations; filenames and function names may contain user data. */
 function scrubFrame(frame: unknown): Record<string, unknown> {
   if (!isRecord(frame)) return {};
   const out: Record<string, unknown> = {};
@@ -134,27 +139,20 @@ function scrubFrame(frame: unknown): Record<string, unknown> {
       if (typeof value === "boolean") out[key] = value;
       continue;
     }
-    const s = safeString(value);
-    if (s === undefined) continue;
-    out[key] = key === "filename" ? s.replace(/[?#].*$/, "") : scrubText(s);
   }
   return out;
 }
 
-/** Eén uitzondering. De MELDING gaat door `scrubText`; bij een SyntaxError
- *  wordt hij helemaal weggelaten, want die citeert per definitie zijn eigen
- *  (onbekende) invoer. */
+/** Exception messages may quote arbitrary account, merchant or document text. */
 function scrubException(entry: unknown): Record<string, unknown> {
   if (!isRecord(entry)) return {};
   const out: Record<string, unknown> = {};
   const type = safeString(entry.type);
-  if (type !== undefined) out.type = scrubText(type);
-  const value = safeString(entry.value);
-  if (value !== undefined && type !== "SyntaxError") out.value = scrubText(value);
+  if (type !== undefined && EXCEPTION_TYPES.has(type)) out.type = type;
   if (isRecord(entry.mechanism)) {
     const mechanism: Record<string, unknown> = {};
     const mType = safeString(entry.mechanism.type);
-    if (mType !== undefined) mechanism.type = mType;
+    if (mType === "onerror" || mType === "onunhandledrejection") mechanism.type = mType;
     if (typeof entry.mechanism.handled === "boolean") mechanism.handled = entry.mechanism.handled;
     out.mechanism = mechanism;
   }
@@ -170,11 +168,9 @@ function scrubExceptionProperties(properties: Record<string, unknown>): Record<s
   const list = properties.$exception_list;
   if (Array.isArray(list)) out.$exception_list = list.map(scrubException);
   const type = safeString(properties.$exception_type);
-  if (type !== undefined) out.$exception_type = scrubText(type);
-  const message = safeString(properties.$exception_message);
-  if (message !== undefined) out.$exception_message = scrubText(message);
+  if (type !== undefined && EXCEPTION_TYPES.has(type)) out.$exception_type = type;
   const level = safeString(properties.$exception_level);
-  if (level !== undefined) out.$exception_level = level;
+  if (level === "error" || level === "warning") out.$exception_level = level;
   if (typeof properties.$exception_synthetic === "boolean")
     out.$exception_synthetic = properties.$exception_synthetic;
   return out;

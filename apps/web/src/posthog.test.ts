@@ -72,7 +72,7 @@ describe("scrubPostHogEvent", () => {
     expect(out.properties.$referrer).toBeUndefined();
   });
 
-  test("masks financial strings inside an exception message and value", () => {
+  test("drops free-form exception text and frame names", () => {
     const out = scrubPostHogEvent(
       capture(
         {
@@ -103,17 +103,16 @@ describe("scrubPostHogEvent", () => {
     expect(serialised).not.toContain("NL02ABNA");
     expect(serialised).not.toContain("4.999");
     expect(serialised).not.toContain("4999");
-    expect(out.properties.$exception_message).toBe("transfer [AMOUNT] to Alexander failed");
+    expect(serialised).not.toContain("Alexander");
+    expect(serialised).not.toContain("vault.js");
+    expect(out.properties.$exception_message).toBeUndefined();
     expect(out.properties.$exception_list).toEqual([
       {
         type: "Error",
-        value: 'Unexpected token, body: {"iban":"[IBAN]"}',
         mechanism: { type: "onerror", handled: false },
         stacktrace: {
           frames: [
             {
-              filename: "https://lavega.dev/assets/vault.js",
-              function: "pay",
               lineno: 12,
               colno: 4,
               in_app: true,
