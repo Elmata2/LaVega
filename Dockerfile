@@ -60,10 +60,8 @@ ENV INVESTING_WEB_DIST=/app/apps/investing-web/dist
 ENV INVESTING_MOUNT=1
 
 # Source + built assets (apps/web/dist, apps/investing-web/dist and the server
-# entry tsx runs) come from the build stage. `pnpm start` still runs from the
-# workspace root, so the root package.json and its start script travel too.
-# Owned by `node` so the non-root runtime can write its runtime state (the
-# .lavega fallback lives under the working directory).
+# entry tsx runs) come from the build stage. The server package directory is
+# owned by `node` for its .lavega fallback state.
 COPY --from=build --chown=node:node /app /app
 
 # Production dependencies only — this is what keeps the dev/test advisories out
@@ -74,4 +72,8 @@ RUN CI=true pnpm install --prod --frozen-lockfile
 EXPOSE 8787
 # Drop root: nothing in the image needs privileged access.
 USER node
-CMD ["pnpm", "start"]
+WORKDIR /app/apps/server
+# pnpm 11 checks the production-only tree and tries to install missing dev
+# dependencies before running scripts. That writes under root-owned /app and
+# fails at startup. Run the installed production tsx binary directly.
+CMD ["./node_modules/.bin/tsx", "--env-file-if-exists=.env", "src/index.ts"]

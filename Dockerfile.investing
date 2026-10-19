@@ -36,4 +36,7 @@ RUN mkdir -p /data && chown node:node /data
 EXPOSE 8788
 # Drop root: nothing in the image needs privileged access.
 USER node
-CMD ["pnpm", "--filter", "@lavega/investing-server", "start:docker"]
+WORKDIR /app/apps/investing-server
+# Run installed production tsx directly: pnpm 11 otherwise tries to reinstall
+# omitted dev dependencies under root-owned /app when starting this image.
+CMD ["./node_modules/.bin/tsx", "--env-file-if-exists=.env", "src/docker.ts"]
