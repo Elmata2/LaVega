@@ -24,6 +24,13 @@ export type AccountRouteDependencies = {
  * will not have. Beyond that it deletes only the caller's own rows — the tenant
  * comes from the session, never from the request — and `eraseUserData` runs the
  * whole thing in one transaction, so there is no half-erased account.
+ *
+ * "The whole thing" includes the Better Auth identity. Clearing application
+ * data alone left the password authenticating and the next sign-in rebuilding a
+ * vault under the same id: the caller was told they were gone while the account
+ * was still there. `eraseUserData` now deletes `user`/`session`/`account`/
+ * `verification` rows for this id in the same transaction, so the old cookie
+ * stops resolving and the old credentials stop working in that same commit.
  */
 export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDependencies): void {
   app.delete("/api/account/data", async (c) => {

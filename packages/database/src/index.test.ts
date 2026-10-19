@@ -596,10 +596,43 @@ test("erasure clears every table that holds personal data, in one transaction", 
     "DELETE FROM personal.vaults WHERE user_id = $1",
     "DELETE FROM personal.vault_keys WHERE user_id = $1",
     "DELETE FROM personal.net_worth_totals WHERE user_id = $1",
+    // The spend ledger became per-account in 0013; it was not being erased.
+    "DELETE FROM personal.ai_usage WHERE user_id = $1",
+    // The Better Auth identity, in `public` and keyed by "userId"/identifier.
+    'DELETE FROM public.session WHERE "userId" = $1',
+    'DELETE FROM public.account WHERE "userId" = $1',
+    "DELETE FROM public.verification WHERE identifier = $1 OR identifier = $2",
+    'DELETE FROM public."user" WHERE id = $1',
   ]);
   // The personal vault — the one thing the server cannot read — is still erasable.
   expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
-  expect(report).toHaveLength(20);
+  expect(report).toHaveLength(25);
+});
+
+test("erasure deletes the Better Auth identity in the SAME transaction, after reading the address for verification tokens", async () => {
+  /* The route deleted application rows only, so the password still
+   * authenticated and a fresh sign-in recreated a vault: the person was
+   * forgotten and could still sign in as themselves. Identity and data now
+   * share one transaction, which is what makes "either every table is cleared
+   * or none is" true of the account too. */
+  const { db, calls, paramCalls } = erasureDatabase(1);
+
+  await eraseUserData(db, "user-123");
+
+  // One transaction, opened before the first delete and closed after the last.
+  expect(calls[0]).toBe("BEGIN");
+  expect(calls.at(-1)).toBe("COMMIT");
+  expect(calls.filter((sql) => sql === "BEGIN")).toHaveLength(1);
+
+  const select = paramCalls.find((call) => call.sql.startsWith('SELECT email FROM public."user"'));
+  expect(select?.values).toEqual(["user-123"]);
+  const userDelete = paramCalls.find((call) => call.sql.startsWith('DELETE FROM public."user"'));
+  expect(userDelete?.values).toEqual(["user-123"]);
+  // `verification` has no user column: both the id and the address are matched.
+  const verification = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM public.verification"),
+  );
+  expect(verification?.values).toEqual(["user-123", "user-123"]);
 });
 
 test("erasure scopes personal.eb_pending_auth by user_id — that table has no RLS to fall back on", async () => {
@@ -622,7 +655,7 @@ test("erasure reports zero rows rather than pretending it did not run", async ()
   const { db } = erasureDatabase(0);
   const report = await eraseUserData(db, "user-123");
   expect(report.every((entry) => entry.rows === 0)).toBe(true);
-  expect(report).toHaveLength(20);
+  expect(report).toHaveLength(25);
 });
 
 test("a half-erased account rolls back — the caller is never told they are gone when they are not", async () => {
@@ -677,7 +710,7 @@ test("sweepSessions reports zero rather than pretending it did not run", async (
   expect(removed).toBe(0);
 });
 
-test("AiUsage.record inserts all 8 columns in order", async () => {
+test("AiUsage.record inserts all 8 columns in order, as the account, in one tenant transaction", async () => {
   const { db, calls } = fakeDatabase();
   await createAiUsageRepository(db).record({
     day: "2026-09-08",
@@ -690,12 +723,19 @@ test("AiUsage.record inserts all 8 columns in order", async () => {
     costCents: 2,
     userId: "user-a",
   });
-  expect(calls).toEqual([
+  // 0025 forces RLS on this table, so the write carries its own identity.
+  expect(calls[0]?.sql).toBe("BEGIN");
+  expect(calls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-a"],
+  });
+  expect(executed(calls)).toEqual([
     {
       sql: "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2, "user-a"],
     },
   ]);
+  expect(calls.at(-1)?.sql).toBe("COMMIT");
 });
 
 /* listSessions returns EVERY row it is allowed to see, which is what makes it

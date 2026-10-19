@@ -69,7 +69,7 @@ test("lavega_runtime is granted select, insert, update, delete on every table in
   }
 });
 
-test("every RLS-enabled table in personal and investing also forces it, except personal.eb_pending_auth and personal.ai_usage", async () => {
+test("every RLS-enabled table in personal and investing also forces it, except personal.eb_pending_auth", async () => {
   const rows = await db.query<{ schema: string; table: string; enabled: boolean; forced: boolean }>(
     `SELECT n.nspname AS schema, c.relname AS table, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -79,8 +79,7 @@ test("every RLS-enabled table in personal and investing also forces it, except p
   expect(rows.rows.length).toBeGreaterThan(0);
 
   const checked = rows.rows.filter(
-    (row) =>
-      !(row.schema === "personal" && (row.table === "eb_pending_auth" || row.table === "ai_usage")),
+    (row) => !(row.schema === "personal" && row.table === "eb_pending_auth"),
   );
   const violations = checked
     .filter((row) => row.enabled && !row.forced)
@@ -100,13 +99,23 @@ test("personal.eb_pending_auth deliberately has neither RLS nor FORCE — the ba
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
-test("personal.ai_usage deliberately has neither RLS nor FORCE — aggregate owner spend, not per-user data", async () => {
+test("personal.ai_usage carries RLS and FORCE, scoped to app.user_id — 0013 made the ledger per-account and 0025 gave it the same backstop as every other table in personal", async () => {
   const rows = await db.query<{ enabled: boolean; forced: boolean }>(
     `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'personal' AND c.relname = 'ai_usage'`,
   );
-  expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
+  expect(rows.rows).toEqual([{ enabled: true, forced: true }]);
+
+  const policy = await db.query<{ qual: string; with_check: string }>(
+    `SELECT qual, with_check FROM pg_policies
+     WHERE schemaname = 'personal' AND tablename = 'ai_usage' AND policyname = 'ai_usage_user_access'`,
+  );
+  // Both directions matter: USING hides another account's row, WITH CHECK stops
+  // a write that claims one.
+  expect(policy.rows).toHaveLength(1);
+  expect(policy.rows[0]!.qual).toContain("app.user_id");
+  expect(policy.rows[0]!.with_check).toContain("app.user_id");
 });
 
 test("investing.preferences gains sector_corrections and sector_inference_enabled columns with the documented defaults", async () => {
@@ -158,7 +167,12 @@ test("personal.net_worth_totals has the shape opting into Investing's net worth 
      ORDER BY column_name`,
   );
   expect(columns.rows).toEqual([
-    { column_name: "currency", data_type: "text", column_default: "'EUR'::text", is_nullable: "NO" },
+    {
+      column_name: "currency",
+      data_type: "text",
+      column_default: "'EUR'::text",
+      is_nullable: "NO",
+    },
     { column_name: "date", data_type: "date", column_default: null, is_nullable: "NO" },
     {
       column_name: "total_cents",

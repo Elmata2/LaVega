@@ -58,3 +58,30 @@ test("a caller cannot erase a tenant they name themselves", async () => {
   expect(erase).toHaveBeenCalledWith("user-123");
   expect(erase).not.toHaveBeenCalledWith("user-999");
 });
+
+/* The account, not only its data. `eraseUserData` deletes the Better Auth
+ * identity in the same transaction as the application rows (see its own doc),
+ * so the report the caller receives names the session and user rows that were
+ * removed. Asserting it here keeps the route from quietly dropping part of the
+ * report — the caller is owed evidence that signing in again will fail, not
+ * just that a vault went away. */
+test("the erasure report reaches the caller with the Better Auth identity in it", async () => {
+  const erase = vi.fn(async () => [
+    { table: "personal.vaults", rows: 1 },
+    { table: 'public."user"', rows: 1 },
+    { table: "public.session", rows: 2 },
+  ]);
+  const app = new Hono();
+  registerAccountRoutes(app, { tenantId: async () => "user-123", erase });
+
+  const res = await app.request("/api/account/data", erasePost({ confirm: "ERASE" }));
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({
+    erased: [
+      { table: "personal.vaults", rows: 1 },
+      { table: 'public."user"', rows: 1 },
+      { table: "public.session", rows: 2 },
+    ],
+  });
+});

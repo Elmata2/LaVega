@@ -48,7 +48,17 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await pglite.exec("RESET ROLE; DELETE FROM personal.ai_usage; SET ROLE lavega_runtime;");
+  /* The cleanup is the superuser: 0025 forces RLS on this table, so only a role
+   * that bypasses it can empty the fixture. The session-level `app.user_id` that
+   * follows is what lets this file's direct `pglite.query` assertions — the
+   * backdating UPDATE and the read-back below — see the rows the repositories
+   * write, the same way a request's transaction does. */
+  await pglite.exec(`
+    RESET ROLE;
+    DELETE FROM personal.ai_usage;
+    SET ROLE lavega_runtime;
+    SELECT set_config('app.user_id', 'user-a', false);
+  `);
 });
 
 async function dayTotal(day: string, userId = "user-a"): Promise<number> {
@@ -137,15 +147,18 @@ test("reconcile() turns a reservation into the real charge in place, not a secon
   if (!reserved.ok) throw new Error("expected the reservation to succeed");
   expect(await dayTotal("2026-09-20")).toBe(5); // worst case, before the real cost is known
 
-  await repo.reconcile({
-    id: reserved.id,
-    model: "mistral-small-latest",
-    inputTokens: 100,
-    outputTokens: 50,
-    pages: 0,
-    searches: 0,
-    costCents: 2, // the real call cost less than the worst case it was held at
-  });
+  await repo.reconcile(
+    {
+      id: reserved.id,
+      model: "mistral-small-latest",
+      inputTokens: 100,
+      outputTokens: 50,
+      pages: 0,
+      searches: 0,
+      costCents: 2, // the real call cost less than the worst case it was held at
+    },
+    "user-a",
+  );
 
   expect(await dayTotal("2026-09-20")).toBe(2);
   const { rows } = await pglite.query<{
@@ -174,7 +187,7 @@ test("release() frees a reservation nothing ever reconciled, so the next caller 
   const blocked = await repo.reserve(params);
   expect(blocked).toEqual({ ok: false, scope: "day" });
 
-  await repo.release(first.id);
+  await repo.release(first.id, "user-a");
   expect(await dayTotal("2026-09-20")).toBe(0);
 
   const afterRelease = await repo.reserve(params);
@@ -193,19 +206,58 @@ test("release() after reconcile() is a no-op — the real charge is not erased b
     monthCapCents: 1000,
   });
   if (!reserved.ok) throw new Error("expected the reservation to succeed");
-  await repo.reconcile({
+  await repo.reconcile(
+    {
+      id: reserved.id,
+      model: "mistral-small-latest",
+      inputTokens: 10,
+      outputTokens: 10,
+      pages: 0,
+      searches: 0,
+      costCents: 3,
+    },
+    "user-a",
+  );
+
+  // arrives late, e.g. a caller that reconciled then still threw
+  await repo.release(reserved.id, "user-a");
+
+  expect(await dayTotal("2026-09-20")).toBe(3); // the reconciled charge stands
+});
+
+test("reconcile() and release() reach only the reserving account's row — an id alone is no longer an address", async () => {
+  /* M5: both used to match `WHERE id = $1` with no account predicate, and the
+   * table had no RLS to fall back on. `id` is server-side (from reserve()), so
+   * that was latent rather than reachable — latent is not the same as safe.
+   * Another account's spend must be unreachable even holding the id, and RLS
+   * (0025) has to say the same thing the predicate does. */
+  const repo = createAiUsageRepository(db);
+  const reserved = await repo.reserve({
+    day: "2026-09-20",
+    userId: "user-a",
+    month: "2026-09",
+    route: "categorize",
+    worstCaseCents: 5,
+    dayCapCents: 1000,
+    monthCapCents: 1000,
+  });
+  if (!reserved.ok) throw new Error("expected the reservation to succeed");
+
+  const realCharge = {
     id: reserved.id,
     model: "mistral-small-latest",
     inputTokens: 10,
     outputTokens: 10,
     pages: 0,
     searches: 0,
-    costCents: 3,
-  });
+    costCents: 2,
+  };
+  await repo.reconcile(realCharge, "user-b");
+  await repo.release(reserved.id, "user-b");
+  expect(await dayTotal("2026-09-20", "user-a")).toBe(5); // untouched by user-b
 
-  await repo.release(reserved.id); // arrives late, e.g. a caller that reconciled then still threw
-
-  expect(await dayTotal("2026-09-20")).toBe(3); // the reconciled charge stands
+  await repo.reconcile(realCharge, "user-a");
+  expect(await dayTotal("2026-09-20", "user-a")).toBe(2);
 });
 
 test("an unreconciled reservation stops counting toward the cap once it goes stale", async () => {

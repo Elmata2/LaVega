@@ -28,7 +28,11 @@ export type UsageInput = {
  *  the DB kind gets the same guarantee from `reconciled_at IS NULL` in the
  *  UPDATE/DELETE itself. */
 export type ReservationHandle =
-  | { readonly kind: "db"; readonly id: number }
+  /* `userId` travels with the DB handle so `reconcile`/`release` can scope the
+   * row to the account that reserved it. The id alone used to be the whole
+   * address of a reservation; `personal.ai_usage` is per-account and 0025
+   * forces RLS on it, so the account is part of the row's identity now. */
+  | { readonly kind: "db"; readonly id: number; readonly userId: string }
   | {
       readonly kind: "memory";
       readonly userId: string;
@@ -157,7 +161,7 @@ export async function checkBudget(route?: AiUsage["route"], userId?: string): Pr
       monthCapCents: caps.monthCents,
     });
     if (!result.ok) return { ok: false, scope: result.scope };
-    return { ok: true, reservation: { kind: "db", id: result.id } };
+    return { ok: true, reservation: { kind: "db", id: result.id, userId: account } };
   }
 
   if (!warnedNoDatabase) {
@@ -242,15 +246,18 @@ export async function recordUsage(
     if (db) {
       const repo = createAiUsageRepository(db);
       if (reservation?.kind === "db") {
-        await repo.reconcile({
-          id: reservation.id,
-          model: input.model,
-          inputTokens,
-          outputTokens,
-          pages,
-          searches,
-          costCents,
-        });
+        await repo.reconcile(
+          {
+            id: reservation.id,
+            model: input.model,
+            inputTokens,
+            outputTokens,
+            pages,
+            searches,
+            costCents,
+          },
+          reservation.userId,
+        );
       } else {
         await repo.record({
           userId: aiAccountId(input.userId),
@@ -316,7 +323,7 @@ export async function releaseReservation(
   try {
     if (reservation.kind === "db") {
       const db = runtimeDatabase();
-      if (db) await createAiUsageRepository(db).release(reservation.id);
+      if (db) await createAiUsageRepository(db).release(reservation.id, reservation.userId);
       return;
     }
     if (reservation.settled) return;
