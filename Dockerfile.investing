@@ -1,4 +1,7 @@
 # Self-hosted investing image. Personal LaVega deployment keeps using Dockerfile.
+# Two stages: the build stage needs the devDependencies (Vite is what builds the
+# SPA); the runtime stage installs only the production tree, so the dev/test
+# advisories (vitest, tinypool) never ship in the image.
 FROM node:22-slim AS build
 WORKDIR /app
 
@@ -7,6 +10,10 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @lavega/investing-web build
 
+# Drop the build tree: the runtime stage installs its own production tree from
+# the lockfile, so this node_modules (with devDeps) must not be copied forward.
+RUN find . -type d -name node_modules -prune -exec rm -rf {} +
+
 FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
@@ -14,7 +21,22 @@ ENV PORT=8788
 ENV INVESTING_WEB_DIST=/app/apps/investing-web/dist
 
 RUN npm install -g pnpm@11.18.0
-COPY --from=build /app /app
+# Owned by `node` so the non-root runtime can write under the working directory.
+COPY --from=build --chown=node:node /app /app
+# Production dependencies only — this is what keeps the dev/test advisories out.
+RUN CI=true pnpm install --prod --frozen-lockfile
+
+# The runtime state stores fall back to /data when it exists
+# (apps/investing-server/src/jsonFileStore.ts), and the container is mounted
+# with -v <volume>:/data by scripts/rebuild-investing-orbstack.sh. Pre-create it
+# owned by `node` so a fresh volume inherits writable ownership now that the
+# process is no longer root.
+RUN mkdir -p /data && chown node:node /data
 
 EXPOSE 8788
-CMD ["pnpm", "--filter", "@lavega/investing-server", "start:docker"]
+# Drop root: nothing in the image needs privileged access.
+USER node
+WORKDIR /app/apps/investing-server
+# Run installed production tsx directly: pnpm 11 otherwise tries to reinstall
+# omitted dev dependencies under root-owned /app when starting this image.
+CMD ["./node_modules/.bin/tsx", "--env-file-if-exists=.env", "src/docker.ts"]
