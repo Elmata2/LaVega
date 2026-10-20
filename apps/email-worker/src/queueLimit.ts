@@ -33,11 +33,6 @@ export type QueueLimitOutcome = { kind: "allowed" } | { kind: "throttled"; reaso
 /** Alleen loggen als de teller niet werkt, en dat één keer per isolate. */
 let warnedAboutLimiter = false;
 
-/** Testhaak: elke test hoort de waarschuwing weer te kunnen zien. */
-export function resetLimiterWarning(): void {
-  warnedAboutLimiter = false;
-}
-
 function warnOnce(warn: (message: string) => void, reason: string): void {
   if (warnedAboutLimiter) return;
   warnedAboutLimiter = true;

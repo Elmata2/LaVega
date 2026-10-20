@@ -4,14 +4,9 @@
  */
 
 import { readFileSync } from "node:fs";
-import { beforeEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { handleInboundEmail } from "../src/handler.js";
-import {
-  INBOUND_LIMIT,
-  INBOUND_PERIOD_SECONDS,
-  allowQueueMessage,
-  resetLimiterWarning,
-} from "../src/queueLimit.js";
+import { INBOUND_LIMIT, INBOUND_PERIOD_SECONDS, allowQueueMessage } from "../src/queueLimit.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
 import { RAW_PLAIN_TEXT } from "./rawMail.js";
 
@@ -20,10 +15,6 @@ const ENV = {
   N8N_SHARED_SECRET: "geheim-123",
 };
 const QUEUED = { addedInvoices: 1, addedNotices: 0, inQueue: 1, noticesInQueue: 0 };
-
-beforeEach(() => {
-  resetLimiterWarning();
-});
 
 test("de grens telt per wachtrij, en bij overschrijding volgt een benoemde weigering", async () => {
   const keys: string[] = [];
@@ -70,6 +61,8 @@ test("onder de grens gaat de mail gewoon naar de wachtrij", async () => {
 });
 
 test("een binding die gooit laat de mail door en logt de reden één keer", async () => {
+  vi.resetModules();
+  const { handleInboundEmail: handleFreshInboundEmail } = await import("../src/handler.js");
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const env = {
     ...ENV,
@@ -81,10 +74,10 @@ test("een binding die gooit laat de mail door en logt de reden één keer", asyn
   };
   const http = fakeFetch({ body: QUEUED });
 
-  const first = await handleInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), env, {
+  const first = await handleFreshInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), env, {
     fetch: http.fetch,
   });
-  const second = await handleInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), env, {
+  const second = await handleFreshInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), env, {
     fetch: http.fetch,
   });
 
@@ -98,10 +91,12 @@ test("een binding die gooit laat de mail door en logt de reden één keer", asyn
 });
 
 test("een ontbrekende binding laat de mail door, met één regel in het log", async () => {
+  vi.resetModules();
+  const { handleInboundEmail: handleFreshInboundEmail } = await import("../src/handler.js");
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const http = fakeFetch({ body: QUEUED });
 
-  const verdict = await handleInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), ENV, {
+  const verdict = await handleFreshInboundEmail(fakeMessage({ raw: RAW_PLAIN_TEXT }), ENV, {
     fetch: http.fetch,
   });
 

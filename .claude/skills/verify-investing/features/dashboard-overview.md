@@ -16,9 +16,8 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   (`data-dashboard-section="performance"`), not in the aside. With no benchmark selected
   the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
   selected the title is `Comparison` and the axis is `Indexed return`; portfolio and
-  benchmark are percents (`packages/core` `deriveChartMode`). Empty chart: title
-  `No portfolio data`, then `The value chart is built from your transaction history. While your
-  broker provides no transactions for it, it stays empty.` Period group `Choose period`:
+  benchmark are percents (`packages/core` `deriveChartMode`). Empty chart title:
+  `No portfolio data`. Empty copy: `The value chart is built from your transaction history. While your broker provides no transactions for it, it stays empty.` Period group `Choose period`:
   `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
   search.
 - allocation donut widget (`data-dashboard-section="allocation"`) in that
@@ -29,7 +28,7 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.
   Metrics: `Annual volatility`, `Beta`, `Regression alpha (annual)`, `Maximum drawdown`,
   `Valid daily returns`, `Benchmark pairs`. Those figures, and the line
-  `Historical account risk · …`, come from the dashboard payload
+  `Historical account risk · …` or `Historical holdings risk · …`, come from the dashboard payload
   `risk.byBenchmark[<benchmark>][<range>]` (`6M`, `1Y`, `All`). The key is the selected
   benchmark, or `defaultBenchmark` when none is selected. An empty book has
   `defaultBenchmark: null` and the key `""`. Switching
@@ -39,7 +38,7 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   before today, that line appends ` (as of <date>)`. The card title stays `Summary`.
   When history is not still loading, the next line is
   `Use Refresh risk after broker or price updates.` The page never requests
-  `/api/investing/summary`: the metrics, the `Historical account risk · …` line,
+  `/api/investing/summary`: the metrics, the risk basis line,
   `Current composition · …` (`priced`/`unpriced`/`estimated` counts) and the
   `Largest positions` list all read the dashboard payload's projections
   (`risk.byBenchmark` and `composition`). `Refresh risk` reloads the dashboard.
