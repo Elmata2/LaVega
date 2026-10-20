@@ -29,6 +29,7 @@ import {
   type ParsedMail,
 } from "./parseMail.js";
 import { buildReplyMime } from "./replyMime.js";
+import { allowQueueMessage } from "./queueLimit.js";
 import { checkSpoofGate } from "./spoofGate.js";
 import type { Env, ForwardableEmailMessage } from "./types.js";
 
@@ -250,6 +251,12 @@ export async function handleInboundEmail(
         ") heeft geen lokaal deel voor de @. Stuur naar <naam>-<code>@invoices.lavega.dev.",
     };
   }
+
+  // De misbruikgrens staat vóór het lezen van de mail: een stortvloed moet
+  // goedkoop blijven. De sleutel is de wachtrij uit RCPT TO, niet de afzender —
+  // die kan de aanvaller kiezen. Werkt de binding niet, dan gaat de mail door.
+  const limit = await allowQueueMessage(env.INBOUND_RATE_LIMIT, queueKey);
+  if (limit.kind === "throttled") return { kind: "reject", reason: limit.reason };
 
   // De grootte, VÓÓR het parsen — de enige controle die kan zonder de mail in
   // het geheugen te trekken.

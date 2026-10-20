@@ -24,6 +24,8 @@ import { RAW_FORWARDED_INVOICE, RAW_PLAIN_TEXT } from "./rawMail.js";
 const ENV = {
   N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",
   N8N_SHARED_SECRET: "geheim-123",
+  // De misbruikgrens heeft eigen tests; hier altijd toestaan.
+  INBOUND_RATE_LIMIT: { limit: async () => ({ success: true }) },
 };
 const QUEUED = { addedInvoices: 1, addedNotices: 0, inQueue: 1, noticesInQueue: 0 };
 
