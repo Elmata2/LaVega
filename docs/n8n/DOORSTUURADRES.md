@@ -93,12 +93,20 @@ afhankelijkheden** — er loopt niets mee in een pad dat een factuur draagt. Je
 haalt wrangler per keer op.
 
 1. URL en geheim gaan **niet** in de repo:
+
    ```bash
    cd apps/email-worker
    pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL       # plak de Production URL
    pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET     # plak het geheim
    pnpm dlx wrangler@4 deploy
    ```
+
+   De `[[ratelimits]]`-binding `INBOUND_RATE_LIMIT` staat al in
+   `wrangler.toml`; `deploy` zet hem neer en er is geen namespace om aan te
+   maken. Botst `namespace_id` `1001` met een andere Worker in het account, kies
+   dan een ander nummer. `limit` en `period` moeten gelijk blijven aan
+   `INBOUND_LIMIT` en `INBOUND_PERIOD_SECONDS` in `src/queueLimit.ts`; een test
+   leest het TOML-bestand en vergelijkt ze.
 
 ### Stap 4 — De route: alle mail naar de Worker
 
@@ -168,14 +176,15 @@ antwoordt je dat er niets is toegevoegd.
 
 ### Grenzen, en waar ze gecontroleerd worden
 
-| Grens                | Waar                                       | Wat er gebeurt bij overschrijding                                |
-| -------------------- | ------------------------------------------ | ---------------------------------------------------------------- |
-| 17.0 MB per bericht  | Worker, **vóór het parsen** (op `rawSize`) | bounce: "deze mail is X MB en LaVega neemt maximaal 17.0 MB aan" |
-| 4 MB per PDF         | Worker, na het parsen                      | bounce **met de bestandsnaam** erin                              |
-| 3 PDF's per bericht  | Worker, na het parsen                      | bounce: "deze mail heeft N PDF-bijlagen; de grens is 3"          |
-| 4 MB / 3 PDF's       | `packages/core`, tweede lijn               | de bijlage valt af met een reden in `skipped`                    |
-| 6000 tekens tekst    | `packages/core`                            | de tekst wordt afgekapt en het verzoek zegt dat                  |
-| 200 regels in de rij | `packages/core`                            | de oudste vallen eruit                                           |
+| Grens                        | Waar                                               | Wat er gebeurt bij overschrijding                                |
+| ---------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
+| 17.0 MB per bericht          | Worker, **vóór het parsen** (op `rawSize`)         | bounce: "deze mail is X MB en LaVega neemt maximaal 17.0 MB aan" |
+| 4 MB per PDF                 | Worker, na het parsen                              | bounce **met de bestandsnaam** erin                              |
+| 3 PDF's per bericht          | Worker, na het parsen                              | bounce: "deze mail heeft N PDF-bijlagen; de grens is 3"          |
+| 4 MB / 3 PDF's               | `packages/core`, tweede lijn                       | de bijlage valt af met een reden in `skipped`                    |
+| 6000 tekens tekst            | `packages/core`                                    | de tekst wordt afgekapt en het verzoek zegt dat                  |
+| 200 regels in de rij         | `packages/core`                                    | de oudste vallen eruit                                           |
+| 20 mails / 60 s per wachtrij | Worker, **vóór het lezen** (Rate Limiting-binding) | bounce: "wachtrij X kreeg te veel mail in korte tijd"            |
 
 Waarom die eerste drie in de **Worker** zitten en niet alleen in core: alleen
 daar kunnen we jou nog iets vertellen. In n8n zou de bijlage met een reden in
@@ -197,8 +206,8 @@ Elke regel die via dit pad binnenkomt draagt vier extra velden:
 | `deliveredTo`  | het volledige adres waarop de mail binnenkwam |
 | `queueKey`     | het lokale deel daarvan                       |
 | `from`         | wie hem stuurde — **niet geverifieerd**       |
-| `senderCheck`  | `unknown` bij dit Worker-pad                 |
-| `senderChecks` | SPF, DKIM en DMARC: alle drie `unknown`      |
+| `senderCheck`  | `unknown` bij dit Worker-pad                  |
+| `senderChecks` | SPF, DKIM en DMARC: alle drie `unknown`       |
 
 Een regel uit Gmail heeft die velden **niet**, en dat is opzet: er wás geen
 doorstuuradres en er is geen SPF-uitslag. Een leeg `deliveredTo` zou zeggen dat
@@ -214,6 +223,29 @@ Een afzender kan zelf een `Authentication-Results`-header schrijven, zelfs met
 Zie [Cloudflare's inbound authentication policy](https://developers.cloudflare.com/email-service/reference/postmaster/),
 de [Worker-API](https://developers.cloudflare.com/email-service/api/route-emails/email-handler/)
 en het [open Cloudflare-issue over ontbrekende authenticatieresultaten](https://github.com/cloudflare/workerd/issues/6740).
+
+### Wat de Worker lokaal wél weigert
+
+De Worker kan niet bewijzen dat een afzender klopt. Hij weigert wel wat zonder
+meting al onwaar is (`apps/email-worker/src/spoofGate.ts`):
+
+| Weigering                  | Wat er aan de hand is                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `service-impersonation`    | De From-regel claimt `lavega.dev` of een subdomein, maar de envelop-afzender komt van buiten.                |
+| `null-envelope-sender`     | De envelop is leeg (`<>`) en het bericht is geen leveringsmelding. Een bounce kan geen factuur zijn.         |
+| `unusable-from-domain`     | Uit de From-regel komt geen bruikbaar domein, dus de afzender is niet vast te stellen en niet te antwoorden. |
+| `unusable-envelope-domain` | De envelop-afzender heeft geen bruikbaar domein. Idem.                                                       |
+
+**Wat de poort met opzet NIET doet: envelop- en From-domein vergelijken.** Een
+doorgestuurde factuur heeft bijna altijd twee verschillende domeinen: MAIL FROM is
+`gmail.com`, From is de leverancier. Een regel "de domeinen moeten gelijk zijn"
+zou precies de hoofdstroom van dit product weigeren. De poort kijkt daarom naar
+onze eigen domeinen (impersonatie) en naar onbruikbare adressen, niet naar
+onderlinge gelijkheid.
+
+De poort keurt niemand goed. Een mail die erdoor komt, staat nog steeds als
+`unknown` in de wachtrij. De echte SPF/DKIM/DMARC-uitslag staat alleen in
+Cloudflare Email Service → Activity log.
 
 **Let op wat `from` betekent bij doorsturen.** Stuur je een mail door uit je
 Gmail, dan ben jij de afzender — niet de leverancier. De leverancier komt uit de
@@ -299,7 +331,7 @@ melding(en) toegevoegd voor wachtrij <sleutel>`. Er staat geen adres, geen
 
 Eerlijk opgeschreven, want dit is precies waar dit soort werk misgaat.
 
-**Wél in tests vastgelegd** (`pnpm --filter @lavega/email-worker test`, 55 tests;
+**Wél in tests vastgelegd** (`pnpm --filter @lavega/email-worker test`, 85 tests;
 `pnpm --filter @lavega/core test`, 430 tests): het MIME-parsen op vijf echte
 mailvormen, RFC 2047 en RFC 2231 in headers en bestandsnamen, base64 en
 quoted-printable, het negeren van onbetrouwbare authenticatieheaders, het lokale deel van een
@@ -322,8 +354,13 @@ blijken:**
   → Activity log of SPF/DKIM/DMARC voor de eerste factuur passen. De Worker
   ontvangt die uitslagen niet als vertrouwde metadata; in n8n blijft
   `senderChecks` dus drie keer `unknown`. Controleer ook of Cloudflare een
-  nagemaakte afzender volgens diens DMARC-beleid weigert. Totdat een vertrouwde
-  Worker-API bestaat, is er geen tweede lokale spoof-poort;
+  nagemaakte afzender volgens diens DMARC-beleid weigert. De lokale spoof-poort
+  dekt alleen wat zonder meting al onwaar is; hij is geen vervanging voor die
+  uitslag en keurt geen afzender goed;
+- **de echte Rate Limiting-teller.** De binding `INBOUND_RATE_LIMIT` staat in
+  `wrangler.toml` (20 per 60 seconden per wachtrij) en de fail-open-route is
+  getest met een nep-binding. Of Cloudflare de teller per locatie deelt en of
+  `namespace_id` `1001` in dit account vrij is, blijkt pas bij de deploy;
 - of de Workers-runtime een bericht van 17 MB in het geheugen aankan. De limiet
   is zo gekozen dat het moet passen, maar de bovengrens is niet opgezocht;
 - `message/rfc822` wordt **niet** uitgepakt. Stuur je een mail door "als bijlage"
