@@ -25,13 +25,12 @@
  *      `from` (wie hem stuurde) mee tot in de wachtrij: hij moet een regel die
  *      hij niet verwachtte kunnen beoordelen.
  *
- *   2. DE AFZENDER IS NIET GECONTROLEERD. `senderChecks` is wat Cloudflare in
- *      de header `Authentication-Results` zette, letterlijk doorgegeven.
- *      `senderCheck` vat dat samen in drie standen — 'passed', 'failed',
- *      'unknown' — en 'passed' betekent uitsluitend dat het DOMEIN de controle
- *      doorstond, niet dat de factuur echt is. Een mail die zakt wordt GEMARKEERD,
- *      niet weggegooid: wegggooien is het enige wat erger is dan een nepfactuur
- *      tonen, want dan mist hij een echte zonder het te weten.
+ *   2. DE AFZENDER IS NIET HIER GECONTROLEERD. Cloudflare toetst SPF/DKIM/DMARC
+ *      vóór aflevering aan de Worker, maar geeft die gemeten uitslagen niet via
+ *      de Worker-API door. `Authentication-Results` is afzendertekst en kan
+ *      nagemaakt zijn. De Worker stuurt daarom voor alle drie controles
+ *      `unknown`; `senderCheck` blijft ook `unknown`. In Cloudflare's Activity
+ *      log staan de echte uitslagen, niet in deze wachtrij.
  *
  *   3. GEEN GMAIL-LINK. `toQueueEntry` zet `mailUrl` alleen voor bron 'gmail'.
  *      Een mail-id uit een doorgestuurd bericht in een Gmail-URL plakken levert
@@ -55,9 +54,9 @@ import {
  */
 
 /**
- * De uitslag van SPF/DKIM/DMARC zoals Cloudflare hem in `Authentication-Results`
- * zet. Een waarde die we niet kennen — of een ontbrekende header — wordt
- * 'unknown'. NOOIT 'pass': onbekend is geen goedkeuring.
+ * SPF/DKIM/DMARC-waarden in het webhook-contract. De huidige Worker stuurt
+ * altijd 'unknown': Cloudflare geeft zijn echte uitslagen niet als vertrouwde
+ * Worker-metadata door. Een onbekende waarde blijft ook 'unknown'.
  * @typedef {'pass'|'fail'|'softfail'|'neutral'|'none'|'temperror'|'permerror'|'unknown'} AuthResult
  */
 

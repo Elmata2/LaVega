@@ -197,24 +197,28 @@ Elke regel die via dit pad binnenkomt draagt vier extra velden:
 | `deliveredTo`  | het volledige adres waarop de mail binnenkwam |
 | `queueKey`     | het lokale deel daarvan                       |
 | `from`         | wie hem stuurde — **niet geverifieerd**       |
-| `senderCheck`  | `passed`, `failed` of `unknown`               |
-| `senderChecks` | de letterlijke uitslag van SPF, DKIM en DMARC |
+| `senderCheck`  | `unknown` bij dit Worker-pad                 |
+| `senderChecks` | SPF, DKIM en DMARC: alle drie `unknown`      |
 
 Een regel uit Gmail heeft die velden **niet**, en dat is opzet: er wás geen
 doorstuuradres en er is geen SPF-uitslag. Een leeg `deliveredTo` zou zeggen dat
 er wél een adres was en dat we het kwijt zijn.
 
-**`senderCheck: 'passed'` is geen goedkeuring van de factuur.** Het betekent
-alleen dat de mail echt van dat domein kwam. Een echte mail van een echte
-leverancier kan nog steeds een nepfactuur bevatten. Daarom heet dit veld nergens
-`verified`, en daarom wordt een mail die **zakt** gemarkeerd en niet weggegooid:
-weggooien betekent dat een echte factuur van een domein met een slordig
-SPF-record verdwijnt zonder dat iemand het merkt.
+**De Worker kan geen SPF/DKIM/DMARC-pass bewijzen.** Cloudflare controleert mail
+bij SMTP-ontvangst en past het DMARC-beleid van de afzender toe. De
+`ForwardableEmailMessage`-API geeft de gemeten uitslagen niet vertrouwd door.
+Een afzender kan zelf een `Authentication-Results`-header schrijven, zelfs met
+`mx.cloudflare.net` als naam. De Worker negeert die header en zet daarom altijd
+`unknown` in deze velden. De echte uitslagen staan in Cloudflare Email Service
+→ Activity log. `unknown` is geen goedkeuring van de afzender of de factuur.
+Zie [Cloudflare's inbound authentication policy](https://developers.cloudflare.com/email-service/reference/postmaster/),
+de [Worker-API](https://developers.cloudflare.com/email-service/api/route-emails/email-handler/)
+en het [open Cloudflare-issue over ontbrekende authenticatieresultaten](https://github.com/cloudflare/workerd/issues/6740).
 
 **Let op wat `from` betekent bij doorsturen.** Stuur je een mail door uit je
 Gmail, dan ben jij de afzender — niet de leverancier. De leverancier komt uit de
 factuur zelf en staat als `counterparty` in de regel. Dat is ook waarom
-`senderCheck` bij een doorgestuurde mail over _jouw_ domein gaat.
+een verificatie van de oorspronkelijke leverancier hier niet mogelijk is.
 
 > **Nog niet in beeld.** De velden komen tot in de wachtrij en de webhook geeft
 > ze terug, maar `parseQueue` in `apps/web/src/n8n.ts` bouwt zijn rij op uit een
@@ -223,8 +227,7 @@ factuur zelf en staat als `counterparty` in de regel. Dat is ook waarom
 > `apps/web` viel buiten de opdracht die deze tak bouwde. Wat er moet gebeuren:
 > `N8nInvoiceRow` en `N8nNotice` uitbreiden met deze vier velden, ze in
 > `parseQueue` overnemen, en ze in de reviewregel in `views/Facturen.tsx` tonen —
-> met bij `senderCheck: 'failed'` een zichtbare markering en géén woord dat op
-> "geverifieerd" lijkt.
+> zonder woord dat op "geverifieerd" lijkt.
 
 ### Er is nog steeds één wachtrij
 
@@ -299,7 +302,7 @@ Eerlijk opgeschreven, want dit is precies waar dit soort werk misgaat.
 **Wél in tests vastgelegd** (`pnpm --filter @lavega/email-worker test`, 55 tests;
 `pnpm --filter @lavega/core test`, 430 tests): het MIME-parsen op vijf echte
 mailvormen, RFC 2047 en RFC 2231 in headers en bestandsnamen, base64 en
-quoted-printable, het lezen van `Authentication-Results`, het lokale deel van een
+quoted-printable, het negeren van onbetrouwbare authenticatieheaders, het lokale deel van een
 adres, elke bounce-tekst met zijn oorzaak, de terugval van antwoord naar bounce,
 de bijlage-limieten, en het naadje tussen wat de Worker POST en wat
 `packages/core` leest.
@@ -315,13 +318,12 @@ blijken:**
   wat de documentatie eist (From = het ontvangende adres, `In-Reply-To` gelijk aan
   de `Message-ID`) en er is een terugval naar een bounce als het faalt, maar het
   antwoordpad zelf is hier niet gelopen;
-- **welke `Authentication-Results`-header Cloudflare precies meestuurt.** De
-  parser leest de eerste uitslag die hij tegenkomt, en als een upstream-MTA er al
-  één had toegevoegd kan dat die van een andere hop zijn. Ontbreekt de header,
-  dan is de uitslag `unknown` — nooit `pass`. Kijk bij de eerste mail in n8n naar
-  `senderChecks`: staat daar drie keer `unknown` bij een mail die je van een net
-  ingericht domein doorstuurde, dan zet Cloudflare de header niet zoals hier
-  aangenomen;
+- **Cloudflare's eigen auth-uitkomst bij een echte mail.** Kijk in Email Service
+  → Activity log of SPF/DKIM/DMARC voor de eerste factuur passen. De Worker
+  ontvangt die uitslagen niet als vertrouwde metadata; in n8n blijft
+  `senderChecks` dus drie keer `unknown`. Controleer ook of Cloudflare een
+  nagemaakte afzender volgens diens DMARC-beleid weigert. Totdat een vertrouwde
+  Worker-API bestaat, is er geen tweede lokale spoof-poort;
 - of de Workers-runtime een bericht van 17 MB in het geheugen aankan. De limiet
   is zo gekozen dat het moet passen, maar de bovengrens is niet opgezocht;
 - `message/rfc822` wordt **niet** uitgepakt. Stuur je een mail door "als bijlage"
