@@ -145,6 +145,7 @@ const PortfolioValuePointSchema = Schema.Struct({
   cashShortfall: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   holdingsUnknown: Schema.optional(StringList),
   unaccountedValue: Schema.optional(NullableNumber),
+  holdingsReturn: Schema.optional(NullableNumber),
 });
 const BenchmarkSeriesSchema = Schema.Struct({
   symbol: Schema.String,
@@ -270,6 +271,7 @@ const PortfolioMetricsSchema = Schema.Struct({
 });
 const HistoricalRiskSchema = Schema.Struct({
   status: Schema.Union([Schema.Literal("estimate"), Schema.Literal("unavailable")]),
+  basis: Schema.Union([Schema.Literal("account"), Schema.Literal("holdings")]),
   range: RiskRangeSchema,
   from: NullableString,
   to: NullableString,

@@ -2,7 +2,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { PortfolioSummaryCard, type PortfolioSummaryView, type SummaryState } from "./PortfolioSummaryCard";
+import {
+  PortfolioSummaryCard,
+  type PortfolioSummaryView,
+  type SummaryState,
+} from "./PortfolioSummaryCard";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -22,6 +26,7 @@ const summary: PortfolioSummaryView = {
   },
   risk: {
     status: "estimate",
+    basis: "account",
     range: "1Y",
     from: "2025-09-10",
     to: "2026-09-10",

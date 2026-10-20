@@ -129,6 +129,18 @@ function withComposition(dashboard: InvestingDashboardData): InvestingDashboardD
   return { ...dashboard, composition: buildCompositionProjection(dashboard.positions) };
 }
 
+/** Risk reports carry the basis they were measured on. A dashboard stored
+ *  before that existed has portfolio dates without `holdingsReturn`, so its risk
+ *  cannot be repaired in place: the read rebuilds it from the sources. A
+ *  dashboard with no risk reports at all has nothing to disagree with. */
+function hasRiskBasis(dashboard: InvestingDashboardData): boolean {
+  const byBenchmark = dashboard.risk?.byBenchmark;
+  if (byBenchmark === undefined) return false;
+  return Object.values(byBenchmark).every((perRange) =>
+    Object.values(perRange).every((report) => report?.risk.basis !== undefined),
+  );
+}
+
 /**
  * The investing dashboard read, as one module with one method.
  *
@@ -171,7 +183,8 @@ export class PortfolioRead extends Context.Service<
           const stored = await timing.measure("stored", () =>
             dashboardSnapshots?.get(storedKey).catch(() => null),
           );
-          if (stored?.dashboard) return withComposition(stored.dashboard as InvestingDashboardData);
+          if (stored?.dashboard && hasRiskBasis(stored.dashboard as InvestingDashboardData))
+            return withComposition(stored.dashboard as InvestingDashboardData);
           const refreshProblems: string[] = [];
           try {
             await timing.measure("broker", async () => {

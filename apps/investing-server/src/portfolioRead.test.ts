@@ -142,6 +142,30 @@ test("a current stored dashboard is served without reading the vault", async () 
   expect(priceRead).not.toHaveBeenCalled();
 });
 
+test("a dashboard stored before risk carried its basis is rebuilt and stored again", async () => {
+  const stale = {
+    ...emptyInvestingDashboard(),
+    dataVersion: 7,
+    risk: {
+      byBenchmark: { "": { "1Y": { metrics: {}, risk: { status: "unavailable", reasons: [] } } } },
+      defaultBenchmark: null,
+    },
+  } as unknown as InvestingDashboardData;
+  const loadBrokerData = vi.fn(async () => undefined);
+  const put = vi.fn(async () => undefined);
+  const snapshots: Snapshots = {
+    get: async () => ({ version: 1, dashboard: stale }),
+    put,
+  };
+
+  const result = await runRead(makeSources({ data: snapshot(), loadBrokerData, snapshots }));
+
+  expect(result).not.toBe(stale);
+  expect(result.positions[0]?.symbol).toBe("AAPL");
+  expect(loadBrokerData).toHaveBeenCalledTimes(1);
+  expect(put).toHaveBeenCalledWith("", 1, result);
+});
+
 test("a failed price read returns a dashboard plus a problem and stores nothing", async () => {
   const snapshots: Snapshots = {
     get: async () => ({ version: 5, dashboard: null }),

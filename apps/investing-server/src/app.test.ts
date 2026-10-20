@@ -9,7 +9,11 @@ import {
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
-import { buildCompositionProjection, buildRiskProjection, emptyInvestingDashboard } from "@lavega/core";
+import {
+  buildCompositionProjection,
+  buildRiskProjection,
+  emptyInvestingDashboard,
+} from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
@@ -1180,6 +1184,7 @@ test("summary reads the dashboard's risk projection and rejects invalid risk sel
     },
     risk: {
       status: "estimate" as const,
+      basis: "account" as const,
       range: "1Y" as const,
       from: "2026-01-01",
       to: "2026-04-01",
@@ -1228,6 +1233,7 @@ test("summary reads a configured benchmark's projection entry for that benchmark
     },
     risk: {
       status: "unavailable" as const,
+      basis: "account" as const,
       range: "6M" as const,
       from: null,
       to: null,

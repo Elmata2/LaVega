@@ -11,6 +11,9 @@ export const RISK_MATERIALITY_THRESHOLD = 0.005;
 export const RISK_MAX_STALE_BUSINESS_DAYS = 7;
 export const RISK_SETTLING_BUSINESS_DAYS = 2;
 export type RiskRange = "6M" | "1Y" | "All";
+/** "account" measures the whole account value, cash included; "holdings"
+ *  measures only the invested holdings, used when cash history is unproven. */
+export type RiskBasis = "account" | "holdings";
 
 export function benchmarkCurrencyMismatchReason(
   presentationCurrency: string,
@@ -52,8 +55,41 @@ export function buildHistoricalRisk(
     if (unaccounted == null || point.value == null) return false;
     return Math.abs(unaccounted) <= RISK_MATERIALITY_THRESHOLD * Math.abs(point.value);
   };
-  const known = (point: (typeof points)[number]) =>
+  const accountKnown = (point: (typeof points)[number]) =>
     point.cashUnknown.length === 0 && isImmaterial(point);
+  const holdingsKnown = (point: (typeof points)[number]) =>
+    isImmaterial(point) &&
+    (Number.isFinite(point.holdingsReturn) ||
+      (point === points[0] && point.holdingsReturn === undefined));
+
+  // Cash moves no market, so when its history cannot be proven the holdings
+  // alone still show how the portfolio moved: each date's return reprices
+  // the previous date's holdings, which trades and transfers cannot distort.
+  const holdingsIndex = new Map<string, number>();
+  let index = 1;
+  for (const point of points) {
+    if (holdingsKnown(point)) index *= 1 + (point.holdingsReturn ?? 0);
+    holdingsIndex.set(point.date, index);
+  }
+  const returnCount = (usable: (point: (typeof points)[number]) => boolean, holdings: boolean) =>
+    computePortfolioMetrics({
+      valuePoints: points.map((point) => ({
+        date: point.date,
+        value: holdings ? holdingsIndex.get(point.date)! : point.value,
+        usable: usable(point),
+      })),
+      externalCashFlows: holdings ? [] : data.externalCashFlows,
+      minObservations: RISK_MINIMUM_OBSERVATIONS,
+    }).observationDays;
+  const basis: RiskBasis =
+    returnCount(accountKnown, false) < RISK_MINIMUM_OBSERVATIONS &&
+    returnCount(holdingsKnown, true) >= RISK_MINIMUM_OBSERVATIONS
+      ? "holdings"
+      : "account";
+  const known = basis === "holdings" ? holdingsKnown : accountKnown;
+  const valueOf = (point: (typeof points)[number]) =>
+    basis === "holdings" ? holdingsIndex.get(point.date)! : point.value;
+  const flows = basis === "holdings" ? [] : data.externalCashFlows;
 
   // A trailing run of unknown dates (today's close still settling, usually)
   // is not a return yet, so the whole account is measured through the last
@@ -106,16 +142,16 @@ export function buildHistoricalRisk(
   const computed = computePortfolioMetrics({
     valuePoints: measured.map((point) => ({
       date: point.date,
-      value: point.value,
+      value: valueOf(point),
       usable: known(point),
     })),
-    externalCashFlows: data.externalCashFlows,
+    externalCashFlows: flows,
     benchmarkPoints: comparable ? benchmark?.points : undefined,
     minObservations: RISK_MINIMUM_OBSERVATIONS,
   });
   const drawdown = computePortfolioMetrics({
-    valuePoints: window.map((point) => ({ date: point.date, value: point.value })),
-    externalCashFlows: data.externalCashFlows,
+    valuePoints: window.map((point) => ({ date: point.date, value: valueOf(point) })),
+    externalCashFlows: flows,
   }).maxDrawdown;
   const available =
     lastKnownIndex >= 0 && !isStale && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
@@ -130,6 +166,10 @@ export function buildHistoricalRisk(
         maxDrawdown: null,
       };
   const reasons: string[] = [];
+  if (basis === "holdings")
+    reasons.push(
+      "Measured on invested holdings only: cash history is incomplete, so cash is left out.",
+    );
   if (missingCash.length) reasons.push(`Cash history missing: ${missingCash.join(", ")}.`);
   if (negativeCashDays > 0)
     reasons.push(
@@ -160,7 +200,9 @@ export function buildHistoricalRisk(
   if (trailingGap === "stale")
     reasons.push(`Risk data has been incomplete since ${points[lastKnownIndex + 1]!.date}.`);
   else if (trailingGap === "settling")
-    reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`);
+    reasons.push(
+      `Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`,
+    );
   else if (trailingGap === "incomplete")
     reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`);
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
@@ -176,6 +218,7 @@ export function buildHistoricalRisk(
     metrics,
     risk: {
       status: available ? ("estimate" as const) : ("unavailable" as const),
+      basis,
       range,
       from: computed.startDate,
       to: computed.endDate,
