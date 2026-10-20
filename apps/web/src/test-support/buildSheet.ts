@@ -25,6 +25,13 @@ export default function setup(): void {
   if (process.env.LAVEGA_SKIP_WEB_BUILD === "1") return;
   if (sheetPresent()) return;
   console.log("web tests: no built stylesheet, building apps/web once (resolveStyle reads dist)");
-  execFileSync("pnpm", ["exec", "vite", "build"], { cwd: appRoot, stdio: "inherit" });
+  /* vitest runs with NODE_ENV=test, and Vite takes its mode from NODE_ENV. A
+   * build in test mode emits a sheet the layout assertions disagree with, so
+   * force the mode the real build uses. */
+  execFileSync("pnpm", ["exec", "vite", "build"], {
+    cwd: appRoot,
+    stdio: "inherit",
+    env: { ...process.env, NODE_ENV: "production" },
+  });
   if (!sheetPresent()) throw new Error("web tests: vite build produced no CSS in dist/assets");
 }
