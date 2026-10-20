@@ -167,6 +167,17 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
   Without `DATABASE_URL` each of these falls back to its file store, which is
   what local and self-hosted runs want.
 
+- `personal.rate_limit_buckets` holds the agent routes' shared rate-limit
+  counters (#246). Each row is one fixed window for one SHA-256 digest of route
+  plus user id or address, so the table never stores an address in the clear.
+  It deliberately has no row-level security: the limiter has to count an
+  anonymous caller before a session exists. The same statement that counts a
+  hit deletes every window that has passed. Without `DATABASE_URL` the limit
+  falls back to the bounded process-local Map and logs once; on Vercel that
+  means the ceiling multiplies by the warm instance count again. Deploy the
+  migration before the code, or a request falls back to that same local Map
+  until the table exists.
+
 - Sector profiles are the one exception, still `/tmp/lavega-sectors.json`. They
   are a cache of public Yahoo data keyed by symbol, not user data, so a cold
   start costs a re-fetch and nothing else. `INVESTING_SECTOR_STORE_FILE` in

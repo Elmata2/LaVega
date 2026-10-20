@@ -22,7 +22,8 @@ import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { getBankNlTable } from "./bankNl.js";
-import { createRateLimiter, clientIp, rateLimitKey, type RateLimiter } from "./agent/rateLimit.js";
+import { clientIp, rateLimitKey } from "./agent/rateLimit.js";
+import { createSharedRateLimiter, type SharedRateLimiter } from "./agent/sharedRateLimit.js";
 import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
 import { ValidationError } from "./agent/validationError.js";
@@ -40,31 +41,34 @@ type Deps = {
   /** The bank.nl koersopslag comparison table. Injected so a test never fetches. */
   cardComparison?: () => Promise<BankNlTable>;
   /** The process-wide ceiling across every AI route. Injected so a test can pin it. */
-  globalLimit?: RateLimiter;
+  globalLimit?: SharedRateLimiter;
 };
 
-/* 20 requests/min per CALLER per route. The key comes from `rateLimitKey`,
+/* 20 requests/min per CALLER per route, counted in Neon when DATABASE_URL is
+ * set and in this process otherwise (#246). The key comes from `rateLimitKey`,
  * which prefers the verified session's user id and falls back to the caller's
- * address; see the note there for why it is not the route name alone. */
-const limit = createRateLimiter(20, 60_000);
+ * address; see the note there for why it is not the route name alone.
+ *
+ * The store is shared, so the ceiling no longer multiplies by the number of
+ * warm serverless instances. Without a database the limiter warns once a minute
+ * and keeps the bounded in-process Map from #238; see sharedRateLimit.ts for
+ * why that is the fallback rather than a 503. */
+const limit = createSharedRateLimiter({ max: 20, windowMs: 60_000 });
 
 /* ONE ceiling across every AI route, whatever the caller and whatever the
- * bucket. On Vercel each serverless instance keeps its own counters and a cold
- * start resets them, so `limit` above is per-instance, not global — the real
- * spend cap is the Neon-backed daily/monthly budget in agent/budget.ts. What
- * this adds is the cheap thing that budget check cannot: a single instance
- * cannot be drained by a burst of calls spread across routes or addresses
- * faster than one batched budget read can see them. 120/min is well above a
- * person (20/min on four routes) and well below a runaway loop that would burn
- * the Mistral key before the next budget read.
+ * bucket. 120/min is well above a person (20/min on four routes) and well below
+ * a runaway loop that would burn the Mistral key before the next budget read.
  *
- * Accepted trade-off, stated out loud: this is per-process, so N warm
- * instances allow up to N×120/min. The alternative — a shared counter — is a
- * database round trip on every AI request to save a single-user app from its
- * own retry loop. Multi-instance abuse is bounded by the budget reservation
- * that every route already takes before spending. */
+ * A caller who rotates addresses gets a fresh per-caller bucket every request,
+ * so this bucket is what stops the spread, and the per-caller rows it lets
+ * through are deleted one window later (0026). The budget reservation remains
+ * the real spend cap.
+ */
 const GLOBAL_LIMIT_PER_MINUTE = 120;
-const allCallers = createRateLimiter(GLOBAL_LIMIT_PER_MINUTE, 60_000);
+const allCallers = createSharedRateLimiter({
+  max: GLOBAL_LIMIT_PER_MINUTE,
+  windowMs: 60_000,
+});
 
 // Mistral's error text (up to 2000 chars of its raw response body, per
 // mistral.ts) must never reach the browser — it can carry more detail about
@@ -175,7 +179,10 @@ async function requireBudget(
 }
 
 /* This request's rate-limit bucket for `route`. */
-function bucket(c: { req: { header(name: string): string | undefined; raw: Request } }, route: string): string {
+function bucket(
+  c: { req: { header(name: string): string | undefined; raw: Request } },
+  route: string,
+): string {
   return rateLimitKey(route, sessionUserId(c as never), clientIp(c.req.raw.headers));
 }
 
@@ -187,11 +194,20 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
   const globalLimit = deps.globalLimit ?? allCallers;
 
-  /* Per-caller first (its own code, so a client can tell "you" from "the
-   * server"), then the process-wide ceiling. */
-  const rateCheck = (c: Parameters<typeof bucket>[0], route: string): "ok" | "caller" | "global" => {
-    if (!limit(bucket(c, route))) return "caller";
-    if (!globalLimit("all")) return "global";
+  /* Per-caller first, then the shared ceiling. The order matters for
+   * availability: a caller already over its own limit must not spend a unit of
+   * the shared ceiling, or one client in a retry loop would lock every caller
+   * (including the owner) out of every AI route for the rest of the window.
+   *
+   * The table stays bounded anyway: one row per distinct caller per window, and
+   * the prune inside the same statement drops every row from a previous window,
+   * so its size tracks callers in the current window, not total history. */
+  const rateCheck = async (
+    c: Parameters<typeof bucket>[0],
+    route: string,
+  ): Promise<"ok" | "caller" | "global"> => {
+    if (!(await limit(bucket(c, route)))) return "caller";
+    if (!(await globalLimit("all"))) return "global";
     return "ok";
   };
 
@@ -238,7 +254,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         },
         503,
       );
-    const rate = rateCheck(c, "extract");
+    const rate = await rateCheck(c, "extract");
     if (rate !== "ok")
       return c.json(
         {
@@ -301,7 +317,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" },
         503,
       );
-    const chatRate = rateCheck(c, "chat");
+    const chatRate = await rateCheck(c, "chat");
     if (chatRate !== "ok")
       return c.json(
         {
@@ -398,13 +414,15 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-categorisatie is niet geconfigureerd.", code: "categorize-not-configured" },
         503,
       );
-    const categorizeRate = rateCheck(c, "categorize");
+    const categorizeRate = await rateCheck(c, "categorize");
     if (categorizeRate !== "ok")
       return c.json(
         {
           error: "Even wachten — te veel verzoeken.",
           code:
-            categorizeRate === "global" ? "ai-rate-limited-global" : "categorize-rate-limited-local",
+            categorizeRate === "global"
+              ? "ai-rate-limited-global"
+              : "categorize-rate-limited-local",
         },
         429,
       );
@@ -434,10 +452,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         apiKey,
         facts,
         (usage) =>
-          recordUsage(
-            { route: "categorize", model: MISTRAL_SMALL, ...usage },
-            budget.reservation,
-          ),
+          recordUsage({ route: "categorize", model: MISTRAL_SMALL, ...usage }, budget.reservation),
         sessionUserId(c),
       );
       return c.json(result);
@@ -464,7 +479,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         { error: "AI-reisadvies is niet geconfigureerd.", code: "travel-not-configured" },
         503,
       );
-    const travelRate = rateCheck(c, "travel");
+    const travelRate = await rateCheck(c, "travel");
     if (travelRate !== "ok")
       return c.json(
         {
