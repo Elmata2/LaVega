@@ -659,3 +659,84 @@ test("measures invested holdings when cash history is unknown on every date", ()
     "Measured on invested holdings only: cash history is incomplete, so cash is left out.",
   );
 });
+
+test("risk is available on the holdings basis when the broker's cash history is unproven", () => {
+  const days: string[] = [];
+  for (let at = new Date("2025-09-29T00:00:00Z"); at <= new Date("2026-10-05T00:00:00Z");) {
+    if (at.getUTCDay() !== 0 && at.getUTCDay() !== 6) days.push(at.toISOString().slice(0, 10));
+    at = new Date(at.getTime() + 86_400_000);
+  }
+  const bars = days.map((date, index) => ({
+    symbol: "VUSA",
+    date,
+    close: 100 + (index % 7) - (index % 3),
+    currency: "EUR",
+  }));
+  const data = buildInvestingDashboard({
+    positions: [
+      {
+        entity: "personal",
+        broker: "trading212",
+        symbol: "VUSA",
+        quantity: 93,
+        averagePrice: 100,
+        marketPrice: 100,
+        marketValue: 9300,
+        currency: "EUR",
+        asOf: "2026-10-02",
+      },
+    ],
+    trades: [
+      {
+        id: "buy-all",
+        entity: "personal",
+        broker: "trading212",
+        date: "2025-09-29",
+        symbol: "VUSA",
+        side: "buy",
+        quantity: 93,
+        price: 100,
+        amount: 9300,
+        currency: "EUR",
+        commission: 0,
+      },
+    ],
+    dividends: [],
+    cashBalances: [
+      { entity: "personal", broker: "trading212", currency: "EUR", amount: 1, asOf: "2026-10-02" },
+    ],
+    cashFlows: [
+      {
+        id: "late-deposit",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-09-01",
+        currency: "EUR",
+        amount: 5000,
+        kind: "deposit",
+      },
+    ],
+    priceBars: bars,
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: [],
+    today: "2026-10-05",
+    cashCoverage: [
+      {
+        entity: "personal",
+        broker: "trading212",
+        tradeCash: "cash-flows",
+        status: "unknown",
+        reason: "pagination is unfinished",
+      },
+    ],
+  });
+
+  const report = buildHistoricalRisk(data, "1Y");
+
+  expect(data.portfolio["1Y"].some((point) => point.cashUnknown.length > 0)).toBe(true);
+  expect(report.risk.basis).toBe("holdings");
+  expect(report.risk.status).toBe("estimate");
+  expect(report.metrics.observationDays).toBeGreaterThanOrEqual(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+});
