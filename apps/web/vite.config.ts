@@ -62,5 +62,8 @@ export default defineConfig({
   ],
   build: { sourcemap: uploadSourceMaps ? "hidden" : false },
   define: { __LAVEGA_BUILD__: JSON.stringify(`${sha} \u00b7 ${day}`) },
-  test: { setupFiles: ["./src/testSetup.ts"] },
+  test: {
+    setupFiles: ["./src/testSetup.ts"],
+    globalSetup: ["./src/test-support/buildSheet.ts"],
+  },
 });
