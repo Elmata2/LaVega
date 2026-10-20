@@ -350,12 +350,22 @@ opzet de complete lijst van wat deze extensie mag aanroepen.
   gaat het vinkje in de opties vanzelf uit. Zie [Op welke sites hij
   werkt](#op-welke-sites-hij-werkt-en-wat-dat-vinkje-wel-en-niet-dekt) voor
   wat die toestemming wel en niet dekt.
-- **Geen bedragen of ordergegevens bewaren.** In de opslag staan drie dingen:
-  welke kaarten je hebt, op welke winkels het paneel mag verschijnen
+- **Geen aankoopgeschiedenis bewaren.** In de opslag staan vier dingen: welke
+  kaarten je hebt, op welke winkels het paneel mag verschijnen
   (`enabledSiteIds`: de aangevinkte winkel-id's uit `src/sites.ts`, niet meer dan
-  dat), en de punten saldi die je zelf hebt ingetypt. Niets dat aan een BEZOEK
-  vastzit — geen bedragen van een pagina, geen artikelen, geen hosts, geen
-  tijdstippen.
+  dat), de puntensaldi die je zelf hebt ingetypt, en de aanbiedingen die de
+  extensie op een door jou aangezette winkelpagina las (winkelnaam, prijstekst,
+  einddatum en leesdag). Die laatste lijst is de enige plek met een bedrag
+  erin: het is de openbare aanbieding van die ene winkel, niet wat je hebt
+  uitgegeven. Hij wordt bij elke lezing vervangen en verdwijnt zodra je de
+  schakelaar omzet. Niets dat als geschiedenis aan een BEZOEK vastzit: geen
+  artikelen, geen winkelwagentjes, geen tijdstippen.
+
+  De opslag is niet versleuteld. `chrome.storage.local` is alleen voor deze
+  extensie leesbaar en staat in `chrome://extensions`; een sleutel die de
+  service worker overleeft zou op schijf moeten staan en dan versleutelt de
+  extensie niets, ze verbergt het alleen. Daarom staat er niets in dat meer
+  over je koopt dan de aanbieding die je zelf opvroeg.
 
   Dat derde lijstje verdient een aparte zin, want het lijkt een uitzondering op
   de eerste. Wat er niet in mag is alles wat ONTSTAAT doordat je ergens kijkt;

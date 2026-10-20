@@ -2,29 +2,34 @@
  *
  * ── WAT ER NOOIT IN MAG, en dat is de belangrijkste helft van dit bestand ───
  *
- * Geen bedragen. Geen artikelen. Geen winkelwagens. Geen URL's, geen hosts die
- * hij bezocht heeft, geen tijdstippen. Wie wil weten wat iemand koopt, hoeft
- * daarvoor geen bedragen te bewaren — een lijstje "wanneer stond het paneel
- * aan" is al een boodschappenlijst met datums. Daarom staat er niets in dat aan
- * een BEZOEK vastzit; alleen dingen die aan een KEUZE vastzitten.
+ * Geen bedragen van zijn aankopen. Geen artikelen. Geen winkelwagens. Geen
+ * URL's, geen hosts die hij bezocht heeft, geen tijdstippen. Wie wil weten wat
+ * iemand koopt, hoeft daarvoor geen bedragen te bewaren — een lijstje "wanneer
+ * stond het paneel aan" is al een boodschappenlijst met datums. Daarom staat er
+ * niets in dat aan een BEZOEK vastzit; alleen dingen die aan een KEUZE
+ * vastzitten. De prijstekst van een aanbieding is de uitzondering en staat
+ * hieronder uitgelegd.
  *
- * Er staan dus drie soorten dingen in:
+ * Er staan dus vier soorten dingen in:
  *   - welke kaarten hij heeft (zijn keuze, hoort bij hem);
  *   - op welke winkels het paneel mag verschijnen (`enabledSiteIds`: de
  *     aangevinkte id's uit sites.ts — de winkels die we gemeten hebben en
  *     waarvoor Chrome per stuk toestemming vroeg);
- *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf).
+ *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf);
+ *   - de aanbiedingen die hij las op een winkel die hij zelf aanzette
+ *     (`bron.sleutels.aanbod`: winkelnaam, prijstekst, einddatum, leesdag).
  *
- * Alle drie zijn ze na het weghalen van de extensie weg, en alle drie zijn ze in
+ * Alle vier zijn ze na het weghalen van de extensie weg, en alle vier zijn ze in
  * chrome://extensions in te zien. Er is geen tweede plek.
  *
- * ── WAAROM EEN PUNTENSALDO HIER MAG STAAN EN EEN BEDRAG NIET ───────────────
+ * ── WAAROM EEN PUNTENSALDO HIER MAG STAAN EN EEN AANKOOPBEDRAG NIET ─────────
  *
  * Dat lijkt een tegenspraak met de alinea hierboven, dus hij staat er voluit.
  *
- * Wat er niet in mag, is alles wat aan een BEZOEK vastzit: het bedrag op de
- * pagina, het artikel, de winkel, het tijdstip. Dat is data die ONTSTAAT doordat
- * hij ergens kijkt, en bewaren maakt er een boodschappenlijst van.
+ * Wat er niet in mag, is alles wat aan een BEZOEK vastzit als GESCHIEDENIS: het
+ * bedrag dat hij afrekende, het artikel, de winkelwagen, het tijdstip. Dat is
+ * data die ONTSTAAT doordat hij ergens koopt, en bewaren maakt er een
+ * boodschappenlijst van.
  *
  * Een puntensaldo is het tegenovergestelde: het is zijn eigen opgave over
  * zichzelf, hij typt het in op een leeg formulier, en het verandert niet doordat
@@ -224,6 +229,15 @@ export const _schoonSaldi = schoonSaldi;
  * Hij gaat ook over ÉÉN pagina per bron, en wel de ene waar hij expliciet ja
  * tegen heeft gezegd, met de tekst uit `watWel` erbij. Dat is iets anders dan
  * een spoor van winkels dat als bijvangst ontstaat.
+ *
+ * EN ER STAAT EEN PRIJSTEKST IN: de letterlijke tekst die op de aanbieding van
+ * die winkel stond. Dat is een bedrag, en de kop van dit bestand zegt dat die
+ * er niet in horen. Het verschil is herkomst en bereik: dit is de openbare
+ * aanbieding van één winkel die hij zelf heeft aangezet, niet wat hij heeft
+ * uitgegeven. De lijst wordt bij elke lezing VERVANGEN, gaat over één pagina,
+ * en `wisBron` haalt hem weg zodra de schakelaar omgaat. Zonder die tekst kan
+ * het paneel de aanbieding niet tonen; er is geen kleiner gegeven dat hetzelfde
+ * doet. Onversleuteld, om dezelfde reden als de rest van dit bestand.
  *
  * En hij is weg zodra hij de schakelaar omzet: `wisBron` hieronder haalt de
  * sleutels ECHT weg in plaats van ze op leeg te zetten. Een lege lijst is nog

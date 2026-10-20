@@ -1,5 +1,21 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { app, isHttpsRequest } from "./index.js";
+
+/* The CDN answers the static shell without ever reaching this server, so its
+ * copy of the policy is a second source of truth. Two policies that drift are
+ * worse than one: the browser enforces both and the narrower one decides. Read
+ * the real array out of the build script and hold it against the live header. */
+const vercelBuild = readFileSync(
+  new URL("../../../scripts/vercel-build.mjs", import.meta.url),
+  "utf8",
+);
+
+function cdnPermissionsPolicy(): string | null {
+  const block = vercelBuild.match(/"Permissions-Policy":\s*\[([\s\S]*?)\]\.join\(", "\)/);
+  if (!block) return null;
+  return [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]).join(", ");
+}
 
 /* HSTS is only emitted for an https request (security review 2026-10-17, A6):
  * over plaintext a browser ignores it at best, and the unconditional
@@ -30,6 +46,12 @@ test("the response carries a restrictive Permissions-Policy", async () => {
   expect(policy).toContain("camera=()");
   expect(policy).toContain("microphone=()");
   expect(policy).toContain("geolocation=()");
+});
+
+test("the CDN's Permissions-Policy is byte-for-byte the server's", async () => {
+  const served = (await app.request("/health")).headers.get("permissions-policy");
+  expect(served).not.toBeNull();
+  expect(cdnPermissionsPolicy()).toBe(served);
 });
 
 test("responses refuse MIME sniffing", async () => {
