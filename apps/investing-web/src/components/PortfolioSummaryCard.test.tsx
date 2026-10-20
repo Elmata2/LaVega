@@ -91,6 +91,35 @@ test("renders metrics and top positions, and excludes sector content", async () 
   expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
 });
 
+test("the account basis explains cash flows and keeps dividends in returns", () => {
+  const { container, root } = render();
+  act(() => root.render(card()));
+  expect(container.textContent).toContain("Historical account risk");
+  expect(container.textContent).toContain("Deposits and withdrawals are removed");
+  expect(container.textContent).toContain("cash-flow-adjusted growth index");
+  expect(container.textContent).not.toContain("holdings growth index");
+});
+
+test("the holdings basis says what it leaves out instead of describing cash flows", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: { ...summary, risk: { ...summary.risk, basis: "holdings" } },
+        },
+      }),
+    ),
+  );
+  expect(container.textContent).toContain("Historical holdings risk");
+  expect(container.textContent).toContain("Each day reprices the previous day’s holdings");
+  expect(container.textContent).toContain("Cash, dividends and fees are left out");
+  expect(container.textContent).toContain("holdings growth index");
+  expect(container.textContent).not.toContain("Deposits and withdrawals are removed");
+  expect(container.textContent).not.toContain("cash-flow-adjusted growth index");
+});
+
 test("shows the drawdown's own start date when it differs from the risk range's start", () => {
   const { container, root } = render();
   act(() =>

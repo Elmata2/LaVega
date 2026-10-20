@@ -197,11 +197,19 @@ export function PortfolioSummaryCard({
         <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer text-foreground">How to read these metrics</summary>
           <div className="mt-2 space-y-2 leading-relaxed">
-            <p>
-              Historical account returns, not a forecast for today’s holdings. Deposits and
-              withdrawals are removed using an end-of-day cash-flow convention. Fees, dividends and
-              interest remain in returns.
-            </p>
+            {risk.basis === "holdings" ? (
+              <p>
+                Historical holdings returns, not a forecast for today’s holdings. Each day reprices
+                the previous day’s holdings, so trades, deposits and withdrawals cannot move it.
+                Cash, dividends and fees are left out.
+              </p>
+            ) : (
+              <p>
+                Historical account returns, not a forecast for today’s holdings. Deposits and
+                withdrawals are removed using an end-of-day cash-flow convention. Fees, dividends
+                and interest remain in returns.
+              </p>
+            )}
             <p>
               Annual volatility measures daily return variation, scaled by √252. It is not a maximum
               possible loss.
@@ -216,8 +224,9 @@ export function PortfolioSummaryCard({
               risk-free-rate-adjusted alpha.
             </p>
             <p>
-              Maximum drawdown measures the largest fall in the cash-flow-adjusted growth index, not
-              in the account balance.
+              Maximum drawdown measures the largest fall in the{" "}
+              {risk.basis === "holdings" ? "holdings" : "cash-flow-adjusted"} growth index, not in
+              the account balance.
             </p>
             <p>
               Currency conversion uses fixed latest exchange rates. Historical currency gains and
