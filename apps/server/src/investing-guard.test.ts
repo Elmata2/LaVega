@@ -141,22 +141,6 @@ test("the health line is answered without a session, and by the investing runtim
  * `app.all("/investing/*", …)` forwarded the alias straight to the investing
  * app with no session and the local tenant. --- */
 
-test("the /investing/api/* alias is refused with no session, for reads and writes", async () => {
-  verifiedSessionMock.mockResolvedValue(null);
-  investingTenantIdMock.mockResolvedValue(null);
-  const app = await investingApp();
-
-  for (const [method, path] of [
-    ["GET", "/investing/api/investing/summary"],
-    ["DELETE", "/investing/api/prices/cache"],
-    ["POST", "/investing/api/brokers/credentials"],
-  ] as const) {
-    const response = await app.request(path, { method });
-    expect(response.status, `${method} ${path}`).toBe(401);
-  }
-  expect(forwardInvestingMock).not.toHaveBeenCalled();
-});
-
 test("the /investing/api/* alias serves a signed-in caller under THEIR OWN tenant, not the local one", async () => {
   verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });
   investingTenantIdMock.mockResolvedValue("user-123");

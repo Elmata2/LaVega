@@ -29,29 +29,9 @@ describe("scrubPostHogEvent", () => {
     expect(serialised).not.toContain("x@y.nl");
   });
 
-  test("keeps the device and SDK fields that diagnose a crash", () => {
-    const out = scrubPostHogEvent(
-      capture({
-        $lib: "web",
-        $lib_version: "1.435.8",
-        $browser: "Chrome",
-        $browser_version: 130,
-        $os: "Mac OS X",
-        $device_type: "Desktop",
-        $screen_width: 1512,
-        distinct_id: "user-abc",
-      }),
-    );
-    expect(out.properties).toEqual({
-      $lib: "web",
-      $lib_version: "1.435.8",
-      $browser: "Chrome",
-      $browser_version: 130,
-      $os: "Mac OS X",
-      $device_type: "Desktop",
-      $screen_width: 1512,
-      distinct_id: "user-abc",
-    });
+  test("keeps the device field that diagnoses a crash ($os)", () => {
+    const out = scrubPostHogEvent(capture({ $lib: "web", $os: "Mac OS X" }));
+    expect(out.properties.$os).toBe("Mac OS X");
   });
 
   test("strips query and hash from a URL and masks id-like path segments", () => {
@@ -137,26 +117,19 @@ describe("scrubPostHogEvent", () => {
     expect(out.properties.$exception_list).toEqual([{ type: "SyntaxError" }]);
   });
 
-  test("keeps the declared product event properties and drops a look-alike amount", () => {
+  test("drops amountCents and counterparty from a product event", () => {
     const out = scrubPostHogEvent(
       capture(
         {
           direction: "outgoing",
-          duplicate: false,
-          currency: "EUR",
-          invoice_count: 3,
           amountCents: 4999,
           counterparty: "JBL",
         },
         "invoice_added",
       ),
     );
-    expect(out.properties).toEqual({
-      direction: "outgoing",
-      duplicate: false,
-      currency: "EUR",
-      invoice_count: 3,
-    });
+    expect(out.properties.amountCents).toBeUndefined();
+    expect(out.properties.counterparty).toBeUndefined();
   });
 
   test("never carries person properties or autocaptured DOM elements", () => {

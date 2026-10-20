@@ -32,5 +32,5 @@ test("the limit does not break the sealed vault backup, which is the largest leg
       pad: "y".repeat(1_000_000),
     }),
   });
-  expect(res.status).not.toBe(413);
+  expect(res.status).toBe(401);
 });

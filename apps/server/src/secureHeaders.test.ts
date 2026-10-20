@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { app, isHttpsRequest } from "./index.js";
+import { app } from "./index.js";
 
 /* The CDN answers the static shell without ever reaching this server, so its
  * copy of the policy is a second source of truth. Two policies that drift are
@@ -33,12 +33,16 @@ test("a plaintext request gets no HSTS header", async () => {
   expect(res.headers.get("strict-transport-security")).toBeNull();
 });
 
-test("isHttpsRequest trusts the forwarded scheme, then the request URL", () => {
-  expect(isHttpsRequest("https", "http://internal/health")).toBe(true);
-  expect(isHttpsRequest("https, http", "http://internal/health")).toBe(true);
-  expect(isHttpsRequest("http", "https://lavega.dev/health")).toBe(false);
-  expect(isHttpsRequest(undefined, "https://lavega.dev/health")).toBe(true);
-  expect(isHttpsRequest(undefined, "http://localhost:8787/health")).toBe(false);
+test("with no forwarded scheme, an https request URL still gets HSTS", async () => {
+  const res = await app.request("https://lavega.dev/health");
+  expect(res.headers.get("strict-transport-security")).toMatch(/max-age=\d{7,}/);
+});
+
+test("a proxy chain's first x-forwarded-proto entry decides: https, http gets HSTS", async () => {
+  const res = await app.request("http://internal/health", {
+    headers: { "x-forwarded-proto": "https, http" },
+  });
+  expect(res.headers.get("strict-transport-security")).toMatch(/max-age=\d{7,}/);
 });
 
 test("the response carries a restrictive Permissions-Policy", async () => {

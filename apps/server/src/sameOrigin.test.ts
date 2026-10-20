@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { expect, test } from "vitest";
-import { isAllowedOrigin, sameOriginGuard } from "./sameOrigin.js";
+import { sameOriginGuard } from "./sameOrigin.js";
 
 /* M4 (security review 2026-10-17): every state-changing call here is a
  * cookie-authenticated request with no CSRF token, so `sameSite:"lax"` was the
@@ -58,12 +58,26 @@ test("a loopback origin is allowed — pnpm dev's Vite on :5173 calls :8787", as
   expect(res.status).toBe(200);
 });
 
-test("the effective origin is rebuilt from the proxy headers a TLS host forwards", () => {
+test("the effective origin is rebuilt from the proxy headers a TLS host forwards", async () => {
   // Behind the proxy the function sees http://<internal>; the browser sent an
   // https Origin. Comparing raw would refuse a correct same-origin POST.
-  expect(
-    isAllowedOrigin("https://lavega.dev", "https://lavega.dev", new Set(["https://lavega.dev"])),
-  ).toBe(true);
+  const forwarded = {
+    origin: "https://lavega.dev",
+    "x-forwarded-proto": "https",
+    "x-forwarded-host": "lavega.dev",
+  };
+  const res = await appWith().request("http://internal/thing", {
+    method: "POST",
+    headers: forwarded,
+  });
+  expect(res.status).toBe(200);
+
+  // Without the forwarded headers the same Origin is foreign to http://internal.
+  const bare = await appWith().request("http://internal/thing", {
+    method: "POST",
+    headers: { origin: "https://lavega.dev" },
+  });
+  expect(bare.status).toBe(403);
 });
 
 test("a safe method is never judged, so a cross-site link cannot be a state change", async () => {

@@ -172,7 +172,7 @@ app.use(
 );
 
 /** Is this request arriving over TLS, as far as the proxy tells us? */
-export function isHttpsRequest(protoHeader: string | undefined, url: string): boolean {
+function isHttpsRequest(protoHeader: string | undefined, url: string): boolean {
   /* Behind Vercel/Cloudflare the function sees `http://<internal>`; the edge
    * states the original scheme in `x-forwarded-proto`. Direct (a local host
    * with a TLS cert) falls back to the request's own URL. */

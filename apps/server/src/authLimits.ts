@@ -37,13 +37,10 @@ export const AUTH_GLOBAL_MAX = 30;
 /** `true` = allowed. Applies to POSTs on the three paths above and nothing else. */
 export type PublicAuthLimiter = (method: string, path: string, headers: Headers) => boolean;
 
-export function createPublicAuthLimiter(
-  windowMs: number = SIGN_UP_RATE_LIMIT.window * 1000,
-  maxPerAddress: number = SIGN_UP_RATE_LIMIT.max,
-  globalMax: number = AUTH_GLOBAL_MAX,
-): PublicAuthLimiter {
-  const perAddress: RateLimiter = createRateLimiter(maxPerAddress, windowMs);
-  const global: RateLimiter = createRateLimiter(globalMax, windowMs);
+export function createPublicAuthLimiter(): PublicAuthLimiter {
+  const windowMs = SIGN_UP_RATE_LIMIT.window * 1000;
+  const perAddress: RateLimiter = createRateLimiter(SIGN_UP_RATE_LIMIT.max, windowMs);
+  const global: RateLimiter = createRateLimiter(AUTH_GLOBAL_MAX, windowMs);
   return (method, path, headers) => {
     if (method !== "POST" || !AUTH_RATE_LIMITED_PATHS.has(path)) return true;
     if (!global("auth:all")) return false;

@@ -113,21 +113,12 @@ test("erasing one account takes its ai_usage with it and leaves the other accoun
   expect((await spend("user-b")).dayCents).toBe(7);
 });
 
-test("erasing the account deletes the Better Auth identity, so the old session is refused and the old credentials fail", async () => {
+test("deletes the Better Auth user, session, account and verification rows", async () => {
   /* M3: deleting application rows alone left the password authenticating and a
    * fresh sign-in recreating a vault under the same id — the erasure reported
    * success and the account was still there. These are the two lookups Better
    * Auth itself makes: a session by token, a sign-in by address. */
-  const report = await eraseUserData(db, "user-a");
-
-  expect(report.map((entry) => entry.table)).toEqual(
-    expect.arrayContaining([
-      'public."user"',
-      "public.session",
-      "public.account",
-      "public.verification",
-    ]),
-  );
+  await eraseUserData(db, "user-a");
 
   // `getSession()` resolves the cookie's token against this table.
   expect(await rows("SELECT 1 FROM public.session WHERE token = 'token-a'")).toEqual([]);

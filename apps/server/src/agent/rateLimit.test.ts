@@ -21,36 +21,27 @@ test("frees the budget once the window has fully passed", () => {
   expect(limit("extract")).toBe(false);
 });
 
-test("a key's entry is pruned once its window has fully passed", () => {
-  let t = 0;
-  const limit = createRateLimiter(2, 1000, () => t);
-  limit("solo");
-  expect(limit.size).toBe(1);
-  t = 1000; // "solo"'s only hit is now outside the window
-  limit("other"); // any call prunes stale entries, not just "solo"'s own
-  expect(limit.size).toBe(1); // "solo" is gone; "other" is the only key left
-});
-
-test("the tracked-key Map is bounded, however many distinct keys arrive", () => {
+test("a rotating caller cannot pin the tracked set: the oldest bucket is evicted at the cap", () => {
   // Every spoofed X-Forwarded-For used to mint a key that lived for the
-  // process lifetime, and the guard scanned them all on every call. A rotating
-  // caller must now hit a hard ceiling instead.
-  const limit = createRateLimiter(5, 60_000, () => 0, 100);
-  for (let i = 0; i < 5_000; i++) limit(`ip-${i}`);
-  expect(limit.size).toBeLessThanOrEqual(100);
+  // process lifetime. A flood of distinct keys must push the oldest bucket out,
+  // so a spent budget does not survive the flood.
+  const limit = createRateLimiter(1, 60_000, () => 0);
+  expect(limit("victim")).toBe(true);
+  expect(limit("victim")).toBe(false);
+  for (let i = 0; i < 10_000; i++) limit(`ip-${i}`);
+  expect(limit("victim")).toBe(true); // evicted, so it starts fresh
 });
 
 test("eviction drops the least recently used bucket, not the freshest one", () => {
-  const limit = createRateLimiter(5, 60_000, () => 0, 2);
-  limit("hot");
-  limit("warm");
-  limit("hot"); // "hot" is now the most recently used
-  limit("cold"); // overflow: evicts "warm", the least recently used
-  expect(limit.size).toBe(2);
-  // "hot" survived, so its own count carried over rather than resetting: three
-  // more calls are still evaluated against the two already recorded.
-  for (let i = 0; i < 3; i++) expect(limit("hot")).toBe(true);
-  expect(limit("hot")).toBe(false);
+  const limit = createRateLimiter(1, 60_000, () => 0);
+  expect(limit("warm")).toBe(true);
+  expect(limit("hot")).toBe(true);
+  // Fill to the cap: "warm" and "hot" plus 9,998 fillers is exactly 10,000 keys.
+  for (let i = 0; i < 9_998; i++) limit(`filler-${i}`);
+  expect(limit("hot")).toBe(false); // "hot" is in use, so it becomes the most recent
+  expect(limit("newcomer")).toBe(true); // overflow: evicts "warm", the least recent
+  expect(limit("hot")).toBe(false); // "hot" survived with its count intact
+  expect(limit("warm")).toBe(true); // "warm" was evicted, so it starts fresh
 });
 
 test("each key has an independent budget", () => {

@@ -1,4 +1,4 @@
-export type RateLimiter = ((key: string) => boolean) & { readonly size: number };
+export type RateLimiter = (key: string) => boolean;
 
 /**
  * Hard ceiling on tracked keys.
@@ -22,15 +22,14 @@ const PRUNE_PER_CALL = 4;
  * Tiny in-memory sliding-window rate limiter. `createRateLimiter(max, windowMs)`
  * returns a guard `(key) => boolean` — `true` = allowed, `false` = over the
  * limit for that key within the last `windowMs`. `now` is injectable so tests
- * can advance the clock deterministically. `.size` exposes the tracked-key
- * count for tests; the Map itself stays private to the closure.
+ * can advance the clock deterministically. The Map stays private to the closure.
  *
  * Keys are kept in least-recently-used order (each call re-inserts its own key),
  * so the entry at the front is the one least likely to be needed again — that
- * is what both the stale prune and the hard-cap eviction drop. `maxKeys` bounds
- * the Map; a caller who fills it evicts its own oldest buckets, which is why a
- * per-key limit alone cannot bound a rotating-IP caller (see the global cap on
- * the sign-up path, index.ts).
+ * is what both the stale prune and the hard-cap eviction drop. The Map is capped
+ * at MAX_TRACKED_KEYS; a caller who fills it evicts its own oldest buckets, which
+ * is why a per-key limit alone cannot bound a rotating-IP caller (see the global
+ * cap on the sign-up path, authLimits.ts).
  *
  * Single-process, single-user personal app: the counts live in a Map that's
  * lost on restart. Good enough to keep a runaway client (or a stuck retry loop)
@@ -40,7 +39,6 @@ export function createRateLimiter(
   max: number,
   windowMs: number,
   now: () => number = () => Date.now(),
-  maxKeys: number = MAX_TRACKED_KEYS,
 ): RateLimiter {
   const hits = new Map<string, number[]>();
 
@@ -50,8 +48,8 @@ export function createRateLimiter(
   const prune = (t: number): void => {
     let dropped = 0;
     for (const [k, arr] of hits) {
-      if (hits.size <= maxKeys && dropped >= PRUNE_PER_CALL) break;
-      if (hits.size > maxKeys || t - arr[arr.length - 1]! >= windowMs) {
+      if (hits.size <= MAX_TRACKED_KEYS && dropped >= PRUNE_PER_CALL) break;
+      if (hits.size > MAX_TRACKED_KEYS || t - arr[arr.length - 1]! >= windowMs) {
         hits.delete(k);
         dropped++;
         continue;
@@ -79,7 +77,7 @@ export function createRateLimiter(
     prune(t);
     return true;
   };
-  return Object.defineProperty(guard, "size", { get: () => hits.size }) as RateLimiter;
+  return guard;
 }
 
 /** A header bag with a case-insensitive `get`. `Headers` and Hono's `c.req.header` both fit. */
