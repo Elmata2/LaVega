@@ -337,3 +337,54 @@ test("the n8n status route answers a boolean without a database", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ configured: expect.any(Boolean) });
 });
+
+/* The two guards on the public auth endpoints, proved through the real app so
+ * a middleware registered in the wrong order fails here and not only in prod
+ * (security review 2026-10-17, M4 and A1 / #253). */
+test("a cross-site POST to a public auth endpoint is refused with 403", async () => {
+  for (const path of ["/api/auth/sign-up/email", "/api/auth/request-password-reset"]) {
+    const res = await app.request(path, {
+      method: "POST",
+      headers: { "sec-fetch-site": "cross-site", "x-real-ip": "198.51.100.1" },
+    });
+    expect(res.status, path).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "cross-site-request" });
+  }
+  const foreignOrigin = await app.request("/api/auth/send-verification-email", {
+    method: "POST",
+    headers: { origin: "https://evil.example.com", "x-real-ip": "198.51.100.1" },
+  });
+  expect(foreignOrigin.status).toBe(403);
+});
+
+test("a refused cross-site POST does not spend the rate limit", async () => {
+  const headers = { "x-real-ip": "198.51.100.2" };
+  for (let i = 0; i < 10; i++) {
+    await app.request("/api/auth/request-password-reset", {
+      method: "POST",
+      headers: { ...headers, "sec-fetch-site": "cross-site" },
+    });
+  }
+  const res = await app.request("/api/auth/request-password-reset", { method: "POST", headers });
+  expect(res.status).not.toBe(429);
+});
+
+test("the sixth POST from one address to a mail-sending auth endpoint gets 429", async () => {
+  const headers = { "x-real-ip": "198.51.100.3" };
+  const path = "/api/auth/send-verification-email";
+  for (let i = 0; i < 5; i++) {
+    const res = await app.request(path, { method: "POST", headers });
+    expect(res.status, `request ${i + 1}`).not.toBe(429);
+  }
+  const sixth = await app.request(path, { method: "POST", headers });
+  expect(sixth.status).toBe(429);
+  expect(await sixth.json()).toEqual({ message: "Too many attempts. Try again later." });
+});
+
+test("sign-in is not rate limited by the public auth limiter", async () => {
+  const headers = { "x-real-ip": "198.51.100.4" };
+  for (let i = 0; i < 8; i++) {
+    const res = await app.request("/api/auth/sign-in/email", { method: "POST", headers });
+    expect(res.status, `request ${i + 1}`).not.toBe(429);
+  }
+});

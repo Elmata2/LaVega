@@ -1,4 +1,4 @@
-import posthog, { type CaptureResult } from "posthog-js";
+import posthog, { type CaptureResult, type PostHogConfig } from "posthog-js";
 import { normalisePath } from "@lavega/core";
 
 const apiKey = import.meta.env.VITE_POSTHOG_KEY;
@@ -225,15 +225,10 @@ export function scrubPostHogEvent(event: CaptureResult): CaptureResult {
   };
 }
 
-if (!runningTests && (!apiKey || !apiHost)) {
-  if (import.meta.env.DEV) {
-    const missingVariable = apiKey ? "VITE_POSTHOG_HOST" : "VITE_POSTHOG_KEY";
-    throw new Error(
-      `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`,
-    );
-  }
-} else if (!runningTests && apiKey && apiHost) {
-  posthog.init(apiKey, {
+/** The options `posthog.init` runs with. Built here, not inline, so a test can
+ *  hold the real `before_send` and prove the scrubber is the thing wired in. */
+export function postHogOptions(apiHost: string, mode: string): Partial<PostHogConfig> {
+  return {
     api_host: apiHost,
     defaults: "2026-05-30",
     /* PostHog's before_send runs for every capture, exceptions included; there
@@ -253,9 +248,20 @@ if (!runningTests && (!apiKey || !apiHost)) {
     mask_all_element_attributes: true,
     logs: {
       serviceName: "lavega-web",
-      environment: import.meta.env.MODE,
+      environment: mode,
     },
-  });
+  };
+}
+
+if (!runningTests && (!apiKey || !apiHost)) {
+  if (import.meta.env.DEV) {
+    const missingVariable = apiKey ? "VITE_POSTHOG_HOST" : "VITE_POSTHOG_KEY";
+    throw new Error(
+      `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`,
+    );
+  }
+} else if (!runningTests && apiKey && apiHost) {
+  posthog.init(apiKey, postHogOptions(apiHost, import.meta.env.MODE));
 }
 
 export default posthog;

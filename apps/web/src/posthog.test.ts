@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { CaptureResult } from "posthog-js";
-import { scrubPostHogEvent } from "./posthog.js";
+import { postHogOptions, scrubPostHogEvent } from "./posthog.js";
 
 /* What leaves for PostHog. The sanitizer is an allowlist that drops every
  * property it does not name, so these tests are about the GRENS: a financial
@@ -9,6 +9,26 @@ import { scrubPostHogEvent } from "./posthog.js";
 function capture(properties: Record<string, unknown>, event = "$pageview"): CaptureResult {
   return { uuid: "u-1", event, properties } as unknown as CaptureResult;
 }
+
+describe("postHogOptions", () => {
+  const options = postHogOptions("https://eu.i.posthog.com", "production");
+  const beforeSend = options.before_send as (event: CaptureResult | null) => CaptureResult | null;
+
+  test("before_send is the scrubber, so a financial string never leaves the browser", () => {
+    const out = beforeSend(capture({ $lib: "web", iban: "NL02ABNA0123456789", amountCents: 4999 }));
+    expect(out?.properties).toEqual({ $lib: "web" });
+  });
+
+  test("before_send passes a dropped capture through as null", () => {
+    expect(beforeSend(null)).toBeNull();
+  });
+
+  test("session replay is off and text and attributes are masked", () => {
+    expect(options.disable_session_recording).toBe(true);
+    expect(options.mask_all_text).toBe(true);
+    expect(options.mask_all_element_attributes).toBe(true);
+  });
+});
 
 describe("scrubPostHogEvent", () => {
   test("drops every property it does not name, financial strings included", () => {

@@ -37,13 +37,23 @@ export const AUTH_GLOBAL_MAX = 30;
 /** `true` = allowed. Applies to POSTs on the three paths above and nothing else. */
 export type PublicAuthLimiter = (method: string, path: string, headers: Headers) => boolean;
 
-export function createPublicAuthLimiter(): PublicAuthLimiter {
-  const windowMs = SIGN_UP_RATE_LIMIT.window * 1000;
-  const perAddress: RateLimiter = createRateLimiter(SIGN_UP_RATE_LIMIT.max, windowMs);
-  const global: RateLimiter = createRateLimiter(AUTH_GLOBAL_MAX, windowMs);
+export function createPublicAuthLimiter(
+  windowMs: number = SIGN_UP_RATE_LIMIT.window * 1000,
+  maxPerAddress: number = SIGN_UP_RATE_LIMIT.max,
+  globalMax: number = AUTH_GLOBAL_MAX,
+  now: () => number = () => Date.now(),
+): PublicAuthLimiter {
+  const perAddress: RateLimiter = createRateLimiter(maxPerAddress, windowMs, now);
+  const global: RateLimiter = createRateLimiter(globalMax, windowMs, now);
   return (method, path, headers) => {
     if (method !== "POST" || !AUTH_RATE_LIMITED_PATHS.has(path)) return true;
-    if (!global("auth:all")) return false;
-    return perAddress(rateLimitKey(path, undefined, clientIp(headers)));
+    const addressKey = rateLimitKey(path, undefined, clientIp(headers));
+    /* Check both ceilings before spending from either, so a refusal costs
+     * nothing: a request the per-address bucket refuses must not burn a global
+     * unit, and one the global bucket refuses must not burn the address's. */
+    if (!global.wouldAllow("auth:all") || !perAddress.wouldAllow(addressKey)) return false;
+    global("auth:all");
+    perAddress(addressKey);
+    return true;
   };
 }

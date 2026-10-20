@@ -1,4 +1,8 @@
-export type RateLimiter = (key: string) => boolean;
+export type RateLimiter = ((key: string) => boolean) & {
+  /** Would `key` be allowed right now? Spends nothing and tracks nothing, so a
+   *  caller combining several limiters can check them all before spending any. */
+  readonly wouldAllow: (key: string) => boolean;
+};
 
 /**
  * Hard ceiling on tracked keys.
@@ -77,7 +81,12 @@ export function createRateLimiter(
     prune(t);
     return true;
   };
-  return guard;
+  const wouldAllow = (key: string): boolean => {
+    const t = now();
+    const live = (hits.get(key) ?? []).filter((ts) => t - ts < windowMs);
+    return live.length < max;
+  };
+  return Object.assign(guard, { wouldAllow });
 }
 
 /** A header bag with a case-insensitive `get`. `Headers` and Hono's `c.req.header` both fit. */

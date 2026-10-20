@@ -38,6 +38,28 @@ test("the three mail/account endpoints share the one global ceiling", () => {
   expect(allow("POST", paths[0]!, headersFor("10.2.0.1"))).toBe(false);
 });
 
+test("a request refused by its own address does not spend a global unit", () => {
+  const allow = createPublicAuthLimiter(60_000, 1, 3);
+  const path = "/api/auth/request-password-reset";
+  expect(allow("POST", path, headersFor("1.1.1.1"))).toBe(true);
+  for (let i = 0; i < 10; i++) expect(allow("POST", path, headersFor("1.1.1.1"))).toBe(false);
+  expect(allow("POST", path, headersFor("2.2.2.2"))).toBe(true);
+  expect(allow("POST", path, headersFor("3.3.3.3"))).toBe(true);
+  expect(allow("POST", path, headersFor("4.4.4.4"))).toBe(false);
+});
+
+test("a request refused by the global cap does not spend its address's allowance", () => {
+  let now = 0;
+  const allow = createPublicAuthLimiter(60_000, 2, 1, () => now);
+  const path = "/api/auth/send-verification-email";
+  expect(allow("POST", path, headersFor("1.1.1.1"))).toBe(true);
+  now = 30_000;
+  for (let i = 0; i < 10; i++) expect(allow("POST", path, headersFor("2.2.2.2"))).toBe(false);
+  now = 60_001;
+  expect(allow("POST", path, headersFor("2.2.2.2"))).toBe(true);
+  expect(allow("POST", path, headersFor("2.2.2.2"))).toBe(false);
+});
+
 test("sign-in and every other auth path are untouched — this is not a login limit", () => {
   const allow = createPublicAuthLimiter();
   for (let i = 0; i < 50; i++) {
