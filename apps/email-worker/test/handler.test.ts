@@ -23,6 +23,9 @@ import {
 const ENV = {
   N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",
   N8N_SHARED_SECRET: "geheim-123",
+  // De grens heeft eigen tests in queueLimit.test.ts; hier altijd toestaan, zodat
+  // deze tests niet afhangen van de volgorde waarin de teller waarschuwt.
+  INBOUND_RATE_LIMIT: { limit: async () => ({ success: true }) },
 };
 const QUEUED = { addedInvoices: 1, addedNotices: 0, inQueue: 1, noticesInQueue: 0, remembered: 1 };
 
