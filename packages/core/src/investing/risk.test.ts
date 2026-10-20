@@ -632,3 +632,30 @@ test("risk is available once the broker's proven trade window makes the holding 
   expect(report.metrics.observationDays).toBeGreaterThanOrEqual(RISK_MINIMUM_OBSERVATIONS);
   expect(report.metrics.dailyVolatility).not.toBeNull();
 });
+
+test("measures invested holdings when cash history is unknown on every date", () => {
+  const benchmarkReturns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
+    index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002,
+  );
+  const holdingsReturns = benchmarkReturns.map((value) => 1.5 * value + 0.0007);
+  const points = pointsFromReturns(holdingsReturns).map((point, index) => ({
+    ...point,
+    positionsValue: point.value! + index * 50,
+    value: point.value! + index * 50,
+    cashUnknown: ["trading212:EUR"],
+    ...(index === 0 ? {} : { holdingsReturn: holdingsReturns[index - 1]! }),
+  }));
+  const report = buildHistoricalRisk(
+    dashboard(points, { benchmarks: [benchmarkFromReturns(benchmarkReturns)] }),
+  );
+
+  expect(report.risk.status).toBe("estimate");
+  expect(report.risk.basis).toBe("holdings");
+  expect(report.metrics.observationDays).toBe(RISK_MINIMUM_OBSERVATIONS);
+  expect(report.metrics.beta).toBeCloseTo(1.5, 10);
+  expect(report.metrics.alpha).toBeCloseTo(0.0007 * 252, 10);
+  expect(report.metrics.annualizedVolatility).not.toBeNull();
+  expect(report.risk.reasons).toContain(
+    "Measured on invested holdings only: cash history is incomplete, so cash is left out.",
+  );
+});
