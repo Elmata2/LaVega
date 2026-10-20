@@ -225,6 +225,45 @@ test("a refresh failure after a valid response keeps the data and reports the er
   root.unmount();
 });
 
+test("a refresh failure on a symbol page keeps that symbol's data and reports the error", async () => {
+  const first = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => first.promise),
+  );
+  const states: DashboardState[] = [];
+  const { root, Probe } = mount("AAA", states);
+  await act(async () => {
+    root.render(<Probe querySymbol="AAA" />);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    first.resolve(new Response(JSON.stringify(dashboardWithVersion(1))));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(states.at(-1)!.status).toBe("ready");
+  const statesBeforeRefresh = states.length;
+
+  const second = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => second.promise),
+  );
+  await act(async () => {
+    window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    second.resolve(new Response("", { status: 503 }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const finalState = states.at(-1)!;
+  expect(finalState.status).toBe("ready");
+  expect(finalState.status === "ready" && finalState.data.dataVersion).toBe(1);
+  expect(finalState.status === "ready" && finalState.refreshError).toBeTruthy();
+  expect(states.slice(statesBeforeRefresh).every((state) => state.status === "ready")).toBe(true);
+  root.unmount();
+});
+
 test("a non-object entry inside an array still renders through the repair path", async () => {
   const payload = {
     ...emptyInvestingDashboard(),
