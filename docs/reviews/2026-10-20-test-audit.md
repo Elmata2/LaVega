@@ -1,0 +1,19 @@
+# Test audit: commits from 2026-10-06 through 2026-10-20
+
+## Scope and evidence
+
+`master` at `a3635f74` had 93 commits in this window. Their combined diff touched 175 test or test-support paths. This pass examined the October 8 pruning commit (`35d5ef78`), the new investing read/cache tests, the investing layout tests, and the recent email-worker limit tests. It is a focused owner audit, not a declaration that every changed test was reviewed.
+
+## Decisions
+
+| Candidate                                                                                  | Evidence                                                                                                                                                                                               | Decision                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `portfolioRead.test.ts`: “in-process cache recomputes only after its data version changes” | Test never changed a data version. It called `dashboardCache.invalidate()` and counted `priceStore.getRange` calls. `dashboardCache.test.ts` already proves invalidation and reuse at the cache owner. | Remove duplicate call-shape proof. Keep read tests for stored snapshots, transient failures, source-version races, and dashboard output. |
+| `layoutResource.ts`: `resetInvestingLayoutStoreForTests`                                   | Only test caller. Body only called `forgetLayout()`, which account switching already uses through `setLayoutOwner()`.                                                                                  | Use `forgetLayout()` in tests; remove test-only production export.                                                                       |
+| Deleted `app.test.tsx` route checks from `35d5ef78`                                        | Layout and registry suites prove module choices, but no remaining test exercised `App` redirect for a disabled module detail URL. `ModuleRoute` owns that UI behavior.                                 | Restore one route-level regression covering position and agent detail links.                                                             |
+| `queueLimit.test.ts` Wrangler binding assertion                                            | Reads independent deployment configuration and checks it against worker constants. A mismatch changes the limit promised in a refusal.                                                                 | Retain configuration contract.                                                                                                           |
+| `dashboardResource.test.tsx` symbol refresh failure                                        | Symbol path carries a distinct query identity and can lose or show another symbol's data during refresh.                                                                                               | Retain lifecycle regression.                                                                                                             |
+
+## Remaining audit work
+
+The October 8 pruning removed 2,615 lines from `apps/investing-web/src/app.test.tsx`. Its other deleted UI interaction contracts need an owner-by-owner comparison with current suites before that pruning can be called fully verified. Recent security, database, extension, and investing tests outside the owners above also need declaration-level review. No deletion is justified from file size or source-reading patterns alone.
