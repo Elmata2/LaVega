@@ -29,6 +29,7 @@ import {
   type ParsedMail,
 } from "./parseMail.js";
 import { buildReplyMime } from "./replyMime.js";
+import { checkSpoofGate } from "./spoofGate.js";
 import type { Env, ForwardableEmailMessage } from "./types.js";
 
 /** Claude weigert documenten boven ongeveer deze grootte — dezelfde grens als
@@ -293,6 +294,18 @@ export async function handleInboundEmail(
         " delen). Stuur de factuur als één PDF in een gewone mail.",
     };
   }
+
+  /* De lokale spoof-poort, vóór de bijlage-limieten en vóór de POST. Hij kijkt
+   * niet naar SPF/DKIM/DMARC — die uitslag geeft Cloudflare niet mee — maar naar
+   * wat zonder meting al onwaar is. Zie de kop van spoofGate.ts, inclusief
+   * waarom "envelop en From moeten hetzelfde domein hebben" hier verboden is:
+   * dat is precies de doorgestuurde factuur. */
+  const spoofRefusal = checkSpoofGate({
+    envelopeFrom: message.from,
+    fromHeader: mail.from,
+    headers: mail.headers,
+  });
+  if (spoofRefusal) return { kind: "reject", reason: spoofRefusal.reason };
 
   const capProblem = checkAttachmentCaps(mail);
   if (capProblem)
