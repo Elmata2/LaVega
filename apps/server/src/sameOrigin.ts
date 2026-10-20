@@ -42,7 +42,7 @@ function effectiveOrigin(c: Context): string {
   return `${proto}://${host}`;
 }
 
-export function isAllowedOrigin(
+function isAllowedOrigin(
   origin: string,
   ownOrigin: string,
   trustedOrigins: ReadonlySet<string>,

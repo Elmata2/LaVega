@@ -326,3 +326,31 @@ test("one account's reservation does not fill another account's cap", async () =
     ).dayCents,
   ).toBe(5);
 });
+
+test("RLS alone stops another account's bare UPDATE or DELETE of ai_usage, with no application predicate", async () => {
+  /* 0025 forces RLS on personal.ai_usage. Every repository method above also
+   * filters by user_id, so this probe issues the statements with no predicate at
+   * all: whatever row-level security returns to the runtime role is all that
+   * stands between user-b and user-a's spend. */
+  const repo = createAiUsageRepository(db);
+  const reserved = await repo.reserve({
+    day: "2026-09-20",
+    userId: "user-a",
+    month: "2026-09",
+    route: "categorize",
+    worstCaseCents: 5,
+    dayCapCents: 1000,
+    monthCapCents: 1000,
+  });
+  if (!reserved.ok) throw new Error("expected the reservation to succeed");
+
+  await pglite.exec("SELECT set_config('app.user_id', 'user-b', false)");
+  try {
+    await pglite.query("UPDATE personal.ai_usage SET cost_cents = 0");
+    await pglite.query("DELETE FROM personal.ai_usage");
+  } finally {
+    await pglite.exec("SELECT set_config('app.user_id', 'user-a', false)");
+  }
+
+  expect(await dayTotal("2026-09-20", "user-a")).toBe(5);
+});

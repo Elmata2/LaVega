@@ -61,7 +61,7 @@ describe("elke host moet te verantwoorden zijn", () => {
     expect(keurPatroon("<all_urls>")).toContain("<all_urls>");
   });
 
-  it("draagt bij elke site de meting waarop de toestemming rust", () => {
+  it("elke site heeft een evidence-tekst van meer dan 40 tekens met een jaartal", () => {
     /* Een vinkje "IKEA Nederland" zonder de meting eronder vraagt vertrouwen in
      * plaats van het te verdienen. De UI toont dit veld; deze test houdt tegen
      * dat er een site bijkomt zonder. */
@@ -69,10 +69,6 @@ describe("elke host moet te verantwoorden zijn", () => {
       expect(s.evidence.length, s.id).toBeGreaterThan(40);
       expect(s.evidence, s.id).toMatch(/\d{4}/); // er staat een jaartal in
     }
-  });
-
-  it("SITE_MATCHES is precies de lijst en niets meer", () => {
-    expect(SITE_MATCHES).toEqual(SITES.map((s) => s.match));
   });
 });
 

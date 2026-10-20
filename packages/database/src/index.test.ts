@@ -609,7 +609,7 @@ test("erasure clears every table that holds personal data, in one transaction", 
   expect(report).toHaveLength(25);
 });
 
-test("erasure deletes the Better Auth identity in the SAME transaction, after reading the address for verification tokens", async () => {
+test("erasure deletes the Better Auth identity in the SAME transaction, matching verification tokens by user id when no address is found", async () => {
   /* The route deleted application rows only, so the password still
    * authenticated and a fresh sign-in recreated a vault: the person was
    * forgotten and could still sign in as themselves. Identity and data now
@@ -710,7 +710,7 @@ test("sweepSessions reports zero rather than pretending it did not run", async (
   expect(removed).toBe(0);
 });
 
-test("AiUsage.record inserts all 8 columns in order, as the account, in one tenant transaction", async () => {
+test("AiUsage.record inserts all 9 columns in order, as the account, in one tenant transaction", async () => {
   const { db, calls } = fakeDatabase();
   await createAiUsageRepository(db).record({
     day: "2026-09-08",

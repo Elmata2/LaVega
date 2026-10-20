@@ -29,7 +29,7 @@ test("de tekst komt er ongeschonden weer uit, inclusief de pijl en de nieuwe reg
   expect(bodyOf(buildReplyMime(FIELDS) as string)).toBe(FIELDS.body);
 });
 
-test("geen Message-ID betekent null: dan MOET de aanroeper bouncen", () => {
+test("geen Message-ID: buildReplyMime returns null (no reply)", () => {
   expect(buildReplyMime({ ...FIELDS, inReplyTo: "" })).toBeNull();
   expect(buildReplyMime({ ...FIELDS, inReplyTo: "   " })).toBeNull();
 });
@@ -66,7 +66,7 @@ test("een nieuwe regel in een header wordt platgeslagen: geen header-injectie", 
 
 /* ── M11: een losse CR in Message-ID is geen antwoord, maar een injectie ───── */
 
-test("een losse CR of LF in de Message-ID levert GEEN antwoord: bouncen", () => {
+test("een losse CR of LF in de Message-ID: buildReplyMime returns null (no reply)", () => {
   // parseMail ziet een losse \r niet als regelscheiding, dus zo'n Message-ID
   // komt hier heel aan — en zou een `Bcc:` in onze eigen mail zetten. Weigeren,
   // niet repareren: dan valt de aanroeper terug op een bounce.
@@ -78,7 +78,7 @@ test("een losse CR of LF in de Message-ID levert GEEN antwoord: bouncen", () => 
   ).toBeNull();
 });
 
-test("een regelovergang in From levert GEEN antwoord: bouncen", () => {
+test("een regelovergang in From: buildReplyMime returns null (no reply)", () => {
   expect(buildReplyMime({ ...FIELDS, from: "ons@invoices.lavega.dev\r\nBcc: x@y" })).toBeNull();
 });
 

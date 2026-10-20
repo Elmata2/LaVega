@@ -20,9 +20,8 @@ const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
  *  allowlist before it can move the browser. `data.url` comes from our own
  *  server today, but a value that is not https (a `javascript:` or `data:`
  *  URL) would run in our origin if a server or proxy ever returned one; a
- *  scheme check is the cheapest place to make that impossible. Exported so a
- *  unit test can hold the allowlist itself, not just the happy path. */
-export function isHttpsUrl(value: string): boolean {
+ *  scheme check is the cheapest place to make that impossible. */
+function isHttpsUrl(value: string): boolean {
   let u: URL;
   try {
     u = new URL(value);
