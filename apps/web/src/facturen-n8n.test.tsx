@@ -194,6 +194,11 @@ function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string)
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/** The guide lives in a modal: the row's button opens it. */
+async function openGuide() {
+  await clickAsync(byText("button", adminCopy.nl.facturen.guide.openButton));
+}
+
 /** Fresh tree, one press of "Nieuwe facturen ophalen". Each call replaces the previous
  *  render so a test that fetches twice isn't reading a stale DOM. */
 async function fetchOnce(
@@ -810,7 +815,7 @@ test("setup signals update the guide and are NOT listed under Zelf ophalen", asy
 
 test("the code shows once it arrived, even though the wait began before the fetch", async () => {
   localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
-  const c = await fetchOnce(
+  const c = render(
     serving([
       {
         invoices: [],
@@ -818,6 +823,8 @@ test("the code shows once it arrived, even though the wait began before the fetc
       },
     ]),
   );
+  await openGuide(); // opening on the Gmail tab starts the wait
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Code("424242"));
 });
 
@@ -843,6 +850,7 @@ test("an unreadable setup mail shows the notice and it can be dismissed", async 
   const c = await fetchOnce(
     serving([{ invoices: [], notices: [{ messageId: "g1", kind: "setup-test", code: "!!" }] }]),
   );
+  await openGuide();
   expect(c.textContent).toContain(g.setupUnreadable.message);
   await clickAsync(byText("button", g.setupUnreadable.dismiss));
   expect(c.textContent).not.toContain(g.setupUnreadable.message);
@@ -876,6 +884,7 @@ test("while a test is pending Facturen fetches every 20 seconds and stops after 
       await vi.advanceTimersByTimeAsync(60_000);
     });
     expect(fx.calls()).toBe(idle); // nothing to wait for, no 20 s polling
+    await openGuide(); // Outlook tab: opening starts no wait
     click(byText("button", adminCopy.nl.facturen.guide.test.startButton));
     const before = fx.calls();
     await act(async () => {
@@ -903,6 +912,7 @@ test("the Gmail tab waits for the code with the same 20 second poll, and unmount
     const fx = pollingFixture();
     render(fx.impl);
     await act(async () => {});
+    await openGuide();
     const before = fx.calls();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
@@ -935,7 +945,7 @@ test("a result that lands after the window still turns the guide green", async (
   );
   const g = adminCopy.nl.facturen.guide;
   expect(c.textContent).not.toContain(g.test.timedOut);
-  expect(c.textContent).toContain(g.passedLine("").slice(0, 20));
+  expect(c.textContent).toContain(g.rowPassed("").trim());
 });
 
 /* ── Fix round 1: no lost code, quiet background polls ────────────────────── */
@@ -951,7 +961,7 @@ test("a code fetched while the Gmail tab appears survives the wait start", async
       },
     ]),
   );
-  await flush();
+  await openGuide(); // the wait starts while the open-the-screen pull is in flight
   await flush();
   expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Code("424242"));
   expect(storedGuide().confirmation.code).toBe("424242");
@@ -965,6 +975,7 @@ test("a background poll leaves the status line and the fetch button alone, and a
     const fx = pollingFixture();
     const c = render(fx.impl);
     await act(async () => {});
+    await openGuide();
     const note = adminCopy.nl.facturen.n8nNotices;
     expect(c.textContent).toContain(note.emptyQueue); // the open-pull's own result
     const button = byText("button", "Nieuwe facturen ophalen") as HTMLButtonElement;
@@ -983,6 +994,7 @@ test("a background poll leaves the status line and the fetch button alone, and a
     root = null;
     const c2 = render(slow);
     await act(async () => {});
+    await openGuide();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TEST_POLL_MS);
     });
@@ -998,6 +1010,7 @@ test("a background poll leaves the status line and the fetch button alone, and a
     const fx2 = pollingFixture();
     render(fx2.impl);
     await act(async () => {});
+    await openGuide();
     hidden.mockReturnValue(true);
     const before = fx2.calls();
     await act(async () => {
@@ -1023,6 +1036,7 @@ test("the guide poll is one 20 s interval, created once and cleared on unmount",
     const clearSpy = vi.spyOn(globalThis, "clearInterval");
     render(pollingFixture().impl);
     await act(async () => {});
+    await openGuide();
     const polls = () => setSpy.mock.calls.filter((a) => a[1] === TEST_POLL_MS);
     expect(polls()).toHaveLength(1);
     const pollId =
@@ -1056,6 +1070,7 @@ test("a click that joins a held-open background poll upgrades it: note shown, bu
     }) as unknown as typeof fetch;
     const c = render(slow);
     await act(async () => {});
+    await openGuide();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TEST_POLL_MS);
     });
@@ -1073,4 +1088,106 @@ test("a click that joins a held-open background poll upgrades it: note shown, bu
   } finally {
     vi.useRealTimers();
   }
+});
+
+/* ── The guide is a modal: closing it must not stop or lose anything ──────── */
+
+function guideDialog(): HTMLDialogElement {
+  return container!.querySelector("dialog")!;
+}
+
+function codeAfterFirstPull() {
+  let queueCalls = 0;
+  return (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address"))
+      return { ok: true, status: 200, json: async () => ({ localPart: "lavega-abcdefghij" }) };
+    const notices =
+      queueCalls++ === 0
+        ? []
+        : [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }];
+    return { ok: true, status: 200, json: async () => ({ invoices: [], notices }) };
+  }) as unknown as typeof fetch;
+}
+
+test("a code fetched while the modal is closed survives, shows in the row and in the reopened modal", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    const g = adminCopy.nl.facturen.guide;
+    const c = render(codeAfterFirstPull());
+    await act(async () => {});
+    await openGuide(); // Gmail tab: the wait starts
+    await clickAsync(c.querySelector(`button[aria-label="${g.closeButton}"]`)!);
+    expect(guideDialog().open).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEST_POLL_MS); // the poll keeps running while closed
+    });
+    expect(storedGuide().confirmation.code).toBe("424242");
+    expect(c.querySelector('section[aria-label] [role="status"]')?.textContent).toBe(
+      g.rowStatus["code-shown"],
+    );
+    expect(c.textContent).not.toContain(g.gmail.step2Code("424242")); // not rendered while closed
+    await openGuide();
+    expect(guideDialog().open).toBe(true);
+    expect(c.textContent).toContain(g.gmail.step2Code("424242"));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("closing the modal does not stop a pending test from polling", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    localStorage.setItem(
+      GUIDE_KEY,
+      JSON.stringify({ ...emptyGuideState(), tab: "outlook", setupUnreadable: 0 }),
+    );
+    const g = adminCopy.nl.facturen.guide;
+    const fx = pollingFixture();
+    const c = render(fx.impl);
+    await act(async () => {});
+    await openGuide();
+    click(byText("button", g.test.startButton));
+    await clickAsync(c.querySelector(`button[aria-label="${g.closeButton}"]`)!);
+    expect(guideDialog().open).toBe(false);
+    const before = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls() - before).toBe(3);
+    expect(c.querySelector('section[aria-label] [role="status"]')?.textContent).toBe(
+      g.rowStatus["test-pending"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("arriving on #forwarding-guide opens the modal on the Gmail tab and starts the code wait", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  window.history.replaceState(null, "", `${window.location.pathname}#forwarding-guide`);
+  const c = render(serving([{ invoices: [] }]));
+  await flush();
+  expect(guideDialog().open).toBe(true);
+  expect(window.location.hash).toBe("");
+  expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Waiting);
+  expect(storedGuide().codeWaitStartedAtMs).not.toBeNull();
+});
+
+test("a code pulled before the modal opens is current once it opens", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const g = adminCopy.nl.facturen.guide;
+  const c = render(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }],
+      },
+    ]),
+  );
+  await flush();
+  expect(c.querySelector('section [role="status"]')?.textContent).toBe(g.rowStatus["code-shown"]);
+  await openGuide();
+  expect(c.textContent).toContain(g.gmail.step2Code("424242"));
 });
