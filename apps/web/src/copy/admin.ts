@@ -292,10 +292,13 @@ type FacturenCopy = {
   guide: {
     ariaLabel: string;
     heading: string;
-    /** Collapsed line once a test has passed; `time` is already formatted. */
-    passedLine: (time: string) => string;
-    showGuide: string;
-    hideGuide: string;
+    /** The compact row in Facturen: the opener and its one-line status. */
+    openButton: string;
+    closeButton: string;
+    /** One short status per GuideStage except test-passed (rowPassed). */
+    rowStatus: Record<Exclude<GuideStage, "test-passed">, string>;
+    /** `time` is already formatted. */
+    rowPassed: (time: string) => string;
     addressLabel: string;
     copyButton: string;
     copiedLabel: string;
@@ -970,9 +973,18 @@ const nlFacturen: FacturenCopy = {
   guide: {
     ariaLabel: "Automatisch doorsturen instellen",
     heading: "Automatisch doorsturen instellen",
-    passedLine: (time) => `Automatisch doorsturen werkt — laatste test ${time}.`,
-    showGuide: "Toon de handleiding",
-    hideGuide: "Verberg de handleiding",
+    openButton: "Doorsturen instellen",
+    closeButton: "Sluiten",
+    rowStatus: {
+      "no-address": "Nog geen factuuradres",
+      "address-ready": "Nog niet ingesteld",
+      "waiting-for-code": "Wacht op code van Gmail…",
+      "code-wait-timed-out": "Nog geen code van Gmail",
+      "code-shown": "Code van Gmail ontvangen — open om te plakken",
+      "test-pending": "Test loopt…",
+      "test-timed-out": "Testmail nog niet aangekomen",
+    },
+    rowPassed: (time) => `Werkt — laatste test ${time}`,
     addressLabel: "Jouw factuuradres",
     copyButton: "Kopieer",
     copiedLabel: "Gekopieerd",
@@ -1623,9 +1635,18 @@ const enFacturen: FacturenCopy = {
   guide: {
     ariaLabel: "Set up auto-forwarding",
     heading: "Set up auto-forwarding",
-    passedLine: (time) => `Auto-forwarding works — last test ${time}.`,
-    showGuide: "Show the guide",
-    hideGuide: "Hide the guide",
+    openButton: "Set up forwarding",
+    closeButton: "Close",
+    rowStatus: {
+      "no-address": "No invoice address yet",
+      "address-ready": "Not set up yet",
+      "waiting-for-code": "Waiting for Gmail's code…",
+      "code-wait-timed-out": "No code from Gmail yet",
+      "code-shown": "Code from Gmail received — open to paste it",
+      "test-pending": "Test running…",
+      "test-timed-out": "Test mail has not arrived yet",
+    },
+    rowPassed: (time) => `Works — last test ${time}`,
     addressLabel: "Your invoice address",
     copyButton: "Copy",
     copiedLabel: "Copied",

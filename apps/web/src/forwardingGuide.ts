@@ -222,6 +222,17 @@ export function retryCodeWait(state: GuideState, nowMs: number): GuideState {
   return { ...state, codeWaitStartedAtMs: nowMs };
 }
 
+/** A code the normal pull stored before any wait began is still the answer if it
+ *  is recent: start the wait at the moment it was seen, so it counts as current.
+ *  Returns `state` itself when there is nothing to adopt. */
+export function adoptFreshConfirmation(state: GuideState, nowMs: number): GuideState {
+  const c = state.confirmation;
+  if (codeStatus(state, nowMs) !== "none" || c === null) return state;
+  return nowMs - c.seenAtMs <= TEST_WINDOW_MS
+    ? { ...state, codeWaitStartedAtMs: c.seenAtMs }
+    : state;
+}
+
 /** Fetch every TEST_POLL_MS only while there is something to wait for. */
 export function isPollingActive(state: GuideState, nowMs: number): boolean {
   return testStatus(state, nowMs) === "pending" || codeStatus(state, nowMs) === "waiting";
