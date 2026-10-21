@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
 import { buildClaudeRequest, requestSize } from "./buildClaudeRequest.js";
-import { noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
+import {
+  noticeForSetup,
+  noticeForUnreadable,
+  parseModelJson,
+  toQueueEntry,
+} from "./claudeToLaVega.js";
+import { GMAIL_CONFIRMATION_PAYLOAD, EXPECTED_CODE } from "./__fixtures__/gmailConfirmation.js";
 import { addToQueue, OWNER_KEY } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
 import {
@@ -204,4 +210,42 @@ test("een doorgestuurde mail zonder leesbare inhoud wordt een melding, geen stil
   expect(notice.senderCheck).toBe("failed");
   // Geen Gmail-link, want dit is geen Gmail-bericht.
   expect(notice.mailUrl).toBe("");
+});
+
+test("both setup kinds reach the owner's queue key and never become a Claude request", () => {
+  const confirmation = normalizeInboundMail(GMAIL_CONFIRMATION_PAYLOAD);
+  const test1 = normalizeInboundMail({
+    ...INBOUND_WITH_PDF,
+    messageId: "<t1>",
+    subject: "LaVega test k3x9 factuur",
+  });
+  const notices = [];
+  for (const m of [confirmation, test1]) {
+    // The If-node: ok:false never reaches "Bouw Claude-verzoek".
+    expect(m.ok).toBe(false);
+    expect(m.setup).not.toBeNull();
+    notices.push(noticeForSetup(m as never));
+  }
+  const store: Record<string, unknown> = {};
+  const result = addToQueue(
+    store,
+    { invoices: [], notices, processedIds: notices.map((n) => n.messageId) } as never,
+    "2026-10-21T14:00:00.000Z",
+  );
+  expect(result.addedNotices).toBe(2);
+  const byKey = store.noticesByKey as Record<string, { kind: string; code: string }[]>;
+  expect(byKey["alexander-7f3a"].map((n) => [n.kind, n.code])).toEqual([
+    ["forwarding-confirmation", EXPECTED_CODE],
+    ["setup-test", "k3x9"],
+  ]);
+  expect(byKey[OWNER_KEY]).toBeUndefined();
+});
+
+test("Gmail resending the same confirmation does not duplicate the notice", () => {
+  const m = normalizeInboundMail(GMAIL_CONFIRMATION_PAYLOAD);
+  const n = noticeForSetup(m as never);
+  const store: Record<string, unknown> = {};
+  addToQueue(store, { invoices: [], notices: [n], processedIds: [] } as never, "t1");
+  const again = addToQueue(store, { invoices: [], notices: [n], processedIds: [] } as never, "t2");
+  expect(again.addedNotices).toBe(0);
 });

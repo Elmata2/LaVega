@@ -80,6 +80,11 @@ import {
  */
 
 /**
+ * Wat de klassifier van een setup-mail zegt: welk soort, en ALLEEN de code.
+ * @typedef {{ kind: 'forwarding-confirmation'|'setup-test', code: string }} SetupSignal
+ */
+
+/**
  * Precies de gedeelde vorm uit normalizeGmailMessage.js, plus de herkomst. Dit
  * is met opzet een UITBREIDING en geen eigen typedef: zodra de twee vormen los
  * van elkaar opgeschreven staan, kunnen ze los van elkaar veranderen.
@@ -88,7 +93,8 @@ import {
  *   deliveredTo: string,
  *   queueKey: string,
  *   senderChecks: SenderChecks,
- *   senderCheck: 'passed'|'failed'|'unknown'
+ *   senderCheck: 'passed'|'failed'|'unknown',
+ *   setup: SetupSignal|null
  * }} NormalizedInboundMessage
  */
 
@@ -173,6 +179,85 @@ function reasonForUnreadable(textChars, skipped, attachmentCount) {
   return "Geen leesbare tekst en geen bijlage in de doorgestuurde mail.";
 }
 
+/* SETUP-MAILS: het ene soort mail dat nooit naar het model gaat.
+ *
+ * 1. De bevestigingsmail van Gmail. Gmail stuurt een doorstuuradres pas
+ *    door nadat de eigenaar een code uit een mail AAN DAT ADRES heeft ingevoerd.
+ *    Die mail kwam tot nu toe in n8n's uitvoeringslog terecht. Hij wordt nu
+ *    herkend en als code-only melding doorgegeven.
+ * 2. De testmail "LaVega test factuur <vier tekens>" uit de handleiding
+ *    ("factuur " mag ontbreken).
+ *
+ * ALLEEN DE CODE REIST MEE. De Worker kan afzenders niet controleren (#260),
+ * dus iedereen kan een mail maken die op die van Google lijkt. Een link uit
+ * zo'n mail tonen leent hem het vertrouwen van LaVega; een cijfercode die
+ * nergens op past wordt door Gmail zelf geweigerd en kost niets.
+ *
+ * DE VORM VAN GOOGLES MAIL IS NIET HIER GEVERIFIEERD. Zie
+ * __fixtures__/gmail-forwarding-confirmation*.json: de tests lezen die, niet
+ * een tekst in dit bestand. */
+const GMAIL_CONFIRMATION_SENDER = "forwarding-noreply@google.com";
+const MAX_CODE_DIGITS = 20;
+/* Voorvoegsels als Fwd:/FW:/Re: mogen ervoor. Precies vier tekens, en direct
+ * daarna geen letter of cijfer meer, zodat "ab123" niet als "ab12" telt. */
+const TEST_SUBJECT =
+  /^\s*(?:(?:re|fwd?)\s*:\s*)*lavega test (?:factuur )?([a-z0-9]{4})(?![a-z0-9])/i;
+
+/**
+ * Het kale adres uit "Naam <adres>" of uit een los adres, kleine letters.
+ * @param {unknown} from
+ * @returns {string}
+ */
+function addressOf(from) {
+  const s = asString(from).trim().toLowerCase();
+  const m = s.match(/<([^<>\s]+)>\s*$/);
+  return m ? m[1] : s;
+}
+
+/**
+ * Alleen cijfers, 1 tot en met 20 stuks. Alles anders is "".
+ * @param {unknown} v
+ * @returns {string}
+ */
+function digitsCode(v) {
+  const s = asString(v);
+  return /^[0-9]+$/.test(s) && s.length <= MAX_CODE_DIGITS ? s : "";
+}
+
+/**
+ * De code uit onderwerp en/of tekst. Een gelabelde code met letters, een
+ * onderwerpcode met letters, of twee verschillende codes: allemaal "".
+ * @param {unknown} subject
+ * @param {unknown} text
+ * @returns {string}
+ */
+function confirmationCodeOf(subject, text) {
+  const labelled = asString(text).match(
+    /(?:confirmation code|bevestigingscode)[ \t]{0,3}:?[ \t]{0,3}([A-Za-z0-9]+)/i,
+  );
+  const inSubject = asString(subject).match(/^\s*\(#([A-Za-z0-9]+)\)/);
+  const fromBody = labelled ? digitsCode(labelled[1]) : "";
+  const fromSubject = inSubject ? digitsCode(inSubject[1]) : "";
+  if (labelled && !fromBody) return "";
+  if (inSubject && !fromSubject) return "";
+  if (fromBody && fromSubject && fromBody !== fromSubject) return "";
+  return fromBody || fromSubject;
+}
+
+/**
+ * @param {{ from: unknown, subject: unknown, text: unknown }} mail
+ * @returns {SetupSignal|null}
+ */
+function classifySetupMail(mail) {
+  if (addressOf(mail.from) === GMAIL_CONFIRMATION_SENDER) {
+    const code = confirmationCodeOf(mail.subject, mail.text);
+    if (code) return { kind: "forwarding-confirmation", code: code };
+  }
+  const t = asString(mail.subject).match(TEST_SUBJECT);
+  if (t) return { kind: "setup-test", code: t[1].toLowerCase() };
+  return null;
+}
+
 /**
  * @param {InboundMailPayload|Record<string, unknown>} payload
  * @returns {NormalizedInboundMessage}
@@ -205,6 +290,7 @@ function normalizeInboundMail(payload) {
 
   const ok = picked.pdfs.length > 0 || text.length >= MIN_TEXT_CHARS;
   const senderChecks = readSenderChecks(p.auth);
+  const setup = classifySetupMail({ from: p.from, subject: p.subject, text: text });
 
   return {
     source: "inbound-mail",
@@ -218,13 +304,22 @@ function normalizeInboundMail(payload) {
     truncated: textChars > text.length,
     pdfs: picked.pdfs,
     skipped: picked.skipped,
-    ok: ok,
-    reason: ok ? "" : reasonForUnreadable(textChars, picked.skipped, attachments.length),
+    // Bij een setup-mail betekent ok:false "niet voor het model", niet "onleesbaar".
+    ok: setup ? false : ok,
+    reason: setup || ok ? "" : reasonForUnreadable(textChars, picked.skipped, attachments.length),
     deliveredTo: asString(p.to),
     queueKey: asString(p.queueKey),
     senderChecks: senderChecks,
     senderCheck: senderCheckOf(senderChecks),
+    setup: setup,
   };
 }
 
-export { AUTH_RESULTS, readAuthResult, readSenderChecks, senderCheckOf, normalizeInboundMail };
+export {
+  AUTH_RESULTS,
+  readAuthResult,
+  readSenderChecks,
+  senderCheckOf,
+  classifySetupMail,
+  normalizeInboundMail,
+};

@@ -115,7 +115,13 @@ test("a body that isn't the documented shape is a failure, not an empty queue", 
   expect(parseQueue("nope")).toBeNull();
   expect(parseQueue(null)).toBeNull();
   // An actually empty queue is a different thing and parses fine.
-  expect(parseQueue({ invoices: [] })).toEqual({ rows: [], notices: [], dropped: 0 });
+  expect(parseQueue({ invoices: [] })).toEqual({
+    rows: [],
+    notices: [],
+    setup: [],
+    setupDropped: 0,
+    dropped: 0,
+  });
 });
 
 test("fetchQueue calls LaVega's own server, never n8n directly", async () => {
@@ -156,6 +162,8 @@ test("every failure mode is its own outcome, and none of them is 'ok'", async ()
     kind: "ok",
     rows: [],
     notices: [],
+    setup: [],
+    setupDropped: 0,
     dropped: 0,
   });
 });
@@ -591,4 +599,61 @@ test("elke ontbrekende factuurregel heeft een zin in beide talen", () => {
     expect(adminCopy.nl.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
     expect(adminCopy.en.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
   }
+});
+
+test("setup notices are parsed into their own list and never into notices", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [
+      {
+        messageId: "a",
+        kind: "forwarding-confirmation",
+        code: "123456789",
+        receivedAt: "2026-10-21T10:00:00Z",
+        subject: "x",
+        from: "y",
+        mailUrl: "https://mail.google.com/z",
+      },
+      { messageId: "b", kind: "setup-test", code: "k3x9" },
+      { messageId: "c", kind: "unreadable", reason: "x", mailUrl: "" },
+    ],
+  })!;
+  expect(parsed.setup).toEqual([
+    { kind: "forwarding-confirmation", code: "123456789", receivedAt: "2026-10-21T10:00:00Z" },
+    { kind: "setup-test", code: "k3x9" },
+  ]);
+  expect(parsed.notices.map((n) => n.kind)).toEqual(["unreadable"]);
+  expect(parsed.dropped).toBe(0);
+  expect(parsed.setupDropped).toBe(0);
+});
+
+test("a malformed setup code is counted in setupDropped, never trusted, never an invoice loss", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [
+      { messageId: "a", kind: "forwarding-confirmation", code: "12ab" },
+      { messageId: "b", kind: "forwarding-confirmation", code: "1".repeat(21) },
+      { messageId: "c", kind: "forwarding-confirmation" },
+      { messageId: "d", kind: "setup-test", code: "K3X9" },
+      { messageId: "e", kind: "setup-test", code: "k3x" },
+      { messageId: "f", kind: "setup-test", code: "https://evil.example" },
+    ],
+  })!;
+  expect(parsed.setup).toEqual([]);
+  expect(parsed.setupDropped).toBe(6);
+  expect(parsed.dropped).toBe(0);
+  expect(parsed.notices).toEqual([]);
+});
+
+test("fetchQueue hands the setup signals through", async () => {
+  const { impl } = fakeFetch(200, {
+    invoices: [],
+    notices: [
+      { messageId: "a", kind: "setup-test", code: "k3x9" },
+      { messageId: "b", kind: "setup-test", code: "BAD" },
+    ],
+  });
+  const out = await fetchQueue(impl);
+  expect(out.kind === "ok" && out.setup).toEqual([{ kind: "setup-test", code: "k3x9" }]);
+  expect(out.kind === "ok" && out.setupDropped).toBe(1);
 });

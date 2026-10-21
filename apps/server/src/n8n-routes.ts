@@ -151,10 +151,27 @@ export function registerN8nRoutes(app: Hono, dependencies: N8nRouteDependencies)
         },
         401,
       );
-    const body: { localPart?: unknown } = await c.req
-      .json<{ localPart?: unknown }>()
+    const body: { localPart?: unknown; ifAbsent?: unknown } = await c.req
+      .json<{ localPart?: unknown; ifAbsent?: unknown }>()
       .catch(() => ({}));
     const raw = typeof body.localPart === "string" ? body.localPart : "";
+    /* `ifAbsent` is the create path ("Maak mijn factuuradres"): it must never
+     * replace a live address. A tab that loaded while the account was empty can
+     * click after another tab created one; without this the second click would
+     * overwrite it and mail to the first address would go nowhere. The explicit
+     * "own address" path omits the flag and may replace on purpose. */
+    if (body.ifAbsent === true) {
+      const existing = await getLocalPart(userId);
+      if (existing)
+        return c.json(
+          {
+            error: "Er is al een factuuradres ingesteld voor dit account.",
+            code: "n8n-address-already-set",
+            localPart: existing,
+          },
+          409,
+        );
+    }
     const outcome = await setLocalPart(userId, raw);
     if (outcome.status === "invalid")
       return c.json(

@@ -114,3 +114,21 @@ test.each(MODULES)("%s English copy holds no Dutch", (_name, copy) => {
     .map(([k, v]) => `${k}: ${v}`);
   expect(leaks).toEqual([]);
 });
+
+/* A tester must never read the name of our plumbing. The allowlist is EMPTY on
+ * purpose: if a legitimate use turns up, add it HERE with a reason, not by
+ * loosening the pattern. */
+const INTERNALS = /n8n|webhook|messageid|workflow/i;
+const INTERNALS_ALLOWLIST: string[] = [];
+
+test.each(["nl", "en"] as const)("%s facturen, koppelingen copy names no internals", (lang) => {
+  const tree = {
+    facturen: adminCopy[lang].facturen,
+    koppelingen: adminCopy[lang].koppelingen,
+    apiErrors: apiErrorCopy[lang],
+  };
+  const hits = strings(tree)
+    .filter(([k, v]) => INTERNALS.test(v) && !INTERNALS_ALLOWLIST.includes(k))
+    .map(([k, v]) => `${k}: ${v}`);
+  expect(hits).toEqual([]);
+});

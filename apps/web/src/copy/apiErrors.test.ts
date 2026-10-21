@@ -63,12 +63,12 @@ test("ai-budget-month: English is a distinct sentence, Dutch reproduces the serv
   );
 });
 
-test("the one code embedding a status renders it in both languages", () => {
-  expect(apiErrorText("nl", "n8n-upstream-error", "should not be seen", 503)).toBe(
-    "n8n antwoordde met status 503.",
+test("the upstream-error code carries no status code in either language", () => {
+  expect(apiErrorText("nl", "n8n-upstream-error", "should not be seen")).toBe(
+    "Het ophalen van facturen lukt nu niet. Probeer het straks opnieuw.",
   );
-  expect(apiErrorText("en", "n8n-upstream-error", "should not be seen", 503)).toBe(
-    "n8n responded with status 503.",
+  expect(apiErrorText("en", "n8n-upstream-error", "should not be seen")).toBe(
+    "Fetching invoices isn't working right now. Try again shortly.",
   );
 });
 

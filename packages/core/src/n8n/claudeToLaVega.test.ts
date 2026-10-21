@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { gmailUrl, noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
+import {
+  gmailUrl,
+  noticeForSetup,
+  noticeForUnreadable,
+  parseModelJson,
+  toQueueEntry,
+} from "./claudeToLaVega.js";
 
 const MSG = {
   source: "gmail",
@@ -211,4 +217,40 @@ test("een melding blijft ook mét herkomst zonder bedragveld", () => {
   const notice = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "reminder" }).notice ?? {};
   expect("amount" in notice).toBe(false);
   expect("amountCents" in notice).toBe(false);
+});
+
+test("noticeForSetup carries the kind and the code and nothing from the mail", () => {
+  const n = noticeForSetup({
+    source: "inbound-mail",
+    messageId: "<abc@mail.gmail.com>",
+    date: "Wed, 21 Oct 2026 13:58:02 +0000",
+    setup: { kind: "forwarding-confirmation", code: "123456789" },
+    deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+    queueKey: "alexander-7f3a",
+    senderCheck: "unknown",
+    senderChecks: { spf: "unknown", dkim: "unknown", dmarc: "unknown" },
+  });
+  expect(n).toMatchObject({
+    kind: "forwarding-confirmation",
+    code: "123456789",
+    subject: "",
+    from: "",
+    reason: "",
+    mailUrl: "",
+    queueKey: "alexander-7f3a",
+  });
+  expect("amountCents" in n).toBe(false);
+});
+
+test("an empty Message-ID still yields a stable id, or addToQueue would drop the notice", () => {
+  const base = {
+    source: "inbound-mail",
+    messageId: "",
+    date: "",
+    setup: { kind: "setup-test" as const, code: "k3x9" },
+    deliveredTo: "a@invoices.lavega.dev",
+    queueKey: "a",
+  };
+  expect(noticeForSetup(base).messageId).toBe("setup-setup-test-k3x9");
+  expect(noticeForSetup(base).messageId).toBe(noticeForSetup(base).messageId);
 });
