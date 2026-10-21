@@ -100,11 +100,13 @@ export function saveGuideState(state: GuideState): void {
 
 const CODE_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // no l, o, 0, 1: it is typed into a subject
 
-const secureRandom = (): number => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+const secureBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n));
 
-export function newTestCode(rand: () => number = secureRandom): string {
+/** The alphabet has exactly 32 symbols, so masking a random byte with 31 is
+ *  uniform: no division, no modulo bias. */
+export function newTestCode(bytes: (n: number) => Uint8Array = secureBytes): string {
   let out = "";
-  for (let i = 0; i < 4; i++) out += CODE_ALPHABET[Math.floor(rand() * CODE_ALPHABET.length)];
+  for (const b of bytes(4)) out += CODE_ALPHABET[b & 31];
   return out;
 }
 

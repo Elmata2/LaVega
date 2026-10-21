@@ -5,7 +5,7 @@ import {
   EXTRA_LOCALE_FIXTURES,
   FIXTURE_IS_REAL,
   GMAIL_CONFIRMATION_PAYLOAD,
-} from "./__fixtures__/gmailConfirmation.js";
+} from "./__fixtures__/gmailConfirmation.test.fixture.js";
 import { INBOUND_PLAIN_TEXT } from "./__fixtures__/inboundPayload.js";
 
 const FIXTURE_LABEL = FIXTURE_IS_REAL ? "REAL capture" : "SYNTHETIC fixture (shape UNVERIFIED)";

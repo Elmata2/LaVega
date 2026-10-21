@@ -7,7 +7,7 @@ import {
   parseModelJson,
   toQueueEntry,
 } from "./claudeToLaVega.js";
-import { GMAIL_CONFIRMATION_PAYLOAD, EXPECTED_CODE } from "./__fixtures__/gmailConfirmation.js";
+import { GMAIL_CONFIRMATION_PAYLOAD, EXPECTED_CODE } from "./__fixtures__/gmailConfirmation.test.fixture.js";
 import { addToQueue, OWNER_KEY } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
 import {

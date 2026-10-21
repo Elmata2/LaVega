@@ -39,7 +39,8 @@ test("a test subject starts with the core classifier's prefix and carries a filt
 
 test("newTestCode is four characters from an unambiguous alphabet", () => {
   for (let i = 0; i < 50; i++) expect(newTestCode()).toMatch(/^[a-km-z2-9]{4}$/);
-  expect(newTestCode(() => 0)).toBe("aaaa");
+  expect(newTestCode(() => new Uint8Array(4))).toBe("aaaa");
+  expect(newTestCode(() => Uint8Array.of(31, 32, 63, 255))).toBe("9a99");
 });
 
 test("a confirmation code is remembered, and the latest one wins", () => {
