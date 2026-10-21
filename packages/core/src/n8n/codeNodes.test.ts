@@ -123,3 +123,50 @@ test("de tweede ingang deelt het pad van Gmail en dupliceert het niet", () => {
   expect(codeNodes.filter((n) => n === "Bouw Claude-verzoek")).toHaveLength(1);
   expect(workflow.nodes.filter((n) => n.name === "Lees de factuur")).toHaveLength(1);
 });
+
+/* Run a generated Code node the way n8n does: as a function body with $input. */
+function runNode(id: string, items: unknown[]) {
+  const jsCode: string = node(id).parameters.jsCode;
+  const fn = new Function("$input", jsCode);
+  return fn({ all: () => items.map((json) => ({ json })) }) as any;
+}
+
+const MELDING = "b1000000-0000-4000-8000-000000000010";
+
+test('"Melding: zelf ophalen" turns a setup message into a code-only notice', () => {
+  const out = runNode(MELDING, [
+    {
+      source: "inbound-mail",
+      messageId: "<m1>",
+      subject: "(#123456789) Gmail Forwarding Confirmation - someone@gmail.com",
+      from: "forwarding-noreply@google.com",
+      date: "d",
+      reason: "",
+      deliveredTo: "a-1@invoices.lavega.dev",
+      queueKey: "a-1",
+      senderCheck: "unknown",
+      senderChecks: { spf: "unknown", dkim: "unknown", dmarc: "unknown" },
+      setup: { kind: "forwarding-confirmation", code: "123456789" },
+    },
+  ]);
+  const n = out[0].json.notices[0];
+  expect(n.kind).toBe("forwarding-confirmation");
+  expect(n.code).toBe("123456789");
+  expect(n.subject).toBe("");
+  expect(JSON.stringify(n)).not.toContain("someone@gmail.com");
+  expect(out[0].json.processedIds).toEqual(["<m1>"]);
+});
+
+test('"Melding: zelf ophalen" still produces an unreadable notice when there is no setup', () => {
+  const out = runNode(MELDING, [
+    {
+      source: "inbound-mail",
+      messageId: "<m2>",
+      subject: "s",
+      from: "f",
+      date: "d",
+      reason: "Niets.",
+    },
+  ]);
+  expect(out[0].json.notices[0].kind).toBe("unreadable");
+});

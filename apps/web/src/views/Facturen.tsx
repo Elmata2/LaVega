@@ -27,6 +27,7 @@ import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
   getHandledInvoiceMessageIds,
+  getInvoiceForwardAddress,
   setAiExtractionEnabled,
 } from "../settings";
 import {
@@ -43,6 +44,18 @@ import {
   type N8nNotice,
   type PendingInvoice,
 } from "../n8n";
+import ForwardingGuide from "./ForwardingGuide";
+import {
+  TEST_POLL_MS,
+  applySetupFetch,
+  isPollingActive,
+  loadGuideState,
+  newTestCode,
+  readNowMs,
+  saveGuideState,
+  startTest,
+  type GuideState,
+} from "../forwardingGuide.js";
 import "../styles/views.css";
 
 /* Facturen — reduced to EXACTLY three ways in (UI review, 2026-08-16):
@@ -135,6 +148,8 @@ function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+type FetchOpts = { background?: boolean };
 
 type FacturenProps = {
   entities: string[];
@@ -231,6 +246,17 @@ export default function Facturen({
   const [locale] = useAppLocale();
   const c = adminCopy[locale].facturen;
   const [entity, setEntity] = useState(defaultEntity);
+  // The forwarding guide's state lives here, not in the card: the fetch below
+  // feeds it, and the 20 s poll is driven by it. Persisted per device.
+  const [guide, setGuide] = useState<GuideState>(() => loadGuideState());
+  const guideRef = useRef(guide);
+  const [clockMs, setClockMs] = useState(() => readNowMs());
+  function commitGuide(update: GuideState | ((prev: GuideState) => GuideState)) {
+    const next = typeof update === "function" ? update(guideRef.current) : update;
+    guideRef.current = next;
+    setGuide(next);
+    saveGuideState(next);
+  }
   /* `""` is "we could not tell", and it is reachable only from an extraction
    * where neither party matched something of his. The manual form still opens
    * on "out", which is what a person typing an invoice by hand almost always
@@ -325,6 +351,9 @@ export default function Facturen({
   // go through this promise: a caller that arrives while one is running gets
   // that same promise instead of starting a second call.
   const inFlight = useRef<Promise<void> | null>(null);
+  // Whether the run in flight is still a quiet background poll. A click that
+  // joins it flips this, so the run reports to him like a pressed button.
+  const backgroundRef = useRef(false);
   // Set once and never reset, so React 18's StrictMode double-mount (and any
   // remount of this view) cannot turn "pull when Facturen opens" into two pulls.
   const autoPulled = useRef(false);
@@ -386,12 +415,35 @@ export default function Facturen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storage]);
 
+  /* The guide's 20 s poll is an ADDITIONAL timer on the same single fetcher
+   * (`fetchLatest` -> `inFlight`), never a second fetch path. It exists only
+   * while the guide is waiting for a code or a test mail, and is cleared the
+   * moment that stops or this screen unmounts. */
+  const polling = isPollingActive(guide, clockMs);
+  useEffect(() => {
+    if (!storage || !polling) return;
+    const id = setInterval(() => {
+      setClockMs(readNowMs());
+      if (document.hidden) return; // nobody is looking; the next visible tick catches up
+      void fetchLatest.current({ background: true });
+    }, TEST_POLL_MS);
+    return () => clearInterval(id);
+  }, [storage, polling]);
+
   // Every outcome gets its own sentence, and none of the failures may read like
   // a success. The two that can cost data (a broken connection, an unreadable
   // body) say so plainly, because on those we cannot tell whether n8n already
   // emptied its queue.
-  function handleFetchN8n(): Promise<void> {
-    if (inFlight.current) return inFlight.current;
+  function handleFetchN8n(opts: FetchOpts = {}): Promise<void> {
+    if (inFlight.current) {
+      if (!opts.background && backgroundRef.current) {
+        backgroundRef.current = false;
+        setN8nBusy(true);
+        showN8nNote(c.n8nNotices.fetching);
+      }
+      return inFlight.current;
+    }
+    backgroundRef.current = opts.background ?? false;
     const run = runFetchN8n().finally(() => {
       inFlight.current = null;
     });
@@ -399,14 +451,19 @@ export default function Facturen({
     return run;
   }
 
+  /* `background` is the guide's 20 s poll: it must not blank the fetch button,
+   * replace the user's last message with "Bezig met ophalen…" (a screen reader
+   * would announce it every 20 s) or report an empty queue over it. */
   async function runFetchN8n() {
     if (!storage) {
       showN8nNote(c.n8nNotices.vaultNotLinked);
       return;
     }
     const vault = storage;
-    setN8nBusy(true);
-    showN8nNote(c.n8nNotices.fetching);
+    if (!backgroundRef.current) {
+      setN8nBusy(true);
+      showN8nNote(c.n8nNotices.fetching);
+    }
     try {
       const outcome = await fetchQueue(fetchImpl);
       if (outcome.kind === "not-configured") {
@@ -418,15 +475,17 @@ export default function Facturen({
         return;
       }
       if (outcome.kind === "unauthorized") {
+        console.warn(`invoice fetch refused (status ${outcome.status})`);
         showN8nNote({
-          short: c.n8nNotices.unauthorized.short(outcome.status),
+          short: c.n8nNotices.unauthorized.short,
           detail: c.n8nNotices.unauthorized.detail,
           detailSummary: c.n8nNotices.unauthorized.detailSummary,
         });
         return;
       }
       if (outcome.kind === "http-error") {
-        showN8nNote(c.n8nNotices.httpError(outcome.status));
+        console.warn(`invoice fetch failed (status ${outcome.status})`);
+        showN8nNote(c.n8nNotices.httpError);
         return;
       }
       if (outcome.kind === "network") {
@@ -448,6 +507,15 @@ export default function Facturen({
       if (outcome.kind === "unreadable") {
         showN8nNote(c.n8nNotices.unreadable);
         return;
+      }
+
+      // Setup mails (Gmail's code, the guide's test) are a separate list from
+      // rows and notices: they never reach the vault, "Zelf ophalen" or the
+      // beforeunload guard. Applied first, because the queue is already drained.
+      if (outcome.setup.length > 0 || outcome.setupDropped > 0) {
+        const at = readNowMs();
+        commitGuide(applySetupFetch(guideRef.current, outcome, at));
+        setClockMs(at);
       }
 
       const handled = new Set(getHandledInvoiceMessageIds());
@@ -568,9 +636,14 @@ export default function Facturen({
       if (freshNotices.length > 0) {
         parts.push(c.n8nNotices.noticesWaiting(freshNotices.length));
       }
-      showN8nNote(parts.join(" "));
+      const quiet =
+        backgroundRef.current &&
+        outcome.rows.length === 0 &&
+        freshNotices.length === 0 &&
+        outcome.dropped === 0;
+      if (!quiet) showN8nNote(parts.join(" "));
     } finally {
-      setN8nBusy(false);
+      if (!backgroundRef.current) setN8nBusy(false);
     }
   }
 
@@ -854,10 +927,11 @@ export default function Facturen({
         }),
       });
       if (!res.ok) {
-        let msg = c.aiExtraction.extractFailedStatus(res.status);
+        console.warn(`AI extraction failed (status ${res.status})`);
+        let msg = c.aiExtraction.extractFailed;
         try {
           const body = (await res.json()) as { error?: string; code?: string };
-          if (body?.code) msg = apiErrorText(locale, body.code, body.error ?? msg, res.status);
+          if (body?.code) msg = apiErrorText(locale, body.code, body.error ?? msg);
           else if (body?.error) msg = body.error;
         } catch {
           /* non-JSON error body; keep the status-based message */
@@ -925,8 +999,23 @@ export default function Facturen({
       <ModuleGrid label={c.forms.sectionLabel}>
         {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
         <Module title={c.forms.auto.moduleTitle} height="tall">
+          <ForwardingGuide
+            address={getInvoiceForwardAddress()}
+            state={guide}
+            nowMs={clockMs}
+            onChange={(next) => {
+              setClockMs(readNowMs());
+              commitGuide(next);
+            }}
+            onStartTest={() => {
+              const at = readNowMs();
+              setClockMs(at);
+              commitGuide(startTest(guideRef.current, newTestCode(), at));
+            }}
+            onOpenKoppelingen={() => onNavigate("koppelingen")}
+          />
           <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
-          <p className="cell-sub">{c.forms.auto.gateNote(entities.length)}</p>
+          <p className="cell-sub">{c.forms.auto.gateNote}</p>
           <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
             <Button
               variant="primary"

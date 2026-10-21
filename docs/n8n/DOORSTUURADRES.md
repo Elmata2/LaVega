@@ -124,9 +124,19 @@ Cloudflare-dashboard → **Email Routing** → **Routes**:
 Een **Gmail-filter** doet daarna het werk: _Instellingen → Filters → Nieuw
 filter_ op je factuur-zoekopdracht, actie **Doorsturen naar** het nieuwe adres.
 Gmail wil dat adres eerst als doorstuuradres bevestigd hebben: het stuurt er een
-verificatiecode naartoe, en die code komt bij deze opzet in **n8n** terecht (als
-melding of als een run zonder factuur), niet in je inbox. Zoek hem op in n8n →
-Executions → de body van "E-mail binnen".
+verificatiecode naartoe. Sinds de handleiding in _Facturen → 1 · Automatisch_
+herkent de workflow die mail (afzender `forwarding-noreply@google.com`, een
+cijfercode) zonder het model, en LaVega toont **alleen de code** in de handleiding.
+Google documenteert alleen een bevestigingslink in die mail. LaVega toont dus
+alleen een code als de mail er een bevat; staat er geen code in, stuur dan zelf
+door. Komt de code niet binnen, dan staat hij nog steeds in n8n → Executions → de
+body van "E-mail binnen" (operator-terugval). **De exacte vorm van Googles mail is
+nog niet vastgelegd:**
+`packages/core/src/n8n/__fixtures__/gmail-forwarding-confirmation.json` bestaat
+nog niet, alleen `gmail-forwarding-confirmation.SYNTHETIC.json`. De echte capture
+komt bij de release erbij; daarna faalt `setupMail.test.ts` als Google de tekst
+verandert, en niet de productie. De release-gate faalt alleen met
+`REQUIRE_REAL_GMAIL_FIXTURE=1`; zonder die variabele wordt de controle overgeslagen.
 
 ---
 

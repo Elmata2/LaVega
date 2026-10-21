@@ -16,6 +16,7 @@ import { buildPayload, SECRET_HEADER } from "../src/handler.js";
 import { parseMail } from "../src/parseMail.js";
 import { fakeMessage } from "./fakeMessage.js";
 import {
+  RAW_GMAIL_CONFIRMATION,
   RAW_HTML_ONLY,
   RAW_IMAGE_ONLY,
   RAW_PDF_INVOICE,
@@ -117,4 +118,11 @@ test("the Worker's header name matches what LaVega binds on the n8n webhook", ()
   // did not, and every forwarded invoice would have been rejected by n8n while
   // the bounce blamed the wrong header.
   expect(SECRET_HEADER).toBe(TOKEN_HEADER);
+});
+
+test("a Gmail confirmation goes through the Worker and is recognised, code only (SYNTHETIC raw mail)", () => {
+  const m = through(RAW_GMAIL_CONFIRMATION);
+  expect(m.from).toBe("forwarding-noreply@google.com");
+  expect(m.setup).toEqual({ kind: "forwarding-confirmation", code: "123456789" });
+  expect(m.ok).toBe(false);
 });

@@ -3,12 +3,14 @@ import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
 import {
   getInvoiceForwardAddress,
-  ensureInvoiceForwardAddress,
+  generateInvoiceForwardAddress,
+  INVOICE_FORWARD_DOMAIN,
   setInvoiceForwardAddress,
-  SUGGESTED_INVOICE_FORWARD_ADDRESS,
 } from "../settings";
+import type { View } from "../App";
 import { fetchForwardAddress, recordForwardAddress } from "../n8n.js";
 import posthog from "../posthog.js";
+import { FORWARDING_GUIDE_ANCHOR } from "./ForwardingGuide.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 
@@ -23,9 +25,10 @@ import Card, { CardHeader } from "../components/ui/Card.js";
 
 type KoppelingenProps = {
   fetchImpl?: typeof fetch;
+  onNavigate?: (view: View) => void;
 };
 
-export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
+export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].koppelingen;
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
@@ -45,12 +48,20 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
   const [confirmRecord, setConfirmRecord] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordNote, setRecordNote] = useState<string | null>(null);
+  const [showOwn, setShowOwn] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createNote, setCreateNote] = useState<string | null>(null);
+  const [createTaken, setCreateTaken] = useState(false);
+  const [createInfo, setCreateInfo] = useState<string | null>(null);
+  const createBusy = useRef(false);
+  const [readAttempt, setReadAttempt] = useState(0);
 
   /* READ ONLY. Deze effect POST't nooit — het schrijft alleen naar de server
    * op een expliciete klik door `doRecord`, nooit hierdoor, ongeacht wat
    * localStorage op dat moment bevat. */
   useEffect(() => {
     let cancelled = false;
+    setServerState("loading");
     void fetchForwardAddress(fetchImpl).then((outcome) => {
       if (cancelled) return;
       if (outcome.kind === "ok") {
@@ -64,13 +75,62 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readAttempt]);
 
-  function handleUseSuggestedAddress() {
-    setInvoiceForwardAddress(SUGGESTED_INVOICE_FORWARD_ADDRESS);
-    const now = getInvoiceForwardAddress();
-    setForwardAddress(now);
-    setForwardDraft(now);
+  /* Eén stap: een vers adres verzinnen EN op de server vastleggen. Lokaal wordt
+   * pas geschreven als de server "stored" zei, zodat een mislukte of botsende
+   * poging niets achterlaat. Alleen aangeboden als de server nog geen adres
+   * heeft: anders zou dit een live adres vervangen en blijft post naar het oude
+   * adres onopgemerkt liggen. */
+  async function handleCreateAddress() {
+    if (createBusy.current) return;
+    createBusy.current = true;
+    setCreating(true);
+    setCreateInfo(null);
+    setCreateNote(null);
+    setCreateTaken(false);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = generateInvoiceForwardAddress();
+        const localPart = candidate.split("@")[0];
+        const outcome = await recordForwardAddress(localPart, fetchImpl, { ifAbsent: true });
+        if (outcome.kind === "taken") continue;
+        if (outcome.kind === "already-set") {
+          adopt(`${outcome.localPart}@${INVOICE_FORWARD_DOMAIN}`, outcome.localPart);
+          setCreateInfo(c.forwardAddress.createAlreadySet(displayAddressFor(outcome.localPart)));
+          return;
+        }
+        if (outcome.kind !== "stored") {
+          setCreateNote(c.forwardAddress.createFailed);
+          return;
+        }
+        adopt(candidate, outcome.localPart);
+        posthog.capture("invoice_forward_address_created");
+        return;
+      }
+      setCreateTaken(true);
+    } finally {
+      createBusy.current = false;
+      setCreating(false);
+    }
+  }
+
+  /* The server is the truth. Keep a copy on this device when the browser lets us;
+   * when it does not, the server's address is still what we show. */
+  function adopt(address: string, serverPart: string) {
+    setServerLocalPart(serverPart);
+    setServerState("ok");
+    if (setInvoiceForwardAddress(address)) {
+      const now = getInvoiceForwardAddress();
+      setForwardAddress(now);
+      setForwardDraft(now);
+    }
+  }
+
+  /* What this device now holds for that local part, else the bare local part. */
+  function displayAddressFor(localPart: string): string {
+    const stored = getInvoiceForwardAddress();
+    return stored.split("@")[0] === localPart ? stored : localPart;
   }
 
   async function handleCopyAddress() {
@@ -120,6 +180,8 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
     setRecordNote(c.forwardAddress.server.recordFailed);
   }
 
+  const canCreate = serverState === "ok" && !serverLocalPart;
+
   return (
     <Card as="section" aria-label={c.ariaLabel}>
       {/* HET DOORSTUURADRES, TERUG ALS ÉÉN REGEL.
@@ -155,78 +217,112 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
           SaldoInput: dat onderdeel is rechts uitgelijnd en 120px breed, gemaakt
           voor een banksaldo, en een e-mailadres in dat vakje moet je met de
           cursor heen en weer scrollen om te lezen. */}
-      <label htmlFor="forward-address" style={{ display: "block", margin: "0 0 var(--sp-1)" }}>
-        {c.forwardAddress.addressLabel}
-      </label>
-      <div className="flex gap-2" style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}>
-        <input
-          id="forward-address"
-          className="w-full"
-          value={forwardDraft}
-          placeholder={c.forwardAddress.addressPlaceholder}
-          aria-label={c.forwardAddress.addressAriaLabel}
-          onChange={(e) => {
-            setForwardDraft(e.target.value);
-            setForwardError(false);
-          }}
-          onBlur={() => {
-            if (setInvoiceForwardAddress(forwardDraft)) {
-              setForwardAddress(getInvoiceForwardAddress());
-              setForwardDraft(getInvoiceForwardAddress());
-            } else {
-              setForwardError(true);
-            }
-          }}
-        />
-        {forwardAddress && (
-          <Button
-            type="button"
-            onClick={() => void handleCopyAddress()}
-            aria-label={c.forwardAddress.copyButtonAriaLabel}
-          >
-            {copied ? c.forwardAddress.copiedLabel : c.forwardAddress.copyButton}
-          </Button>
-        )}
-      </div>
-      {forwardError && (
-        <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
-          {c.forwardAddress.invalidError}
-        </p>
+      {(forwardAddress || showOwn) && (
+        <>
+          <label htmlFor="forward-address" style={{ display: "block", margin: "0 0 var(--sp-1)" }}>
+            {c.forwardAddress.addressLabel}
+          </label>
+          <div className="flex gap-2" style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}>
+            <input
+              id="forward-address"
+              className="w-full"
+              value={forwardDraft}
+              placeholder={c.forwardAddress.addressPlaceholder}
+              aria-label={c.forwardAddress.addressAriaLabel}
+              onChange={(e) => {
+                setForwardDraft(e.target.value);
+                setForwardError(false);
+              }}
+              onBlur={() => {
+                if (setInvoiceForwardAddress(forwardDraft)) {
+                  setForwardAddress(getInvoiceForwardAddress());
+                  setForwardDraft(getInvoiceForwardAddress());
+                } else {
+                  setForwardError(true);
+                }
+              }}
+            />
+            {forwardAddress && (
+              <Button
+                type="button"
+                onClick={() => void handleCopyAddress()}
+                aria-label={c.forwardAddress.copyButtonAriaLabel}
+              >
+                {copied ? c.forwardAddress.copiedLabel : c.forwardAddress.copyButton}
+              </Button>
+            )}
+          </div>
+          {forwardError && (
+            <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
+              {c.forwardAddress.invalidError}
+            </p>
+          )}
+        </>
       )}
       {!forwardAddress && !forwardError && (
         <div style={{ margin: "0 0 var(--sp-3)" }}>
-          <p className="cell-sub">{c.forwardAddress.emptyIntro}</p>
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <Button onClick={handleUseSuggestedAddress}>
-                {c.forwardAddress.suggestedButton(SUGGESTED_INVOICE_FORWARD_ADDRESS)}
-              </Button>
-              <p
-                className="cell-sub text-muted text-[0.85rem]"
-                style={{ margin: "var(--sp-1) 0 0" }}
-              >
-                {c.forwardAddress.suggestedTradeoff}
-              </p>
-            </div>
-            <div>
+          {!(serverState === "ok" && serverLocalPart) && (
+            <p className="cell-sub">{c.forwardAddress.emptyIntro}</p>
+          )}
+          {canCreate && (
+            <p>
               <Button
-                onClick={() => {
-                  const made = ensureInvoiceForwardAddress();
-                  setForwardAddress(made);
-                  setForwardDraft(made);
-                }}
+                variant="primary"
+                disabled={creating}
+                onClick={() => void handleCreateAddress()}
               >
-                {c.forwardAddress.generateButton}
+                {creating
+                  ? c.forwardAddress.creating
+                  : createTaken
+                    ? c.forwardAddress.createTakenRetry
+                    : c.forwardAddress.createButton}
               </Button>
-              <p
-                className="cell-sub text-muted text-[0.85rem]"
-                style={{ margin: "var(--sp-1) 0 0" }}
-              >
-                {c.forwardAddress.generateTradeoff}
-              </p>
-            </div>
-          </div>
+            </p>
+          )}
+          {!showOwn && (
+            <p>
+              <Button onClick={() => setShowOwn(true)}>{c.forwardAddress.useOwnButton}</Button>
+            </p>
+          )}
+          {createTaken && (
+            <p className="cell-sub" role="alert">
+              {c.forwardAddress.createTaken}
+            </p>
+          )}
+          {createNote && (
+            <p className="cell-sub text-warn" role="alert">
+              {createNote}
+            </p>
+          )}
         </div>
+      )}
+      {createInfo && (
+        <p className="cell-sub" role="status">
+          {createInfo}
+        </p>
+      )}
+      {forwardAddress && onNavigate && (
+        <p>
+          <Button
+            onClick={() => {
+              // App.setView keeps the search but drops the hash, so the anchor
+              // is set after it has been told to change view; the guide card
+              // scrolls to it on mount and clears it again.
+              onNavigate("facturen");
+              try {
+                window.history.replaceState(
+                  window.history.state,
+                  "",
+                  `${window.location.pathname}${window.location.search}#${FORWARDING_GUIDE_ANCHOR}`,
+                );
+              } catch {
+                /* the view still changes; only the scroll is lost */
+              }
+            }}
+          >
+            {c.forwardAddress.setupLink}
+          </Button>
+        </p>
       )}
 
       {/* HET SERVER-ADRES, ERONDER. Dit blok leest wat de server daadwerkelijk
@@ -235,7 +331,12 @@ export default function Koppelingen({ fetchImpl }: KoppelingenProps) {
        * klikt en dat bevestigt. Zie doRecord: alleen die klik schrijft. */}
       {serverState === "loading" && <p className="cell-sub">{c.forwardAddress.server.loading}</p>}
       {serverState === "error" && (
-        <p className="cell-sub text-neg">{c.forwardAddress.server.readFailed}</p>
+        <p className="cell-sub text-neg" role="status">
+          {c.forwardAddress.server.readFailed}{" "}
+          <Button onClick={() => setReadAttempt((n) => n + 1)}>
+            {c.forwardAddress.server.retryButton}
+          </Button>
+        </p>
       )}
       {serverState === "ok" && (
         <p className="cell-sub">

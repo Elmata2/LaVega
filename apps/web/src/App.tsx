@@ -1780,7 +1780,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
           )}
 
-          {view === "koppelingen" && <Koppelingen />}
+          {view === "koppelingen" && <Koppelingen onNavigate={setView} />}
 
           {view === "backup" && (
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />

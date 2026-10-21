@@ -28,7 +28,7 @@ const UNIQUE: Array<[AutoBookHold, Record<Locale, string>]> = [
   ],
   [
     { kind: "sender-unchecked" },
-    { nl: "geen afzendercontrole gedaan", en: "No sender check was run" },
+    { nl: "niet nagaan wie de afzender is", en: "can't verify who sent this mail" },
   ],
   [{ kind: "entity-ambiguous" }, { nl: "meer dan één onderneming", en: "more than one company" }],
   [

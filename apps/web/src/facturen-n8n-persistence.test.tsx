@@ -244,7 +244,7 @@ test("a fetched row and notice survive the tab closing entirely", async () => {
       txs={[]}
     />,
   );
-  await clickAsync(byText("button", "Ophalen uit n8n"));
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   expect(container!.querySelectorAll(".n8n-row[data-messageid]")).toHaveLength(1);
   expect(container!.querySelector('[data-noticeid="msg-notice-a"]')).not.toBeNull();
 
@@ -260,7 +260,7 @@ test("a fetched row and notice survive the tab closing entirely", async () => {
 
   const row = c2.querySelector('.n8n-row[data-messageid="msg-a"]');
   expect(row).not.toBeNull();
-  const cp = row!.querySelector('[aria-label="Relatie (n8n)"]') as HTMLInputElement;
+  const cp = row!.querySelector('[aria-label="Relatie (te bevestigen)"]') as HTMLInputElement;
   expect(cp.value).toBe("Leverancier A");
   expect(c2.querySelector('[data-noticeid="msg-notice-a"]')).not.toBeNull();
 });
@@ -276,7 +276,7 @@ test("a confirmed row does not come back after a fresh mount, and leaves the vau
       txs={[]}
     />,
   );
-  await clickAsync(byText("button", "Ophalen uit n8n"));
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   expect(container!.querySelectorAll(".n8n-row[data-messageid]")).toHaveLength(2);
 
   const rowA = container!.querySelector('.n8n-row[data-messageid="msg-a"]')!;

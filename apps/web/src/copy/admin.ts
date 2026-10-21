@@ -1,4 +1,5 @@
 import type { Locale } from "../locale.js";
+import type { GuideStage } from "../forwardingGuide.js";
 import type { InvoiceGap, SenderCheckDetail } from "../n8n.js";
 // TaxSheetField is imported from core rather than locally redeclared, unlike
 // VatNote/VatBasis/etc., because it is a closed vocabulary already defined
@@ -16,18 +17,18 @@ const checkDetail = (c: SenderCheckDetail | null): string =>
 const nlGaps: Record<InvoiceGap, string> = {
   counterparty: "Vul een relatie in.",
   "issue-date": "Vul een factuurdatum in.",
-  "due-date": "Vul een vervaldatum in — n8n vond er geen.",
+  "due-date": "Vul een vervaldatum in — LaVega vond er geen.",
   amount: "Vul een geldig bedrag in.",
-  currency: "Vul de valuta in — n8n las er geen, en LaVega gokt geen euro's.",
+  currency: "Vul de valuta in — LaVega las er geen, en gokt geen euro's.",
   vat: "Btw-bedrag klopt niet.",
 };
 
 const enGaps: Record<InvoiceGap, string> = {
   counterparty: "Fill in a counterparty.",
   "issue-date": "Fill in an invoice date.",
-  "due-date": "Fill in a due date — n8n found none.",
+  "due-date": "Fill in a due date — LaVega found none.",
   amount: "Fill in a valid amount.",
-  currency: "Fill in the currency — n8n read none, and LaVega does not assume euros.",
+  currency: "Fill in the currency — LaVega read none, and does not assume euros.",
   vat: "That VAT amount isn't right.",
 };
 
@@ -59,8 +60,8 @@ type FacturenCopy = {
       moduleTitle: string;
       /** "LaVega fetches ... every {minutes} minutes ..." */
       pullIntro: (minutes: number) => string;
-      /** The eligibility explanation; wording depends on how many entities exist. */
-      gateNote: (entityCount: number) => string;
+      /** One line: every invoice waits for the owner; nothing books itself. */
+      gateNote: string;
       fetchButton: string;
       connectionsButton: string;
       pendingWarning: (n: number) => string;
@@ -143,8 +144,8 @@ type FacturenCopy = {
     fetching: string;
     notConfigured: string;
     noAddress: string;
-    unauthorized: { short: (status: number) => string; detail: string; detailSummary: string };
-    httpError: (status: number) => string;
+    unauthorized: { short: string; detail: string; detailSummary: string };
+    httpError: string;
     network: { short: string; detail: string; detailSummary: string };
     unreadable: string;
     /** The rows/notices from THIS fetch render on screen, but the vault write
@@ -182,7 +183,6 @@ type FacturenCopy = {
   /** Every string routed through setAiNote (handleExtractPdf). */
   aiExtraction: {
     reading: string;
-    extractFailedStatus: (status: number) => string;
     extractFailed: string;
     confidencePart: (pct: number) => string;
     /** amount is an already-formatted string (formatEuroIn), not a number. */
@@ -284,6 +284,78 @@ type FacturenCopy = {
     markPaidButton: string;
     cancelButton: string;
     noActions: string;
+  };
+
+  /** The forwarding-setup guide on the Facturen screen (Gmail / Outlook). The
+   *  search expression and the rule words are NOT here: they live in
+   *  forwardingGuide.ts (GMAIL_FILTER_QUERY, RULE_WORDS) and are passed in. */
+  guide: {
+    ariaLabel: string;
+    heading: string;
+    /** Collapsed line once a test has passed; `time` is already formatted. */
+    passedLine: (time: string) => string;
+    showGuide: string;
+    hideGuide: string;
+    addressLabel: string;
+    copyButton: string;
+    copiedLabel: string;
+    noAddress: string;
+    goCreateAddress: string;
+    tabsAriaLabel: string;
+    tabGmail: string;
+    tabOutlook: string;
+    stepDoneAria: (n: number) => string;
+    /** One status line per GuideStage. Record, so a new stage is a type error. */
+    stages: Record<GuideStage, string>;
+    /** A setup mail reached LaVega but could not be read (setupUnreadable > 0). */
+    setupUnreadable: { message: string; dismiss: string };
+    gmail: {
+      step1: string;
+      openSettings: string;
+      /** Gmail deep links use /u/0/, the first signed-in account. */
+      multiAccountNote: string;
+      step2Waiting: string;
+      /** The code only, never a link. The user pastes it into Gmail. */
+      step2Code: (code: string) => string;
+      step2Warn: string;
+      /** The code did not arrive within the wait window. */
+      step2TimedOut: string;
+      retryCode: string;
+      step3: string;
+      openFilters: string;
+      copyQuery: string;
+      queryCopied: string;
+      step4: string;
+    };
+    outlook: {
+      step1: string;
+      openPersonal: string;
+      openWork: string;
+      /** `words` is RULE_WORDS, injected by the component. */
+      step2: (words: string) => string;
+      workNote: string;
+    };
+    otherApps: string;
+    test: {
+      heading: string;
+      /** Includes the one sentence on why the subject holds a filter word. */
+      intro: string;
+      subjectLabel: string;
+      startButton: string;
+      againButton: string;
+      copySubject: string;
+      subjectCopied: string;
+      pending: string;
+      passed: (time: string) => string;
+      passedOtherCode: (time: string) => string;
+      timedOut: string;
+      /** Provider-neutral items. */
+      checklist: string[];
+      /** Shown on the Gmail tab only. */
+      checklistGmail: string;
+      /** Shown on the Outlook tab only. */
+      checklistOutlook: string;
+    };
   };
 };
 
@@ -591,17 +663,24 @@ type KoppelingenCopy = {
     copiedLabel: string;
     /** aria-label on the copy button; names WHAT gets copied */
     copyButtonAriaLabel: string;
-    /** shown only while no address exists yet, above the two options */
+    /** shown only while no address exists yet, above the create button */
     emptyIntro: string;
-    /** button offering the specific readable address; takes it as an argument
-     *  so the address itself stays a single fact in settings.ts, not copy */
-    suggestedButton: (address: string) => string;
-    /** one line under suggestedButton: readable and easy to type, but guessable */
-    suggestedTradeoff: string;
-    /** the inline button that calls ensureInvoiceForwardAddress() */
-    generateButton: string;
-    /** one line under generateButton: unguessable, but harder to type */
-    generateTradeoff: string;
+    /** the one primary button: makes the address AND records it on the server */
+    createButton: string;
+    /** the create button's label while the request runs */
+    creating: string;
+    /** creating failed for any reason other than a collision; nothing was saved */
+    createFailed: string;
+    /** every fresh address we tried was already taken */
+    createTaken: string;
+    /** the create button's label after createTaken: try with a new address */
+    createTakenRetry: string;
+    /** this account already had an address (e.g. created in another tab); it was kept */
+    createAlreadySet: (address: string) => string;
+    /** secondary button revealing the typed-address input (operator path) */
+    useOwnButton: string;
+    /** link to the auto-forwarding guide in Facturen, shown once an address is set */
+    setupLink: string;
     /** The card's SERVER-recorded-address sub-section: what /api/n8n/forward-address
      *  holds, and the explicit confirm-gated action that writes to it. */
     server: {
@@ -612,6 +691,8 @@ type KoppelingenCopy = {
       none: string;
       /** the initial GET failed (401/network/non-2xx) */
       readFailed: string;
+      /** retry button next to readFailed */
+      retryButton: string;
       recordButton: string;
       /** first-click warning before the second, real click */
       confirmWarning: (address: string) => string;
@@ -642,7 +723,7 @@ export type AdminCopy = {
 const nlFacturen: FacturenCopy = {
   head: {
     title: "Drie manieren om een factuur binnen te krijgen",
-    eyebrow: "alleen een geverifieerde afzender boekt zichzelf",
+    eyebrow: "Elke factuur wacht op jouw bevestiging — LaVega boekt niets zelf.",
   },
 
   forms: {
@@ -651,16 +732,9 @@ const nlFacturen: FacturenCopy = {
     auto: {
       moduleTitle: "1 · Automatisch",
       pullIntro: (minutes) =>
-        `LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna elke ${minutes} minuten zolang je hier bent. De knop hieronder is voor een directe hercontrole.`,
-      gateNote: (entityCount) => {
-        const oneEntity = entityCount === 1 ? ", je hebt één onderneming" : "";
-        const manyEntities =
-          entityCount > 1
-            ? " Je hebt meer dan één onderneming, dus kiest LaVega de BV nooit voor je: die keuze vraagt hij één keer, en tot die tijd boekt er hier niets automatisch."
-            : "";
-        return `Een factuur boekt zichzelf alleen als er niets meer te beslissen valt: de mail kwam via je doorstuuradres binnen én door de SPF/DKIM-controle${oneEntity}, en de factuur is compleet. Die krijgt het label “automatisch” en is met één klik terug te draaien. Al het andere wacht op jou, met de reden erbij — een niet-geverifieerde afzender boekt hier niets.${manyEntities}`;
-      },
-      fetchButton: "Ophalen uit n8n",
+        `LaVega kijkt of er facturen zijn binnengekomen zodra je dit scherm opent, en daarna elke ${minutes} minuten.`,
+      gateNote: "Elke factuur wacht op jouw bevestiging — LaVega boekt niets zelf.",
+      fetchButton: "Nieuwe facturen ophalen",
       connectionsButton: "Koppelingen instellen",
       pendingWarning: (n) =>
         `${n} ${n === 1 ? "regel wacht" : "regels wachten"} op je beslissing — zie hieronder.`,
@@ -729,45 +803,42 @@ const nlFacturen: FacturenCopy = {
     vaultNotLinked: "De kluis is nog niet gekoppeld aan dit scherm. Er is niets opgehaald.",
     fetching: "Bezig met ophalen…",
     notConfigured:
-      "Nog niet ingesteld: de factuur-wachtrij is niet geconfigureerd op de server. Er is niets opgehaald.",
+      "Nog niet ingesteld: het ophalen van facturen staat op de server niet aan. Er is niets opgehaald.",
     noAddress: "Er is nog geen doorstuuradres aan je account gekoppeld. Er is niets opgehaald.",
     unauthorized: {
-      short: (status) => `Je bent uitgelogd (${status}). Er is niets opgehaald. Log opnieuw in.`,
-      detail: "De wachtrij in n8n staat er nog; er is geen verzoek naar n8n geweest.",
-      detailSummary: "Wat dit voor de wachtrij in n8n betekent",
+      short: "Je bent uitgelogd. Er is niets opgehaald. Log opnieuw in.",
+      detail: "Er is niets van je mailbox gehaald; je facturen zijn onaangeroerd.",
+      detailSummary: "Wat dit betekent",
     },
-    httpError: (status) =>
-      `n8n antwoordde met status ${status}. Er is niets opgehaald. Staat de workflow aan?`,
+    httpError: "Ophalen lukt nu niet. Probeer het straks opnieuw.",
     network: {
       short: "Geen antwoord van de LaVega-server; hier is niets binnengekomen.",
-      detail:
-        "Dit is een verbindingsprobleem met LaVega zelf, niet met n8n — de wachtrij in n8n is niet aangeraakt.",
+      detail: "Dit is een verbindingsprobleem met LaVega zelf.",
       detailSummary: "Wat hier waarschijnlijk misgaat",
     },
     unreadable:
-      "Het antwoord van de server was niet te lezen. Er is niets overgenomen — en omdat het ophalen de wachtrij in n8n al geleegd kan hebben, kan die rij verloren zijn.",
+      "Het antwoord van de server was niet te lezen. Er is niets overgenomen — en omdat het ophalen de lijst op de server al geleegd kan hebben, kan een regel verloren zijn.",
     pendingSaveFailed: {
       short:
         "Opgehaald, maar niet opgeslagen in de kluis. Sluit dit tabblad niet en laad niet opnieuw.",
       detail:
-        "n8n heeft zijn eigen kopie van deze rijen al gewist — dit tabblad is nu de enige plek waar ze nog bestaan. Ze staan hieronder zodat je ze niet kwijtraakt, maar de opslag in de kluis is mislukt. Probeer het opnieuw (bijvoorbeeld door de kluis te ontgrendelen) voordat je dit tabblad sluit of herlaadt.",
+        "De server heeft zijn eigen kopie van deze regels al gewist — dit tabblad is nu de enige plek waar ze nog bestaan. Ze staan hieronder zodat je ze niet kwijtraakt, maar opslaan in de kluis is mislukt. Probeer het opnieuw (bijvoorbeeld door de kluis te ontgrendelen) voordat je dit tabblad sluit of herlaadt.",
       detailSummary: "Wat dit voor deze rijen betekent",
     },
     emptyQueue:
-      "De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.",
-    nothingNew: "Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.",
+      "Er waren geen nieuwe facturen. Dat is geen bevestiging dat er niets is binnengekomen.",
+    nothingNew: "Niets nieuws: alles wat binnenkwam was hier al afgehandeld.",
     fetched: (n) =>
-      `${n} ${n === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd.`,
+      `${n} ${n === 1 ? "factuur" : "facturen"} opgehaald. Ze staan niet meer op de server.`,
     autoBooked: (n) =>
-      `${n} daarvan ${n === 1 ? "is" : "zijn"} automatisch geboekt: de afzender kwam door de SPF/DKIM-controle en er stond alles in wat nodig is. Ze staan hieronder met “automatisch” erbij en zijn met één klik terug te draaien.`,
+      `${n} ${n === 1 ? "factuur is" : "facturen zijn"} zonder jouw klik geboekt. Met één klik draai je dat terug.`,
     alreadyStoredOne: "Eén ervan stond al in LaVega en is niet dubbel geboekt.",
     alreadyStoredMany: (n) => `${n} ervan stonden al in LaVega en zijn niet dubbel geboekt.`,
     waiting: (n) =>
       `${n} ${n === 1 ? "regel wacht" : "regels wachten"} op jou — bij elke regel staat waarom.`,
-    duplicatesSkipped: (n) =>
-      `${n} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`,
+    duplicatesSkipped: (n) => `${n} regel(s) kende LaVega al en worden niet opnieuw aangeboden.`,
     dropped: (n) =>
-      `${n} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`,
+      `${n} regel(s) misten een kenmerk of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer op de server.`,
     noticesWaiting: (n) =>
       `${n} ${n === 1 ? "mail wacht" : "mails wachten"} onder “Zelf ophalen”: daar zat geen factuur in die LaVega kon boeken.`,
     confirmedDuplicate: (counterparty) =>
@@ -791,7 +862,6 @@ const nlFacturen: FacturenCopy = {
 
   aiExtraction: {
     reading: "Bezig met lezen…",
-    extractFailedStatus: (status) => `AI-extractie mislukt (${status}).`,
     extractFailed: "AI-extractie mislukt. Probeer het opnieuw.",
     confidencePart: (pct) => ` (AI-inschatting zekerheid ${pct}%)`,
     vatPart: (formattedAmount) => `, incl. btw ${formattedAmount}`,
@@ -803,10 +873,10 @@ const nlFacturen: FacturenCopy = {
   queue: {
     sectionAriaLabel: "Te bevestigen facturen",
     heading: "Te bevestigen",
-    eyebrow: (n) => `uit n8n · ${n}`,
+    eyebrow: (n) => `uit je mailbox · ${n}`,
     warningLead: "Let op — dit is de enige kopie.",
     warningBody: (n) =>
-      ` n8n leegt zijn wachtrij op het moment dat hij antwoordt: nog eens ophalen levert deze ${n} ${n === 1 ? "regel" : "regels"} niet terug. Ook herladen of vergrendelen wist ze. Bevestig of verwerp ze nu.`,
+      ` Het ophalen leegt de lijst op de server: nog eens ophalen levert deze ${n} ${n === 1 ? "regel" : "regels"} niet terug. Ze staan veilig in je kluis tot je ze bevestigt of verwerpt.`,
     mailSourcePrefix: "Uit de mail:",
     waitReason: (reason) => `Wacht op jou: ${reason}`,
     holds: {
@@ -815,7 +885,7 @@ const nlFacturen: FacturenCopy = {
       senderFailed: (c) =>
         `De afzender kwam niet door de SPF/DKIM-controle${checkDetail(c)}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
       senderUnchecked:
-        "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
+        "LaVega kan bij deze mail niet nagaan wie de afzender is, dus hij wacht op jou. Controleer hem en bevestig.",
       entityAmbiguous:
         "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
       incomplete: (gap) => `${nlGaps[gap]} Zolang dat ontbreekt boekt LaVega niets automatisch.`,
@@ -824,24 +894,24 @@ const nlFacturen: FacturenCopy = {
         `Boven € ${(cents / 100).toLocaleString("nl-NL")} boekt LaVega niets zelf, ook niet van een geverifieerde afzender. Deze wacht op jou.`,
     },
     entityLabel: "Entiteit",
-    entityAriaLabel: "Entiteit (n8n)",
+    entityAriaLabel: "Entiteit (te bevestigen)",
     directionLabel: "Richting",
-    directionAriaLabel: "Richting (n8n)",
+    directionAriaLabel: "Richting (te bevestigen)",
     counterpartyLabel: "Relatie",
-    counterpartyAriaLabel: "Relatie (n8n)",
+    counterpartyAriaLabel: "Relatie (te bevestigen)",
     invoiceNumberLabel: "Factuurnr.",
-    invoiceNumberAriaLabel: "Factuurnummer (n8n)",
+    invoiceNumberAriaLabel: "Factuurnummer (te bevestigen)",
     issueDateLabel: "Factuurdatum",
-    issueDateAriaLabel: "Factuurdatum (n8n)",
+    issueDateAriaLabel: "Factuurdatum (te bevestigen)",
     dueDateLabel: "Vervaldatum",
-    dueDateAriaLabel: "Vervaldatum (n8n)",
+    dueDateAriaLabel: "Vervaldatum (te bevestigen)",
     amountLabel: "Bedrag",
-    amountAriaLabel: "Bedrag (n8n)",
+    amountAriaLabel: "Bedrag (te bevestigen)",
     currencyLabel: "Valuta",
-    currencyAriaLabel: "Valuta (n8n)",
+    currencyAriaLabel: "Valuta (te bevestigen)",
     currencyPlaceholder: "onbekend",
     vatLabel: "Btw",
-    vatAriaLabel: "Btw (n8n)",
+    vatAriaLabel: "Btw (te bevestigen)",
     vatPlaceholder: "onbekend",
     confirmButton: "Bevestigen",
     rejectButton: "Verwerpen",
@@ -861,16 +931,16 @@ const nlFacturen: FacturenCopy = {
     },
     sectionAriaLabel: "Zelf ophalen",
     heading: "Zelf ophalen",
-    eyebrow: (n) => `uit n8n · ${n}`,
+    eyebrow: (n) => `uit je mailbox · ${n}`,
     introLead:
       "Deze mails gingen over een factuur, maar er zat er geen in die LaVega kan boeken. Er staat met opzet",
     introStrong: "geen bedrag",
     introTail:
       "bij: dit is een lijstje om zelf af te werken, geen boeking in wording. Haal de factuur op en sleep hem hierboven naar binnen.",
     noSubjectFallback: "(geen onderwerp)",
-    noReasonFallback: "n8n gaf geen reden mee.",
+    noReasonFallback: "Er is geen reden meegegeven.",
     openInGmail: "Open in Gmail",
-    noLinkFallback: "n8n gaf geen link mee; zoek de mail op het onderwerp.",
+    noLinkFallback: "Er is geen link meegegeven; zoek de mail op het onderwerp.",
     doneButton: "Gedaan",
   },
 
@@ -890,12 +960,95 @@ const nlFacturen: FacturenCopy = {
     directionBadge: { in: "AR · inkomend", out: "AP · uitgaand" },
     autoBadge: "automatisch",
     autoBadgeTitle:
-      "Deze factuur is zonder klik geboekt: de afzender kwam door de SPF/DKIM-controle en de factuur was compleet.",
+      "Deze factuur is eerder zonder jouw klik geboekt. Met Terugdraaien zet je hem op geannuleerd.",
     statusLabels: { expected: "verwacht", paid: "betaald", cancelled: "geannuleerd" },
     undoButton: "Terugdraaien",
     markPaidButton: "markeer betaald",
     cancelButton: "annuleer",
     noActions: "—",
+  },
+  guide: {
+    ariaLabel: "Automatisch doorsturen instellen",
+    heading: "Automatisch doorsturen instellen",
+    passedLine: (time) => `Automatisch doorsturen werkt — laatste test ${time}.`,
+    showGuide: "Toon de handleiding",
+    hideGuide: "Verberg de handleiding",
+    addressLabel: "Jouw factuuradres",
+    copyButton: "Kopieer",
+    copiedLabel: "Gekopieerd",
+    noAddress: "Je hebt nog geen factuuradres. Maak er eerst een aan.",
+    goCreateAddress: "Maak je adres bij Koppelingen",
+    tabsAriaLabel: "Kies je mailprogramma",
+    tabGmail: "Gmail",
+    tabOutlook: "Outlook",
+    stepDoneAria: (n) => `Stap ${n} gedaan`,
+    stages: {
+      "no-address": "Maak eerst een factuuradres aan.",
+      "address-ready": "Je adres staat klaar. Volg de stappen voor jouw mailprogramma.",
+      "waiting-for-code":
+        "Gmail stuurt een bevestiging naar je LaVega-adres. Staat er een code in, dan verschijnt die hier.",
+      "code-wait-timed-out": "Er is nog geen code van Gmail aangekomen.",
+      "code-shown": "De code van Gmail is binnen. Plak hem in Gmail.",
+      "test-pending": "De test loopt: wachten tot de testmail aankomt…",
+      "test-passed": "De test is geslaagd: automatisch doorsturen werkt.",
+      "test-timed-out": "De testmail is nog niet aangekomen.",
+    },
+    setupUnreadable: {
+      message:
+        "Er is een mail van je mailprogramma binnengekomen die we niet konden lezen. Is het een code of testmail, probeer het dan nog eens.",
+      dismiss: "Sluiten",
+    },
+    gmail: {
+      step1:
+        "Open de doorstuurinstellingen van Gmail (Instellingen, Alle instellingen, Doorsturen en POP/IMAP), kies “Een doorstuuradres toevoegen” en plak je factuuradres hierboven.",
+      openSettings: "Open Gmail-instellingen",
+      multiAccountNote: "Meerdere Gmail-accounts? Open de instellingen in het juiste account.",
+      step2Waiting:
+        "Gmail stuurt een bevestiging naar je LaVega-adres. Staat er een code in, dan verschijnt die hier.",
+      step2Code: (code) => `Plak deze code in Gmail: ${code}`,
+      step2Warn:
+        "Zet “Een kopie van binnenkomende e-mail doorsturen” niet aan: dan gaat al je post naar LaVega.",
+      step2TimedOut:
+        "Geen code? Je kunt facturen ook met de hand doorsturen naar je adres — daar is geen bevestiging voor nodig. Of probeer het opnieuw.",
+      retryCode: "Opnieuw wachten op de code",
+      step3: "Maak een filter met deze zoekopdracht.",
+      openFilters: "Open Gmail-filters",
+      copyQuery: "Kopieer zoekopdracht",
+      queryCopied: "Gekopieerd",
+      step4: "Vink bij de acties “Doorsturen naar” aan en kies je factuuradres.",
+    },
+    outlook: {
+      step1: "Open de regels van Outlook (Instellingen, Mail, Regels).",
+      openPersonal: "Regels van Outlook.com",
+      openWork: "Outlook van een werk- of schoolaccount",
+      step2: (words) =>
+        `Maak een nieuwe regel met een voorwaarde voor bijlagen en een voorwaarde voor het onderwerp of de tekst, met een van deze woorden: ${words}. Actie: “Doorsturen naar” je factuuradres.`,
+      workNote:
+        "Werk- of schoolaccount? Organisaties met Microsoft 365 kunnen doorsturen naar adressen buiten de organisatie blokkeren. Komt de testmail niet aan, stuur facturen dan zelf door of vraag het je IT-beheerder.",
+    },
+    otherApps:
+      "Een andere mailapp? Elke mailapp die automatisch kan doorsturen werkt: stuur je facturen door naar je factuuradres.",
+    test: {
+      heading: "Test het",
+      intro:
+        "Stuur jezelf een mail met een PDF als bijlage en dit onderwerp. Je eigen filter of regel stuurt hem door, dus de hele keten wordt getest. Het woord “factuur” staat in het onderwerp zodat je eigen filter of regel de mail herkent.",
+      subjectLabel: "Onderwerp",
+      startButton: "Start de test",
+      againButton: "Nieuwe test",
+      copySubject: "Kopieer onderwerp",
+      subjectCopied: "Gekopieerd",
+      pending: "Wachten tot de testmail aankomt… dit duurt hooguit 10 minuten.",
+      passed: (time) => `Ontvangen om ${time} — automatisch doorsturen werkt.`,
+      passedOtherCode: (time) =>
+        `Ontvangen om ${time} — automatisch doorsturen werkt. Het was wel een eerdere testmail.`,
+      timedOut: "Nog niet aangekomen. Loop dit na:",
+      checklist: [
+        "Had de mail een PDF als bijlage, en past je filter of regel daarop?",
+        "Staat er in je spam of je verzonden mail een foutmelding?",
+      ],
+      checklistGmail: "Heb je het adres in Gmail bevestigd?",
+      checklistOutlook: "Werk je met een werkaccount, en kan je organisatie doorsturen blokkeren?",
+    },
   },
 };
 
@@ -1181,8 +1334,9 @@ const nlBackup: BackupCopy = {
 const nlKoppelingen: KoppelingenCopy = {
   ariaLabel: "Koppelingen",
   forwardAddress: {
-    heading: "Doorstuuradres voor facturen",
-    eyebrow: "stuur een factuur hiernaartoe en hij komt in de wachtrij",
+    heading: "Je persoonlijke factuuradres",
+    eyebrow:
+      "Stuur of forward facturen naar dit adres; ze verschijnen bij Facturen onder Te bevestigen.",
     addressLabel: "Adres",
     addressPlaceholder: "invoices@lavega.dev",
     addressAriaLabel: "Doorstuuradres",
@@ -1190,21 +1344,26 @@ const nlKoppelingen: KoppelingenCopy = {
     copyButton: "Kopieer",
     copiedLabel: "Gekopieerd",
     copyButtonAriaLabel: "Doorstuuradres kopiëren",
-    emptyIntro:
-      "Nog geen adres. Typ zelf een adres dat je in Cloudflare hebt aangemaakt, of kies er een:",
-    suggestedButton: (address) => `Gebruik ${address}`,
-    suggestedTradeoff: "Makkelijk te onthouden en over te typen — maar wel te raden.",
-    generateButton: "Genereer een willekeurig adres",
-    generateTradeoff: "Niet te raden — maar lastiger over te typen.",
+    emptyIntro: "Je hebt nog geen factuuradres.",
+    createButton: "Maak mijn factuuradres",
+    creating: "Bezig met aanmaken…",
+    createFailed: "Aanmaken is mislukt. Er is niets opgeslagen; probeer het opnieuw.",
+    createTaken: "Dat adres was al in gebruik. Probeer het met een nieuw adres.",
+    createTakenRetry: "Nieuw adres proberen",
+    createAlreadySet: (address) =>
+      `Je had al een factuuradres: ${address}. Dat blijft zoals het was.`,
+    useOwnButton: "Eigen adres gebruiken",
+    setupLink: "Automatisch doorsturen instellen →",
     server: {
       loading: "Even kijken wat de server heeft…",
       active: (address) => `Nu actief: ${address}`,
-      none: "Nog geen adres ingesteld op de server — Facturen haalt nog niets automatisch op.",
+      none: "Nog geen adres ingesteld — Facturen haalt nog niets automatisch op.",
       readFailed:
         "Kon niet lezen wat de server heeft ingesteld — probeer dit scherm opnieuw te openen.",
+      retryButton: "Opnieuw proberen",
       recordButton: "Gebruik dit adres",
       confirmWarning: (address) =>
-        `Dit maakt ${address} het adres waar Facturen zijn wachtrij mee ophaalt. Een eerder ingesteld adres van jou wordt vervangen; een adres dat al bij een ander account hoort, kan niet.`,
+        `Dit maakt ${address} het adres waarmee Facturen je nieuwe facturen ophaalt. Een eerder ingesteld adres van jou wordt vervangen; een adres dat al bij een ander account hoort, kan niet.`,
       confirmButton: "Ja, gebruik dit adres",
       cancelButton: "Annuleren",
       recording: "Bezig met opslaan…",
@@ -1220,7 +1379,7 @@ const nlKoppelingen: KoppelingenCopy = {
 const enFacturen: FacturenCopy = {
   head: {
     title: "Three ways to get an invoice in",
-    eyebrow: "only a verified sender books itself",
+    eyebrow: "Every invoice waits for your confirmation — LaVega books nothing by itself.",
   },
 
   forms: {
@@ -1229,16 +1388,9 @@ const enFacturen: FacturenCopy = {
     auto: {
       moduleTitle: "1 · Automatic",
       pullIntro: (minutes) =>
-        `LaVega fetches your own n8n's queue as soon as this screen opens, and again every ${minutes} minutes while you stay here. The button below is for an immediate recheck.`,
-      gateNote: (entityCount) => {
-        const oneEntity = entityCount === 1 ? ", you have one company" : "";
-        const manyEntities =
-          entityCount > 1
-            ? " You have more than one company, so LaVega never picks the BV for you: it asks that choice once, and until then nothing here books automatically."
-            : "";
-        return `An invoice books itself only when there is nothing left to decide: the mail arrived through your forwarding address and passed the SPF/DKIM check${oneEntity}, and the invoice is complete. That one gets the “automatic” label and can be undone with a single click. Everything else waits for you, with the reason attached — an unverified sender books nothing here.${manyEntities}`;
-      },
-      fetchButton: "Fetch from n8n",
+        `LaVega checks for new invoices when you open this screen, then every ${minutes} minutes.`,
+      gateNote: "Every invoice waits for your confirmation — LaVega books nothing by itself.",
+      fetchButton: "Check for new invoices",
       connectionsButton: "Set up connections",
       pendingWarning: (n) =>
         `${n} ${n === 1 ? "row is" : "rows are"} waiting on your decision — see below.`,
@@ -1307,43 +1459,39 @@ const enFacturen: FacturenCopy = {
     vaultNotLinked: "The vault is not yet connected to this screen. Nothing was fetched.",
     fetching: "Fetching…",
     notConfigured:
-      "Not set up yet: the invoice queue is not configured on the server. Nothing was fetched.",
+      "Not set up yet: invoice fetching is not switched on for this server. Nothing was fetched.",
     noAddress: "No forwarding address is linked to your account yet. Nothing was fetched.",
     unauthorized: {
-      short: (status) => `You're signed out (${status}). Nothing was fetched. Log back in.`,
-      detail: "The queue in n8n is untouched; no request to n8n was made.",
-      detailSummary: "What this means for the n8n queue",
+      short: "You're signed out. Nothing was fetched. Log back in.",
+      detail: "Nothing was taken from your inbox; your invoices are untouched.",
+      detailSummary: "What this means",
     },
-    httpError: (status) =>
-      `n8n responded with status ${status}. Nothing was fetched. Is the workflow switched on?`,
+    httpError: "Couldn't fetch right now. Try again shortly.",
     network: {
       short: "No response from the LaVega server; nothing arrived here.",
-      detail:
-        "This is a connection problem with LaVega itself, not with n8n — the queue in n8n was not touched.",
+      detail: "This is a connection problem with LaVega itself.",
       detailSummary: "What's likely going wrong here",
     },
     unreadable:
-      "The server's response could not be read. Nothing was taken over — and because fetching may already have emptied the n8n queue, that row may be lost.",
+      "The server's response could not be read. Nothing was taken over — and because fetching may already have cleared the list on the server, a row may be lost.",
     pendingSaveFailed: {
       short: "Fetched, but not saved to the vault. Don't close or reload this tab.",
       detail:
-        "n8n has already deleted its own copy of these rows — this tab is now the only place they still exist. They are shown below so you don't lose them, but saving them to the vault failed. Try again (for example by unlocking the vault) before closing or reloading this tab.",
+        "The server has already deleted its own copy of these rows — this tab is now the only place they still exist. They are shown below so you don't lose them, but saving them to the vault failed. Try again (for example by unlocking the vault) before closing or reloading this tab.",
       detailSummary: "What this means for these rows",
     },
-    emptyQueue:
-      "The queue in n8n was empty. Nothing was fetched — that is not confirmation that there are invoices.",
-    nothingNew: "Nothing new: everything n8n sent was already handled here.",
+    emptyQueue: "There were no new invoices. That is not confirmation that nothing arrived.",
+    nothingNew: "Nothing new: everything that arrived was already handled here.",
     fetched: (n) =>
-      `${n} ${n === 1 ? "invoice" : "invoices"} fetched. n8n has emptied its queue as a result.`,
+      `${n} ${n === 1 ? "invoice" : "invoices"} fetched. They are no longer on the server.`,
     autoBooked: (n) =>
-      `${n} of ${n === 1 ? "those was" : "these were"} booked automatically: the sender passed the SPF/DKIM check and everything needed was there. They show up below marked “automatic” and can be undone with a single click.`,
+      `${n} ${n === 1 ? "invoice was" : "invoices were"} booked without your click. One click undoes that.`,
     alreadyStoredOne: "One of them was already in LaVega and was not booked twice.",
     alreadyStoredMany: (n) => `${n} of them were already in LaVega and were not booked twice.`,
     waiting: (n) => `${n} ${n === 1 ? "row is" : "rows are"} waiting on you — each row says why.`,
-    duplicatesSkipped: (n) =>
-      `${n} row(s) LaVega already knew (same messageId) and are not offered again.`,
+    duplicatesSkipped: (n) => `${n} row(s) LaVega already knew and are not offered again.`,
     dropped: (n) =>
-      `${n} row(s) were missing a messageId or an amount and were not taken over — they are not in LaVega and no longer in n8n.`,
+      `${n} row(s) were missing an identifier or an amount and were not taken over — they are not in LaVega and no longer on the server.`,
     noticesWaiting: (n) =>
       `${n} ${n === 1 ? "mail is waiting" : "mails are waiting"} under “Fetch it yourself”: none of them held an invoice LaVega could book.`,
     confirmedDuplicate: (counterparty) =>
@@ -1367,7 +1515,6 @@ const enFacturen: FacturenCopy = {
 
   aiExtraction: {
     reading: "Reading…",
-    extractFailedStatus: (status) => `AI extraction failed (${status}).`,
     extractFailed: "AI extraction failed. Try again.",
     confidencePart: (pct) => ` (AI-estimated confidence ${pct}%)`,
     vatPart: (formattedAmount) => `, incl. VAT (BTW) ${formattedAmount}`,
@@ -1379,10 +1526,10 @@ const enFacturen: FacturenCopy = {
   queue: {
     sectionAriaLabel: "Invoices to confirm",
     heading: "To confirm",
-    eyebrow: (n) => `from n8n · ${n}`,
+    eyebrow: (n) => `from your inbox · ${n}`,
     warningLead: "Note — this is the only copy.",
     warningBody: (n) =>
-      ` n8n empties its queue the moment it answers: fetching again will not bring these ${n} ${n === 1 ? "row" : "rows"} back. Reloading or locking the vault wipes them too. Confirm or reject them now.`,
+      ` Fetching clears the list on the server: fetching again will not bring these ${n} ${n === 1 ? "row" : "rows"} back. They are kept safe in your vault until you confirm or reject them.`,
     mailSourcePrefix: "From the mail:",
     waitReason: (reason) => `Waiting on you: ${reason}`,
     holds: {
@@ -1391,7 +1538,7 @@ const enFacturen: FacturenCopy = {
       senderFailed: (c) =>
         `The sender did not pass the SPF/DKIM check${checkDetail(c)}. That can be a sloppily configured domain or a faked sender — which is why LaVega won't book this one for you. Check it and confirm it yourself.`,
       senderUnchecked:
-        "No sender check was run on this mail — it did not arrive through the forwarding address. No check is not an approval, so this one waits for you.",
+        "LaVega can't verify who sent this mail, so it waits for you. Check it and confirm.",
       entityAmbiguous:
         "You have more than one company and the invoice doesn't say which one it's for. LaVega does not guess an entity — pick it and confirm.",
       incomplete: (gap) => `${enGaps[gap]} Until that's there, LaVega books nothing automatically.`,
@@ -1400,24 +1547,24 @@ const enFacturen: FacturenCopy = {
         `Above €${(cents / 100).toLocaleString("en-GB")} LaVega books nothing itself, not even from a verified sender. This one waits for you.`,
     },
     entityLabel: "Entity",
-    entityAriaLabel: "Entity (n8n)",
+    entityAriaLabel: "Entity (to confirm)",
     directionLabel: "Direction",
-    directionAriaLabel: "Direction (n8n)",
+    directionAriaLabel: "Direction (to confirm)",
     counterpartyLabel: "Counterparty",
-    counterpartyAriaLabel: "Counterparty (n8n)",
+    counterpartyAriaLabel: "Counterparty (to confirm)",
     invoiceNumberLabel: "Inv. no.",
-    invoiceNumberAriaLabel: "Invoice number (n8n)",
+    invoiceNumberAriaLabel: "Invoice number (to confirm)",
     issueDateLabel: "Invoice date",
-    issueDateAriaLabel: "Invoice date (n8n)",
+    issueDateAriaLabel: "Invoice date (to confirm)",
     dueDateLabel: "Due date",
-    dueDateAriaLabel: "Due date (n8n)",
+    dueDateAriaLabel: "Due date (to confirm)",
     amountLabel: "Amount",
-    amountAriaLabel: "Amount (n8n)",
+    amountAriaLabel: "Amount (to confirm)",
     currencyLabel: "Currency",
-    currencyAriaLabel: "Currency (n8n)",
+    currencyAriaLabel: "Currency (to confirm)",
     currencyPlaceholder: "unknown",
     vatLabel: "VAT (BTW)",
-    vatAriaLabel: "VAT (BTW) (n8n)",
+    vatAriaLabel: "VAT (BTW) (to confirm)",
     vatPlaceholder: "unknown",
     confirmButton: "Confirm",
     rejectButton: "Reject",
@@ -1437,16 +1584,16 @@ const enFacturen: FacturenCopy = {
     },
     sectionAriaLabel: "Fetch it yourself",
     heading: "Fetch it yourself",
-    eyebrow: (n) => `from n8n · ${n}`,
+    eyebrow: (n) => `from your inbox · ${n}`,
     introLead:
       "These mails were about an invoice, but none of them held one LaVega can book. There is deliberately",
     introStrong: "no amount",
     introTail:
       "shown here: this is a to-do list, not a booking in progress. Fetch the invoice yourself and drag it in above.",
     noSubjectFallback: "(no subject)",
-    noReasonFallback: "n8n gave no reason.",
+    noReasonFallback: "No reason was given.",
     openInGmail: "Open in Gmail",
-    noLinkFallback: "n8n did not include a link; search your mail by the subject.",
+    noLinkFallback: "No link was included; search your mail by the subject.",
     doneButton: "Done",
   },
 
@@ -1466,12 +1613,95 @@ const enFacturen: FacturenCopy = {
     directionBadge: { in: "AR · incoming", out: "AP · outgoing" },
     autoBadge: "automatic",
     autoBadgeTitle:
-      "This invoice was booked without a click: the sender passed the SPF/DKIM check and the invoice was complete.",
+      "This invoice was booked earlier without your click. Undo sets it to cancelled.",
     statusLabels: { expected: "expected", paid: "paid", cancelled: "cancelled" },
     undoButton: "Undo",
     markPaidButton: "mark paid",
     cancelButton: "cancel",
     noActions: "—",
+  },
+  guide: {
+    ariaLabel: "Set up auto-forwarding",
+    heading: "Set up auto-forwarding",
+    passedLine: (time) => `Auto-forwarding works — last test ${time}.`,
+    showGuide: "Show the guide",
+    hideGuide: "Hide the guide",
+    addressLabel: "Your invoice address",
+    copyButton: "Copy",
+    copiedLabel: "Copied",
+    noAddress: "You don't have an invoice address yet. Create one first.",
+    goCreateAddress: "Create your address in Connections",
+    tabsAriaLabel: "Choose your mail app",
+    tabGmail: "Gmail",
+    tabOutlook: "Outlook",
+    stepDoneAria: (n) => `Step ${n} done`,
+    stages: {
+      "no-address": "Create an invoice address first.",
+      "address-ready": "Your address is ready. Follow the steps for your mail app.",
+      "waiting-for-code":
+        "Gmail sends a confirmation to your LaVega address. If it contains a code, it appears here.",
+      "code-wait-timed-out": "No code from Gmail has arrived yet.",
+      "code-shown": "Gmail's code is here. Paste it into Gmail.",
+      "test-pending": "The test is running: waiting for the test mail to arrive…",
+      "test-passed": "The test passed: auto-forwarding works.",
+      "test-timed-out": "The test mail has not arrived yet.",
+    },
+    setupUnreadable: {
+      message:
+        "A mail from your mail app reached LaVega, but we could not read it. If it was a code or a test mail, please try again.",
+      dismiss: "Dismiss",
+    },
+    gmail: {
+      step1:
+        "Open Gmail's forwarding settings (Settings, See all settings, Forwarding and POP/IMAP), choose “Add a forwarding address” and paste your invoice address from above.",
+      openSettings: "Open Gmail settings",
+      multiAccountNote: "Several Gmail accounts? Open settings in the right account.",
+      step2Waiting:
+        "Gmail sends a confirmation to your LaVega address. If it contains a code, it appears here.",
+      step2Code: (code) => `Paste this code into Gmail: ${code}`,
+      step2Warn:
+        "Do not switch on “Forward a copy of incoming mail”: that sends all your mail to LaVega.",
+      step2TimedOut:
+        "No code? You can also forward invoices by hand to your address — that needs no confirmation. Or try again.",
+      retryCode: "Wait for the code again",
+      step3: "Create a filter with this search.",
+      openFilters: "Open Gmail filters",
+      copyQuery: "Copy search",
+      queryCopied: "Copied",
+      step4: "In the filter's actions, tick “Forward it to” and pick your invoice address.",
+    },
+    outlook: {
+      step1: "Open Outlook's rules (Settings, Mail, Rules).",
+      openPersonal: "Outlook.com rules",
+      openWork: "Outlook for a work or school account",
+      step2: (words) =>
+        `Create a new rule with a condition for attachments and a condition for the subject or body, using one of these words: ${words}. Action: “Forward to” your invoice address.`,
+      workNote:
+        "Work or school account? Microsoft 365 organisations may block forwarding to addresses outside the organisation. If the test mail never arrives, forward invoices by hand or ask your IT admin.",
+    },
+    otherApps:
+      "Another mail app? Any app that can forward automatically works: forward your invoices to your invoice address.",
+    test: {
+      heading: "Test it",
+      intro:
+        "Send yourself a mail with a PDF attached and this subject. Your own filter or rule forwards it, so the whole chain is tested. The word “invoice” is in the subject so that your own filter or rule matches the mail.",
+      subjectLabel: "Subject",
+      startButton: "Start the test",
+      againButton: "New test",
+      copySubject: "Copy subject",
+      subjectCopied: "Copied",
+      pending: "Waiting for the test mail to arrive… this takes 10 minutes at most.",
+      passed: (time) => `Received at ${time} — auto-forwarding works.`,
+      passedOtherCode: (time) =>
+        `Received at ${time} — auto-forwarding works. It was an earlier test mail, though.`,
+      timedOut: "Not arrived yet. Check this:",
+      checklist: [
+        "Did the mail have a PDF attached, and does your filter or rule match it?",
+        "Is there an error in your spam folder or your sent mail?",
+      ],
+      checklistGmail: "Did you confirm the address in Gmail?",
+      checklistOutlook: "Are you on a work account, and may your organisation block forwarding?",
+    },
   },
 };
 
@@ -1759,8 +1989,9 @@ const enBackup: BackupCopy = {
 const enKoppelingen: KoppelingenCopy = {
   ariaLabel: "Connections",
   forwardAddress: {
-    heading: "Forwarding address for invoices",
-    eyebrow: "send an invoice here and it lands in the queue",
+    heading: "Your personal invoice address",
+    eyebrow:
+      "Send or forward invoices to this address; they appear under Invoices, waiting for your confirmation.",
     addressLabel: "Address",
     addressPlaceholder: "invoices@lavega.dev",
     addressAriaLabel: "Forwarding address",
@@ -1769,19 +2000,25 @@ const enKoppelingen: KoppelingenCopy = {
     copyButton: "Copy",
     copiedLabel: "Copied",
     copyButtonAriaLabel: "Copy forwarding address",
-    emptyIntro: "No address yet. Type one you created in Cloudflare yourself, or pick one:",
-    suggestedButton: (address) => `Use ${address}`,
-    suggestedTradeoff: "Easy to remember and type — but guessable.",
-    generateButton: "Generate a random address",
-    generateTradeoff: "Not guessable — but harder to type.",
+    emptyIntro: "You don't have an invoice address yet.",
+    createButton: "Create my invoice address",
+    creating: "Creating…",
+    createFailed: "Creating failed. Nothing was saved; please try again.",
+    createTaken: "That address was already in use. Try again with a new address.",
+    createTakenRetry: "Try a new address",
+    createAlreadySet: (address) =>
+      `You already had an invoice address: ${address}. It stays as it was.`,
+    useOwnButton: "Use my own address",
+    setupLink: "Set up auto-forwarding →",
     server: {
       loading: "Checking what the server has…",
       active: (address) => `Currently active: ${address}`,
-      none: "No address set on the server yet — Facturen isn't fetching anything automatically.",
+      none: "No address set yet — Facturen isn't fetching anything automatically.",
       readFailed: "Couldn't read what the server has set — try opening this screen again.",
+      retryButton: "Try again",
       recordButton: "Use this address",
       confirmWarning: (address) =>
-        `This makes ${address} the address Facturen uses to fetch its queue. Any address you set before is replaced; an address that already belongs to another account can't be.`,
+        `This makes ${address} the address Facturen uses to fetch your new invoices. Any address you set before is replaced; an address that already belongs to another account can't be.`,
       confirmButton: "Yes, use this address",
       cancelButton: "Cancel",
       recording: "Saving…",
