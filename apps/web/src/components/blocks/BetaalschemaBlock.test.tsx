@@ -22,25 +22,41 @@ const recurring: Tx[] = ["2026-05-18", "2026-06-17", "2026-07-17"].map((date, i)
   manual: false,
 }));
 
-test("BetaalschemaBlock lists the planned flows by due date, overdue flagged", () => {
+test("BetaalschemaBlock lists the upcoming planned flows by due date, past dates left off", () => {
   const html = renderToStaticMarkup(
     <BetaalschemaBlock scheduledFlows={scheduledFlows} txs={[]} asOf={ASOF} />,
   );
   expect(html).toContain("Betaalagenda");
-  // Sorted ascending by date: 31 jul (overdue) before 28 aug before 31 okt.
-  expect(html.indexOf("BTW Q2 2026")).toBeLessThan(html.indexOf("Factuur Klant BV"));
+  // BTW Q2 2026 was due 31 jul, before asOf: not "next", so not on the agenda.
+  expect(html).not.toContain("BTW Q2 2026");
+  expect(html).not.toContain("te laat");
+  expect(html).not.toContain("verstreken");
+  // Sorted ascending by date: 28 aug before 31 okt.
   expect(html.indexOf("Factuur Klant BV")).toBeLessThan(html.indexOf("BTW Q3 2026"));
-  expect(html).toContain(">31<");
-  expect(html).toContain(">jul<");
-  expect(html).toContain('data-overdue="true"');
-  expect(html).toContain("te laat");
-  expect(html).toContain("1 datum al verstreken.");
+  expect(html).toContain(">28<");
+  expect(html).toContain(">aug<");
   // sign drives the amount's direction: -1 out, +1 in.
-  expect(html).toContain(formatEuro(-4_125));
   expect(html).toContain(formatEuro(1_200));
   // A paid flow is not part of the agenda any more.
   expect(html).not.toContain("Al betaald");
-  expect(html).toContain("Alle regels zijn ingeplande bedragen.");
+  // No caption under the rows any more (removed on request, 21 Oct 2026).
+  expect(html).not.toContain("ingeplande bedragen");
+});
+
+test("agendaRows: past planned flows never crowd out the upcoming ones", () => {
+  const stale = Array.from({ length: 8 }, (_, i) => ({
+    ...scheduledFlows[0],
+    id: `old${i}`,
+    label: `Oud ${i}`,
+    dueDate: `2026-07-0${i + 1}`,
+  }));
+  const rows = agendaRows([...stale, ...scheduledFlows], [], ASOF);
+  expect(rows.map((r) => r.label)).toEqual(["Factuur Klant BV", "BTW Q3 2026"]);
+});
+
+test("agendaRows keeps a planned flow due today", () => {
+  const rows = agendaRows(scheduledFlows, [], "2026-07-31");
+  expect(rows.map((r) => r.label)).toContain("BTW Q2 2026");
 });
 
 test("BetaalschemaBlock adds detected recurring payments and marks them as predictions", () => {
@@ -50,7 +66,6 @@ test("BetaalschemaBlock adds detected recurring payments and marks them as predi
   expect(html).toContain("Spotify");
   expect(html).toContain("voorspeld");
   expect(html).toContain("maandelijks · 3× gezien");
-  expect(html).toContain("1 regel voorspeld uit je eigen geschiedenis, niet bevestigd.");
   expect(html).toContain(formatEuro(-14.99));
 });
 
@@ -81,7 +96,7 @@ test("agendaRows keeps a prediction distinguishable from a committed date", () =
   const rows = agendaRows(scheduledFlows, recurring, ASOF);
   const spotify = rows.find((r) => r.label === "Spotify");
   expect(spotify?.predicted).toBe(true);
-  expect(rows.find((r) => r.label === "BTW Q2 2026")?.predicted).toBe(false);
+  expect(rows.find((r) => r.label === "BTW Q3 2026")?.predicted).toBe(false);
   // Sorted by date, oldest first.
   expect([...rows].map((r) => r.date)).toEqual([...rows].map((r) => r.date).sort());
 });

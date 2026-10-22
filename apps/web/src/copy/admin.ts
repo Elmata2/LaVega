@@ -1027,7 +1027,8 @@ const nlFacturen: FacturenCopy = {
       openFilters: "Open Gmail-filters",
       copyQuery: "Kopieer zoekopdracht",
       queryCopied: "Gekopieerd",
-      step4: "Vink bij de acties “Doorsturen naar” aan en kies je factuuradres.",
+      step4:
+        "Vink bij de acties “Doorsturen naar” aan en kies je factuuradres. Gmail toont daarna een week lang bovenin “Je stuurt je e-mail door naar …”: dat is een standaardmelding van Google, geen fout.",
     },
     outlook: {
       step1: "Open de regels van Outlook (Instellingen, Mail, Regels).",
@@ -1689,7 +1690,8 @@ const enFacturen: FacturenCopy = {
       openFilters: "Open Gmail filters",
       copyQuery: "Copy search",
       queryCopied: "Copied",
-      step4: "In the filter's actions, tick “Forward it to” and pick your invoice address.",
+      step4:
+        "In the filter's actions, tick “Forward it to” and pick your invoice address. For the first week Gmail then shows “You are forwarding your email to …” at the top: that is Google's standard notice, not an error.",
     },
     outlook: {
       step1: "Open Outlook's rules (Settings, Mail, Rules).",
