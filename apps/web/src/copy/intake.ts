@@ -646,7 +646,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
       result: {
         title: "Jouw cijfers naast je antwoorden",
         tolerance: (n) => `Wat je aangeeft te verdragen: ${n} van 5`,
-        capacity: (n) => `Wat je cijfers toelaten: ${n} van 5`,
+        capacity: (n) => `Draagkracht uit je cijfers (schaal 1 tot 5): ${n}`,
         toleranceUnknown: "Beantwoord minstens vier risicovragen om dit te zien.",
         capacityUnknown: "Er zijn nog te weinig gegevens om dit uit te rekenen.",
         disagree:
@@ -1095,7 +1095,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
       result: {
         title: "Your numbers next to your answers",
         tolerance: (n) => `What you say you can bear: ${n} of 5`,
-        capacity: (n) => `What your numbers allow: ${n} of 5`,
+        capacity: (n) => `Capacity from your figures (scale 1 to 5): ${n}`,
         toleranceUnknown: "Answer at least four risk questions to see this.",
         capacityUnknown: "There is not enough data yet to work this out.",
         disagree:

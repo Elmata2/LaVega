@@ -4,7 +4,7 @@ import type { EntityProfile } from "../entities.js";
 import { toEur, type ConversionMode } from "../fx.js";
 import { ownAccounts, type OwnAccounts } from "../views.js";
 import { isIsoDate, isoMonth, previousMonths } from "./months.js";
-import { cleanTxs, personalView } from "./scopePersonal.js";
+import { cleanTxs, historyCoverage, personalView } from "./scopePersonal.js";
 
 export type RoomMonth = {
   month: string;
@@ -33,6 +33,9 @@ export type RoomResult =
       /** Accounts whose data does not cover one of the three most recent full
        *  months. Empty when none blocks. */
       blockingAccounts: BlockingAccount[];
+      /** Days between the first and last personal transaction. The one
+       *  short-history rule (resolveRoomRanges) reads it; absent = enough. */
+      coverageDays?: number;
     }
   | { kind: "none"; reason: "no-data" }
   | { kind: "none"; reason: "no-full-month"; blockingAccounts: BlockingAccount[] }
@@ -194,6 +197,7 @@ export function computeRoom(input: RoomInput): RoomResult {
     partial: months.length < 3,
     excludedForeignCount,
     blockingAccounts,
+    coverageDays: historyCoverage(view.txs).days,
   };
 }
 

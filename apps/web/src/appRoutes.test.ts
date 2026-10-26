@@ -124,3 +124,9 @@ test("what LaVega knows about you has its own route segment", () => {
   expect(pathForView("about-you")).toBe("/app/about-you");
   expect(viewFromPathname("/app/about-you")).toBe("about-you");
 });
+
+test("plan is a routed view at /app/plan", () => {
+  expect(pathForView("plan")).toBe("/app/plan");
+  expect(viewFromPathname("/app/plan")).toBe("plan");
+  expect(viewFromPathname("/app/plan/")).toBe("plan");
+});

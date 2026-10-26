@@ -13,7 +13,7 @@ import type {
   AdvisorProfileStore,
   ProfileRead,
 } from "@lavega/core";
-import { computeRoom, emptyProfile } from "@lavega/core";
+import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
@@ -59,7 +59,7 @@ import {
   createRatesProvider,
   type RatesResult,
 } from "@lavega/adapters";
-import { CATALOGUE_RATES } from "./catalogue-rates";
+import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
@@ -128,11 +128,12 @@ import Button from "./components/ui/Button.js";
 import {
   enabledModules as resolveModules,
   navModules,
+  withoutLockedModules,
   type ModuleId,
 } from "./components/moduleRegistry";
 import Intake from "./views/Intake";
 import AboutYou from "./views/AboutYou";
-import { capacityFor, resolveRoom } from "./intake/state.js";
+import PlanRoute from "./plan/PlanRoute";
 import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
@@ -1123,6 +1124,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => ({ ...own, names: ownNamesForMatching }),
     [own, ownNamesForMatching],
   );
+  // The plan joins the nav once the intake has produced something to plan with.
+  const planUnlocked =
+    profileRead !== "loading" &&
+    profileRead !== "error" &&
+    profileRead.kind === "ok" &&
+    planProfileOf(profileRead.store).intakeBlocksDone >= 1;
   // Capacity for "what LaVega knows about you": the same room and the same
   // profile inputs the intake uses, worked out here and never stored.
   // The home screen's room card: computed once per data change, and only while
@@ -1651,7 +1658,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     <div className="shell">
       <NavBar
         view={view}
-        modules={navModules(modules)}
+        modules={navModules(withoutLockedModules(modules, planUnlocked))}
         onNavigate={setView}
         onOpenProfile={() => setView("profiel")}
       />
@@ -1951,6 +1958,33 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                 onOwnerNameChange={handleOwnerNameChange}
               />
             ))}
+
+          {view === "plan" && (
+            <PlanRoute
+              profileRead={profileRead}
+              onRetry={() => void retryProfileRead()}
+              store={
+                profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+                  ? null
+                  : profileRead.store
+              }
+              storage={storage}
+              accounts={accounts}
+              txs={txs}
+              entityProfiles={entityProfiles}
+              rules={rules}
+              own={ownWithNames}
+              rewards={rewards}
+              facts={facts}
+              catalogue={CATALOGUE_ENTRIES}
+              rates={rates.rates}
+              mode={fxConversionMode}
+              fxHistory={fxHistory}
+              asOf={asOf}
+              onSaveProfile={saveProfile}
+              onNavigate={setView}
+            />
+          )}
 
           {view === "about-you" &&
             (profileRead === "loading" ? (

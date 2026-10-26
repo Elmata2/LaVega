@@ -19,7 +19,8 @@ export type View =
   | "backup"
   | "profiel"
   | "intake"
-  | "about-you";
+  | "about-you"
+  | "plan";
 
 export const APP_BASE = "/app";
 
@@ -39,6 +40,7 @@ const VIEW_BY_SEGMENT: Record<string, View> = {
   profiel: "profiel",
   intake: "intake",
   "about-you": "about-you",
+  plan: "plan",
 };
 
 /** Path for a view. Overview is `/app` (and also `/app/overview`). */

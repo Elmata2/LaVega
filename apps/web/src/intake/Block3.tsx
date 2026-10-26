@@ -2,7 +2,9 @@ import { useState } from "react";
 import {
   KNOWLEDGE_QUESTIONS,
   RISK_SCALE,
+  capacityFor,
   capacityToleranceFlag,
+  resolveRoom,
   scoreTolerance,
   type AdvisorProfile,
   type RoomResult,
@@ -16,9 +18,7 @@ import {
   applyKnowledge,
   applyRiskAnswers,
   applyWorries,
-  capacityFor,
   completeBlock,
-  resolveRoom,
 } from "./state.js";
 
 type Props = {

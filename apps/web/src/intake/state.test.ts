@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+  capacityFor,
   emptyProfile,
   fingerprint,
   isSuppressed,
@@ -16,7 +17,6 @@ import {
   applyStatedHousing,
   applyStatedRange,
   applyStatedSavings,
-  capacityFor,
   completeBlock,
   markStep0,
   resumeStage,

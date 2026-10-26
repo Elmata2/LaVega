@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   computeRoom,
+  resolveRoom,
   type Account,
   type AdvisorProfile,
   type AdvisorProfileStore,
@@ -20,7 +21,7 @@ import Block1 from "../intake/Block1.js";
 import Block2 from "../intake/Block2.js";
 import Block3 from "../intake/Block3.js";
 import { inferBlock1 } from "../intake/inference.js";
-import { completeBlock, markStep0, resolveRoom, resumeStage, type Stage } from "../intake/state.js";
+import { completeBlock, markStep0, resumeStage, type Stage } from "../intake/state.js";
 import Step0 from "../intake/Step0.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import RoomPayoff, { blockingInfoOf } from "../intake/RoomPayoff.js";

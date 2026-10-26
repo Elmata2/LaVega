@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { View } from "../App";
 import { isArchivedView, isArchivedWidget } from "../archive";
+import { shellCopy } from "../copy/shell";
 
 /* The module registry — the ONE place a module is declared.
  *
@@ -32,6 +33,7 @@ export type ModuleId = Extract<
   | "punten"
   | "belasting"
   | "facturen"
+  | "plan"
 >;
 
 export type ModuleDef = {
@@ -113,6 +115,32 @@ function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: b
 }
 
 export const MODULES: ModuleDef[] = [
+  {
+    id: "plan",
+    /* Nav order is registry order, so this is the first item. The words come
+     * from the shell copy (the nav and picker read them from there too). */
+    label: shellCopy.nl.nav.moduleLabels.plan,
+    what: shellCopy.nl.modulePicker.modules.plan,
+    icon: (
+      <Icon>
+        <path d="M5 4h14v16H5z" />
+        <path d="M9 9h6M9 13h6M9 17h3" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={14} />
+        <Line x={12} y={12} w={24} strong />
+        <Line x={12} y={17} w={50} />
+        <Tile x={8} y={26} w={38} h={26} />
+        <Line x={12} y={32} w={16} strong />
+        <Line x={12} y={39} w={26} />
+        <Tile x={50} y={26} w={38} h={26} />
+        <Line x={54} y={32} w={16} strong />
+        <Line x={54} y={39} w={26} />
+      </Thumb>
+    ),
+  },
   {
     id: "overview",
     label: "Overzicht",
@@ -420,6 +448,13 @@ export function toggleModule(enabled: ModuleId[], id: ModuleId, on: boolean): Mo
   if (on) set.add(id);
   else set.delete(id);
   return enabledModules([...set]);
+}
+
+/** The plan module stays out of the nav until the intake has produced
+ *  something to plan with (at least one block done). The route itself stays
+ *  reachable and shows the invitation. */
+export function withoutLockedModules(enabled: ModuleId[], planUnlocked: boolean): ModuleId[] {
+  return planUnlocked ? enabled : enabled.filter((id) => id !== "plan");
 }
 
 /** The definitions behind the enabled ids, in registry order — what the nav renders. */

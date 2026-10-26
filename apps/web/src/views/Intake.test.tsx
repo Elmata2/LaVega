@@ -416,6 +416,33 @@ test("block 2: household, goals and debts save on each add", async () => {
   expect(text()).toContain("Risk and knowledge");
 });
 
+test("block 2: a goal id is never reused after the goal is removed (its anchor must not carry over)", async () => {
+  const props = baseProps({ store: profileAt((p) => completeBlock(markStep0(p, "none"), 1)) });
+  await mount(props);
+  const addGoal = async (name: string) => {
+    await fill(byLabel("What it is for"), name);
+    await fill(byLabel("Target amount in euros"), "1000");
+    await fill(byLabel("Target date"), "2029-01-01");
+    await click("Add goal");
+  };
+  await addGoal("Car");
+  await addGoal("Laptop");
+  const ids = () => (lastSaved(props).current.goals ?? []).map((g) => g.value.id);
+  const [first, second] = ids();
+  expect(new Set([first, second]).size).toBe(2);
+  const laptopRow = [...container!.querySelectorAll("li")].find((li) =>
+    li.textContent?.includes("Laptop"),
+  )!;
+  await act(async () =>
+    [...laptopRow.querySelectorAll("button")].find((b) => b.textContent === "Remove")!.click(),
+  );
+  expect(ids()).toEqual([first]);
+  await addGoal("Phone");
+  const [, third] = ids();
+  expect(third).not.toBe(second);
+  expect(third).not.toBe(first);
+});
+
 test("block 3: risk items, knowledge items, optional worries; capacity/tolerance disagreement is shown, not resolved", async () => {
   const { accounts, txs } = ledger(
     Array.from({ length: 3 }, (_, i) => tx(`Reis ${i}`, `2026-0${7 + i}-14`, -2500)),

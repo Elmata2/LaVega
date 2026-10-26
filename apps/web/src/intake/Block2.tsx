@@ -37,6 +37,15 @@ const nextId = (prefix: string, existing: readonly string[]): string => {
   return `${prefix}-${n}`;
 };
 
+/** Goal ids are random, never counted from the list: a goal's plan anchors are
+ *  keyed by its id, so a removed goal's id must not come back. */
+const newGoalId = (): string =>
+  `goal-${
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+  }`;
+
 export default function Block2(p: Props) {
   const { copy: c, locale, profile } = p;
   const b = c.block2;
@@ -246,10 +255,7 @@ function GoalsCard(p: Props & { goals: Goal[]; eur: (cents: number) => string })
       return setError(true);
     setError(false);
     const goal: Goal = {
-      id: nextId(
-        "goal",
-        p.goals.map((g) => g.id),
-      ),
+      id: newGoalId(),
       purpose: purpose.trim(),
       kind,
       ...(kind === "child" ? { childId: kidId } : {}),

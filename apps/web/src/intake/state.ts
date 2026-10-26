@@ -1,25 +1,19 @@
 import {
   AdvisorProfile,
   RISK_SCALE,
-  capacityInputs,
-  debtPaymentsMonthly,
   experienceOf,
   fingerprint,
   isSuppressed,
   KNOWLEDGE_QUESTIONS,
   removeDerived,
-  roomFromStated,
-  scoreCapacity,
   scoreKnowledge,
   scoreTolerance,
-  type CapacityScore,
   type DataProposal,
   type DebtProposal,
   type FixedCostProposal,
   type Goal,
   type HousingProposalCard,
   type IncomeProposal,
-  type RoomResult,
 } from "@lavega/core";
 
 export type Stage = "step0" | "block1" | "block2" | "block3" | "done";
@@ -310,44 +304,4 @@ export function applyKnowledge(
         experience: { value: experienceOf(correct, investedBefore), source: "stated", at: asOf },
       })
     : next;
-}
-
-/** Fixed costs as the profile holds them: the confirmed housing line plus the
- *  confirmed fixed costs. A guess nobody confirmed is not counted. */
-export const fixedCostsMonthlyCents = (p: AdvisorProfile): number =>
-  (p.housing?.value.monthlyCents ?? 0) +
-  (p.fixedCosts ?? []).reduce((s, f) => s + f.value.monthlyCents, 0);
-
-/** Capacity from what the profile holds plus the room. Never stored. */
-export function capacityFor(p: AdvisorProfile, room: RoomResult, asOf: string): CapacityScore {
-  const inputs = capacityInputs({
-    savingsCents: p.savings?.value.totalCents ?? 0,
-    fixedCostsMonthlyCents: fixedCostsMonthlyCents(p),
-    room,
-    debtPaymentsMonthlyCents: debtPaymentsMonthly(
-      [],
-      (p.debts ?? []).map((d) => d.monthlyCents),
-    ),
-    goals: (p.goals ?? []).map((g) => g.value),
-    asOf,
-  });
-  return scoreCapacity({
-    ...inputs,
-    bufferMonths: p.savings === undefined ? null : inputs.bufferMonths,
-  });
-}
-
-/** The room to show: the computed one when transactions allow it, else the one
- *  worked out from the user's own ranges, else the computed "none". */
-export function resolveRoom(
-  computed: RoomResult,
-  profile: AdvisorProfile,
-): { room: RoomResult; statedInputs?: { income: Range; spend: Range } } {
-  if (computed.kind === "computed") return { room: computed };
-  const r = profile.statedRanges?.value;
-  if (r?.income === undefined || r.spend === undefined) return { room: computed };
-  return {
-    room: roomFromStated(r.income, r.spend),
-    statedInputs: { income: r.income, spend: r.spend },
-  };
 }

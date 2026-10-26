@@ -5,6 +5,17 @@ import { moneyCopy } from "./money.js";
 import { optimiseCopy } from "./optimise.js";
 import { apiErrorCopy } from "./apiErrors.js";
 import { intakeCopy } from "./intake.js";
+import {
+  assumptionsCopy,
+  bufferCopy,
+  cardsCopy,
+  debtsCopy,
+  goalsCopy,
+  monthCopy,
+  planShellCopy,
+  spendingCopy,
+  subscriptionsCopy,
+} from "./plan/index.js";
 
 /* The copy modules are typed `Record<Locale, T>`, so a missing English string
  * is normally a compile error. Normally is not always: a cast, an index
@@ -81,6 +92,15 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["optimise", optimiseCopy],
   ["apiErrors", apiErrorCopy],
   ["intake", intakeCopy],
+  ["plan/shell", planShellCopy],
+  ["plan/month", monthCopy],
+  ["plan/buffer", bufferCopy],
+  ["plan/debts", debtsCopy],
+  ["plan/spending", spendingCopy],
+  ["plan/subscriptions", subscriptionsCopy],
+  ["plan/cards", cardsCopy],
+  ["plan/goals", goalsCopy],
+  ["plan/assumptions", assumptionsCopy],
 ];
 
 test.each(MODULES)("%s has the same keys in both languages", (_name, copy) => {

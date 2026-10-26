@@ -175,6 +175,7 @@ export default function Overzicht({
             {...(intake.statedInputs ? { statedInputs: intake.statedInputs } : {})}
             onOpenIntake={() => onNavigate("intake")}
             onImport={() => onNavigate("profiel")}
+            onOpenPlan={() => onNavigate("plan")}
           />
         </>
       )}

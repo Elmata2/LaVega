@@ -34,6 +34,7 @@ import {
   normaliseWidgets,
   toggleModule,
   toggleWidget,
+  withoutLockedModules,
   useOverviewWidgets,
   type ModuleId,
 } from "./moduleRegistry";
@@ -536,4 +537,19 @@ test("every widget entry carries what the picker shows: label, one line, preview
   expect(
     container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length,
   ).toBeGreaterThanOrEqual(WIDGETS.length);
+});
+
+test("plan is the first nav item and overview the second; both are on by default and no widget id is 'plan'", () => {
+  const ids = navModules(enabledModules(null)).map((m) => m.id);
+  expect(ids.slice(0, 2)).toEqual(["plan", "overview"]);
+  expect(DEFAULT_MODULES).toContain("plan");
+  expect(HOME_MODULE).toBe("overview");
+  expect(WIDGETS.map((w) => w.id as string)).not.toContain("plan");
+});
+
+test("the plan stays out of the nav until a first intake block is done", () => {
+  const all = enabledModules(null);
+  expect(withoutLockedModules(all, false)).not.toContain("plan");
+  expect(withoutLockedModules(all, false)).toContain("overview");
+  expect(withoutLockedModules(all, true)).toEqual(all);
 });

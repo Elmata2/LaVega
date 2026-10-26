@@ -14,12 +14,11 @@ import {
   applyStatedHousing,
   applyStatedRange,
   applyStatedSavings,
-  resolveRoom,
   statusOf,
   type CardProposal,
 } from "./state.js";
 import { StatedHousingCard, StatedRangeCard, StatedSavingsCard } from "./StatedCards.js";
-import type { RoomResult } from "@lavega/core";
+import { resolveRoom, type RoomResult } from "@lavega/core";
 
 const MAX_EVIDENCE = 12;
 

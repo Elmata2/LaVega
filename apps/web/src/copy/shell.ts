@@ -272,6 +272,7 @@ const nl: ShellCopy = {
       profiel: "Profiel",
       intake: "Intake",
       "about-you": "Wat LaVega weet",
+      plan: "Jouw plan",
     },
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
@@ -290,6 +291,7 @@ const nl: ShellCopy = {
       punten: "Punten",
       belasting: "Belasting",
       facturen: "Facturen",
+      plan: "Jouw plan",
     },
   },
   modulePicker: {
@@ -307,6 +309,7 @@ const nl: ShellCopy = {
       punten: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
       belasting: "Btw opzijzetten per bedrijf, met de eerstvolgende aangiftedatum.",
       facturen: "Facturen die nog open staan, en wanneer ze binnen zouden moeten komen.",
+      plan: "Je maand, buffer, schulden, uitgaven, abonnementen, kaarten en doelen, met de uitleg erbij.",
     },
     widgets: {
       "intake-invite": {
@@ -619,6 +622,7 @@ const en: ShellCopy = {
       profiel: "Profile",
       intake: "Intake",
       "about-you": "What LaVega knows",
+      plan: "Your plan",
     },
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
@@ -637,6 +641,7 @@ const en: ShellCopy = {
       punten: "Points",
       belasting: "Tax",
       facturen: "Invoices",
+      plan: "Your plan",
     },
   },
   modulePicker: {
@@ -654,6 +659,7 @@ const en: ShellCopy = {
       punten: "Your reward points and air miles in one place, with each program's rules.",
       belasting: "Setting aside VAT per company, with the next filing deadline.",
       facturen: "Invoices still outstanding, and when they should come in.",
+      plan: "Your month, buffer, debts, spending, subscriptions, cards and goals, with the explanation next to each.",
     },
     widgets: {
       "intake-invite": {

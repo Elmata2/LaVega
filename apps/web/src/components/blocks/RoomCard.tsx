@@ -1,6 +1,7 @@
 import type { Account, AdvisorProfileStore, RoomResult } from "@lavega/core";
 import { useAppLocale } from "../../appLocale.js";
 import { intakeCopy } from "../../copy/intake.js";
+import { planShellCopy } from "../../copy/plan/shell.js";
 import { blockingInfoOf, RoomBody } from "../../intake/RoomPayoff.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
@@ -16,6 +17,8 @@ export type RoomCardProps = {
   statedInputs?: { income: Range; spend: Range };
   /** Where data comes in; shown when there is not enough of it. */
   onImport?: () => void;
+  /** A way on to the plan page; absent, the card is unchanged. */
+  onOpenPlan?: () => void;
 };
 
 /** "Your room each month" on the home screen. The figures and the calculation
@@ -26,6 +29,7 @@ export default function RoomCard({
   accounts = [],
   statedInputs,
   onImport,
+  onOpenPlan,
 }: RoomCardProps) {
   const [locale] = useAppLocale();
   const c = intakeCopy[locale];
@@ -40,6 +44,12 @@ export default function RoomCard({
       footer={
         <>
           <CardLink onClick={onOpenIntake}>{c.home.room.open}</CardLink>
+          {onOpenPlan && (
+            <>
+              {" "}
+              <CardLink onClick={onOpenPlan}>{planShellCopy[locale].navLabel}</CardLink>
+            </>
+          )}
           {needsData && onImport && (
             <>
               {" "}

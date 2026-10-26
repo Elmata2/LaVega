@@ -55,3 +55,16 @@ export function daysBetween(from: string, to: string): number {
     (DateTime.toEpochMillis(parse(to)) - DateTime.toEpochMillis(parse(from))) / 86_400_000,
   );
 }
+
+/** `iso` plus `n` calendar months as YYYY-MM-DD; the day clamps to the end of a
+ *  shorter month (Jan 31 + 1 month = Feb 28, or 29 in a leap year). */
+export function addMonths(iso: string, n: number): string {
+  return DateTime.formatIso(DateTime.add(parse(iso), { months: n })).slice(0, 10);
+}
+
+/** The last calendar day of a YYYY-MM, as YYYY-MM-DD. */
+export function lastDayOfMonth(month: string): string {
+  return DateTime.formatIso(
+    DateTime.subtract(DateTime.add(parse(`${month}-01`), { months: 1 }), { days: 1 }),
+  ).slice(0, 10);
+}
