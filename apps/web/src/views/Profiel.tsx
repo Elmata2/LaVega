@@ -28,12 +28,15 @@ import {
   setCashbackAssumptionEnabled,
   type OwnerName,
 } from "../settings.js";
+import { SHOW_ENTITY_CLASSIFIER, SHOW_INVOICE_FORWARDING, isArchivedWidget } from "../archive";
 import { SCOPE_ORDER } from "../scope.js";
 import { signOut, useAuthState } from "../authClient.js";
 import posthog from "../posthog.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
+import { intakeCopy } from "../copy/intake.js";
+import type { View } from "../appRoutes.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
 import Import from "./Import";
 import Koppelingen from "./Koppelingen";
@@ -56,6 +59,8 @@ import SignInForm from "../components/SignInForm.js";
  * card terms, and Vergrendelen. */
 
 type ProfielProps = {
+  /** Opens "what LaVega knows about you". Absent: the card is not shown. */
+  onNavigate?: (view: View) => void;
   /** Module picker. */
   enabledModules: ModuleId[];
   onModulesChange: (next: ModuleId[]) => void;
@@ -454,6 +459,7 @@ export default function Profiel({
   storage,
   asOf,
   onRestored,
+  onNavigate,
 }: ProfielProps) {
   const [locale, setLocale] = useAppLocale();
   const c = shellCopy[locale];
@@ -507,6 +513,18 @@ export default function Profiel({
       </Card>
 
       <AccountBlock />
+
+      {onNavigate && (
+        <Card as="section" aria-label={intakeCopy[locale].aboutYou.profielCard.title}>
+          <h2>{intakeCopy[locale].aboutYou.profielCard.title}</h2>
+          <p className="text-muted text-[0.85rem]">
+            {intakeCopy[locale].aboutYou.profielCard.body}
+          </p>
+          <Button onClick={() => onNavigate("about-you")}>
+            {intakeCopy[locale].aboutYou.profielCard.open}
+          </Button>
+        </Card>
+      )}
 
       {/* The owner, at the very top, so the page reads as his own screen and not
           as a settings menu. The name is a local preference like the buffer and
@@ -572,71 +590,74 @@ export default function Profiel({
         <CardHeader>
           <h2>{c.profiel.widgets.heading}</h2>
           <span className="eyebrow">
-            {widgets.length} {c.profiel.widgets.of} {WIDGETS.length} {c.profiel.widgets.on}
+            {widgets.length} {c.profiel.widgets.of}{" "}
+            {WIDGETS.filter((w) => !isArchivedWidget(w.id)).length} {c.profiel.widgets.on}
           </span>
         </CardHeader>
         <p className="cell-sub">{c.profiel.widgets.description}</p>
         <WidgetPicker enabled={widgets} onChange={setWidgets} />
       </Card>
 
-      <Card as="section" aria-label={c.profiel.scopeSection.ariaLabel}>
-        <CardHeader>
-          <h2>{c.profiel.scopeSection.heading}</h2>
-          <span className="eyebrow">
-            {entities.length}{" "}
-            {entities.length === 1
-              ? c.profiel.scopeSection.unitSingular
-              : c.profiel.scopeSection.unitPlural}
-          </span>
-        </CardHeader>
-        <p className="cell-sub">{c.profiel.scopeSection.description}</p>
+      {SHOW_ENTITY_CLASSIFIER && (
+        <Card as="section" aria-label={c.profiel.scopeSection.ariaLabel}>
+          <CardHeader>
+            <h2>{c.profiel.scopeSection.heading}</h2>
+            <span className="eyebrow">
+              {entities.length}{" "}
+              {entities.length === 1
+                ? c.profiel.scopeSection.unitSingular
+                : c.profiel.scopeSection.unitPlural}
+            </span>
+          </CardHeader>
+          <p className="cell-sub">{c.profiel.scopeSection.description}</p>
 
-        {entities.length === 0 ? (
-          <p className="text-muted">{c.profiel.scopeSection.noAccounts}</p>
-        ) : (
-          <ul className="scope-list">
-            {entities.map((e) => (
-              <li key={e.entity} className="scope-item">
-                <div className="scope-item-text">
-                  <span className="scope-item-name">{e.entity}</span>
-                  <span className="mp-what">
-                    {e.accountKeys.length}{" "}
-                    {e.accountKeys.length === 1
-                      ? c.profiel.scopeSection.accountSingular
-                      : c.profiel.scopeSection.accountPlural}
-                    {!e.explicit &&
-                      `${c.profiel.scopeSection.unclassifiedPrefix}${c.scope.personal.toLowerCase()}`}
-                    {!e.explicit &&
-                      e.suggested !== e.scope &&
-                      `${c.profiel.scopeSection.nameReadsAsPrefix}${c.scope[e.suggested].toLowerCase()}`}
-                  </span>
-                </div>
+          {entities.length === 0 ? (
+            <p className="text-muted">{c.profiel.scopeSection.noAccounts}</p>
+          ) : (
+            <ul className="scope-list">
+              {entities.map((e) => (
+                <li key={e.entity} className="scope-item">
+                  <div className="scope-item-text">
+                    <span className="scope-item-name">{e.entity}</span>
+                    <span className="mp-what">
+                      {e.accountKeys.length}{" "}
+                      {e.accountKeys.length === 1
+                        ? c.profiel.scopeSection.accountSingular
+                        : c.profiel.scopeSection.accountPlural}
+                      {!e.explicit &&
+                        `${c.profiel.scopeSection.unclassifiedPrefix}${c.scope.personal.toLowerCase()}`}
+                      {!e.explicit &&
+                        e.suggested !== e.scope &&
+                        `${c.profiel.scopeSection.nameReadsAsPrefix}${c.scope[e.suggested].toLowerCase()}`}
+                    </span>
+                  </div>
 
-                <div
-                  className="scope-switch"
-                  role="group"
-                  aria-label={`${e.entity}: ${c.profiel.scopeSection.groupAriaLabelSuffix}`}
-                >
-                  {SCOPE_ORDER.map((s, i) => (
-                    <Fragment key={s}>
-                      {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-                      <button
-                        type="button"
-                        className={`scope-option${e.scope === s ? " scope-on" : ""}`}
-                        aria-pressed={e.scope === s}
-                        aria-label={`${e.entity} ${c.scope[s].toLowerCase()}`}
-                        onClick={() => onClassifyEntity(e.entity, s)}
-                      >
-                        {c.scope[s]}
-                      </button>
-                    </Fragment>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                  <div
+                    className="scope-switch"
+                    role="group"
+                    aria-label={`${e.entity}: ${c.profiel.scopeSection.groupAriaLabelSuffix}`}
+                  >
+                    {SCOPE_ORDER.map((s, i) => (
+                      <Fragment key={s}>
+                        {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+                        <button
+                          type="button"
+                          className={`scope-option${e.scope === s ? " scope-on" : ""}`}
+                          aria-pressed={e.scope === s}
+                          aria-label={`${e.entity} ${c.scope[s].toLowerCase()}`}
+                          onClick={() => onClassifyEntity(e.entity, s)}
+                        >
+                          {c.scope[s]}
+                        </button>
+                      </Fragment>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Card as="section" aria-label={c.profiel.countryRegion.ariaLabel}>
         <h2>{c.profiel.countryRegion.heading}</h2>
@@ -744,7 +765,7 @@ export default function Profiel({
         onRefreshBank={onRefreshBank}
       />
 
-      <Koppelingen />
+      {SHOW_INVOICE_FORWARDING && <Koppelingen />}
 
       <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
 

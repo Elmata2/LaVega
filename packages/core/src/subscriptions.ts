@@ -38,6 +38,10 @@ export type Subscription = {
    *  the DOMINANT price was not charged that month — a bundle or catch-up month
    *  billed something else — not that nothing was charged at all. */
   skippedCycles: number;
+  /** Ids of the transactions that ARE this stream (`fit.members`), oldest
+   *  first. Extras the detector set aside are not in it. Evidence for
+   *  anything derived from the stream. */
+  txIds: string[];
 };
 
 export type SubscriptionOverlap = { function: string; subs: Subscription[]; monthlyCents: number };
@@ -1657,6 +1661,7 @@ export function detectSubscriptions(
         occurrences: stream.length,
         lastDate,
         skippedCycles: fit.skippedCycles,
+        txIds: stream.map((t) => t.id),
       });
     }
   }
@@ -1786,6 +1791,9 @@ export type ScheduleStream = {
    *  Kept because it is the difference between "monthly, seen 5×" and a stream
    *  the detector had to bend to accept. */
   skippedCycles: number;
+  /** Ids of the transactions that ARE this stream (`fit.members`), oldest
+   *  first. Extras the detector set aside are not in it. */
+  txIds: string[];
 };
 
 /* Dutch institutions whose name is written a different way every month, and
@@ -1980,6 +1988,7 @@ export function detectScheduleStreams(
         occurrences: stream.length,
         lastDate,
         skippedCycles: fit.skippedCycles,
+        txIds: stream.map((t) => t.id),
       });
     }
   }

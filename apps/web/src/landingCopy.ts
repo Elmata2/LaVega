@@ -72,7 +72,7 @@ const nl: LandingCopy = {
   meta: {
     title: "LaVega – Al je rekeningen, één helder getal.",
     description:
-      "Al je rekeningen en beleggingen in één overzicht: forecast, btw apart, abonnementen en rentes vergeleken. Alleen-lezen en versleuteld.",
+      "Al je rekeningen en beleggingen in één overzicht: forecast, abonnementen en rentes vergeleken. Alleen-lezen en versleuteld.",
   },
   nav: {
     agents: "Agents",
@@ -127,18 +127,6 @@ const nl: LandingCopy = {
     title: "Wat LaVega voor je doet",
     cards: [
       {
-        t: "Facturen",
-        d: "Voeg facturen toe via CSV, UBL of PDF. Met de AI-optie leest LaVega de PDF uit; jij bevestigt.",
-      },
-      {
-        t: "Belasting",
-        d: "Houdt je btw apart en elke aangifte-deadline in de gaten.",
-      },
-      {
-        t: "Valuta",
-        d: "Rangschikt banken op wat wisselen echt kost, met de actuele ECB-koers als maatstaf.",
-      },
-      {
         t: "Punten",
         d: "Houdt de saldi bij die jij invult, van spaarpunten tot reisprogramma's, op één plek.",
       },
@@ -163,7 +151,7 @@ const nl: LandingCopy = {
       { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
       {
         t: "Blijf vooruit",
-        d: "Een seintje als je buffer krap wordt, je btw al apart gezet en je beleggingen met je echte rendement in beeld.",
+        d: "Een seintje als je buffer krap wordt, en je beleggingen met je echte rendement in beeld.",
       },
     ],
   },
@@ -188,12 +176,16 @@ const nl: LandingCopy = {
         a: "Trading 212 en Interactive Brokers (IBKR, via een Flex-query). De koppeling is alleen-lezen. Eén LaVega-account geeft je het persoonlijke deel én Investing.",
       },
       {
-        q: "Werkt het met meerdere rekeningen en BV's?",
-        a: "Ja. LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
+        q: "Werkt het met meerdere rekeningen?",
+        a: "Ja. LaVega bundelt al je rekeningen, bij elke bank, in één helder overzicht.",
+      },
+      {
+        q: "Wat doet het profiel?",
+        a: "Na je eerste import stelt LaVega een paar vragen over je situatie en laat zien hoeveel ruimte je maandelijks overhoudt. Jij bevestigt wat het uit je transacties haalt. LaVega geeft informatie, geen financieel advies.",
       },
       {
         q: "Voor wie is LaVega?",
-        a: "Voor iedereen die rekeningen bij meer dan één bank heeft of belegt bij Trading 212 of IBKR, en het overzicht kwijt is. Met Zakelijk ook voor zzp'ers en BV's: btw apart, privé en zakelijk gescheiden.",
+        a: "Voor iedereen die rekeningen bij meer dan één bank heeft of belegt bij Trading 212 of IBKR, en het overzicht kwijt is.",
       },
       {
         q: "Kan ik mijn account en gegevens verwijderen?",
@@ -216,7 +208,7 @@ const en: LandingCopy = {
   meta: {
     title: "LaVega – Every account, one clear number.",
     description:
-      "Every account and investment in one view: forecast, VAT set aside, subscriptions and savings rates compared. Read-only and encrypted.",
+      "Every account and investment in one view: forecast, subscriptions and savings rates compared. Read-only and encrypted.",
   },
   nav: {
     agents: "Agents",
@@ -267,18 +259,6 @@ const en: LandingCopy = {
     title: "What LaVega does for you",
     cards: [
       {
-        t: "Invoices",
-        d: "Add invoices via CSV, UBL or PDF. With the AI option LaVega reads the PDF and you confirm it.",
-      },
-      {
-        t: "Tax",
-        d: "Sets your VAT aside and watches every filing deadline.",
-      },
-      {
-        t: "Currency",
-        d: "Ranks banks by what converting really costs, with the current ECB rate as the yardstick.",
-      },
-      {
         t: "Points",
         d: "Keeps the reward and travel balances you enter in one place.",
       },
@@ -306,7 +286,7 @@ const en: LandingCopy = {
       },
       {
         t: "Stay ahead",
-        d: "A heads-up when your buffer runs low, your VAT already set aside, and your investments in view with your real return.",
+        d: "A heads-up when your buffer runs low, and your investments in view with your real return.",
       },
     ],
   },
@@ -331,12 +311,16 @@ const en: LandingCopy = {
         a: "Trading 212 and Interactive Brokers (IBKR, through a Flex query). The connection is read-only. One LaVega account gives you both Personal and Investing.",
       },
       {
-        q: "Does it handle multiple accounts and entities?",
-        a: "Yes. LaVega brings every account together, personal and business, both per entity and consolidated.",
+        q: "Does it handle multiple accounts?",
+        a: "Yes. LaVega brings every account together, at any bank, in one clear overview.",
+      },
+      {
+        q: "What does the profile do?",
+        a: "After your first import LaVega asks a few questions about your situation and shows how much room you have each month. You confirm what it reads from your transactions. LaVega gives information, not financial advice.",
       },
       {
         q: "Who is LaVega for?",
-        a: "Anyone with accounts at more than one bank, or investing through Trading 212 or IBKR, who has lost the overview. With Business mode also for freelancers and limited companies: VAT set aside, personal and business kept apart.",
+        a: "Anyone with accounts at more than one bank, or investing through Trading 212 or IBKR, who has lost the overview.",
       },
       {
         q: "Can I delete my account and data?",

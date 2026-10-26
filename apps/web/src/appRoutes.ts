@@ -1,3 +1,5 @@
+import { isArchivedView } from "./archive";
+
 /* Personal SPA paths. Landing stays at `/`. The vault app lives under `/app`
  * with one segment per view so a URL can open Overzicht, Transacties, etc.
  * Legacy `/#app` and `/?eb=…` still enter the app (Root normalises them). */
@@ -15,7 +17,9 @@ export type View =
   | "punten"
   | "koppelingen"
   | "backup"
-  | "profiel";
+  | "profiel"
+  | "intake"
+  | "about-you";
 
 export const APP_BASE = "/app";
 
@@ -33,6 +37,8 @@ const VIEW_BY_SEGMENT: Record<string, View> = {
   koppelingen: "koppelingen",
   backup: "backup",
   profiel: "profiel",
+  intake: "intake",
+  "about-you": "about-you",
 };
 
 /** Path for a view. Overview is `/app` (and also `/app/overview`). */
@@ -46,7 +52,9 @@ export function viewFromPathname(pathname: string): View | null {
   if (path === APP_BASE || path === `${APP_BASE}/overview`) return "overview";
   if (!path.startsWith(`${APP_BASE}/`)) return null;
   const segment = path.slice(APP_BASE.length + 1).split("/")[0] ?? "";
-  return VIEW_BY_SEGMENT[segment] ?? null;
+  const view = VIEW_BY_SEGMENT[segment] ?? null;
+  if (view !== null && isArchivedView(view)) return "overview";
+  return view;
 }
 
 /** True when this pathname should mount the vault app (known or unknown /app/…). */
