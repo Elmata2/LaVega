@@ -131,7 +131,7 @@ import {
   withoutLockedModules,
   type ModuleId,
 } from "./components/moduleRegistry";
-import Intake from "./views/Intake";
+import IntakeWizard from "./views/IntakeWizard";
 import AboutYou from "./views/AboutYou";
 import PlanRoute from "./plan/PlanRoute";
 import { intakeCopy } from "./copy/intake.js";
@@ -458,7 +458,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
    * niet opnieuw krijgen. */
   const [freshVault, setFreshVault] = useState(false);
   const [onboarded, setOnboarded] = useState(onboardingSeen);
-  /* Een verse kluis opent de intake op stap 0 (taal, land, regio, data), niet
+  /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
    * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
    * die dit apparaat nog niet zag, dus een bestaande gebruiker krijgt hier niets
    * en ziet de uitnodiging op Overzicht. De vlag gaat meteen om; de intake
@@ -869,19 +869,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (!pending) return;
     const { session: ebSession, error: ebError } = pending;
     setView("overview");
-    // Back from the bank in the middle of the intake: it saved "bank" as its
-    // step 0 before leaving, so land on it again (it resumes at block 1).
-    void storage
-      .getProfile()
-      .then((r) => {
-        if (
-          r.kind === "ok" &&
-          r.store.current.intake.step0 === "bank" &&
-          r.store.current.intake.blocksDone === 0
-        )
-          setView("intake");
-      })
-      .catch(() => {});
     if (ebError) {
       setProblems([{ kind: "bank-link-failed", detail: String(ebError) }]);
       return;
@@ -1654,6 +1641,30 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     );
   }
 
+  if (view === "intake") {
+    return (
+      <>
+        {profileRead === "loading" ? (
+          <p role="status">{intakeCopy[locale].loading}</p>
+        ) : profileRead === "error" ? (
+          <div role="alert">
+            <p className="text-warn">{intakeCopy[locale].loadError}</p>
+            <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
+          </div>
+        ) : (
+          <IntakeWizard
+            store={profileRead.kind === "ok" ? profileRead.store : null}
+            corrupt={profileRead.kind === "corrupt"}
+            asOf={asOf}
+            onSave={saveProfile}
+            onFinish={() => setView("plan")}
+            onExit={() => setView("overview")}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="shell">
       <NavBar
@@ -1922,42 +1933,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {view === "backup" && (
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
           )}
-
-          {view === "intake" &&
-            (profileRead === "loading" ? (
-              <p role="status">{intakeCopy[locale].loading}</p>
-            ) : profileRead === "error" ? (
-              <div role="alert">
-                <p className="text-warn">{intakeCopy[locale].loadError}</p>
-                <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
-              </div>
-            ) : (
-              <Intake
-                accounts={accounts}
-                txs={txs}
-                rules={rules}
-                own={ownWithNames}
-                profiles={entityProfiles}
-                asOf={asOf}
-                mode={fxConversionMode}
-                fxHistory={fxHistory}
-                store={profileRead.kind === "ok" ? profileRead.store : null}
-                corrupt={profileRead.kind === "corrupt"}
-                onSave={saveProfile}
-                onNavigate={setView}
-                busy={busy}
-                entity={entity}
-                onEntityChange={setEntity}
-                onImport={handleImport}
-                onRefreshBank={() => void handleRefreshBank()}
-                homeCountry={homeCountryChosen ? homeCountry : ""}
-                onHomeCountryChange={handleHomeCountryChange}
-                homeRegion={homeRegion}
-                onHomeRegionChange={handleHomeRegionChange}
-                ownerName={ownerName}
-                onOwnerNameChange={handleOwnerNameChange}
-              />
-            ))}
 
           {view === "plan" && (
             <PlanRoute

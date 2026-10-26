@@ -15,7 +15,7 @@ import {
 import RoomCard, { RoomCardWidget } from "./RoomCard";
 import { intakeCopy } from "../../copy/intake";
 import { setEnabledWidgets, WIDGETS } from "../moduleRegistry";
-import { completeBlock } from "../../intake/state";
+import { markDone } from "../../intake/wizard/screens";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -339,7 +339,7 @@ test("copy scan: no room or home string trips findAdviceLanguage or recommends i
 test("the room card is a widget: in the registry, on by default, and it respects the switch", () => {
   expect(WIDGETS.some((w) => w.id === "room-card" && w.defaultOn === true)).toBe(true);
   const store = {
-    current: completeBlock(emptyProfile(), 1),
+    current: markDone(emptyProfile(), "savings"),
     versions: [],
     updatedAt: "x",
   } as AdvisorProfileStore;

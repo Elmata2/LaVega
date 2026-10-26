@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import {
+  AdvisorProfile,
   capacityFor,
   emptyProfile,
-  fingerprint,
-  isSuppressed,
-  makeProposal,
   type RoomResult,
 } from "@lavega/core";
 import {
@@ -12,101 +10,13 @@ import {
   removeUserDebt,
   applyBuffer,
   applyKnowledge,
-  applyProposalAnswer,
   applyRiskAnswers,
   applyStatedHousing,
   applyStatedRange,
   applyStatedSavings,
-  completeBlock,
-  markStep0,
-  resumeStage,
-  statusOf,
-  type SavingsCard,
 } from "./state.js";
 
 const AS_OF = "2026-10-23";
-const income = makeProposal("income", ["t1", "t2", "t3"], {
-  label: "Acme BV",
-  monthlyCents: 300_000,
-  regularity: "regular" as const,
-});
-const housing = makeProposal("housing", ["h1", "h2", "h3"], {
-  housingKind: "huur" as const,
-  counterparty: "Verhuurder",
-  monthlyCents: 120_000,
-});
-const debt = makeProposal("debt", ["d1", "d2", "d3"], {
-  lender: "DUO",
-  monthlyCents: 15_000,
-  origin: "stream" as const,
-});
-const card = makeProposal("debt", ["account:cc"], {
-  lender: "Visa",
-  monthlyCents: null,
-  balanceCents: 40_000,
-  origin: "creditCard" as const,
-});
-const savings: SavingsCard = makeProposal("savings", ["account:s1"], {
-  totalCents: 500_000,
-  excluded: 0,
-});
-
-test("confirm -> confirmed with evidence kept", () => {
-  const p = applyProposalAnswer(emptyProfile(), income, { kind: "confirm" }, AS_OF);
-  const f = p.incomeStreams![0]!;
-  expect(f.source).toBe("confirmed");
-  expect(f.evidence).toEqual(["t1", "t2", "t3"]);
-  expect(f.value.monthlyCents).toBe(300_000);
-  expect(f.at).toBe(AS_OF);
-  expect(statusOf(p, income)).toBe("confirmed");
-});
-
-test("correct -> stated with the user's figure", () => {
-  const p = applyProposalAnswer(
-    emptyProfile(),
-    housing,
-    { kind: "correct", value: { cents: 110_000 } },
-    AS_OF,
-  );
-  expect(p.housing!.source).toBe("stated");
-  expect(p.housing!.value).toEqual({ kind: "rent", monthlyCents: 110_000 });
-  expect(statusOf(p, housing)).toBe("stated");
-});
-
-test("notMine -> fingerprint in removed, earlier answer dropped", () => {
-  const confirmed = applyProposalAnswer(emptyProfile(), income, { kind: "confirm" }, AS_OF);
-  const p = applyProposalAnswer(confirmed, income, { kind: "notMine" }, AS_OF);
-  expect(p.incomeStreams).toEqual([]);
-  expect(isSuppressed(p, fingerprint(["t1", "t2", "t3"]))).toBe(true);
-  expect(statusOf(p, income)).toBe("rejected");
-});
-
-test("a credit card with no fixed payment is stored with its balance and 0 a month", () => {
-  const p = applyProposalAnswer(emptyProfile(), card, { kind: "confirm" }, AS_OF);
-  expect(p.debts![0]).toMatchObject({ lender: "Visa", monthlyCents: 0, balanceCents: 40_000 });
-  expect(statusOf(p, card)).toBe("confirmed");
-});
-
-test("savings and debts answer; a re-answer replaces, not duplicates", () => {
-  let p = applyProposalAnswer(emptyProfile(), savings, { kind: "confirm" }, AS_OF);
-  p = applyProposalAnswer(p, savings, { kind: "correct", value: { cents: 450_000 } }, AS_OF);
-  expect(p.savings!.value.totalCents).toBe(450_000);
-  p = applyProposalAnswer(p, debt, { kind: "confirm" }, AS_OF);
-  p = applyProposalAnswer(p, debt, { kind: "confirm" }, AS_OF);
-  expect(p.debts).toHaveLength(1);
-});
-
-test("the same stream with one more payment replaces the earlier answer by label", () => {
-  let p = applyProposalAnswer(emptyProfile(), income, { kind: "confirm" }, AS_OF);
-  const later = makeProposal("income", ["t1", "t2", "t3", "t4"], {
-    label: "Acme BV",
-    monthlyCents: 300_000,
-    regularity: "regular" as const,
-  });
-  p = applyProposalAnswer(p, later, { kind: "confirm" }, AS_OF);
-  expect(p.incomeStreams).toHaveLength(1);
-});
-
 test("applyStatedRange is stated and merges sections", () => {
   let p = applyStatedRange(
     emptyProfile(),
@@ -118,19 +28,6 @@ test("applyStatedRange is stated and merges sections", () => {
   expect(p.statedRanges!.source).toBe("stated");
   expect(p.statedRanges!.value.income!.highCents).toBe(300_000);
   expect(p.statedRanges!.value.spend!.lowCents).toBe(180_000);
-});
-
-test("resumeStage: blocksDone 0 -> step0, 1 -> block2, 3 -> done", () => {
-  const p = emptyProfile();
-  expect(resumeStage(p)).toBe("step0");
-  expect(resumeStage(markStep0(p, "bank"))).toBe("block1");
-  expect(resumeStage(completeBlock(markStep0(p, "none"), 1))).toBe("block2");
-  expect(resumeStage(completeBlock(p, 2))).toBe("block3");
-  expect(resumeStage(completeBlock(p, 3))).toBe("done");
-});
-
-test("completeBlock never goes backwards", () => {
-  expect(completeBlock(completeBlock(emptyProfile(), 2), 1).intake.blocksDone).toBe(2);
 });
 
 test("risk needs enough answers for a score; knowledge needs all three", () => {
@@ -188,12 +85,20 @@ test("capacity counts confirmed figures only and is null with too little", () =>
 });
 
 test("block 2 debt edits touch only typed debts; block 1 debts keep evidence and date", () => {
-  let p = applyProposalAnswer(
-    emptyProfile(),
-    debt,
-    { kind: "correct", value: { cents: 20_000 } },
-    "2026-09-01",
-  );
+  const debt = { id: "debt-1" };
+  let p = new AdvisorProfile({
+    ...emptyProfile(),
+    debts: [
+      {
+        id: debt.id,
+        lender: "DUO",
+        monthlyCents: 20_000,
+        source: "confirmed",
+        at: "2026-09-01",
+        evidence: ["d1", "d2", "d3"],
+      },
+    ],
+  } as never);
   p = addUserDebt(p, { id: "debt-9", lender: "Aunt", monthlyCents: 5000 }, AS_OF);
   p = removeUserDebt(p, debt.id); // not a typed debt: ignored
   expect(p.debts).toHaveLength(2);

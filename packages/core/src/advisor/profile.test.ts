@@ -198,3 +198,22 @@ test("a partial risk section and partial knowledge answers round-trip", async ()
   expect(back.current.knowledge?.value.answers?.["interest"]).toBe("more-than-102");
   expect(back.current.knowledge?.value.investedBefore).toBe(false);
 });
+
+test("decodes a stored profile without the wizard keys", async () => {
+  const p = await Effect.runPromise(
+    Schema.decodeUnknownEffect(AdvisorProfile)({
+      removed: [],
+      intake: { blocksDone: 2, step0: "none" },
+    }),
+  );
+  expect(p.intake.lastScreen).toBeUndefined();
+  expect(p.intake.noUserDebts).toBeUndefined();
+});
+
+test("round-trips lastScreen and noUserDebts", async () => {
+  const intake = { blocksDone: 1, step0: "none", lastScreen: "savings", noUserDebts: true } as const;
+  const p = new AdvisorProfile({ removed: [], intake });
+  const store = commitProfile(emptyProfileStore(), p, "2026-10-26T10:00:00Z");
+  const back = await Effect.runPromise(decodeProfileStore(encodeProfileStore(store)));
+  expect(back.current.intake).toEqual(intake);
+});

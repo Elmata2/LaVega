@@ -1,19 +1,18 @@
 import { riskDue, type AdvisorProfileStore } from "@lavega/core";
 import { useAppLocale } from "../../appLocale.js";
 import { intakeCopy } from "../../copy/intake.js";
-import { reopened } from "../../intake/aboutYouRows.js";
-import { resumeStage } from "../../intake/state.js";
 import { useProfileCommit } from "../../intake/useProfileCommit.js";
+import { reopenRisk, resumeScreen, type ScreenId } from "../../intake/wizard/screens.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import Button from "../ui/Button.js";
 
-export type ResumeAt = "step0" | "block1" | "block2" | "block3" | null;
+export type ResumeAt = ScreenId | null;
 
 export type IntakeInviteCardProps = {
   onStart: () => void;
   resumeAt: ResumeAt;
-  /** The intake is done but the risk answers are due again; resumes at block 3. */
+  /** The intake is done but the risk answers are due again; resumes at the first risk screen. */
   riskDue?: boolean;
 };
 
@@ -31,7 +30,7 @@ export function IntakeInviteCard({
         <p className="m-0">{c.intro}</p>
         {resuming && (
           <p className="text-muted text-[0.85rem]" data-testid="intake-invite-resume">
-            {due ? c.riskDue : c.resumeStep[resumeAt ?? "step0"]}
+            {due ? c.riskDue : c.resumed}
           </p>
         )}
         <div className="mt-3">
@@ -54,13 +53,14 @@ export function inviteState(
   if (store === null) return { resumeAt: null, riskDue: false };
   const p = store.current;
   if (p.intake.blocksDone < 3) {
-    const stage = resumeStage(p);
-    const resumeAt =
-      p.intake.blocksDone === 0 && p.intake.step0 === null ? null : stage === "done" ? null : stage;
-    return { resumeAt, riskDue: false };
+    const at = resumeScreen(p);
+    const started = p.intake.lastScreen !== undefined || p.intake.blocksDone > 0;
+    return { resumeAt: started && at !== "done" ? at : null, riskDue: false };
   }
-  if (p.risk !== undefined && riskDue(p.risk.at, asOf, []))
-    return { resumeAt: "block3", riskDue: true };
+  if (p.risk !== undefined && riskDue(p.risk.at, asOf, [])) {
+    const at = resumeScreen(reopenRisk(p));
+    return { resumeAt: at === "done" ? null : at, riskDue: true };
+  }
   return null;
 }
 
@@ -83,8 +83,8 @@ function InviteInner(props: IntakeInviteWidgetProps) {
       riskDue={state.riskDue}
       onStart={() => {
         if (!state.riskDue) return props.onOpenIntake();
-        // Same mechanism as "Redo these questions": block 3 reopens, answers stay.
-        void update(reopened).then((saved) => {
+        // Same mechanism as "Redo these questions": the risk screens reopen, answers stay.
+        void update(reopenRisk).then((saved) => {
           if (saved) props.onOpenIntake();
         });
       }}

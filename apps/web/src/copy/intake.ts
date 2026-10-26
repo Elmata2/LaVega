@@ -85,109 +85,10 @@ export type AboutYouCopy = {
 };
 
 export type IntakeCopy = {
-  ariaLabel: string;
-  title: string;
-  legalLine: string;
   corruptNotice: string;
   loading: string;
   loadError: string;
   retry: string;
-  saveFailed: string;
-  stages: { step0: string; block1: string; block2: string; block3: string; done: string };
-  progress: (n: number, of: number, label: string) => string;
-  common: {
-    confirm: string;
-    correct: string;
-    notMine: string;
-    save: string;
-    cancel: string;
-    add: string;
-    remove: string;
-    continue: string;
-    change: string;
-    optional: string;
-    from: string;
-    to: string;
-    yes: string;
-    no: string;
-    perMonth: string;
-    euros: string;
-  };
-  step0: {
-    title: string;
-    intro: string;
-    tradeNote: string;
-    settingsTitle: string;
-    language: string;
-    country: string;
-    countryHint: string;
-    regionPlaceholder: string;
-    firstName: string;
-    lastName: string;
-    nameNote: string;
-    languages: { code: Locale; label: string }[];
-    existing: (accounts: number, txs: number) => string;
-    useExisting: string;
-    skipTitle: string;
-    skipBody: string;
-    skipButton: string;
-  };
-  block1: {
-    title: string;
-    intro: string;
-    weThink: string;
-    evidence: (n: number) => string;
-    accountsEvidence: (n: number) => string;
-    evidenceMore: (n: number) => string;
-    accountEvidence: (name: string) => string;
-    status: { confirmed: string; stated: string; rejected: string };
-    noData: string;
-    thinData: (days: number) => string;
-    amountLabel: string;
-    sections: {
-      income: string;
-      housing: string;
-      fixed: string;
-      debts: string;
-      savings: string;
-      children: string;
-    };
-    sentences: {
-      incomeRegular: (label: string, amount: string) => string;
-      incomeIrregular: (label: string, amount: string) => string;
-      housing: (kind: string, counterparty: string, amount: string) => string;
-      housingKinds: { huur: string; hypotheek: string; wonen: string };
-      fixedStream: (label: string, amount: string) => string;
-      fixedSubscription: (label: string, amount: string) => string;
-      debtStream: (lender: string, amount: string) => string;
-      debtCard: (lender: string, balance: string) => string;
-      savings: (amount: string) => string;
-      savingsExcluded: (n: number) => string;
-    };
-    child: {
-      kinderbijslag: string;
-      childcare: string;
-      question: string;
-      yesNote: string;
-      noNote: string;
-    };
-    stated: {
-      incomeTitle: string;
-      incomeQuestion: string;
-      spendTitle: string;
-      spendQuestion: string;
-      housingTitle: string;
-      housingQuestion: string;
-      housingKinds: { rent: string; mortgage: string; other: string };
-      savingsTitle: string;
-      savingsQuestion: string;
-      rangeError: string;
-      amountError: string;
-      saved: (summary: string) => string;
-      range: (low: string, high: string) => string;
-    };
-    continueToRoom: string;
-  };
   payoff: {
     title: string;
     headline: (amount: string) => string;
@@ -214,7 +115,7 @@ export type IntakeCopy = {
       intro: string;
       start: string;
       resume: string;
-      resumeStep: { step0: string; block1: string; block2: string; block3: string };
+      resumed: string;
       riskDue: string;
     };
     room: {
@@ -223,71 +124,13 @@ export type IntakeCopy = {
       importLink: string;
     };
   };
-  block2: {
-    title: string;
-    intro: string;
-    household: { title: string; alone: string; together: string; partnerIncome: string };
-    children: {
-      title: string;
-      intro: string;
-      saidYes: string;
-      birthYear: string;
-      add: string;
-      item: (year: number) => string;
-      none: string;
-    };
-    goals: {
-      title: string;
-      intro: string;
-      purpose: string;
-      kind: string;
-      kinds: { general: string; child: string };
-      child: string;
-      target: string;
-      date: string;
-      priority: string;
-      priorities: { flexible: string; important: string; must: string };
-      planned: string;
-      add: string;
-      empty: string;
-      item: (purpose: string, amount: string, date: string, priority: string) => string;
-      error: string;
-    };
-    debts: {
-      title: string;
-      intro: string;
-      lender: string;
-      monthly: string;
-      balance: string;
-      rate: string;
-      add: string;
-      empty: string;
-      item: (lender: string, monthly: string) => string;
-      error: string;
-    };
-    buffer: {
-      title: string;
-      intro: string;
-      option: (months: number) => string;
-      unset: string;
-    };
-  };
   block3: {
-    title: string;
-    intro: string;
     risk: {
-      title: string;
-      intro: string;
-      scaleNote: string;
       items: Record<string, IntakeQuestionCopy>;
     };
     knowledge: {
-      title: string;
-      intro: string;
-      items: Record<string, IntakeQuestionCopy>;
       invested: { prompt: string; yes: string; no: string };
     };
-    worries: { title: string; prompt: string; hint: string };
     result: {
       title: string;
       tolerance: (n: number) => string;
@@ -297,139 +140,17 @@ export type IntakeCopy = {
       disagree: string;
       agree: string;
     };
-    finish: string;
-    needMore: string;
   };
-  done: { title: string; body: string; toOverview: string };
   aboutYou: AboutYouCopy;
 };
 
 export const intakeCopy: Record<Locale, IntakeCopy> = {
   nl: {
-    ariaLabel: "Je financieel profiel",
-    title: "Je financiële beeld",
-    legalLine:
-      "LaVega geeft informatie en rekent met jouw eigen cijfers. Het is geen financieel advies.",
     corruptNotice:
       "Je eerder opgeslagen profiel was niet meer te lezen. We beginnen opnieuw; het oude blijft als reservekopie bewaard.",
     loading: "Je gegevens worden geladen…",
     loadError: "Je profiel kon niet uit de kluis worden gelezen.",
     retry: "Opnieuw proberen",
-    saveFailed: "Opslaan lukte niet. Probeer het opnieuw.",
-    stages: {
-      step0: "Je gegevens",
-      block1: "Wat we vonden",
-      block2: "Wat je ons vertelt",
-      block3: "Risico en kennis",
-      done: "Klaar",
-    },
-    progress: (n, of, label) => `Stap ${n} van ${of}: ${label}`,
-    common: {
-      confirm: "Klopt",
-      correct: "Aanpassen",
-      notMine: "Niet van mij",
-      save: "Opslaan",
-      cancel: "Annuleren",
-      add: "Toevoegen",
-      remove: "Verwijderen",
-      continue: "Verder",
-      change: "Wijzigen",
-      optional: "optioneel",
-      from: "Van",
-      to: "tot",
-      yes: "Ja",
-      no: "Nee",
-      perMonth: "per maand",
-      euros: "in euro's",
-    },
-    step0: {
-      title: "Begin met je gegevens",
-      intro:
-        "Koppel een bank of upload een afschrift, dan hoef je straks vooral te bevestigen in plaats van te typen. Je kunt ook zonder gegevens verder.",
-      tradeNote:
-        "Zonder gegevens vragen we je om bedragen als bandbreedte, bijvoorbeeld tussen 2.500 en 3.000 euro per maand.",
-      settingsTitle: "Taal en land",
-      language: "Taal",
-      country: "Land",
-      countryHint: "Bepaalt welke landspecifieke regels LaVega gebruikt.",
-      regionPlaceholder: "optioneel",
-      firstName: "Voornaam (optioneel)",
-      lastName: "Achternaam (optioneel)",
-      nameNote:
-        "LaVega gebruikt je naam om overboekingen tussen je eigen rekeningen te herkennen. Hij blijft in deze browser en gaat niet naar de kluis of een model.",
-      languages: [
-        { code: "nl", label: "Nederlands" },
-        { code: "en", label: "English" },
-      ],
-      existing: (a, t) => `Er staan al ${a} rekeningen en ${t} transacties in je kluis.`,
-      useExisting: "Met deze gegevens verder",
-      skipTitle: "Verder zonder gegevens",
-      skipBody: "Je geeft zelf bandbreedtes op. Je kunt later nog een bank koppelen.",
-      skipButton: "Verder zonder gegevens",
-    },
-    block1: {
-      title: "Wat we in je gegevens vonden",
-      intro: "Controleer elke kaart. Wat je niet bevestigt, behandelen we als een gok.",
-      weThink: "Wij denken:",
-      evidence: (n) => `Gebaseerd op ${n} transacties`,
-      accountsEvidence: (n) => `Gebaseerd op ${n} rekeningsaldo(s)`,
-      evidenceMore: (n) => `en nog ${n} andere`,
-      accountEvidence: (name) => `Saldo van rekening ${name}`,
-      status: {
-        confirmed: "Bevestigd",
-        stated: "Door jou aangepast",
-        rejected: "Gemarkeerd als niet van jou",
-      },
-      noData: "Je hebt geen gegevens gekoppeld, dus we vragen het je zelf.",
-      thinData: (days) =>
-        `We hebben ongeveer twee maanden geschiedenis nodig om dit uit je gegevens te lezen; er zijn er nu ${days} dagen. Vul het daarom zelf in.`,
-      amountLabel: "Bedrag per maand in euro's",
-      sections: {
-        income: "Inkomen",
-        housing: "Wonen",
-        fixed: "Vaste lasten en abonnementen",
-        debts: "Schulden",
-        savings: "Sparen",
-        children: "Kinderen",
-      },
-      sentences: {
-        incomeRegular: (l, a) => `Je ontvangt ongeveer ${a} per maand van ${l}.`,
-        incomeIrregular: (l, a) =>
-          `${l} betaalt je gemiddeld ${a} per maand, maar niet op een vast ritme.`,
-        housing: (k, c, a) => `Je betaalt ${a} per maand voor ${k} aan ${c}.`,
-        housingKinds: { huur: "huur", hypotheek: "je hypotheek", wonen: "wonen" },
-        fixedStream: (l, a) => `${l} kost je ongeveer ${a} per maand.`,
-        fixedSubscription: (l, a) => `Je abonnement ${l} kost ongeveer ${a} per maand.`,
-        debtStream: (l, a) => `Je betaalt ${l} ongeveer ${a} per maand af.`,
-        debtCard: (l, b) => `Op je creditcard ${l} staat een schuld van ${b}.`,
-        savings: (a) => `Op je spaarrekeningen staat samen ${a}.`,
-        savingsExcluded: (n) => `${n} spaarrekening(en) in vreemde valuta tellen we niet mee.`,
-      },
-      child: {
-        kinderbijslag: "We zagen betalingen van kinderbijslag.",
-        childcare: "We zagen betalingen aan kinderopvang.",
-        question: "Heb je kinderen?",
-        yesNote: "Aantal en geboortejaren vraag je hierna.",
-        noNote: "Genoteerd: geen kinderen.",
-      },
-      stated: {
-        incomeTitle: "Je inkomen",
-        incomeQuestion: "Hoeveel houd je ongeveer netto over per maand, alles bij elkaar?",
-        spendTitle: "Je uitgaven",
-        spendQuestion: "Hoeveel geef je ongeveer uit per maand, alles inbegrepen?",
-        housingTitle: "Je woning",
-        housingQuestion: "Huur of koop je, en wat kost het per maand?",
-        housingKinds: { rent: "Huur", mortgage: "Hypotheek", other: "Anders" },
-        savingsTitle: "Je spaargeld",
-        savingsQuestion: "Hoeveel staat er ongeveer op je spaarrekeningen?",
-        rangeError:
-          "Vul een laagste en een hoogste bedrag in; het eerste is niet hoger dan het tweede.",
-        amountError: "Vul een bedrag van nul of meer in.",
-        saved: (s) => `Opgeslagen: ${s}`,
-        range: (l, h) => `tussen ${l} en ${h}`,
-      },
-      continueToRoom: "Toon mijn ruimte",
-    },
     payoff: {
       title: "Je ruimte per maand",
       headline: (a) => `Ongeveer ${a} per maand`,
@@ -466,12 +187,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           "Beantwoord een paar vragen en LaVega rekent met jouw cijfers. Alles blijft in je eigen kluis en je kunt het later aanpassen.",
         start: "Begin",
         resume: "Ga verder",
-        resumeStep: {
-          step0: "Je was gestart met het aanleveren van je gegevens.",
-          block1: "Je gegevens zijn binnen; er staan nog voorstellen die je kunt bevestigen.",
-          block2: "Je ruimte staat. De vragen over je situatie zijn nog open.",
-          block3: "Alleen de laatste vragen zijn nog open.",
-        },
+        resumed: "Je bent gestart; ga verder waar je bleef.",
         riskDue:
           "Het is tijd om je antwoorden over risico nog eens langs te lopen; je andere antwoorden blijven staan.",
       },
@@ -481,75 +197,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         importLink: "Naar importeren en koppelen",
       },
     },
-    block2: {
-      title: "Wat gegevens niet laten zien",
-      intro: "Een paar vragen over je situatie. Elk antwoord wordt direct opgeslagen.",
-      household: {
-        title: "Huishouden",
-        alone: "Ik woon alleen",
-        together: "Ik woon samen",
-        partnerIncome: "Het inkomen van mijn partner hoort bij mijn cijfers",
-      },
-      children: {
-        title: "Kinderen",
-        intro: "Aantal en geboortejaar per kind. Namen hebben we niet nodig.",
-        saidYes: "Je gaf eerder aan dat je kinderen hebt.",
-        birthYear: "Geboortejaar",
-        add: "Kind toevoegen",
-        item: (y) => `Kind, geboren in ${y}`,
-        none: "Nog geen kinderen genoteerd.",
-      },
-      goals: {
-        title: "Doelen",
-        intro:
-          "Elk doel is een eigen potje: waarvoor, hoeveel, wanneer en wat er gebeurt als het niet lukt.",
-        purpose: "Waarvoor",
-        kind: "Soort",
-        kinds: { general: "Algemeen", child: "Voor een kind" },
-        child: "Kind",
-        target: "Streefbedrag in euro's",
-        date: "Streefdatum",
-        priority: "Als het niet lukt",
-        priorities: {
-          flexible: "Flexibel, het mag opschuiven",
-          important: "Belangrijk",
-          must: "Onmisbaar",
-        },
-        planned: "Geplande inleg per maand (optioneel)",
-        add: "Doel toevoegen",
-        empty: "Nog geen doelen.",
-        item: (p, a, d, pr) => `${p}: ${a} voor ${d} (${pr})`,
-        error:
-          "Vul waarvoor, een bedrag boven nul en een datum in; kies bij een kinddoel een kind.",
-      },
-      debts: {
-        title: "Schulden buiten je gekoppelde rekeningen",
-        intro:
-          "Een studieschuld die we niet zien, een hypotheek bij een andere bank, een privélening.",
-        lender: "Bij wie",
-        monthly: "Aflossing per maand in euro's",
-        balance: "Openstaand bedrag in euro's (optioneel)",
-        rate: "Rente in procenten (optioneel)",
-        add: "Schuld toevoegen",
-        empty: "Geen extra schulden genoteerd.",
-        item: (l, m) => `${l}: ${m} per maand`,
-        error: "Vul bij wie en een aflossing van nul of meer in.",
-      },
-      buffer: {
-        title: "Buffer",
-        intro: "Hoeveel maanden vaste lasten wil je als buffer achter de hand hebben?",
-        option: (m) => `${m} maanden`,
-        unset: "Kies een aantal",
-      },
-    },
     block3: {
-      title: "Risico en kennis",
-      intro: "Vragen over hoe je zou handelen en wat je al weet. Er zijn geen foute antwoorden.",
       risk: {
-        title: "Hoe ga je met verlies om",
-        intro: "Kies bij elke vraag wat het dichtst bij je past.",
-        scaleNote:
-          "Eigen conceptvragen van LaVega, nog niet afgestemd op een gepubliceerde schaal.",
         items: {
           "loss-20": {
             prompt: (m) =>
@@ -601,47 +250,11 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         },
       },
       knowledge: {
-        title: "Wat weet je al",
-        intro: "Drie korte vragen.",
-        items: {
-          interest: {
-            prompt: (m) =>
-              `Je hebt ${m(100)} op een spaarrekening met 2 procent rente per jaar. Hoeveel heb je na 5 jaar?`,
-            options: {
-              "more-than-102": `Meer dan 102 euro`,
-              "exactly-102": "Precies 102 euro",
-              "less-than-102": "Minder dan 102 euro",
-            },
-          },
-          inflation: {
-            prompt: () =>
-              "Je spaarrente is 1 procent per jaar en de inflatie 2 procent. Wat kun je na een jaar met dat geld kopen?",
-            options: {
-              "buy-less": "Minder dan nu",
-              "buy-same": "Hetzelfde als nu",
-              "buy-more": "Meer dan nu",
-            },
-          },
-          diversification: {
-            prompt: () =>
-              "Je spreidt je geld over veel verschillende beleggingen in plaats van over één bedrijf. Wat verandert er voor het risico?",
-            options: {
-              "lower-risk": "Het risico wordt lager",
-              "higher-risk": "Het risico wordt hoger",
-              "no-difference": "Er verandert niets",
-            },
-          },
-        },
         invested: {
           prompt: "Heb je al eens belegd, bijvoorbeeld in aandelen, fondsen of crypto?",
           yes: "Ja",
           no: "Nee",
         },
-      },
-      worries: {
-        title: "Waar maak je je zorgen over",
-        prompt: "Wat zit je op dit moment het meest dwars met geld?",
-        hint: "Optioneel. Blijft in je kluis staan zoals je het schrijft.",
       },
       result: {
         title: "Jouw cijfers naast je antwoorden",
@@ -653,13 +266,6 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           "Deze twee liggen twee punten of meer uit elkaar. Dat laten we zien en we lossen het niet voor je op.",
         agree: "Deze twee liggen dicht bij elkaar.",
       },
-      finish: "Afronden",
-      needMore: "Beantwoord de kennisvragen en of je al eerder belegde om af te ronden.",
-    },
-    done: {
-      title: "Je profiel staat",
-      body: "Je kunt alles later nog aanpassen. Wat LaVega van je weet, blijft in je eigen kluis.",
-      toOverview: "Naar het overzicht",
     },
     aboutYou: {
       ariaLabel: "Wat LaVega over je weet",
@@ -758,129 +364,11 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
     },
   },
   en: {
-    ariaLabel: "Your financial profile",
-    title: "Your financial picture",
-    legalLine:
-      "LaVega gives information and works with your own numbers. It is not financial advice.",
     corruptNotice:
       "Your previously saved profile could no longer be read. We start fresh; the old one is kept as a backup copy.",
     loading: "Loading your data…",
     loadError: "Your profile could not be read from the vault.",
     retry: "Try again",
-    saveFailed: "Saving did not work. Try again.",
-    stages: {
-      step0: "Your data",
-      block1: "What we found",
-      block2: "What you tell us",
-      block3: "Risk and knowledge",
-      done: "Done",
-    },
-    progress: (n, of, label) => `Step ${n} of ${of}: ${label}`,
-    common: {
-      confirm: "Confirm",
-      correct: "Correct",
-      notMine: "Not mine",
-      save: "Save",
-      cancel: "Cancel",
-      add: "Add",
-      remove: "Remove",
-      continue: "Continue",
-      change: "Change",
-      optional: "optional",
-      from: "From",
-      to: "to",
-      yes: "Yes",
-      no: "No",
-      perMonth: "per month",
-      euros: "in euros",
-    },
-    step0: {
-      title: "Start with your data",
-      intro:
-        "Connect a bank or upload a statement and you mostly confirm instead of type. You can also continue without data.",
-      tradeNote:
-        "Without data we ask for amounts as a range, for example between 2,500 and 3,000 euros a month.",
-      settingsTitle: "Language and country",
-      language: "Language",
-      country: "Country",
-      countryHint: "Decides which country-specific rules LaVega uses.",
-      regionPlaceholder: "optional",
-      firstName: "First name (optional)",
-      lastName: "Last name (optional)",
-      nameNote:
-        "LaVega uses your name to recognise transfers between your own accounts. It stays in this browser and never goes to the vault or a model.",
-      languages: [
-        { code: "nl", label: "Nederlands" },
-        { code: "en", label: "English" },
-      ],
-      existing: (a, t) => `Your vault already holds ${a} accounts and ${t} transactions.`,
-      useExisting: "Continue with this data",
-      skipTitle: "Continue without data",
-      skipBody: "You give ranges yourself. You can connect a bank later.",
-      skipButton: "Continue without data",
-    },
-    block1: {
-      title: "What we found in your data",
-      intro: "Check each card. What you do not confirm is treated as a guess.",
-      weThink: "We think:",
-      evidence: (n) => `Based on ${n} transactions`,
-      accountsEvidence: (n) => `Based on ${n} account balance(s)`,
-      evidenceMore: (n) => `and ${n} more`,
-      accountEvidence: (name) => `Balance of account ${name}`,
-      status: {
-        confirmed: "Confirmed",
-        stated: "Corrected by you",
-        rejected: "Marked as not yours",
-      },
-      noData: "You have not linked any data, so we ask you directly.",
-      thinData: (days) =>
-        `We need about two months of history to read this from your data; there are ${days} days so far. Please fill it in yourself.`,
-      amountLabel: "Amount per month in euros",
-      sections: {
-        income: "Income",
-        housing: "Home",
-        fixed: "Fixed costs and subscriptions",
-        debts: "Debts",
-        savings: "Savings",
-        children: "Children",
-      },
-      sentences: {
-        incomeRegular: (l, a) => `You receive about ${a} a month from ${l}.`,
-        incomeIrregular: (l, a) =>
-          `${l} pays you about ${a} a month on average, but not on a fixed rhythm.`,
-        housing: (k, c, a) => `You pay ${a} a month for ${k} to ${c}.`,
-        housingKinds: { huur: "rent", hypotheek: "your mortgage", wonen: "housing" },
-        fixedStream: (l, a) => `${l} costs you about ${a} a month.`,
-        fixedSubscription: (l, a) => `Your subscription ${l} costs about ${a} a month.`,
-        debtStream: (l, a) => `You repay ${l} about ${a} a month.`,
-        debtCard: (l, b) => `Your credit card ${l} carries a balance of ${b}.`,
-        savings: (a) => `Your savings accounts add up to ${a}.`,
-        savingsExcluded: (n) => `${n} savings account(s) in a foreign currency are not counted.`,
-      },
-      child: {
-        kinderbijslag: "We saw child benefit payments.",
-        childcare: "We saw payments to childcare.",
-        question: "Do you have children?",
-        yesNote: "You give the number and birth years next.",
-        noNote: "Noted: no children.",
-      },
-      stated: {
-        incomeTitle: "Your income",
-        incomeQuestion: "Roughly how much do you take home each month, in total?",
-        spendTitle: "Your spending",
-        spendQuestion: "Roughly how much do you spend each month, everything included?",
-        housingTitle: "Your home",
-        housingQuestion: "Do you rent or own, and what does it cost each month?",
-        housingKinds: { rent: "Rent", mortgage: "Mortgage", other: "Other" },
-        savingsTitle: "Your savings",
-        savingsQuestion: "Roughly how much sits in your savings accounts?",
-        rangeError: "Enter a lowest and a highest amount; the first is not above the second.",
-        amountError: "Enter an amount of zero or more.",
-        saved: (s) => `Saved: ${s}`,
-        range: (l, h) => `between ${l} and ${h}`,
-      },
-      continueToRoom: "Show my room",
-    },
     payoff: {
       title: "Your room each month",
       headline: (a) => `About ${a} a month`,
@@ -917,12 +405,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           "Answer a few questions and LaVega works with your own numbers. Everything stays in your own vault and you can change it later.",
         start: "Start",
         resume: "Continue",
-        resumeStep: {
-          step0: "You started on providing your data.",
-          block1: "Your data is in; there are proposals left for you to confirm.",
-          block2: "Your room is worked out. The questions about your situation are still open.",
-          block3: "Only the last questions are still open.",
-        },
+        resumed: "You have started; pick up where you stopped.",
         riskDue:
           "It is time to look at your answers about risk again; your other answers stay as they are.",
       },
@@ -932,73 +415,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         importLink: "Go to import and linking",
       },
     },
-    block2: {
-      title: "What data cannot show",
-      intro: "A few questions about your situation. Each answer is saved straight away.",
-      household: {
-        title: "Household",
-        alone: "I live alone",
-        together: "I live with a partner",
-        partnerIncome: "My partner's income belongs in my numbers",
-      },
-      children: {
-        title: "Children",
-        intro: "The number and birth year of each child. We do not need names.",
-        saidYes: "You said earlier that you have children.",
-        birthYear: "Birth year",
-        add: "Add child",
-        item: (y) => `Child, born in ${y}`,
-        none: "No children noted yet.",
-      },
-      goals: {
-        title: "Goals",
-        intro:
-          "Each goal is its own bucket: what for, how much, by when, and what happens if it is missed.",
-        purpose: "What it is for",
-        kind: "Kind",
-        kinds: { general: "General", child: "For a child" },
-        child: "Child",
-        target: "Target amount in euros",
-        date: "Target date",
-        priority: "If it is missed",
-        priorities: {
-          flexible: "Flexible, it can slip",
-          important: "Important",
-          must: "Essential",
-        },
-        planned: "Planned monthly amount (optional)",
-        add: "Add goal",
-        empty: "No goals yet.",
-        item: (p, a, d, pr) => `${p}: ${a} by ${d} (${pr})`,
-        error:
-          "Fill in what it is for, an amount above zero and a date; pick a child for a child goal.",
-      },
-      debts: {
-        title: "Debts outside your linked accounts",
-        intro: "A student loan we cannot see, a mortgage at another bank, a private loan.",
-        lender: "Owed to",
-        monthly: "Repayment per month in euros",
-        balance: "Amount outstanding in euros (optional)",
-        rate: "Interest rate in percent (optional)",
-        add: "Add debt",
-        empty: "No extra debts noted.",
-        item: (l, m) => `${l}: ${m} a month`,
-        error: "Fill in who it is owed to and a repayment of zero or more.",
-      },
-      buffer: {
-        title: "Buffer",
-        intro: "How many months of fixed costs do you want to keep as a buffer?",
-        option: (m) => `${m} months`,
-        unset: "Pick a number",
-      },
-    },
     block3: {
-      title: "Risk and knowledge",
-      intro: "Questions about how you would act and what you already know. No answer is wrong.",
       risk: {
-        title: "How you handle a loss",
-        intro: "For each question, pick what is closest to you.",
-        scaleNote: "LaVega's own draft questions, not yet matched to a published scale.",
         items: {
           "loss-20": {
             prompt: (m) =>
@@ -1050,47 +468,11 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         },
       },
       knowledge: {
-        title: "What you already know",
-        intro: "Three short questions.",
-        items: {
-          interest: {
-            prompt: (m) =>
-              `You have ${m(100)} in a savings account at 2 percent interest a year. How much do you have after 5 years?`,
-            options: {
-              "more-than-102": "More than 102 euros",
-              "exactly-102": "Exactly 102 euros",
-              "less-than-102": "Less than 102 euros",
-            },
-          },
-          inflation: {
-            prompt: () =>
-              "Your savings rate is 1 percent a year and inflation is 2 percent. After a year, what will that money be able to pay for compared with today?",
-            options: {
-              "buy-less": "Less than today",
-              "buy-same": "The same as today",
-              "buy-more": "More than today",
-            },
-          },
-          diversification: {
-            prompt: () =>
-              "You spread your money over many different investments instead of one company. What changes for the risk?",
-            options: {
-              "lower-risk": "The risk is lower",
-              "higher-risk": "The risk is higher",
-              "no-difference": "Nothing changes",
-            },
-          },
-        },
         invested: {
           prompt: "Have you invested before, for example in shares, funds or crypto?",
           yes: "Yes",
           no: "No",
         },
-      },
-      worries: {
-        title: "What worries you",
-        prompt: "What worries you most about money right now?",
-        hint: "Optional. Stays in your vault exactly as you write it.",
       },
       result: {
         title: "Your numbers next to your answers",
@@ -1102,13 +484,6 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           "These two are two points or more apart. We show it and do not settle it for you.",
         agree: "These two are close together.",
       },
-      finish: "Finish",
-      needMore: "Answer the knowledge questions and whether you have invested before to finish.",
-    },
-    done: {
-      title: "Your profile is in place",
-      body: "You can change anything later. What LaVega knows about you stays in your own vault.",
-      toOverview: "To the overview",
     },
     aboutYou: {
       ariaLabel: "What LaVega knows about you",

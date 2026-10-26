@@ -2,189 +2,16 @@ import {
   AdvisorProfile,
   RISK_SCALE,
   experienceOf,
-  fingerprint,
-  isSuppressed,
   KNOWLEDGE_QUESTIONS,
-  removeDerived,
   scoreKnowledge,
   scoreTolerance,
-  type DataProposal,
-  type DebtProposal,
-  type FixedCostProposal,
   type Goal,
-  type HousingProposalCard,
-  type IncomeProposal,
 } from "@lavega/core";
-
-export type Stage = "step0" | "block1" | "block2" | "block3" | "done";
-export type IntakeState = { profile: AdvisorProfile; stage: Stage };
-
-export type SavingsCard = DataProposal<"savings", { totalCents: number; excluded: number }>;
-export type CardProposal =
-  | IncomeProposal
-  | HousingProposalCard
-  | FixedCostProposal
-  | DebtProposal
-  | SavingsCard;
-
-/** `cents` is a monthly figure for income, housing, fixed costs and debts, and
- *  the total balance for savings. */
-export type ProposalAnswer =
-  | { kind: "confirm" }
-  | { kind: "correct"; value: { cents: number } }
-  | { kind: "notMine" };
-
-export type AnswerStatus = "open" | "confirmed" | "stated" | "rejected";
 
 const copyProfile = (
   p: AdvisorProfile,
   patch: Partial<ConstructorParameters<typeof AdvisorProfile>[0]>,
 ) => new AdvisorProfile({ ...p, ...patch });
-
-/** Where the intake should open. Step 0 once chosen counts as done, so a user
- *  who left for the bank returns to block 1. */
-export function resumeStage(profile: AdvisorProfile): Stage {
-  const { blocksDone, step0 } = profile.intake;
-  if (blocksDone >= 3) return "done";
-  if (blocksDone === 2) return "block3";
-  if (blocksDone === 1) return "block2";
-  return step0 === null ? "step0" : "block1";
-}
-
-export const markStep0 = (p: AdvisorProfile, step0: "bank" | "upload" | "none"): AdvisorProfile =>
-  copyProfile(p, { intake: { ...p.intake, step0 } });
-
-export const completeBlock = (p: AdvisorProfile, block: 1 | 2 | 3): AdvisorProfile =>
-  p.intake.blocksDone >= block ? p : copyProfile(p, { intake: { ...p.intake, blocksDone: block } });
-
-const housingKindOf = (k: "huur" | "hypotheek" | "wonen"): "rent" | "mortgage" | "other" =>
-  k === "huur" ? "rent" : k === "hypotheek" ? "mortgage" : "other";
-
-const isFixedCost = (p: CardProposal): p is FixedCostProposal =>
-  (p.kind === "fixedCost" || p.kind === "housing") && "origin" in p.data;
-const isHousing = (p: CardProposal): p is HousingProposalCard =>
-  p.kind === "housing" && "housingKind" in p.data;
-
-const fpOf = (ev: readonly string[] | undefined): string | null =>
-  ev === undefined || ev.length === 0 ? null : fingerprint(ev);
-
-/** Drop what a proposal produced before, by id, by label (the same payment
- *  stream changes id when one more transaction arrives) or by evidence. */
-function withoutEntry(p: AdvisorProfile, proposal: CardProposal): AdvisorProfile {
-  if (proposal.kind === "income" && "regularity" in proposal.data) {
-    const label = proposal.data.label;
-    return copyProfile(p, {
-      incomeStreams: (p.incomeStreams ?? []).filter(
-        (f) => f.value.id !== proposal.id && f.value.label !== label,
-      ),
-    });
-  }
-  if (isFixedCost(proposal)) {
-    const label = proposal.data.label;
-    return copyProfile(p, {
-      fixedCosts: (p.fixedCosts ?? []).filter(
-        (f) => f.value.id !== proposal.id && f.value.label !== label,
-      ),
-    });
-  }
-  if (proposal.kind === "debt") {
-    const lender = proposal.data.lender;
-    return copyProfile(p, {
-      debts: (p.debts ?? []).filter((d) => d.id !== proposal.id && d.lender !== lender),
-    });
-  }
-  if (isHousing(proposal)) {
-    const { housing: _h, ...rest } = p;
-    return new AdvisorProfile(rest);
-  }
-  const { savings: _s, ...rest } = p;
-  return new AdvisorProfile(rest);
-}
-
-export function applyProposalAnswer(
-  profile: AdvisorProfile,
-  proposal: CardProposal,
-  answer: ProposalAnswer,
-  asOf: string,
-): AdvisorProfile {
-  const cleared = withoutEntry(profile, proposal);
-  if (answer.kind === "notMine") return removeDerived(cleared, proposal.fingerprint);
-  const source = answer.kind === "correct" ? ("stated" as const) : ("confirmed" as const);
-  const meta = { source, at: asOf, evidence: [...proposal.evidence] };
-  const pick = (proposed: number): number =>
-    answer.kind === "correct" ? answer.value.cents : proposed;
-
-  if (proposal.kind === "income" && "regularity" in proposal.data) {
-    const d = proposal.data;
-    return copyProfile(cleared, {
-      incomeStreams: [
-        ...(cleared.incomeStreams ?? []),
-        {
-          ...meta,
-          value: {
-            id: proposal.id,
-            label: d.label,
-            monthlyCents: pick(d.monthlyCents),
-            regular: d.regularity === "regular",
-          },
-        },
-      ],
-    });
-  }
-  if (isFixedCost(proposal)) {
-    const d = proposal.data;
-    return copyProfile(cleared, {
-      fixedCosts: [
-        ...(cleared.fixedCosts ?? []),
-        { ...meta, value: { id: proposal.id, label: d.label, monthlyCents: pick(d.monthlyCents) } },
-      ],
-    });
-  }
-  if (proposal.kind === "debt") {
-    const d = proposal.data;
-    return copyProfile(cleared, {
-      debts: [
-        ...(cleared.debts ?? []),
-        {
-          id: proposal.id,
-          lender: d.lender,
-          monthlyCents: pick(d.monthlyCents ?? 0),
-          ...(d.balanceCents === undefined ? {} : { balanceCents: d.balanceCents }),
-          ...meta,
-        },
-      ],
-    });
-  }
-  if (isHousing(proposal)) {
-    const d = proposal.data;
-    return copyProfile(cleared, {
-      housing: {
-        ...meta,
-        value: { kind: housingKindOf(d.housingKind), monthlyCents: pick(d.monthlyCents) },
-      },
-    });
-  }
-  const d = proposal.data as { totalCents: number };
-  return copyProfile(cleared, { savings: { ...meta, value: { totalCents: pick(d.totalCents) } } });
-}
-
-/** `confirmed`/`stated` when the profile holds an answer for this proposal,
- *  `rejected` when "Not mine" suppresses it, otherwise `open`. */
-export function statusOf(profile: AdvisorProfile, proposal: CardProposal): AnswerStatus {
-  if (isSuppressed(profile, proposal.fingerprint)) return "rejected";
-  const hit = (ev: readonly string[] | undefined) => fpOf(ev) === proposal.fingerprint;
-  let source: "derived" | "confirmed" | "stated" | undefined;
-  if (proposal.kind === "income" && "regularity" in proposal.data)
-    source = profile.incomeStreams?.find((f) => f.value.id === proposal.id)?.source;
-  else if (isFixedCost(proposal))
-    source = profile.fixedCosts?.find((f) => f.value.id === proposal.id)?.source;
-  else if (proposal.kind === "debt")
-    source = profile.debts?.find((d) => d.id === proposal.id)?.source;
-  else if (isHousing(proposal))
-    source = hit(profile.housing?.evidence) ? profile.housing?.source : undefined;
-  else source = hit(profile.savings?.evidence) ? profile.savings?.source : undefined;
-  return source === "confirmed" || source === "stated" ? source : "open";
-}
 
 type Range = { lowCents: number; highCents: number };
 
@@ -229,9 +56,6 @@ export const applyGoals = (p: AdvisorProfile, goals: readonly Goal[], asOf: stri
 
 export const applyBuffer = (p: AdvisorProfile, months: number, asOf: string) =>
   copyProfile(p, { buffer: { value: { months }, source: "stated", at: asOf } });
-
-export const applyWorries = (p: AdvisorProfile, text: string, asOf: string) =>
-  copyProfile(p, { worries: { value: text, source: "stated", at: asOf } });
 
 /** A debt the user typed in block 2: stated and with no evidence. Debts from
  *  block 1 (confirmed, or corrected and still carrying their evidence) are

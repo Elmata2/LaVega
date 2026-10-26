@@ -113,7 +113,7 @@ export default function Plan({
           ? steps.riskDue
           : invite.resumeAt === null
             ? null
-            : steps.resumeStep[invite.resumeAt];
+            : steps.resumed;
     return (
       <Card as="section" aria-label={shell.title} data-testid="intake-invite">
         <h2>{shell.title}</h2>

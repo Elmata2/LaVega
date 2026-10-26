@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { emptyProfile, findAdviceLanguage, type AdvisorProfileStore } from "@lavega/core";
 import { IntakeInviteCard, IntakeInviteWidget, inviteState } from "./IntakeInviteCard";
 import { setEnabledWidgets, WIDGETS } from "../moduleRegistry";
-import { applyRiskAnswers, completeBlock, markStep0 } from "../../intake/state";
+import { applyRiskAnswers } from "../../intake/state";
+import { markDone, reopenRisk } from "../../intake/wizard/screens";
 import { RISK_SCALE } from "@lavega/core";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,7 +42,7 @@ const store = (build: (p: ReturnType<typeof emptyProfile>) => ReturnType<typeof 
   }) as AdvisorProfileStore;
 const answers = Object.fromEntries(RISK_SCALE.items.map((i) => [i.id, i.options[0]!.id]));
 const doneWithRisk = (at: string) =>
-  store((p) => completeBlock(applyRiskAnswers(completeBlock(p, 3), answers, at), 3));
+  store((p) => markDone(applyRiskAnswers(markDone(p, "invested"), answers, at), "invested"));
 
 test("no profile -> invitation with Start; click opens the intake", () => {
   const open = vi.fn();
@@ -57,46 +58,46 @@ test("partway through -> Continue, and a line about where they stopped", () => {
   const open = vi.fn();
   mount(
     <IntakeInviteWidget
-      store={store((p) => completeBlock(p, 1))}
+      store={store((p) => markDone(p, "housing"))}
       asOf={AS_OF}
       onSave={async () => {}}
       onOpenIntake={open}
     />,
   );
-  expect(text()).toContain("The questions about your situation are still open.");
+  expect(text()).toContain("You have started; pick up where you stopped.");
   act(() => button("Continue").click());
   expect(open).toHaveBeenCalledTimes(1);
 });
 
-test("inviteState: fresh, step 0 done, blocks, finished, and finished with fresh risk", () => {
+test("invite shows start for a fresh store and continue for a half-done one", () => {
   expect(inviteState(null, AS_OF)).toEqual({ resumeAt: null, riskDue: false });
-  expect(
-    inviteState(
-      store((p) => p),
-      AS_OF,
-    ),
-  ).toEqual({ resumeAt: null, riskDue: false });
-  expect(
-    inviteState(
-      store((p) => markStep0(p, "upload")),
-      AS_OF,
-    ),
-  ).toEqual({
-    resumeAt: "block1",
+  expect(inviteState(store((p) => p), AS_OF)).toEqual({ resumeAt: null, riskDue: false });
+  expect(inviteState(store((p) => markDone(p, "spend")), AS_OF)).toEqual({
+    resumeAt: "housing",
     riskDue: false,
   });
-  expect(
-    inviteState(
-      store((p) => completeBlock(p, 2)),
-      AS_OF,
-    )?.resumeAt,
-  ).toBe("block3");
   expect(inviteState(doneWithRisk("2026-08-01"), AS_OF)).toBeNull();
+});
+
+test("invite after reopenRisk resumes at the first risk screen", () => {
+  const s = store((p) => reopenRisk(markDone(p, "invested")));
+  expect(inviteState(s, AS_OF)).toEqual({
+    resumeAt: `risk:${RISK_SCALE.items[0]!.id}`,
+    riskDue: false,
+  });
+});
+
+test("riskDue still surfaces after blocksDone 3", () => {
+  const s = doneWithRisk("2025-09-01");
+  expect(s.current.intake.blocksDone).toBe(3);
+  expect(inviteState(s, AS_OF)).toEqual({
+    resumeAt: `risk:${RISK_SCALE.items[0]!.id}`,
+    riskDue: true,
+  });
 });
 
 test("risk due -> resume at block 3: blocksDone goes to 2, answers stay, then the intake opens", async () => {
   const s = doneWithRisk("2025-09-01");
-  expect(inviteState(s, AS_OF)).toEqual({ resumeAt: "block3", riskDue: true });
   const saved: AdvisorProfileStore[] = [];
   const open = vi.fn();
   mount(
@@ -113,6 +114,7 @@ test("risk due -> resume at block 3: blocksDone goes to 2, answers stay, then th
   await act(async () => button("Continue").click());
   expect(saved).toHaveLength(1);
   expect(saved[0]!.current.intake.blocksDone).toBe(2);
+  expect(saved[0]!.current.intake.lastScreen).toBe("buffer");
   expect(saved[0]!.current.risk?.answers).toEqual(answers);
   expect(open).toHaveBeenCalledTimes(1);
 });
@@ -160,6 +162,6 @@ test("the invitation is a widget: registered, on by default, and the picker swit
 });
 
 test("the invitation text trips no advice-language rule", () => {
-  mount(<IntakeInviteCard resumeAt="block2" onStart={() => {}} />);
+  mount(<IntakeInviteCard resumeAt="housing" onStart={() => {}} />);
   expect(findAdviceLanguage(text(), "en")).toEqual([]);
 });

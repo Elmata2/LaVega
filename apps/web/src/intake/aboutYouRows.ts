@@ -9,6 +9,7 @@ import {
 import type { AboutYouCopy, ProfileSection } from "../copy/intake.js";
 import { formatDate, formatEuroIn } from "../format.js";
 import type { Locale } from "../locale.js";
+import { reopenRisk } from "./wizard/screens.js";
 
 type Fact<T> = {
   value: T;
@@ -71,12 +72,6 @@ export type RowContext = { c: AboutYouCopy; locale: Locale; asOf: string };
 
 const rebuild = (p: AdvisorProfile, patch: Record<string, unknown>) =>
   new AdvisorProfile({ ...p, ...patch } as never);
-
-/** Reopen the questions: the intake resumes at block 3, answers kept. */
-export const reopened = (p: AdvisorProfile): AdvisorProfile =>
-  p.intake.blocksDone <= 2
-    ? p
-    : new AdvisorProfile({ ...p, intake: { ...p.intake, blocksDone: 2 } });
 
 const without = (p: AdvisorProfile, key: ProfileSection): AdvisorProfile => {
   const { [key]: _gone, ...rest } = p;
@@ -335,8 +330,8 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
             source: "stated",
             at: p.risk.at,
             editor: null,
-            redo: reopened,
-            remove: (q) => reopened(without(q, "risk")),
+            redo: reopenRisk,
+            remove: (q) => reopenRisk(without(q, "risk")),
           },
         ],
   knowledge: (p, ctx) =>
@@ -346,7 +341,7 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
       p.knowledge,
       (v) => ctx.c.values.knowledge(v.correct, v.of),
       () => null,
-    ).map((row) => ({ ...row, redo: reopened, remove: (q) => reopened(row.remove(q)) })),
+    ).map((row) => ({ ...row, redo: reopenRisk, remove: (q) => reopenRisk(row.remove(q)) })),
   experience: (p, ctx) =>
     single(
       ctx,

@@ -154,6 +154,9 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   intake: Schema.Struct({
     blocksDone: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
     step0: Schema.NullOr(Schema.Literals(["bank", "upload", "none"])),
+    /** Wizard bookkeeping: the last screen answered, and a "no debts" answer. */
+    lastScreen: Schema.optionalKey(Schema.String),
+    noUserDebts: Schema.optionalKey(Schema.Boolean),
   }),
 }) {}
 

@@ -14,6 +14,7 @@ import "./styles/charts.css";
 import "./styles/blocks.css";
 import "./styles/worldmap.css";
 import "./styles/landing.css";
+import "./styles/wizard.css";
 import Root from "./Root";
 import { initWebSentry } from "./observability";
 import posthog, { posthogConfigured } from "./posthog";

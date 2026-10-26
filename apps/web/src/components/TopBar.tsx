@@ -56,12 +56,10 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
           </div>
         )}
 
-        {view !== "intake" && (
-          <Pill className="topbar-add" onClick={onAddWidget}>
-            <span aria-hidden="true">+</span>
-            <span>{c.topBar.addWidget}</span>
-          </Pill>
-        )}
+        <Pill className="topbar-add" onClick={onAddWidget}>
+          <span aria-hidden="true">+</span>
+          <span>{c.topBar.addWidget}</span>
+        </Pill>
       </div>
     </div>
   );

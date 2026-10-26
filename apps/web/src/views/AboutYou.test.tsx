@@ -9,17 +9,15 @@ import {
   ADVICE_LANGUAGE,
   emptyProfile,
   findAdviceLanguage,
+  fingerprint,
   RISK_SCALE,
-  ownAccounts,
   scoreCapacity,
-  type Account,
   type AdvisorProfileStore,
-  type Tx,
 } from "@lavega/core";
 import AboutYou, { type AboutYouProps } from "./AboutYou";
-import Intake from "./Intake";
+import IntakeWizard from "./IntakeWizard";
 import { intakeCopy } from "../copy/intake";
-import { inferBlock1 } from "../intake/inference";
+import { formatWholeEuroIn } from "../format";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -123,66 +121,26 @@ test("every populated field row shows value, source and date; absent data shows 
   }
 });
 
-test("Remove on a derived field stores its fingerprint; the same data is no longer proposed, changed data is", async () => {
-  let n = 0;
-  const tx = (cp: string, date: string, amount: number): Tx => ({
-    id: `t${n++}`,
-    accountKey: "A1",
-    date,
-    amount,
-    currency: "EUR",
-    counterparty: cp,
-    description: "",
-    category: "",
-    manual: false,
-  });
-  const month = (m: number) => `2026-${String(m).padStart(2, "0")}-25`;
-  const txs = Array.from({ length: 9 }, (_, i) => tx("Acme BV", month(i + 1), 3000));
-  const accounts: Account[] = [
-    {
-      key: "A1",
-      iban: "",
-      name: "Betaalrekening",
-      bank: "ING",
-      entity: "Prive",
-      currency: "EUR",
-      balance: null,
-    },
-  ];
-  const input = { accounts, rules: [], own: ownAccounts(accounts), profiles: [], asOf: AS_OF };
-  const proposal = inferBlock1({ ...input, txs, profile: emptyProfile() }).income[0]!;
-  expect(proposal).toBeDefined();
-
+test("Remove on a derived field stores its fingerprint so the same data is not proposed again", async () => {
+  const evidence = ["t1", "t2", "t3"];
   const store = storeOf({
     incomeStreams: [
       {
-        value: {
-          id: proposal.id,
-          label: proposal.data.label,
-          monthlyCents: proposal.data.monthlyCents,
-          regular: true,
-        },
+        value: { id: "inc-1", label: "Acme BV", monthlyCents: 300_000, regular: true },
         source: "derived",
         at: "2026-09-01",
-        evidence: proposal.evidence,
+        evidence,
       },
     ],
   });
   const props = baseProps({ store });
   await mount(props);
-  await click(button(`Remove: Income, ${proposal.data.label}`));
+  await click(button("Remove: Income, Acme BV"));
 
   const saved = lastSaved(props).current;
-  expect(saved.removed).toEqual([proposal.fingerprint]);
+  expect(saved.removed).toEqual([fingerprint(evidence)]);
   expect(saved.incomeStreams).toBeUndefined();
   expect(text()).toContain("Nothing is recorded yet");
-  expect(inferBlock1({ ...input, txs, profile: saved }).income).toEqual([]);
-  // Identical data re-imported: still suppressed.
-  const again = txs.map((t) => ({ ...t }));
-  expect(inferBlock1({ ...input, txs: again, profile: saved }).income).toEqual([]);
-  // Data that changed: proposed again.
-  const more = [...txs, tx("Acme BV", "2026-10-25", 3000)];
-  expect(inferBlock1({ ...input, txs: more, profile: saved }).income.length).toBe(1);
 });
 
 test("Remove on a stated or confirmed field deletes it and suppresses nothing", async () => {
@@ -359,38 +317,22 @@ test("Redo on risk reopens block 3 with the answers kept and opens the intake", 
   root = createRoot(container);
   await act(async () =>
     root!.render(
-      <Intake
-        accounts={[]}
-        txs={[]}
-        rules={[]}
-        own={ownAccounts([])}
-        profiles={[]}
+      <IntakeWizard
         asOf={AS_OF}
-        mode="convert"
-        fxHistory={{}}
         store={lastSaved(props)}
         onSave={async () => {}}
-        onNavigate={() => {}}
-        busy={false}
-        entity="Persoonlijk"
-        onEntityChange={() => {}}
-        onImport={() => {}}
-        onRefreshBank={() => {}}
-        homeCountry="NL"
-        onHomeCountryChange={() => {}}
-        homeRegion=""
-        ownerName={{ first: "", last: "" }}
-        onOwnerNameChange={() => {}}
-        onHomeRegionChange={() => {}}
+        onFinish={() => {}}
+        onExit={() => {}}
         now={() => NOW}
       />,
     ),
   );
-  expect(text()).toContain(intakeCopy.en.block3.title);
-  expect(
-    container!.querySelector<HTMLInputElement>(`input[name="risk-${item.id}"][value="${picked}"]`)
-      ?.checked,
-  ).toBe(true);
+  const first = RISK_SCALE.items[0]!;
+  expect(container!.querySelector(`[role=radiogroup]`)?.getAttribute("aria-label")).toBe(
+    intakeCopy.en.block3.risk.items[first.id]!.prompt((n) => formatWholeEuroIn("en", n)),
+  );
+  const checked = container!.querySelector("[role=radio][aria-checked=true]");
+  expect(checked?.textContent).toBe(intakeCopy.en.block3.risk.items[first.id]!.options[picked]);
 });
 
 test("Redo on knowledge also reopens block 3", async () => {
