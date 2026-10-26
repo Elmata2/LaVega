@@ -4,14 +4,24 @@ import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
 import type { Account, Tx } from "@lavega/core";
-import { LOCAL_TENANT_ID } from "@lavega/core";
+import {
+  AdvisorProfile,
+  type ProfileRead,
+  LOCAL_TENANT_ID,
+  commitProfile,
+  emptyProfile,
+  emptyProfileStore,
+  encodeProfileStore,
+} from "@lavega/core";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
 import {
+  decryptJSON,
   deriveKey,
   encryptJSON,
   generateVaultKey,
   newSalt,
   PBKDF2_ITERATIONS,
+  sealJSON,
 } from "../crypto/vaultCrypto.js";
 import { createEncryptedStorage } from "./encryptedStorage.js";
 
@@ -502,4 +512,145 @@ test("broker credentials stay encrypted, are absent while locked, and restore wi
   await restored.open(KEY, "user:a");
   expect(await restored.restore(backup!)).toBe(true);
   expect(await restored.getCredentials(LOCAL_TENANT_ID, "trading212")).toEqual(trading212);
+});
+
+const AT1 = "2026-10-22T10:00:00Z";
+const AT2 = "2026-10-22T11:00:00Z";
+const currentWorry = (r: ProfileRead): string | undefined =>
+  r.kind === "ok" ? r.store.current.worries?.value : undefined;
+
+const sampleProfile = (w: string): AdvisorProfile =>
+  new AdvisorProfile({
+    ...emptyProfile(),
+    worries: { value: w, source: "stated", at: "2026-10-22" },
+  });
+
+test("legacy vault without a profile returns null; put then get round-trips; survives lock/open and restore", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-profile");
+  await v.open(KEY, "user:a");
+  expect(await v.getProfile()).toEqual({ kind: "absent" });
+
+  const store = commitProfile(
+    commitProfile(emptyProfileStore(), sampleProfile("one"), AT1),
+    sampleProfile("two"),
+    AT2,
+  );
+  await v.putProfile(store);
+  const got = await v.getProfile();
+  expect(got).toEqual({ kind: "ok", store });
+  expect(got.kind === "ok" && got.store.current).toBeInstanceOf(AdvisorProfile);
+
+  v.lock();
+  await expect(v.getProfile()).rejects.toBeTruthy();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getProfile()).toEqual({ kind: "ok", store });
+
+  // back-up export/restore carries the profile and the other three sections
+  await v.putSection("plan", { preferences: { at: "2026-10-22", value: "p" }, snapshots: {} });
+  await v.putSection("learning", { c1: { at: "2026-10-22", value: 1 } });
+  await v.appendEvents([{ id: "e1", kind: "plan", at: "2026-10-22" }]);
+  const backup = v.export()!;
+  const other = createEncryptedStorage("lavega-vault-test-profile-restored");
+  await other.open(KEY, "user:a");
+  expect(await other.restore(backup)).toBe(true);
+  expect(await other.getProfile()).toEqual({ kind: "ok", store });
+  expect((await other.getSection("plan")).preferences?.value).toBe("p");
+  expect(await other.getSection("learning")).toEqual({ c1: { at: "2026-10-22", value: 1 } });
+  expect((await other.getSection("events")).map((e) => e.id)).toEqual(["e1"]);
+});
+
+test("an undecodable stored profile reads as corrupt; the next put keeps the old blob under profileCorruptBackup", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const bad = JSON.parse(JSON.stringify(encodeProfileStore(emptyProfileStore())));
+  bad.current.risk = { score: 99, answers: {}, scaleId: "s", at: "2026-10-22" };
+  const sealed = await sealJSON(KEY, { accounts: [], txs: [], rules: [], profile: bad });
+  const v = createEncryptedStorage("lavega-vault-test-profile-bad");
+  await v.open(KEY, "user:a");
+  expect(await v.restore(sealed)).toBe(true);
+  expect(await v.getProfile()).toEqual({ kind: "corrupt" });
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getProfile()).toEqual({ kind: "corrupt" });
+  let raw = await decryptJSON<{ profile: unknown; profileCorruptBackup?: unknown }>(
+    KEY,
+    v.export()!,
+  );
+  expect(raw.profile).toEqual(bad);
+  expect(raw.profileCorruptBackup).toBeUndefined();
+
+  const fresh = commitProfile(emptyProfileStore(), sampleProfile("fresh"), AT1);
+  await v.putProfile(fresh);
+  expect(await v.getProfile()).toEqual({ kind: "ok", store: fresh });
+  raw = await decryptJSON<{ profile: unknown; profileCorruptBackup?: unknown }>(KEY, v.export()!);
+  expect(raw.profileCorruptBackup).toEqual(bad);
+  // a second put does not overwrite the backup
+  await v.putProfile(commitProfile(fresh, sampleProfile("later"), AT2));
+  raw = await decryptJSON<{ profile: unknown; profileCorruptBackup?: unknown }>(KEY, v.export()!);
+  expect(raw.profileCorruptBackup).toEqual(bad);
+});
+
+test("a profile with an unknown section from a newer build survives a get/put round trip", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const newer = JSON.parse(
+    JSON.stringify(
+      encodeProfileStore(commitProfile(emptyProfileStore(), sampleProfile("keep"), AT1)),
+    ),
+  );
+  newer.current.insurance = { value: { monthlyCents: 4200 }, source: "stated", at: "2026-10-22" };
+  newer.futureTop = { n: 1 };
+  const sealed = await sealJSON(KEY, { accounts: [], txs: [], rules: [], profile: newer });
+  const v = createEncryptedStorage("lavega-vault-test-profile-unknown");
+  await v.open(KEY, "user:a");
+  expect(await v.restore(sealed)).toBe(true);
+  const read = await v.getProfile();
+  expect(read.kind).toBe("ok");
+  if (read.kind !== "ok") return;
+  // An older build edits a known field and saves again.
+  await v.putProfile(commitProfile(read.store, sampleProfile("edited"), AT2));
+  const raw = await decryptJSON<{ profile: any }>(KEY, v.export()!);
+  expect(raw.profile.current.insurance).toEqual(newer.current.insurance);
+  expect(raw.profile.futureTop).toEqual({ n: 1 });
+  expect(raw.profile.current.worries.value).toBe("edited");
+  expect(currentWorry(await v.getProfile())).toBe("edited");
+});
+
+test("plan and learning are replace-all sections; events merge by union and are idempotent", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-sections");
+  await v.open(KEY, "user:a");
+  expect(await v.getSection("plan")).toEqual({ preferences: null, snapshots: {} });
+  expect(await v.getSection("learning")).toEqual({});
+  expect(await v.getSection("events")).toEqual([]);
+
+  await v.appendEvents([
+    { id: "1", kind: "plan", at: "2026-10-01" },
+    { id: "2", kind: "from-the-future", at: "2026-10-02", extra: 1 },
+  ]);
+  await v.appendEvents([
+    { id: "2", kind: "from-the-future", at: "2026-10-02", extra: 1 },
+    { id: "3", kind: "plan", at: "2026-10-03" },
+  ]);
+  const events = await v.getSection("events");
+  expect(events.map((e) => e.id)).toEqual(["1", "2", "3"]);
+  expect(events[1]).toMatchObject({ kind: "from-the-future", extra: 1 });
+  await v.appendEvents(events);
+  expect(await v.getSection("events")).toEqual(events);
+
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getSection("events")).toEqual(events);
+});
+
+test("two rapid puts: the second wins (enqueueWrite ordering)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-profile-race");
+  await v.open(KEY, "user:a");
+  const first = commitProfile(emptyProfileStore(), sampleProfile("first"), AT1);
+  const second = commitProfile(emptyProfileStore(), sampleProfile("second"), AT2);
+  await Promise.all([v.putProfile(first), v.putProfile(second)]);
+  expect(currentWorry(await v.getProfile())).toBe("second");
+  v.lock();
+  await v.open(KEY, "user:a");
+  expect(currentWorry(await v.getProfile())).toBe("second");
 });

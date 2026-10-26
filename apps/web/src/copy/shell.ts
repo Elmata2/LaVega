@@ -83,23 +83,6 @@ export type ShellCopy = {
       signOut: string;
     };
   };
-  /** De eenmalige instelstap na een verse kluis. */
-  onboarding: {
-    ariaLabel: string;
-    title: string;
-    intro: string;
-    languageLabel: string;
-    firstNameLabel: string;
-    lastNameLabel: string;
-    nameNote: string;
-    countryLabel: string;
-    countryHint: string;
-    regionPlaceholder: string;
-    scopeLabel: string;
-    scopeHint: string;
-    submit: string;
-    skip: string;
-  };
   overzicht: { gridLabel: string };
   import: {
     ariaLabel: string;
@@ -287,6 +270,9 @@ const nl: ShellCopy = {
       koppelingen: "Koppelingen",
       backup: "Back-up",
       profiel: "Profiel",
+      intake: "Intake",
+      "about-you": "Wat LaVega weet",
+      plan: "Jouw plan",
     },
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
@@ -305,6 +291,7 @@ const nl: ShellCopy = {
       punten: "Punten",
       belasting: "Belasting",
       facturen: "Facturen",
+      plan: "Jouw plan",
     },
   },
   modulePicker: {
@@ -313,7 +300,7 @@ const nl: ShellCopy = {
     widgetSwitchLabel: (label) => `${label} op je overzicht`,
     modules: {
       overview: "Je startpagina: totaalpositie, cashflow, aandachtspunten en statistieken.",
-      accounts: "Al je rekeningen en kaarten, per bank en per bedrijf, met hun saldo.",
+      accounts: "Al je rekeningen en kaarten, per bank, met hun saldo.",
       transactions:
         "Al je transacties in één lijst, met filters op periode, rekening en categorie.",
       forecast: "Wat er de komende 30, 60 en 90 dagen binnenkomt en uitgaat.",
@@ -322,8 +309,19 @@ const nl: ShellCopy = {
       punten: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
       belasting: "Btw opzijzetten per bedrijf, met de eerstvolgende aangiftedatum.",
       facturen: "Facturen die nog open staan, en wanneer ze binnen zouden moeten komen.",
+      plan: "Je maand, buffer, schulden, uitgaven, abonnementen, kaarten en doelen, met de uitleg erbij.",
     },
     widgets: {
+      "intake-invite": {
+        label: "Vertel over jezelf",
+        what: "Een uitnodiging om de vragen over je situatie te beantwoorden, of om verder te gaan waar je stopte.",
+        note: "Staat aan zolang de vragen niet af zijn — hier zet je hem uit.",
+      },
+      "room-card": {
+        label: "Je ruimte per maand",
+        what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
+        note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
+      },
       aandacht: {
         label: "Aandacht",
         what: "Een brede balk bovenaan met wat er misgaat: tekorten, gemiste betalingen, deadlines.",
@@ -372,26 +370,6 @@ const nl: ShellCopy = {
       retry: "Opnieuw proberen",
       signOut: "Uitloggen",
     },
-  },
-  onboarding: {
-    ariaLabel: "Eerste instellingen",
-    title: "Even instellen",
-    intro:
-      "Vier vragen, en LaVega rekent meteen met de juiste regels. Je kunt alles later wijzigen bij Profiel.",
-    languageLabel: "Taal",
-    firstNameLabel: "Voornaam",
-    lastNameLabel: "Achternaam",
-    nameNote:
-      "Je naam blijft in deze browser — niet in de kluis, niet in een back-up, en hij wordt nooit naar een model gestuurd.",
-    countryLabel: "Land",
-    countryHint:
-      "Bepaalt welke belastingregels LaVega gebruikt. Voor een land zonder regels rekent LaVega geen belasting uit en zegt dat erbij.",
-    regionPlaceholder: "optioneel",
-    scopeLabel: "Waar open je op?",
-    scopeHint:
-      "De schakelaar bovenin toont één helft van je geld. Dit is de helft waar de app op start; je kunt altijd wisselen.",
-    submit: "Klaar",
-    skip: "Overslaan",
   },
   overzicht: { gridLabel: "Overzicht" },
   import: {
@@ -541,8 +519,7 @@ const nl: ShellCopy = {
     countryRegion: {
       ariaLabel: "Land en regio",
       heading: "Land en regio",
-      purpose:
-        "Bepaalt welke belastingregels LaVega gebruikt en in welke markt het de voorwaarden van je kaarten opzoekt. De belastingmodules zijn op dit moment alleen voor Nederland uitgewerkt.",
+      purpose: "Bepaalt in welke markt LaVega de voorwaarden van je kaarten opzoekt.",
       neverInferred:
         "Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.",
       countryLabel: "Land",
@@ -643,6 +620,9 @@ const en: ShellCopy = {
       koppelingen: "Connections",
       backup: "Backup",
       profiel: "Profile",
+      intake: "Intake",
+      "about-you": "What LaVega knows",
+      plan: "Your plan",
     },
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
@@ -661,6 +641,7 @@ const en: ShellCopy = {
       punten: "Points",
       belasting: "Tax",
       facturen: "Invoices",
+      plan: "Your plan",
     },
   },
   modulePicker: {
@@ -678,8 +659,19 @@ const en: ShellCopy = {
       punten: "Your reward points and air miles in one place, with each program's rules.",
       belasting: "Setting aside VAT per company, with the next filing deadline.",
       facturen: "Invoices still outstanding, and when they should come in.",
+      plan: "Your month, buffer, debts, spending, subscriptions, cards and goals, with the explanation next to each.",
     },
     widgets: {
+      "intake-invite": {
+        label: "Tell us about you",
+        what: "An invitation to answer the questions about your situation, or to carry on where you stopped.",
+        note: "On while the questions are unfinished — switch it off here.",
+      },
+      "room-card": {
+        label: "Your room each month",
+        what: "What is left on average each month, with the lowest and highest month as the range.",
+        note: "Appears once you have answered the first questions.",
+      },
       aandacht: {
         label: "Attention",
         what: "A wide bar at the top with what needs attention: shortfalls, missed payments, deadlines.",
@@ -727,26 +719,6 @@ const en: ShellCopy = {
       retry: "Try again",
       signOut: "Sign out",
     },
-  },
-  onboarding: {
-    ariaLabel: "First settings",
-    title: "Let's set up",
-    intro:
-      "Four questions, and LaVega works with the right rules straight away. You can change all of it later under Profile.",
-    languageLabel: "Language",
-    firstNameLabel: "First name",
-    lastNameLabel: "Last name",
-    nameNote:
-      "Your name stays in this browser — never in the vault, never in a backup, and never sent to a model.",
-    countryLabel: "Country",
-    countryHint:
-      "Decides which tax rules LaVega uses. For a country it has no rules for, LaVega works out no tax and says so.",
-    regionPlaceholder: "optional",
-    scopeLabel: "Which half do you open on?",
-    scopeHint:
-      "The switch at the top shows one half of your money. This is the half the app starts on; you can always flip it.",
-    submit: "Done",
-    skip: "Skip",
   },
   overzicht: { gridLabel: "Overview" },
   import: {
@@ -895,8 +867,7 @@ const en: ShellCopy = {
     countryRegion: {
       ariaLabel: "Country and region",
       heading: "Country and region",
-      purpose:
-        "Determines which tax rules LaVega uses, and which market it looks up your card terms in. The tax modules are currently only built out for the Netherlands.",
+      purpose: "Determines which market LaVega looks up your card terms in.",
       neverInferred:
         "You fill this in yourself. LaVega never infers where you are — no location, no IP, no time zone.",
       countryLabel: "Country",

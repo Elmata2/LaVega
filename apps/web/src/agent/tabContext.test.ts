@@ -62,44 +62,19 @@ test("overview context computes real aggregates from raw state, never raw txs", 
   expect((context as any).bufferCents).toBe(0);
 });
 
+test("archived tabs (facturen, belasting, valuta) fall back to an empty context", () => {
+  for (const tab of ["facturen", "belasting", "valuta"]) {
+    const built = buildTabContext(tab, {
+      invoices: [{ amount: 1 }],
+      accounts: [{ currency: "USD" }],
+      vatSettings: [],
+    } as any);
+    expect(built).toEqual({ tab, context: {} });
+  }
+});
+
 test("unknown tab yields empty context", () => {
   expect(buildTabContext("zzz", {} as any).context).toEqual({});
-});
-
-test("facturen context carries capped invoices only, never raw txs", () => {
-  const { tab, context } = buildTabContext("facturen", {
-    invoices: Array.from({ length: 200 }, (_, i) => ({
-      counterparty: "X" + i,
-      amount: 1,
-      issueDate: "2026-01-01",
-      dueDate: "2026-01-31",
-      status: "expected",
-    })),
-    txs: [{ id: "t1", amount: 999 }],
-  } as any);
-  expect(tab).toBe("facturen");
-  expect(Array.isArray((context as any).invoices)).toBe(true);
-  expect((context as any).invoices.length).toBeLessThanOrEqual(100);
-  expect((context as any).txs).toBeUndefined();
-});
-
-test("valuta context has rate + holdings, no personal amounts", () => {
-  const { tab, context } = buildTabContext("valuta", {
-    fxRate: { base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } },
-    accounts: [{ currency: "USD" }, { currency: "EUR" }, { currency: "USD" }],
-    invoices: [{ amount: 500 }],
-  } as any);
-  expect(tab).toBe("valuta");
-  expect((context as any).rate).toBeTruthy();
-  expect((context as any).holdings).toContain("USD");
-  expect((context as any).holdings).not.toContain("EUR");
-  expect((context as any).invoices).toBeUndefined();
-});
-
-test("valuta omits rate when App has no fxRate (agent web-searches it)", () => {
-  const { context } = buildTabContext("valuta", { accounts: [{ currency: "GBP" }] } as any);
-  expect((context as any).rate).toBeUndefined();
-  expect((context as any).holdings).toContain("GBP");
 });
 
 test("punten context carries reward balances", () => {
@@ -189,33 +164,6 @@ test("forecast context carries a compact summary, never raw txs", () => {
   expect(tab).toBe("forecast");
   expect((context as any).summary).toBeTruthy();
   expect(typeof (context as any).summary).toBe("object");
-  expect((context as any).txs).toBeUndefined();
-  expect(JSON.stringify(context)).not.toContain('"accountKey"');
-});
-
-test("belasting context carries vat/deadlines/settings, never raw txs", () => {
-  const { tab, context } = buildTabContext("belasting", {
-    accounts: [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }],
-    txs: [
-      {
-        id: "t1",
-        accountKey: "k1",
-        date: "2026-07-10",
-        amount: 12100,
-        counterparty: "Klant",
-        description: "",
-        currency: "EUR",
-        category: "",
-        manual: false,
-      },
-    ],
-    vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false }],
-    asOf: "2026-08-05",
-  } as any);
-  expect(tab).toBe("belasting");
-  expect((context as any).settings).toBeTruthy();
-  expect(Array.isArray((context as any).deadlines)).toBe(true);
-  expect((context as any).vat).toBeTruthy();
   expect((context as any).txs).toBeUndefined();
   expect(JSON.stringify(context)).not.toContain('"accountKey"');
 });

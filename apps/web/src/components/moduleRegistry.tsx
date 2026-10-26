@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { View } from "../App";
+import { isArchivedView, isArchivedWidget } from "../archive";
+import { shellCopy } from "../copy/shell";
 
 /* The module registry — the ONE place a module is declared.
  *
@@ -31,6 +33,7 @@ export type ModuleId = Extract<
   | "punten"
   | "belasting"
   | "facturen"
+  | "plan"
 >;
 
 export type ModuleDef = {
@@ -113,6 +116,32 @@ function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: b
 
 export const MODULES: ModuleDef[] = [
   {
+    id: "plan",
+    /* Nav order is registry order, so this is the first item. The words come
+     * from the shell copy (the nav and picker read them from there too). */
+    label: shellCopy.nl.nav.moduleLabels.plan,
+    what: shellCopy.nl.modulePicker.modules.plan,
+    icon: (
+      <Icon>
+        <path d="M5 4h14v16H5z" />
+        <path d="M9 9h6M9 13h6M9 17h3" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={14} />
+        <Line x={12} y={12} w={24} strong />
+        <Line x={12} y={17} w={50} />
+        <Tile x={8} y={26} w={38} h={26} />
+        <Line x={12} y={32} w={16} strong />
+        <Line x={12} y={39} w={26} />
+        <Tile x={50} y={26} w={38} h={26} />
+        <Line x={54} y={32} w={16} strong />
+        <Line x={54} y={39} w={26} />
+      </Thumb>
+    ),
+  },
+  {
     id: "overview",
     label: "Overzicht",
     what: "Je startpagina: totaalpositie, cashflow, aandachtspunten en statistieken.",
@@ -141,7 +170,7 @@ export const MODULES: ModuleDef[] = [
   {
     id: "accounts",
     label: "Rekeningen",
-    what: "Al je rekeningen en kaarten, per bank en per bedrijf, met hun saldo.",
+    what: "Al je rekeningen en kaarten, per bank, met hun saldo.",
     icon: (
       <Icon>
         <path d="M3 10l9-6 9 6" />
@@ -390,11 +419,11 @@ export const MODULES: ModuleDef[] = [
  *  betekent hier "de nav blijft zoals hij was", en dat is precies waarom een
  *  module die eerder WEGGEHAALD is er niet vanzelf weer bij komt: dat zou net zo
  *  goed een verandering zijn die niemand vroeg. */
-export const DEFAULT_MODULES: ModuleId[] = MODULES.filter((m) => m.defaultOn !== false).map(
-  (m) => m.id,
-);
+export const DEFAULT_MODULES: ModuleId[] = MODULES.filter(
+  (m) => m.defaultOn !== false && !isArchivedView(m.id),
+).map((m) => m.id);
 
-const KNOWN = new Set<string>(MODULES.map((m) => m.id));
+const KNOWN = new Set<string>(MODULES.filter((m) => !isArchivedView(m.id)).map((m) => m.id));
 
 /** Resolve the STORED preference into the modules that belong in the nav.
  *
@@ -408,7 +437,7 @@ export function enabledModules(stored: string[] | null): ModuleId[] {
     stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
   const set = new Set<ModuleId>(chosen);
   set.add(HOME_MODULE);
-  return MODULES.filter((m) => set.has(m.id)).map((m) => m.id);
+  return MODULES.filter((m) => set.has(m.id) && !isArchivedView(m.id)).map((m) => m.id);
 }
 
 /** Switch one module on or off. The home module is never removable — an app
@@ -421,10 +450,17 @@ export function toggleModule(enabled: ModuleId[], id: ModuleId, on: boolean): Mo
   return enabledModules([...set]);
 }
 
+/** The plan module stays out of the nav until the intake has produced
+ *  something to plan with (at least one block done). The route itself stays
+ *  reachable and shows the invitation. */
+export function withoutLockedModules(enabled: ModuleId[], planUnlocked: boolean): ModuleId[] {
+  return planUnlocked ? enabled : enabled.filter((id) => id !== "plan");
+}
+
 /** The definitions behind the enabled ids, in registry order — what the nav renders. */
 export function navModules(enabled: ModuleId[]): ModuleDef[] {
   const set = new Set<ModuleId>(enabled);
-  return MODULES.filter((m) => set.has(m.id));
+  return MODULES.filter((m) => set.has(m.id) && !isArchivedView(m.id));
 }
 
 /* ====================================================================== *
@@ -451,7 +487,14 @@ export function navModules(enabled: ModuleId[]): ModuleDef[] {
  *  opleveren in plaats van er stilletjes een aan te zetten. Daarom heten de twee
  *  nieuwe kaarten `facturen-open` en `btw-stand` en niet `facturen` en
  *  `belasting`: die laatste twee zijn routes. Er staat een test op. */
-export type WidgetId = "aandacht" | "positie" | "betaalagenda" | "facturen-open" | "btw-stand";
+export type WidgetId =
+  | "aandacht"
+  | "intake-invite"
+  | "room-card"
+  | "positie"
+  | "betaalagenda"
+  | "facturen-open"
+  | "btw-stand";
 
 export type WidgetDef = {
   id: WidgetId;
@@ -499,6 +542,37 @@ export const WIDGETS: WidgetDef[] = [
         <Line x={23} y={30} w={52} />
         <circle cx="16" cy="42" r="2.5" fill="var(--warn)" opacity="0.5" />
         <Line x={23} y={41} w={34} />
+      </Thumb>
+    ),
+  },
+  {
+    id: "intake-invite",
+    label: "Vertel over jezelf",
+    what: "Een uitnodiging om de vragen over je situatie te beantwoorden, of om verder te gaan waar je stopte.",
+    note: "Staat aan zolang de vragen niet af zijn — hier zet je hem uit.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={18} w={36} strong />
+        <Line x={14} y={27} w={58} />
+        <rect x="14" y="36" width="22" height="8" rx="4" fill="var(--accent)" opacity="0.8" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "room-card",
+    label: "Je ruimte per maand",
+    what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
+    note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={17} w={24} />
+        <rect x="14" y="25" width="34" height="7" rx="3.5" fill="var(--pos)" opacity="0.7" />
+        <rect x="14" y="38" width="60" height="3" rx="1.5" fill="var(--line)" />
+        <rect x="30" y="38" width="28" height="3" rx="1.5" fill="var(--accent)" opacity="0.6" />
       </Thumb>
     ),
   },
@@ -619,16 +693,20 @@ export const WIDGETS: WidgetDef[] = [
  *  antwoord dat allebei zijn zinnen respecteert — Aandacht, Positie en Facturen
  *  mogen niet ongevraagd verschijnen, Betaalagenda mag niet ongevraagd
  *  verdwijnen, en BTW moet er staan omdat hij daar met zoveel woorden om vroeg. */
-export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter((w) => w.defaultOn).map((w) => w.id);
+export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter(
+  (w) => w.defaultOn && !isArchivedWidget(w.id),
+).map((w) => w.id);
 
-const KNOWN_WIDGETS = new Set<string>(WIDGETS.map((w) => w.id));
+const KNOWN_WIDGETS = new Set<string>(
+  WIDGETS.filter((w) => !isArchivedWidget(w.id)).map((w) => w.id),
+);
 
 /** ALLE ids, en dat is wat er als "gezien" wordt weggeschreven.
  *
  *  Verantwoord omdat de picker de hele lijst tegelijk toont: wie één schakelaar
  *  omzet, heeft de rest óók voor zich gehad en er (door hem te laten staan) een
  *  antwoord op gegeven. */
-const ALL_WIDGETS: WidgetId[] = WIDGETS.map((w) => w.id);
+const ALL_WIDGETS: WidgetId[] = WIDGETS.filter((w) => !isArchivedWidget(w.id)).map((w) => w.id);
 
 /** De twee die bestonden toen de voorkeur nog een KALE LIJST was.
  *
@@ -666,9 +744,9 @@ export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetI
   if (pref === null) return [...DEFAULT_WIDGETS];
   const on = new Set(pref.on);
   const seen = new Set(pref.seen);
-  return WIDGETS.filter((w) => (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true)).map(
-    (w) => w.id,
-  );
+  return WIDGETS.filter(
+    (w) => !isArchivedWidget(w.id) && (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true),
+  ).map((w) => w.id);
 }
 
 /** Een lijst ids opschonen: alleen bestaande widgets, ontdubbeld, in
@@ -678,7 +756,7 @@ export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetI
  *  terug door de deur van "nooit gevraagd". */
 export function normaliseWidgets(ids: readonly string[]): WidgetId[] {
   const set = new Set(ids.filter((id): id is WidgetId => KNOWN_WIDGETS.has(id)));
-  return WIDGETS.filter((w) => set.has(w.id)).map((w) => w.id);
+  return WIDGETS.filter((w) => set.has(w.id) && !isArchivedWidget(w.id)).map((w) => w.id);
 }
 
 /** Switch one widget on or off. No widget is locked: a homescreen with none of

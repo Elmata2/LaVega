@@ -10,7 +10,10 @@ import type {
   LearnedFact,
   EntityProfile,
   EntityScope,
+  AdvisorProfileStore,
+  ProfileRead,
 } from "@lavega/core";
+import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
@@ -56,8 +59,9 @@ import {
   createRatesProvider,
   type RatesResult,
 } from "@lavega/adapters";
-import { CATALOGUE_RATES } from "./catalogue-rates";
+import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
+import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -71,7 +75,6 @@ import {
   getHomeCountry,
   storedHomeCountry,
   getDefaultEntity,
-  getDefaultScope,
   setHomeCountry,
   getHomeRegion,
   setHomeRegion,
@@ -110,8 +113,7 @@ import {
 import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
-import Onboarding from "./components/Onboarding";
-import { onboardingSeen, showOnboarding } from "./onboarding.js";
+import { markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
 import {
   autoRefreshDue,
   everConnectedBank,
@@ -122,11 +124,17 @@ import {
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
+import Button from "./components/ui/Button.js";
 import {
   enabledModules as resolveModules,
   navModules,
+  withoutLockedModules,
   type ModuleId,
 } from "./components/moduleRegistry";
+import IntakeWizard from "./views/IntakeWizard";
+import AboutYou from "./views/AboutYou";
+import PlanRoute from "./plan/PlanRoute";
+import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
 import Regels from "./views/Regels";
@@ -218,6 +226,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
+  // The adviser profile, from the vault. "loading" until read; "error" if the
+  // read itself threw (the intake then stays closed rather than starting empty
+  // over something it could not read).
+  const [profileRead, setProfileRead] = useState<ProfileRead | "loading" | "error">("loading");
   // Invoice rows fetched from his own n8n and not yet decided on. Held HERE,
   // not in the Facturen view: that webhook empties its queue as it responds, so
   // these rows are the only copy in existence and must not die when the view
@@ -407,7 +419,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [view, setViewState] = useState<View>(
     () => viewFromPathname(window.location.pathname) ?? "overview",
   );
-  const setView = useCallback((next: View) => {
+  const setView = useCallback((requested: View) => {
+    const next = isArchivedView(requested) ? "overview" : requested;
     setViewState(next);
     const nextPath = pathForView(next);
     if (window.location.pathname !== nextPath) {
@@ -438,13 +451,25 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
   // everything it has rather than an empty page.
-  const [scope, setScope] = useState<EntityScope>(getDefaultScope);
+  const [scope, setScope] = useState<EntityScope>(() => initialScope());
   /* Of dit een VERSE kluis is, gezet op het moment dat de instelstap nog te
    * beslissen valt. Niet afgeleid uit "heeft hij al rekeningen": iemand kan een
    * lege kluis hebben en toch een bestaande gebruiker zijn, en die mag deze stap
    * niet opnieuw krijgen. */
   const [freshVault, setFreshVault] = useState(false);
   const [onboarded, setOnboarded] = useState(onboardingSeen);
+  /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
+   * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
+   * die dit apparaat nog niet zag, dus een bestaande gebruiker krijgt hier niets
+   * en ziet de uitnodiging op Overzicht. De vlag gaat meteen om; de intake
+   * onthoudt zelf waar hij was en hervat via die uitnodiging. */
+  useEffect(() => {
+    if (gate !== "ready" || !showOnboarding(freshVault, onboarded)) return;
+    markOnboardingSeen();
+    setOnboarded(true);
+    setScope(initialScope());
+    setView("intake");
+  }, [gate, freshVault, onboarded, setView]);
   // The per-COMPANY scope inside that half ("" = every company in this scope).
   // The chrome no longer sets it (per-company splitting is not a priority), but
   // the plumbing is intact and every view still receives it — Transacties and
@@ -597,6 +622,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setFxHistoryState(loadedFxHistory);
       setPendingInvoices(loadedPendingInvoices.filter(isPendingInvoiceLike));
       setPendingNotices(loadedPendingNotices.filter(isN8nNoticeLike));
+      try {
+        setProfileRead(await storage.getProfile());
+      } catch {
+        setProfileRead("error");
+      }
       // Fire, don't block: refresh the ECB history against what's ALREADY on
       // screen. A slow or failed fetch must never delay showing the vault's
       // own data — it just leaves fxHistory as it was until this lands. The
@@ -922,6 +952,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setEntityProfiles([]);
     setPendingInvoices([]);
     setPendingNotices([]);
+    setProfileRead("loading");
     setGate("loading");
     if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
     else setOpenAttempt((n) => n + 1);
@@ -953,6 +984,23 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   async function saveRewards(next: RewardsBalance[]) {
     setRewards(next);
     await storage.putRewards(next);
+  }
+
+  async function retryProfileRead() {
+    setProfileRead("loading");
+    try {
+      setProfileRead(await storage.getProfile());
+    } catch {
+      setProfileRead("error");
+    }
+  }
+
+  // The adviser profile is one store (current + versions), written whole. The
+  // intake builds the next store with commitProfile; this only keeps state and
+  // vault in step. A failed write rejects so the intake can say so.
+  async function saveProfile(next: AdvisorProfileStore) {
+    await storage.putProfile(next);
+    setProfileRead({ kind: "ok", store: next });
   }
 
   // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
@@ -1005,6 +1053,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setInvoices(freshInvoices);
     setRewards(freshRewards);
     setEntityProfiles(freshProfiles);
+    try {
+      setProfileRead(await storage.getProfile());
+    } catch {
+      setProfileRead("error");
+    }
   }
 
   // Classify one entity as privé or zakelijk. Replace-all persistence, same
@@ -1051,6 +1104,80 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     const parsed = parseOwnName(ownerDisplayName(ownerName));
     return parsed ? [parsed] : [];
   }, [ownerName]);
+
+  // The same identifiers plus the name he typed, for the room and the intake:
+  // a transfer under his own name is his own money, not income.
+  const ownWithNames = useMemo(
+    () => ({ ...own, names: ownNamesForMatching }),
+    [own, ownNamesForMatching],
+  );
+  // The plan joins the nav once the intake has produced something to plan with.
+  const planUnlocked =
+    profileRead !== "loading" &&
+    profileRead !== "error" &&
+    profileRead.kind === "ok" &&
+    planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+  // Capacity for "what LaVega knows about you": the same room and the same
+  // profile inputs the intake uses, worked out here and never stored.
+  // The home screen's room card: computed once per data change, and only while
+  // the overview is showing.
+  const homeRoom = useMemo(() => {
+    if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
+    const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
+    const computed = computeRoom({
+      txs,
+      accounts,
+      profiles: entityProfiles,
+      rules,
+      own: ownWithNames,
+      asOf,
+      mode: fxConversionMode,
+      fxHistory,
+    });
+    return resolveRoom(computed, profile);
+  }, [
+    view,
+    profileRead,
+    txs,
+    accounts,
+    entityProfiles,
+    rules,
+    ownWithNames,
+    asOf,
+    fxConversionMode,
+    fxHistory,
+  ]);
+
+  const aboutYouCapacity = useMemo(() => {
+    const profile =
+      profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+        ? profileRead.store.current
+        : emptyProfile();
+    if (view !== "about-you")
+      return capacityFor(profile, { kind: "none", reason: "no-data" }, asOf);
+    const computed = computeRoom({
+      txs,
+      accounts,
+      profiles: entityProfiles,
+      rules,
+      own: ownWithNames,
+      asOf,
+      mode: fxConversionMode,
+      fxHistory,
+    });
+    return capacityFor(profile, resolveRoom(computed, profile).room, asOf);
+  }, [
+    view,
+    profileRead,
+    txs,
+    accounts,
+    entityProfiles,
+    rules,
+    ownWithNames,
+    asOf,
+    fxConversionMode,
+    fxHistory,
+  ]);
 
   // Accounts that look like the SAME real account imported twice. Computed on
   // the full list (a duplicate pair can straddle two entities if one side was
@@ -1514,18 +1641,27 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     );
   }
 
-  /* Na een verse kluis en vóór de app: de eenmalige instelstap. Hier en niet in
-   * `VaultGate`, omdat hij niets met de kluis te maken heeft — hij zet
-   * voorkeuren van dit apparaat, en die horen achter het wachtwoordscherm en
-   * niet erin. */
-  if (showOnboarding(freshVault, onboarded)) {
+  if (view === "intake") {
     return (
-      <Onboarding
-        onDone={() => {
-          setOnboarded(true);
-          setScope(getDefaultScope());
-        }}
-      />
+      <>
+        {profileRead === "loading" ? (
+          <p role="status">{intakeCopy[locale].loading}</p>
+        ) : profileRead === "error" ? (
+          <div role="alert">
+            <p className="text-warn">{intakeCopy[locale].loadError}</p>
+            <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
+          </div>
+        ) : (
+          <IntakeWizard
+            store={profileRead.kind === "ok" ? profileRead.store : null}
+            corrupt={profileRead.kind === "corrupt"}
+            asOf={asOf}
+            onSave={saveProfile}
+            onFinish={() => setView("plan")}
+            onExit={() => setView("overview")}
+          />
+        )}
+      </>
     );
   }
 
@@ -1533,7 +1669,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     <div className="shell">
       <NavBar
         view={view}
-        modules={navModules(modules)}
+        modules={navModules(withoutLockedModules(modules, planUnlocked))}
         onNavigate={setView}
         onOpenProfile={() => setView("profiel")}
       />
@@ -1593,6 +1729,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               mode={fxConversionMode}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
+              {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
+                ? {
+                    intake: {
+                      store: profileRead.kind === "ok" ? profileRead.store : null,
+                      room: homeRoom.room,
+                      ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
+                      onSave: saveProfile,
+                    },
+                  }
+                : {})}
               travel={{
                 accounts: scopedAccounts,
                 txs: scopedTxs,
@@ -1728,9 +1874,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {/* Scoped like every other view: standing in Zakelijk and being offered a
               conversion out of a personal account is a leak across the very line
               the switch exists to draw. */}
-          {view === "valuta" && <Valuta accounts={scopedAccounts} />}
+          {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
 
-          {view === "belasting" && (
+          {view === "belasting" && !isArchivedView("belasting") && (
             <Belasting
               entities={entityScope ? [entityScope] : entityOptions}
               txs={scopedTxs}
@@ -1757,7 +1903,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             />
           )}
 
-          {view === "facturen" && (
+          {view === "facturen" && !isArchivedView("facturen") && (
             <Facturen
               storage={storage}
               entities={entityOptions}
@@ -1780,14 +1926,63 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
           )}
 
-          {view === "koppelingen" && <Koppelingen onNavigate={setView} />}
+          {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
+            <Koppelingen onNavigate={setView} />
+          )}
 
           {view === "backup" && (
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
           )}
 
+          {view === "plan" && (
+            <PlanRoute
+              profileRead={profileRead}
+              onRetry={() => void retryProfileRead()}
+              store={
+                profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+                  ? null
+                  : profileRead.store
+              }
+              storage={storage}
+              accounts={accounts}
+              txs={txs}
+              entityProfiles={entityProfiles}
+              rules={rules}
+              own={ownWithNames}
+              rewards={rewards}
+              facts={facts}
+              catalogue={CATALOGUE_ENTRIES}
+              rates={rates.rates}
+              mode={fxConversionMode}
+              fxHistory={fxHistory}
+              asOf={asOf}
+              onSaveProfile={saveProfile}
+              onNavigate={setView}
+            />
+          )}
+
+          {view === "about-you" &&
+            (profileRead === "loading" ? (
+              <p role="status">{intakeCopy[locale].loading}</p>
+            ) : profileRead === "error" ? (
+              <div role="alert">
+                <p className="text-warn">{intakeCopy[locale].loadError}</p>
+                <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
+              </div>
+            ) : (
+              <AboutYou
+                store={profileRead.kind === "ok" ? profileRead.store : null}
+                corrupt={profileRead.kind === "corrupt"}
+                capacity={aboutYouCapacity}
+                asOf={asOf}
+                onSave={saveProfile}
+                onNavigate={setView}
+              />
+            ))}
+
           {view === "profiel" && (
             <Profiel
+              onNavigate={setView}
               enabledModules={modules}
               onModulesChange={handleModulesChange}
               focusModules={addWidget}

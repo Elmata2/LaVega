@@ -1,7 +1,24 @@
 // @vitest-environment jsdom
 import { useState, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("../archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import ModulePicker, { WidgetPicker } from "./ModulePicker";
 import NavBar from "./NavBar";
 import {
@@ -17,6 +34,7 @@ import {
   normaliseWidgets,
   toggleModule,
   toggleWidget,
+  withoutLockedModules,
   useOverviewWidgets,
   type ModuleId,
 } from "./moduleRegistry";
@@ -240,8 +258,8 @@ test("een verse installatie toont alleen de kaarten die standaard aan staan", ()
   // dezelfde zin met de tegenovergestelde opdracht ("als de gebruiker dat wilt")
   // en begint daarom uit.
   expect(getEnabledWidgets()).toBeNull();
-  expect(DEFAULT_WIDGETS).toEqual(["betaalagenda", "btw-stand"]);
-  expect(enabledWidgets(null)).toEqual(["betaalagenda", "btw-stand"]);
+  expect(DEFAULT_WIDGETS).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(null)).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
   expect(DEFAULT_WIDGETS).not.toContain("facturen-open");
 });
 
@@ -252,11 +270,17 @@ test("een oude opgeslagen lijst zet alleen uit waar hij toen over ging", () => {
    * Aandacht en Positie, en daar is afwezig een echt antwoord. Voor elke kaart
    * die er later bij kwam geldt hetzelfde als voor de Betaalagenda: zijn eigen
    * `defaultOn` beslist, niet zijn afwezigheid. */
-  expect(enabledWidgets(["aandacht"])).toEqual(["aandacht", "betaalagenda", "btw-stand"]);
-  expect(enabledWidgets([])).toEqual(["betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(["aandacht"])).toEqual([
+    "aandacht",
+    "intake-invite",
+    "room-card",
+    "betaalagenda",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets([])).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
   // Een nav-lijst die per ongeluk hier belandt levert geen enkele widget op
   // behalve de standaard: geen van die ids is een widget.
-  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(["betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(DEFAULT_WIDGETS);
 });
 
 test("geen enkele widget-id is ook een module-id", () => {
@@ -267,6 +291,9 @@ test("geen enkele widget-id is ook een module-id", () => {
    * een nav-voorkeur met de MODULE facturen erin de kaart aanzetten. */
   const moduleIds = new Set<string>(MODULES.map((m) => m.id));
   for (const w of WIDGETS) expect(moduleIds.has(w.id), `${w.id} is ook een route`).toBe(false);
+  // De routes van de intake (en de latere "about-you") mogen ook geen widget-id zijn.
+  const routeIds = new Set<string>(["intake", "about-you"]);
+  for (const w of WIDGETS) expect(routeIds.has(w.id), `${w.id} is een intake-route`).toBe(false);
   expect(enabledWidgets(MODULES.map((m) => m.id))).toEqual(DEFAULT_WIDGETS);
 });
 
@@ -279,14 +306,27 @@ test("uitzetten werkt ook voor de kaart die standaard aan staat", () => {
   expect(enabledWidgets({ on: ["aandacht"], seen: alles })).toEqual(["aandacht"]);
   // Alleen BTW is gevraagd en uitgezet; de Betaalagenda is nooit gevraagd en
   // valt dus nog steeds terug op zijn eigen `defaultOn`.
-  expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual(["betaalagenda"]);
+  expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual([
+    "intake-invite",
+    "room-card",
+    "betaalagenda",
+  ]);
 
   /* En de andere kant van diezelfde regel, nu voor de twee nieuwe kaarten: een
    * `seen` uit de tijd van de eerste drie zegt niets over hen, dus hun eigen
    * `defaultOn` beslist — BTW verschijnt, Facturen niet. */
   const gezienToen = ["aandacht", "positie", "betaalagenda"];
-  expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual(["btw-stand"]);
-  expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual(["aandacht", "btw-stand"]);
+  expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual([
+    "intake-invite",
+    "room-card",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual([
+    "aandacht",
+    "intake-invite",
+    "room-card",
+    "btw-stand",
+  ]);
 });
 
 test("een lijst ids opschonen is iets anders dan een voorkeur lezen", () => {
@@ -413,7 +453,7 @@ test("a widget he switched on survives a reload; one he never touched stays off"
    * meenemen. En `seen` is de hele registerlijst, want de picker toont ze
    * allemaal tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
   expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual({
-    on: ["aandacht", "betaalagenda", "btw-stand"],
+    on: ["aandacht", "intake-invite", "room-card", "betaalagenda", "btw-stand"],
     seen: WIDGETS.map((w) => w.id),
   });
 
@@ -497,4 +537,19 @@ test("every widget entry carries what the picker shows: label, one line, preview
   expect(
     container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length,
   ).toBeGreaterThanOrEqual(WIDGETS.length);
+});
+
+test("plan is the first nav item and overview the second; both are on by default and no widget id is 'plan'", () => {
+  const ids = navModules(enabledModules(null)).map((m) => m.id);
+  expect(ids.slice(0, 2)).toEqual(["plan", "overview"]);
+  expect(DEFAULT_MODULES).toContain("plan");
+  expect(HOME_MODULE).toBe("overview");
+  expect(WIDGETS.map((w) => w.id as string)).not.toContain("plan");
+});
+
+test("the plan stays out of the nav until a first intake block is done", () => {
+  const all = enabledModules(null);
+  expect(withoutLockedModules(all, false)).not.toContain("plan");
+  expect(withoutLockedModules(all, false)).toContain("overview");
+  expect(withoutLockedModules(all, true)).toEqual(all);
 });

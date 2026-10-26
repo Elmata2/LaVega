@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isArchivedView, isArchivedWidget } from "../archive";
 import {
   HOME_MODULE,
   MODULES,
@@ -91,7 +92,7 @@ export default function ModulePicker({ enabled, onChange }: ModulePickerProps) {
 
   return (
     <ul className="module-picker">
-      {MODULES.map((m) => {
+      {MODULES.filter((m) => !isArchivedView(m.id)).map((m) => {
         const isOn = on.has(m.id);
         const locked = m.id === HOME_MODULE;
         const label = c.nav.moduleLabels[m.id];
@@ -128,7 +129,7 @@ export function WidgetPicker({ enabled, onChange }: WidgetPickerProps) {
 
   return (
     <ul className="module-picker">
-      {WIDGETS.map((w) => {
+      {WIDGETS.filter((w) => !isArchivedWidget(w.id)).map((w) => {
         const isOn = on.has(w.id);
         const widgetCopy = c.modulePicker.widgets[w.id];
         return (

@@ -1,5 +1,22 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("../archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import NavBar from "./NavBar";
 import TopBar from "./TopBar";
 import { enabledModules, navModules } from "./moduleRegistry";
