@@ -1,3 +1,4 @@
+import type { WorkKind } from "@lavega/core";
 import type { Locale } from "../locale.js";
 import type { Section } from "../intake/wizard/screens.js";
 
@@ -31,6 +32,25 @@ export type WizardCopy = {
     debts: string;
     debtDetails: string;
     buffer: string;
+    work: string;
+    hasCards: (together: boolean) => string;
+    cards: (together: boolean) => string;
+    upload: string;
+  };
+  workKinds: Record<WorkKind, string>;
+  spendUnknown: string;
+  spendExact: string;
+  spendBands: [string, string, string, string, string];
+  cardSearch: string;
+  cardNotFound: string;
+  otherCard: string;
+  upload: {
+    button: string;
+    later: string;
+    toPlan: string;
+    imported: (n: number) => string;
+    nothingNew: string;
+    failed: string;
   };
   alone: string;
   together: string;
@@ -85,6 +105,39 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       debts: "Heb je schulden die we niet zien?",
       debtDetails: "Bij wie, en hoeveel los je per maand af?",
       buffer: "Hoeveel maanden buffer wil je achter de hand?",
+      work: "Wat voor werk doe je?",
+      hasCards: (t) => (t ? "Hebben jullie een creditcard?" : "Heb je een creditcard?"),
+      cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
+      upload: "Wil je je bankafschrift toevoegen?",
+    },
+    workKinds: {
+      employed: "Loondienst",
+      freelance: "Freelance / zzp",
+      business: "Eigen bedrijf",
+      student: "Student",
+      jobseeking: "Werkzoekend",
+      retired: "Met pensioen",
+      other: "Anders",
+    },
+    spendUnknown: "Weet ik niet",
+    spendExact: "Toch een bedrag invullen",
+    spendBands: [
+      "Minder dan €1.500",
+      "€1.500 – €2.500",
+      "€2.500 – €3.500",
+      "€3.500 – €5.000",
+      "Meer dan €5.000",
+    ],
+    cardSearch: "Zoek je kaart",
+    cardNotFound: "Geen kaart gevonden",
+    otherCard: "Een andere kaart",
+    upload: {
+      button: "Bankafschrift uploaden",
+      later: "Later",
+      toPlan: "Naar je plan",
+      imported: (n) => `${n} transacties toegevoegd`,
+      nothingNew: "Deze transacties stonden er al in.",
+      failed: "Dit bestand konden we niet lezen.",
     },
     alone: "Alleen",
     together: "Samen",
@@ -137,6 +190,39 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       debts: "Do you have debts we cannot see?",
       debtDetails: "Owed to whom, and how much do you pay off per month?",
       buffer: "How many months of buffer do you want in reserve?",
+      work: "What kind of work do you do?",
+      hasCards: (t) => (t ? "Do you have a credit card?" : "Do you have a credit card?"),
+      cards: (t) => (t ? "Which credit cards do you have?" : "Which credit cards do you have?"),
+      upload: "Do you want to add your bank statement?",
+    },
+    workKinds: {
+      employed: "Employed",
+      freelance: "Freelance / self-employed",
+      business: "Own business",
+      student: "Student",
+      jobseeking: "Job seeking",
+      retired: "Retired",
+      other: "Other",
+    },
+    spendUnknown: "I don't know",
+    spendExact: "Enter an amount instead",
+    spendBands: [
+      "Less than €1,500",
+      "€1,500 – €2,500",
+      "€2,500 – €3,500",
+      "€3,500 – €5,000",
+      "More than €5,000",
+    ],
+    cardSearch: "Search for your card",
+    cardNotFound: "No card found",
+    otherCard: "Another card",
+    upload: {
+      button: "Upload bank statement",
+      later: "Later",
+      toPlan: "Go to your plan",
+      imported: (n) => `${n} transactions added`,
+      nothingNew: "These transactions were already in.",
+      failed: "We could not read this file.",
     },
     alone: "Alone",
     together: "Together",

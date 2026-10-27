@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { AdvisorProfile, RISK_SCALE, emptyProfile } from "@lavega/core";
 import { applyChildren, applyGoals } from "../state.js";
 import {
+  answerCards,
   answerDebts,
   answerHasChildren,
   answerNoChildren,
@@ -24,10 +25,48 @@ test("fresh profile resumes at household", () => {
   expect(resumeScreen(emptyProfile())).toBe("household");
 });
 
-test("screensFor has 12 + risk screens by default and one fewer after Nee on children", () => {
-  expect(screensFor(emptyProfile())).toHaveLength(12 + riskCount);
-  expect(screensFor(answerNoChildren(emptyProfile(), AS_OF))).toHaveLength(11 + riskCount);
-  expect(screensFor(emptyProfile())).toHaveLength(17);
+test("screensFor has 21 screens by default and one fewer after Nee on children", () => {
+  expect(screensFor(emptyProfile())).toHaveLength(16 + riskCount);
+  expect(screensFor(answerNoChildren(emptyProfile(), AS_OF))).toHaveLength(15 + riskCount);
+  expect(screensFor(emptyProfile())).toHaveLength(21);
+});
+
+test("Nee on cards drops the cards screen and Ja restores it", () => {
+  const no = answerCards(emptyProfile(), false, AS_OF);
+  expect(screensFor(no)).not.toContain("cards");
+  expect(screensFor(no)).toHaveLength(20);
+  expect(screensFor(answerCards(no, true, AS_OF))).toContain("cards");
+  expect(answerCards(no, true, AS_OF).intake.noCards).toBe(false);
+  expect(answerCards(no, true, AS_OF).statedCards).toBeUndefined();
+});
+
+test("Nee on cards stores an empty stated list and noCards", () => {
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    statedCards: { value: ["other"], source: "stated", at: AS_OF },
+  });
+  const no = answerCards(p, false, AS_OF);
+  expect(no.statedCards).toEqual({ value: [], source: "stated", at: AS_OF });
+  expect(no.intake.noCards).toBe(true);
+  expect(answerCards(no, true, AS_OF).statedCards).toBeUndefined();
+});
+
+test("finished old profile stays done", () => {
+  expect(resumeScreen(withBlocks(3))).toBe("done");
+});
+
+test("round-1 finisher resumes at upload", () => {
+  const p = markDone(withBlocks(3), "invested");
+  expect(resumeScreen(p)).toBe("upload");
+});
+
+test("markDone upload then resume is done", () => {
+  expect(resumeScreen(markDone(markDone(withBlocks(3), "invested"), "upload"))).toBe("done");
+});
+
+test("new screens belong to their sections", () => {
+  for (const id of ["work", "has-cards", "cards"] as const) expect(sectionOf(id)).toBe("about");
+  expect(sectionOf("upload")).toBe("risk");
 });
 
 test("risk screens follow RISK_SCALE order and sections are assigned", () => {
@@ -63,7 +102,7 @@ test("a lastScreen absent from screensFor moves on to the next present screen", 
 });
 
 test("resume after the last screen is done", () => {
-  expect(resumeScreen(markDone(emptyProfile(), "invested"))).toBe("done");
+  expect(resumeScreen(markDone(emptyProfile(), "upload"))).toBe("done");
 });
 
 test("answering Nee after Ja clears children, keeps goals", () => {

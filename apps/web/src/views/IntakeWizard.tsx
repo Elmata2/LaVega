@@ -15,14 +15,17 @@ import {
   applyHousehold,
   applyKnowledge,
   applyRiskAnswers,
+  applyStatedCards,
   applyStatedHousing,
   applyStatedRange,
   applyStatedSavings,
+  applyWork,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import ChoiceTiles from "../intake/wizard/ChoiceTiles.js";
 import WizardFrame from "../intake/wizard/WizardFrame.js";
 import {
+  answerCards,
   answerDebts,
   answerHasChildren,
   answerNoChildren,
@@ -34,10 +37,14 @@ import {
 } from "../intake/wizard/screens.js";
 import {
   AmountScreen,
+  CardsScreen,
   ChildYearsScreen,
   DebtScreen,
   GoalScreen,
   HousingScreen,
+  SpendScreen,
+  UploadScreen,
+  WorkScreen,
 } from "../intake/wizard/screenViews.js";
 
 export type IntakeWizardProps = {
@@ -45,6 +52,7 @@ export type IntakeWizardProps = {
   corrupt?: boolean;
   asOf: string;
   onSave: (next: AdvisorProfileStore) => Promise<void>;
+  onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
   onFinish: () => void;
   onExit: () => void;
   now?: () => string;
@@ -123,12 +131,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     const ok = await update(change);
     setBusy(false);
     if (!ok) return;
-    const target = after[after.indexOf(id) + 1];
-    if (id === "invested" || target === undefined) {
-      setScreen("done");
-    } else {
-      setScreen(target);
-    }
+    setScreen(after[after.indexOf(id) + 1] ?? "done");
   }
 
   const back =
@@ -205,19 +208,47 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         onSubmit={(kids) => void save((p) => applyChildren(p, kids, asOf))}
       />
     );
-  } else if (screen === "income" || screen === "spend") {
-    question = q[screen](together);
-    const stored = profile.statedRanges?.value?.[screen]?.lowCents ?? null;
+  } else if (screen === "work") {
+    question = q.work;
+    body = (
+      <WorkScreen
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.work?.value ?? []}
+        onSubmit={(kinds) => void save((p) => applyWork(p, kinds, asOf))}
+      />
+    );
+  } else if (screen === "spend") {
+    question = q.spend(together);
+    const stored = profile.statedRanges?.value?.spend ?? null;
+    body = (
+      <SpendScreen
+        copy={w}
+        busy={busy}
+        label={question}
+        stored={stored}
+        onExact={(c) =>
+          void save((p) =>
+            applyStatedRange(p, "spend", { lowCents: c, highCents: c }, asOf),
+          )
+        }
+        onBand={(range) => void save((p) => applyStatedRange(p, "spend", range, asOf))}
+      />
+    );
+  } else if (screen === "income") {
+    question = q.income(together);
+    const stored = profile.statedRanges?.value?.income?.lowCents ?? null;
     body = (
       <AmountScreen
         copy={w}
         busy={busy}
         label={question}
         initialCents={stored}
-        allowZero={screen === "spend"}
+        allowZero={false}
         onSubmit={(c) =>
           void save((p) =>
-            applyStatedRange(p, screen, { lowCents: c, highCents: c }, asOf),
+            applyStatedRange(p, "income", { lowCents: c, highCents: c }, asOf),
           )
         }
       />
@@ -318,6 +349,33 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         }
       />
     );
+  } else if (screen === "has-cards") {
+    question = q.hasCards(together);
+    const sel = profile.intake.noCards === true
+        ? "no"
+        : profile.intake.noCards === false || (profile.statedCards?.value.length ?? 0) > 0
+          ? "yes"
+          : null;
+    body = choice(
+      question,
+      [
+        { value: "yes", label: w.yes },
+        { value: "no", label: w.no },
+      ],
+      sel,
+      (v) => void save((p) => answerCards(p, v === "yes", asOf)),
+    );
+  } else if (screen === "cards") {
+    question = q.cards(together);
+    body = (
+      <CardsScreen
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.statedCards?.value ?? []}
+        onSubmit={(ids) => void save((p) => applyStatedCards(p, ids, asOf))}
+      />
+    );
   } else if (screen === "buffer") {
     question = q.buffer;
     const m = profile.buffer?.value.months;
@@ -350,6 +408,16 @@ export default function IntakeWizard(props: IntakeWizardProps) {
             asOf,
           ),
         ),
+    );
+  } else if (screen === "upload") {
+    question = q.upload;
+    body = (
+      <UploadScreen
+        copy={w}
+        busy={busy}
+        onImport={props.onImport}
+        onFinish={() => void save((p) => p)}
+      />
     );
   } else {
     const itemId = screen.slice("risk:".length);

@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import ChoiceTiles from "./ChoiceTiles";
+import MultiTiles from "./MultiTiles";
 import WizardFrame from "./WizardFrame";
 import AmountField from "./AmountField";
 
@@ -130,4 +131,32 @@ test("AmountField reports cents and null", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   expect(onChange).toHaveBeenLastCalledWith(null);
+});
+
+test("MultiTiles toggles aria-checked", () => {
+  const picked: string[] = [];
+  const render = () => (
+    <MultiTiles
+      label="Q"
+      selected={picked}
+      onToggle={(v) => {
+        const i = picked.indexOf(v);
+        if (i >= 0) picked.splice(i, 1);
+        else picked.push(v);
+        act(() => root!.render(render()));
+      }}
+      options={[
+        { value: "a", label: "A" },
+        { value: "b", label: "B" },
+      ]}
+    />
+  );
+  const c = mount(render());
+  const boxes = () => [...c.querySelectorAll('[role="checkbox"]')] as HTMLButtonElement[];
+  expect(boxes().map((b) => b.getAttribute("aria-checked"))).toEqual(["false", "false"]);
+  act(() => boxes()[0]!.click());
+  act(() => boxes()[1]!.click());
+  expect(boxes().map((b) => b.getAttribute("aria-checked"))).toEqual(["true", "true"]);
+  act(() => boxes()[0]!.click());
+  expect(boxes().map((b) => b.getAttribute("aria-checked"))).toEqual(["false", "true"]);
 });

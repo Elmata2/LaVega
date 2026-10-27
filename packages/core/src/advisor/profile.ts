@@ -132,6 +132,17 @@ export const Risk = Schema.Struct({
 });
 export type Risk = Schema.Schema.Type<typeof Risk>;
 
+export const WorkKind = Schema.Literals([
+  "employed",
+  "freelance",
+  "business",
+  "student",
+  "jobseeking",
+  "retired",
+  "other",
+]);
+export type WorkKind = Schema.Schema.Type<typeof WorkKind>;
+
 export const Experience = Schema.Literals(["beginner", "some", "experienced"]);
 
 export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile")({
@@ -149,6 +160,9 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   experience: Schema.optionalKey(Field(Experience)),
   worries: Schema.optionalKey(Field(Schema.String)),
   statedRanges: Schema.optionalKey(Field(StatedRanges)),
+  work: Schema.optionalKey(Field(Schema.Array(WorkKind))),
+  /** Catalogue ids of credit cards the user says they have, or "other". */
+  statedCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
   /** Evidence fingerprints of derived facts the user removed. */
   removed: Schema.Array(Schema.String),
   intake: Schema.Struct({
@@ -157,6 +171,7 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
     /** Wizard bookkeeping: the last screen answered, and a "no debts" answer. */
     lastScreen: Schema.optionalKey(Schema.String),
     noUserDebts: Schema.optionalKey(Schema.Boolean),
+    noCards: Schema.optionalKey(Schema.Boolean),
   }),
 }) {}
 

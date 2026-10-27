@@ -1,4 +1,4 @@
-import type { AdvisorProfile } from "@lavega/core";
+import type { AdvisorProfile, WorkKind } from "@lavega/core";
 import type { Locale } from "../locale.js";
 
 /**
@@ -63,6 +63,9 @@ export type AboutYouCopy = {
     range: (low: string, high: string) => string;
     incomeRange: string;
     spendRange: string;
+    workKinds: Record<WorkKind, string>;
+    otherCard: string;
+    noCards: string;
   };
   editors: {
     euros: string;
@@ -306,6 +309,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         experience: "Ervaring",
         worries: "Zorgen",
         statedRanges: "Opgegeven bedragen",
+        work: "Werk",
+        statedCards: "Creditcards",
       },
       edit: "Wijzig",
       remove: "Verwijder",
@@ -338,6 +343,17 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         range: (l, h) => `tussen ${l} en ${h} per maand`,
         incomeRange: "Netto inkomen",
         spendRange: "Uitgaven",
+        workKinds: {
+          employed: "Loondienst",
+          freelance: "Freelance / zzp",
+          business: "Eigen bedrijf",
+          student: "Student",
+          jobseeking: "Werkzoekend",
+          retired: "Met pensioen",
+          other: "Anders",
+        },
+        otherCard: "Een andere kaart",
+        noCards: "Geen creditcard",
       },
       editors: {
         euros: "Bedrag in euro",
@@ -524,6 +540,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         experience: "Experience",
         worries: "Worries",
         statedRanges: "Amounts you gave",
+        work: "Work",
+        statedCards: "Credit cards",
       },
       edit: "Edit",
       remove: "Remove",
@@ -555,6 +573,17 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         range: (l, h) => `between ${l} and ${h} a month`,
         incomeRange: "Net income",
         spendRange: "Spending",
+        workKinds: {
+          employed: "Employed",
+          freelance: "Freelance / self-employed",
+          business: "Own business",
+          student: "Student",
+          jobseeking: "Job seeking",
+          retired: "Retired",
+          other: "Other",
+        },
+        otherCard: "Another card",
+        noCards: "No credit card",
       },
       editors: {
         euros: "Amount in euros",

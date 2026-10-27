@@ -103,3 +103,12 @@ Mockups: `.superpowers/brainstorm/50774-1793042623/content/whoop-light-v2.html`,
 - How the wizard reuses or replaces `views/Intake.tsx`.
 - Exact spacing, type scale and transition, inside the visual above.
 - How an existing profile (answers already given through the old intake) maps to a resume position.
+
+## Round 2 additions (2026-10-26, owner request; owner skipped the questions, so the calls below are the designer's)
+
+Owner asked for: bands / "weet ik niet" when a user does not know their spending; bank-data upload back in the flow; a place to say which cards they hold; a question about what kind of work they do.
+
+- **Werk (new screen 2, after household, section Over jou):** "Wat voor werk doe je?" Multi-select (people combine, e.g. loondienst + freelance): Loondienst, Freelance / zzp, Eigen bedrijf, Student, Werkzoekend, Met pensioen, Anders. Asked for the user only, also when Samen. Stored as `work` (stated Field with an array of those kinds). Shown and editable in About you. The plan does not use it yet.
+- **Uitgaven onbekend:** the spend screen gets a small "Weet ik niet" link. It swaps the amount field for five band tiles (single tap saves and advances): Minder dan €1.500 (€750–€1.500), €1.500 – €2.500, €2.500 – €3.500, €3.500 – €5.000, Meer dan €5.000 (€5.000–€7.500). Stored as the spend range low/high (no longer zero-width). Household wording follows Samen/Alleen. Other amount screens stay single-amount.
+- **Kaarten (two screens after savings, section Over jou):** "Heb je een creditcard?" Ja/Nee. Ja → "Welke creditcards heb je?": a search field over the catalogue's personal credit cards (docs/catalog/catalog.json kind "creditcard", minus Business/Corporate products) shown as multi-select tiles, plus "Een andere kaart". Stored as `statedCards` (stated Field with catalogue ids or "other"); Nee stores an empty list. Jouw plan's cards section lists the stated cards by name when no card account comes from bank data, with its existing missing-data note; About you shows and edits them.
+- **Bankgegevens (last screen, after "Heb je al eens belegd?"):** "Wil je je bankafschrift toevoegen?" One upload button (the existing CSV/statement import) and a "Later" link. After a successful import it shows the import result and "Naar je plan"; a failed import shows the error and lets the user try again or go on. Bank linking (redirect) stays in Profiel. Old profiles that finished the intake are not sent back for this screen.

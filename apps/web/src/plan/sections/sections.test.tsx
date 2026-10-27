@@ -29,6 +29,8 @@ import {
   type VaultEvent,
 } from "@lavega/core";
 import Plan from "../../views/Plan";
+import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
+import { buildHeldCards } from "../heldCards";
 import ChangeLog from "../ChangeLog";
 import { richAccounts, richPlanInput, richStore } from "../richInput";
 import type { UsePlan } from "../usePlan";
@@ -880,4 +882,87 @@ test("B1: the whole rendered page, in both languages, never calls anything inves
     expect(cardEl(c, "goals").textContent).toContain(locale === "en" ? "Goals" : "Doelen");
     unmount();
   }
+});
+
+test("CardsSection lists stated cards when no card account", () => {
+  const { ctx, result } = cardsCtx();
+  const store = richStore();
+  ctx.profile.store = asClass(store, {
+    statedCards: { value: ["ing-creditcard", "other"], source: "stated", at: AS_OF },
+  });
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const t = q(c, "plan-cards-stated")!.textContent!;
+  expect(t).toContain("ING creditcard");
+  expect(t).toContain("Another card");
+  unmount();
+});
+
+const currentAccount: Account = {
+  key: "ing-pas",
+  iban: "",
+  name: "Betaalrekening",
+  bank: "ING",
+  entity: "Prive",
+  currency: "EUR",
+  balance: null,
+};
+
+/** The cards section as the app builds it: a real held-card list from `accounts`. */
+function cardsFor(accounts: Account[], patch: Record<string, unknown>) {
+  const store = asClass(richStore(), patch);
+  const rich = richPlanInput(store);
+  const input = {
+    ...rich,
+    accounts: [...rich.accounts, ...accounts],
+    heldCards: buildHeldCards({
+      accounts,
+      facts: [],
+      entries: CATALOGUE_ENTRIES,
+      rewards: [],
+      assumptionOn: false,
+    }),
+  };
+  const base = computePlan(input);
+  const { ctx } = cardsCtx();
+  ctx.accounts = accounts;
+  ctx.profile.store = store;
+  return { ctx, result: base.sections.cards };
+}
+
+const statedPatch = {
+  statedCards: { value: ["ing-creditcard"], source: "stated", at: AS_OF },
+};
+
+test("M2: a real betaalrekening (no creditcard account) still shows the stated card and no contradicting note", () => {
+  const { ctx, result } = cardsFor([currentAccount], statedPatch);
+  expect(result.figures.criteria.some((r) => r.held)).toBe(true);
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated")!.textContent).toContain("ING creditcard");
+  expect(c.textContent).not.toContain("No card has been entered");
+  expect(c.textContent).not.toContain("is not known, so there is nothing to compare");
+  expect(c.textContent).not.toContain("There is no card data");
+  expect(c.textContent).toContain("not in your bank data");
+  unmount();
+});
+
+test("S3: with no bank data at all, the stated list is not followed by 'no card entered'", () => {
+  const { ctx, result } = cardsFor([], statedPatch);
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated")).not.toBeNull();
+  expect(c.textContent).not.toContain("No card has been entered");
+  expect(c.textContent).not.toContain("There is no card data");
+  expect(c.textContent).not.toContain("There are no cards to show");
+  unmount();
+});
+
+test("M2: a real creditcard account hides the stated list (the bank data is the source)", () => {
+  const cc: Account = { ...currentAccount, key: "abn-cc", name: "Creditcard", type: "Creditcard" };
+  const { ctx, result } = cardsFor([cc], statedPatch);
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated")).toBeNull();
+  unmount();
 });

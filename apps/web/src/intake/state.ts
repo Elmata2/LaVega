@@ -6,6 +6,7 @@ import {
   scoreKnowledge,
   scoreTolerance,
   type Goal,
+  type WorkKind,
 } from "@lavega/core";
 
 const copyProfile = (
@@ -27,6 +28,12 @@ export function applyStatedRange(
     statedRanges: { value: { ...prev, [section]: range }, source: "stated", at: asOf },
   });
 }
+
+export const applyWork = (p: AdvisorProfile, kinds: readonly WorkKind[], asOf: string) =>
+  copyProfile(p, { work: { value: [...kinds], source: "stated", at: asOf } });
+
+export const applyStatedCards = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
+  copyProfile(p, { statedCards: { value: [...ids], source: "stated", at: asOf } });
 
 export const applyStatedHousing = (
   p: AdvisorProfile,

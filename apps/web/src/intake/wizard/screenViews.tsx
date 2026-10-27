@@ -1,7 +1,11 @@
 import { useId, useState, type ReactNode } from "react";
+import type { WorkKind } from "@lavega/core";
 import type { WizardCopy } from "../../copy/wizard.js";
 import AmountField from "./AmountField.js";
 import ChoiceTiles from "./ChoiceTiles.js";
+import CardPicker, { orderedCardIds } from "./CardPicker.js";
+import MultiTiles from "./MultiTiles.js";
+import { WORK_ORDER } from "./screens.js";
 
 type Kind = "rent" | "mortgage" | "other";
 type Busy = { busy: boolean };
@@ -295,5 +299,211 @@ export function DebtScreen(
       </div>
       <Next label={p.copy.next} disabled={!valid || p.busy} />
     </Form>
+  );
+}
+
+export function WorkScreen(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    initial: readonly WorkKind[];
+    onSubmit: (kinds: WorkKind[]) => void;
+  },
+) {
+  const [picked, setPicked] = useState<readonly WorkKind[]>(p.initial);
+  const valid = picked.length > 0;
+  return (
+    <Form
+      ok={valid && !p.busy}
+      onSubmit={() => valid && p.onSubmit(WORK_ORDER.filter((k) => picked.includes(k)))}
+    >
+      <MultiTiles<WorkKind>
+        label={p.label}
+        disabled={p.busy}
+        selected={picked}
+        onToggle={(k) =>
+          setPicked((all) => (all.includes(k) ? all.filter((x) => x !== k) : [...all, k]))
+        }
+        options={WORK_ORDER.map((k) => ({ value: k, label: p.copy.workKinds[k] }))}
+      />
+      <Next label={p.copy.next} disabled={!valid || p.busy} />
+    </Form>
+  );
+}
+
+/** Spend bands in cents, low to high; labels come from copy.spendBands. */
+export const SPEND_BANDS: readonly { lowCents: number; highCents: number }[] = [
+  { lowCents: 75000, highCents: 150000 },
+  { lowCents: 150000, highCents: 250000 },
+  { lowCents: 250000, highCents: 350000 },
+  { lowCents: 350000, highCents: 500000 },
+  { lowCents: 500000, highCents: 750000 },
+];
+
+type StoredRange = { lowCents: number; highCents: number } | null;
+
+export function SpendScreen(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    stored: StoredRange;
+    onExact: (cents: number) => void;
+    onBand: (range: { lowCents: number; highCents: number }) => void;
+  },
+) {
+  const bandAt = p.stored
+    ? SPEND_BANDS.findIndex(
+        (b) => b.lowCents === p.stored!.lowCents && b.highCents === p.stored!.highCents,
+      )
+    : -1;
+  const [bands, setBands] = useState(bandAt >= 0);
+  if (!bands) {
+    return (
+      <>
+        <AmountScreen
+          copy={p.copy}
+          busy={p.busy}
+          label={p.label}
+          initialCents={
+            p.stored !== null && p.stored.highCents === p.stored.lowCents
+              ? p.stored.lowCents
+              : null
+          }
+          allowZero
+          onSubmit={p.onExact}
+        />
+        <button
+          type="button"
+          className="wz-link"
+          disabled={p.busy}
+          onClick={() => setBands(true)}
+        >
+          {p.copy.spendUnknown}
+        </button>
+      </>
+    );
+  }
+  return (
+    <>
+      <ChoiceTiles<string>
+        label={p.label}
+        disabled={p.busy}
+        selected={bandAt >= 0 ? String(bandAt) : null}
+        onPick={(v) => p.onBand(SPEND_BANDS[Number(v)] as (typeof SPEND_BANDS)[number])}
+        options={SPEND_BANDS.map((_, i) => ({
+          value: String(i),
+          label: p.copy.spendBands[i] as string,
+        }))}
+      />
+      <button
+        type="button"
+        className="wz-link"
+        disabled={p.busy}
+        onClick={() => setBands(false)}
+      >
+        {p.copy.spendExact}
+      </button>
+    </>
+  );
+}
+
+export function CardsScreen(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    initial: readonly string[];
+    onSubmit: (ids: string[]) => void;
+  },
+) {
+  const [picked, setPicked] = useState<readonly string[]>(p.initial);
+  const valid = picked.length > 0;
+  return (
+    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(orderedCardIds(picked))}>
+      <CardPicker
+        copy={p.copy}
+        label={p.label}
+        disabled={p.busy}
+        picked={picked}
+        onChange={setPicked}
+      />
+      <Next label={p.copy.next} disabled={!valid || p.busy} />
+    </Form>
+  );
+}
+
+/** Optional last screen: hand a statement to the app's import. The wizard is
+ *  full-screen, so a failure is shown here, not in the page banner. */
+export function UploadScreen(
+  p: Busy & {
+    copy: WizardCopy;
+    onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
+    onFinish: () => void;
+  },
+) {
+  const [state, setState] = useState<
+    { kind: "idle" } | { kind: "working" } | { kind: "ok"; count: number } | { kind: "failed" }
+  >({ kind: "idle" });
+  const u = p.copy.upload;
+  const working = state.kind === "working";
+
+  async function pick(file: File) {
+    setState({ kind: "working" });
+    try {
+      const r = await p.onImport(file);
+      setState(r.ok ? { kind: "ok", count: r.count } : { kind: "failed" });
+    } catch {
+      setState({ kind: "failed" });
+    }
+  }
+
+  return (
+    <div className="wz-form">
+      {state.kind === "ok" ? (
+        <>
+          <p role="status" className="wz-hint">
+            {state.count > 0 ? u.imported(state.count) : u.nothingNew}
+          </p>
+          <div className="wz-footer">
+            <button type="button" className="wz-next" disabled={p.busy} onClick={p.onFinish}>
+              {u.toPlan}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="wz-footer">
+            {/* No `accept`: the format is sniffed from the contents, as in Import. */}
+            <label className="wz-next wz-upload" aria-disabled={working || p.busy}>
+              {u.button}
+              <input
+                type="file"
+                className="wz-sr"
+                disabled={working || p.busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void pick(file);
+                }}
+              />
+            </label>
+          </div>
+          {state.kind === "failed" ? (
+            <p role="alert" className="wz-error">
+              {u.failed}
+            </p>
+          ) : null}
+          <div className="wz-footer">
+            <button
+              type="button"
+              className="wz-link"
+              disabled={working || p.busy}
+              onClick={p.onFinish}
+            >
+              {u.later}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
