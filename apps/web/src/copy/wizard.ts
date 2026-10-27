@@ -44,6 +44,10 @@ export type WizardCopy = {
   cardSearch: string;
   cardNotFound: string;
   otherCard: string;
+  /** Group name for brands the list does not know. */
+  otherBrand: string;
+  /** Badge on a brand tile: how many of its cards are picked. */
+  cardsPicked: (n: number) => string;
   upload: {
     button: string;
     later: string;
@@ -131,6 +135,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     cardSearch: "Zoek je kaart",
     cardNotFound: "Geen kaart gevonden",
     otherCard: "Een andere kaart",
+    otherBrand: "Overige",
+    cardsPicked: (n) => `${n} gekozen`,
     upload: {
       button: "Bankafschrift uploaden",
       later: "Later",
@@ -216,6 +222,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     cardSearch: "Search for your card",
     cardNotFound: "No card found",
     otherCard: "Another card",
+    otherBrand: "Other",
+    cardsPicked: (n) => `${n} selected`,
     upload: {
       button: "Upload bank statement",
       later: "Later",

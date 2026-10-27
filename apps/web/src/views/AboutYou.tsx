@@ -286,7 +286,14 @@ function EditorForm({
           }
         />
       ) : editor.kind === "cards" ? (
-        <CardPicker copy={wizardCopy[locale]} label={label} picked={picked} onChange={setPicked} />
+        <div className="w-full basis-full">
+          <CardPicker
+            copy={wizardCopy[locale]}
+            label={label}
+            picked={picked}
+            onChange={setPicked}
+          />
+        </div>
       ) : editor.kind === "choice" ? (
         <select
           aria-label={c.editors.choice}

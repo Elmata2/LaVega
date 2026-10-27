@@ -7,8 +7,55 @@ const entries = (catalogue as { entries: Entry[] }).entries ?? [];
 /** The id stored when the card is not in the catalogue. */
 export const OTHER_CARD = "other";
 
-const personal = (e: Entry) =>
-  e.kind === "creditcard" && !/business|corporate/i.test(e.product);
+const isCard = (e: Entry) => e.kind === "creditcard";
+
+export type CardBrand =
+  | "amex"
+  | "ics"
+  | "ing"
+  | "abn"
+  | "rabo"
+  | "anwb"
+  | "bunq"
+  | "knab"
+  | "sns-asn-regio"
+  | "nexo"
+  | "other-brand";
+
+/** Id prefix to brand, first match wins. Display order is BRAND_ORDER. */
+const BRAND_PREFIXES: readonly (readonly [CardBrand, readonly string[]])[] = [
+  ["amex", ["american-express-", "flying-blue-american-express-", "klm-american-express-"]],
+  ["ics", ["ics-"]],
+  ["ing", ["ing-"]],
+  ["abn", ["abn-amro-"]],
+  ["rabo", ["rabo-", "rabobank-"]],
+  ["anwb", ["anwb-"]],
+  ["bunq", ["bunq-"]],
+  ["knab", ["knab-"]],
+  ["sns-asn-regio", ["sns-", "asn-", "regiobank-"]],
+  ["nexo", ["nexo-"]],
+];
+
+export const BRAND_ORDER: readonly CardBrand[] = [
+  ...BRAND_PREFIXES.map(([b]) => b),
+  "other-brand",
+];
+
+const BRAND_LABELS: Record<Exclude<CardBrand, "other-brand">, string> = {
+  amex: "American Express",
+  ics: "ICS (Visa / Mastercard)",
+  ing: "ING",
+  abn: "ABN AMRO",
+  rabo: "Rabobank",
+  anwb: "ANWB",
+  bunq: "bunq",
+  knab: "Knab",
+  "sns-asn-regio": "SNS / ASN / RegioBank",
+  nexo: "Nexo",
+};
+
+export const brandOf = (id: string): CardBrand =>
+  BRAND_PREFIXES.find(([, ps]) => ps.some((p) => id.startsWith(p)))?.[0] ?? "other-brand";
 
 /** Case-blind and locale-free, so the order is the same on every device. */
 export const byName = (a: string, b: string): number => {
@@ -39,10 +86,10 @@ function aliasesOf(e: Entry): string {
   return out.join(" ");
 }
 
-type Card = { id: string; label: string };
+export type Card = { id: string; label: string };
 
 const CARDS: readonly (Card & { search: string })[] = entries
-  .filter(personal)
+  .filter(isCard)
   .map((e) => ({
     id: e.id,
     label: e.product,
@@ -59,7 +106,20 @@ export const matchCards = (query: string): Card[] => {
   );
 };
 
-/** The personal credit cards of the catalogue, sorted by product, then the
+export type CardGroup = { brand: CardBrand; label: string; cards: Card[] };
+
+/** The catalogue cards by brand in display order, each sorted by label; empty
+ *  brands are left out. `extra` cards (stated ids the catalogue lacks) join "other". */
+export const cardGroups = (otherLabel: string, extra: readonly Card[] = []): CardGroup[] => {
+  const all: Card[] = [...CARDS.map(({ id, label }) => ({ id, label })), ...extra];
+  return BRAND_ORDER.map((brand) => ({
+    brand,
+    label: brand === "other-brand" ? otherLabel : BRAND_LABELS[brand],
+    cards: all.filter((c) => brandOf(c.id) === brand).sort((a, b) => byName(a.label, b.label)),
+  })).filter((g) => g.cards.length > 0);
+};
+
+/** The credit cards of the catalogue, sorted by product, then the
  *  "another card" choice (its label is copy, so the caller passes it). */
 export const cardOptions = (otherLabel: string): { id: string; label: string }[] => [
   ...CARDS.map(({ id, label }) => ({ id, label })),

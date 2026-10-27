@@ -579,17 +579,24 @@ test("band then exact amount replaces the range (and the reverse)", async () => 
 const searchInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="search"]')!;
 const boxes = (c: HTMLElement) => [...c.querySelectorAll('[role="checkbox"]')];
 
-test("search narrows the list", async () => {
+const brandTile = (c: HTMLElement, text: RegExp) =>
+  [...c.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((b) =>
+    text.test(b.textContent ?? ""),
+  )!;
+const openBrand = (c: HTMLElement, text: RegExp) => act(async () => brandTile(c, text).click());
+
+test("search swaps the brand tiles for a narrowed flat list", async () => {
   const { c } = mount(fromScreen("savings"));
   expect(h1(c)).toBe("Do you have a credit card?");
   await tap(c, "Yes");
   expect(h1(c)).toBe("Which credit cards do you have?");
-  const before = boxes(c).length;
+  expect(c.querySelectorAll("button[aria-expanded]").length).toBeGreaterThan(5);
+  expect(boxes(c).length).toBe(1);
   await type(searchInput(c), "american express gold");
   const after = boxes(c)
     .map((b) => b.textContent)
     .filter((t) => t !== "Another card");
-  expect(boxes(c).length).toBeLessThan(before);
+  expect(c.querySelectorAll("button[aria-expanded]").length).toBe(0);
   expect(after.every((t) => /american express gold/i.test(t ?? ""))).toBe(true);
   expect(after.length).toBeGreaterThan(0);
 });
@@ -598,6 +605,7 @@ test("cards saves the picked ids", async () => {
   const { c, saved } = mount(fromScreen("savings"));
   await tap(c, "Yes");
   expect(nextBtn(c).disabled).toBe(true);
+  await openBrand(c, /^ING/);
   await act(async () => box(c, "ING creditcard").click());
   await act(async () => box(c, "Another card").click());
   expect(nextBtn(c).disabled).toBe(false);
@@ -618,6 +626,15 @@ test("search 'amex' finds the American Express cards and keeps 'Another card' li
   expect(labels.filter((t) => /american express/i.test(t)).length).toBeGreaterThan(3);
   expect(labels).toContain("Another card");
   expect(c.textContent).not.toContain("No card found");
+});
+
+test("opening American Express in the wizard lists its business and corporate cards", async () => {
+  const { c } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  await openBrand(c, /American Express/);
+  const labels = boxes(c).map((b) => b.textContent ?? "");
+  for (const n of ["Blue Card", "Gold Card", "Platinum Card", "Business Gold Card", "Corporate Card"])
+    expect(labels).toContain(`American Express ${n}`);
 });
 
 test("a query nothing matches says so and still offers 'Another card'", async () => {
@@ -648,6 +665,7 @@ test("after Ja then Back, the Ja tile is still selected", async () => {
 test("Nee after picks stores an empty stated list", async () => {
   const { c, saved } = mount(fromScreen("savings"));
   await tap(c, "Yes");
+  await openBrand(c, /^ING/);
   await act(async () => box(c, "ING creditcard").click());
   await act(async () => nextBtn(c).click());
   expect(saved().current.statedCards?.value).toEqual(["ing-creditcard"]);

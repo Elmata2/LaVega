@@ -473,34 +473,36 @@ export function UploadScreen(
         <>
           <div className="wz-footer">
             {/* No `accept`: the format is sniffed from the contents, as in Import. */}
-            <label className="wz-next wz-upload" aria-disabled={working || p.busy}>
-              {u.button}
-              <input
-                type="file"
-                className="wz-sr"
+            <div>
+              <label className="wz-next wz-upload" aria-disabled={working || p.busy}>
+                {u.button}
+                <input
+                  type="file"
+                  className="wz-sr"
+                  disabled={working || p.busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void pick(file);
+                  }}
+                />
+              </label>
+            </div>
+            {state.kind === "failed" ? (
+              <p role="alert" className="wz-error">
+                {u.failed}
+              </p>
+            ) : null}
+            <div>
+              <button
+                type="button"
+                className="wz-link"
                 disabled={working || p.busy}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) void pick(file);
-                }}
-              />
-            </label>
-          </div>
-          {state.kind === "failed" ? (
-            <p role="alert" className="wz-error">
-              {u.failed}
-            </p>
-          ) : null}
-          <div className="wz-footer">
-            <button
-              type="button"
-              className="wz-link"
-              disabled={working || p.busy}
-              onClick={p.onFinish}
-            >
-              {u.later}
-            </button>
+                onClick={p.onFinish}
+              >
+                {u.later}
+              </button>
+            </div>
           </div>
         </>
       )}
