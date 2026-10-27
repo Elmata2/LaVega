@@ -11,7 +11,7 @@ import { formatDate, formatEuroIn } from "../format.js";
 import type { Locale } from "../locale.js";
 import { cardLabel } from "./wizard/cardOptions.js";
 import { WORK_ORDER, answerCards, reopenRisk } from "./wizard/screens.js";
-import { applyStatedCards, applyWork } from "./state.js";
+import { applyStatedCards, applyStatedDebitCards, applyWork } from "./state.js";
 
 type Fact<T> = {
   value: T;
@@ -58,6 +58,8 @@ export type Editor =
   | {
       /** Several cards from the catalogue: search plus tiles. */
       kind: "cards";
+      /** Credit cards unless "debit". */
+      cardKind?: "credit" | "debit";
       initial: readonly string[];
       apply: (p: AdvisorProfile, ids: string[]) => AdvisorProfile;
     }
@@ -428,6 +430,19 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
         return new AdvisorProfile({ ...gone, intake });
       },
     })),
+  statedDebitCards: (p, ctx) =>
+    single(
+      ctx,
+      "statedDebitCards",
+      p.statedDebitCards,
+      (v) => v.map((id) => cardLabel(id, ctx.c.values.otherDebitCard, "debit")).join(", "),
+      (f) => ({
+        kind: "cards",
+        cardKind: "debit",
+        initial: f.value,
+        apply: (q, ids) => applyStatedDebitCards(q, ids, ctx.asOf),
+      }),
+    ),
   statedRanges: (p, ctx) => {
     const f = p.statedRanges;
     if (f === undefined) return [];

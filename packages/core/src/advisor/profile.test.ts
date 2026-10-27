@@ -226,6 +226,18 @@ test("decodes a profile without work/statedCards", () => {
   expect(p.intake.noCards).toBeUndefined();
 });
 
+test("decodes a profile without statedDebitCards and round-trips it", () => {
+  const dec = Schema.decodeUnknownSync(AdvisorProfile);
+  expect(dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).statedDebitCards).toBeUndefined();
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    statedDebitCards: { value: ["ing-betaalpas", "other"], source: "stated", at: "2026-10-26" },
+  });
+  const s = { current: p, versions: [], updatedAt: "2026-10-26" };
+  const back = Effect.runSync(decodeProfileStore(encodeProfileStore(s)));
+  expect(back.current).toEqual(p);
+});
+
 test("round-trips work and statedCards", () => {
   const p = new AdvisorProfile({
     ...emptyProfile(),

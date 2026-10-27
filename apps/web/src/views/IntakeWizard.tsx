@@ -16,6 +16,7 @@ import {
   applyKnowledge,
   applyRiskAnswers,
   applyStatedCards,
+  applyStatedDebitCards,
   applyStatedHousing,
   applyStatedRange,
   applyStatedSavings,
@@ -347,6 +348,18 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         onSubmit={(d) =>
           void save((p) => saveWizardDebt(p, d, asOf))
         }
+      />
+    );
+  } else if (screen === "debit-cards") {
+    question = q.debitCards(together);
+    body = (
+      <CardsScreen
+        copy={w}
+        busy={busy}
+        kind="debit"
+        label={question}
+        initial={profile.statedDebitCards?.value ?? []}
+        onSubmit={(ids) => void save((p) => applyStatedDebitCards(p, ids, asOf))}
       />
     );
   } else if (screen === "has-cards") {

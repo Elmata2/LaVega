@@ -1,13 +1,28 @@
 import { useId, useState } from "react";
 import type { WizardCopy } from "../../copy/wizard.js";
 import MultiTiles from "./MultiTiles.js";
-import { OTHER_CARD, cardGroups, cardLabel, matchCards, type CardBrand } from "./cardOptions.js";
+import {
+  OTHER_CARD,
+  cardGroups,
+  cardLabel,
+  matchCards,
+  type CardBrand,
+  type CardKind,
+} from "./cardOptions.js";
 
 export type CardPickerProps = {
   copy: Pick<
     WizardCopy,
-    "cardSearch" | "cardNotFound" | "otherCard" | "otherBrand" | "cardsPicked"
+    | "cardSearch"
+    | "cardNotFound"
+    | "otherCard"
+    | "otherDebitCard"
+    | "otherBrand"
+    | "cardsPicked"
+    | "debitBrands"
   >;
+  /** Credit cards by default; "debit" lists the betaalpassen. */
+  kind?: CardKind;
   label: string;
   picked: readonly string[];
   onChange: (ids: string[]) => void;
@@ -18,18 +33,19 @@ export type CardPickerProps = {
  *  they survive opening and closing a brand and typing in the search. */
 export default function CardPicker(p: CardPickerProps) {
   const id = useId();
+  const kind = p.kind ?? "credit";
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<ReadonlySet<CardBrand>>(new Set());
   const searching = query.trim() !== "";
-  const found = matchCards(query);
+  const found = matchCards(query, kind);
   const toggle = (c: string) =>
     p.onChange(p.picked.includes(c) ? p.picked.filter((x) => x !== c) : [...p.picked, c]);
-  const other = { value: OTHER_CARD, label: p.copy.otherCard };
+  const other = { value: OTHER_CARD, label: kind === "debit" ? p.copy.otherDebitCard : p.copy.otherCard };
   const toOptions = (cards: readonly { id: string; label: string }[]) =>
     cards.map((o) => ({ value: o.id, label: o.label }));
   const stray = p.picked
-    .filter((x) => x !== OTHER_CARD && !matchCards("").some((f) => f.id === x))
-    .map((x) => ({ id: x, label: cardLabel(x, p.copy.otherCard) }));
+    .filter((x) => x !== OTHER_CARD && !matchCards("", kind).some((f) => f.id === x))
+    .map((x) => ({ id: x, label: cardLabel(x, other.label, kind) }));
   const flat = [...found, ...stray.filter((s) => !found.some((f) => f.id === s.id))];
   const flip = (b: CardBrand) =>
     setOpen((cur) => {
@@ -63,7 +79,7 @@ export default function CardPicker(p: CardPickerProps) {
         />
       ) : (
         <div className="wz-brands">
-          {cardGroups(p.copy.otherBrand, stray).map((g) => {
+          {cardGroups(p.copy.otherBrand, stray, kind, p.copy.debitBrands).map((g) => {
             const isOpen = open.has(g.brand);
             const n = g.cards.filter((c) => p.picked.includes(c.id)).length;
             const panel = `${id}-${g.brand}`;
@@ -131,7 +147,7 @@ export default function CardPicker(p: CardPickerProps) {
 }
 
 /** Picked ids in a stable order: catalogue cards as listed, then the rest as picked. */
-export const orderedCardIds = (picked: readonly string[]): string[] => {
-  const known = matchCards("").map((c) => c.id);
+export const orderedCardIds = (picked: readonly string[], kind: CardKind = "credit"): string[] => {
+  const known = matchCards("", kind).map((c) => c.id);
   return [...known.filter((x) => picked.includes(x)), ...picked.filter((x) => !known.includes(x))];
 };

@@ -25,16 +25,16 @@ test("fresh profile resumes at household", () => {
   expect(resumeScreen(emptyProfile())).toBe("household");
 });
 
-test("screensFor has 21 screens by default and one fewer after Nee on children", () => {
-  expect(screensFor(emptyProfile())).toHaveLength(16 + riskCount);
-  expect(screensFor(answerNoChildren(emptyProfile(), AS_OF))).toHaveLength(15 + riskCount);
-  expect(screensFor(emptyProfile())).toHaveLength(21);
+test("screensFor has 22 screens by default and one fewer after Nee on children", () => {
+  expect(screensFor(emptyProfile())).toHaveLength(17 + riskCount);
+  expect(screensFor(answerNoChildren(emptyProfile(), AS_OF))).toHaveLength(16 + riskCount);
+  expect(screensFor(emptyProfile())).toHaveLength(22);
 });
 
 test("Nee on cards drops the cards screen and Ja restores it", () => {
   const no = answerCards(emptyProfile(), false, AS_OF);
   expect(screensFor(no)).not.toContain("cards");
-  expect(screensFor(no)).toHaveLength(20);
+  expect(screensFor(no)).toHaveLength(21);
   expect(screensFor(answerCards(no, true, AS_OF))).toContain("cards");
   expect(answerCards(no, true, AS_OF).intake.noCards).toBe(false);
   expect(answerCards(no, true, AS_OF).statedCards).toBeUndefined();
@@ -65,7 +65,7 @@ test("markDone upload then resume is done", () => {
 });
 
 test("new screens belong to their sections", () => {
-  for (const id of ["work", "has-cards", "cards"] as const) expect(sectionOf(id)).toBe("about");
+  for (const id of ["work", "debit-cards", "has-cards", "cards"] as const) expect(sectionOf(id)).toBe("about");
   expect(sectionOf("upload")).toBe("risk");
 });
 
@@ -163,4 +163,19 @@ test("Nee then Ja opens child-years", () => {
   expect(resumeScreen(p)).toBe("child-years");
   const kept = applyChildren(emptyProfile(), [{ id: "c1", birthYear: 2015 }], AS_OF);
   expect(answerHasChildren(kept)).toBe(kept);
+});
+
+test("debit-cards sits right after savings and before has-cards, always present", () => {
+  const all = screensFor(emptyProfile());
+  const at = all.indexOf("debit-cards");
+  expect(all[at - 1]).toBe("savings");
+  expect(all[at + 1]).toBe("has-cards");
+  const noCards = answerCards(emptyProfile(), false, AS_OF);
+  expect(screensFor(noCards)).toContain("debit-cards");
+});
+
+test("resume after savings lands on debit-cards; after debit-cards on has-cards", () => {
+  expect(resumeScreen(markDone(emptyProfile(), "savings"))).toBe("debit-cards");
+  expect(resumeScreen(markDone(emptyProfile(), "debit-cards"))).toBe("has-cards");
+  expect(resumeScreen(markDone(emptyProfile(), "has-cards"))).toBe("cards");
 });

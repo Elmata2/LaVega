@@ -163,6 +163,8 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   work: Schema.optionalKey(Field(Schema.Array(WorkKind))),
   /** Catalogue ids of credit cards the user says they have, or "other". */
   statedCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
+  /** Catalogue ids of debit cards (betaalpassen) the user says they have, or "other". */
+  statedDebitCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
   /** Evidence fingerprints of derived facts the user removed. */
   removed: Schema.Array(Schema.String),
   intake: Schema.Struct({

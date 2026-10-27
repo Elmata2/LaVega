@@ -82,3 +82,47 @@ test("an empty query lists every card; nonsense lists none", () => {
   expect(matchCards("").length).toBe(cardOptions("x").length - 1);
   expect(matchCards("zzzzqq")).toEqual([]);
 });
+
+test("debit brandOf maps every catalogue betaalpas to a known brand, 212-card to other", () => {
+  const all = matchCards("", "debit");
+  expect(all.length).toBe(31);
+  for (const c of all) {
+    if (c.id === "212-card") expect(brandOf(c.id, "debit")).toBe("other-brand");
+    else expect(brandOf(c.id, "debit"), c.id).not.toBe("other-brand");
+  }
+  expect(brandOf("regiobank-betaalpas", "debit")).toBe("sns-asn-regio");
+  expect(brandOf("krak-card-kraken", "debit")).toBe("crypto");
+  expect(brandOf("bybit-card", "debit")).toBe("crypto");
+  expect(brandOf("rabobank-betaalpas", "debit")).toBe("rabo");
+  expect(brandOf("openbank-betaalpas-r42-betaalpas", "debit")).toBe("openbank");
+});
+
+test("debit and credit lists do not mix", () => {
+  expect(matchCards("", "debit").some((c) => c.id === "ing-creditcard")).toBe(false);
+  expect(matchCards("").some((c) => c.id === "ing-betaalpas")).toBe(false);
+  expect(cardLabel("ing-betaalpas", "x", "debit")).toBe("ING betaalpas");
+});
+
+test("debit cardGroups follow the fixed brand order, 212 Card in other", () => {
+  const labels = Object.fromEntries(
+    ["ing","abn","rabo","sns-asn-regio","triodos","knab","bunq","revolut","n26","wise","openbank","trade-republic","crypto"].map((b) => [b, b]),
+  ) as never;
+  const g = cardGroups("Overige", [], "debit", labels);
+  expect(g.map((x) => x.brand)).toEqual([
+    "ing", "abn", "rabo", "sns-asn-regio", "triodos", "knab", "bunq", "revolut", "n26", "wise",
+    "openbank", "trade-republic", "crypto", "other-brand",
+  ]);
+  expect(g.at(-1)!.cards.map((c) => c.id)).toEqual(["212-card"]);
+  expect(g.flatMap((x) => x.cards).length).toBe(31);
+});
+
+test("debit search: kraken finds the Krak Card", () => {
+  expect(matchCards("kraken", "debit").map((c) => c.id)).toEqual(["krak-card-kraken"]);
+  expect(matchCards("revolut", "debit").length).toBe(4);
+});
+
+test("credit aliases do not leak into the debit picker, and pinpas stays debit-only", () => {
+  expect(matchCards("ics", "debit")).toEqual([]);
+  expect(matchCards("pinpas")).toEqual([]);
+  expect(matchCards("pinpas", "debit").length).toBe(31);
+});
