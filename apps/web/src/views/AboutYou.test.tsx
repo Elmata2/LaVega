@@ -480,3 +480,29 @@ test("Remove on the 'No credit card' row clears the Nee flag too", async () => {
   expect(saved.statedCards).toBeUndefined();
   expect(saved.intake.noCards).toBeUndefined();
 });
+
+const workOf = (kinds: ("employed" | "freelance" | "business")[]) => ({
+  value: kinds,
+  source: "stated" as const,
+  at: "2026-10-01",
+});
+
+test("a freelancer who never answered the VAT question sees an editable 'Not filled in' row and can answer it", async () => {
+  const store = storeOf({ work: workOf(["freelance"]) });
+  const props = baseProps({ store });
+  await mount(props);
+  expect(text()).toContain("Charges VAT");
+  expect(text()).toContain("Not filled in");
+  await click(button("Edit: Charges VAT"));
+  const select = container!.querySelector<HTMLSelectElement>("select")!;
+  await fill(select, "yes");
+  await click(
+    [...container!.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Save")!,
+  );
+  expect(lastSaved(props).current.chargesVat).toEqual({ value: true, source: "stated", at: AS_OF });
+});
+
+test("employed-only profiles have no VAT row", async () => {
+  await mount(baseProps({ store: storeOf({ work: workOf(["employed"]) }) }));
+  expect(text()).not.toContain("Charges VAT");
+});

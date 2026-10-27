@@ -11,6 +11,7 @@ export * from "./spending.js";
 export * from "./subs.js";
 export * from "./cards.js";
 export * from "./goals.js";
+export * from "./cashflow.js";
 export * from "./publicFacts.js";
 export * from "./compute.js";
 export * from "./changes.js";

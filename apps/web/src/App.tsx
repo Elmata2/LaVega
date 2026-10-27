@@ -1966,6 +1966,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               rates={rates.rates}
               mode={fxConversionMode}
               fxHistory={fxHistory}
+              vatSettings={vatSettings}
               asOf={asOf}
               onSaveProfile={saveProfile}
               onNavigate={setView}

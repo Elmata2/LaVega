@@ -185,6 +185,8 @@ export type PlanInput = {
   mode: ConversionMode;
   fxHistory: Record<string, Record<string, number>>;
   movedCategories: ReadonlySet<string>;
+  /** The VAT filing frequency the person saved, when there is one (default: the pack's). */
+  vatFrequency?: "monthly" | "quarterly" | "yearly" | null;
   asOf: string;
 };
 

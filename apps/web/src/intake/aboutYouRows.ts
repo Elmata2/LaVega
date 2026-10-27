@@ -11,7 +11,7 @@ import { formatDate, formatEuroIn } from "../format.js";
 import type { Locale } from "../locale.js";
 import { cardLabel } from "./wizard/cardOptions.js";
 import { WORK_ORDER, answerCards, reopenRisk } from "./wizard/screens.js";
-import { applyStatedCards, applyStatedDebitCards, applyWork } from "./state.js";
+import { applyChargesVat, applyStatedCards, applyStatedDebitCards, applyWork } from "./state.js";
 
 type Fact<T> = {
   value: T;
@@ -406,6 +406,47 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
           ),
       }),
     ),
+  chargesVat: (p, ctx) => {
+    const options = [
+      { id: "yes", label: ctx.c.values.yes },
+      { id: "no", label: ctx.c.values.no },
+    ];
+    const selfEmployed = (p.work?.value ?? []).some((w) => w === "freelance" || w === "business");
+    // Freelance and business work are asked this; someone who finished the
+    // intake before it existed can still answer it here.
+    if (p.chargesVat === undefined)
+      return selfEmployed
+        ? [
+            {
+              key: "chargesVat",
+              section: "chargesVat",
+              detail: "",
+              value: ctx.c.values.notAnswered,
+              source: "stated",
+              at: ctx.asOf,
+              editor: {
+                kind: "choice",
+                options,
+                initial: "",
+                apply: (q, id) => applyChargesVat(q, id === "yes", ctx.asOf),
+              },
+              remove: (q) => q,
+            },
+          ]
+        : [];
+    return single(
+      ctx,
+      "chargesVat",
+      p.chargesVat,
+      (v) => (v ? ctx.c.values.yes : ctx.c.values.no),
+      (f) => ({
+        kind: "choice",
+        options,
+        initial: f.value ? "yes" : "no",
+        apply: (q, id) => applyChargesVat(q, id === "yes", ctx.asOf),
+      }),
+    );
+  },
   statedCards: (p, ctx) =>
     single(
       ctx,

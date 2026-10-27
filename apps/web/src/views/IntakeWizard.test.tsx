@@ -537,7 +537,25 @@ test("work requires one pick and saves all picks", async () => {
     source: "stated",
     at: AS_OF,
   });
+  expect(h1(c)).toBe("Do you charge your clients VAT?");
+});
+
+test("freelance work asks the VAT question once; Yes is stored and the wizard moves on", async () => {
+  const { c, saved } = mount(fromScreen("household"));
+  await act(async () => box(c, "Freelance / self-employed").click());
+  await act(async () => nextBtn(c).click());
+  expect(h1(c)).toBe("Do you charge your clients VAT?");
+  await tap(c, "Yes");
+  expect(saved().current.chargesVat).toEqual({ value: true, source: "stated", at: AS_OF });
   expect(h1(c)).toBe("Do you have children?");
+});
+
+test("employed-only work skips the VAT question", async () => {
+  const { c, saved } = mount(fromScreen("household"));
+  await act(async () => box(c, "Employed").click());
+  await act(async () => nextBtn(c).click());
+  expect(h1(c)).toBe("Do you have children?");
+  expect(saved().current.chargesVat).toBeUndefined();
 });
 
 const spendScreen = () => fromScreen("income");
