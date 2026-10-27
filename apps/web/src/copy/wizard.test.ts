@@ -69,5 +69,8 @@ test("new keys exist: work kinds, five spend bands, upload copy, card questions"
   expect(wizardCopy.nl.questions.hasCards(false)).toBe("Heb je een creditcard?");
   expect(wizardCopy.nl.questions.hasCards(true)).toBe("Hebben jullie een creditcard?");
   expect(wizardCopy.nl.questions.cards(false)).toBe("Welke creditcards heb je?");
+  expect(wizardCopy.nl.cardsPicked(2)).toBe("2 gekozen");
+  expect(wizardCopy.en.cardsPicked(2)).toBe("2 selected");
+  expect([wizardCopy.nl.otherBrand, wizardCopy.en.otherBrand]).toEqual(["Overige", "Other"]);
   expect(wizardCopy.nl.spendBands[0]).toBe("Minder dan €1.500");
 });

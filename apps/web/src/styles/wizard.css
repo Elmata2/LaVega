@@ -1,7 +1,11 @@
 /* Intake wizard: one question per screen. Light, centred, no app chrome. */
 @layer components {
   .wz-root {
-    min-height: 100dvh;
+    /* The wizard renders without the app shell, whose body is overflow:hidden,
+       so the root is the scroll container. */
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: #ffffff;
     color: #14161a;
     display: flex;
@@ -15,6 +19,10 @@
     padding: 16px 20px 32px;
     display: flex;
     flex-direction: column;
+  }
+  .wz-progress,
+  .wz-top {
+    flex-shrink: 0;
   }
   .wz-progress {
     display: flex;
@@ -68,10 +76,16 @@
     margin-top: 0;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
     text-align: center;
     animation: wz-in 180ms ease-out;
+  }
+  /* Equal flexible spacers centre a short screen and collapse to nothing on a
+     tall one, so it starts at the top (justify-content:safe is not in older Safari). */
+  .wz-screen::before,
+  .wz-screen::after {
+    content: "";
+    flex: 1 0 0;
   }
   .wz-section {
     margin: 0 0 8px;
@@ -100,8 +114,24 @@
     align-items: center;
   }
   .wz-footer {
-    margin-top: 24px;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+    background: #ffffff;
     text-align: center;
+  }
+  .wz-footer::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 16px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #ffffff);
+    pointer-events: none;
   }
   .wz-tiles {
     display: flex;
@@ -123,6 +153,43 @@
     transition:
       background-color 120ms ease-out,
       border-color 120ms ease-out;
+  }
+  .wz-brands,
+  .wz-brand {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .wz-brand-tile {
+    position: relative;
+  }
+  .wz-brand-tile[aria-expanded="true"] {
+    border-color: #7048e8;
+  }
+  .wz-brand-end {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wz-brand-count {
+    font-size: 13px;
+    color: #5f3dc4;
+  }
+  .wz-chevron {
+    color: #9aa0aa;
+    transition: transform 150ms ease-out;
+  }
+  .wz-brand-tile[aria-expanded="true"] .wz-chevron {
+    transform: rotate(180deg);
+  }
+  .wz-brand-cards {
+    padding-left: 12px;
+    border-left: 2px solid #e4e7ec;
   }
   .wz-tile.is-selected {
     background: #f3f0ff;
@@ -279,6 +346,9 @@
       animation: none;
     }
     .wz-tile {
+      transition: none;
+    }
+    .wz-chevron {
       transition: none;
     }
   }
