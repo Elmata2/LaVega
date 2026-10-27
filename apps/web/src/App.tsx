@@ -1265,7 +1265,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // and the widget are both still in the tree, just unmounted.
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
-  async function handleImport(file: File) {
+  async function importFile(file: File): Promise<{ ok: true; count: number } | { ok: false }> {
     setBusy(true);
     try {
       const text = await file.text();
@@ -1302,13 +1302,23 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       const reconciled = reconcileInvoices(curInvoices, freshTxs);
       if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
         await saveInvoices(reconciled);
+      // Nothing read = a file we could not use (the wizard shows
+      // its own message; the page banner is not on screen there).
+      return result.txs.length === 0
+        ? { ok: false }
+        : { ok: true, count: mergedTxs.length - txs.length };
     } catch (err) {
       setProblems([
         { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
       ]);
+      return { ok: false };
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleImport(file: File) {
+    await importFile(file);
   }
 
   // Reassign an account's entity: update in memory on every keystroke (so the
@@ -1657,6 +1667,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             corrupt={profileRead.kind === "corrupt"}
             asOf={asOf}
             onSave={saveProfile}
+            onImport={importFile}
             onFinish={() => setView("plan")}
             onExit={() => setView("overview")}
           />

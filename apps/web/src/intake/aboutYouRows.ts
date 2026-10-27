@@ -9,7 +9,9 @@ import {
 import type { AboutYouCopy, ProfileSection } from "../copy/intake.js";
 import { formatDate, formatEuroIn } from "../format.js";
 import type { Locale } from "../locale.js";
-import { reopenRisk } from "./wizard/screens.js";
+import { cardLabel } from "./wizard/cardOptions.js";
+import { WORK_ORDER, answerCards, reopenRisk } from "./wizard/screens.js";
+import { applyStatedCards, applyWork } from "./state.js";
 
 type Fact<T> = {
   value: T;
@@ -45,6 +47,19 @@ export type Editor =
       kind: "range";
       initial: { lowCents: number; highCents: number };
       apply: (p: AdvisorProfile, r: { lowCents: number; highCents: number }) => AdvisorProfile;
+    }
+  | {
+      /** Several of a fixed list: tiles. */
+      kind: "multi";
+      options: { id: string; label: string }[];
+      initial: readonly string[];
+      apply: (p: AdvisorProfile, ids: string[]) => AdvisorProfile;
+    }
+  | {
+      /** Several cards from the catalogue: search plus tiles. */
+      kind: "cards";
+      initial: readonly string[];
+      apply: (p: AdvisorProfile, ids: string[]) => AdvisorProfile;
     }
   | {
       kind: "choice";
@@ -371,6 +386,48 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
         apply: (q, text) => set(q, text),
       }),
     ),
+  work: (p, ctx) =>
+    single(
+      ctx,
+      "work",
+      p.work,
+      (v) => v.map((k) => ctx.c.values.workKinds[k]).join(", "),
+      (f) => ({
+        kind: "multi",
+        options: WORK_ORDER.map((k) => ({ id: k, label: ctx.c.values.workKinds[k] })),
+        initial: f.value,
+        apply: (q, ids) =>
+          applyWork(
+            q,
+            WORK_ORDER.filter((k) => ids.includes(k)),
+            ctx.asOf,
+          ),
+      }),
+    ),
+  statedCards: (p, ctx) =>
+    single(
+      ctx,
+      "statedCards",
+      p.statedCards,
+      (v) =>
+        v.length === 0
+          ? ctx.c.values.noCards
+          : v.map((id) => cardLabel(id, ctx.c.values.otherCard)).join(", "),
+      (f) => ({
+        kind: "cards",
+        initial: f.value,
+        // Picking cards after a Nee takes the Nee back.
+        apply: (q, ids) => applyStatedCards(answerCards(q, true, ctx.asOf), ids, ctx.asOf),
+      }),
+    ).map((row) => ({
+      ...row,
+      // Removing the list also removes a Nee, so the question is asked again.
+      remove: (q) => {
+        const gone = row.remove(q);
+        const { noCards: _n, ...intake } = gone.intake;
+        return new AdvisorProfile({ ...gone, intake });
+      },
+    })),
   statedRanges: (p, ctx) => {
     const f = p.statedRanges;
     if (f === undefined) return [];

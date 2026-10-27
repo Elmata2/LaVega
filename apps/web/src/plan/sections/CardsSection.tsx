@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
-import type { CardCriteriaRow, CardsFigures, CriteriaValue } from "@lavega/core";
+import { accountType, type CardCriteriaRow, type CardsFigures, type CriteriaValue } from "@lavega/core";
 import Button from "../../components/ui/Button.js";
 import CardLink from "../../components/ui/CardLink.js";
 import { Table, TableWrap, Td, Th } from "../../components/ui/Table.js";
 import { cardsCopy, factLine } from "../../copy/plan/index.js";
+import { cardLabel } from "../../intake/wizard/cardOptions.js";
 import SectionCard from "../SectionCard.js";
 import {
   CalcList,
@@ -140,6 +141,12 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
     }
   };
 
+  const stated = ctx.profile.store?.current.statedCards?.value ?? [];
+  // The bank data is the source when it holds a credit card; otherwise the
+  // stated cards are shown. A current account is not a credit card.
+  const hasCreditcard = ctx.accounts.some((acc) => accountType(acc) === "Creditcard");
+  const showStated = stated.length > 0 && !hasCreditcard;
+
   const terms = factLine("card-nl-terms", copy.facts.cardTerms, ctx.publicFacts);
 
   return (
@@ -147,7 +154,24 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
       {{
         figures: (
           <div>
-            <StatusBody section="cards" result={result} ctx={ctx} />
+            {showStated ? (
+              <div data-testid="plan-cards-stated" className="mb-2">
+                <p className="m-0 text-muted text-[0.85rem]">{copy.statedCardsLead}</p>
+                <ul className="m-0 list-none p-0 text-[0.9rem]">
+                  {stated.map((id) => (
+                    <li key={id}>{cardLabel(id, copy.otherCard)}</li>
+                  ))}
+                </ul>
+                <p className="m-0 mt-1 text-muted text-[0.85rem]">{copy.statedCardsNote}</p>
+              </div>
+            ) : null}
+            <StatusBody
+              section="cards"
+              result={result}
+              ctx={ctx}
+              skipReasons={showStated ? ["in-use-card-unknown", "no-card-data"] : []}
+              skipMissing={showStated ? ["cards"] : []}
+            />
             {rows.length > 0 ? (
               <>
                 <p className="m-0 mb-1 text-muted text-[0.85rem]">{copy.sortNote}</p>
@@ -195,7 +219,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                   </Table>
                 </TableWrap>
               </>
-            ) : (
+            ) : showStated ? null : (
               <p className="m-0 text-muted">{a.cards.noCards}</p>
             )}
             <Lines

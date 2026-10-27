@@ -1,45 +1,53 @@
-import { AdvisorProfile, RISK_SCALE } from "@lavega/core";
+import { AdvisorProfile, RISK_SCALE, type WorkKind } from "@lavega/core";
 import { applyChildren } from "../state.js";
 
 export type ScreenId =
   | "household"
+  | "work"
   | "children"
   | "child-years"
   | "income"
   | "spend"
   | "housing"
   | "savings"
+  | "has-cards"
+  | "cards"
   | "goal"
   | "debts"
   | "debt-details"
   | "buffer"
   | `risk:${string}`
-  | "invested";
+  | "invested"
+  | "upload";
 
 export type Section = "about" | "goals" | "risk";
 
 const ABOUT: readonly ScreenId[] = [
   "household",
+  "work",
   "children",
   "child-years",
   "income",
   "spend",
   "housing",
   "savings",
+  "has-cards",
+  "cards",
 ];
 const GOALS: readonly ScreenId[] = ["goal", "debts", "debt-details", "buffer"];
 
 const riskScreens = (): ScreenId[] => RISK_SCALE.items.map((i) => `risk:${i.id}` as const);
 
 /** Every screen in order, including the conditional ones. */
-const canonical = (): ScreenId[] => [...ABOUT, ...GOALS, ...riskScreens(), "invested"];
+const canonical = (): ScreenId[] => [...ABOUT, ...GOALS, ...riskScreens(), "invested", "upload"];
 
 export function screensFor(p: AdvisorProfile): ScreenId[] {
   const noChildren = Array.isArray(p.children?.value) && p.children.value.length === 0;
   return canonical().filter(
     (id) =>
       !(id === "child-years" && noChildren) &&
-      !(id === "debt-details" && p.intake.noUserDebts === true),
+      !(id === "debt-details" && p.intake.noUserDebts === true) &&
+      !(id === "cards" && p.intake.noCards === true),
   );
 }
 
@@ -94,6 +102,35 @@ export function answerDebts(p: AdvisorProfile, has: boolean): AdvisorProfile {
   const { noUserDebts: _n, ...rest } = p.intake;
   return withIntake(p, rest);
 }
+
+/** Nee stores an empty stated list (the answer is a fact) and `noCards`, which
+ *  skips the cards screen. Ja clears both an empty list and the Nee flag. */
+export function answerCards(p: AdvisorProfile, has: boolean, asOf: string): AdvisorProfile {
+  if (!has) {
+    return new AdvisorProfile({
+      ...p,
+      statedCards: { value: [], source: "stated", at: asOf },
+      intake: { ...p.intake, noCards: true },
+    });
+  }
+  const { statedCards, ...rest } = p;
+  const keep = statedCards !== undefined && statedCards.value.length > 0;
+  return new AdvisorProfile({
+    ...rest,
+    ...(keep ? { statedCards } : {}),
+    intake: { ...p.intake, noCards: false },
+  });
+}
+
+export const WORK_ORDER: readonly WorkKind[] = [
+  "employed",
+  "freelance",
+  "business",
+  "student",
+  "jobseeking",
+  "retired",
+  "other",
+];
 
 export const reopenRisk = (p: AdvisorProfile): AdvisorProfile =>
   withIntake(p, {

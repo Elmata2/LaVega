@@ -321,6 +321,7 @@ test("Redo on risk reopens block 3 with the answers kept and opens the intake", 
         asOf={AS_OF}
         store={lastSaved(props)}
         onSave={async () => {}}
+        onImport={async () => ({ ok: false })}
         onFinish={() => {}}
         onExit={() => {}}
         now={() => NOW}
@@ -357,4 +358,101 @@ test("Remove on risk or knowledge lowers blocksDone to 2 so they can be answered
   await click(button("Remove: Knowledge"));
   expect(lastSaved(props2).current.knowledge).toBeUndefined();
   expect(lastSaved(props2).current.intake.blocksDone).toBe(2);
+});
+
+test("About you shows work and cards rows", async () => {
+  const store = storeOf({
+    work: { value: ["employed", "student"], source: "stated", at: "2026-09-03" },
+    statedCards: { value: ["ing-creditcard", "other"], source: "stated", at: "2026-09-03" },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  const work = container!.querySelector('[data-testid="fact-work"]')!.textContent!;
+  expect(work).toContain("Employed, Student");
+  const cards = container!.querySelector('[data-testid="fact-statedCards"]')!.textContent!;
+  expect(cards).toContain("ING creditcard, Another card");
+  expect(cards).not.toContain("ing-creditcard");
+  await click(button("Remove: Credit cards"));
+  expect(lastSaved(props).current.statedCards).toBeUndefined();
+  await click(button("Remove: Work"));
+  expect(lastSaved(props).current.work).toBeUndefined();
+});
+
+const boxByText = (text: string) =>
+  [...container!.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')].find(
+    (b) => b.textContent === text,
+  )!;
+const saveBtn = () =>
+  [...container!.querySelectorAll<HTMLButtonElement>("button")].find(
+    (b) => b.textContent === "Save",
+  )!;
+
+test("Edit work toggles the kinds with tiles and saves a stated field", async () => {
+  const store = storeOf({
+    work: { value: ["employed"], source: "confirmed", at: "2026-09-03" },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  await click(button("Edit: Work"));
+  expect(boxByText("Employed").getAttribute("aria-checked")).toBe("true");
+  await click(boxByText("Student"));
+  await click(boxByText("Employed"));
+  await click(saveBtn());
+  expect(lastSaved(props).current.work).toEqual({
+    value: ["student"],
+    source: "stated",
+    at: AS_OF,
+  });
+});
+
+test("Edit credit cards uses the card search and saves a stated list", async () => {
+  const store = storeOf({
+    statedCards: { value: ["ing-creditcard"], source: "stated", at: "2026-09-03" },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  await click(button("Edit: Credit cards"));
+  const search = container!.querySelector<HTMLInputElement>('input[type="search"]')!;
+  await fill(search, "amex");
+  expect(boxByText("Another card")).toBeDefined();
+  await click(boxByText("American Express Gold Card"));
+  await click(saveBtn());
+  expect(lastSaved(props).current.statedCards).toEqual({
+    value: ["american-express-gold-card", "ing-creditcard"],
+    source: "stated",
+    at: AS_OF,
+  });
+});
+
+test("a stated empty card list shows 'No credit card' and Edit then picking clears noCards", async () => {
+  const p0 = emptyProfile();
+  const store = storeOf({
+    statedCards: { value: [], source: "stated", at: "2026-09-03" },
+    intake: { ...p0.intake, noCards: true },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  expect(container!.querySelector('[data-testid="fact-statedCards"]')!.textContent).toContain(
+    "No credit card",
+  );
+  await click(button("Edit: Credit cards"));
+  await click(boxByText("Another card"));
+  await click(saveBtn());
+  const saved = lastSaved(props).current;
+  expect(saved.statedCards?.value).toEqual(["other"]);
+  expect(saved.intake.noCards).toBe(false);
+});
+
+test("Remove on the 'No credit card' row clears the Nee flag too", async () => {
+  const p0 = emptyProfile();
+  const store = storeOf({
+    statedCards: { value: [], source: "stated", at: "2026-09-03" },
+    intake: { ...p0.intake, noCards: true },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  await click(button("Remove: Credit cards"));
+  const saved = lastSaved(props).current;
+  expect(saved.statedCards).toBeUndefined();
+  expect(saved.intake.noCards).toBeUndefined();
 });

@@ -28,6 +28,12 @@ export type CardsCopy = SectionCopy<CardsFigures, CardsReasonKey, CardsMissingKi
   tier: Record<CardTier, string>;
   /** A criteria value the catalogue has no figure for. */
   unknownValue: string;
+  /** Lead line over the cards a person named in the intake. */
+  statedCardsLead: string;
+  /** Under the stated cards when the bank data holds no credit card. */
+  statedCardsNote: string;
+  /** A stated card that is not in the catalogue. */
+  otherCard: string;
   netLine: (net: CardNet, fmt: PlanFmt) => string;
   /** Plain statement that a fee share under twelve months covers only those months. */
   feeShareNote: (months: number) => string;
@@ -72,6 +78,10 @@ const nl: CardsCopy = {
     unknown: "onbekend",
   },
   unknownValue: "onbekend",
+  statedCardsLead: "Je gaf aan deze creditcards te hebben:",
+  statedCardsNote:
+    "Deze kaarten staan niet in je bankgegevens. Zonder uitgaven op de kaart is er geen nettowaarde te berekenen. Er is niets geschat.",
+  otherCard: "Een andere kaart",
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
       return `${net.name}: de cashback is onbekend, dus er is geen nettowaarde berekend.`;
@@ -202,6 +212,10 @@ const en: CardsCopy = {
     unknown: "unknown",
   },
   unknownValue: "unknown",
+  statedCardsLead: "You said you have these credit cards:",
+  statedCardsNote:
+    "These cards are not in your bank data. Without spending on the card, no net value can be calculated. Nothing has been estimated.",
+  otherCard: "Another card",
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
       return `${net.name}: the cashback is unknown, so no net value has been calculated.`;

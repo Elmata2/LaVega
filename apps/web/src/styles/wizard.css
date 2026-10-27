@@ -235,7 +235,17 @@
     border-radius: 999px;
     cursor: pointer;
   }
-  .wz-next:disabled {
+  .wz-upload {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+  .wz-upload:focus-within {
+    outline: 2px solid #7048e8;
+    outline-offset: 2px;
+  }
+  .wz-next:disabled,
+  .wz-upload[aria-disabled="true"] {
     opacity: 0.4;
     cursor: default;
   }

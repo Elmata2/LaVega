@@ -9,7 +9,7 @@ import {
   type AdvisorProfileStore,
 } from "@lavega/core";
 import IntakeWizard from "./IntakeWizard";
-import { applyChildren, applyGoals, applyHousehold } from "../intake/state";
+import { applyChildren, applyGoals, applyHousehold, applyStatedCards } from "../intake/state";
 import { markDone, screensFor } from "../intake/wizard/screens";
 
 (
@@ -42,6 +42,10 @@ function mount(
   store: AdvisorProfileStore | null = null,
   onSave: (s: AdvisorProfileStore) => Promise<void> = async () => {},
   corrupt = false,
+  onImport: (f: File) => Promise<{ ok: true; count: number } | { ok: false }> = async () => ({
+    ok: true,
+    count: 0,
+  }),
 ): Mounted {
   const spy = vi.fn(onSave);
   const onFinish = vi.fn();
@@ -55,6 +59,7 @@ function mount(
         corrupt={corrupt}
         asOf={AS_OF}
         onSave={spy}
+        onImport={onImport}
         onFinish={onFinish}
         onExit={() => {}}
         now={NOW}
@@ -88,12 +93,20 @@ async function type(input: HTMLInputElement, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+const box = (c: HTMLElement, text: string) =>
+  [...c.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')].find(
+    (b) => b.textContent === text,
+  )!;
+async function pickWork(c: HTMLElement, text = "Employed") {
+  await act(async () => box(c, text).click());
+  await act(async () => c.querySelector<HTMLButtonElement>(".wz-next")!.click());
+}
 const nextBtn = (c: HTMLElement) =>
   c.querySelector<HTMLButtonElement>(".wz-next")!;
 
-test("fresh store opens on household and shows 1 / 17", () => {
+test("fresh store opens on household and shows 1 / 21", () => {
   const { c } = mount();
-  expect(counter(c)).toBe("1 / 17");
+  expect(counter(c)).toBe("1 / 21");
   expect(h1(c)).toBe("Do you live alone or together?");
 });
 
@@ -104,7 +117,9 @@ test("tapping Samen saves household together with partnerIncomeInScope and words
     kind: "together",
     partnerIncomeInScope: true,
   });
-  expect(counter(c)).toBe("2 / 17");
+  expect(counter(c)).toBe("2 / 21");
+  await pickWork(c);
+  expect(counter(c)).toBe("3 / 21");
   await tap(c, "No");
   expect(h1(c)).toBe("What do you earn together, net per month?");
 });
@@ -112,6 +127,7 @@ test("tapping Samen saves household together with partnerIncomeInScope and words
 test("income Verder is disabled when empty and saves a zero-width range", async () => {
   const { c, saved } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
   expect(h1(c)).toBe("What do you earn, net per month?");
   expect(nextBtn(c).disabled).toBe(true);
@@ -122,20 +138,22 @@ test("income Verder is disabled when empty and saves a zero-width range", async 
     lowCents: 325000,
     highCents: 325000,
   });
-  expect(counter(c)).toBe("4 / 16");
+  expect(counter(c)).toBe("5 / 20");
 });
 
-test("Nee on children skips child-years and the counter shows 16", async () => {
+test("Nee on children skips child-years and the counter shows 20", async () => {
   const { c } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
-  expect(counter(c)).toBe("3 / 16");
+  expect(counter(c)).toBe("4 / 20");
   expect(h1(c)).toBe("What do you earn, net per month?");
 });
 
 test("Ja on children goes to child-years, and Back then Ja again still does", async () => {
   const { c } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
   await act(async () =>
     c.querySelector<HTMLButtonElement>(".wz-back")!.click(),
@@ -157,13 +175,13 @@ test("failed save on a choice stays on the screen", async () => {
   expect(h1(c)).toBe("Do you live alone or together?");
   expect(c.querySelector('[role="alert"]')).not.toBeNull();
   await tap(c, "Alone");
-  expect(h1(c)).toBe("Do you have children?");
+  expect(h1(c)).toBe("What kind of work do you do?");
   expect(c.querySelector('[role="alert"]')).toBeNull();
 });
 
 test("goal with a past date cannot be saved; Nog geen doel advances without a goal", async () => {
   let s = emptyProfileStore(NOW());
-  s = { ...s, current: markDone(s.current, "savings") };
+  s = { ...s, current: markDone(s.current, "cards") };
   const { c, saved } = mount(s);
   expect(h1(c)).toBe("What are you saving for?");
   const [purpose, , date] = [...c.querySelectorAll<HTMLInputElement>("input")];
@@ -198,7 +216,59 @@ test("the last risk tap then invested calls onFinish with blocksDone 3", async (
     c.querySelectorAll<HTMLButtonElement>('[role="radio"]')[0]!.click(),
   );
   expect(saved().current.intake.blocksDone).toBe(3);
+  expect(onFinish).not.toHaveBeenCalled();
+  expect(h1(c)).toBe("Do you want to add your bank statement?");
+});
+
+const pickFile = async (c: HTMLElement) => {
+  const input = c.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const file = new File(["x"], "a.csv");
+  await act(async () => {
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+};
+const laterBtn = (c: HTMLElement, text: string) =>
+  [...c.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text)!;
+
+test("Later finishes and marks upload done", async () => {
+  const { c, saved, onFinish } = mount(fromScreen("invested"));
+  expect(h1(c)).toBe("Do you want to add your bank statement?");
+  await act(async () => laterBtn(c, "Later").click());
+  expect(saved().current.intake.lastScreen).toBe("upload");
   expect(onFinish).toHaveBeenCalledTimes(1);
+});
+
+test("successful import shows the count then finishes", async () => {
+  const onImport = vi.fn(async () => ({ ok: true as const, count: 12 }));
+  const { c, saved, onFinish } = mount(fromScreen("invested"), undefined, false, onImport);
+  await pickFile(c);
+  expect(onImport).toHaveBeenCalledTimes(1);
+  expect(c.textContent).toContain("12 transactions added");
+  expect(onFinish).not.toHaveBeenCalled();
+  await act(async () => laterBtn(c, "Go to your plan").click());
+  expect(saved().current.intake.lastScreen).toBe("upload");
+  expect(onFinish).toHaveBeenCalledTimes(1);
+});
+
+test("count 0 shows nothingNew and still finishes", async () => {
+  const onImport = vi.fn(async () => ({ ok: true as const, count: 0 }));
+  const { c, onFinish } = mount(fromScreen("invested"), undefined, false, onImport);
+  await pickFile(c);
+  expect(c.textContent).toContain("These transactions were already in.");
+  expect(c.textContent).not.toContain("transactions added");
+  await act(async () => laterBtn(c, "Go to your plan").click());
+  expect(onFinish).toHaveBeenCalledTimes(1);
+});
+
+test("failed import stays on upload", async () => {
+  const onImport = vi.fn(async () => ({ ok: false as const }));
+  const { c, onFinish, onSave } = mount(fromScreen("invested"), undefined, false, onImport);
+  await pickFile(c);
+  expect(c.querySelector('[role="alert"]')!.textContent).toBe("We could not read this file.");
+  expect(h1(c)).toBe("Do you want to add your bank statement?");
+  expect(onFinish).not.toHaveBeenCalled();
+  expect(onSave).not.toHaveBeenCalled();
 });
 
 test("reopening a half-done store resumes at the saved screen", () => {
@@ -226,7 +296,7 @@ test("no rendered screen contains advice language", () => {
     AS_OF,
   );
   const all = screensFor(filled);
-  expect(all.length).toBe(17);
+  expect(all.length).toBe(21);
   for (const lang of ["en", "nl"] as const) {
     document.cookie = `lavega_locale=${lang}`;
     all.forEach((id, i) => {
@@ -282,7 +352,7 @@ test("Back and resave of the goal replaces wizard-goal and leaves other goals al
     accountRefs: [],
   };
   const { c, saved } = mount(
-    fromScreen("savings", (p) => applyGoals(p, [old], AS_OF)),
+    fromScreen("cards", (p) => applyGoals(p, [old], AS_OF)),
   );
   expect(inputs(c)[0]!.value).toBe("");
   await type(inputs(c)[0]!, "Holiday");
@@ -387,7 +457,7 @@ test("S2: saving the goal screen leaves another goal's at and source untouched",
     accountRefs: [],
   };
   const { c, saved } = mount(
-    fromScreen("savings", (p) => ({
+    fromScreen("cards", (p) => ({
       ...p,
       goals: [{ value: other, source: "confirmed" as const, at: "2026-01-05" }],
     })),
@@ -411,16 +481,18 @@ test("S2: saving the goal screen leaves another goal's at and source untouched",
 test("S3: submitting the form (Enter) advances an amount screen", async () => {
   const { c, saved } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
   await type(c.querySelector("input")!, "3250");
   await submitForm(c);
   expect(saved().current.statedRanges?.value?.income?.lowCents).toBe(325000);
-  expect(counter(c)).toBe("4 / 16");
+  expect(counter(c)).toBe("5 / 20");
 });
 
 test("S3: Enter does nothing while Verder is disabled", async () => {
   const { c, onSave } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
   const before = onSave.mock.calls.length;
   await submitForm(c);
@@ -430,6 +502,7 @@ test("S3: Enter does nothing while Verder is disabled", async () => {
 test("S4: spend accepts 0, income does not", async () => {
   const { c, saved } = mount();
   await tap(c, "Alone");
+  await pickWork(c);
   await tap(c, "No");
   await type(c.querySelector("input")!, "0");
   expect(nextBtn(c).disabled).toBe(true);
@@ -443,4 +516,153 @@ test("S4: spend accepts 0, income does not", async () => {
     lowCents: 0,
     highCents: 0,
   });
+});
+
+test("work requires one pick and saves all picks", async () => {
+  const { c, saved } = mount(fromScreen("household"));
+  expect(h1(c)).toBe("What kind of work do you do?");
+  expect(nextBtn(c).disabled).toBe(true);
+  await act(async () => box(c, "Student").click());
+  await act(async () => box(c, "Freelance / self-employed").click());
+  expect(nextBtn(c).disabled).toBe(false);
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.work).toEqual({
+    value: ["freelance", "student"],
+    source: "stated",
+    at: AS_OF,
+  });
+  expect(h1(c)).toBe("Do you have children?");
+});
+
+const spendScreen = () => fromScreen("income");
+const link = (c: HTMLElement, text: string) =>
+  [...c.querySelectorAll<HTMLButtonElement>(".wz-link")].find(
+    (b) => b.textContent === text,
+  )!;
+
+test("spend band saves its range and advances", async () => {
+  const { c, saved } = mount(spendScreen());
+  expect(h1(c)).toBe("About how much do you spend per month?");
+  await act(async () => link(c, "I don't know").click());
+  expect(c.querySelectorAll('[role="radio"]').length).toBe(5);
+  await tap(c, "€2,500 – €3,500");
+  expect(saved().current.statedRanges?.value?.spend).toEqual({
+    lowCents: 250000,
+    highCents: 350000,
+  });
+  expect(h1(c)).toBe("Do you rent or own, and what does it cost per month?");
+});
+
+test("band then exact amount replaces the range (and the reverse)", async () => {
+  const { c, saved } = mount(spendScreen());
+  await act(async () => link(c, "I don't know").click());
+  await tap(c, "€2,500 – €3,500");
+  await act(async () => backBtn(c).click());
+  expect(tile(c, "€2,500 – €3,500").getAttribute("aria-checked")).toBe("true");
+  await act(async () => link(c, "Enter an amount instead").click());
+  await type(c.querySelector("input")!, "1800");
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedRanges?.value?.spend).toEqual({
+    lowCents: 180000,
+    highCents: 180000,
+  });
+  await act(async () => backBtn(c).click());
+  expect(c.querySelector("input")!.value).not.toBe("");
+  await act(async () => link(c, "I don't know").click());
+  await tap(c, "€1,500 – €2,500");
+  expect(saved().current.statedRanges?.value?.spend).toEqual({
+    lowCents: 150000,
+    highCents: 250000,
+  });
+});
+
+const searchInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="search"]')!;
+const boxes = (c: HTMLElement) => [...c.querySelectorAll('[role="checkbox"]')];
+
+test("search narrows the list", async () => {
+  const { c } = mount(fromScreen("savings"));
+  expect(h1(c)).toBe("Do you have a credit card?");
+  await tap(c, "Yes");
+  expect(h1(c)).toBe("Which credit cards do you have?");
+  const before = boxes(c).length;
+  await type(searchInput(c), "american express gold");
+  const after = boxes(c)
+    .map((b) => b.textContent)
+    .filter((t) => t !== "Another card");
+  expect(boxes(c).length).toBeLessThan(before);
+  expect(after.every((t) => /american express gold/i.test(t ?? ""))).toBe(true);
+  expect(after.length).toBeGreaterThan(0);
+});
+
+test("cards saves the picked ids", async () => {
+  const { c, saved } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  expect(nextBtn(c).disabled).toBe(true);
+  await act(async () => box(c, "ING creditcard").click());
+  await act(async () => box(c, "Another card").click());
+  expect(nextBtn(c).disabled).toBe(false);
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedCards).toEqual({
+    value: ["ing-creditcard", "other"],
+    source: "stated",
+    at: AS_OF,
+  });
+  expect(saved().current.intake.noCards).toBe(false);
+});
+
+test("search 'amex' finds the American Express cards and keeps 'Another card' listed", async () => {
+  const { c } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  await type(searchInput(c), "amex");
+  const labels = boxes(c).map((b) => b.textContent ?? "");
+  expect(labels.filter((t) => /american express/i.test(t)).length).toBeGreaterThan(3);
+  expect(labels).toContain("Another card");
+  expect(c.textContent).not.toContain("No card found");
+});
+
+test("a query nothing matches says so and still offers 'Another card'", async () => {
+  const { c } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  await type(searchInput(c), "zzzzqq");
+  expect(boxes(c).map((b) => b.textContent)).toEqual(["Another card"]);
+  expect(c.textContent).toContain("No card found");
+});
+
+test("a stored card id the catalogue no longer holds survives a resubmit", async () => {
+  const { c, saved } = mount(
+    fromScreen("savings", (p) => applyStatedCards(p, ["gone-card"], AS_OF)),
+  );
+  await tap(c, "Yes");
+  expect(nextBtn(c).disabled).toBe(false);
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedCards?.value).toEqual(["gone-card"]);
+});
+
+test("after Ja then Back, the Ja tile is still selected", async () => {
+  const { c } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  await act(async () => backBtn(c).click());
+  expect(tile(c, "Yes").getAttribute("aria-checked")).toBe("true");
+});
+
+test("Nee after picks stores an empty stated list", async () => {
+  const { c, saved } = mount(fromScreen("savings"));
+  await tap(c, "Yes");
+  await act(async () => box(c, "ING creditcard").click());
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedCards?.value).toEqual(["ing-creditcard"]);
+  await act(async () => backBtn(c).click());
+  await act(async () => backBtn(c).click());
+  await tap(c, "No");
+  expect(saved().current.statedCards).toEqual({ value: [], source: "stated", at: AS_OF });
+  expect(saved().current.intake.noCards).toBe(true);
+});
+
+test("exact mode prefills only an exact stored spend, never a band", async () => {
+  const { c } = mount(spendScreen());
+  await act(async () => link(c, "I don't know").click());
+  await tap(c, "€2,500 – €3,500");
+  await act(async () => backBtn(c).click());
+  await act(async () => link(c, "Enter an amount instead").click());
+  expect(c.querySelector("input")!.value).toBe("");
 });

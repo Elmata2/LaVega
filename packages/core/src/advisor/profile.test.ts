@@ -217,3 +217,23 @@ test("round-trips lastScreen and noUserDebts", async () => {
   const back = await Effect.runPromise(decodeProfileStore(encodeProfileStore(store)));
   expect(back.current.intake).toEqual(intake);
 });
+
+test("decodes a profile without work/statedCards", () => {
+  const dec = Schema.decodeUnknownSync(AdvisorProfile);
+  const p = dec({ removed: [], intake: { blocksDone: 3, step0: "none" } });
+  expect(p.work).toBeUndefined();
+  expect(p.statedCards).toBeUndefined();
+  expect(p.intake.noCards).toBeUndefined();
+});
+
+test("round-trips work and statedCards", () => {
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    work: { value: ["employed", "freelance"], source: "stated", at: "2026-10-26" },
+    statedCards: { value: ["amex-gold", "other"], source: "stated", at: "2026-10-26" },
+    intake: { blocksDone: 1, step0: "none", noCards: true },
+  });
+  const s = { current: p, versions: [], updatedAt: "2026-10-26" };
+  const back = Effect.runSync(decodeProfileStore(encodeProfileStore(s)));
+  expect(back.current).toEqual(p);
+});

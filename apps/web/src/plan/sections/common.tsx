@@ -34,20 +34,28 @@ export function StatusBody({
   section,
   result,
   ctx,
+  skipReasons = [],
+  skipMissing = [],
 }: {
   section: SectionId;
   result: SectionResult<unknown>;
   ctx: PlanCtx;
+  /** Reason keys / missing kinds another note on the page already answers. */
+  skipReasons?: readonly string[];
+  skipMissing?: readonly string[];
 }) {
   const { locale, shell } = useSectionCopy();
   const copy = frameCopyOf(locale, section);
-  const reason = copy.reasons[result.statusReason.key];
+  const reason = skipReasons.includes(result.statusReason.key)
+    ? undefined
+    : copy.reasons[result.statusReason.key];
+  const missing = result.missing.filter((m) => !skipMissing.includes(m.kind));
   return (
     <>
       {reason !== undefined && <p className="m-0 mb-2">{reason}</p>}
-      {result.missing.length > 0 && (
+      {missing.length > 0 && (
         <ul className="m-0 mb-2 grid list-none gap-3 p-0">
-          {result.missing.map((m, i) => (
+          {missing.map((m, i) => (
             <li key={`${m.kind}-${m.ref ?? i}`}>
               <p className="m-0">{copy.empty[m.kind] ?? shell.missing[m.kind]}</p>
               <CardLink

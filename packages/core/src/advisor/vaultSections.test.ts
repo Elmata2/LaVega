@@ -11,6 +11,7 @@ import {
   mergeLearning,
   mergePlan,
   mergeProfileStores,
+  profileUpdatedAt,
   type VaultEvent,
 } from "./vaultSections.js";
 
@@ -96,4 +97,23 @@ test("profile: a remove-only write (no fact `at` changes) wins over an older sto
   expect(m.current.removed).toEqual(["fp1"]);
   expect(m.updatedAt).toBe("2026-10-05T10:00:00Z");
   expect(mergeProfileStores(removed, older)).toEqual(m);
+});
+
+test("profileUpdatedAt sees work and statedCards", () => {
+  const base = emptyProfile();
+  const w = new AdvisorProfile({
+    ...base,
+    work: { value: ["employed"], source: "stated", at: "2026-10-20" },
+  });
+  expect(profileUpdatedAt(w)).toBe("2026-10-20");
+  const later = new AdvisorProfile({
+    ...w,
+    statedCards: { value: ["other"], source: "stated", at: "2026-10-25" },
+  });
+  expect(profileUpdatedAt(later)).toBe("2026-10-25");
+  const laterWork = new AdvisorProfile({
+    ...later,
+    work: { value: ["student"], source: "stated", at: "2026-10-27" },
+  });
+  expect(profileUpdatedAt(laterWork)).toBe("2026-10-27");
 });

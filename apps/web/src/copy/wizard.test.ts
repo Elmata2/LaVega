@@ -56,3 +56,18 @@ test("household variants differ", () => {
     expect(q.savings(true)).not.toBe(q.savings(false));
   }
 });
+
+test("new keys exist: work kinds, five spend bands, upload copy, card questions", () => {
+  for (const l of ["nl", "en"] as Locale[]) {
+    const w = wizardCopy[l];
+    expect(Object.keys(w.workKinds).sort()).toEqual(
+      ["business", "employed", "freelance", "jobseeking", "other", "retired", "student"],
+    );
+    expect(w.spendBands).toHaveLength(5);
+    expect(w.upload.imported(3)).toContain("3");
+  }
+  expect(wizardCopy.nl.questions.hasCards(false)).toBe("Heb je een creditcard?");
+  expect(wizardCopy.nl.questions.hasCards(true)).toBe("Hebben jullie een creditcard?");
+  expect(wizardCopy.nl.questions.cards(false)).toBe("Welke creditcards heb je?");
+  expect(wizardCopy.nl.spendBands[0]).toBe("Minder dan €1.500");
+});

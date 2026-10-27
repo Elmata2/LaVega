@@ -11,6 +11,9 @@ import type { Locale } from "../locale.js";
 import { profileRows, type Editor, type Row } from "../intake/aboutYouRows.js";
 import { centsToInput, toCents } from "../intake/money.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
+import { wizardCopy } from "../copy/wizard.js";
+import CardPicker, { orderedCardIds } from "../intake/wizard/CardPicker.js";
+import MultiTiles from "../intake/wizard/MultiTiles.js";
 
 export type AboutYouProps = {
   /** What the vault holds; null when it holds nothing readable. */
@@ -162,6 +165,7 @@ function FactRow({
           <EditorForm
             editor={row.editor}
             c={c}
+            locale={locale}
             label={c.actionFor(c.edit, label, row.detail)}
             onCancel={onCancel}
             onApply={onApply}
@@ -202,12 +206,14 @@ function FactRow({
 function EditorForm({
   editor,
   c,
+  locale,
   label,
   onCancel,
   onApply,
 }: {
   editor: Editor;
   c: AboutYouCopy;
+  locale: Locale;
   label: string;
   onCancel: () => void;
   onApply: (fn: (p: AdvisorProfile) => AdvisorProfile) => Promise<void>;
@@ -217,8 +223,16 @@ function EditorForm({
     editor.kind === "range" ? centsToInput(editor.initial.highCents) : "",
   );
 
+  const [picked, setPicked] = useState<readonly string[]>(() =>
+    editor.kind === "multi" || editor.kind === "cards" ? editor.initial : [],
+  );
+
   const apply = (): ((p: AdvisorProfile) => AdvisorProfile) | null => {
     switch (editor.kind) {
+      case "multi":
+        return picked.length === 0 ? null : (p) => editor.apply(p, [...picked]);
+      case "cards":
+        return picked.length === 0 ? null : (p) => editor.apply(p, orderedCardIds(picked));
       case "euros": {
         const cents = toCents(text);
         return cents === null ? null : (p) => editor.apply(p, cents);
@@ -262,7 +276,18 @@ function EditorForm({
         if (next) void onApply(next);
       }}
     >
-      {editor.kind === "choice" ? (
+      {editor.kind === "multi" ? (
+        <MultiTiles<string>
+          label={label}
+          options={editor.options.map((o) => ({ value: o.id, label: o.label }))}
+          selected={picked}
+          onToggle={(k) =>
+            setPicked((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))
+          }
+        />
+      ) : editor.kind === "cards" ? (
+        <CardPicker copy={wizardCopy[locale]} label={label} picked={picked} onChange={setPicked} />
+      ) : editor.kind === "choice" ? (
         <select
           aria-label={c.editors.choice}
           value={text}
@@ -342,5 +367,8 @@ function initialText(e: Editor): string {
       return centsToInput(e.initial.lowCents);
     case "choice":
       return e.initial;
+    case "multi":
+    case "cards":
+      return "";
   }
 }
