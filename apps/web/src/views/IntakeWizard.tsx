@@ -4,6 +4,7 @@ import {
   type AdvisorProfile,
   type AdvisorProfileStore,
   type Goal,
+  type RewardsBalance,
 } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { intakeCopy } from "../copy/intake.js";
@@ -11,6 +12,7 @@ import { wizardCopy } from "../copy/wizard.js";
 import { formatWholeEuroIn } from "../format.js";
 import {
   applyBuffer,
+  applyCardBalances,
   applyChildren,
   applyHousehold,
   applyKnowledge,
@@ -24,6 +26,8 @@ import {
   applyChargesVat,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
+import { applyPoints, cardName, detailRows } from "../intake/wizard/cardDetails.js";
+import CardDetailsForm from "../intake/wizard/CardDetailsForm.js";
 import ChoiceTiles from "../intake/wizard/ChoiceTiles.js";
 import WizardFrame from "../intake/wizard/WizardFrame.js";
 import {
@@ -37,6 +41,7 @@ import {
   sectionOf,
   type ScreenId,
 } from "../intake/wizard/screens.js";
+import { upsertBalance } from "./Punten.js";
 import {
   AmountScreen,
   CardsScreen,
@@ -58,6 +63,10 @@ export type IntakeWizardProps = {
   onFinish: () => void;
   onExit: () => void;
   now?: () => string;
+  /** The manual points balances and how to store them (the Punten tab's store).
+   *  Without the saver the points are not asked. */
+  rewards?: RewardsBalance[];
+  onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
 };
 
 const WIZARD_GOAL = "wizard-goal";
@@ -400,6 +409,39 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         label={question}
         initial={profile.statedCards?.value ?? []}
         onSubmit={(ids) => void save((p) => applyStatedCards(p, ids, asOf))}
+      />
+    );
+  } else if (screen === "card-balances") {
+    question = q.cardDetails(together);
+    const rewards = props.rewards ?? [];
+    body = (
+      <CardDetailsForm
+        key="card-balances"
+        copy={w}
+        busy={busy}
+        submitLabel={w.next}
+        rows={detailRows({
+          cardIds: profile.statedCards?.value ?? [],
+          balances: profile.cardBalances?.value ?? [],
+          rewards,
+          nameOf: (id) => cardName(id, w.otherCard, w.cardDetails.unknownCard),
+          askPoints: props.onSaveRewards !== undefined,
+        })}
+        onSkip={() => void save((p) => p)}
+        onSubmit={(result) => {
+          void (async () => {
+            try {
+              if (props.onSaveRewards !== undefined) {
+                const next = applyPoints(rewards, result.points, asOf, upsertBalance);
+                if (next !== null) await props.onSaveRewards(next);
+              }
+            } catch {
+              setSaveFailed(true);
+              return;
+            }
+            await save((p) => applyCardBalances(p, result.balances, asOf));
+          })();
+        }}
       />
     );
   } else if (screen === "buffer") {

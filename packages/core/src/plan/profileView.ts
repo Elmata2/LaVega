@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import {
   AdvisorProfile,
   emptyProfile,
+  type CardBalance,
   EPOCH,
   type AdvisorProfileStore,
   type Goal,
@@ -42,6 +43,10 @@ export type PlanProfile = {
   tolerance: 1 | 2 | 3 | 4 | 5 | null;
   experience: "beginner" | "some" | "experienced" | null;
   savingsStatedCents: number | null;
+  /** Catalogue ids (or "other") of the credit cards the user said he holds. */
+  statedCardIds: string[];
+  /** Balance, paid-in-full and rate per stated credit card. */
+  cardBalances: CardBalance[];
   incomeStatedRange: CentsRange | null;
   spendStatedRange: CentsRange | null;
   /** The work kinds the person stated; empty when not asked. */
@@ -90,6 +95,8 @@ export function planProfileOf(
     tolerance: (p?.risk?.score ?? null) as PlanProfile["tolerance"],
     experience: p?.experience?.value ?? null,
     savingsStatedCents: p?.savings?.value.totalCents ?? null,
+    statedCardIds: [...(p?.statedCards?.value ?? [])],
+    cardBalances: (p?.cardBalances?.value ?? []).map((b) => ({ ...b })),
     incomeStatedRange: p?.statedRanges?.value.income ?? null,
     spendStatedRange: p?.statedRanges?.value.spend ?? null,
     workKinds: [...(p?.work?.value ?? [])],

@@ -109,6 +109,10 @@ export type SpendHistory = {
   /** category -> month -> positive cents. A month without spending is absent. */
   byCategory: Map<string, Map<string, number>>;
   excludedForeignCount: number;
+  /** Cents (in euro, converted) of the foreign-currency rows that are inside
+   *  `byCategory`. Those rows are part of the totals above; this is how much of
+   *  them a foreign-currency surcharge applies to. */
+  foreignCents: number;
   /** Cents of the rows `skip` dropped, inside the window (0 without `skip`). */
   skippedCents: number;
   /** Keys of in-scope non-savings accounts whose data ends before the last day
@@ -177,6 +181,7 @@ export function spendHistory(i: SpendHistoryInput): SpendHistory {
   const byCategory = new Map<string, Map<string, number>>();
   let excludedForeignCount = 0;
   let skippedCents = 0;
+  let foreignCents = 0;
   for (const t of dated) {
     const m = t.date.slice(0, 7);
     if (!inWindow.has(m) || t.amount >= 0) continue;
@@ -198,8 +203,9 @@ export function spendHistory(i: SpendHistoryInput): SpendHistory {
     const per = byCategory.get(cat) ?? new Map<string, number>();
     per.set(m, (per.get(m) ?? 0) + cents);
     byCategory.set(cat, per);
+    if (!isEurCurrency(t.currency)) foreignCents += cents;
   }
-  return { months, byCategory, excludedForeignCount, skippedCents, staleAccounts };
+  return { months, byCategory, excludedForeignCount, foreignCents, skippedCents, staleAccounts };
 }
 
 const median = (xs: readonly number[]): number | null => {

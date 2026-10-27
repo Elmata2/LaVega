@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { AdvisorProfile, RISK_SCALE, emptyProfile } from "@lavega/core";
-import { applyChildren, applyGoals } from "../state.js";
+import { applyCardBalances, applyChildren, applyGoals, applyStatedCards } from "../state.js";
 import {
   answerCards,
   answerDebts,
@@ -194,4 +194,31 @@ test("the VAT screen follows work and appears only for freelance or business", (
     expect(list).toHaveLength(23);
   }
   expect(sectionOf("vat")).toBe("about");
+});
+
+test("card-balances follows cards and only exists when credit cards are stated", () => {
+  expect(screensFor(emptyProfile())).not.toContain("card-balances");
+  const stated = applyStatedCards(emptyProfile(), ["american-express-gold-card"], AS_OF);
+  const all = screensFor(stated);
+  const at = all.indexOf("card-balances");
+  expect(all[at - 1]).toBe("cards");
+  expect(all[at + 1]).toBe("goal");
+  expect(all).toHaveLength(23);
+  expect(sectionOf("card-balances")).toBe("about");
+  expect(screensFor(answerCards(stated, false, AS_OF))).not.toContain("card-balances");
+});
+
+test("resume after cards lands on card-balances; after it on goal", () => {
+  const stated = applyStatedCards(emptyProfile(), ["other"], AS_OF);
+  expect(resumeScreen(markDone(stated, "cards"))).toBe("card-balances");
+  expect(resumeScreen(markDone(stated, "card-balances"))).toBe("goal");
+});
+
+test("answering Nee on cards drops the stated balances", () => {
+  const p = applyCardBalances(
+    applyStatedCards(emptyProfile(), ["other"], AS_OF),
+    [{ cardId: "other", balanceCents: 1000, paysInFull: true }],
+    AS_OF,
+  );
+  expect(answerCards(p, false, AS_OF).cardBalances).toBeUndefined();
 });

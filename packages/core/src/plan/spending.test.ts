@@ -87,6 +87,23 @@ describe("spendHistory", () => {
     expect(rated.byCategory.get("Reizen")!.get("2026-09")).toBe(10_000);
   });
 
+  test("foreignCents totals the converted foreign rows that were kept, and only those", () => {
+    const usd = (d: string) => mkTx("Shop", d, -110, { currency: "USD", category: "Reizen" });
+    const txs = [...history([100, 100, 100]), usd("2026-09-12"), usd("2026-08-12")];
+    expect(hist(txs).foreignCents).toBe(0);
+    const rated = hist(txs, {
+      mode: "convert",
+      fxHistory: { USD: { "2026-09-12": 1.1, "2026-08-12": 1.1 } },
+    });
+    expect(rated.foreignCents).toBe(20_000);
+    const skipped = hist(txs, {
+      mode: "convert",
+      fxHistory: { USD: { "2026-09-12": 1.1, "2026-08-12": 1.1 } },
+      skip: (t: Tx) => t.currency === "USD",
+    });
+    expect(skipped.foreignCents).toBe(0);
+  });
+
   test("accountKeys filters to those accounts; windowMonths keeps the newest", () => {
     const a1 = ACC();
     const a2 = mkAccount("C2", { balance: 0, balanceDate: "2026-10-20" });

@@ -1,4 +1,10 @@
-import type { Account, AdvisorProfileStore, PublicFact, SectionResult } from "@lavega/core";
+import type {
+  Account,
+  AdvisorProfileStore,
+  PublicFact,
+  RewardsBalance,
+  SectionResult,
+} from "@lavega/core";
 import type { View } from "../../App";
 import type { ProfileCommit } from "../../intake/useProfileCommit.js";
 import type { UsePlan } from "../usePlan.js";
@@ -15,6 +21,10 @@ export type PlanCtx = {
   profile: Pick<ProfileCommit, "update" | "saveFailed"> & {
     store: AdvisorProfileStore | null;
   };
+  /** The manual points balances (the Punten tab's store) and how to store them.
+   *  Without the saver the points are neither asked nor changed here. */
+  rewards?: readonly RewardsBalance[];
+  saveRewards?: (next: RewardsBalance[]) => Promise<void>;
   /** Test seam: the verified public facts to read. Default is PUBLIC_FACTS. */
   publicFacts?: readonly PublicFact[];
   onNavigate: (view: View) => void;

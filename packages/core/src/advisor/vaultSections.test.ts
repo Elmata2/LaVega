@@ -125,3 +125,15 @@ test("profileUpdatedAt sees work and statedCards", () => {
   });
   expect(profileUpdatedAt(laterWork)).toBe("2026-10-27");
 });
+
+test("profileUpdatedAt sees cardBalances", () => {
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    cardBalances: {
+      value: [{ cardId: "other", balanceCents: 100, paysInFull: true }],
+      source: "stated",
+      at: "2026-10-29",
+    },
+  });
+  expect(profileUpdatedAt(p)).toBe("2026-10-29");
+});

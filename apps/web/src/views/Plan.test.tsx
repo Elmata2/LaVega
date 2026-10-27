@@ -359,6 +359,18 @@ test("SectionCard renders a passed explanation slot instead of the template one,
   ]);
 });
 
+
+/** The text the advice-language scan reads: the card recommendation block and the
+ *  footer are left out, since the owner allowed recommendations there (27 Oct 2026). */
+const scanText = (c: HTMLElement, locale: "nl" | "en"): string => {
+  const clone = c.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[data-testid='plan-card-advice']").forEach((n) => n.remove());
+  let text = clone.textContent ?? "";
+  for (const l of [locale])
+    text = text.replace(planShellCopy[l].footer.notice, "");
+  return text;
+};
+
 test("renders in NL and EN; no advice language in the rendered text, cards open", () => {
   for (const locale of ["nl", "en"] as const) {
     setLocale(locale);
@@ -367,7 +379,7 @@ test("renders in NL and EN; no advice language in the rendered text, cards open"
     const text = c.textContent!;
     expect(text.length).toBeGreaterThan(200);
     expect(text).toContain(planShellCopy[locale].title);
-    expect(findAdviceLanguage(text, locale)).toEqual([]);
+    expect(findAdviceLanguage(scanText(c, locale), locale)).toEqual([]);
     act(() => root!.unmount());
     container!.remove();
     root = null;
@@ -481,7 +493,7 @@ test("rich fixture: most sections have figures, every card open and in detail mo
     for (const id of withFigures) {
       expect(q(c, `plan-card-${id}`)!.textContent!.length).toBeGreaterThan(40);
     }
-    expect(findAdviceLanguage(c.textContent!, locale)).toEqual([]);
+    expect(findAdviceLanguage(scanText(c, locale), locale)).toEqual([]);
     act(() => root!.unmount());
     container!.remove();
     root = null;

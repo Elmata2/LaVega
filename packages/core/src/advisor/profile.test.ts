@@ -249,3 +249,38 @@ test("round-trips work and statedCards", () => {
   const back = Effect.runSync(decodeProfileStore(encodeProfileStore(s)));
   expect(back.current).toEqual(p);
 });
+
+test("decodes a profile without cardBalances and round-trips it", () => {
+  const dec = Schema.decodeUnknownSync(AdvisorProfile);
+  expect(dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).cardBalances).toBeUndefined();
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    cardBalances: {
+      value: [
+        { cardId: "american-express-gold-card", balanceCents: 123_456, paysInFull: false, ratePct: 14.5 },
+        { cardId: "other", balanceCents: 0, paysInFull: true },
+      ],
+      source: "stated",
+      at: "2026-10-27",
+    },
+  });
+  const s = { current: p, versions: [], updatedAt: "2026-10-27" };
+  const back = Effect.runSync(decodeProfileStore(encodeProfileStore(s)));
+  expect(back.current).toEqual(p);
+});
+
+test("cardBalances rejects a negative or fractional balance", () => {
+  const dec = Schema.decodeUnknownSync(AdvisorProfile);
+  const bad = (balanceCents: number) => () =>
+    dec({
+      removed: [],
+      intake: { blocksDone: 0, step0: null },
+      cardBalances: {
+        value: [{ cardId: "x", balanceCents, paysInFull: true }],
+        source: "stated",
+        at: "2026-10-27",
+      },
+    });
+  expect(bad(-1)).toThrow();
+  expect(bad(10.5)).toThrow();
+});

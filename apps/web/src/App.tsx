@@ -1667,6 +1667,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             corrupt={profileRead.kind === "corrupt"}
             asOf={asOf}
             onSave={saveProfile}
+            rewards={rewards}
+            onSaveRewards={saveRewards}
             onImport={importFile}
             onFinish={() => setView("plan")}
             onExit={() => setView("overview")}
@@ -1969,6 +1971,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               vatSettings={vatSettings}
               asOf={asOf}
               onSaveProfile={saveProfile}
+              onSaveRewards={saveRewards}
               onNavigate={setView}
             />
           )}

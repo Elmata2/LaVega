@@ -2,6 +2,7 @@ import {
   AdvisorProfile,
   fingerprint,
   removeDerived,
+  type CardBalance,
   type Debt,
   type FieldSource,
   type Goal,
@@ -207,6 +208,47 @@ function debtRows(ctx: RowContext, p: AdvisorProfile): Row[] {
       const next = left.length === 0 ? without(q, "debts") : rebuild(q, { debts: left });
       return dropped(next, d.source, d.evidence);
     },
+  }));
+}
+
+/** One row per stated credit-card balance. The amount is edited here; whether it
+ *  is paid in full and the rate are changed where they were answered (the card
+ *  details in the cards section of the plan). */
+function cardBalanceRows(p: AdvisorProfile, ctx: RowContext): Row[] {
+  const f = p.cardBalances;
+  if (f === undefined) return [];
+  const write = (q: AdvisorProfile, list: readonly CardBalance[]) =>
+    list.length === 0
+      ? without(q, "cardBalances")
+      : rebuild(q, { cardBalances: stated(q.cardBalances ?? f, [...list], ctx.asOf) });
+  return f.value.map((b) => ({
+    key: `cardBalances:${b.cardId}`,
+    section: "cardBalances" as const,
+    detail: cardLabel(b.cardId, ctx.c.values.otherCard) === b.cardId ? ctx.c.values.otherCard : cardLabel(b.cardId, ctx.c.values.otherCard),
+    value: join(
+      eur(ctx, b.balanceCents),
+      b.paysInFull
+        ? ctx.c.values.cardPaidInFull
+        : ctx.c.values.cardRevolving(b.ratePct === undefined ? null : `${String(b.ratePct).replace(".", ",")}%`),
+    ),
+    source: f.source,
+    at: f.at,
+    editor: {
+      kind: "euros" as const,
+      initial: b.balanceCents,
+      apply: (q: AdvisorProfile, cents: number) =>
+        write(
+          q,
+          (q.cardBalances?.value ?? []).map((x) =>
+            x.cardId === b.cardId ? { ...x, balanceCents: cents } : x,
+          ),
+        ),
+    },
+    remove: (q: AdvisorProfile) =>
+      write(
+        q,
+        (q.cardBalances?.value ?? []).filter((x) => x.cardId !== b.cardId),
+      ),
   }));
 }
 
@@ -471,6 +513,7 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
         return new AdvisorProfile({ ...gone, intake });
       },
     })),
+  cardBalances: (p, ctx) => cardBalanceRows(p, ctx),
   statedDebitCards: (p, ctx) =>
     single(
       ctx,

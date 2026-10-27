@@ -37,6 +37,7 @@ export type WizardCopy = {
     vat: string;
     hasCards: (together: boolean) => string;
     cards: (together: boolean) => string;
+    cardDetails: (together: boolean) => string;
     debitCards: (together: boolean) => string;
     upload: string;
   };
@@ -54,6 +55,21 @@ export type WizardCopy = {
   otherBrand: string;
   /** Badge on a brand tile: how many of its cards are picked. */
   cardsPicked: (n: number) => string;
+  /** The balance, paid-in-full, rate and points row per credit card. */
+  cardDetails: {
+    balance: string;
+    paysInFull: string;
+    payYes: string;
+    payNo: string;
+    rate: string;
+    rateHint: string;
+    points: (program: string) => string;
+    pointsHint: string;
+    skipHint: string;
+    skip: string;
+    unknownCard: string;
+    errors: { balance: string; paysInFull: string; rate: string; points: string };
+  };
   upload: {
     button: string;
     later: string;
@@ -136,6 +152,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       vat: "Reken je btw aan je klanten?",
       hasCards: (t) => (t ? "Hebben jullie een creditcard?" : "Heb je een creditcard?"),
       cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
+      cardDetails: (t) =>
+        t ? "Wat staat er nu op jullie creditcards?" : "Wat staat er nu op je creditcards?",
       debitCards: (t) =>
         t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?",
       upload: "Wil je je bankafschrift toevoegen?",
@@ -165,6 +183,25 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Overige",
     cardsPicked: (n) => `${n} gekozen`,
+    cardDetails: {
+      balance: "Openstaand saldo",
+      paysInFull: "Betaal je het saldo elke maand helemaal af?",
+      payYes: "Ja, elke maand",
+      payNo: "Nee, een deel blijft staan",
+      rate: "Rente op het openstaande saldo (% per jaar)",
+      rateHint: "Weet je de rente niet? Laat dit leeg. Er wordt dan niets geschat.",
+      points: (program) => `Puntensaldo ${program}`,
+      pointsHint: "Het saldo uit je Amex-app of online account.",
+      skipHint: "Laat een kaart leeg om die over te slaan.",
+      skip: "Overslaan",
+      unknownCard: "Onbekende kaart",
+      errors: {
+        balance: "Vul een bedrag in, bijvoorbeeld 1500.",
+        paysInFull: "Kies of je het saldo elke maand helemaal afbetaalt.",
+        rate: "Vul een percentage in, bijvoorbeeld 14,9.",
+        points: "Vul een aantal punten in, bijvoorbeeld 12500.",
+      },
+    },
     upload: {
       button: "Bankafschrift uploaden",
       later: "Later",
@@ -228,6 +265,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       vat: "Do you charge your clients VAT?",
       hasCards: (t) => (t ? "Do you have a credit card?" : "Do you have a credit card?"),
       cards: (t) => (t ? "Which credit cards do you have?" : "Which credit cards do you have?"),
+      cardDetails: (t) =>
+        t ? "What is on your credit cards right now?" : "What is on your credit cards right now?",
       debitCards: (t) => (t ? "Which debit cards do you have?" : "Which debit cards do you have?"),
       upload: "Do you want to add your bank statement?",
     },
@@ -256,6 +295,25 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Other",
     cardsPicked: (n) => `${n} selected`,
+    cardDetails: {
+      balance: "Outstanding balance",
+      paysInFull: "Do you pay the balance in full every month?",
+      payYes: "Yes, every month",
+      payNo: "No, part of it stays",
+      rate: "Interest on the outstanding balance (% a year)",
+      rateHint: "Do not know the rate? Leave it empty. Nothing will be estimated.",
+      points: (program) => `Points balance ${program}`,
+      pointsHint: "The balance from your Amex app or online account.",
+      skipHint: "Leave a card empty to skip it.",
+      skip: "Skip",
+      unknownCard: "Unknown card",
+      errors: {
+        balance: "Enter an amount, for example 1500.",
+        paysInFull: "Choose whether you pay the balance in full every month.",
+        rate: "Enter a percentage, for example 14.9.",
+        points: "Enter a number of points, for example 12500.",
+      },
+    },
     upload: {
       button: "Upload bank statement",
       later: "Later",
