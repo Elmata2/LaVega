@@ -9,7 +9,13 @@ import {
   type AdvisorProfileStore,
 } from "@lavega/core";
 import IntakeWizard from "./IntakeWizard";
-import { applyChildren, applyGoals, applyHousehold, applyStatedCards } from "../intake/state";
+import {
+  applyChildren,
+  applyGoals,
+  applyHousehold,
+  applyStatedCards,
+  applyStatedDebitCards,
+} from "../intake/state";
 import { markDone, screensFor } from "../intake/wizard/screens";
 
 (
@@ -104,9 +110,9 @@ async function pickWork(c: HTMLElement, text = "Employed") {
 const nextBtn = (c: HTMLElement) =>
   c.querySelector<HTMLButtonElement>(".wz-next")!;
 
-test("fresh store opens on household and shows 1 / 21", () => {
+test("fresh store opens on household and shows 1 / 22", () => {
   const { c } = mount();
-  expect(counter(c)).toBe("1 / 21");
+  expect(counter(c)).toBe("1 / 22");
   expect(h1(c)).toBe("Do you live alone or together?");
 });
 
@@ -117,9 +123,9 @@ test("tapping Samen saves household together with partnerIncomeInScope and words
     kind: "together",
     partnerIncomeInScope: true,
   });
-  expect(counter(c)).toBe("2 / 21");
+  expect(counter(c)).toBe("2 / 22");
   await pickWork(c);
-  expect(counter(c)).toBe("3 / 21");
+  expect(counter(c)).toBe("3 / 22");
   await tap(c, "No");
   expect(h1(c)).toBe("What do you earn together, net per month?");
 });
@@ -138,15 +144,15 @@ test("income Verder is disabled when empty and saves a zero-width range", async 
     lowCents: 325000,
     highCents: 325000,
   });
-  expect(counter(c)).toBe("5 / 20");
+  expect(counter(c)).toBe("5 / 21");
 });
 
-test("Nee on children skips child-years and the counter shows 20", async () => {
+test("Nee on children skips child-years and the counter shows 21", async () => {
   const { c } = mount();
   await tap(c, "Alone");
   await pickWork(c);
   await tap(c, "No");
-  expect(counter(c)).toBe("4 / 20");
+  expect(counter(c)).toBe("4 / 21");
   expect(h1(c)).toBe("What do you earn, net per month?");
 });
 
@@ -296,7 +302,7 @@ test("no rendered screen contains advice language", () => {
     AS_OF,
   );
   const all = screensFor(filled);
-  expect(all.length).toBe(21);
+  expect(all.length).toBe(22);
   for (const lang of ["en", "nl"] as const) {
     document.cookie = `lavega_locale=${lang}`;
     all.forEach((id, i) => {
@@ -486,7 +492,7 @@ test("S3: submitting the form (Enter) advances an amount screen", async () => {
   await type(c.querySelector("input")!, "3250");
   await submitForm(c);
   expect(saved().current.statedRanges?.value?.income?.lowCents).toBe(325000);
-  expect(counter(c)).toBe("5 / 20");
+  expect(counter(c)).toBe("5 / 21");
 });
 
 test("S3: Enter does nothing while Verder is disabled", async () => {
@@ -586,7 +592,7 @@ const brandTile = (c: HTMLElement, text: RegExp) =>
 const openBrand = (c: HTMLElement, text: RegExp) => act(async () => brandTile(c, text).click());
 
 test("search swaps the brand tiles for a narrowed flat list", async () => {
-  const { c } = mount(fromScreen("savings"));
+  const { c } = mount(fromScreen("debit-cards"));
   expect(h1(c)).toBe("Do you have a credit card?");
   await tap(c, "Yes");
   expect(h1(c)).toBe("Which credit cards do you have?");
@@ -602,7 +608,7 @@ test("search swaps the brand tiles for a narrowed flat list", async () => {
 });
 
 test("cards saves the picked ids", async () => {
-  const { c, saved } = mount(fromScreen("savings"));
+  const { c, saved } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   expect(nextBtn(c).disabled).toBe(true);
   await openBrand(c, /^ING/);
@@ -619,7 +625,7 @@ test("cards saves the picked ids", async () => {
 });
 
 test("search 'amex' finds the American Express cards and keeps 'Another card' listed", async () => {
-  const { c } = mount(fromScreen("savings"));
+  const { c } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   await type(searchInput(c), "amex");
   const labels = boxes(c).map((b) => b.textContent ?? "");
@@ -629,7 +635,7 @@ test("search 'amex' finds the American Express cards and keeps 'Another card' li
 });
 
 test("opening American Express in the wizard lists its business and corporate cards", async () => {
-  const { c } = mount(fromScreen("savings"));
+  const { c } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   await openBrand(c, /American Express/);
   const labels = boxes(c).map((b) => b.textContent ?? "");
@@ -638,7 +644,7 @@ test("opening American Express in the wizard lists its business and corporate ca
 });
 
 test("a query nothing matches says so and still offers 'Another card'", async () => {
-  const { c } = mount(fromScreen("savings"));
+  const { c } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   await type(searchInput(c), "zzzzqq");
   expect(boxes(c).map((b) => b.textContent)).toEqual(["Another card"]);
@@ -647,7 +653,7 @@ test("a query nothing matches says so and still offers 'Another card'", async ()
 
 test("a stored card id the catalogue no longer holds survives a resubmit", async () => {
   const { c, saved } = mount(
-    fromScreen("savings", (p) => applyStatedCards(p, ["gone-card"], AS_OF)),
+    fromScreen("debit-cards", (p) => applyStatedCards(p, ["gone-card"], AS_OF)),
   );
   await tap(c, "Yes");
   expect(nextBtn(c).disabled).toBe(false);
@@ -656,14 +662,14 @@ test("a stored card id the catalogue no longer holds survives a resubmit", async
 });
 
 test("after Ja then Back, the Ja tile is still selected", async () => {
-  const { c } = mount(fromScreen("savings"));
+  const { c } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   await act(async () => backBtn(c).click());
   expect(tile(c, "Yes").getAttribute("aria-checked")).toBe("true");
 });
 
 test("Nee after picks stores an empty stated list", async () => {
-  const { c, saved } = mount(fromScreen("savings"));
+  const { c, saved } = mount(fromScreen("debit-cards"));
   await tap(c, "Yes");
   await openBrand(c, /^ING/);
   await act(async () => box(c, "ING creditcard").click());
@@ -674,6 +680,39 @@ test("Nee after picks stores an empty stated list", async () => {
   await tap(c, "No");
   expect(saved().current.statedCards).toEqual({ value: [], source: "stated", at: AS_OF });
   expect(saved().current.intake.noCards).toBe(true);
+});
+
+test("debit-cards screen: Revolut tiles, needs one pick, saves ids, then asks for a credit card", async () => {
+  const { c, saved } = mount(fromScreen("savings"));
+  expect(h1(c)).toBe("Which debit cards do you have?");
+  expect(nextBtn(c).disabled).toBe(true);
+  await openBrand(c, /Revolut/);
+  expect(boxes(c).map((b) => b.textContent)).toEqual([
+    "Revolut Metal betaalpas",
+    "Revolut Plus betaalpas",
+    "Revolut Premium betaalpas",
+    "Revolut Standard betaalpas",
+    "Another card",
+  ]);
+  await act(async () => box(c, "Revolut Standard betaalpas").click());
+  await act(async () => box(c, "Revolut Plus betaalpas").click());
+  expect(nextBtn(c).disabled).toBe(false);
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedDebitCards).toEqual({
+    value: ["revolut-plus-betaalpas", "revolut-standard-betaalpas"],
+    source: "stated",
+    at: AS_OF,
+  });
+  expect(saved().current.intake.lastScreen).toBe("debit-cards");
+  expect(h1(c)).toBe("Do you have a credit card?");
+});
+
+test("debit-cards screen prefills from the profile", async () => {
+  const { c } = mount(
+    fromScreen("savings", (p) => applyStatedDebitCards(p, ["ing-betaalpas"], AS_OF)),
+  );
+  expect(nextBtn(c).disabled).toBe(false);
+  expect(brandTile(c, /^ING/).textContent).toContain("1 selected");
 });
 
 test("exact mode prefills only an exact stored spend, never a band", async () => {

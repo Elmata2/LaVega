@@ -232,7 +232,9 @@ function EditorForm({
       case "multi":
         return picked.length === 0 ? null : (p) => editor.apply(p, [...picked]);
       case "cards":
-        return picked.length === 0 ? null : (p) => editor.apply(p, orderedCardIds(picked));
+        return picked.length === 0
+          ? null
+          : (p) => editor.apply(p, orderedCardIds(picked, editor.cardKind));
       case "euros": {
         const cents = toCents(text);
         return cents === null ? null : (p) => editor.apply(p, cents);
@@ -289,6 +291,7 @@ function EditorForm({
         <div className="w-full basis-full">
           <CardPicker
             copy={wizardCopy[locale]}
+            kind={editor.cardKind}
             label={label}
             picked={picked}
             onChange={setPicked}

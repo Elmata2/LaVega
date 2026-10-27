@@ -117,3 +117,7 @@ Owner asked for: bands / "weet ik niet" when a user does not know their spending
 
 - The wizard must scroll when a screen is taller than the viewport (the cards list was cut off and "Verder" unreachable). The app sets `overflow: hidden` on body, so the wizard root owns its scrolling; content that overflows starts at the top instead of being centred off-screen; "Verder" stays visible at the bottom.
 - The card picker is brand-first: known brands as tiles; tapping a brand expands that brand's cards (multi-select). Typing in the search field shows a flat filtered list as before. Business and Corporate cards are included again (they were excluded in round 2).
+
+## Round 4 (2026-10-26, owner: "en dan ook debetkaarten")
+
+- New screen "Welke betaalpassen heb je?" / together "Welke betaalpassen hebben jullie?" in Over jou, right after savings and before "Heb je een creditcard?". No Ja/Nee gate (nearly everyone has one); multi-select, at least one, with "Een andere pas" always available. Same brand-first picker as the credit cards, over the catalogue's `kind: "betaalpas"` entries (business variants included). Stored as `statedDebitCards` (stated Field, catalogue ids or "other"); shown and editable in About you. Jouw plan does not use it yet. Users who already finished the wizard are not sent back for it; they can add it in About you.

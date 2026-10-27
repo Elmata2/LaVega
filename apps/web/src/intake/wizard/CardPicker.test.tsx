@@ -102,3 +102,38 @@ test("English badge, and a search with no match says so", () => {
   type("zzzzqq");
   expect(el!.textContent).toContain("No card found");
 });
+
+function DebitHarness({ lang = "nl" }: { lang?: "nl" | "en" }) {
+  const [picked, setPicked] = useState<string[]>([]);
+  return (
+    <CardPicker
+      kind="debit"
+      copy={wizardCopy[lang]}
+      label="Passen"
+      picked={picked}
+      onChange={setPicked}
+    />
+  );
+}
+
+test("debit picker: brands closed, Revolut shows Standard, Plus, Premium, Metal, other tile is 'Een andere pas'", () => {
+  el = document.createElement("div");
+  document.body.append(el);
+  root = createRoot(el);
+  act(() => root!.render(<DebitHarness />));
+  expect(boxes()).toEqual(["Een andere pas"]);
+  const names = [...el.querySelectorAll("button[aria-expanded]")].map((b) => b.textContent);
+  expect(names[0]).toContain("ING");
+  expect(names.some((n) => n?.includes("Crypto (Bybit, Kraken, Plutus)"))).toBe(true);
+  expect(names.at(-1)).toContain("Overige");
+  click(brand(/Revolut/));
+  expect(boxes()).toEqual([
+    "Revolut Metal betaalpas",
+    "Revolut Plus betaalpas",
+    "Revolut Premium betaalpas",
+    "Revolut Standard betaalpas",
+    "Een andere pas",
+  ]);
+  click(box("Revolut Plus betaalpas"));
+  expect(brand(/Revolut/).textContent).toContain("1 gekozen");
+});

@@ -4,6 +4,7 @@ import type { WizardCopy } from "../../copy/wizard.js";
 import AmountField from "./AmountField.js";
 import ChoiceTiles from "./ChoiceTiles.js";
 import CardPicker, { orderedCardIds } from "./CardPicker.js";
+import type { CardKind } from "./cardOptions.js";
 import MultiTiles from "./MultiTiles.js";
 import { WORK_ORDER } from "./screens.js";
 
@@ -412,15 +413,17 @@ export function CardsScreen(
     copy: WizardCopy;
     label: string;
     initial: readonly string[];
+    kind?: CardKind;
     onSubmit: (ids: string[]) => void;
   },
 ) {
   const [picked, setPicked] = useState<readonly string[]>(p.initial);
   const valid = picked.length > 0;
   return (
-    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(orderedCardIds(picked))}>
+    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(orderedCardIds(picked, p.kind))}>
       <CardPicker
         copy={p.copy}
+        kind={p.kind}
         label={p.label}
         disabled={p.busy}
         picked={picked}

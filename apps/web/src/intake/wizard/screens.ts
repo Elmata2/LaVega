@@ -10,6 +10,7 @@ export type ScreenId =
   | "spend"
   | "housing"
   | "savings"
+  | "debit-cards"
   | "has-cards"
   | "cards"
   | "goal"
@@ -31,6 +32,7 @@ const ABOUT: readonly ScreenId[] = [
   "spend",
   "housing",
   "savings",
+  "debit-cards",
   "has-cards",
   "cards",
 ];

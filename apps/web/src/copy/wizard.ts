@@ -1,6 +1,7 @@
 import type { WorkKind } from "@lavega/core";
 import type { Locale } from "../locale.js";
 import type { Section } from "../intake/wizard/screens.js";
+import type { DebitBrand } from "../intake/wizard/cardOptions.js";
 
 /**
  * Every word the intake wizard adds on top of `intakeCopy`. Risk prompts and
@@ -35,6 +36,7 @@ export type WizardCopy = {
     work: string;
     hasCards: (together: boolean) => string;
     cards: (together: boolean) => string;
+    debitCards: (together: boolean) => string;
     upload: string;
   };
   workKinds: Record<WorkKind, string>;
@@ -44,6 +46,9 @@ export type WizardCopy = {
   cardSearch: string;
   cardNotFound: string;
   otherCard: string;
+  otherDebitCard: string;
+  /** Debit brand tile names (credit brand names are fixed in cardOptions). */
+  debitBrands: Record<Exclude<DebitBrand, "other-brand">, string>;
   /** Group name for brands the list does not know. */
   otherBrand: string;
   /** Badge on a brand tile: how many of its cards are picked. */
@@ -70,6 +75,23 @@ export type WizardCopy = {
   amountRequired: string;
   incomePositive: string;
   dateFuture: string;
+};
+
+/** Brand names, the same in both languages except the crypto group. */
+const DEBIT_BRANDS: WizardCopy["debitBrands"] = {
+  ing: "ING",
+  abn: "ABN AMRO",
+  rabo: "Rabobank",
+  "sns-asn-regio": "SNS / ASN / RegioBank",
+  triodos: "Triodos",
+  knab: "Knab",
+  bunq: "bunq",
+  revolut: "Revolut",
+  n26: "N26",
+  wise: "Wise",
+  openbank: "Openbank",
+  "trade-republic": "Trade Republic",
+  crypto: "Crypto (Bybit, Kraken, Plutus)",
 };
 
 export const wizardCopy: Record<Locale, WizardCopy> = {
@@ -112,6 +134,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       work: "Wat voor werk doe je?",
       hasCards: (t) => (t ? "Hebben jullie een creditcard?" : "Heb je een creditcard?"),
       cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
+      debitCards: (t) =>
+        t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?",
       upload: "Wil je je bankafschrift toevoegen?",
     },
     workKinds: {
@@ -135,6 +159,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     cardSearch: "Zoek je kaart",
     cardNotFound: "Geen kaart gevonden",
     otherCard: "Een andere kaart",
+    otherDebitCard: "Een andere pas",
+    debitBrands: DEBIT_BRANDS,
     otherBrand: "Overige",
     cardsPicked: (n) => `${n} gekozen`,
     upload: {
@@ -199,6 +225,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       work: "What kind of work do you do?",
       hasCards: (t) => (t ? "Do you have a credit card?" : "Do you have a credit card?"),
       cards: (t) => (t ? "Which credit cards do you have?" : "Which credit cards do you have?"),
+      debitCards: (t) => (t ? "Which debit cards do you have?" : "Which debit cards do you have?"),
       upload: "Do you want to add your bank statement?",
     },
     workKinds: {
@@ -222,6 +249,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     cardSearch: "Search for your card",
     cardNotFound: "No card found",
     otherCard: "Another card",
+    otherDebitCard: "Another card",
+    debitBrands: DEBIT_BRANDS,
     otherBrand: "Other",
     cardsPicked: (n) => `${n} selected`,
     upload: {

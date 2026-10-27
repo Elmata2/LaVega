@@ -424,6 +424,30 @@ test("Edit credit cards uses the card search and saves a stated list", async () 
   });
 });
 
+test("About you shows, edits and removes the debit cards row", async () => {
+  const store = storeOf({
+    statedDebitCards: { value: ["ing-betaalpas", "other"], source: "stated", at: "2026-09-03" },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  const row = container!.querySelector('[data-testid="fact-statedDebitCards"]')!.textContent!;
+  expect(row).toContain("Debit cards");
+  expect(row).toContain("ING betaalpas, Another card");
+  await click(button("Edit: Debit cards"));
+  const search = container!.querySelector<HTMLInputElement>('input[type="search"]')!;
+  await fill(search, "revolut");
+  await click(boxByText("Revolut Plus betaalpas"));
+  await click(saveBtn());
+  expect(lastSaved(props).current.statedDebitCards).toEqual({
+    value: ["ing-betaalpas", "revolut-plus-betaalpas", "other"],
+    source: "stated",
+    at: AS_OF,
+  });
+  expect(lastSaved(props).current.statedCards).toBeUndefined();
+  await click(button("Remove: Debit cards"));
+  expect(lastSaved(props).current.statedDebitCards).toBeUndefined();
+});
+
 test("a stated empty card list shows 'No credit card' and Edit then picking clears noCards", async () => {
   const p0 = emptyProfile();
   const store = storeOf({

@@ -65,6 +65,7 @@ export type AboutYouCopy = {
     spendRange: string;
     workKinds: Record<WorkKind, string>;
     otherCard: string;
+    otherDebitCard: string;
     noCards: string;
   };
   editors: {
@@ -311,6 +312,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         statedRanges: "Opgegeven bedragen",
         work: "Werk",
         statedCards: "Creditcards",
+        statedDebitCards: "Betaalpassen",
       },
       edit: "Wijzig",
       remove: "Verwijder",
@@ -353,6 +355,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           other: "Anders",
         },
         otherCard: "Een andere kaart",
+        otherDebitCard: "Een andere pas",
         noCards: "Geen creditcard",
       },
       editors: {
@@ -542,6 +545,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         statedRanges: "Amounts you gave",
         work: "Work",
         statedCards: "Credit cards",
+        statedDebitCards: "Debit cards",
       },
       edit: "Edit",
       remove: "Remove",
@@ -583,6 +587,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           other: "Other",
         },
         otherCard: "Another card",
+        otherDebitCard: "Another card",
         noCards: "No credit card",
       },
       editors: {

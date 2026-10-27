@@ -99,6 +99,14 @@ test("profile: a remove-only write (no fact `at` changes) wins over an older sto
   expect(mergeProfileStores(removed, older)).toEqual(m);
 });
 
+test("profileUpdatedAt sees statedDebitCards", () => {
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    statedDebitCards: { value: ["other"], source: "stated", at: "2026-10-28" },
+  });
+  expect(profileUpdatedAt(p)).toBe("2026-10-28");
+});
+
 test("profileUpdatedAt sees work and statedCards", () => {
   const base = emptyProfile();
   const w = new AdvisorProfile({
