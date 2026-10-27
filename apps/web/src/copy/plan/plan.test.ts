@@ -321,6 +321,7 @@ const subsProbes = (): SubsFigures[] => {
       whatIfCancelYearlyCents: 0,
       coverageDays: 30,
       excludedForeignCount: 0,
+      excludedFixedCosts: [],
     },
   ];
   for (const n of SPREAD)
@@ -341,6 +342,7 @@ const subsProbes = (): SubsFigures[] => {
       whatIfCancelYearlyCents: Math.abs(n) + 1,
       coverageDays: 120,
       excludedForeignCount: 2,
+      excludedFixedCosts: [{ name: "Energie" }],
     });
   return out;
 };
@@ -655,6 +657,13 @@ function renderAll(locale: Locale): Rendered[] {
     out.push({ where: "subs.noUse", text: u.noUseLogged(fmt.eur(n)) });
     out.push({ where: "subs.whatIf", text: u.whatIf(fmt.eur(n), fmt.eur(n)) });
     out.push({ where: "cards.points", text: c.pointsLine("Card A", cardNet(n), fmt) ?? "" });
+    const st = c.stated;
+    for (const [k, v] of Object.entries(st))
+      if (typeof v === "string") out.push({ where: `cards.stated.${k}`, text: v });
+    out.push({ where: "cards.stated.checkedOn", text: st.checkedOn(fmt.date("2026-08-20")) });
+    out.push({ where: "cards.stated.billed", text: st.billed(fmt.eurExact(n), "maand") });
+    out.push({ where: "cards.stated.total", text: st.total(fmt.eurExact(n)) });
+    out.push({ where: "cards.stated.left", text: st.left(n) });
     out.push({ where: "spending.limit", text: s.limitLine("groceries", fmt.eur(n), 2) });
     out.push({ where: "goals.scenario", text: g.scenario.cell("2%", "0,2%", fmt.eur(n)) });
     out.push({

@@ -28,9 +28,27 @@ export type CardsCopy = SectionCopy<CardsFigures, CardsReasonKey, CardsMissingKi
   tier: Record<CardTier, string>;
   /** A criteria value the catalogue has no figure for. */
   unknownValue: string;
-  /** Lead line over the cards a person named in the intake. */
-  statedCardsLead: string;
-  /** Under the stated cards when the bank data holds no credit card. */
+  /** The block over the cards a person named in the intake, with catalogue facts. */
+  stated: {
+    title: string;
+    otherDebitCard: string;
+    unknownCard: string;
+    credit: string;
+    debit: string;
+    fee: string;
+    fx: string;
+    points: string;
+    unknown: string;
+    checkedOn: (date: string) => string;
+    source: string;
+    conditions: string;
+    billed: (amount: string, period: "maand" | "jaar") => string;
+    total: (amount: string) => string;
+    left: (n: number) => string;
+    /** Stated cards the bank data holds: shown with the accounts instead. */
+    alsoHeld: (names: string) => string;
+  };
+  /** Under the stated credit cards when the bank data holds no credit card. */
   statedCardsNote: string;
   /** A stated card that is not in the catalogue. */
   otherCard: string;
@@ -78,7 +96,27 @@ const nl: CardsCopy = {
     unknown: "onbekend",
   },
   unknownValue: "onbekend",
-  statedCardsLead: "Je gaf aan deze creditcards te hebben:",
+  stated: {
+    title: "Jouw kaarten",
+    otherDebitCard: "Een andere pas",
+    unknownCard: "Onbekende kaart",
+    credit: "Creditcards",
+    debit: "Betaalpassen",
+    fee: "Jaarlijkse kosten",
+    fx: "Opslag buitenlandse valuta",
+    points: "Punten per euro",
+    unknown: "niet bekend",
+    checkedOn: (date) => `gecontroleerd op ${date}`,
+    source: "bron",
+    conditions: "voorwaarden",
+    billed: (amount, period) => `${amount} per ${period}`,
+    total: (amount) => `Totaal ${amount} per jaar aan kaartkosten`,
+    left: (n) =>
+      n === 1
+        ? "1 kaart zonder bekende kosten telt niet mee"
+        : `${n} kaarten zonder bekende kosten tellen niet mee`,
+    alsoHeld: (names) => `Ook opgegeven, staat hieronder bij je rekeningen: ${names}`,
+  },
   statedCardsNote:
     "Deze kaarten staan niet in je bankgegevens. Zonder uitgaven op de kaart is er geen nettowaarde te berekenen. Er is niets geschat.",
   otherCard: "Een andere kaart",
@@ -212,7 +250,27 @@ const en: CardsCopy = {
     unknown: "unknown",
   },
   unknownValue: "unknown",
-  statedCardsLead: "You said you have these credit cards:",
+  stated: {
+    title: "Your cards",
+    otherDebitCard: "Another debit card",
+    unknownCard: "Unknown card",
+    credit: "Credit cards",
+    debit: "Debit cards",
+    fee: "Yearly cost",
+    fx: "Foreign currency surcharge",
+    points: "Points per euro",
+    unknown: "not known",
+    checkedOn: (date) => `checked on ${date}`,
+    source: "source",
+    conditions: "conditions (in Dutch)",
+    billed: (amount, period) => `${amount} per ${period === "maand" ? "month" : "year"}`,
+    total: (amount) => `In total ${amount} a year in card costs`,
+    left: (n) =>
+      n === 1
+        ? "1 card without a known cost is not counted"
+        : `${n} cards without a known cost are not counted`,
+    alsoHeld: (names) => `Also stated, shown below with your accounts: ${names}`,
+  },
   statedCardsNote:
     "These cards are not in your bank data. Without spending on the card, no net value can be calculated. Nothing has been estimated.",
   otherCard: "Another card",

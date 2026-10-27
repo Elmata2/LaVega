@@ -167,6 +167,16 @@ export default function SubscriptionsSection({ result, ctx }: SectionProps<SubsF
                 />
               </>
             )}
+            <Lines
+              lines={[
+                f.excludedFixedCosts.length > 0
+                  ? a.subs.fixedExcluded(
+                      f.excludedFixedCosts.length,
+                      f.excludedFixedCosts.map((x) => x.name).join(", "),
+                    )
+                  : null,
+              ]}
+            />
           </div>
         ),
         assumptions: null,

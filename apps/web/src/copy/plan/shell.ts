@@ -274,6 +274,7 @@ const nl: PlanShellCopy = {
     sub_whatif_year: "Abonnementen per jaar zonder de gemarkeerde",
     sub_coverage_days: "Dagen aan transacties voor abonnementen",
     sub_foreign_excluded: "Abonnementen in een andere valuta, niet meegeteld",
+    sub_fixed_excluded: "Vaste lasten die geen abonnement zijn, niet meegeteld",
   },
 };
 
@@ -447,6 +448,7 @@ const en: PlanShellCopy = {
     sub_whatif_year: "Subscriptions per year without the flagged ones",
     sub_coverage_days: "Days of transactions behind the subscriptions",
     sub_foreign_excluded: "Subscriptions in another currency, not counted",
+    sub_fixed_excluded: "Fixed costs that are not subscriptions, not counted",
   },
 };
 

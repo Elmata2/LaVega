@@ -5,6 +5,7 @@ import { isIsoDate, isoMonth, monthsBetween, previousMonths } from "../advisor/m
 import { fingerprint } from "../advisor/evidence.js";
 import { scopedOwn } from "../advisor/room.js";
 import { cleanTxs, personalView } from "../advisor/scopePersonal.js";
+import { categorize } from "../views.js";
 import { hash } from "../hash.js";
 import { isEurCurrency, type Tx } from "../model.js";
 import type { VaultEvent } from "../advisor/vaultSections.js";
@@ -38,8 +39,42 @@ export const SUBS_FLAT_IDS = [
   "sub_whatif_year",
   "sub_coverage_days",
   "sub_foreign_excluded",
+  "sub_fixed_excluded",
 ] as const;
 export type SubsFlatId = (typeof SUBS_FLAT_IDS)[number];
+
+/** Categories whose recurring charges are fixed costs, not subscriptions. */
+export const FIXED_COST_CATEGORIES: ReadonlySet<string> = new Set([
+  "Wonen & energie",
+  "Verzekeringen",
+  "Belastingen & overheid",
+]);
+
+/** Health insurers and childcare providers, as lower-case match fragments of
+ *  the counterparty. Local to subscriptions: no app-wide category change. */
+export const FIXED_COST_MERCHANTS: readonly string[] = [
+  "zilveren kruis",
+  "cz",
+  "vgz",
+  "menzis",
+  "ditzo",
+  "dsw",
+  "zorgverzekering",
+  "kinderopvang",
+  "gastouder",
+  "bso",
+];
+
+const escapeRe = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A fragment starts at a word boundary; a short one (3 letters or fewer) must
+ *  also end on one, so "cz" does not match "czerny". */
+const FIXED_COST_MERCHANT_RES: readonly RegExp[] = FIXED_COST_MERCHANTS.map(
+  (f) => new RegExp(`(^|[^a-z0-9])${escapeRe(f)}${f.length <= 3 ? "($|[^a-z0-9])" : ""}`),
+);
+const isFixedCostMerchant = (name: string): boolean => {
+  const n = name.toLowerCase();
+  return FIXED_COST_MERCHANT_RES.some((re) => re.test(n));
+};
 
 export const SUBS_CALC_IDS = [
   "sub-detect",
@@ -85,6 +120,10 @@ export type SubsFigures = {
   coverageDays: number;
   /** Streams left out because a charge is not in euros (no conversion here). */
   excludedForeignCount: number;
+  /** Recurring fixed costs (energy, water, insurance, childcare ...) kept out
+   *  of the subscriptions. Names only: an amount could be in a foreign
+   *  currency. Sorted by name. */
+  excludedFixedCosts: { name: string }[];
 };
 
 const cents = (t: Tx): number => Math.round(Math.abs(t.amount) * 100);
@@ -172,8 +211,38 @@ export function computeSubscriptions(i: PlanInput): SectionResult<SubsFigures> {
       const t = byId.get(id);
       return t !== undefined && !isEurCurrency(t.currency);
     });
-  const subs = detected.filter((s) => !isForeign(s));
-  const excludedForeignCount = detected.length - subs.length;
+  /** The series' category is the most common one over its transactions; a tie
+   *  goes to the category of the most recent transaction. */
+  const seriesCategory = (s: Subscription): string | null => {
+    const n = new Map<string, { count: number; last: string }>();
+    for (const id of s.txIds) {
+      const t = byId.get(id);
+      if (t === undefined) continue;
+      const c = categorize(t, i.rules, own);
+      const e = n.get(c) ?? { count: 0, last: "" };
+      n.set(c, { count: e.count + 1, last: t.date > e.last ? t.date : e.last });
+    }
+    let best: string | null = null;
+    let top = { count: 0, last: "" };
+    for (const [c, e] of n)
+      if (e.count > top.count || (e.count === top.count && e.last > top.last)) {
+        best = c;
+        top = e;
+      }
+    return best;
+  };
+  const isFixedCost = (s: Subscription): boolean => {
+    if (isFixedCostMerchant(s.name)) return true;
+    const c = seriesCategory(s);
+    return c !== null && FIXED_COST_CATEGORIES.has(c);
+  };
+  const fixed = detected.filter(isFixedCost);
+  const nonFixed = detected.filter((s) => !isFixedCost(s));
+  const excludedFixedCosts = fixed
+    .map((s) => ({ name: s.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const subs = nonFixed.filter((s) => !isForeign(s));
+  const excludedForeignCount = nonFixed.length - subs.length;
   const coverageDays = subscriptionCoverage(clean).historyDays;
 
   // A price change moves the key (`merchant|out|price`). State logged under an
@@ -259,6 +328,7 @@ export function computeSubscriptions(i: PlanInput): SectionResult<SubsFigures> {
     whatIfCancelYearlyCents: sum(cancelled, (r) => r.yearlyCents),
     coverageDays,
     excludedForeignCount,
+    excludedFixedCosts,
   };
 
   const flagged = (k: SubRow["facts"][number]): SubRow[] => rows.filter((r) => r.facts.includes(k));
@@ -337,6 +407,7 @@ export function computeSubscriptions(i: PlanInput): SectionResult<SubsFigures> {
     sub_whatif_year: fig("cents", figures.whatIfCancelYearlyCents),
     sub_coverage_days: fig("count", coverageDays),
     sub_foreign_excluded: fig("count", excludedForeignCount),
+    sub_fixed_excluded: fig("count", excludedFixedCosts.length),
   };
 
   const facts: PlanFact[] = [];

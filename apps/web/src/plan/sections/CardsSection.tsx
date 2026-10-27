@@ -1,10 +1,23 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { accountType, type CardCriteriaRow, type CardsFigures, type CriteriaValue } from "@lavega/core";
+import {
+  accountType,
+  type CardCriteriaRow,
+  type CardsFigures,
+  type CriteriaValue,
+} from "@lavega/core";
 import Button from "../../components/ui/Button.js";
 import CardLink from "../../components/ui/CardLink.js";
 import { Table, TableWrap, Td, Th } from "../../components/ui/Table.js";
 import { cardsCopy, factLine } from "../../copy/plan/index.js";
-import { cardLabel } from "../../intake/wizard/cardOptions.js";
+import { CATALOGUE_ENTRIES } from "../../catalogue-rates.js";
+import { heldCatalogueIds } from "../heldCards.js";
+import {
+  heldStatedNames,
+  statedCardRows,
+  yearlyFeeTotal,
+  type CardFact,
+  type StatedCardRow,
+} from "../statedCards.js";
 import SectionCard from "../SectionCard.js";
 import {
   CalcList,
@@ -141,11 +154,23 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
     }
   };
 
-  const stated = ctx.profile.store?.current.statedCards?.value ?? [];
+  const store = ctx.profile.store?.current;
+  const statedCredit = store?.statedCards?.value ?? [];
+  const statedDebit = store?.statedDebitCards?.value ?? [];
+  const heldIds = heldCatalogueIds(ctx.accounts, CATALOGUE_ENTRIES);
+  const otherLabels = { credit: copy.otherCard, debit: copy.stated.otherDebitCard };
+  const statedRows = statedCardRows(
+    statedCredit,
+    statedDebit,
+    heldIds,
+    otherLabels,
+    copy.stated.unknownCard,
+  );
+  const heldNames = heldStatedNames(statedCredit, statedDebit, heldIds, otherLabels);
   // The bank data is the source when it holds a credit card; otherwise the
   // stated cards are shown. A current account is not a credit card.
   const hasCreditcard = ctx.accounts.some((acc) => accountType(acc) === "Creditcard");
-  const showStated = stated.length > 0 && !hasCreditcard;
+  const showStated = statedCredit.length + statedDebit.length > 0 && !hasCreditcard;
 
   const terms = factLine("card-nl-terms", copy.facts.cardTerms, ctx.publicFacts);
 
@@ -154,16 +179,8 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
       {{
         figures: (
           <div>
-            {showStated ? (
-              <div data-testid="plan-cards-stated" className="mb-2">
-                <p className="m-0 text-muted text-[0.85rem]">{copy.statedCardsLead}</p>
-                <ul className="m-0 list-none p-0 text-[0.9rem]">
-                  {stated.map((id) => (
-                    <li key={id}>{cardLabel(id, copy.otherCard)}</li>
-                  ))}
-                </ul>
-                <p className="m-0 mt-1 text-muted text-[0.85rem]">{copy.statedCardsNote}</p>
-              </div>
+            {statedRows.length + heldNames.length > 0 ? (
+              <StatedCards rows={statedRows} note={showStated} heldNames={heldNames} />
             ) : null}
             <StatusBody
               section="cards"
@@ -403,6 +420,109 @@ function Redemption({
       >
         {error}
       </p>
+    </div>
+  );
+}
+
+function StatedCards({
+  rows,
+  note,
+  heldNames,
+}: {
+  rows: StatedCardRow[];
+  note: boolean;
+  heldNames: string[];
+}) {
+  const { locale, fmt } = useSectionCopy();
+  const copy = cardsCopy[locale];
+  const t = copy.stated;
+  const total = yearlyFeeTotal(rows);
+  const fact = (f: CardFact, show: (v: CardFact & object) => string) =>
+    f === null ? (
+      t.unknown
+    ) : (
+      <>
+        {show(f)}
+        <span className="block text-muted text-[0.75rem]">
+          {t.checkedOn(fmt.date(f.checkedAt))},{" "}
+          <a href={f.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {t.source}
+          </a>
+        </span>
+        {f.conditions !== undefined && (
+          <details className="text-muted text-[0.7rem]">
+            <summary>{t.conditions}</summary>
+            <span lang="nl" className="block">
+              {f.conditions}
+            </span>
+          </details>
+        )}
+      </>
+    );
+  const group = (kind: "credit" | "debit") => {
+    const list = rows.filter((r) => r.kind === kind);
+    if (list.length === 0) return null;
+    return (
+      <div key={kind}>
+        <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">{t[kind]}</h5>
+        <ul className="m-0 mb-2 grid list-none gap-2 p-0 text-[0.9rem]">
+          {list.map((r) => (
+            <li key={`${r.kind}-${r.id}`} data-testid="plan-cards-stated-row">
+              <span className="font-semibold">{r.name}</span>
+              {r.id !== "other" && (
+                <dl className="m-0 grid gap-1">
+                  <div>
+                    <dt className="inline text-muted">{t.fee}: </dt>
+                    <dd className="m-0 inline">
+                      {fact(r.yearlyFee, (f) =>
+                        f.billed !== undefined && f.billed.period === "maand"
+                          ? `${fmt.eurExact(f.value)} (${t.billed(fmt.eurExact(f.billed.cents), "maand")})`
+                          : fmt.eurExact(f.value),
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-muted">{t.fx}: </dt>
+                    <dd className="m-0 inline">{fact(r.fxFeePct, (f) => fmt.points(f.value))}</dd>
+                  </div>
+                  {(kind === "credit" || r.pointsPerEuro !== null) && (
+                    <div>
+                      <dt className="inline text-muted">{t.points}: </dt>
+                      <dd className="m-0 inline">
+                        {fact(r.pointsPerEuro, (f) => fmt.plain(f.value))}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+            </li>
+          ))}
+        </ul>
+        {kind === "credit" && note && (
+          <p className="m-0 mb-2 text-muted text-[0.85rem]">{copy.statedCardsNote}</p>
+        )}
+      </div>
+    );
+  };
+  const totalParts = [
+    total.unknownCount < rows.length ? t.total(fmt.eurExact(total.totalCents)) : null,
+    total.unknownCount > 0 ? t.left(total.unknownCount) : null,
+  ].filter((x) => x !== null);
+  return (
+    <div data-testid="plan-cards-stated" className="mb-2">
+      <h4 className="m-0 mb-1 text-[0.9rem] font-semibold">{t.title}</h4>
+      {group("credit")}
+      {group("debit")}
+      {heldNames.length > 0 && (
+        <p data-testid="plan-cards-stated-held" className="m-0 mb-2 text-muted text-[0.85rem]">
+          {t.alsoHeld(heldNames.join(", "))}
+        </p>
+      )}
+      {totalParts.length > 0 && (
+        <p data-testid="plan-cards-stated-total" className="m-0 text-[0.9rem]">
+          {`${totalParts.join(". ")}.`}
+        </p>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { applyBuffer } from "../../intake/state.js";
 import { bufferCopy, factLine, monthCopy } from "../../copy/plan/index.js";
 import { centsText, parseEuros, parseNumber, parseWholeNumber } from "./parse.js";
 import { saveProfile } from "./profileEdits.js";
+import { workNoteFor } from "../FromAnswers.js";
 import SectionCard from "../SectionCard.js";
 import {
   CalcList,
@@ -82,6 +83,7 @@ export default function BufferSection({ result, ctx }: SectionProps<BufferFigure
                 copy.closeExample(f, fmt),
                 copy.statedOverlapNote(f.statedOverlapGoalCount),
                 irregular ? copy.irregularIncome : null,
+                workNoteFor(ctx.profile.store, "buffer", locale),
               ]}
             />
           </div>
@@ -105,7 +107,9 @@ export default function BufferSection({ result, ctx }: SectionProps<BufferFigure
               }
               parse={(t) => parseWholeNumber(t, { min: 1, max: 120 })}
               onSave={(months) =>
-                ctx.plan.setPreference({ bufferTopUpMonths: { months, at: ctx.asOf } })
+                ctx.plan.setPreference({
+                  bufferTopUpMonths: { months, at: ctx.asOf },
+                })
               }
               onClear={() => ctx.plan.setPreference({ bufferTopUpMonths: null })}
             />
@@ -118,7 +122,9 @@ export default function BufferSection({ result, ctx }: SectionProps<BufferFigure
               }
               parse={(t) => parseEuros(t)}
               onSave={(cents) =>
-                ctx.plan.setPreference({ nibudBufferResult: { cents, at: ctx.asOf } })
+                ctx.plan.setPreference({
+                  nibudBufferResult: { cents, at: ctx.asOf },
+                })
               }
               onClear={() => ctx.plan.setPreference({ nibudBufferResult: null })}
             />

@@ -238,6 +238,52 @@ describe("diffSnapshots", () => {
     expect(topChanges(d)).toEqual([]);
   });
 
+  test("sub_fixed_excluded is bookkeeping: absent in the old snapshot, 0 or 2 in the new one, no change", () => {
+    const a = snap({ flat: { subscriptions: { sub_count: { unit: "count", value: 3 } } } });
+    for (const v of [0, 2]) {
+      const b = snap({
+        flat: {
+          subscriptions: {
+            sub_count: { unit: "count", value: 3 },
+            sub_fixed_excluded: { unit: "count", value: v },
+          },
+        },
+      });
+      const d = diffSnapshots(a, b);
+      expect(d.changes).toEqual([]);
+      expect(d.material).toBe(false);
+    }
+  });
+
+  test("a plan-1 snapshot (subscriptions once counted fixed costs) gives a baseline, not a subscriptions drop", () => {
+    expect(PLAN_ENGINE_VERSION).toBe("plan-2");
+    const old = snap({
+      engineVersion: "plan-1",
+      flat: {
+        subscriptions: {
+          sub_total_month: cents(123100),
+          sub_total_year: cents(1477200),
+          sub_count: { unit: "count", value: 9 },
+        },
+      },
+    });
+    const now = snap({
+      flat: {
+        subscriptions: {
+          sub_total_month: cents(12100),
+          sub_total_year: cents(145200),
+          sub_count: { unit: "count", value: 4 },
+        },
+      },
+    });
+    expect(diffSnapshots(old, now)).toEqual({
+      changes: [],
+      statusChanges: [],
+      material: false,
+      baseline: true,
+    });
+  });
+
   test("across a thresholdsVersion or engineVersion bump, and with no previous: baseline, no figure changes", () => {
     const a = snap({ flat: { month: { x: cents(1) } } });
     const b = snap({
