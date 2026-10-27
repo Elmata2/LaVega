@@ -98,9 +98,19 @@ describe("computeSubscriptions", () => {
     for (const row of r.figures.rows) {
       expect(Object.keys(row).sort()).toEqual(
         [
-          "key", "name", "function", "monthlyCents", "yearlyCents", "monthsActive",
-          "priceChange", "overlapGroup", "overlapCombinedMonthlyCents", "skippedCycles",
-          "usage", "decision", "facts",
+          "key",
+          "name",
+          "function",
+          "monthlyCents",
+          "yearlyCents",
+          "monthsActive",
+          "priceChange",
+          "overlapGroup",
+          "overlapCombinedMonthlyCents",
+          "skippedCycles",
+          "usage",
+          "decision",
+          "facts",
         ].sort(),
       );
       for (const f of row.facts)
@@ -114,7 +124,9 @@ describe("computeSubscriptions", () => {
     const at = (events: PlanEvent[]) =>
       computeSubscriptions(input(txs, { events })).figures.rows[0]!.decision;
     expect(at([])).toBeNull();
-    expect(at([dec("a", "2026-10-01", key, "keep"), dec("b", "2026-10-02", key, "cancel")])).toBe("cancel");
+    expect(at([dec("a", "2026-10-01", key, "keep"), dec("b", "2026-10-02", key, "cancel")])).toBe(
+      "cancel",
+    );
     expect(
       at([dec("a", "2026-10-01", key, "cancel"), dec("b", "2026-10-02", key, "clear")]),
     ).toBeNull();
@@ -125,11 +137,16 @@ describe("computeSubscriptions", () => {
       ...series("Netflix", "2026-04", rep(7, 12.99)),
       ...series("Spotify", "2026-04", rep(7, 10.99)),
     ];
-    const keyN = sub(txs, detectSubscriptions(txs, { asOf: AS_OF }).find((s) => s.merchant.includes("netflix"))!.key).key;
+    const keyN = sub(
+      txs,
+      detectSubscriptions(txs, { asOf: AS_OF }).find((s) => s.merchant.includes("netflix"))!.key,
+    ).key;
     const none = computeSubscriptions(input(txs));
     expect(none.figures.whatIfCancelMonthlyCents).toBe(0);
     expect(none.figures.whatIfCancelYearlyCents).toBe(0);
-    const one = computeSubscriptions(input(txs, { events: [dec("a", "2026-10-01", keyN, "cancel")] }));
+    const one = computeSubscriptions(
+      input(txs, { events: [dec("a", "2026-10-01", keyN, "cancel")] }),
+    );
     expect(one.figures.whatIfCancelMonthlyCents).toBe(1299);
     expect(one.figures.whatIfCancelYearlyCents).toBe(1299 * 12);
   });
@@ -272,10 +289,7 @@ describe("computeSubscriptions", () => {
   });
 
   test("price increase wins over overlap in the status reason", () => {
-    const txs = [
-      ...netflixUp(),
-      ...series("Videoland", "2026-04", rep(7, 11.99)),
-    ];
+    const txs = [...netflixUp(), ...series("Videoland", "2026-04", rep(7, 11.99))];
     const r = computeSubscriptions(input(txs));
     expect(r.statusReason.key).toBe("price-increase");
     const pf = r.facts.find((f) => f.factId.startsWith("sub_price_up:"))!;
@@ -287,7 +301,10 @@ describe("computeSubscriptions", () => {
     const txs = series("Netflix", "2026-04", rep(7, 12.99));
     const r = computeSubscriptions(
       input(txs, {
-        events: [dec("a", "2026-10-01", "gone|out|1", "cancel"), use("u", "2026-10-01", "gone|out|1", "2026-09")],
+        events: [
+          dec("a", "2026-10-01", "gone|out|1", "cancel"),
+          use("u", "2026-10-01", "gone|out|1", "2026-09"),
+        ],
       }),
     );
     expect(r.figures.rows).toHaveLength(1);
@@ -470,5 +487,104 @@ describe("round 1 fixes", () => {
       mkTx("Netflix", "2026-09-30", -12.99),
     ];
     expect(computeSubscriptions(input(txs)).figures.rows[0]!.monthsActive).toBe(7);
+  });
+});
+
+describe("fixed costs are not subscriptions", () => {
+  // Merchants and amounts from the synthetic ING statement (lavega-voorbeeld-transacties-ing.csv).
+  const fixedSet = (): Tx[] => [
+    ...series("Vattenfall Klantenservice", "2026-04", rep(7, 145)),
+    ...series("Vitens NV", "2026-04", rep(7, 21.4)),
+    ...series("Zilveren Kruis Zorgverzekeringen", "2026-04", rep(7, 284.6)),
+    ...series("Centraal Beheer", "2026-04", rep(7, 18.75)),
+    ...series("Kinderopvang Het Zonnetje", "2026-04", rep(7, 640)),
+  ];
+  const keptSet = (): Tx[] => [
+    ...series("Netflix International BV", "2026-04", rep(7, 13.99)),
+    ...series("Spotify AB", "2026-04", rep(7, 17.99)),
+    ...series("Basic-Fit Nederland", "2026-04", rep(7, 29.99)),
+    ...series("Ziggo Services BV", "2026-04", rep(7, 62.5)),
+    ...series("Simyo", "2026-04", rep(7, 15)),
+  ];
+
+  test("excludes energy, water, health insurance, home insurance and childcare", () => {
+    const r = computeSubscriptions(input([...fixedSet(), ...keptSet()]));
+    const names = r.figures.rows.map((x) => x.name);
+    for (const n of ["Vattenfall", "Vitens", "Zilveren Kruis", "Centraal Beheer", "Kinderopvang"])
+      expect(names.some((x) => x.startsWith(n))).toBe(false);
+    expect(r.figures.excludedFixedCosts.map((x) => x.name)).toEqual([
+      "Centraal Beheer",
+      "Kinderopvang Het Zonnetje",
+      "Vattenfall Klantenservice",
+      "Vitens NV",
+      "Zilveren Kruis Zorgverzekeringen",
+    ]);
+  });
+
+  test("keeps Netflix, Spotify, Basic-Fit, Ziggo, Simyo", () => {
+    const r = computeSubscriptions(input([...fixedSet(), ...keptSet()]));
+    expect(r.figures.rows.map((x) => x.name).sort()).toEqual([
+      "Basic-Fit Nederland",
+      "Netflix International BV",
+      "Simyo",
+      "Spotify AB",
+      "Ziggo Services BV",
+    ]);
+  });
+
+  test("user category rule excludes a series", () => {
+    const txs = keptSet();
+    const plain = computeSubscriptions(input(txs));
+    expect(plain.figures.rows.some((x) => x.name.startsWith("Ziggo"))).toBe(true);
+    const ruled = computeSubscriptions(
+      input(txs, { rules: [{ id: "r1", match: "ziggo", category: "Wonen & energie" }] }),
+    );
+    expect(ruled.figures.rows.some((x) => x.name.startsWith("Ziggo"))).toBe(false);
+    expect(ruled.figures.excludedFixedCosts.map((x) => x.name)).toEqual(["Ziggo Services BV"]);
+  });
+
+  test("excluded list carries the name only (a foreign series would carry foreign cents)", () => {
+    const r = computeSubscriptions(input(fixedSet()));
+    expect(r.figures.excludedFixedCosts).toContainEqual({
+      name: "Zilveren Kruis Zorgverzekeringen",
+    });
+    expect(r.flat.sub_fixed_excluded).toEqual({ unit: "count", value: 5 });
+  });
+
+  test("totals exclude them", () => {
+    const r = computeSubscriptions(input([...fixedSet(), ...keptSet()]));
+    const kept = 1399 + 1799 + 2999 + 6250 + 1500;
+    expect(r.figures.totalMonthlyCents).toBe(kept);
+    expect(r.figures.totalYearlyCents).toBe(kept * 12);
+  });
+
+  test("majority category decides: Netflix with one 'Verzekeringen' charge stays a subscription", () => {
+    const txs = series("Netflix", "2026-04", rep(7, 13.99));
+    txs[3] = { ...txs[3]!, category: "Verzekeringen" };
+    const r = computeSubscriptions(input(txs));
+    expect(r.figures.rows.map((x) => x.name)).toEqual(["Netflix"]);
+    expect(r.figures.excludedFixedCosts).toEqual([]);
+  });
+
+  test("majority fixed category excludes; a tie goes to the most recent transaction", () => {
+    const V = "Verzekeringen";
+    const A = "Abonnementen";
+    const mk = (cats: string[]): Tx[] =>
+      series("Acme", "2026-04", rep(cats.length, 20)).map((t, k) => ({ ...t, category: cats[k]! }));
+    const run = (cats: string[]) => computeSubscriptions(input(mk(cats))).figures;
+    expect(run([A, A, A, A, A, A]).rows).toHaveLength(1);
+    expect(run([V, V, V, V, A, A]).rows).toEqual([]);
+    expect(run([A, A, A, V, V, V]).rows).toEqual([]);
+    expect(run([V, V, V, A, A, A]).rows).toHaveLength(1);
+  });
+
+  test("a health insurer is recognised by name even without a category", () => {
+    const r = computeSubscriptions(
+      input(series("CZ Groep Zorgverzekeraar", "2026-04", rep(7, 130))),
+    );
+    expect(r.figures.rows).toEqual([]);
+    expect(r.figures.excludedFixedCosts).toHaveLength(1);
+    const czerny = computeSubscriptions(input(series("Czerny Muziek", "2026-04", rep(7, 12))));
+    expect(czerny.figures.rows).toHaveLength(1);
   });
 });

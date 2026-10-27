@@ -19,6 +19,7 @@ import { intakeCopy } from "../copy/intake.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import { planFmt, planShellCopy } from "../copy/plan/index.js";
 import BackboneStrip from "../plan/BackboneStrip.js";
+import FromAnswers from "../plan/FromAnswers.js";
 import ChangeLog from "../plan/ChangeLog.js";
 import PlanHeader, { ASSUMPTIONS_ANCHOR } from "../plan/PlanHeader.js";
 import ScenarioTable from "../plan/ScenarioTable.js";
@@ -149,7 +150,11 @@ export default function Plan({
     plan,
     asOf: plan.result.asOf,
     accounts: personalAccounts,
-    profile: { store: profile.store, update: profile.update, saveFailed: profile.saveFailed },
+    profile: {
+      store: profile.store,
+      update: profile.update,
+      saveFailed: profile.saveFailed,
+    },
     publicFacts,
     onNavigate,
   };
@@ -167,6 +172,12 @@ export default function Plan({
           {shell.errors.write}
         </p>
       )}
+      <FromAnswers
+        store={profile.store}
+        hasAccounts={personalAccounts.length > 0}
+        month={plan.result.sections.month}
+        onNavigate={onNavigate}
+      />
       <BackboneStrip backbone={plan.result.backbone} publicFacts={publicFacts} />
       <ChangeLog diff={plan.changes} since={plan.changesSince} />
       {SECTION_IDS.map((id) => (

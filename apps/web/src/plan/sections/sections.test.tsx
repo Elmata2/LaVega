@@ -958,11 +958,225 @@ test("S3: with no bank data at all, the stated list is not followed by 'no card 
   unmount();
 });
 
-test("M2: a real creditcard account hides the stated list (the bank data is the source)", () => {
+test("M2: a real creditcard account hides the stated rows (the bank data is the source); the card is named, not lost", () => {
   const cc: Account = { ...currentAccount, key: "abn-cc", name: "Creditcard", type: "Creditcard" };
   const { ctx, result } = cardsFor([cc], statedPatch);
   const c = mount(<CardsSection result={result} ctx={ctx} />);
   openAll(c);
+  expect(qa(c, "plan-cards-stated-row")).toHaveLength(0);
+  expect(q(c, "plan-cards-stated-held")!.textContent).toContain("ING creditcard");
+  unmount();
+});
+
+test("fixed costs are listed under the subscriptions as not counted, in EN and NL", () => {
+  const fixed = (name: string, cents: number): Tx[] =>
+    ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].map((m, k) => ({
+      id: `fx-${name}-${k}`,
+      date: `${m}-06`,
+      amount: -cents / 100,
+      currency: "EUR",
+      counterparty: name,
+      description: "Incasso",
+      accountKey: "A1",
+    })) as Tx[];
+  const mapTxs = (txs: Tx[]): Tx[] => [
+    ...txs,
+    ...fixed("Vattenfall Klantenservice", 14500),
+    ...fixed("Zilveren Kruis Zorgverzekeringen", 28460),
+  ];
+  for (const l of ["en", "nl"] as const) {
+    setLocale(l);
+    const spy = newSpy();
+    const c = mount(<Harness spy={spy} mapTxs={mapTxs} />);
+    openAll(c);
+    const text = cardEl(c, "subscriptions").textContent ?? "";
+    const want =
+      l === "en"
+        ? "2 fixed costs are not counted here: Vattenfall Klantenservice, Zilveren Kruis Zorgverzekeringen. They count in your fixed costs only if you confirmed them in your profile."
+        : "2 vaste lasten zijn hier niet meegeteld: Vattenfall Klantenservice, Zilveren Kruis Zorgverzekeringen. Ze tellen alleen mee in je vaste lasten als je ze in je profiel hebt bevestigd.";
+    expect(text).toContain(want);
+    expect(findAdviceLanguage(want, l)).toEqual([]);
+    expect(
+      spy.result.sections.subscriptions.figures.rows.some((r) => r.name.includes("Vattenfall")),
+    ).toBe(false);
+    unmount();
+  }
+});
+
+const fixedSeries = (name: string, cents: number): Tx[] =>
+  ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].map((m, k) => ({
+    id: `fy-${name}-${k}`,
+    date: `${m}-06`,
+    amount: -cents / 100,
+    currency: "EUR",
+    counterparty: name,
+    description: "Incasso",
+    accountKey: "A1",
+  })) as Tx[];
+
+test("one fixed cost uses the singular line; with every recurring series a fixed cost the line still shows and no subscription rows remain", () => {
+  const onlyFixed = (txs: Tx[]): Tx[] => [
+    ...txs.filter((t) => t.category === "Salaris"),
+    ...fixedSeries("Vattenfall Klantenservice", 14500),
+  ];
+  for (const l of ["en", "nl"] as const) {
+    setLocale(l);
+    const spy = newSpy();
+    const c = mount(<Harness spy={spy} mapTxs={onlyFixed} />);
+    openAll(c);
+    expect(spy.result.sections.subscriptions.figures.rows.map((r) => r.name)).toEqual([]);
+    expect(qa(c, "plan-sub-row")).toHaveLength(0);
+    const text = cardEl(c, "subscriptions").textContent ?? "";
+    const want =
+      l === "en"
+        ? "1 fixed cost is not counted here: Vattenfall Klantenservice. It counts in your fixed costs only if you confirmed it in your profile."
+        : "1 vaste last is hier niet meegeteld: Vattenfall Klantenservice. Die telt alleen mee in je vaste lasten als je die in je profiel hebt bevestigd.";
+    expect(text).toContain(want);
+    expect(findAdviceLanguage(want, l)).toEqual([]);
+    unmount();
+  }
+});
+
+const unknownCardsPatch = (credit: string[], debit: string[] = []) => ({
+  statedCards: { value: credit, source: "stated", at: AS_OF },
+  statedDebitCards: { value: debit, source: "stated", at: AS_OF },
+});
+
+test("Amex Gold shows its yearly fee, 2,5% and 1 point with dates and sources", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch(["american-express-gold-card"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const row = q(c, "plan-cards-stated-row")!;
+  expect(row.textContent).toContain("€240.00");
+  expect(row.textContent).toContain("€20.00 per month");
+  expect(row.textContent).toContain("2.5%");
+  expect(row.textContent).toContain("checked on");
+  expect(row.querySelectorAll("a[href^='https://www.americanexpress.com']").length).toBe(3);
+  expect(q(c, "plan-cards-stated-total")!.textContent).toContain("€240.00");
+  unmount();
+});
+
+test("debit card without points shows no points row", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch([], ["ing-betaalpas"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const row = q(c, "plan-cards-stated-row")!;
+  expect(row).not.toBeNull();
+  expect(row.textContent).not.toContain("Points per euro");
+  unmount();
+});
+
+test("no stated cards renders nothing new", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch([]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
   expect(q(c, "plan-cards-stated")).toBeNull();
+  unmount();
+});
+
+test("held card is not repeated under stated cards", () => {
+  const cc: Account = { ...currentAccount, key: "ing-cc", name: "Creditcard", type: "Creditcard" };
+  const { ctx, result } = cardsFor([cc], unknownCardsPatch(["ing-creditcard", "other"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const rows = qa(c, "plan-cards-stated-row").map((r) => r.textContent);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain("Another card");
+  unmount();
+});
+
+test("S1: a stated debit card never gets the credit-card 'not in your bank data' note", () => {
+  const revolut: Account = { ...currentAccount, key: "rev", bank: "Revolut", name: "Current" };
+  const { ctx, result } = cardsFor(
+    [revolut],
+    unknownCardsPatch([], ["revolut-standard-betaalpas"]),
+  );
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated")!.textContent).toContain("Revolut Standard");
+  expect(c.textContent).not.toContain("not in your bank data");
+  unmount();
+});
+
+test("S1: the note sits under the credit cards only", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch(["ing-creditcard"], ["ing-betaalpas"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(c.textContent!.match(/not in your bank data/g)).toHaveLength(1);
+  unmount();
+});
+
+test("S2: a stated card the bank data holds is named in a line, not lost", () => {
+  const { ctx, result } = cardsFor(
+    [currentAccount],
+    unknownCardsPatch([], ["ing-betaalpas", "other"]),
+  );
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated-held")!.textContent).toBe(
+    "Also stated, shown below with your accounts: ING betaalpas",
+  );
+  expect(qa(c, "plan-cards-stated-row")).toHaveLength(1);
+  unmount();
+});
+
+test("S2: with every stated card held, the line still shows", () => {
+  const { ctx, result } = cardsFor([currentAccount], unknownCardsPatch([], ["ing-betaalpas"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated-held")!.textContent).toContain("ING betaalpas");
+  unmount();
+});
+
+test("the fee-total sentence ends with a period, in EN", () => {
+  const { ctx, result } = cardsFor(
+    [],
+    unknownCardsPatch(["american-express-gold-card", "other", "gone"]),
+  );
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated-total")!.textContent).toBe(
+    "In total €240.00 a year in card costs. 2 cards without a known cost are not counted.",
+  );
+  unmount();
+});
+
+test("unknown stated id renders a fallback", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch(["no-longer-in-catalogue"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(q(c, "plan-cards-stated")!.textContent).toContain("Unknown card");
+  expect(c.textContent).not.toContain("no-longer-in-catalogue");
+  unmount();
+});
+
+test("fee total excludes unknown fees and says how many", () => {
+  const { ctx, result } = cardsFor(
+    [],
+    unknownCardsPatch(["american-express-gold-card", "other", "gone"]),
+  );
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const t = q(c, "plan-cards-stated-total")!.textContent!;
+  expect(t).toContain("€240.00");
+  expect(t).toContain("2 cards without a known cost are not counted");
+  unmount();
+});
+
+test("catalogue conditions sit inside a closed details element, with the Dutch text intact", () => {
+  const { ctx, result } = cardsFor([], unknownCardsPatch(["american-express-gold-card"]));
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const row = q(c, "plan-cards-stated-row")!;
+  const details = [...row.querySelectorAll("details")];
+  expect(details.length).toBeGreaterThanOrEqual(2);
+  for (const d of details) {
+    expect(d.open).toBe(false);
+    expect(d.querySelector("summary")!.textContent).toContain("conditions");
+    expect(d.querySelector("[lang='nl']")).not.toBeNull();
+  }
+  expect(
+    details.some((d) => d.textContent!.includes("Wisselkoersopslag op het omgewisselde")),
+  ).toBe(true);
   unmount();
 });

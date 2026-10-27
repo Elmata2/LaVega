@@ -61,6 +61,7 @@ const NOT_A_CHANGE: ReadonlySet<string> = new Set([
   "spend_foreign_excluded",
   "sub_coverage_days",
   "sub_foreign_excluded",
+  "sub_fixed_excluded",
   "cards_months",
   "cards_foreign_excluded",
 ]);

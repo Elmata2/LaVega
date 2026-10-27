@@ -44,6 +44,8 @@ export type AssumptionsCopy = {
     usedThisMonth: string;
     usedLogged: string;
     foreignExcluded: (n: number) => string;
+    /** Fixed costs (energy, insurance, childcare ...) left out of the subscriptions. */
+    fixedExcluded: (n: number, names: string) => string;
     /** Subscription function names as stored (Dutch) -> the reader's language. */
     functions: Record<string, string>;
     /** For a function name the table does not know. */
@@ -152,6 +154,8 @@ const nl: AssumptionsCopy = {
     usedThisMonth: "Deze maand gebruikt",
     usedLogged: "Deze maand vastgelegd",
     foreignExcluded: (n) => `${n} abonnement(en) in een andere valuta zijn niet meegeteld.`,
+    fixedExcluded: (n, names) =>
+      `${n} ${n === 1 ? "vaste last is" : "vaste lasten zijn"} hier niet meegeteld: ${names}. ${n === 1 ? "Die telt" : "Ze tellen"} alleen mee in je vaste lasten als je ${n === 1 ? "die" : "ze"} in je profiel hebt bevestigd.`,
     functions: {
       Videostreaming: "videostreaming",
       Muziekstreaming: "muziekstreaming",
@@ -241,6 +245,8 @@ const en: AssumptionsCopy = {
     usedThisMonth: "Used this month",
     usedLogged: "Logged this month",
     foreignExcluded: (n) => `${n} subscription(s) in another currency are not counted.`,
+    fixedExcluded: (n, names) =>
+      `${n} ${n === 1 ? "fixed cost is" : "fixed costs are"} not counted here: ${names}. ${n === 1 ? "It counts" : "They count"} in your fixed costs only if you confirmed ${n === 1 ? "it" : "them"} in your profile.`,
     functions: {
       Videostreaming: "video streaming",
       Muziekstreaming: "music streaming",

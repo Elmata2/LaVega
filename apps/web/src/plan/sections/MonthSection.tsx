@@ -1,7 +1,8 @@
 import type { MonthFigures } from "@lavega/core";
 import { DASH, factLine, monthCopy } from "../../copy/plan/index.js";
+import { workNoteFor } from "../FromAnswers.js";
 import SectionCard from "../SectionCard.js";
-import { CalcList, Rows, Sources, StatusBody, useSectionCopy } from "./common.js";
+import { CalcList, Lines, Rows, Sources, StatusBody, useSectionCopy } from "./common.js";
 import type { SectionProps } from "./types.js";
 
 /** Section 1: the user's own last months. Figures only: nothing in it is a
@@ -21,11 +22,19 @@ export default function MonthSection({ result, ctx }: SectionProps<MonthFigures>
     ...(room.kind === "computed"
       ? [
           { key: "low", label: l.lowMonth, value: fmt.eur(room.lowCents) },
-          { key: "middle", label: l.middleMonth, value: fmt.eur(room.middleCents) },
+          {
+            key: "middle",
+            label: l.middleMonth,
+            value: fmt.eur(room.middleCents),
+          },
           { key: "high", label: l.highMonth, value: fmt.eur(room.highCents) },
         ]
       : []),
-    { key: "fixed", label: l.fixed, value: f.fixedCents === null ? null : fmt.eur(f.fixedCents) },
+    {
+      key: "fixed",
+      label: l.fixed,
+      value: f.fixedCents === null ? null : fmt.eur(f.fixedCents),
+    },
     {
       key: "variable",
       label: l.variable,
@@ -50,6 +59,7 @@ export default function MonthSection({ result, ctx }: SectionProps<MonthFigures>
           <div>
             <StatusBody section="month" result={result} ctx={ctx} />
             <Rows rows={result.status === "not-enough-data" && room.kind === "none" ? [] : rows} />
+            <Lines lines={[workNoteFor(ctx.profile.store, "month", locale)]} />
           </div>
         ),
         assumptions: null,

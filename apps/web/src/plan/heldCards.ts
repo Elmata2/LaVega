@@ -46,6 +46,28 @@ function entryFor(
   return same.length === 1 ? same[0]! : null;
 }
 
+type CostOf = ReturnType<typeof accountCosts>["rows"][number]["cost"];
+
+const feeProductIdOf = (cost: CostOf | undefined): string | null =>
+  cost?.kind === "known" && cost.matchedBy === "product-name" ? cost.fee.productId : null;
+
+/** The catalogue ids that the person's card accounts already resolve to, by the
+ *  same matcher the held-card list uses. A stated card with one of these ids is
+ *  that held card and is not listed a second time. */
+export function heldCatalogueIds(
+  accounts: readonly Account[],
+  entries: readonly CatalogueEntryLike[],
+): Set<string> {
+  const cards = accounts.filter(isSpendable);
+  const costs = new Map(accountCosts(cards, entries).rows.map((r) => [r.account.key, r.cost]));
+  const ids = new Set<string>();
+  for (const account of cards) {
+    const entry = entryFor(account, entries, feeProductIdOf(costs.get(account.key)));
+    if (entry !== null) ids.add(entry.id);
+  }
+  return ids;
+}
+
 /** A covered catalogue figure with the date and source it carries; anything
  *  else gives nothing, and the plan then shows the figure as unknown. */
 function sourced(
@@ -106,11 +128,7 @@ export function buildHeldCards(i: {
         : cost.matchedBy === "product-name"
           ? cost.fee
           : (cost.agreeing[0] ?? null);
-    const entry = entryFor(
-      account,
-      i.entries,
-      cost?.kind === "known" && cost.matchedBy === "product-name" ? cost.fee.productId : null,
-    );
+    const entry = entryFor(account, i.entries, feeProductIdOf(cost));
     const fx = sourced(entry, "fxFeePct");
     const pts = sourced(entry, "pointsPerEuro");
     const provenance: Provenance = {

@@ -566,3 +566,20 @@ test("the Assumptions link moves focus to the scenario card", () => {
   act(() => (q(c, "plan-link-assumptions") as HTMLButtonElement).click());
   expect(document.activeElement).toBe(target);
 });
+
+test("the answers block sits under the header and above the backbone strip, and shows the stated figures", () => {
+  const stated = (value: unknown) => ({ value, source: "stated", at: "2026-10-01" });
+  const store = storeWith(1, {
+    household: stated({ kind: "together" }),
+    work: stated(["freelance"]),
+    statedRanges: stated({ income: { lowCents: 450000, highCents: 450000 } }),
+  });
+  const c = mount(<Plan {...props({ store })} />);
+  const block = q(c, "plan-from-answers")!;
+  expect(block).not.toBeNull();
+  const header = q(c, "plan-header")!;
+  const backbone = q(c, "plan-backbone")!;
+  expect(header.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(block.compareDocumentPosition(backbone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(block.textContent).toContain("€4,500");
+});

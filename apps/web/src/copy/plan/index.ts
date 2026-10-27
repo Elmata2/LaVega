@@ -18,6 +18,7 @@ export { debtsCopy, type DebtsCopy } from "./debts.js";
 export { spendingCopy, type SpendingCopy } from "./spending.js";
 export { subscriptionsCopy, type SubsCopy } from "./subscriptions.js";
 export { cardsCopy, type CardsCopy } from "./cards.js";
+export { fromAnswersCopy, type FromAnswersCopy } from "./fromAnswers.js";
 export { goalsCopy, learnShortHorizonText, type GoalsCopy } from "./goals.js";
 export { FACT_GATED_EXAMPLES, WORDING_TABLES, type WordingTable } from "./wording.js";
 

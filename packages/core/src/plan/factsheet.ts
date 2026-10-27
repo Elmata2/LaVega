@@ -2,17 +2,14 @@ import { Schema } from "effect";
 import { hash } from "../hash.js";
 import type { FigureUnit, PlanFact, Polarity, SectionId } from "./types.js";
 
-export const PLAN_ENGINE_VERSION = "plan-1";
+export const PLAN_ENGINE_VERSION = "plan-2";
 
 /** Thrown when facts break the FactSheet contract (a factId that could carry a
  *  raw key, free text in `exact`, or a duplicate factId). A programming
  *  defect, not a user-data condition: callers do not catch it. */
-export class FactSheetError extends Schema.TaggedError<FactSheetError>()(
-  "FactSheetError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class FactSheetError extends Schema.TaggedError<FactSheetError>()("FactSheetError", {
+  message: Schema.String,
+}) {}
 
 const FACT_ID = /^[a-z0-9_:-]+$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,8 +71,7 @@ const YEARS: readonly Band[] = [
   [Infinity, "10+"],
 ];
 
-const band = (table: readonly Band[], x: number): string =>
-  table.find(([upper]) => x < upper)![1];
+const band = (table: readonly Band[], x: number): string => table.find(([upper]) => x < upper)![1];
 
 const num = (exact: number | string): number | null =>
   typeof exact === "number" && Number.isFinite(exact) ? exact : null;
@@ -97,13 +93,7 @@ export function bucketOf(unit: FigureUnit, exact: number | string): string {
     case "years":
       return x < 0 ? "<0" : band(YEARS, x);
     case "count":
-      return x < 0
-        ? "<0"
-        : !Number.isInteger(x)
-          ? "unknown"
-          : x <= 5
-            ? String(x)
-            : "6+";
+      return x < 0 ? "<0" : !Number.isInteger(x) ? "unknown" : x <= 5 ? String(x) : "6+";
     case "ratio": {
       // A fraction (0.25 = 25%). Round first so 0.99999999995 stays below 1.
       const r = Math.round(x * 1e6) / 1e6;
@@ -138,10 +128,7 @@ export function buildFactSheet(
       throw new FactSheetError({ message: `duplicate factId: ${f.factId}` });
     }
     seen.add(f.factId);
-    if (
-      typeof f.exact === "string" &&
-      !(f.unit === "date" && ISO_DAY.test(f.exact))
-    ) {
+    if (typeof f.exact === "string" && !(f.unit === "date" && ISO_DAY.test(f.exact))) {
       throw new FactSheetError({
         message: `string exact only for dates: ${f.factId}`,
       });
@@ -161,9 +148,7 @@ export function buildFactSheet(
     ...(f.derivedFrom === undefined ? {} : { derivedFrom: f.derivedFrom }),
   }));
   const h = hash(
-    JSON.stringify(
-      out.map((f) => [f.factId, f.exact, f.polarity, f.mustMention, f.bucket]),
-    ) +
+    JSON.stringify(out.map((f) => [f.factId, f.exact, f.polarity, f.mustMention, f.bucket])) +
       PLAN_ENGINE_VERSION +
       ctx.locale +
       taskType,
