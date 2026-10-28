@@ -77,6 +77,7 @@ const nl: CardsCopy = {
     "other-card-nets-more": NET_PER_CARD_NL,
     "no-card-data": "Er zijn geen kaartgegevens.",
     "no-cardable-spend": "Er zijn geen uitgaven gevonden die met een kaart kunnen.",
+    "card-advice": "De kaartvergelijking hieronder rekent met je uitgaven op al je rekeningen.",
   },
   labels: {
     card: "Kaart",
@@ -89,7 +90,7 @@ const nl: CardsCopy = {
     insurance: "Verzekering",
     netValue: "Nettowaarde",
   },
-  sortNote: "De volgorde is op naam. Elke kolom is te sorteren; geen rij staat voorop.",
+  sortNote: "Deze tabel toont alleen je eigen kaarten, op naam. Elke kolom is te sorteren. De kaartvergelijking staat hierboven.",
   tier: {
     measured: "uit een bron met datum",
     assumed: "aangenomen: een gewone kaart zonder cashback",
@@ -118,7 +119,7 @@ const nl: CardsCopy = {
     alsoHeld: (names) => `Ook opgegeven, staat hieronder bij je rekeningen: ${names}`,
   },
   statedCardsNote:
-    "Deze kaarten staan niet in je bankgegevens. Zonder uitgaven op de kaart is er geen nettowaarde te berekenen. Er is niets geschat.",
+    "Deze kaarten staan niet in je bankgegevens, dus hun eigen gebruik is niet te zien. De kaartvergelijking hieronder rekent met je uitgaven op al je rekeningen.",
   otherCard: "Een andere kaart",
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
@@ -133,7 +134,7 @@ const nl: CardsCopy = {
   feeShareNote: (months) =>
     months >= PLAN_NUMBERS.cardHorizonMonths
       ? "De kosten zijn die van een heel jaar."
-      : `Het aandeel in de jaarkosten telt alleen de ${months} maanden waarover gegevens zijn. Er is niets doorgetrokken naar een heel jaar.`,
+      : `Voor de kaartrekeningen in je bankgegevens telt het aandeel in de jaarkosten alleen de ${months} maanden waarover gegevens zijn. De kaartvergelijking rekent op jaarbasis; zie daar hoe.`,
   pointsLine: (name, net, fmt) =>
     net.pointsEarned === null
       ? null
@@ -147,7 +148,7 @@ const nl: CardsCopy = {
       ? `${name}: het bedrag waarbij de jaarkosten zijn terugverdiend is niet te berekenen.`
       : `${name}: de jaarkosten zijn terugverdiend bij ${fmt.eur(annualSpendCents)} uitgaven per jaar.`,
   noMarketValue:
-    "LaVega neemt geen marktwaarde per punt aan. Een waarde komt alleen uit voorbeelden die jij invult.",
+    "LaVega neemt geen marktwaarde per punt aan. Een waarde komt uit een gepubliceerde koers van de aanbieder, met bron en datum bij de punten hierboven, of uit voorbeelden die jij invult.",
   facts: { cardTerms: (value, source) => `${value} (${source})` },
   headline: (f, fmt) =>
     f.cardableSpendCents <= 0
@@ -198,7 +199,7 @@ const nl: CardsCopy = {
       "Er zijn geen uitgaven gevonden die met een kaart te betalen zijn. Zonder die uitgaven is geen opbrengst te berekenen. Er is niets geschat.",
   },
   howCalculated: {
-    "cardable-spend": `Het totaal van je uitgaven van de laatste volle maanden (hooguit ${PLAN_NUMBERS.cardHorizonMonths}) die met een kaart te betalen zijn, in euro, zonder huur, hypotheek, belasting, verzekeringen, aflossingen en eigen overboekingen en zonder regels in een andere valuta. Er is niets doorgetrokken naar een heel jaar.`,
+    "cardable-spend": `Het totaal van je uitgaven van de laatste volle maanden (hooguit ${PLAN_NUMBERS.cardHorizonMonths}) die met een kaart te betalen zijn, in euro, zonder huur, hypotheek, belasting, verzekeringen, aflossingen en eigen overboekingen en zonder regels in een andere valuta. Dit cijfer is niet doorgetrokken naar een heel jaar; de kaartvergelijking doet dat wel en laat zien hoe.`,
     "card-earned":
       "De opbrengst is het cashbackpercentage van de kaart over die uitgaven, alsof alles op die kaart ging.",
     "card-fee":
@@ -231,6 +232,7 @@ const en: CardsCopy = {
     "other-card-nets-more": NET_PER_CARD_EN,
     "no-card-data": "There is no card data.",
     "no-cardable-spend": "No spending was found that fits on a card.",
+    "card-advice": "The card comparison below uses your spending on all your accounts.",
   },
   labels: {
     card: "Card",
@@ -243,7 +245,7 @@ const en: CardsCopy = {
     insurance: "Insurance",
     netValue: "Net value",
   },
-  sortNote: "The order is by name. Every column can be sorted; no row is placed first.",
+  sortNote: "This table shows only your own cards, by name. Every column can be sorted. The card comparison is above.",
   tier: {
     measured: "from a dated source",
     assumed: "assumed: an ordinary card with no cashback",
@@ -272,7 +274,7 @@ const en: CardsCopy = {
     alsoHeld: (names) => `Also stated, shown below with your accounts: ${names}`,
   },
   statedCardsNote:
-    "These cards are not in your bank data. Without spending on the card, no net value can be calculated. Nothing has been estimated.",
+    "These cards are not in your bank data, so their own use cannot be seen. The card comparison below uses your spending on all your accounts.",
   otherCard: "Another card",
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
@@ -287,7 +289,7 @@ const en: CardsCopy = {
   feeShareNote: (months) =>
     months >= PLAN_NUMBERS.cardHorizonMonths
       ? "The fee is that of a full year."
-      : `The share of the annual fee covers only the ${months} months of data. Nothing was extended to a full year.`,
+      : `For the card accounts in your bank data, the share of the annual fee covers only the ${months} months of data. The card comparison works per year; see there how.`,
   pointsLine: (name, net, fmt) =>
     net.pointsEarned === null
       ? null
@@ -301,7 +303,7 @@ const en: CardsCopy = {
       ? `${name}: the break-even amount cannot be calculated.`
       : `${name}: the annual fee is earned back at ${fmt.eur(annualSpendCents)} of spending a year.`,
   noMarketValue:
-    "LaVega assumes no market value per point. A value only comes from examples you enter.",
+    "LaVega assumes no market value per point. A value comes from a rate the provider publishes, with its source and date next to the points above, or from examples you enter.",
   facts: { cardTerms: (value, source) => `${value} (${source})` },
   headline: (f, fmt) =>
     f.cardableSpendCents <= 0
@@ -352,7 +354,7 @@ const en: CardsCopy = {
       "No spending was found that fits on a card. Without it, no earnings can be calculated. Nothing has been estimated.",
   },
   howCalculated: {
-    "cardable-spend": `The total of your spending over the latest full months (at most ${PLAN_NUMBERS.cardHorizonMonths}) that fit on a card, in euros, leaving out rent, mortgage, tax, insurance, loan repayments, transfers between your own accounts and lines in another currency. Nothing was extended to a full year.`,
+    "cardable-spend": `The total of your spending over the latest full months (at most ${PLAN_NUMBERS.cardHorizonMonths}) that fit on a card, in euros, leaving out rent, mortgage, tax, insurance, loan repayments, transfers between your own accounts and lines in another currency. This figure is not extended to a full year; the card comparison does that and shows how.`,
     "card-earned":
       "Earnings are the card's cashback rate on that spending, as if all of it went on that card.",
     "card-fee":

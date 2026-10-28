@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   AdvisorProfile,
   capacityFor,
@@ -9,6 +9,8 @@ import {
   addUserDebt,
   removeUserDebt,
   applyBuffer,
+  applyCardBalances,
+  applyStatedCards,
   applyKnowledge,
   applyRiskAnswers,
   applyStatedHousing,
@@ -108,4 +110,26 @@ test("block 2 debt edits touch only typed debts; block 1 debts keep evidence and
   p = removeUserDebt(p, "debt-9");
   expect(p.debts).toHaveLength(1);
   expect(p.debts![0]!.at).toBe("2026-09-01");
+});
+
+describe("card balances", () => {
+  const AT = "2026-10-27";
+  const rows = [
+    { cardId: "gold", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 },
+    { cardId: "other", balanceCents: 0, paysInFull: true },
+  ];
+  test("applyCardBalances stores the rows as a stated fact", () => {
+    const p = applyCardBalances(emptyProfile(), rows, AT);
+    expect(p.cardBalances).toEqual({ value: rows, source: "stated", at: AT });
+  });
+  test("an empty list removes the fact", () => {
+    const p = applyCardBalances(applyCardBalances(emptyProfile(), rows, AT), [], AT);
+    expect(p.cardBalances).toBeUndefined();
+  });
+  test("changing the stated cards drops balances of cards that are gone", () => {
+    const base = applyCardBalances(applyStatedCards(emptyProfile(), ["gold", "other"], AT), rows, AT);
+    const next = applyStatedCards(base, ["gold"], AT);
+    expect(next.cardBalances?.value).toEqual([rows[0]]);
+    expect(applyStatedCards(base, ["x"], AT).cardBalances).toBeUndefined();
+  });
 });

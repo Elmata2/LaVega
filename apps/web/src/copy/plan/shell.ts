@@ -171,7 +171,7 @@ const nl: PlanShellCopy = {
   },
   footer: {
     notice:
-      "Deze pagina geeft informatie en uitleg. Het is geen financieel advies en LaVega kiest geen producten voor je.",
+      "LaVega doet aanbevelingen op basis van jouw cijfers en openbare bronnen. Controleer de voorwaarden bij de aanbieder voordat je iets afsluit.",
     computedAt: (time) => `Laatst berekend op ${time}`,
     recompute: "Nu opnieuw berekenen",
   },
@@ -345,7 +345,7 @@ const en: PlanShellCopy = {
   },
   footer: {
     notice:
-      "This page gives information and education. It is not financial advice, and LaVega does not choose products for you.",
+      "LaVega makes recommendations based on your own figures and public sources. Check the provider's terms before you sign up for anything.",
     computedAt: (time) => `Last calculated ${time}`,
     recompute: "Recalculate now",
   },

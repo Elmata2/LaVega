@@ -362,8 +362,27 @@ const cardNet = (n: number, over: Partial<CardNet> = {}): CardNet => ({
   ...over,
 });
 
+const NO_ADVICE: CardsFigures["advice"] = {
+  state: "short-history",
+  spend: {
+    windowCents: 0,
+    months: 0,
+    foreignCents: 0,
+    excludedForeignCount: 0,
+    annualCents: 0,
+    annualForeignCents: 0,
+  },
+  baseline: { kind: "no-card", netCents: 0 },
+  verdict: { kind: "no-options" },
+  options: [],
+  notComparable: [],
+  interest: [],
+  ignoresInterest: false,
+  points: [],
+};
+
 const cardsProbes = (): CardsFigures[] => {
-  const base = { criteria: [], sharedCases: true as const };
+  const base = { criteria: [], sharedCases: true as const, advice: NO_ADVICE };
   const out: CardsFigures[] = [
     {
       ...base,
@@ -893,6 +912,8 @@ describe("plan copy: wording", () => {
     "%s: every rendered template, reason, empty state and note is free of advice language",
     (l) => {
       const hits = renderAll(l)
+        // The footer states that LaVega now makes recommendations (owner, 27 Oct 2026).
+        .filter((r) => !/shell\.footer/.test(r.where))
         .map((r) => ({ ...r, found: findAdviceLanguage(r.text, l) }))
         .filter((r) => r.found.length > 0)
         .map((r) => `${r.where}: [${r.found.join(", ")}] ${r.text}`);

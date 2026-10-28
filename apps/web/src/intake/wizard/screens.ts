@@ -14,6 +14,7 @@ export type ScreenId =
   | "debit-cards"
   | "has-cards"
   | "cards"
+  | "card-balances"
   | "goal"
   | "debts"
   | "debt-details"
@@ -37,6 +38,7 @@ const ABOUT: readonly ScreenId[] = [
   "debit-cards",
   "has-cards",
   "cards",
+  "card-balances",
 ];
 const GOALS: readonly ScreenId[] = ["goal", "debts", "debt-details", "buffer"];
 
@@ -56,7 +58,11 @@ export function screensFor(p: AdvisorProfile): ScreenId[] {
       !(id === "vat" && !isSelfEmployed(p)) &&
       !(id === "child-years" && noChildren) &&
       !(id === "debt-details" && p.intake.noUserDebts === true) &&
-      !(id === "cards" && p.intake.noCards === true),
+      !(id === "cards" && p.intake.noCards === true) &&
+      !(
+        id === "card-balances" &&
+        (p.intake.noCards === true || (p.statedCards?.value.length ?? 0) === 0)
+      ),
   );
 }
 
@@ -116,8 +122,9 @@ export function answerDebts(p: AdvisorProfile, has: boolean): AdvisorProfile {
  *  skips the cards screen. Ja clears both an empty list and the Nee flag. */
 export function answerCards(p: AdvisorProfile, has: boolean, asOf: string): AdvisorProfile {
   if (!has) {
+    const { cardBalances: _balances, ...rest } = p;
     return new AdvisorProfile({
-      ...p,
+      ...rest,
       statedCards: { value: [], source: "stated", at: asOf },
       intake: { ...p.intake, noCards: true },
     });

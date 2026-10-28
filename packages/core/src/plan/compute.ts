@@ -160,7 +160,7 @@ export function computePlan(i: PlanInput): PlanResult {
   const debts = computeDebts(i);
   const spending = computeSpending(i);
   const subscriptions = computeSubscriptions(i);
-  const cards = computeCards(i);
+  const cards = computeCards(i, buffer.figures);
   const goals = computeGoals(i, month, buffer, debts);
   const sections: PlanSections = {
     month,

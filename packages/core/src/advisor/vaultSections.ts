@@ -112,6 +112,7 @@ export function profileUpdatedAt(p: AdvisorProfile): string {
   addField(p.chargesVat);
   addField(p.statedCards);
   addField(p.statedDebitCards);
+  addField(p.cardBalances);
   for (const f of [...(p.incomeStreams ?? []), ...(p.fixedCosts ?? []), ...(p.goals ?? [])]) {
     addField(f);
   }

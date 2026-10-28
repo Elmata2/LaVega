@@ -5,6 +5,7 @@ import {
   KNOWLEDGE_QUESTIONS,
   scoreKnowledge,
   scoreTolerance,
+  type CardBalance,
   type Goal,
   type WorkKind,
 } from "@lavega/core";
@@ -38,8 +39,33 @@ export const applyChargesVat = (p: AdvisorProfile, charges: boolean, asOf: strin
 export const applyStatedDebitCards = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
   copyProfile(p, { statedDebitCards: { value: [...ids], source: "stated", at: asOf } });
 
-export const applyStatedCards = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
-  copyProfile(p, { statedCards: { value: [...ids], source: "stated", at: asOf } });
+/** Without the key at all: optional schema keys cannot hold undefined. */
+const withoutBalances = (p: AdvisorProfile): AdvisorProfile => {
+  const { cardBalances: _gone, ...rest } = p;
+  return new AdvisorProfile(rest);
+};
+
+/** The stated balances of the credit cards. An empty list removes the fact. */
+export function applyCardBalances(
+  p: AdvisorProfile,
+  rows: readonly CardBalance[],
+  asOf: string,
+): AdvisorProfile {
+  if (rows.length === 0) return withoutBalances(p);
+  return copyProfile(p, { cardBalances: { value: [...rows], source: "stated", at: asOf } });
+}
+
+/** Picking other cards drops the balances of cards that are no longer stated. */
+export function applyStatedCards(
+  p: AdvisorProfile,
+  ids: readonly string[],
+  asOf: string,
+): AdvisorProfile {
+  const next = copyProfile(p, { statedCards: { value: [...ids], source: "stated", at: asOf } });
+  const kept = (p.cardBalances?.value ?? []).filter((b) => ids.includes(b.cardId));
+  if (p.cardBalances === undefined || kept.length === p.cardBalances.value.length) return next;
+  return applyCardBalances(next, kept, p.cardBalances.at);
+}
 
 export const applyStatedHousing = (
   p: AdvisorProfile,

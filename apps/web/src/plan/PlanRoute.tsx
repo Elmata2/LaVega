@@ -5,7 +5,7 @@ import Plan, { type PlanProps } from "../views/Plan.js";
 import { usePlan, type UsePlanInput } from "./usePlan.js";
 
 export type PlanRouteProps = UsePlanInput &
-  Pick<PlanProps, "onSaveProfile" | "onNavigate"> & {
+  Pick<PlanProps, "onSaveProfile" | "onNavigate" | "onSaveRewards"> & {
     profileRead: PlanProps["profileRead"] | "loading" | "error";
     onRetry: () => void;
   };
@@ -19,6 +19,7 @@ export default function PlanRoute({
   onRetry,
   onSaveProfile,
   onNavigate,
+  onSaveRewards,
   ...input
 }: PlanRouteProps) {
   const [locale] = useAppLocale();
@@ -42,6 +43,8 @@ export default function PlanRoute({
       asOf={input.asOf}
       onSaveProfile={onSaveProfile}
       onNavigate={onNavigate}
+      rewards={input.rewards}
+      {...(onSaveRewards === undefined ? {} : { onSaveRewards })}
       accounts={input.accounts}
       entityProfiles={input.entityProfiles}
     />

@@ -10,6 +10,7 @@ export * from "./debts.js";
 export * from "./spending.js";
 export * from "./subs.js";
 export * from "./cards.js";
+export * from "./cardAdvice.js";
 export * from "./goals.js";
 export * from "./cashflow.js";
 export * from "./publicFacts.js";

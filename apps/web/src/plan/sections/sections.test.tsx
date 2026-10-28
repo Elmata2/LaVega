@@ -11,8 +11,10 @@ import {
   goalAnchorsOf,
   mergeEvents,
   planEventOf,
+  AdvisorProfile,
   type Account,
   type AdvisorProfileStore,
+  type RewardsBalance,
   type CardCriteriaRow,
   type BufferFigures,
   type CardsFigures,
@@ -29,6 +31,7 @@ import {
   type VaultEvent,
 } from "@lavega/core";
 import Plan from "../../views/Plan";
+import { planShellCopy } from "../../copy/plan";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
 import { buildHeldCards } from "../heldCards";
 import ChangeLog from "../ChangeLog";
@@ -282,12 +285,15 @@ test("cards table: default sorted by name, clicking a column sorts, no element h
   expect(rowNames(c).map((n) => n.replace(/\(.*\)/, "").trim())).toEqual(["Zeta", "Alpha", "Mid"]);
   act(() => feeHeader.click());
   expect(rowNames(c).map((n) => n.replace(/\(.*\)/, "").trim())).toEqual(["Alpha", "Zeta", "Mid"]);
+  // The criteria table stays neutral. Ranked recommendations live in their own
+  // block (CardAdvice), since the owner allowed them on 27 Oct 2026.
   const bad = /highlight|selected|best|beste|winner|recommend|top-pick|bg-accent/i;
-  for (const el of c.querySelectorAll("*")) {
+  const table = q(c, "plan-cards-table")!;
+  for (const el of [table, ...table.querySelectorAll("*")]) {
     expect(el.getAttribute("class") ?? "").not.toMatch(bad);
     expect(el.getAttribute("aria-selected")).toBeNull();
   }
-  expect(c.textContent!.toLowerCase()).not.toMatch(/\bbest\b|\bbeste\b/);
+  expect(table.textContent!.toLowerCase()).not.toMatch(/\bbest\b|\bbeste\b/);
 
   // Keep / Review / Cancel start unselected.
   const spy = newSpy();
@@ -509,6 +515,18 @@ test("business-entity accounts present: displayed figures equal those without th
   expect(q(c, "plan-goal-link-g1-S1")).not.toBeNull();
 });
 
+
+/** The text the advice-language scan reads: the card recommendation block and the
+ *  footer are left out, since the owner allowed recommendations there (27 Oct 2026). */
+const scanText = (c: HTMLElement, locale: "nl" | "en"): string => {
+  const clone = c.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[data-testid='plan-card-advice']").forEach((n) => n.remove());
+  let text = clone.textContent ?? "";
+  for (const l of [locale])
+    text = text.replace(planShellCopy[l].footer.notice, "");
+  return text;
+};
+
 test("copy scan on the rendered seeded fixture in NL and EN: findAdviceLanguage empty, cards open, detail on", () => {
   for (const locale of ["nl", "en"] as const) {
     setLocale(locale);
@@ -522,7 +540,7 @@ test("copy scan on the rendered seeded fixture in NL and EN: findAdviceLanguage 
     });
     const text = c.textContent!;
     expect(text.length).toBeGreaterThan(1500);
-    expect(findAdviceLanguage(text, locale)).toEqual([]);
+    expect(findAdviceLanguage(scanText(c, locale), locale)).toEqual([]);
     expect(text).not.toMatch(/gift|schenk|Nibud|SPIVA|AFM/i);
     unmount();
   }
@@ -1179,4 +1197,54 @@ test("catalogue conditions sit inside a closed details element, with the Dutch t
     details.some((d) => d.textContent!.includes("Wisselkoersopslag op het omgewisselde")),
   ).toBe(true);
   unmount();
+});
+
+
+test("card details editor: balance goes to the profile, points to the Punten store, and the form reopens filled", async () => {
+  const { ctx, result } = cardsCtx();
+  const store = richStore();
+  const withCard: AdvisorProfileStore = {
+    ...store,
+    current: new AdvisorProfile({
+      ...store.current,
+      statedCards: { value: ["american-express-gold-card"], source: "stated", at: AS_OF },
+    }),
+  };
+  const applied: AdvisorProfile[] = [];
+  const saveRewards = vi.fn(async (_next: RewardsBalance[]) => {});
+  const update = vi.fn(async (change: (p: AdvisorProfile) => AdvisorProfile) => {
+    applied.push(change(withCard.current));
+    return true;
+  });
+  const c = mount(
+    <CardsSection
+      result={result}
+      ctx={{ ...ctx, profile: { store: withCard, update, saveFailed: false }, rewards: [], saveRewards }}
+    />,
+  );
+  openAll(c);
+  const form = q(c, "plan-card-details")!;
+  const input = (re: RegExp) =>
+    ([...form.querySelectorAll<HTMLLabelElement>("label")].find((l) => re.test(l.textContent ?? ""))!
+      .control as HTMLInputElement);
+  typeInto(input(/Outstanding balance/), "2000");
+  await click([...form.querySelectorAll<HTMLButtonElement>("[role='radio']")].find((b) => b.textContent === "No, part of it stays")!);
+  typeInto(input(/Interest on the outstanding/), "12");
+  typeInto(input(/Points balance/), "9000");
+  await click(form.querySelector<HTMLButtonElement>("button[type='submit']")!);
+  expect(applied[0]!.cardBalances?.value).toEqual([
+    { cardId: "american-express-gold-card", balanceCents: 200_000, paysInFull: false, ratePct: 12 },
+  ]);
+  expect(saveRewards).toHaveBeenCalledTimes(1);
+  expect(saveRewards.mock.calls[0]![0]).toEqual([
+    expect.objectContaining({ id: "american express membership rewards", points: 9000 }),
+  ]);
+  expect(q(c, "plan-card-details-status")!.textContent).toBe("Saved.");
+});
+
+test("card details editor without stated credit cards points back to the intake", () => {
+  const { ctx, result } = cardsCtx();
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(c.textContent).toContain("Say which credit cards you have in the intake first.");
 });

@@ -138,6 +138,7 @@ export function buildHeldCards(i: {
     return {
       accountKey: account.key,
       label: accountLabel(account),
+      catalogueId: entry?.id ?? null,
       cashback,
       fee,
       fxFeePct: fx?.value ?? null,

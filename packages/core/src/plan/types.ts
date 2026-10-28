@@ -71,6 +71,7 @@ export const STATUS_REASON_KEYS = [
   "other-card-nets-more",
   "no-card-data",
   "no-cardable-spend",
+  "card-advice",
   // goals
   "on-schedule",
   "behind-schedule",
@@ -156,6 +157,8 @@ export type SectionResult<F> = {
 export type HeldCardInput = {
   accountKey: string;
   label: string;
+  /** The catalogue row this card is (the web layer's matcher); null when none. */
+  catalogueId?: string | null;
   cashback: HeldCashback;
   fee: ProductFee | null;
   fxFeePct: number | null;
