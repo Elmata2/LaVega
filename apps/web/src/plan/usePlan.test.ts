@@ -17,7 +17,7 @@ import {
   type Tx,
   type VaultEvent,
 } from "@lavega/core";
-import { usePlan, type PlanStorage, type UsePlanInput } from "./usePlan";
+import { usePlan, vatFrequencyOf, type PlanStorage, type UsePlanInput } from "./usePlan";
 import { useGoalAnchors } from "./sections/useGoalAnchors";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -314,6 +314,32 @@ test("setPreference merges, keeps the rest and stamps the preferences", async ()
   const stored = mem.plan();
   expect(stored.preferences).not.toBeNull();
   expect(decodePlanState(stored).preferences.bufferTopUpMonths?.months).toBe(2);
+});
+
+test("the income-tax percentage survives a reload: set, read back from the stored section, then cleared", async () => {
+  const mem = memStorage();
+  const h = mount(baseInput(mem.storage));
+  await settle();
+  await act(async () => {
+    await h.out.current.setPreference({ incomeTaxSetAsidePct: { pct: 27.5, at: AS_OF } });
+  });
+  expect(decodePlanState(mem.plan()).preferences.incomeTaxSetAsidePct).toEqual({ pct: 27.5, at: AS_OF });
+  const again = mount(baseInput(mem.storage));
+  await settle();
+  expect(again.out.current.preferences.incomeTaxSetAsidePct).toEqual({ pct: 27.5, at: AS_OF });
+  await act(async () => {
+    await again.out.current.setPreference({ incomeTaxSetAsidePct: null });
+  });
+  expect(decodePlanState(mem.plan()).preferences.incomeTaxSetAsidePct).toBeNull();
+});
+
+test("the saved VAT filing frequency comes from the entity that holds the personal accounts", () => {
+  const acct = (key: string, entity: string) => ({ key, entity }) as never;
+  const vat = (entity: string, frequency: "monthly" | "quarterly" | "yearly") =>
+    ({ entity, frequency, defaultRatePct: 21, mixedRates: false }) as never;
+  expect(vatFrequencyOf([vat("Prive", "monthly"), vat("Acme BV", "yearly")], [acct("A", "Prive")], [])).toBe("monthly");
+  expect(vatFrequencyOf([vat("Acme BV", "yearly")], [acct("A", "Prive")], [])).toBeNull();
+  expect(vatFrequencyOf([], [acct("A", "Prive")], [])).toBeNull();
 });
 
 test("a stored plan section that cannot be decoded is not overwritten", async () => {

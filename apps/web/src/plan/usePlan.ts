@@ -14,6 +14,8 @@ import {
   refreshDecision,
   snapshotOf,
   type Account,
+  type VatSettings,
+  personalView,
   type AdvisorProfileStore,
   type CatalogueEntryLike,
   type ConversionMode,
@@ -59,6 +61,8 @@ export type UsePlanInput = {
   rates: readonly RateBenchmark[];
   mode: ConversionMode;
   fxHistory: Record<string, Record<string, number>>;
+  /** The saved tax setups; the filing frequency of the person's own entity is read from them. */
+  vatSettings?: readonly VatSettings[];
   /** ISO day, fixed at app mount. */
   asOf: string;
   /** False while the app is still loading the data the plan reads; nothing is
@@ -109,6 +113,17 @@ type Stored = {
   /** The stored plan section could not be decoded. */
   error: boolean;
 };
+
+/** The filing frequency saved for the entity that holds the person's personal
+ *  accounts; null when none is saved (the pack's default applies). */
+export function vatFrequencyOf(
+  settings: readonly VatSettings[],
+  accounts: readonly Account[],
+  entityProfiles: readonly EntityProfile[],
+): VatSettings["frequency"] | null {
+  const personal = new Set(personalView(accounts, [], entityProfiles).accounts.map((a) => a.entity));
+  return settings.find((s) => personal.has(s.entity))?.frequency ?? null;
+}
 
 export function usePlan(i: UsePlanInput): UsePlan {
   const { storage } = i;
@@ -256,6 +271,11 @@ export function usePlan(i: UsePlanInput): UsePlan {
     [i.accounts, i.facts, i.catalogue, i.rewards, assumptionOn],
   );
 
+  const vatFrequency = useMemo(
+    () => vatFrequencyOf(i.vatSettings ?? [], i.accounts, i.entityProfiles),
+    [i.vatSettings, i.accounts, i.entityProfiles],
+  );
+
   const inputAt = useCallback(
     (day: string): PlanInput => ({
       profile,
@@ -273,6 +293,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       mode: i.mode,
       fxHistory: i.fxHistory,
       movedCategories: MOVED,
+      vatFrequency,
       asOf: day,
     }),
     [
@@ -290,6 +311,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       planEvents,
       i.mode,
       i.fxHistory,
+      vatFrequency,
     ],
   );
   const result = useMemo(() => computePlan(inputAt(asOf)), [inputAt, asOf]);

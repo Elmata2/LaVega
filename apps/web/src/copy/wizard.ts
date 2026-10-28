@@ -34,6 +34,7 @@ export type WizardCopy = {
     debtDetails: string;
     buffer: string;
     work: string;
+    vat: string;
     hasCards: (together: boolean) => string;
     cards: (together: boolean) => string;
     debitCards: (together: boolean) => string;
@@ -132,6 +133,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       debtDetails: "Bij wie, en hoeveel los je per maand af?",
       buffer: "Hoeveel maanden buffer wil je achter de hand?",
       work: "Wat voor werk doe je?",
+      vat: "Reken je btw aan je klanten?",
       hasCards: (t) => (t ? "Hebben jullie een creditcard?" : "Heb je een creditcard?"),
       cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
       debitCards: (t) =>
@@ -223,6 +225,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       debtDetails: "Owed to whom, and how much do you pay off per month?",
       buffer: "How many months of buffer do you want in reserve?",
       work: "What kind of work do you do?",
+      vat: "Do you charge your clients VAT?",
       hasCards: (t) => (t ? "Do you have a credit card?" : "Do you have a credit card?"),
       cards: (t) => (t ? "Which credit cards do you have?" : "Which credit cards do you have?"),
       debitCards: (t) => (t ? "Which debit cards do you have?" : "Which debit cards do you have?"),

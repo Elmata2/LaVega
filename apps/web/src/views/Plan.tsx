@@ -19,6 +19,7 @@ import { intakeCopy } from "../copy/intake.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import { planFmt, planShellCopy } from "../copy/plan/index.js";
 import BackboneStrip from "../plan/BackboneStrip.js";
+import CashflowCard from "../plan/CashflowCard.js";
 import FromAnswers from "../plan/FromAnswers.js";
 import ChangeLog from "../plan/ChangeLog.js";
 import PlanHeader, { ASSUMPTIONS_ANCHOR } from "../plan/PlanHeader.js";
@@ -183,6 +184,7 @@ export default function Plan({
       {SECTION_IDS.map((id) => (
         <SectionBody key={id} section={id} ctx={ctx} />
       ))}
+      {plan.result.cashflow !== null && <CashflowCard cashflow={plan.result.cashflow} ctx={ctx} />}
       <ScenarioTable id={ASSUMPTIONS_ANCHOR} />
       <footer className="text-muted text-[0.85rem]" data-testid="plan-footer">
         <p className="m-0 mb-2">{shell.footer.notice}</p>

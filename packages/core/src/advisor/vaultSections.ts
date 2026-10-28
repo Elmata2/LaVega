@@ -109,6 +109,7 @@ export function profileUpdatedAt(p: AdvisorProfile): string {
   addField(p.experience);
   addField(p.worries);
   addField(p.work);
+  addField(p.chargesVat);
   addField(p.statedCards);
   addField(p.statedDebitCards);
   for (const f of [...(p.incomeStreams ?? []), ...(p.fixedCosts ?? []), ...(p.goals ?? [])]) {

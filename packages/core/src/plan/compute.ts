@@ -1,6 +1,7 @@
 import { isIsoDate, monthsBetween } from "../advisor/months.js";
 import { personalView } from "../advisor/scopePersonal.js";
 import { computeBuffer, type BufferFigures } from "./buffer.js";
+import { computeCashflow, type CashflowResult } from "./cashflow.js";
 import { computeCards, type CardsFigures } from "./cards.js";
 import { computeDebts, type DebtFigures } from "./debts.js";
 import {
@@ -58,6 +59,8 @@ export type PlanResult = {
   ) => FactSheet;
   markers: PlanMarkers;
   backbone: PlanBackbone;
+  /** The cash-flow view for irregular income; null when it does not apply. */
+  cashflow: CashflowResult | null;
   freshness: {
     bankDataTo: string | null;
     profileConfirmedAt: string | null;
@@ -182,6 +185,7 @@ export function computePlan(i: PlanInput): PlanResult {
       }),
     markers: markersOf(i, sections),
     backbone: backboneOf(sections),
+    cashflow: computeCashflow(i),
     freshness: { bankDataTo: newestTxDate(i), profileConfirmedAt: i.profile.profileUpdatedAt },
   };
 }

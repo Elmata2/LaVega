@@ -161,6 +161,8 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   worries: Schema.optionalKey(Field(Schema.String)),
   statedRanges: Schema.optionalKey(Field(StatedRanges)),
   work: Schema.optionalKey(Field(Schema.Array(WorkKind))),
+  /** Asked only of freelance and business work: do they charge VAT (btw)? */
+  chargesVat: Schema.optionalKey(Field(Schema.Boolean)),
   /** Catalogue ids of credit cards the user says they have, or "other". */
   statedCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
   /** Catalogue ids of debit cards (betaalpassen) the user says they have, or "other". */

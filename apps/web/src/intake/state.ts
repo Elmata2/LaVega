@@ -32,6 +32,9 @@ export function applyStatedRange(
 export const applyWork = (p: AdvisorProfile, kinds: readonly WorkKind[], asOf: string) =>
   copyProfile(p, { work: { value: [...kinds], source: "stated", at: asOf } });
 
+export const applyChargesVat = (p: AdvisorProfile, charges: boolean, asOf: string) =>
+  copyProfile(p, { chargesVat: { value: charges, source: "stated", at: asOf } });
+
 export const applyStatedDebitCards = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
   copyProfile(p, { statedDebitCards: { value: [...ids], source: "stated", at: asOf } });
 

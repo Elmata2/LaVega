@@ -247,3 +247,11 @@ describe("computePlan", () => {
     expect(uniqueFactIds([f("a"), f("a"), f("b"), f("a"), f("a-2")]).map((x) => x.factId)).toEqual(["a", "a-3", "b", "a-4", "a-2"]);
   });
 });
+
+describe("cashflow in the plan result", () => {
+  test("null for an employed user, present for freelance work", () => {
+    expect(computePlan(planInput()).cashflow).toBeNull();
+    const r = computePlan(planInput({ profile: { workKinds: ["freelance"] } }));
+    expect(r.cashflow).not.toBeNull();
+  });
+});

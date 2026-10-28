@@ -4,6 +4,7 @@ import { applyChildren } from "../state.js";
 export type ScreenId =
   | "household"
   | "work"
+  | "vat"
   | "children"
   | "child-years"
   | "income"
@@ -26,6 +27,7 @@ export type Section = "about" | "goals" | "risk";
 const ABOUT: readonly ScreenId[] = [
   "household",
   "work",
+  "vat",
   "children",
   "child-years",
   "income",
@@ -43,10 +45,15 @@ const riskScreens = (): ScreenId[] => RISK_SCALE.items.map((i) => `risk:${i.id}`
 /** Every screen in order, including the conditional ones. */
 const canonical = (): ScreenId[] => [...ABOUT, ...GOALS, ...riskScreens(), "invested", "upload"];
 
+/** Freelance or own business: the work kinds that ask the VAT question. */
+export const isSelfEmployed = (p: AdvisorProfile): boolean =>
+  (p.work?.value ?? []).some((w) => w === "freelance" || w === "business");
+
 export function screensFor(p: AdvisorProfile): ScreenId[] {
   const noChildren = Array.isArray(p.children?.value) && p.children.value.length === 0;
   return canonical().filter(
     (id) =>
+      !(id === "vat" && !isSelfEmployed(p)) &&
       !(id === "child-years" && noChildren) &&
       !(id === "debt-details" && p.intake.noUserDebts === true) &&
       !(id === "cards" && p.intake.noCards === true),

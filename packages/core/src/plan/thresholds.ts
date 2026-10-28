@@ -20,6 +20,15 @@ export const PLAN_THRESHOLDS = {
   },
   cards: { betterCardMargin: 0.1, horizonMonths: 12 },
   goals: { within12Months: 12 },
+  /** Cash-flow view for irregular income (freelance, business). */
+  cashflow: {
+    /** Full months needed before anything is measured. */
+    minMonths: 3,
+    horizonMonths: 6,
+    /** LaVega's own buffer rule: base + longest dry stretch, capped. */
+    bufferBaseMonths: 3,
+    bufferMaxMonths: 12,
+  },
   /** Absolute noise bounds for the change log (spec 17), tunable. `pct` is in
    *  percentage points (0.1 = 0.1 points), matching the `pct` figure unit. */
   noise: { cents: 1000, months: 0.1, ratio: 0.01, pct: 0.1 },

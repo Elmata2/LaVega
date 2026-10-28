@@ -21,6 +21,7 @@ import {
   applyStatedRange,
   applyStatedSavings,
   applyWork,
+  applyChargesVat,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import ChoiceTiles from "../intake/wizard/ChoiceTiles.js";
@@ -219,6 +220,18 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         initial={profile.work?.value ?? []}
         onSubmit={(kinds) => void save((p) => applyWork(p, kinds, asOf))}
       />
+    );
+  } else if (screen === "vat") {
+    question = q.vat;
+    const sel = profile.chargesVat === undefined ? null : profile.chargesVat.value ? "yes" : "no";
+    body = choice(
+      question,
+      [
+        { value: "yes", label: w.yes },
+        { value: "no", label: w.no },
+      ],
+      sel,
+      (v) => void save((p) => applyChargesVat(p, v === "yes", asOf)),
     );
   } else if (screen === "spend") {
     question = q.spend(together);

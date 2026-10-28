@@ -46,6 +46,9 @@ export const PlanPreferencesSchema = Schema.Struct({
   /** Keyed by debt id. */
   extraDebtPayment: Schema.Record(Schema.String, Stamp),
   bufferTopUpMonths: Schema.NullOr(Schema.Struct({ months: Schema.Finite, at: IsoDate })),
+  /** The person's own income-tax set-aside, in percent of client income. Optional
+   *  key so preferences saved before it existed still decode. */
+  incomeTaxSetAsidePct: Schema.optionalKey(Schema.NullOr(Schema.Struct({ pct: Schema.Finite, at: IsoDate }))),
 });
 export type PlanPreferences = Schema.Schema.Type<typeof PlanPreferencesSchema>;
 

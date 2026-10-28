@@ -179,3 +179,19 @@ test("resume after savings lands on debit-cards; after debit-cards on has-cards"
   expect(resumeScreen(markDone(emptyProfile(), "debit-cards"))).toBe("has-cards");
   expect(resumeScreen(markDone(emptyProfile(), "has-cards"))).toBe("cards");
 });
+
+test("the VAT screen follows work and appears only for freelance or business", () => {
+  const withWork = (kinds: ("employed" | "freelance" | "business")[]) =>
+    new AdvisorProfile({
+      ...emptyProfile(),
+      work: { value: kinds, source: "stated", at: AS_OF },
+    });
+  expect(screensFor(emptyProfile())).not.toContain("vat");
+  expect(screensFor(withWork(["employed"]))).not.toContain("vat");
+  for (const k of ["freelance", "business"] as const) {
+    const list = screensFor(withWork([k]));
+    expect(list[list.indexOf("work") + 1]).toBe("vat");
+    expect(list).toHaveLength(23);
+  }
+  expect(sectionOf("vat")).toBe("about");
+});

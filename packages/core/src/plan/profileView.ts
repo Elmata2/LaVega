@@ -6,6 +6,7 @@ import {
   type AdvisorProfileStore,
   type Goal,
   type Debt,
+  type WorkKind,
 } from "../advisor/profile.js";
 import { fixedCostsMonthlyCents } from "../advisor/resolve.js";
 import { hash } from "../hash.js";
@@ -43,6 +44,10 @@ export type PlanProfile = {
   savingsStatedCents: number | null;
   incomeStatedRange: CentsRange | null;
   spendStatedRange: CentsRange | null;
+  /** The work kinds the person stated; empty when not asked. */
+  workKinds: WorkKind[];
+  /** Stated: they charge VAT. Null = not asked or not answered. */
+  chargesVat: boolean | null;
   intakeBlocksDone: number;
   profileHash: string;
   /** When the profile was last written (store.updatedAt); null for no store or
@@ -87,6 +92,8 @@ export function planProfileOf(
     savingsStatedCents: p?.savings?.value.totalCents ?? null,
     incomeStatedRange: p?.statedRanges?.value.income ?? null,
     spendStatedRange: p?.statedRanges?.value.spend ?? null,
+    workKinds: [...(p?.work?.value ?? [])],
+    chargesVat: p?.chargesVat?.value ?? null,
     intakeBlocksDone: p?.intake.blocksDone ?? 0,
     profileHash: emptyHash(p ?? emptyProfile()),
     profileUpdatedAt:

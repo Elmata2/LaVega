@@ -99,3 +99,17 @@ test("profileUpdatedAt is the store's updatedAt; null store or the epoch gives n
   expect(planProfileOf(emptyProfileStore()).profileUpdatedAt).toBeNull();
   expect(planProfileOf(storeWith(base)).profileUpdatedAt).toBe("2026-10-24");
 });
+
+test("work kinds and the VAT answer reach the plan profile; absent means empty and null", () => {
+  expect(planProfileOf(null).workKinds).toEqual([]);
+  expect(planProfileOf(null).chargesVat).toBeNull();
+  const p = planProfileOf(
+    storeWith({
+      ...base,
+      work: { value: ["employed", "freelance"], source: "stated", at: "2026-10-24" },
+      chargesVat: { value: true, source: "stated", at: "2026-10-24" },
+    }),
+  );
+  expect(p.workKinds).toEqual(["employed", "freelance"]);
+  expect(p.chargesVat).toBe(true);
+});
