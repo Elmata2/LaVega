@@ -12,7 +12,7 @@
  * fix for the "SVG <text> shrinks to 6px on a phone" problem.
  *
  * No chart library is used anywhere: apps/web/package.json has no charting
- * dependency (only gsap, for the landing page's motion) and none was added. */
+ * dependency and none was added. */
 
 export type Pt = { x: number; y: number };
 
