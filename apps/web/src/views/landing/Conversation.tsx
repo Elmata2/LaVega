@@ -144,7 +144,8 @@ export default function Conversation({ copy, animated }: { copy: Acts; animated:
           {copy.who}
         </p>
         <p
-          className={`bubble r${frame.think ? " think" : ""}`}
+          className="bubble r"
+          data-think={frame.think || undefined}
           style={{ "--d": 3 } as CSSProperties}
         >
           {animated &&
@@ -167,7 +168,8 @@ export default function Conversation({ copy, animated }: { copy: Acts; animated:
         </p>
         {current.rows.map((row, i) => (
           <div
-            className={`row r${frame.pending[i] ? " sk" : ""}`}
+            className="row r"
+            data-sk={frame.pending[i] || undefined}
             style={{ "--d": 5 + i } as CSSProperties}
             key={i}
           >

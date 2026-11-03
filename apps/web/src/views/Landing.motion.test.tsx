@@ -98,7 +98,7 @@ test("reduced motion: static first conversation, plan ticked, no timers", () => 
   const copy = landingCopy("en").acts.talks[0];
   expect(el.querySelector(".ghost")).toBeNull();
   expect(el.querySelector(".bubble")?.textContent).toBe(copy.a);
-  expect(el.querySelectorAll(".row.sk").length).toBe(0);
+  expect(el.querySelectorAll(".row[data-sk]").length).toBe(0);
   expect(moves(el).every((m) => m.getAttribute("aria-pressed") === "true")).toBe(true);
   expect(el.querySelector(".plan .total b")?.textContent).toBe("€77 a month");
   /* jsdom queues a zero-delay timer for the <details open> toggle event; run it. */
@@ -166,4 +166,22 @@ test("the first FAQ item is open, the rest are closed", () => {
     false,
     false,
   ]);
+});
+
+test("the conversation stays revealed while it types, thinks and fills its rows", async () => {
+  motion(false);
+  const el = render();
+  const t = landingCopy("en").acts.talks[0];
+  const revealed = () =>
+    [...el.querySelectorAll("#acts .r")].every((n) => n.classList.contains("in-view"));
+  expect(revealed()).toBe(true);
+  await act(
+    async () =>
+      void (await vi.advanceTimersByTimeAsync(
+        32 * t.q.length + 500 + 20 * t.a.length + 200 + 3 * 160 + 100,
+      )),
+  );
+  expect(el.querySelector("#acts .bubble")?.hasAttribute("data-think")).toBe(false);
+  expect(el.querySelectorAll("#acts .row[data-sk]").length).toBe(0);
+  expect(revealed()).toBe(true);
 });

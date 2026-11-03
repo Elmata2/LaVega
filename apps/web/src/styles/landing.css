@@ -720,7 +720,7 @@
     animation: lp-dot 1.1s var(--ease-out) infinite;
     animation-delay: calc(var(--n) * 160ms);
   }
-  .lp .think .dots {
+  .lp .bubble[data-think] .dots {
     display: flex;
   }
   @keyframes lp-dot {
@@ -765,7 +765,7 @@
   .lp .row b::before {
     content: "\2713\00a0";
   }
-  .lp .row.sk > * {
+  .lp .row[data-sk] > * {
     color: transparent;
     background: var(--box2);
   }
