@@ -1,0 +1,23 @@
+{
+  "name": "@lavega/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "tsx src/cli-check.ts ../../content",
+    "build": "tsx src/cli-build.ts --out dist",
+    "preview": "tsx src/cli-build.ts --out dist-preview --drafts --serve"
+  },
+  "dependencies": {
+    "@lavega/core": "workspace:*",
+    "effect": "^4.0.1",
+    "marked": "18.1.1",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4"
+  }
+}

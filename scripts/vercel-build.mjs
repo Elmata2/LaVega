@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -154,6 +154,7 @@ const TYPECHECKED = [
   "@lavega/server",
   "@lavega/web",
   "@lavega/email-worker",
+  "@lavega/site",
 ];
 await exec(
   "pnpm",
@@ -174,6 +175,18 @@ await exec("pnpm", ["--filter", "@lavega/web", "build"], {
   cwd: root,
   env: { ...process.env, CI: "true", ...browserEnv },
 });
+/* PRE-RENDER THE LANDING PAGES.
+ *
+ * Vite emits one empty SPA shell, so a crawler that does not run JavaScript
+ * (most AI crawlers, and Google's first pass) saw `<title>LaVega</title>` and an
+ * empty <div id="root">: nothing to index, nothing to quote. The prerender step
+ * renders the real nl and en landing markup into dist/index.html and
+ * dist/en/index.html. The bare shell is kept as dist/app-shell.html, which the
+ * non-landing SPA routes (/app, /reset-password) are served; the landing is not
+ * hydrated, the bundle replaces it with createRoot. It runs only
+ * after `build` and refuses to run twice on the same dist; it also checks its
+ * own output, so a broken render fails the deploy here. */
+await exec("pnpm", ["--filter", "@lavega/web", "prerender"], execOptions);
 await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
   cwd: root,
   env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/", ...browserEnv },
@@ -183,6 +196,41 @@ const staticDir = `${output}/static`;
 await mkdir(`${staticDir}/investing`, { recursive: true });
 await cp("apps/web/dist", staticDir, { recursive: true });
 await cp("apps/investing-web/dist", `${staticDir}/investing`, { recursive: true });
+
+/* THE CONTENT SITE GOES INTO THE SAME STATIC DIRECTORY.
+ *
+ * apps/site renders the published Markdown pages (vragen, gids, vs, ...) plus
+ * robots.txt, sitemap.xml and llms.txt as plain HTML. Two things differ from a
+ * standalone site build. `--no-clean`: its output dir already holds the web app,
+ * and the default clean would delete it. And clean URLs: pages are written as
+ * `vragen/x.html` but served at `/vragen/x`, which the Build Output API calls
+ * `overrides` in config.json (merged into the config below). The overrides file
+ * is written OUTSIDE staticDir on purpose — inside it, it would be published.
+ *
+ * buildSite fails on any published page that breaks the content rules (advice
+ * wording, missing disclaimer, duplicate urls) and on a file that does not
+ * parse, and that failure is the check: it throws here, before anything is
+ * deployed. Only `status: published` pages are built — drafts never ship. */
+const siteOverridesFile = `${root}/.vercel/site-overrides.json`;
+await exec(
+  "pnpm",
+  [
+    "--filter",
+    "@lavega/site",
+    "exec",
+    "tsx",
+    "src/cli-build.ts",
+    "--content",
+    `${root}/content`,
+    "--out",
+    staticDir,
+    "--no-clean",
+    "--overrides",
+    siteOverridesFile,
+  ],
+  execOptions,
+);
+const siteOverrides = JSON.parse(await readFile(siteOverridesFile, "utf8"));
 
 /* Routing. `handle: filesystem` serves anything that really exists first; what
  * is left is either an API path or an SPA view. The SPA fallbacks come last so
@@ -277,6 +325,14 @@ await writeFile(
           status: 302,
           headers: { Location: "/en", Vary: "Accept-Language, Cookie" },
         },
+        /* The app and the investing dashboard are behind a login and hold no
+         * public content; keep them out of search indexes even if a link to
+         * them leaks. robots.txt Disallow alone does not do that (a blocked URL
+         * can still be indexed from links), a noindex header does. `continue`
+         * so routing carries on to the gate and the filesystem handler. */
+        { src: "/app(?:/.*)?", headers: { "X-Robots-Tag": "noindex" }, continue: true },
+        { src: "/investing(?:/.*)?", headers: { "X-Robots-Tag": "noindex" }, continue: true },
+        { src: "/app-shell.html", headers: { "X-Robots-Tag": "noindex" }, continue: true },
         { handle: "filesystem" },
         { src: "/api/(.*)", dest: "/api/[...route]" },
         { src: "/health", dest: "/api/[...route]" },
@@ -310,7 +366,7 @@ await writeFile(
         {
           src: "/app",
           has: [{ type: "query", key: "error" }],
-          dest: "/index.html",
+          dest: "/app-shell.html",
         },
         // APP_GATE_ROUTES_START
         {
@@ -326,21 +382,26 @@ await writeFile(
           headers: { Location: "/", Vary: "Cookie", "Cache-Control": "private, no-store" },
         },
         // APP_GATE_ROUTES_END
-        { src: "/app/(.*)", dest: "/index.html" },
-        { src: "/app", dest: "/index.html" },
-        /* The English landing page. Same SPA; `Root` reads the locale off the
-         * path, so this only needs to reach index.html like any other view. */
+        { src: "/app/(.*)", dest: "/app-shell.html" },
+        { src: "/app", dest: "/app-shell.html" },
+        /* The English landing page. It is pre-rendered to en/index.html (English
+         * markup for crawlers); the same SPA bundle replaces it on load (createRoot,
+         * no hydration) and `Root` reads the locale off the path. */
         /* Where the emailed password-reset link lands (authClient.ts,
          * RESET_PASSWORD_PATH). Public: the token in the query is the proof. */
-        { src: "/reset-password", dest: "/index.html" },
-        { src: "/en", dest: "/index.html" },
-        { src: "/en/", dest: "/index.html" },
+        { src: "/reset-password", dest: "/app-shell.html" },
+        { src: "/en", dest: "/en/index.html" },
+        { src: "/en/", dest: "/en/index.html" },
       ],
+      /* Clean URLs for the content site's pages (see the site build above). */
+      overrides: siteOverrides,
     },
     null,
     2,
   ),
 );
+
+await exec("node", ["scripts/verify-seo-output.mjs", output], execOptions);
 
 // Kept so a local `pnpm build`-style check still has something to look at.
 await rm("dist", { recursive: true, force: true });

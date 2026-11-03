@@ -41,12 +41,12 @@ const sentryProject = process.env.SENTRY_PROJECT;
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 const uploadSourceMaps = Boolean(sentryOrg && sentryProject && sentryAuthToken);
 
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     react(),
     cspMetaPlugin(),
     ...(process.env.LAVEGA_PREVIEW === "1" ? [previewPlugin()] : []),
-    ...(uploadSourceMaps
+    ...(uploadSourceMaps && !isSsrBuild
       ? sentryVitePlugin({
           org: sentryOrg,
           project: sentryProject,
@@ -62,10 +62,12 @@ export default defineConfig({
         }).map((plugin) => ({ ...plugin, apply: "build" as const }))
       : []),
   ],
-  build: { sourcemap: uploadSourceMaps ? "hidden" : false },
+  /* The pre-render SSR build (`vite build --ssr`) is a throwaway Node bundle: no
+   * source-map upload and no hidden maps, or it would land under the browser release. */
+  build: { sourcemap: uploadSourceMaps && !isSsrBuild ? "hidden" : false },
   define: { __LAVEGA_BUILD__: JSON.stringify(`${sha} \u00b7 ${day}`) },
   test: {
     setupFiles: ["./src/testSetup.ts"],
     globalSetup: ["./src/test-support/buildSheet.ts"],
   },
-});
+}));
