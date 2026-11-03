@@ -27,7 +27,9 @@ const en = page({ locale: "en", slug: "a-en", file: "content/en/vragen/a-en.md" 
 
 describe("robots", () => {
   it("disallows app api investing for every group", () => {
-    const groups = robotsTxt(O).split("\n\n").filter((g) => g.startsWith("User-agent"));
+    const groups = robotsTxt(O)
+      .split("\n\n")
+      .filter((g) => g.startsWith("User-agent"));
     expect(groups).toHaveLength(12);
     for (const g of groups) {
       expect(g).toContain("Allow: /\n");
@@ -51,8 +53,13 @@ describe("sitemap", () => {
   });
   it("adds hreflang only when the counterpart is published", () => {
     expect(xml).toContain(`hreflang="en" href="${O}/en/questions/a-en"`);
-    const solo = sitemapXml([nl, page({ id: "z", slug: "z", locale: "en", file: "content/en/vragen/z.md" })], O);
-    expect(solo).not.toContain("xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"" + O + "/en/questions/a-en");
+    const solo = sitemapXml(
+      [nl, page({ id: "z", slug: "z", locale: "en", file: "content/en/vragen/z.md" })],
+      O,
+    );
+    expect(solo).not.toContain(
+      'xhtml:link rel="alternate" hreflang="en" href="' + O + "/en/questions/a-en",
+    );
     expect(solo).toContain(`<loc>${O}/vragen/a</loc>\n    <lastmod>2026-10-27</lastmod>\n  </url>`);
   });
   it("adds x-default (nl) to landing, page and hub alternates, matching the html", () => {
@@ -62,7 +69,12 @@ describe("sitemap", () => {
     expect(xml).toContain(`hreflang="en" href="${O}/en/questions"`);
   });
   it("omits hreflang to a draft counterpart", () => {
-    const enDraft = page({ locale: "en", slug: "a-en", status: "draft", file: "content/en/vragen/a-en.md" });
+    const enDraft = page({
+      locale: "en",
+      slug: "a-en",
+      status: "draft",
+      file: "content/en/vragen/a-en.md",
+    });
     const out = sitemapXml([nl, enDraft], O);
     expect(out).toContain(`<loc>${O}/vragen/a</loc>`);
     expect(out).not.toContain("a-en");

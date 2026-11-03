@@ -59,8 +59,7 @@ export function checkPages(pages: Page[]): Finding[] {
     if (!p.bodyMarkdown.includes(DISCLAIMER[p.locale]))
       add("disclaimer", `body lacks "${DISCLAIMER[p.locale]}"`);
 
-    if (p.family !== "over" && p.sources.length === 0)
-      add("sources", "needs at least one source");
+    if (p.family !== "over" && p.sources.length === 0) add("sources", "needs at least one source");
 
     if (/^# /m.test(p.bodyMarkdown) || /<h1[\s>]/i.test(p.bodyMarkdown))
       add("no-h1", "body must not contain an h1; the title is the h1");

@@ -1,5 +1,14 @@
 import { Marked, type Tokens } from "marked";
-import { builtHubs, counterpart, hubAlternates, hubUrl, urlFor, type Family, type Locale, type Page } from "./content.js";
+import {
+  builtHubs,
+  counterpart,
+  hubAlternates,
+  hubUrl,
+  urlFor,
+  type Family,
+  type Locale,
+  type Page,
+} from "./content.js";
 import { FAMILY_LABEL, authorOf, jsonLdForPage, safeJsonLd, visibleAuthorPath } from "./jsonld.js";
 
 export type RenderOpts = { origin: string; draft: boolean };
@@ -52,7 +61,7 @@ const IMAGE_SCHEMES = ["http", "https"];
 
 /** Allowlist: relative URLs, or an absolute URL whose scheme is listed. Browsers drop tab/CR/LF/NUL and leading spaces inside a scheme, so strip them before looking. */
 export function safeUrl(href: string, schemes: readonly string[]): boolean {
-  const u = href.replace(/[\t\n\r\u0000-\u0020]/g, "");
+  const u = [...href].filter((c) => c.charCodeAt(0) > 0x20).join("");
   const m = /^([a-z][a-z0-9+.-]*):/i.exec(u);
   if (!m) return true;
   return schemes.includes((m[1] ?? "").toLowerCase());
@@ -158,7 +167,13 @@ function footer(l: Locale, hubs: Set<string>): string {
   return `<footer class="site-footer">${nav}<p>LaVega · <a href="${homePath(l)}">lavega.dev</a></p></footer>`;
 }
 
-function document(l: Locale, headHtml: string, bodyHtml: string, draft: boolean, hubs: Set<string>): string {
+function document(
+  l: Locale,
+  headHtml: string,
+  bodyHtml: string,
+  draft: boolean,
+  hubs: Set<string>,
+): string {
   const banner = draft ? `<div class="draft-banner">${esc(T[l].draft)}</div>\n` : "";
   return `<!doctype html>
 <html lang="${l}">
@@ -176,7 +191,9 @@ ${footer(l, hubs)}
 
 function crumbs(l: Locale, crumbList: { name: string; href?: string }[]): string {
   const items = crumbList
-    .map((c) => (c.href ? `<li><a href="${esc(c.href)}">${esc(c.name)}</a></li>` : `<li>${esc(c.name)}</li>`))
+    .map((c) =>
+      c.href ? `<li><a href="${esc(c.href)}">${esc(c.name)}</a></li>` : `<li>${esc(c.name)}</li>`,
+    )
     .join("");
   return `<nav class="breadcrumbs" aria-label="${T[l].breadcrumb}"><ol>${items}</ol></nav>`;
 }
@@ -229,7 +246,10 @@ export function renderPage(p: Page, all: Page[], opts: RenderOpts): string {
 <article>
 ${crumbs(l, [
   { name: "LaVega", href: homePath(l) },
-  { name: FAMILY_LABEL[l][p.family], href: hubs.has(hubUrl(l, p.family)) ? hubUrl(l, p.family) : undefined },
+  {
+    name: FAMILY_LABEL[l][p.family],
+    href: hubs.has(hubUrl(l, p.family)) ? hubUrl(l, p.family) : undefined,
+  },
   { name: p.title },
 ])}
 <h1>${esc(p.title)}</h1>
@@ -293,10 +313,7 @@ export function renderHub(
   const canonical = opts.origin + hubUrl(locale, family);
   const description = HUB_INTRO[locale][family];
   const items = list
-    .map(
-      (x) =>
-        `<li><a href="${urlFor(x)}">${esc(x.title)}</a><p>${esc(x.description)}</p></li>`,
-    )
+    .map((x) => `<li><a href="${urlFor(x)}">${esc(x.title)}</a><p>${esc(x.description)}</p></li>`)
     .join("\n");
   const body = `<main>
 ${crumbs(locale, [{ name: "LaVega", href: homePath(locale) }, { name: title }])}
@@ -325,7 +342,10 @@ ${items}
       canonical,
       origin: opts.origin,
       draft: false,
-      alternates: hubAlternates(pages, family).map((a) => ({ hreflang: a.hreflang, href: opts.origin + a.path })),
+      alternates: hubAlternates(pages, family).map((a) => ({
+        hreflang: a.hreflang,
+        href: opts.origin + a.path,
+      })),
       jsonLd,
       ogType: "website",
     }),

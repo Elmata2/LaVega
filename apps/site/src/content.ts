@@ -76,10 +76,10 @@ export class DuplicateContentError extends Schema.TaggedError<DuplicateContentEr
 }
 
 /** The content directory or a file in it could not be read. */
-export class ContentReadError extends Schema.TaggedError<ContentReadError>()(
-  "ContentReadError",
-  { path: Schema.String, reason: Schema.String },
-) {
+export class ContentReadError extends Schema.TaggedError<ContentReadError>()("ContentReadError", {
+  path: Schema.String,
+  reason: Schema.String,
+}) {
   override get message(): string {
     return `${this.path}: ${this.reason}`;
   }
@@ -158,9 +158,7 @@ export const parsePage = Effect.fn("parsePage")(function* (
     Effect.mapError((e) => fail(`invalid front matter: ${e.message}`)),
   );
   if (fm.family !== undefined && fm.family !== family)
-    return yield* fail(
-      `front matter family "${fm.family}" disagrees with the path ("${family}")`,
-    );
+    return yield* fail(`front matter family "${fm.family}" disagrees with the path ("${family}")`);
 
   return {
     file,

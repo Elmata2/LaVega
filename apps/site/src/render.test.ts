@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Page } from "./content.js";
 import { jsonLdForPage, safeJsonLd } from "./jsonld.js";
-import { renderHub, renderPage } from "./render.js";
+import { renderHub, renderPage, safeUrl } from "./render.js";
 
 const origin = "https://www.lavega.dev";
 const mk = (o: Partial<Page> = {}): Page => ({
@@ -23,7 +23,8 @@ const mk = (o: Partial<Page> = {}): Page => ({
 const en = (o: Partial<Page> = {}) =>
   mk({ locale: "en", slug: "x-en", file: "content/en/vragen/x-en.md", title: "What is X", ...o });
 const authorNl = () => mk({ family: "over", slug: "alexander-steunenberg", id: "me", sources: [] });
-const authorEn = () => mk({ locale: "en", family: "over", slug: "alexander-steunenberg", id: "me", sources: [] });
+const authorEn = () =>
+  mk({ locale: "en", family: "over", slug: "alexander-steunenberg", id: "me", sources: [] });
 const draft = { origin, draft: true };
 const prod = { origin, draft: false };
 
@@ -68,7 +69,9 @@ describe("renderPage", () => {
 
   it("json-ld parses and has Article author", () => {
     const html = renderPage(mk({ faq: [{ q: "Q?", a: "A." }] }), [mk(), authorNl()], prod);
-    const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(
+    const blocks = [
+      ...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g),
+    ].map(
       (m) => JSON.parse(m[1] ?? "") as { "@type": string; author?: { name: string; url: string } },
     );
     const article = blocks.find((b) => b["@type"] === "Article");
@@ -92,7 +95,10 @@ describe("renderPage", () => {
   });
 
   it("does not pass raw html through", () => {
-    const p = mk({ bodyMarkdown: "Hi <img src=x onerror=x>\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))" });
+    const p = mk({
+      bodyMarkdown:
+        "Hi <img src=x onerror=x>\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
+    });
     const html = renderPage(p, [p], prod);
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img src=x onerror=x&gt;");
@@ -115,7 +121,9 @@ describe("renderPage", () => {
   });
 
   it("does not render a javascript: source url as a link", () => {
-    const p = mk({ sources: [{ title: "Bad", url: "javascript:alert(1)", accessed: "2026-10-27" }] });
+    const p = mk({
+      sources: [{ title: "Bad", url: "javascript:alert(1)", accessed: "2026-10-27" }],
+    });
     const html = renderPage(p, [p], prod);
     expect(html).not.toContain("javascript:");
     expect(html).toContain("Bad");
@@ -190,7 +198,9 @@ describe("links only to pages that exist", () => {
     const withAuthor = renderPage(mk(), [mk(), authorNl()], prod);
     expect(withAuthor).toContain('href="/over/alexander-steunenberg" rel="author"');
     const draftAuthor = { ...authorNl(), status: "draft" as const };
-    expect(renderPage(mk(), [mk(), draftAuthor], prod)).not.toContain("/over/alexander-steunenberg");
+    expect(renderPage(mk(), [mk(), draftAuthor], prod)).not.toContain(
+      "/over/alexander-steunenberg",
+    );
   });
 
   it("breadcrumb hub crumb is plain text and left out of json-ld when the hub is not built", () => {
@@ -198,10 +208,15 @@ describe("links only to pages that exist", () => {
     const html = renderPage(p, [], prod);
     expect(html).toContain("<li>Vragen</li>");
     expect(links(html)).not.toContain("/vragen");
-    const crumbs = jsonLdForPage(p, origin, []).find((b) => (b as { "@type": string })["@type"] === "BreadcrumbList") as {
+    const crumbs = jsonLdForPage(p, origin, []).find(
+      (b) => (b as { "@type": string })["@type"] === "BreadcrumbList",
+    ) as {
       itemListElement: { position: number; name: string }[];
     };
-    expect(crumbs.itemListElement.map((c) => [c.position, c.name])).toEqual([[1, "LaVega"], [2, p.title]]);
+    expect(crumbs.itemListElement.map((c) => [c.position, c.name])).toEqual([
+      [1, "LaVega"],
+      [2, p.title],
+    ]);
     expect(renderPage(p, [p], prod)).toContain('<li><a href="/vragen">Vragen</a></li>');
   });
 
@@ -233,5 +248,26 @@ describe("renderHub", () => {
     expect(html).toContain('href="/vragen/x"');
     expect(html).not.toContain("/en/questions/x-en");
     expect(html.match(/<h1[ >]/g)).toHaveLength(1);
+  });
+});
+
+describe("safeUrl", () => {
+  const links = ["http", "https", "mailto"];
+  it("allows relative URLs and listed schemes", () => {
+    expect(safeUrl("/vragen/box-3", links)).toBe(true);
+    expect(safeUrl("https://www.lavega.dev", links)).toBe(true);
+    expect(safeUrl("mailto:hi@lavega.dev", links)).toBe(true);
+  });
+  it("rejects a scheme hidden behind whitespace or control characters", () => {
+    for (const href of [
+      "javascript:alert(1)",
+      " javascript:alert(1)",
+      "java\tscript:alert(1)",
+      "java\nscript:x",
+      "\u0000javascript:x",
+      "JAVASCRIPT:x",
+    ]) {
+      expect(safeUrl(href, links)).toBe(false);
+    }
   });
 });

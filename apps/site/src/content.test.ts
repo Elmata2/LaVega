@@ -54,7 +54,10 @@ function tree(files: Record<string, string>): string {
 
 describe("content", () => {
   it("parses front matter and path", async () => {
-    const p = await parse("content/en/vragen/what-is-a-personal-cfo.md", fm({ id: "personal-cfo" }));
+    const p = await parse(
+      "content/en/vragen/what-is-a-personal-cfo.md",
+      fm({ id: "personal-cfo" }),
+    );
     expect(p).toMatchObject({
       locale: "en",
       family: "vragen",

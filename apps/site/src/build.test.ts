@@ -60,7 +60,14 @@ describe("buildSite", () => {
     expect(existsSync(join(d.outDir, "vragen/b.html"))).toBe(false);
     expect(existsSync(join(d.outDir, "vragen.html"))).toBe(true);
     expect(existsSync(join(d.outDir, "gids.html"))).toBe(false);
-    for (const f of ["robots.txt", "sitemap.xml", "llms.txt", "site.css", "brand/wordmark.png", "og/og-nl.png"])
+    for (const f of [
+      "robots.txt",
+      "sitemap.xml",
+      "llms.txt",
+      "site.css",
+      "brand/wordmark.png",
+      "og/og-nl.png",
+    ])
       expect(existsSync(join(d.outDir, f)), f).toBe(true);
     expect(existsSync(join(d.outDir, "scripts"))).toBe(false);
     expect(readFileSync(join(d.outDir, "sitemap.xml"), "utf8")).not.toContain("/vragen/b");
@@ -82,7 +89,11 @@ describe("buildSite", () => {
 
   it("fails on published advice finding", async () => {
     const d = setup({
-      "nl/vragen/a.md": md({ id: "a", status: "published", body: `Dit is de beste keuze.\n\n${NL}\n` }),
+      "nl/vragen/a.md": md({
+        id: "a",
+        status: "published",
+        body: `Dit is de beste keuze.\n\n${NL}\n`,
+      }),
     });
     const e = await Effect.runPromise(
       Effect.flip(buildSite({ ...d, drafts: false, origin, clean: false })),
@@ -109,15 +120,16 @@ describe("buildSite", () => {
 
   it("reports a malformed file as a tagged error naming it", async () => {
     const d = setup({ "nl/vragen/a.md": "# no front matter" });
-    const e = await Effect.runPromise(Effect.flip(buildSite({ ...d, drafts: false, origin, clean: false })));
+    const e = await Effect.runPromise(
+      Effect.flip(buildSite({ ...d, drafts: false, origin, clean: false })),
+    );
     expect(e._tag).toBe("ContentParseError");
     expect(e.message).toContain("a.md");
   });
 
   it("clean removes a page that went from published to draft", async () => {
     const d = setup(files);
-    const run = () =>
-      Effect.runPromise(buildSite({ ...d, drafts: false, origin, clean: true }));
+    const run = () => Effect.runPromise(buildSite({ ...d, drafts: false, origin, clean: true }));
     await run();
     expect(existsSync(join(d.outDir, "vragen/a.html"))).toBe(true);
     writeFileSync(join(d.contentDir, "nl/vragen/a.md"), md({ id: "a", status: "draft" }));
@@ -138,7 +150,9 @@ describe("buildSite", () => {
     const d = setup(files);
     const refuse = async (outDir: string) => {
       const e = await Effect.runPromise(
-        Effect.flip(buildSite({ contentDir: d.contentDir, outDir, drafts: false, origin, clean: true })),
+        Effect.flip(
+          buildSite({ contentDir: d.contentDir, outDir, drafts: false, origin, clean: true }),
+        ),
       );
       expect(e._tag).toBe("UnsafeCleanError");
     };
@@ -152,7 +166,9 @@ describe("buildSite", () => {
     const d = setup(files);
     const missing = join(dirname(d.contentDir), "nope");
     const e = await Effect.runPromise(
-      Effect.flip(buildSite({ contentDir: missing, outDir: d.outDir, drafts: false, origin, clean: false })),
+      Effect.flip(
+        buildSite({ contentDir: missing, outDir: d.outDir, drafts: false, origin, clean: false }),
+      ),
     );
     expect(e._tag).toBe("ContentReadError");
     expect(e.message).toContain(missing);
@@ -161,7 +177,11 @@ describe("buildSite", () => {
 
   it("fails when a published page links to a draft page", async () => {
     const d = setup({
-      "nl/vragen/a.md": md({ id: "a", status: "published", body: `Zie [b](/vragen/b).\n\n${NL}\n` }),
+      "nl/vragen/a.md": md({
+        id: "a",
+        status: "published",
+        body: `Zie [b](/vragen/b).\n\n${NL}\n`,
+      }),
       "nl/vragen/b.md": md({ id: "b", status: "draft" }),
     });
     const e = await Effect.runPromise(
@@ -176,12 +196,23 @@ describe("buildSite", () => {
     await build(d, false);
     const exists = (href: string) => {
       const path = href.split(/[?#]/)[0] ?? "";
-      return path === "/" || path === "/en" || existsSync(join(d.outDir, `${path}.html`)) || existsSync(join(d.outDir, path));
+      return (
+        path === "/" ||
+        path === "/en" ||
+        existsSync(join(d.outDir, `${path}.html`)) ||
+        existsSync(join(d.outDir, path))
+      );
     };
     const dead: string[] = [];
-    for (const f of ["vragen/a.html", "vragen.html", "en/questions/a-en.html", "en/questions.html"]) {
+    for (const f of [
+      "vragen/a.html",
+      "vragen.html",
+      "en/questions/a-en.html",
+      "en/questions.html",
+    ]) {
       const html = readFileSync(join(d.outDir, f), "utf8");
-      for (const m of html.matchAll(/<a [^>]*href="(\/[^"]*)"/g)) if (!exists(m[1] ?? "")) dead.push(`${f} -> ${m[1]}`);
+      for (const m of html.matchAll(/<a [^>]*href="(\/[^"]*)"/g))
+        if (!exists(m[1] ?? "")) dead.push(`${f} -> ${m[1]}`);
     }
     expect(dead).toEqual([]);
   });

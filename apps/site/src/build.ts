@@ -42,7 +42,11 @@ export type BuildResult = {
 /** A published page broke a content rule; nothing was written. */
 export class PublishedFindingsError extends Schema.TaggedError<PublishedFindingsError>()(
   "PublishedFindingsError",
-  { findings: Schema.Array(Schema.Struct({ file: Schema.String, rule: Schema.String, detail: Schema.String })) },
+  {
+    findings: Schema.Array(
+      Schema.Struct({ file: Schema.String, rule: Schema.String, detail: Schema.String }),
+    ),
+  },
 ) {
   override get message(): string {
     return this.findings.map((f) => `${f.file} [${f.rule}] ${f.detail}`).join("\n");
@@ -96,8 +100,7 @@ function unsafeToClean(outDir: string, contentDir: string): string | undefined {
 const write = <A>(path: string, f: () => A) =>
   Effect.try({
     try: f,
-    catch: (e) =>
-      new BuildWriteError({ path, reason: e instanceof Error ? e.message : String(e) }),
+    catch: (e) => new BuildWriteError({ path, reason: e instanceof Error ? e.message : String(e) }),
   });
 
 /**
@@ -109,12 +112,15 @@ export const buildSite = Effect.fn("buildSite")(function* (
   opts: BuildOptions,
 ): Effect.fn.Return<BuildResult, BuildError> {
   const unsafe = opts.clean ? unsafeToClean(opts.outDir, opts.contentDir) : undefined;
-  if (unsafe !== undefined) return yield* new UnsafeCleanError({ outDir: opts.outDir, reason: unsafe });
+  if (unsafe !== undefined)
+    return yield* new UnsafeCleanError({ outDir: opts.outDir, reason: unsafe });
 
   const everything = yield* loadPages(opts.contentDir, { drafts: true });
 
   const status = new Map(everything.map((p) => [p.file, p.status]));
-  const blocking = checkPages(everything).filter((f: Finding) => status.get(f.file) === "published");
+  const blocking = checkPages(everything).filter(
+    (f: Finding) => status.get(f.file) === "published",
+  );
   if (blocking.length) return yield* new PublishedFindingsError({ findings: blocking });
 
   const pages = opts.drafts ? everything : everything.filter((p) => p.status === "published");
@@ -141,7 +147,10 @@ export const buildSite = Effect.fn("buildSite")(function* (
   for (const locale of LOCALES) {
     for (const family of FAMILIES) {
       if (!pages.some((p) => p.locale === locale && p.family === family)) continue;
-      yield* emit(hubUrl(locale, family), renderHub(locale, family, pages, { origin: opts.origin }));
+      yield* emit(
+        hubUrl(locale, family),
+        renderHub(locale, family, pages, { origin: opts.origin }),
+      );
     }
   }
 

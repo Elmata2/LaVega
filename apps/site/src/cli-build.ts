@@ -68,7 +68,9 @@ function serve(pages: Page[]): Effect.Effect<never> {
       }
       const rel = normalize(path).replace(/^([/\\]|\.\.[/\\])+/, "");
       const candidates = [join(outDir, rel), join(outDir, `${rel}.html`)];
-      const file = candidates.find((c) => c.startsWith(outDir + sep) && existsSync(c) && statSync(c).isFile());
+      const file = candidates.find(
+        (c) => c.startsWith(outDir + sep) && existsSync(c) && statSync(c).isFile(),
+      );
       if (!file) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
@@ -85,10 +87,11 @@ function serve(pages: Page[]): Effect.Effect<never> {
 }
 
 const program = Effect.gen(function* () {
-  if (overridesFile !== undefined && (overridesFile === outDir || overridesFile.startsWith(outDir + sep)))
-    return yield* Effect.fail(
-      new OverridesInsideOutDirError({ file: overridesFile, outDir }),
-    );
+  if (
+    overridesFile !== undefined &&
+    (overridesFile === outDir || overridesFile.startsWith(outDir + sep))
+  )
+    return yield* Effect.fail(new OverridesInsideOutDirError({ file: overridesFile, outDir }));
   const { pages, overrides } = yield* buildSite({
     contentDir,
     outDir,
@@ -105,7 +108,10 @@ const program = Effect.gen(function* () {
         writeFileSync(overridesFile, JSON.stringify(overrides, null, 2) + "\n");
       },
       catch: (e) =>
-        new BuildWriteError({ path: overridesFile, reason: e instanceof Error ? e.message : String(e) }),
+        new BuildWriteError({
+          path: overridesFile,
+          reason: e instanceof Error ? e.message : String(e),
+        }),
     });
   }
   console.log(`built ${pages.length} pages to ${outDir}`);

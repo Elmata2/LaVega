@@ -25,11 +25,20 @@ const tmp = mkdtempSync(join(tmpdir(), "lavega-og-"));
 const url = (p) => pathToFileURL(p).href;
 
 function shot(pageUrl, out, w, h) {
-  execFileSync(CHROME, [
-    "--headless=new", "--disable-gpu", "--hide-scrollbars",
-    "--default-background-color=00000000",
-    `--screenshot=${out}`, `--window-size=${w},${h}`, "--virtual-time-budget=3000", pageUrl,
-  ], { stdio: "ignore" });
+  execFileSync(
+    CHROME,
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--hide-scrollbars",
+      "--default-background-color=00000000",
+      `--screenshot=${out}`,
+      `--window-size=${w},${h}`,
+      "--virtual-time-budget=3000",
+      pageUrl,
+    ],
+    { stdio: "ignore" },
+  );
 }
 
 const template = readFileSync(resolve(here, "og-card.html"), "utf8")
@@ -44,9 +53,12 @@ for (const locale of ["nl", "en"]) {
 }
 
 const wm = join(tmp, "wordmark.html");
-writeFileSync(wm, `<!doctype html><meta charset="utf-8"><style>
+writeFileSync(
+  wm,
+  `<!doctype html><meta charset="utf-8"><style>
 html,body{margin:0;width:400px;height:130px;overflow:hidden;background:#02070a}
 img{display:block;position:absolute;left:-100px;top:-20px;width:600px;height:175px;filter:grayscale(1) invert(1) brightness(1.1);mix-blend-mode:screen}
-</style><img src="${url(logo)}" alt="">`);
+</style><img src="${url(logo)}" alt="">`,
+);
 shot(url(wm), resolve(outBrand, "wordmark.png"), 400, 130);
 console.log("done");

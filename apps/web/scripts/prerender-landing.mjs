@@ -10,7 +10,9 @@ const ORIGIN = "https://www.lavega.dev";
 const shell = readFileSync(resolve(root, "dist/index.html"), "utf8");
 for (const marker of ["<title>LaVega</title>", '<div id="root"></div>', "<html lang="])
   if (!shell.includes(marker))
-    throw new Error(`dist/index.html is missing ${marker}; run "vite build" first (pre-render is not re-runnable)`);
+    throw new Error(
+      `dist/index.html is missing ${marker}; run "vite build" first (pre-render is not re-runnable)`,
+    );
 
 /* index.html is about to become the Dutch landing page. Every other SPA route
  * (/app, /app/*, /reset-password, /app?error) still needs the untouched shell, so
@@ -25,7 +27,12 @@ const targets = [
 ];
 
 const decodeHtml = (x) =>
-  x.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
+  x
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&amp;/g, "&");
 const h1FirstRun = (html) => decodeHtml(/<h1[^>]*>([^<]*)/.exec(html)?.[1] ?? "");
 let mod;
 for (const t of targets) {
@@ -34,7 +41,15 @@ for (const t of targets) {
   });
   const g = globalThis;
   const saved = {};
-  for (const k of ["window", "document", "navigator", "location", "history", "localStorage", "sessionStorage"]) {
+  for (const k of [
+    "window",
+    "document",
+    "navigator",
+    "location",
+    "history",
+    "localStorage",
+    "sessionStorage",
+  ]) {
     saved[k] = Object.getOwnPropertyDescriptor(g, k);
     Object.defineProperty(g, k, { value: dom.window[k], configurable: true, writable: true });
   }
@@ -53,9 +68,13 @@ for (const t of targets) {
       [h1s === 1, `exactly one <h1 (found ${h1s})`],
       [out.includes(`<html lang="${t.locale}"`), `<html lang="${t.locale}">`],
       [out.includes('http-equiv="Content-Security-Policy"'), "CSP meta"],
-      [h1FirstRun(out) === mod.heroFirstLine(t.locale), `h1 starts with "${mod.heroFirstLine(t.locale)}" (found "${h1FirstRun(out)}")`],
+      [
+        h1FirstRun(out) === mod.heroFirstLine(t.locale),
+        `h1 starts with "${mod.heroFirstLine(t.locale)}" (found "${h1FirstRun(out)}")`,
+      ],
     ];
-    for (const [ok, what] of checks) if (!ok) throw new Error(`${t.out}: self-check failed: ${what}`);
+    for (const [ok, what] of checks)
+      if (!ok) throw new Error(`${t.out}: self-check failed: ${what}`);
     console.log(`prerendered ${t.locale} -> ${t.out} (${html.length} bytes)`);
   } finally {
     for (const [k, d] of Object.entries(saved)) {

@@ -22,9 +22,16 @@ const has = (rel) => existsSync(join(staticDir, rel));
 /* The hero line comes from the module the pre-render self-check uses (the SSR
  * bundle `pnpm --filter @lavega/web prerender` leaves in dist-ssr), so the
  * expected text cannot drift from landingCopy.ts. */
-const { heroFirstLine, faqQuestions } = await import(new URL("../apps/web/dist-ssr/prerender.js", import.meta.url).href);
+const { heroFirstLine, faqQuestions } = await import(
+  new URL("../apps/web/dist-ssr/prerender.js", import.meta.url).href
+);
 const decode = (s) =>
-  s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+  s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'");
 
 function walk(dir) {
   const out = [];
@@ -39,35 +46,56 @@ function walk(dir) {
 if (!existsSync(staticDir)) {
   failures.push(`${staticDir} does not exist`);
 } else {
-  for (const f of ["robots.txt", "sitemap.xml", "llms.txt"]) check(has(f), `static/${f} is missing`);
+  for (const f of ["robots.txt", "sitemap.xml", "llms.txt"])
+    check(has(f), `static/${f} is missing`);
 
-  for (const [locale, rel] of [["nl", "index.html"], ["en", "en/index.html"]]) {
+  for (const [locale, rel] of [
+    ["nl", "index.html"],
+    ["en", "en/index.html"],
+  ]) {
     if (!has(rel)) {
       failures.push(`static/${rel} is missing`);
       continue;
     }
     const html = read(rel);
     const title = /<title>([^<]*)<\/title>/.exec(html)?.[1];
-    check(title !== undefined && title.trim() !== "" && title !== "LaVega", `static/${rel}: title is "${title}" (empty or the bare shell title)`);
-    check(decode(html).includes(heroFirstLine(locale)), `static/${rel}: ${locale} hero text "${heroFirstLine(locale)}" not found`);
-    for (const q of faqQuestions(locale)) check(decode(html).includes(q), `static/${rel}: faq question "${q}" not found`);
+    check(
+      title !== undefined && title.trim() !== "" && title !== "LaVega",
+      `static/${rel}: title is "${title}" (empty or the bare shell title)`,
+    );
+    check(
+      decode(html).includes(heroFirstLine(locale)),
+      `static/${rel}: ${locale} hero text "${heroFirstLine(locale)}" not found`,
+    );
+    for (const q of faqQuestions(locale))
+      check(decode(html).includes(q), `static/${rel}: faq question "${q}" not found`);
     check(html.includes(`<html lang="${locale}"`), `static/${rel}: not <html lang="${locale}">`);
   }
-  if (has("robots.txt")) check(/^Disallow: \/app\s*$/m.test(read("robots.txt")), "robots.txt has no `Disallow: /app`");
+  if (has("robots.txt"))
+    check(/^Disallow: \/app\s*$/m.test(read("robots.txt")), "robots.txt has no `Disallow: /app`");
 
   if (has("sitemap.xml")) {
     const xml = read("sitemap.xml");
     const open = (xml.match(/<url>/g) ?? []).length;
     const close = (xml.match(/<\/url>/g) ?? []).length;
-    const wellFormed = xml.startsWith("<?xml") && /<urlset[\s>]/.test(xml) && /<\/urlset>\s*$/.test(xml) && open === close && open > 0;
+    const wellFormed =
+      xml.startsWith("<?xml") &&
+      /<urlset[\s>]/.test(xml) &&
+      /<\/urlset>\s*$/.test(xml) &&
+      open === close &&
+      open > 0;
     let parsed = wellFormed;
     if (wellFormed) {
       /* A real parser, not a regex: jsdom is a dependency of apps/web. */
       try {
         const { createRequire } = await import("node:module");
-        const { JSDOM } = createRequire(new URL("../apps/web/package.json", import.meta.url))("jsdom");
+        const { JSDOM } = createRequire(new URL("../apps/web/package.json", import.meta.url))(
+          "jsdom",
+        );
         const doc = new JSDOM(xml, { contentType: "application/xml" }).window.document;
-        parsed = doc.getElementsByTagName("parsererror").length === 0 && doc.getElementsByTagName("loc").length === open;
+        parsed =
+          doc.getElementsByTagName("parsererror").length === 0 &&
+          doc.getElementsByTagName("loc").length === open;
       } catch (e) {
         failures.push(`sitemap.xml: parser failed: ${e instanceof Error ? e.message : e}`);
         parsed = true;
@@ -78,7 +106,11 @@ if (!existsSync(staticDir)) {
 
   /* The bare SPA shell that /app and /reset-password are served. */
   if (!has("app-shell.html")) failures.push("static/app-shell.html is missing");
-  else check(read("app-shell.html").includes('<div id="root"></div>'), 'static/app-shell.html lacks the bare <div id="root"></div> (it must not be pre-rendered)');
+  else
+    check(
+      read("app-shell.html").includes('<div id="root"></div>'),
+      'static/app-shell.html lacks the bare <div id="root"></div> (it must not be pre-rendered)',
+    );
 
   /* config.json: /en routes and overrides. */
   const configPath = join(outDir, "config.json");
@@ -87,15 +119,29 @@ if (!existsSync(staticDir)) {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
     for (const src of ["/en", "/en/"]) {
       const route = (config.routes ?? []).find((r) => r.src === src && r.dest !== undefined);
-      check(route?.dest === "/en/index.html", `config.json: route ${src} dest is ${route?.dest ?? "absent"}, expected /en/index.html`);
+      check(
+        route?.dest === "/en/index.html",
+        `config.json: route ${src} dest is ${route?.dest ?? "absent"}, expected /en/index.html`,
+      );
     }
     const spaRoutes = (config.routes ?? []).filter((r) => r.dest === "/index.html");
-    check(spaRoutes.length === 0, `config.json: routes still serve the pre-rendered landing: ${spaRoutes.map((r) => r.src).join(", ")} (want /app-shell.html)`);
-    const shellHeader = (config.routes ?? []).find((r) => r.src === "/app-shell.html" && r.headers?.["X-Robots-Tag"] === "noindex");
-    check(shellHeader !== undefined, "config.json: no X-Robots-Tag noindex route for /app-shell.html");
+    check(
+      spaRoutes.length === 0,
+      `config.json: routes still serve the pre-rendered landing: ${spaRoutes.map((r) => r.src).join(", ")} (want /app-shell.html)`,
+    );
+    const shellHeader = (config.routes ?? []).find(
+      (r) => r.src === "/app-shell.html" && r.headers?.["X-Robots-Tag"] === "noindex",
+    );
+    check(
+      shellHeader !== undefined,
+      "config.json: no X-Robots-Tag noindex route for /app-shell.html",
+    );
     for (const [file, o] of Object.entries(config.overrides ?? {})) {
       check(has(file), `config.json: override target static/${file} does not exist`);
-      check(typeof o?.path === "string" && o.path.length > 0, `config.json: override for ${file} has no path`);
+      check(
+        typeof o?.path === "string" && o.path.length > 0,
+        `config.json: override for ${file} has no path`,
+      );
     }
   }
 
@@ -111,7 +157,9 @@ if (!existsSync(staticDir)) {
       const h1s = (html.match(/<h1[\s>]/g) ?? []).length;
       check(h1s === 1, `${rel}: ${h1s} <h1> (expected exactly 1)`);
       check(/<link[^>]+rel="canonical"[^>]*>/.test(html), `${rel}: no canonical link`);
-      const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+      const blocks = [
+        ...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g),
+      ];
       for (const [, body] of blocks) {
         try {
           JSON.parse(body);
@@ -119,7 +167,8 @@ if (!existsSync(staticDir)) {
           failures.push(`${rel}: JSON-LD does not parse`);
         }
       }
-      if (rel !== "index.html" && rel !== "en/index.html") check(blocks.length > 0, `${rel}: no JSON-LD`);
+      if (rel !== "index.html" && rel !== "en/index.html")
+        check(blocks.length > 0, `${rel}: no JSON-LD`);
     }
   }
 }

@@ -61,7 +61,8 @@ export function landingHead(locale: Locale, origin: string): string {
     `<meta name="description" content="${esc(description)}" />`,
     `<link rel="canonical" href="${canonical}" />`,
     ...hreflangLinks(origin).map(
-      (l) => `<link rel="alternate" hreflang="${l.hreflang}" href="${l.href}" data-lavega-hreflang />`,
+      (l) =>
+        `<link rel="alternate" hreflang="${l.hreflang}" href="${l.href}" data-lavega-hreflang />`,
     ),
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="LaVega" />`,
