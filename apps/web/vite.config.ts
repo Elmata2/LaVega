@@ -65,6 +65,10 @@ export default defineConfig(({ isSsrBuild }) => ({
   /* The pre-render SSR build (`vite build --ssr`) is a throwaway Node bundle: no
    * source-map upload and no hidden maps, or it would land under the browser release. */
   build: { sourcemap: uploadSourceMaps && !isSsrBuild ? "hidden" : false },
+  /* It also gets no VITE_ variables. With the deployment's VITE_POSTHOG_KEY in the
+   * bundle, posthog.ts calls posthog.init at import, which is not a function under
+   * Node, and the deploy failed. The pre-render only emits static markup. */
+  envPrefix: isSsrBuild ? "LAVEGA_PRERENDER_ONLY_" : "VITE_",
   define: { __LAVEGA_BUILD__: JSON.stringify(`${sha} \u00b7 ${day}`) },
   test: {
     setupFiles: ["./src/testSetup.ts"],
