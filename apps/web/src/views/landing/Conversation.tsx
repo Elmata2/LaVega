@@ -16,6 +16,11 @@ type Frame = {
 
 const SKELETON: Frame["pending"] = [true, true, true];
 
+/** How long a finished exchange stays before the next one starts: long enough
+ *  to read the answer, so it scales with its length. */
+export const holdMs = (answer: string): number =>
+  Math.min(9000, Math.max(5000, answer.trim().split(/\s+/).length * 300));
+
 const idle = (talk: number): Frame => ({
   talk,
   ask: "",
@@ -101,7 +106,7 @@ export default function Conversation({ copy, animated }: { copy: Acts; animated:
           }));
           await wait(160);
         }
-        await wait(3800);
+        await wait(holdMs(t.a));
       }
     })();
 
