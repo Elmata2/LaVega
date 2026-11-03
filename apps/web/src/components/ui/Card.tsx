@@ -13,7 +13,7 @@ const CARD_BASE =
    * aimed the same way, so a bare `<h2>` direct child still gets it without
    * every such call site adopting `<CardHeader>`. No-op wherever a card's
    * first child isn't an `<h2>`. */
-  "[&>h2]:mb-4 [&>h2]:border-b [&>h2]:border-ink [&>h2]:pb-3";
+  "[&>h2]:mb-4 [&>h2]:border-b [&>h2]:border-line [&>h2]:pb-3";
 
 type CardProps = {
   as?: ElementType;
@@ -33,7 +33,7 @@ const Card = forwardRef<HTMLElement, CardProps>(function Card({ as, className, .
  * fighting the title's. `[&_h2]` is a descendant match, not `[&>h2]`, because
  * the original was `.card-header h2` — any depth, not only a direct child. */
 const CARD_HEADER_BASE =
-  "mb-4 flex items-baseline justify-between gap-3 border-b border-ink pb-3 " +
+  "mb-4 flex items-baseline justify-between gap-3 border-b border-line pb-3 " +
   "[&_h2]:m-0 [&_h2]:border-b-0 [&_h2]:pb-0";
 
 type CardHeaderProps = {

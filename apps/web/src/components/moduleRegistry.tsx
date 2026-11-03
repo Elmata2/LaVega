@@ -621,7 +621,8 @@ export const WIDGETS: WidgetDef[] = [
           width="14"
           height="14"
           rx="3"
-          fill="rgba(176, 120, 30, 0.18)"
+          fill="var(--warn)"
+          fillOpacity="0.18"
           stroke="var(--warn)"
         />
         <Line x={11} y={34} w={8} strong />

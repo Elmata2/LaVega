@@ -524,7 +524,7 @@ export default function Punten({
   return (
     <Card as="section" aria-label={c.header.ariaLabel}>
       <div
-        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
         <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
@@ -713,7 +713,7 @@ export default function Punten({
       ) : null}
 
       <div
-        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
         <h3 className="m-0 font-display text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">

@@ -389,7 +389,7 @@ export default function Belasting({
   if (entities.length === 0) {
     return (
       <>
-        <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b border-b-line first:mt-0">
           <h2 className="m-0 text-[1.5rem]">
             {c.header.title} · {countryLabel}
           </h2>
@@ -406,7 +406,7 @@ export default function Belasting({
 
   return (
     <>
-      <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b border-b-line first:mt-0">
         {/* HET ⓘ VERVANGT DE VOLLE-BREEDTE MODULE "Niet berekend" ONDERAAN.
             Die lijst is anders niet te beoordelen (zie de kop van dit bestand),
             maar hoeft niet standaard open te staan om dat te blijven doen —

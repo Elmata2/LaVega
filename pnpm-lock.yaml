@@ -243,9 +243,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@fontsource/eb-garamond':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@fontsource/instrument-serif':
         specifier: ^5.3.0
         version: 5.3.0
@@ -273,6 +270,9 @@ importers:
       effect:
         specifier: ^4.0.1
         version: 4.0.1
+      gsap:
+        specifier: ^3.15.0
+        version: 3.15.0
       posthog-js:
         specifier: ^1.435.8
         version: 1.435.8(@types/react@18.3.31)(react@18.3.1)
@@ -286,9 +286,6 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
     devDependencies:
-      '@fontsource/inter':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@fontsource/space-grotesk':
         specifier: ^5.3.0
         version: 5.3.0
@@ -2591,6 +2588,9 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  gsap@3.15.0:
+    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   hashery@1.5.1:
     resolution: {integrity: sha512-iZyKG96/JwPz1N55vj2Ie2vXbhu440zfUfJvSwEqEbeLluk7NnapfGqa7LH0mOsnDxTF85Mx8/dyR6HfqcbmbQ==}
@@ -5138,6 +5138,8 @@ snapshots:
       path-scurry: 2.0.2
 
   graceful-fs@4.2.11: {}
+
+  gsap@3.15.0: {}
 
   hashery@1.5.1:
     dependencies:
