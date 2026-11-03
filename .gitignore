@@ -31,3 +31,6 @@ state.json
 # store from an older install is still ignored.
 .pnpm-store/
 .env.local
+apps/site/dist
+apps/site/dist-preview
+apps/web/dist-ssr

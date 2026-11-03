@@ -41,8 +41,8 @@ async function readAppGateRoutes(): Promise<AppGateRoute[]> {
 }
 
 const STATIC_APP_ROUTES: StaticAppRoute[] = [
-  { src: "/app/(.*)", dest: "/index.html" },
-  { src: "/app", dest: "/index.html" },
+  { src: "/app/(.*)", dest: "/app-shell.html" },
+  { src: "/app", dest: "/app-shell.html" },
 ];
 
 // Proven empirically against better-auth 1.7.1's getCookies() with the exact
