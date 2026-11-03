@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, extname, join, normalize, resolve, sep } from "node:path";
+import { dirname, extname, normalize, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 import { BuildWriteError, buildSite } from "./build";
 import { urlFor, type Page } from "./content";
@@ -67,7 +67,7 @@ function serve(pages: Page[]): Effect.Effect<never> {
         return;
       }
       const rel = normalize(path).replace(/^([/\\]|\.\.[/\\])+/, "");
-      const candidates = [join(outDir, rel), join(outDir, `${rel}.html`)];
+      const candidates = [resolve(outDir, rel), resolve(outDir, `${rel}.html`)];
       const file = candidates.find(
         (c) => c.startsWith(outDir + sep) && existsSync(c) && statSync(c).isFile(),
       );

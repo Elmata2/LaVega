@@ -149,7 +149,7 @@ describe("renderPage", () => {
 
   it("no executable script tags", () => {
     const html = renderPage(mk(), [mk()], prod);
-    const tags = html.match(/<script[^>]*>/g) ?? [];
+    const tags = html.match(/<script\b[^>]*>/gi) ?? [];
     expect(tags.length).toBeGreaterThan(0);
     for (const t of tags) expect(t).toBe('<script type="application/ld+json">');
   });

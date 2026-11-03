@@ -107,7 +107,7 @@ export function sitemapXml(allPages: Page[], origin: string): string {
 }
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-const linkText = (s: string) => oneLine(s).replace(/[[\]]/g, "\\$&");
+const linkText = (s: string) => oneLine(s).replace(/[\\[\]]/g, "\\$&");
 
 export function llmsTxt(allPages: Page[], facts: SiteFacts, origin: string): string {
   const pages = published(allPages);
