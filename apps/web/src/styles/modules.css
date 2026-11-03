@@ -68,7 +68,7 @@
     min-height: 32px;
     padding-bottom: var(--sp-3);
     margin-bottom: var(--sp-4);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--line);
   }
 
   /* Uppercase, letter-spaced, mono — the reference's card title register. */
@@ -398,7 +398,7 @@
     }
   }
   .guide-dialog::backdrop {
-    background: rgba(26, 26, 23, 0.45);
+    background: var(--scrim);
     opacity: 0;
     transition: opacity 250ms var(--ease-emphasized);
   }

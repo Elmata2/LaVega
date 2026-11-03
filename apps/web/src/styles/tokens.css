@@ -20,48 +20,94 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
-/* LaVega design-system tokens. Warm editorial palette (EB Garamond headings +
- * Inter body — self-hosted via @fontsource in main.tsx). The app now sits as a
- * single floating, rounded "frame" on a soft gutter, with generously rounded
- * white cards, soft diffuse shadows and a solid dark active nav pill — the look
- * borrowed from the reference dashboard, our fonts + warm accents kept.
- * Everything references these variables, so the whole theme lives here. */
+/* LaVega design-system tokens. "Midnight" palette matching the marketing site:
+ * near-black ground, two raised panel tones, hairline borders, cantaloupe for the
+ * primary action and blue for links and active states. One typeface, Instrument
+ * Serif (self-hosted, see the @font-face block below). The app sits as a single
+ * floating, rounded "frame" on the gutter. Everything references these
+ * variables, so the whole theme lives here. */
+
+/* Instrument Serif ships ONE weight (400). The face is declared over 100-900 so
+ * a `font-weight: 600` or `font-bold` anywhere in the app resolves to the real
+ * glyphs instead of a synthesized faux-bold smear. Hierarchy comes from size,
+ * not weight. Relative url(), not a bare @fontsource import, so Vite fingerprints
+ * and bundles the file like any other asset. */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2")
+    format("woff2");
+}
+
 :root {
-  /* Color — light, warm, editorial */
-  --gutter: #d8d3c9; /* soft warm-grey frame the app floats on */
-  --bg: #f7f5f0; /* app surface inside the frame */
-  --surface: #ffffff; /* raised cards */
-  --surface-2: #f1eee7; /* nested rows / inputs */
-  --ink: #1a1a17; /* near-black text + active nav pill */
-  --ink-soft: #33322d; /* pill gradient bottom */
-  --on-ink: #f7f5f0; /* text/icons on the dark pill */
-  --muted: #6b6961; /* warm grey */
-  --line: #e6e2d9; /* hairline border */
-  --accent: #1f4e6b; /* aegean deep blue */
-  --accent-soft: rgba(31, 78, 107, 0.1);
-  --pos: #4e7a3a; /* money in — natural green */
-  --neg: #b0442e; /* money out / debt — terracotta */
-  --warn: #b0781e; /* attention — amber */
-  /* The 12% tints behind the delta pills. Derived rather than written out: they
-   * were rgba(78,122,58,.12) and rgba(176,68,46,.12), two hand-copied values
-   * that would not follow --pos/--neg if either changed.
+  color-scheme: dark;
+  /* Color: midnight */
+  --gutter: #02070a; /* ground the app frame sits on */
+  --bg: #02070a; /* app surface inside the frame */
+  --surface: #0d171d; /* raised panels */
+  --surface-2: #16222a; /* nested rows / inputs */
+  --ink: #ffffff; /* primary text + active nav pill */
+  --ink-soft: #e3e9ec; /* hover state of the pill */
+  --on-ink: #02070a; /* text/icons on the white pill */
+  --muted: #a9b4bb; /* secondary text */
+  --line: rgba(255, 255, 255, 0.12); /* hairline border */
+  --accent: #0297de; /* blue: links, active states, focus */
+  --accent-soft: rgba(2, 151, 222, 0.16);
+  --cta: #fc734d; /* cantaloupe: the primary button */
+  --on-cta: #02070a;
+  /* Semantic colours, lifted for the dark ground. Each is >= 4.5:1 on --bg,
+   * --surface and --surface-2 (measured in scripts/check-midnight-contrast.mjs). */
+  --pos: #5fd38d; /* money in */
+  --neg: #ff8f8f; /* money out / debt */
+  --warn: #f2b84b; /* attention */
+  /* The 12% tints behind the delta pills. Derived rather than written out so
+   * they follow --pos/--neg.
    *
    * color-mix in srgb, not Tailwind's `bg-pos/12`. That modifier SILENTLY emits
    * full opacity here, because @theme inline points --color-pos at another
    * variable and Tailwind cannot resolve it at build time to mix against. A
    * solid green pill, no error, no failing test. */
-  --pos-tint: color-mix(in srgb, var(--pos) 12%, transparent);
-  --neg-tint: color-mix(in srgb, var(--neg) 12%, transparent);
+  --pos-tint: color-mix(in srgb, var(--pos) 16%, transparent);
+  --neg-tint: color-mix(in srgb, var(--neg) 16%, transparent);
   /* Data-viz accents (charts, category dots) */
-  --chart-blue: #3b6ea5;
-  --chart-purple: #7b6cc4;
-  --chart-teal: #2f8f83;
+  --chart-blue: #4db4f0;
+  --chart-purple: #a99bff;
+  --chart-teal: #4fd1c0;
+  /* Fallback faces for bank cards with no brand colour. Flat, dark enough for
+   * the fixed light card text (--card-text) at >= 4.5:1. */
+  --card-face-1: #0a4a6b;
+  --card-face-2: #0f5c55;
+  --card-face-3: #4b3f8f;
+  --card-face-4: #8a3a22;
+  --card-text: #f7f5f0;
+  /* Spending pie slices. No green or red: those mean money in and out
+   * everywhere else, so a green slice would read as income. */
+  --slice-1: #6f8cff;
+  --slice-2: #a58bff;
+  --slice-3: #ff9a5c;
+  --slice-4: #3cc3d9;
+  --slice-5: #ffc247;
+  --slice-6: #ff7fb0;
+  --slice-7: #6fd08a;
+  --slice-8: #9aa7b2;
+  --slice-rest: #c3ccd3;
+  --scrim: rgba(2, 7, 10, 0.72); /* behind dialogs */
 
-  /* Radius — larger, softer than before */
-  --r-lg: 26px; /* the floating app frame */
-  --r-card: 22px; /* module cards on the homescreen grid */
-  --r: 18px; /* cards */
-  --r-sm: 12px; /* inputs, chips, small controls */
+  /* Radius: large and soft, like the site's panels */
+  --r-lg: 32px; /* the floating app frame */
+  --r-card: 28px; /* module cards on the homescreen grid */
+  --r: 20px; /* cards */
+  --r-sm: 14px; /* inputs, chips, small controls */
   --pill: 999px;
 
   /* Spacing (4px base) */
@@ -72,17 +118,20 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type — EB Garamond for classical headings, Inter for everything else */
-  --font-display: "EB Garamond", Georgia, "Times New Roman", serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Type: one family. Instrument Serif has no tabular-figure feature (checked
+   * in the font's GSUB table: only ccmp/liga/locl), so --font-mono is the same
+   * face; figures in columns align by right edge, not by digit width. */
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-body: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "Instrument Serif", Georgia, "Times New Roman", serif;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.04), 0 18px 40px -28px rgba(26, 26, 23, 0.16);
-  --shadow-float: 0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
+  /* Elevation: panels are separated by tone and hairline, not shadow. Only
+   * floating layers (dialogs, menus) get a shadow, and it is dark-on-dark. */
+  --shadow-sm: 0 0 0 0 transparent; /* a real value, not `none`: Tailwind lists it among ring shadows */
+  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.55);
 
   /* Layout */
-  --frame-gap: 14px; /* gutter around the floating app */
+  --frame-gap: 20px; /* gutter around the floating app */
 
   /* Motion */
   --ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1); /* fast out, gentle settle */
@@ -94,6 +143,44 @@
   --module-h-short: 200px;
   --module-h-tall: 360px;
   --module-pad: var(--sp-5);
+}
+
+/* Light: the same brand on a white ground. Only colour changes; radius, type,
+ * spacing and motion are shared. Blue and the semantic colours are darkened so
+ * they stay >= 4.5:1 as text on the light panels (scripts/check-midnight-contrast.mjs
+ * checks both themes). Bank card faces keep their fixed colours. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --gutter: #e9eef1;
+  --bg: #ffffff;
+  --surface: #f3f6f8;
+  --surface-2: #e8edf0;
+  --ink: #02070a;
+  --ink-soft: #1c2830;
+  --on-ink: #ffffff;
+  --muted: #4f5d66;
+  --line: rgba(2, 7, 10, 0.1);
+  --accent: #016da3;
+  --accent-soft: rgba(2, 151, 222, 0.12);
+  --cta: #fc734d;
+  --on-cta: #02070a;
+  --pos: #17703f;
+  --neg: #b42f25;
+  --warn: #7d5200;
+  --chart-blue: #016da3;
+  --chart-purple: #5a45c4;
+  --chart-teal: #0a6f64;
+  --slice-1: #3d5ce0;
+  --slice-2: #7a5cd6;
+  --slice-3: #d4622a;
+  --slice-4: #128a9e;
+  --slice-5: #b07d00;
+  --slice-6: #c94f86;
+  --slice-7: #3f8f58;
+  --slice-8: #6b7983;
+  --slice-rest: #9aa5ad;
+  --scrim: rgba(2, 7, 10, 0.4);
+  --shadow-float: 0 24px 80px rgba(2, 7, 10, 0.16);
 }
 
 /* Tailwind's namespace, pointed at the variables above. Adding a token means
@@ -110,6 +197,8 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-cta: var(--cta);
+  --color-on-cta: var(--on-cta);
   --color-pos: var(--pos);
   --color-neg: var(--neg);
   --color-warn: var(--warn);

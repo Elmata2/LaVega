@@ -1,0 +1,53 @@
+/* Chrome of the preview harness only; the app itself is styled by src/styles. */
+.pv-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  max-width: calc(100vw - 24px);
+  padding: 8px 14px;
+  border-radius: 24px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-float);
+  font-size: 0.8rem;
+}
+.pv-bar button {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.pv-bar button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.pv-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.pv-group em {
+  color: var(--muted);
+  font-style: italic;
+}
+.pv-net {
+  color: var(--muted);
+}
+.pv-pad {
+  padding: 48px 24px 120px;
+  height: 100%;
+  overflow: auto;
+}
+.pv-narrow {
+  max-width: 460px;
+  margin: 0 auto;
+}
+.pv-loading {
+  padding: 24px;
+}

@@ -77,6 +77,14 @@
  * op dit element in Globe.tsx: `flex flex-col gap-4 min-w-0`. Deze regel houdt
  * alleen de kleurtokens vast — Globe.test.tsx leest de --lv-globe-*-regels
  * hieronder met een regex, dus die blijven woordelijk staan. */
+  /* MIDNIGHT RE-DERIVATION. The measured ratios quoted in the paragraphs above
+   * describe the old light palette. On the dark ground the fills sit in a narrow
+   * luminance band (every fill has to stay under ~0.43 so a white hover reaches
+   * 2.2:1 against all of them), so teal now runs dark (euro) to mid (rate) and the
+   * greys light (norate) to lighter (notender). The pairs that count are the ones
+   * Globe.test.tsx measures; this block was searched against exactly those
+   * thresholds. Hover is --ink, the same white as the pin: the pin sits on the
+   * selected country (--accent), so the two never share a fill. */
   .lv-globe {
     --lv-globe-sea: var(--surface-2);
     --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
@@ -85,12 +93,12 @@
     /* WAT LAVEGA KAN BEANTWOORDEN: teal, in twee stappen. Dezelfde hue voor euro en
    * "wij hebben een koers", want dat zijn allebei antwoorden; het verschil tussen
    * de twee staat in het paneel eronder en niet in een kleur. */
-    --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 34%, var(--surface));
-    --lv-globe-rate: var(--chart-teal);
+    --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 20%, var(--surface));
+    --lv-globe-rate: color-mix(in srgb, var(--chart-teal) 60%, var(--bg));
 
     /* WAT LAVEGA MIST OF WAT ER NIET IS: neutraal grijs, ook in twee stappen. Geen
    * teal erin, want dan zou een leemte eruitzien als een half antwoord. */
-    --lv-globe-norate: color-mix(in srgb, var(--muted) 60%, var(--surface));
+    --lv-globe-norate: color-mix(in srgb, var(--muted) 40%, var(--surface));
     /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
    * dezelfde als "geen koers" zou beweren dat het aan ONS ligt dat daar niets te
    * wisselen valt, en dat is precies het onderscheid waar deze tab over gaat.
@@ -111,7 +119,7 @@
    * een land dat niet meedoet.
    * Komt er ooit een tweede land met deze tint bij, dan is dit de eerste regel die
    * opnieuw gemeten moet worden. */
-    --lv-globe-notender: var(--muted);
+    --lv-globe-notender: color-mix(in srgb, var(--ink) 50%, var(--surface-2));
 
     /* DE BEDIENING: niet teal en niet grijs, zodat aanwijzen en kiezen nooit voor
    * een antwoord kunnen doorgaan. Aangewezen is bijna-zwart, en dat is met opzet
@@ -127,7 +135,7 @@
    * overgebleven kleur zakt tegen minstens één vulling naar 1,0 à 1,1
    * (--chart-blue 1,04, --chart-purple 1,12, --pos 1,09, --neg 1,03, --warn 1,03).
    * Vandaar deze twee, en niet iets vrolijkers. */
-    --lv-globe-hover: var(--ink-soft);
+    --lv-globe-hover: var(--ink);
     --lv-globe-selected: var(--accent);
     --lv-globe-pin: var(--ink);
   }

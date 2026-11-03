@@ -345,7 +345,7 @@
     min-height: 148px;
     padding: var(--sp-4);
     border-radius: var(--r);
-    color: var(--on-ink);
+    color: var(--card-text);
     box-shadow: var(--shadow-sm);
     /* Voor de glans: `relative` geeft hem iets om zich aan te hangen, en `hidden`
    * houdt hem binnen de afgeronde hoeken - anders steekt er een lichte cirkel
@@ -437,10 +437,7 @@
 
   .bank-card:hover,
   .bank-card:focus-within {
-    box-shadow:
-      0 2px 4px rgba(26, 26, 23, 0.08),
-      0 22px 44px -26px rgba(26, 26, 23, 0.34),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
   }
 
   @media (max-width: 520px) {

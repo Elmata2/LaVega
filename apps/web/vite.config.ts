@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { CSP_FALLBACK_META } from "./src/csp.js";
+import { previewPlugin } from "./vite-preview-plugin";
 
 /* A <meta http-equiv="Content-Security-Policy"> fallback for the built shell,
  * mirroring the header that `scripts/vercel-build.mjs` sets on the CDN (see
@@ -44,6 +45,7 @@ export default defineConfig({
   plugins: [
     react(),
     cspMetaPlugin(),
+    ...(process.env.LAVEGA_PREVIEW === "1" ? [previewPlugin()] : []),
     ...(uploadSourceMaps
       ? sentryVitePlugin({
           org: sentryOrg,

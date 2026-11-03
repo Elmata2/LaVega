@@ -726,7 +726,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const blad = (naam: string) => readFileSync(resolve(here, "../styles", naam), "utf8");
 
 const CSS = blad("worldmap.css");
-const TOKENS_CSS = blad("tokens.css");
+/* Alleen het donkere :root-blok: het lichte thema overschrijft dezelfde namen
+ * verderop, en de bol is op de donkere grond afgesteld. */
+const TOKENS_CSS = blad("tokens.css").split(':root[data-theme="light"]')[0]!;
 
 /** Elke `--naam: #hex` uit tokens.css. Alleen hex: alles wat de bol gebruikt is
  *  daar een hex, en een token dat het niet is hoort hier niet stil als zwart
