@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, extname, normalize, resolve, sep } from "node:path";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 import { BuildWriteError, buildSite } from "./build";
 import { urlFor, type Page } from "./content";
@@ -51,6 +51,12 @@ function indexPage(pages: Page[]): string {
 /** Preview only: serve outDir on loopback, `/x` resolving to `x.html`. */
 function serve(pages: Page[]): Effect.Effect<never> {
   const listing = indexPage(pages);
+  const served = new Map<string, string>(
+    readdirSync(outDir, { recursive: true, encoding: "utf8" })
+      .map((rel) => join(outDir, rel))
+      .filter((abs) => statSync(abs).isFile())
+      .map((abs) => [`/${relative(outDir, abs).split(sep).join("/")}`, abs] as const),
+  );
   return Effect.callback<never>(() => {
     const server = createServer((req, res) => {
       let path: string;
@@ -66,11 +72,7 @@ function serve(pages: Page[]): Effect.Effect<never> {
         res.end(listing);
         return;
       }
-      const rel = normalize(path).replace(/^([/\\]|\.\.[/\\])+/, "");
-      const candidates = [resolve(outDir, rel), resolve(outDir, `${rel}.html`)];
-      const file = candidates.find(
-        (c) => c.startsWith(outDir + sep) && existsSync(c) && statSync(c).isFile(),
-      );
+      const file = served.get(path) ?? served.get(`${path}.html`);
       if (!file) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
