@@ -8,8 +8,7 @@ import { resetAuthLinkFailure, takePendingEbParams } from "./appRoutes.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/* Neither component has anything to say about the session gate; stubbed the
- * same way Landing.signin.test.tsx stubs CardSpiral. */
+/* Neither component has anything to say about the session gate, so both are stubbed. */
 vi.mock("./App", () => ({ default: () => <div data-testid="app-shell" /> }));
 vi.mock("./views/Landing", () => ({
   default: ({ onEnter, linkError }: { onEnter: () => void; linkError?: boolean }) => (

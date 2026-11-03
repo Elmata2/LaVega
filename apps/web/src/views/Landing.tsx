@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import CardSpiral from "./CardSpiral";
-import { INVESTING_URL } from "../investing.js";
+import type { CSSProperties, MouseEvent } from "react";
 import { landingCopy } from "../landingCopy.js";
 import {
   alternatePath,
@@ -16,34 +15,16 @@ import { NewPasswordForm, RequestResetForm } from "../components/PasswordResetFo
 import { shellCopy } from "../copy/shell.js";
 import SignInForm from "../components/SignInForm.js";
 import SignUpForm from "../components/SignUpForm.js";
-
-/* The hero/footer CTAs used to share `.lp-btn`/`.lp-btn-dark` (still
- * used by the nav login button, outside this pass) with a `.lp-btn-lg` size modifier layered on top. Mixing that
- * unlayered class with a Tailwind padding override would lose to it — see the
- * `@layer components` note in landing.css — so these four buttons are now
- * fully Tailwind, duplicating `.lp-btn`'s shape rather than reaching for it.
- *
- * One of the four is a `<button>`, and base.css's bare `button{}` (background,
- * border, border-radius, padding, color, font-size, cursor — all unlayered)
- * would beat every one of those Tailwind utilities under the cascade-layers
- * rule regardless of specificity. `!` forces each to win; on the three `<a>`
- * CTAs it is a harmless no-op except for color, where base.css's bare `a`
- * rule has the same problem. */
-const LP_BTN =
-  "inline-flex items-center gap-2 rounded-pill! font-body! text-[0.95rem]! font-semibold border! " +
-  "cursor-pointer! no-underline whitespace-nowrap transition-[transform,box-shadow,background] " +
-  "duration-[120ms] ease-[ease] motion-safe:hover:-translate-y-px";
-const LP_BTN_LG = "px-[28px]! py-[15px]! text-[1.02rem]!";
-/** `.lp-btn`'s own (non-`-lg`) padding for the nav "Inloggen" button,
- *  converted from `.lp-btn`/`.lp-btn-dark` below. */
-const LP_BTN_MD = "px-[22px]! py-[11px]!";
-const LP_BTN_DARK =
-  "bg-[var(--lp-ink)]! text-[var(--lp-cream)]! border-transparent! shadow-[0_12px_26px_-14px_rgba(43,33,23,.6)]";
-const LP_BTN_LIGHT = "bg-[var(--lp-card)]! text-[var(--lp-ink)]! border-[var(--lp-line)]!";
-const LP_BTN_TAN =
-  "bg-[var(--lp-tan)]! text-[var(--lp-espresso)]! border-transparent! shadow-[0_14px_30px_-14px_rgba(176,127,51,.7)]";
+import Conversation from "./landing/Conversation.js";
+import RevealWords from "./landing/RevealWords.js";
+import ThreeBoxes from "./landing/ThreeBoxes.js";
+import { useAnimated, useReducedMotion } from "./landing/motion.js";
 
 type AuthView = "sign-in" | "sign-up" | "forgot" | "new-password";
+
+const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
+const SECTION_IDS = ["does", "faq"] as const;
+const delay = (n: number) => ({ "--d": n }) as CSSProperties;
 
 /** The emailed reset link lands on /reset-password?token=… (or ?error=… when
  *  better-auth already refused the token). Read once, then strip the token
@@ -59,10 +40,19 @@ function takeResetLink(): { token: string | null } | null {
   return resetLinkTaken;
 }
 
-/** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
- *  serif (StrategiQ-inspired), broad audience (students → werkenden →
- *  ondernemers). Every CTA opens the auth dialog on its sign-up view; the header
- *  "Inloggen" opens it on sign-in and enters the vault (`/app`) via `onEnter`. */
+/** Heading with its last words in italics. */
+function Heading({ lead, em }: { lead: string; em: string }) {
+  return (
+    <>
+      {lead} <em>{em}</em>
+    </>
+  );
+}
+
+/** Public marketing landing page: midnight palette, Instrument Serif, the
+ *  gradient only in the hero and the closing call to action. Every "get early
+ *  access" button opens the auth dialog on its sign-up view; "Log in" opens it
+ *  on sign-in and enters the vault (`/app`) via `onEnter`. */
 export default function Landing({
   onEnter,
   locale = DEFAULT_LOCALE,
@@ -75,6 +65,8 @@ export default function Landing({
 }) {
   const c = landingCopy(locale);
   const { state: authState } = useAuthState();
+  const reduce = useReducedMotion();
+  const animated = useAnimated();
   const [resetLink] = useState(takeResetLink);
   const [showSignIn, setShowSignIn] = useState(linkError || resetLink !== null);
   const [authView, setAuthView] = useState<AuthView>(resetLink ? "new-password" : "sign-in");
@@ -82,9 +74,16 @@ export default function Landing({
    * and the "password changed" line onto the sign-in form after a reset. */
   const [resetEmail, setResetEmail] = useState("");
   const [signInNotice, setSignInNotice] = useState<string | undefined>(undefined);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const account = shellCopy[locale].profiel.account;
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  /* Whichever button opened the dialog gets the focus back when it closes. */
+  const openerRef = useRef<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const burgerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   /* The dialog is always mounted; only showModal()/close() move it on/off
    * screen. That's what gives the CSS exit transition something to animate
@@ -105,7 +104,7 @@ export default function Landing({
       dialog.querySelector<HTMLInputElement>("input")?.focus();
     } else if (!shouldOpen && dialog.open) {
       dialog.close();
-      triggerRef.current?.focus();
+      (openerRef.current ?? triggerRef.current)?.focus();
     }
   }, [showSignIn, authState.kind]);
 
@@ -118,11 +117,31 @@ export default function Landing({
     setShowSignIn(true);
   }
 
+  function openSignIn() {
+    if (authState.kind === "signed-in") {
+      onEnter();
+      return;
+    }
+    if (showSignIn && authView === "sign-in") {
+      setShowSignIn(false);
+      return;
+    }
+    setAuthView("sign-in");
+    setShowSignIn(true);
+  }
+
+  const withOpener = (open: () => void) => (e: MouseEvent<HTMLElement>) => {
+    openerRef.current = e.currentTarget;
+    open();
+  };
+  const onCta = withOpener(openSignUp);
+  const onLogin = withOpener(openSignIn);
+
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
    * engine as content competing with the Dutch one it exists alongside. Title
    * and meta description are restored on unmount so entering the vault via
-   * "Inloggen" leaves the plain "LaVega" title behind instead of leaking the
+   * "Log in" leaves the plain "LaVega" title behind instead of leaking the
    * public pitch into the app frame. */
   useEffect(() => {
     const prev = {
@@ -140,10 +159,46 @@ export default function Landing({
     };
   }, [locale]);
 
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  /* The open mobile menu locks page scroll, makes everything behind it inert,
+   * moves focus into the panel, and closes on Escape or when the viewport grows
+   * past the mobile breakpoint (the burger is gone there, so nothing could close
+   * it). Focus goes back to the burger on close. Declared before the
+   * window-scroll effect below: on unmount cleanups run in order, so this one
+   * restores first and that one has the last word on body.overflow. */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const root = rootRef.current;
+    const panel = panelRef.current;
+    const dialog = dialogRef.current;
+    const burger = burgerRef.current;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const behind = [...(root?.children ?? [])].filter(
+      (el) => el !== panel && !el.matches("nav, dialog") && !el.hasAttribute("inert"),
+    );
+    behind.forEach((el) => el.setAttribute("inert", ""));
+    panel?.querySelector<HTMLElement>("a, button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const wide =
+      typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 761px)") : null;
+    const onWide = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false);
+    };
+    wide?.addEventListener("change", onWide);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      behind.forEach((el) => el.removeAttribute("inert"));
+      window.removeEventListener("keydown", onKey);
+      wide?.removeEventListener("change", onWide);
+      if (!dialog?.open) burger?.focus();
+    };
+  }, [menuOpen]);
+
   // Let the whole window scroll (the app frame otherwise pins body overflow).
-  // Restored on unmount so the dashboard frame behaves again. Window-scrolling
-  // also lets GSAP ScrollTrigger track with its default scroller.
+  // Restored on unmount so the dashboard frame behaves again.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -160,111 +215,138 @@ export default function Landing({
     };
   }, []);
 
-  // Scroll-reveal (fade/rise) via IntersectionObserver; CSS keeps content
-  // visible under prefers-reduced-motion.
+  // Scroll-reveal (fade/rise) via IntersectionObserver. Without one, show everything.
   useEffect(() => {
-    const els = rootRef.current?.querySelectorAll<HTMLElement>(".lp-reveal");
-    if (!els || !("IntersectionObserver" in window)) {
-      els?.forEach((el) => el.classList.add("lp-in"));
+    const els = rootRef.current?.querySelectorAll<HTMLElement>(".r");
+    if (!els) return;
+    if (typeof IntersectionObserver === "undefined") {
+      els.forEach((el) => el.classList.add("in-view"));
       return;
     }
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           if (e.isIntersecting) {
-            e.target.classList.add("lp-in");
+            e.target.classList.add("in-view");
             io.unobserve(e.target);
           }
         }
       },
-      { threshold: 0.15 },
+      { threshold: 0.2, rootMargin: "0px 0px -6% 0px" },
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
 
+  // Scrollspy: the nav link of the section crossing the middle of the screen.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.isIntersecting) setActiveSection(e.target.id);
+      },
+      { rootMargin: "-45% 0px -50% 0px" },
+    );
+    SECTION_IDS.forEach((id) => {
+      const el = root.querySelector(`#${id}`);
+      if (el) io.observe(el);
+    });
+    return () => io.disconnect();
+  }, []);
+
   const otherLocale = locale === "en" ? "nl" : "en";
+  const closeMenu = () => setMenuOpen(false);
+  const switchLocale = () => rememberLocale(otherLocale);
+  const shot = c.hero.shot;
 
   return (
-    <div className="lp relative" ref={rootRef}>
-      {/* Nav */}
-      <header className="flex items-center justify-between gap-[var(--sp-4)] max-w-[1200px] mx-auto px-[28px] py-[22px]">
+    <div className="lp" ref={rootRef}>
+      <a className="skip" href="#main">
+        {c.skip}
+      </a>
+      <nav className="lp-nav" aria-label={c.nav.label}>
+        <div className="w">
+          <a className="logo" href="#main">
+            LaVega
+          </a>
+          <div className="links">
+            <a href="#does" aria-current={activeSection === "does" ? "true" : undefined}>
+              {c.nav.how}
+            </a>
+            <a href="#faq" aria-current={activeSection === "faq" ? "true" : undefined}>
+              {c.nav.faq}
+            </a>
+            <a
+              className="lp-lang"
+              href={alternatePath(locale)}
+              hrefLang={otherLocale}
+              title={c.langSwitch.to}
+              aria-label={c.langSwitch.to}
+              onClick={switchLocale}
+            >
+              {c.langSwitch.label}
+            </a>
+          </div>
+          <div className="right">
+            <button ref={triggerRef} type="button" className="login" onClick={onLogin}>
+              {c.nav.login}
+            </button>
+            <button type="button" className="btn small" onClick={onCta}>
+              {c.nav.cta}
+            </button>
+            <button
+              ref={burgerRef}
+              type="button"
+              className="burger"
+              aria-expanded={menuOpen}
+              aria-controls="panel"
+              aria-label={c.nav.menu}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <i />
+              <i />
+            </button>
+          </div>
+        </div>
+      </nav>
+      <div className={`panel${menuOpen ? " open" : ""}`} id="panel" ref={panelRef}>
+        <a style={{ "--n": 0 } as CSSProperties} href="#does" onClick={closeMenu}>
+          {c.nav.how}
+        </a>
+        <a style={{ "--n": 1 } as CSSProperties} href="#faq" onClick={closeMenu}>
+          {c.nav.faq}
+        </a>
         <button
           type="button"
-          className="font-display font-semibold text-[1.5rem] tracking-[-0.01em] text-[var(--lp-ink)] bg-transparent border-none border-[var(--lp-ink)] cursor-pointer p-0"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          style={{ "--n": 2 } as CSSProperties}
+          onClick={(e) => {
+            closeMenu();
+            onLogin(e);
+            /* The panel is hidden once closed; the burger is what the visitor can see. */
+            openerRef.current = burgerRef.current;
+          }}
         >
-          LaVega
+          {c.nav.login}
         </button>
-        <nav className="flex gap-[28px] [@media(max-width:860px)]:hidden">
-          <a
-            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
-            href="#agents"
-          >
-            {c.nav.agents}
-          </a>
-          <a
-            className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
-            href="#how"
-          >
-            {c.nav.how}
-          </a>
-          {INVESTING_URL && (
-            <a
-              className="text-[var(--lp-ink2)] no-underline text-[0.95rem] font-medium hover:text-[var(--lp-ink)]"
-              href={INVESTING_URL}
-              {...(INVESTING_URL.startsWith("http")
-                ? { target: "_blank", rel: "noopener noreferrer" }
-                : {})}
-            >
-              {c.nav.investing}
-            </a>
-          )}
-        </nav>
-        <div className="flex items-center gap-[18px]">
-          <button
-            ref={triggerRef}
-            type="button"
-            className="text-[var(--lp-ink2)] bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.95rem]! font-medium hover:text-[var(--lp-ink)]"
-            onClick={() => {
-              if (authState.kind === "signed-in") {
-                onEnter();
-                return;
-              }
-              if (showSignIn && authView === "sign-in") {
-                setShowSignIn(false);
-                return;
-              }
-              setAuthView("sign-in");
-              setShowSignIn(true);
-            }}
-          >
-            {c.nav.login}
-          </button>
-          <button
-            type="button"
-            className={`${LP_BTN} ${LP_BTN_MD} ${LP_BTN_DARK}`}
-            onClick={openSignUp}
-          >
-            {c.nav.signUp}
-          </button>
-          <a
-            className="lp-lang text-[var(--lp-ink2)] no-underline text-[0.85rem] font-medium tracking-[0.02em] px-[10px] py-[6px] rounded-pill border border-[var(--lp-line)] whitespace-nowrap [transition:color_140ms_ease,border-color_140ms_ease] hover:text-[var(--lp-ink)] hover:border-[var(--lp-ink2)]"
-            href={alternatePath(locale)}
-            hrefLang={otherLocale}
-            title={c.langSwitch.to}
-            aria-label={c.langSwitch.to}
-            onClick={() => rememberLocale(otherLocale)}
-          >
-            {c.langSwitch.label}
-          </a>
-        </div>
-      </header>
+        <a
+          style={{ "--n": 3 } as CSSProperties}
+          className="lp-lang-menu"
+          href={alternatePath(locale)}
+          hrefLang={otherLocale}
+          onClick={() => {
+            closeMenu();
+            switchLocale();
+          }}
+        >
+          {c.nav.menuLanguage}
+        </a>
+      </div>
 
       <dialog
         ref={dialogRef}
         className="lp-signin-dialog"
-        aria-label={c.nav.login}
+        aria-labelledby="lp-dialog-title"
         onClick={(e) => {
           if (e.target === dialogRef.current) setShowSignIn(false);
         }}
@@ -281,7 +363,7 @@ export default function Landing({
         >
           ×
         </button>
-        <h2>
+        <h2 id="lp-dialog-title">
           {authView === "sign-up"
             ? c.login.signUpTitle
             : authView === "forgot"
@@ -290,23 +372,17 @@ export default function Landing({
                 ? account.reset.newTitle
                 : c.nav.login}
         </h2>
-        {linkError && authView === "sign-in" && (
-          <p role="alert" className="font-body text-[0.95rem] text-[var(--lp-ink2)]">
-            {c.login.linkInvalid}
-          </p>
-        )}
+        {linkError && authView === "sign-in" && <p role="alert">{c.login.linkInvalid}</p>}
         {authView === "forgot" ? (
           <RequestResetForm
             locale={locale}
             initialEmail={resetEmail}
-            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
             onBack={() => setAuthView("sign-in")}
           />
         ) : authView === "new-password" ? (
           <NewPasswordForm
             locale={locale}
             token={resetLink?.token ?? null}
-            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
             onDone={() => {
               setSignInNotice(account.reset.done);
               setAuthView("sign-in");
@@ -314,16 +390,11 @@ export default function Landing({
             onRequestNew={() => setAuthView("forgot")}
           />
         ) : authView === "sign-up" ? (
-          <SignUpForm
-            locale={locale}
-            intro={c.login.signUpIntro}
-            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
-          />
+          <SignUpForm locale={locale} intro={c.login.signUpIntro} />
         ) : (
           <SignInForm
             locale={locale}
             intro={c.login.intro}
-            introClassName="font-body text-[0.95rem] text-[var(--lp-ink2)]"
             notice={signInNotice}
             initialEmail={resetEmail}
             onForgotPassword={(email) => {
@@ -348,7 +419,7 @@ export default function Landing({
           <button
             type="button"
             data-testid="auth-toggle"
-            className="mt-4 bg-transparent! border-0! p-0! cursor-pointer! font-body! text-[0.9rem]! text-[var(--lp-ink2)] underline"
+            className="lp-dialog-link"
             onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
           >
             {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
@@ -356,220 +427,141 @@ export default function Landing({
         )}
       </dialog>
 
-      {/* Hero */}
-      <section className="lp-hero max-w-[1000px] mx-auto pt-[48px] px-[28px] pb-[40px] text-center">
-        <h1 className="lp-reveal font-display! font-semibold! text-[clamp(2.6rem,6vw,4.6rem)]! leading-[1.04] tracking-[-0.02em]! m-0! mb-[22px]! text-[var(--lp-ink)]!">
-          {c.hero.titleTop}
-          <br />
-          {c.hero.titleBottom}
-        </h1>
-        <p className="lp-reveal max-w-[640px] mx-auto! mt-0! mb-[28px]! text-[var(--lp-ink2)] text-[1.1rem]">
-          {c.hero.sub}
-        </p>
-        <div className="lp-reveal flex gap-3 justify-center flex-wrap mb-[56px]">
-          <button
-            type="button"
-            className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_DARK}`}
-            onClick={openSignUp}
-          >
-            {c.hero.ctaPrimary} <span aria-hidden="true">→</span>
+      <header className="g g-hero hero">
+        <div className="w">
+          <p className="kicker">{c.hero.eyebrow}</p>
+          <h1>
+            {c.hero.lineOne}
+            <br />
+            {c.hero.lineTwo} <em>{c.hero.em}</em>
+          </h1>
+          <p className="sub">{c.hero.sub}</p>
+          <button type="button" className="btn" onClick={onCta}>
+            {c.nav.cta}
           </button>
-          <a className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_LIGHT}`} href="#how">
-            {c.hero.ctaSecondary}
-          </a>
-        </div>
-
-        {/* Floating product illustration */}
-        <div className="lp-reveal relative max-w-[720px] min-h-[400px] mx-auto" aria-hidden="true">
-          <div className="relative z-[2] w-[min(340px,82vw)] mx-auto bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[24px] p-[24px] text-left shadow-[0_40px_80px_-40px_rgba(43,33,23,.45),0_8px_20px_-12px_rgba(43,33,23,.2)]">
-            <div className="font-mono text-[0.72rem] tracking-[0.04em] uppercase text-[var(--lp-ink2)]">
-              {c.device.eyebrow}
-            </div>
-            <div className="text-[2.4rem] font-bold tracking-[-0.02em] tabular-nums mt-[2px]">
-              {c.device.total}
-            </div>
-            <div className="text-[var(--lp-pos)] text-[0.9rem] font-semibold mb-2">
-              {c.device.delta}
-            </div>
-            <div className="mt-2 mb-[14px]">
-              <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
-                <polyline
-                  points="0,52 30,46 60,50 90,38 120,40 150,28 180,30 210,16 240,10"
-                  fill="none"
-                  stroke="var(--lp-tan-deep)"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div>
-              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
-                <span>{c.device.rows[0].label}</span>
-                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">
-                  {c.device.rows[0].value}
+          <div className="shot" role="img" aria-label={shot.label}>
+            <div className="shot-nav">
+              <b>LaVega</b>
+              {shot.tabs.map((tab, i) => (
+                <span key={tab} className={i === 1 ? "on" : i > 1 ? "x" : undefined}>
+                  {tab}
                 </span>
-              </div>
-              <div className="flex justify-between py-2 border-t border-[var(--lp-line)] text-[0.9rem] text-[var(--lp-ink2)]">
-                <span>{c.device.rows[1].label}</span>
-                <span className="text-[var(--lp-ink)] font-semibold tabular-nums">
-                  {c.device.rows[1].value}
-                </span>
-              </div>
+              ))}
+            </div>
+            <div className="shot-main">
+              <h2>{shot.title}</h2>
+              <p>{shot.asOf}</p>
+              <p className="shot-mut">{shot.source}</p>
+              <p className="shot-links">
+                <span>{shot.links[0]}</span>
+                <span>{shot.links[1]}</span>
+              </p>
+              {shot.cards.map((card) => (
+                <div className="shot-card" key={card.title}>
+                  <strong>{card.title}</strong>
+                  <span>
+                    {card.value}
+                    <i className={card.attention ? "warn" : undefined}>
+                      {card.attention ? shot.warn : shot.ok}
+                    </i>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[30px] left-0 [@media(max-width:760px)]:hidden motion-safe:animate-[lp-bob_4s_ease-in-out_infinite]">
-            <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
-              {c.device.returnLabel}
-            </div>
-            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">
-              {c.device.returnValue}
-            </div>
-          </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] top-[90px] right-0 [@media(max-width:760px)]:hidden motion-safe:animate-[lp-bob_5.5s_ease-in-out_infinite]">
-            <div className="font-mono text-[0.68rem] tracking-[0.03em] uppercase text-[var(--lp-ink2)]">
-              {c.device.forecastLabel}
-            </div>
-            <div className="text-[1.15rem] font-bold tabular-nums text-[var(--lp-pos)] text-base">
-              {c.device.forecastValue}
-            </div>
-          </div>
-          <div className="absolute z-[3] bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-4 py-3 shadow-[0_24px_50px_-28px_rgba(43,33,23,.4)] text-[0.9rem] bottom-[24px] left-[8%] inline-flex items-center gap-2 font-semibold motion-safe:animate-[lp-bob_7s_ease-in-out_infinite]">
-            <span className="text-base">🔒</span> {c.device.lockChip}
-          </div>
         </div>
-      </section>
+      </header>
 
-      {/* Signature scroll section (GSAP card spiral + tagline) */}
-      <CardSpiral locale={locale} />
-
-      {/* Agents — feature grid (id kept for the nav anchor) */}
-      <section className="lp-section" id="agents">
-        <div className="lp-feature-head lp-reveal">
-          <div>
-            <p className="lp-eyebrow lp-eyebrow-left">{c.agents.eyebrow}</p>
-            <h2 className="lp-h2 lp-strengths-title">{c.agents.title}</h2>
-          </div>
-        </div>
-        <div className="lp-feature-grid lp-reveal">
-          {c.agents.cards.map((a) => (
-            <article className="lp-feature-card" key={a.t}>
-              <h3 className="lp-feature-title">{a.t}</h3>
-              <p className="lp-feature-text">{a.d}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="lp-section" id="how">
-        <p className="lp-eyebrow lp-reveal">{c.how.eyebrow}</p>
-        <h2 className="lp-h2 lp-reveal">{c.how.title}</h2>
-        <div className="lp-steps lp-reveal">
-          {c.how.steps.map((step, i) => (
-            <div className="lp-step" key={step.t}>
-              <div className="lp-step-n">{i + 1}</div>
-              <h3 className="lp-card-title">{step.t}</h3>
-              <p className="lp-card-text">{step.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="max-w-[1100px] mx-auto py-[72px] px-[28px]" id="faq">
-        <p className="lp-reveal font-mono text-[0.75rem] tracking-[0.08em] uppercase text-[var(--lp-tan-deep)] text-center m-0! mb-[10px]!">
-          {c.faq.eyebrow}
-        </p>
-        <h2 className="lp-reveal font-display! font-semibold! text-[clamp(1.9rem,3.4vw,2.8rem)]! tracking-[-0.02em]! text-center m-0! mb-[36px]! text-[var(--lp-ink)]!">
-          {c.faq.title}
-        </h2>
-        <div className="lp-reveal max-w-[760px] mx-auto flex flex-col gap-3">
-          {c.faq.items.map((f) => (
-            <details
-              className="lp-faq-item bg-[var(--lp-card)] border border-[var(--lp-line)] rounded-[16px] px-[22px]"
-              key={f.q}
-            >
-              <summary className="flex items-center justify-between gap-4 list-none cursor-pointer py-[18px] font-display font-semibold text-[1.1rem] text-[var(--lp-ink)]">
-                <span>{f.q}</span>
-                <span className="lp-faq-mark" aria-hidden="true" />
-              </summary>
-              <p className="m-0! mb-[18px]! text-[var(--lp-ink2)]">{f.a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-[var(--lp-espresso)] text-[var(--lp-cream)] mt-[24px]">
-        <div className="lp-reveal max-w-[1100px] mx-auto pt-[64px] px-[28px] pb-[40px] text-center">
-          <button
-            type="button"
-            className={`${LP_BTN} ${LP_BTN_LG} ${LP_BTN_TAN}`}
-            onClick={openSignUp}
-          >
-            {c.footer.cta} <span aria-hidden="true">→</span>
-          </button>
-        </div>
-        <div className="max-w-[1100px] mx-auto py-[32px] px-[28px] grid grid-cols-[1.6fr_1fr_1fr] gap-[32px] border-t border-[color-mix(in_srgb,var(--lp-cream)_12%,transparent)] [@media(max-width:860px)]:grid-cols-1 [@media(max-width:860px)]:gap-[24px]">
-          <div>
-            <div className="font-display font-semibold text-[1.4rem]">LaVega</div>
-            <p className="text-[color-mix(in_srgb,var(--lp-cream)_70%,transparent)] text-[0.95rem] max-w-[320px] mt-[10px]!">
-              {c.footer.note}
+      <main id="main" tabIndex={-1}>
+        <section>
+          <div className="w">
+            <h2 className="r">
+              <Heading {...c.view.title} />
+            </h2>
+            <p className="lead r" style={delay(1)}>
+              {c.view.lead}
             </p>
           </div>
-          <div className="flex flex-col gap-[10px]">
-            <span className="font-mono text-[0.72rem] tracking-[0.06em] uppercase text-[color-mix(in_srgb,var(--lp-cream)_55%,transparent)] mb-1">
-              {c.footer.product}
-            </span>
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
-              href="#agents"
-            >
-              {c.nav.agents}
-            </a>
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
-              href="#how"
-            >
-              {c.nav.how}
-            </a>
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
-              href="#faq"
-            >
-              {c.faq.eyebrow}
-            </a>
+        </section>
+
+        <section className="flush">
+          <div className="w problem">
+            <div className="r">
+              <h2>
+                <Heading {...c.problem.title} />
+              </h2>
+            </div>
+            <div className="r" style={delay(1)}>
+              <div className="stat">{c.problem.stat}</div>
+              <p className="statnote">{c.problem.note}</p>
+            </div>
           </div>
-          <div className="flex flex-col gap-[10px]">
-            <span className="font-mono text-[0.72rem] tracking-[0.06em] uppercase text-[color-mix(in_srgb,var(--lp-cream)_55%,transparent)] mb-1">
-              {c.footer.legal}
-            </span>
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
-              href="/privacy"
-            >
-              {c.footer.privacy}
-            </a>
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! no-underline text-[0.95rem] hover:text-[var(--lp-cream)]!"
-              href="/terms"
-            >
-              {c.footer.terms}
-            </a>
+        </section>
+
+        <section className="flush">
+          <div className="w">
+            <RevealWords text={c.reveal} reduce={reduce} />
           </div>
+        </section>
+
+        <section id="does" className="flush">
+          <div className="w">
+            <h2 className="r">
+              <Heading {...c.does.title} />
+            </h2>
+            <ThreeBoxes copy={c.does} animated={animated} reduce={reduce} />
+          </div>
+        </section>
+
+        <section className="flush">
+          <div className="w r">
+            <blockquote>
+              {c.quote.text}
+              <cite>{c.quote.cite}</cite>
+            </blockquote>
+          </div>
+        </section>
+
+        <section className="flush">
+          <div className="w">
+            <Conversation copy={c.acts} animated={animated} />
+          </div>
+        </section>
+
+        <section id="faq" className="flush">
+          <div className="w split">
+            <h2 className="r">
+              <Heading {...c.faq.title} />
+            </h2>
+            <div className="faq r">
+              {c.faq.items.map((item, i) => (
+                <details key={item.q} open={i === 0 ? true : undefined}>
+                  <summary>{item.q}</summary>
+                  <p>{item.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div className="g g-end end">
+        <div className="w">
+          <h2 className="r">
+            <Heading {...c.end.title} />
+          </h2>
+          <button type="button" className="btn r" style={delay(2)} onClick={onCta}>
+            {c.nav.cta}
+          </button>
         </div>
-        <div className="max-w-[1100px] mx-auto pt-[20px] px-[28px] pb-[48px] flex flex-wrap justify-between gap-[12px] text-[color-mix(in_srgb,var(--lp-cream)_50%,transparent)] text-[0.85rem]">
-          <span>{c.footer.rights}</span>
-          <p data-testid="beta-note" className="m-0">
-            {c.beta.lead}{" "}
-            <a
-              className="text-[color-mix(in_srgb,var(--lp-cream)_85%,transparent)]! underline underline-offset-2 hover:text-[var(--lp-cream)]!"
-              href="mailto:alexander.steunenberg@gmail.com"
-            >
-              {c.beta.link}
-            </a>
-          </p>
+      </div>
+      <footer>
+        <div className="w foot">
+          <span>{c.footer.note}</span>
+          <span>
+            <a href="/privacy">{c.footer.privacy}</a> · <a href="/terms">{c.footer.terms}</a> ·{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{c.footer.contact}</a>
+          </span>
         </div>
       </footer>
     </div>

@@ -7,10 +7,6 @@ import { rememberLocale } from "../locale.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/* CardSpiral drives GSAP against a real scroller; it has nothing to say about
- * the switcher, so it is stubbed out rather than rendered. */
-vi.mock("./CardSpiral", () => ({ default: () => null }));
-
 vi.mock("../locale.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../locale.js")>();
   return { ...actual, rememberLocale: vi.fn() };
