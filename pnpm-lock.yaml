@@ -33,9 +33,6 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
-      marked:
-        specifier: 18.1.1
-        version: 18.1.1
       oxfmt:
         specifier: ^0.66.0
         version: 0.66.0
@@ -54,9 +51,6 @@ importers:
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(jsdom@30.0.1(@noble/hashes@2.3.0))(lightningcss@1.32.0)
-      yaml:
-        specifier: 2.9.0
-        version: 2.9.0
 
   apps/email-worker:
     dependencies:
@@ -255,6 +249,19 @@ importers:
       effect:
         specifier: ^4.0.1
         version: 4.0.1
+      marked:
+        specifier: 18.1.1
+        version: 18.1.1
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      tsx:
+        specifier: ^4
+        version: 4.23.1
 
   apps/web:
     dependencies:

@@ -12,6 +12,12 @@
   },
   "dependencies": {
     "@lavega/core": "workspace:*",
-    "effect": "^4.0.1"
+    "effect": "^4.0.1",
+    "marked": "18.1.1",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4"
   }
 }
