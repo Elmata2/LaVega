@@ -56,6 +56,7 @@ export default function SignInForm({
     setBusy(false);
     if (!result.ok) {
       setFailure(result.kind);
+      posthog.capture("sign_in_failed", { reason: result.kind });
       return;
     }
     setPassword("");

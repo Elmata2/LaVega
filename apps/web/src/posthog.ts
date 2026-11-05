@@ -61,6 +61,8 @@ const ALLOWED = new Set<string>([
   "invoice_count",
   "collections_erased",
   "rows_erased",
+  // Een vaste foutsoort uit authClient (SignInFailure / SignUpFailure), geen servertekst.
+  "reason",
 ]);
 
 /** Sleutels waarvan de waarde een ADRES is: die gaat door `normalisePath`,
