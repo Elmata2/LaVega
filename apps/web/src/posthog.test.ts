@@ -152,6 +152,11 @@ describe("scrubPostHogEvent", () => {
     expect(out.properties.counterparty).toBeUndefined();
   });
 
+  test("keeps the failure reason of a sign-in or sign-up attempt", () => {
+    const out = scrubPostHogEvent(capture({ reason: "rate-limited" }, "sign_up_failed"));
+    expect(out.properties.reason).toBe("rate-limited");
+  });
+
   test("never carries person properties or autocaptured DOM elements", () => {
     const base = capture({ $lib: "web" });
     const out = scrubPostHogEvent({
