@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { hash } from "../hash.js";
 import type { FigureUnit, PlanFact, Polarity, SectionId } from "./types.js";
 
-export const PLAN_ENGINE_VERSION = "plan-2";
+export const PLAN_ENGINE_VERSION = "plan-3";
 
 /** Thrown when facts break the FactSheet contract (a factId that could carry a
  *  raw key, free text in `exact`, or a duplicate factId). A programming

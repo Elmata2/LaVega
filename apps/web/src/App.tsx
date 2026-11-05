@@ -457,6 +457,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
    * lege kluis hebben en toch een bestaande gebruiker zijn, en die mag deze stap
    * niet opnieuw krijgen. */
   const [freshVault, setFreshVault] = useState(false);
+  /** Which wizard run the intake view opens: 2 only from the Overview invite. */
+  const [intakeRound, setIntakeRound] = useState<1 | 2>(1);
   const [onboarded, setOnboarded] = useState(onboardingSeen);
   /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
    * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
@@ -1668,8 +1670,15 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             asOf={asOf}
             onSave={saveProfile}
             onImport={importFile}
-            onFinish={() => setView("plan")}
-            onExit={() => setView("overview")}
+            round={intakeRound}
+            onFinish={() => {
+              setIntakeRound(1);
+              setView("plan");
+            }}
+            onExit={() => {
+              setIntakeRound(1);
+              setView("overview");
+            }}
           />
         )}
       </>
@@ -1747,6 +1756,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                       room: homeRoom.room,
                       ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
                       onSave: saveProfile,
+                      onOpenRound2: () => {
+                        setIntakeRound(2);
+                        setView("intake");
+                      },
                     },
                   }
                 : {})}
@@ -1934,7 +1947,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           )}
 
           {view === "punten" && (
-            <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
+            <Punten
+              balances={rewards}
+              asOf={asOf}
+              busy={busy}
+              onSave={saveRewards}
+              statedPrograms={
+                profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+                  ? profileRead.store.current.statedPrograms?.value
+                  : undefined
+              }
+            />
           )}
 
           {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (

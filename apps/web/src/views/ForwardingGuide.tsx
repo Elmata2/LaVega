@@ -36,7 +36,7 @@ export type ForwardingGuideProps = {
   onChange: (update: (prev: GuideState) => GuideState) => void;
   /** Facturen creates the code and starts the clock. */
   onStartTest: () => void;
-  onOpenKoppelingen: () => void;
+  onOpenAccounts: () => void;
 };
 
 /** A copy button that flips its label for 1.5 s. A denied clipboard changes nothing. */
@@ -103,7 +103,7 @@ export default function ForwardingGuide({
   nowMs,
   onChange,
   onStartTest,
-  onOpenKoppelingen,
+  onOpenAccounts,
 }: ForwardingGuideProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].facturen.guide;
@@ -251,7 +251,7 @@ export default function ForwardingGuide({
               {!hasAddress ? (
                 <>
                   <p className="cell-sub">{c.noAddress}</p>
-                  <Button type="button" onClick={onOpenKoppelingen}>
+                  <Button type="button" onClick={onOpenAccounts}>
                     {c.goCreateAddress}
                   </Button>
                 </>

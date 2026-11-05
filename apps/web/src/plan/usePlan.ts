@@ -259,6 +259,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
   const assumptionOn = useMemo(() => getCashbackAssumptionEnabled(), []);
   const events = stored?.events;
   const planEvents = useMemo(() => (events ?? []).flatMap((e) => planEventOf(e) ?? []), [events]);
+  const statedCreditIds = i.store?.current.statedCards?.value;
   const heldCards = useMemo(
     () =>
       buildHeldCards({
@@ -267,8 +268,9 @@ export function usePlan(i: UsePlanInput): UsePlan {
         entries: i.catalogue,
         rewards: i.rewards,
         assumptionOn,
+        statedCreditIds,
       }),
-    [i.accounts, i.facts, i.catalogue, i.rewards, assumptionOn],
+    [i.accounts, i.facts, i.catalogue, i.rewards, assumptionOn, statedCreditIds],
   );
 
   const vatFrequency = useMemo(

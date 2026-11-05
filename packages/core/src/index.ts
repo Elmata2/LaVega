@@ -51,6 +51,7 @@ export * from "./redact.js";
 export * from "./sentryScrub.js";
 export * from "./advisor/evidence.js";
 export * from "./advisor/profile.js";
+export * from "./advisor/profileSummary.js";
 export * from "./advisor/vaultSections.js";
 export * from "./advisor/publicFact.js";
 export * from "./advice/language.js";

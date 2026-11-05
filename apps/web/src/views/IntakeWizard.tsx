@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import {
+  AdvisorProfile,
+  REWARD_PROGRAMS,
   RISK_SCALE,
-  type AdvisorProfile,
   type AdvisorProfileStore,
   type Goal,
 } from "@lavega/core";
@@ -10,10 +11,24 @@ import { intakeCopy } from "../copy/intake.js";
 import { wizardCopy } from "../copy/wizard.js";
 import { formatWholeEuroIn } from "../format.js";
 import {
+  applyBirthYear,
   applyBuffer,
+  applyCardRepayment,
+  applyCheckInCadence,
   applyChildren,
+  applyConfidence,
+  applyCutTargets,
+  applyFlightsPerYear,
+  applyPointsGoal,
+  applyStatedPrograms,
+  applyForeignSpend,
   applyHousehold,
+  applyIncomeRegularity,
   applyKnowledge,
+  applyMoneySharing,
+  applyPriorities,
+  applySpendMix,
+  applyStatedBanks,
   applyRiskAnswers,
   applyStatedCards,
   applyStatedDebitCards,
@@ -24,26 +39,40 @@ import {
   applyChargesVat,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
-import ChoiceTiles from "../intake/wizard/ChoiceTiles.js";
+import { bankBrandIds } from "../intake/wizard/cardOptions.js";
+import SummaryScreen from "../intake/wizard/SummaryScreen.js";
+import { summaryRows } from "../intake/wizard/summaryRows.js";
 import WizardFrame from "../intake/wizard/WizardFrame.js";
 import {
   answerCards,
   answerDebts,
   answerHasChildren,
   answerNoChildren,
+  isAnswered,
+  isFinishedIntake,
+  isSelfEmployed,
   markDone,
+  markRound2Done,
+  pendingNewQuestions,
   resumeScreen,
+  round2Pending,
+  ROUND2,
   screensFor,
   sectionOf,
+  WIZARD_DEBT,
+  WIZARD_GOAL,
   type ScreenId,
 } from "../intake/wizard/screens.js";
 import {
   AmountScreen,
+  BirthYearScreen,
   CardsScreen,
   ChildYearsScreen,
+  ChoiceScreen,
   DebtScreen,
   GoalScreen,
   HousingScreen,
+  MultiScreen,
   SpendScreen,
   UploadScreen,
   WorkScreen,
@@ -57,11 +86,16 @@ export type IntakeWizardProps = {
   onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
   onFinish: () => void;
   onExit: () => void;
+  /** 2 runs only the coaching questions (no summary) and leaves round 1's
+   *  bookkeeping alone. Defaults to 1. */
+  round?: 1 | 2;
   now?: () => string;
 };
 
-const WIZARD_GOAL = "wizard-goal";
-const WIZARD_DEBT = "wizard-debt";
+/** A copy record as tile options, in the record's own order. */
+const tilesOf = <T extends string>(r: Record<T, string>) =>
+  (Object.keys(r) as T[]).map((value) => ({ value, label: r[value] }));
+
 const BUFFER_CHOICES = [0, 1, 2, 3, 4, 5, 6, 9, 12];
 
 /** The wizard owns the debt with this id whatever its source: Nee removes it. */
@@ -103,10 +137,22 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     now,
   );
   const profile = store.current;
+  const round2 = props.round === 2;
   const [screen, setScreen] = useState<ScreenId | "done">(() =>
-    resumeScreen(profile),
+    round2 ? (round2Pending(profile)[0] ?? ROUND2[0] ?? "done") : resumeScreen(profile),
   );
+  /** A finished user runs only the questions that are new to them, then the
+   *  summary. Fixed when the wizard opens so answered screens stay in the run. */
+  const [run] = useState<ScreenId[] | null>(() => {
+    if (round2 || !isFinishedIntake(profile)) return null;
+    const fresh = pendingNewQuestions(profile);
+    return fresh.length === 0 ? null : [...fresh, "summary"];
+  });
   const [busy, setBusy] = useState(false);
+  /** Set when a summary line sent the user to edit; Verder goes back there. */
+  const [returnTo, setReturnTo] = useState<ScreenId | null>(null);
+  /** Screens an edit made newly required, still to be visited before returnTo. */
+  const [pending, setPending] = useState<ScreenId[]>([]);
 
   useEffect(() => {
     if (screen === "done") props.onFinish();
@@ -116,10 +162,14 @@ export default function IntakeWizard(props: IntakeWizardProps) {
 
   if (screen === "done") return <></>;
 
-  const list = screensFor(profile);
+  const fullList = round2 ? [...ROUND2] : screensFor(profile);
+  /** What Back and the counter walk: the whole flow, or a finished user's run. */
+  const walk = (all: ScreenId[]) =>
+    run === null ? all : run.filter((x) => x === "summary" || all.includes(x));
+  const list = walk(fullList);
   const at = list.indexOf(screen);
-  const step = at + 1;
   const total = list.length;
+  const step = at >= 0 ? at + 1 : total;
   const eur = (n: number) => formatWholeEuroIn(locale, n);
   const together = profile.household?.value.kind === "together";
 
@@ -127,20 +177,62 @@ export default function IntakeWizard(props: IntakeWizardProps) {
   async function save(apply: (p: AdvisorProfile) => AdvisorProfile) {
     if (screen === "done" || busy) return;
     const id = screen;
-    const change = (p: AdvisorProfile) => markDone(apply(p), id);
+    if (round2) {
+      // Answers are saved screen by screen; only the last one marks round 2 done.
+      const isLast = id === ROUND2[ROUND2.length - 1];
+      setBusy(true);
+      const ok = await update((p) => (isLast ? markRound2Done(apply(p)) : apply(p)));
+      setBusy(false);
+      if (!ok) return;
+      setScreen(ROUND2[ROUND2.indexOf(id) + 1] ?? "done");
+      return;
+    }
+    // In a finished user's run, and in edits from the summary, lastScreen stays
+    // as stored (the run ends on "upload"), so a later open resumes correctly.
+    const keepLast = run !== null || returnTo !== null;
+    const change = (p: AdvisorProfile) => {
+      const marked = markDone(apply(p), id);
+      if (!keepLast) return marked;
+      const { lastScreen: _l, ...intake } = marked.intake;
+      const last = run !== null && returnTo === null && id === "summary" ? "upload" : p.intake.lastScreen;
+      return new AdvisorProfile({
+        ...marked,
+        intake: last === undefined ? intake : { ...intake, lastScreen: last },
+      });
+    };
     const after = screensFor(change(profile));
+    const afterWalk = walk(after);
     setBusy(true);
     const ok = await update(change);
     setBusy(false);
     if (!ok) return;
-    setScreen(after[after.indexOf(id) + 1] ?? "done");
+    if (returnTo !== null) {
+      const changed = change(profile);
+      const fresh = after.filter((x) => !fullList.includes(x) && !isAnswered(changed, x));
+      const queue = [...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh];
+      const [head, ...rest] = queue;
+      setPending(rest);
+      if (head !== undefined) {
+        setScreen(head);
+        return;
+      }
+      setScreen(returnTo);
+      setReturnTo(null);
+      return;
+    }
+    const next = afterWalk[afterWalk.indexOf(id) + 1];
+    setScreen(next ?? "done");
   }
 
   const back =
-    at > 0
+    at > 0 || returnTo !== null
       ? () => {
           setSaveFailed(false);
-          setScreen(list[at - 1] as ScreenId);
+          if (returnTo !== null) {
+            setScreen(returnTo);
+            setReturnTo(null);
+            setPending([]);
+          } else setScreen(list[at - 1] as ScreenId);
         }
       : null;
 
@@ -155,12 +247,14 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     selected: T | null,
     onPick: (v: T) => void,
   ) => (
-    <ChoiceTiles
+    <ChoiceScreen<T>
+      key={screen}
+      copy={w}
+      busy={busy}
       label={label}
       options={options}
-      selected={selected}
-      onPick={onPick}
-      disabled={busy}
+      initial={selected}
+      onSubmit={onPick}
     />
   );
 
@@ -182,6 +276,169 @@ export default function IntakeWizard(props: IntakeWizardProps) {
             asOf,
           ),
         ),
+    );
+  } else if (screen === "money-sharing") {
+    question = q.moneySharing;
+    body = choice(
+      question,
+      tilesOf(w.moneySharing),
+      profile.household?.value.moneySharing ?? null,
+      (v) => void save((p) => applyMoneySharing(p, v, asOf)),
+    );
+  } else if (screen === "birth-year") {
+    question = q.birthYear;
+    body = (
+      <BirthYearScreen
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.birthYear?.value ?? null}
+        currentYear={new Date(asOf).getFullYear()}
+        onSubmit={(y) => void save((p) => applyBirthYear(p, y, asOf))}
+      />
+    );
+  } else if (screen === "income-regularity") {
+    question = q.incomeRegularity;
+    body = choice(
+      question,
+      tilesOf(w.incomeRegularity),
+      profile.incomeRegularity?.value ?? (isSelfEmployed(profile) ? "varies" : null),
+      (v) => void save((p) => applyIncomeRegularity(p, v, asOf)),
+    );
+  } else if (screen === "banks") {
+    question = q.banks;
+    body = (
+      <MultiScreen<string>
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.statedBanks?.value ?? []}
+        options={[...bankBrandIds(), "other"].map((id) => ({
+          value: id,
+          label: w.bankNames[id] ?? id,
+        }))}
+        onSubmit={(ids) => void save((p) => applyStatedBanks(p, ids, asOf))}
+      />
+    );
+  } else if (screen === "card-repayment") {
+    question = q.cardRepayment;
+    body = choice(
+      question,
+      tilesOf(w.cardRepayment),
+      profile.cardRepayment?.value ?? null,
+      (v) => void save((p) => applyCardRepayment(p, v, asOf)),
+    );
+  } else if (screen === "spend-mix") {
+    question = q.spendMix;
+    body = (
+      <MultiScreen
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.spendMix?.value ?? []}
+        options={tilesOf(w.spendAreas)}
+        max={3}
+        hint={w.spendMixHint}
+        onSubmit={(v) => void save((p) => applySpendMix(p, v, asOf))}
+      />
+    );
+  } else if (screen === "foreign-spend") {
+    question = q.foreignSpend;
+    body = choice(
+      question,
+      tilesOf(w.foreignSpend),
+      profile.foreignSpend?.value ?? null,
+      (v) => void save((p) => applyForeignSpend(p, v, asOf)),
+    );
+  } else if (screen === "priorities") {
+    question = q.priorities;
+    body = (
+      <MultiScreen
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.priorities?.value ?? []}
+        options={tilesOf(w.priorities)}
+        onSubmit={(v) => void save((p) => applyPriorities(p, v, asOf))}
+      />
+    );
+  } else if (screen === "cut-targets") {
+    question = q.cutTargets;
+    body = (
+      <MultiScreen
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.cutTargets?.value ?? []}
+        options={tilesOf(w.cutTargets)}
+        onSubmit={(v) => void save((p) => applyCutTargets(p, v, asOf))}
+      />
+    );
+  } else if (screen === "check-in") {
+    question = q.checkInCadence;
+    body = choice(
+      question,
+      tilesOf(w.checkInCadence),
+      profile.checkInCadence?.value ?? null,
+      (v) => void save((p) => applyCheckInCadence(p, v, asOf)),
+    );
+  } else if (screen === "confidence") {
+    question = q.confidence;
+    const stored = profile.confidence?.value;
+    body = choice(
+      question,
+      ([1, 2, 3, 4] as const).map((n) => ({ value: String(n), label: w.confidence[n] })),
+      stored === undefined ? null : String(stored),
+      (v) => void save((p) => applyConfidence(p, Number(v) as 1 | 2 | 3 | 4, asOf)),
+    );
+  } else if (screen === "programs") {
+    question = q.programs;
+    body = (
+      <MultiScreen<string>
+        key={screen}
+        copy={w}
+        busy={busy}
+        label={question}
+        initial={profile.statedPrograms?.value ?? []}
+        options={REWARD_PROGRAMS.map((r) => ({ value: r.name, label: r.name }))}
+        allowEmpty
+        onSubmit={(v) => void save((p) => applyStatedPrograms(p, v, asOf))}
+      />
+    );
+  } else if (screen === "points-goal") {
+    question = q.pointsGoal;
+    body = choice(
+      question,
+      tilesOf(w.pointsGoal),
+      profile.pointsGoal?.value ?? null,
+      (v) => void save((p) => applyPointsGoal(p, v, asOf)),
+    );
+  } else if (screen === "flights") {
+    question = q.flights;
+    body = choice(
+      question,
+      tilesOf(w.flights),
+      profile.flightsPerYear?.value ?? null,
+      (v) => void save((p) => applyFlightsPerYear(p, v, asOf)),
+    );
+  } else if (screen === "summary") {
+    question = q.summary;
+    body = (
+      <SummaryScreen
+        copy={w}
+        busy={busy}
+        rows={summaryRows(profile, fullList, { c: ic.aboutYou, locale, asOf })}
+        onEdit={(s) => {
+          setReturnTo("summary");
+          setScreen(s);
+        }}
+        onSubmit={() => void save((p) => p)}
+      />
     );
   } else if (screen === "children") {
     question = q.children;
@@ -214,6 +471,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     question = q.work;
     body = (
       <WorkScreen
+        key={screen}
         copy={w}
         busy={busy}
         label={question}
@@ -275,9 +533,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         copy={w}
         busy={busy}
         label={question}
-        initial={h ? { kind: h.kind, monthlyCents: h.monthlyCents } : null}
-        onSubmit={(kind, c) =>
-          void save((p) => applyStatedHousing(p, kind, c, asOf))
+        initialCents={h?.monthlyCents ?? null}
+        onSubmit={(c) =>
+          void save((p) => applyStatedHousing(p, h?.kind ?? "other", c, asOf))
         }
       />
     );
@@ -367,6 +625,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     question = q.debitCards(together);
     body = (
       <CardsScreen
+        key={screen}
         copy={w}
         busy={busy}
         kind="debit"
@@ -375,31 +634,21 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         onSubmit={(ids) => void save((p) => applyStatedDebitCards(p, ids, asOf))}
       />
     );
-  } else if (screen === "has-cards") {
-    question = q.hasCards(together);
-    const sel = profile.intake.noCards === true
-        ? "no"
-        : profile.intake.noCards === false || (profile.statedCards?.value.length ?? 0) > 0
-          ? "yes"
-          : null;
-    body = choice(
-      question,
-      [
-        { value: "yes", label: w.yes },
-        { value: "no", label: w.no },
-      ],
-      sel,
-      (v) => void save((p) => answerCards(p, v === "yes", asOf)),
-    );
   } else if (screen === "cards") {
     question = q.cards(together);
     body = (
       <CardsScreen
+        key={screen}
         copy={w}
         busy={busy}
         label={question}
         initial={profile.statedCards?.value ?? []}
-        onSubmit={(ids) => void save((p) => applyStatedCards(p, ids, asOf))}
+        noneLabel={w.noneCard}
+        initialNone={profile.intake.noCards === true}
+        onNone={() => void save((p) => answerCards(p, false, asOf))}
+        onSubmit={(ids) =>
+          void save((p) => applyStatedCards(answerCards(p, true, asOf), ids, asOf))
+        }
       />
     );
   } else if (screen === "buffer") {
@@ -411,7 +660,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         value: String(n),
         label: w.bufferOption(n),
       })),
-      m === undefined ? null : String(m),
+      m !== undefined ? String(m) : profile.incomeRegularity?.value === "varies" ? "6" : null,
       (v) => void save((p) => applyBuffer(p, Number(v), asOf)),
     );
   } else if (screen === "invested") {
@@ -469,7 +718,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     <WizardFrame
       step={step}
       total={total}
-      counter={w.counter(step, total)}
+      counter={at >= 0 ? w.counter(step, total) : ""}
       section={w.sections[sectionOf(screen)]}
       question={question}
       onBack={back}

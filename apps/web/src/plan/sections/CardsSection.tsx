@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import {
+  STATED_CARD_PREFIX,
   accountType,
   type CardCriteriaRow,
   type CardsFigures,
@@ -88,12 +89,19 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
   const copy = cardsCopy[locale];
   const f = result.figures;
   const prefs = ctx.plan.preferences;
-  const [sort, setSort] = useState<{ column: Column; dir: 1 | -1 }>({ column: "name", dir: 1 });
+  const [sort, setSort] = useState<{ column: Column; dir: 1 | -1 }>({
+    column: "name",
+    dir: 1,
+  });
   const rows = useMemo(
     () => [...f.criteria].sort((x, y) => compare(x, y, sort.column, sort.dir, locale)),
     [f.criteria, sort, locale],
   );
-  const nets = [...f.nets].sort((x, y) => x.name.localeCompare(y.name, locale));
+  // With an interest ranking the figures already carry the order; else by name.
+  const nets =
+    f.interest === undefined
+      ? [...f.nets].sort((x, y) => x.name.localeCompare(y.name, locale))
+      : f.nets;
   const programs = [
     ...new Set([
       ...f.balances.map((b) => b.programId),
@@ -158,7 +166,10 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
   const statedCredit = store?.statedCards?.value ?? [];
   const statedDebit = store?.statedDebitCards?.value ?? [];
   const heldIds = heldCatalogueIds(ctx.accounts, CATALOGUE_ENTRIES);
-  const otherLabels = { credit: copy.otherCard, debit: copy.stated.otherDebitCard };
+  const otherLabels = {
+    credit: copy.otherCard,
+    debit: copy.stated.otherDebitCard,
+  };
   const statedRows = statedCardRows(
     statedCredit,
     statedDebit,
@@ -179,8 +190,20 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
       {{
         figures: (
           <div>
+            {f.interest !== undefined && (
+              <Lines
+                lines={[
+                  copy.interest.warning,
+                  ...f.interest.cards.map((c) => copy.interest.line(c.name, c.yearlyCents, fmt)),
+                ]}
+              />
+            )}
             {statedRows.length + heldNames.length > 0 ? (
-              <StatedCards rows={statedRows} note={showStated} heldNames={heldNames} />
+              <StatedCards
+                rows={statedRows}
+                note={showStated && !f.nets.some((n) => n.cardKey.startsWith(STATED_CARD_PREFIX))}
+                heldNames={heldNames}
+              />
             ) : null}
             <StatusBody
               section="cards"
@@ -242,7 +265,12 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
             <Lines
               lines={[
                 f.cardableSpendCents > 0 ? copy.feeShareNote(f.months) : null,
-                ...nets.flatMap((n) => [copy.netLine(n, fmt), copy.pointsLine(n.name, n, fmt)]),
+                ...nets.flatMap((n) => {
+                  const lines = [copy.netLine(n, fmt), copy.pointsLine(n.name, n, fmt)];
+                  return n.cardKey.startsWith(STATED_CARD_PREFIX)
+                    ? lines.map((l) => (l === null ? null : `${l.replace(/\.$/, "")} (${copy.statedEstimate}).`))
+                    : lines;
+                }),
                 ...f.breakEven.map((b) =>
                   copy.breakEvenLine(
                     f.nets.find((n) => n.cardKey === b.cardKey)?.name ?? b.cardKey,
@@ -273,7 +301,10 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                   parse={parseDate}
                   onSave={(date) =>
                     ctx.plan.setPreference((cur) => ({
-                      pointsExpiry: { ...cur.pointsExpiry, [b.programId]: date },
+                      pointsExpiry: {
+                        ...cur.pointsExpiry,
+                        [b.programId]: date,
+                      },
                     }))
                   }
                   onClear={() =>
@@ -308,7 +339,11 @@ function Redemption({
 }) {
   const { fmt, a } = useSectionCopy();
   const examples = ctx.plan.preferences.redemptionExamples;
-  const [entry, setEntry] = useState<Entry>({ program: "", points: "", cash: "" });
+  const [entry, setEntry] = useState<Entry>({
+    program: "",
+    points: "",
+    cash: "",
+  });
   const [error, setError] = useState<string | null>(null);
 
   async function add(e: FormEvent) {

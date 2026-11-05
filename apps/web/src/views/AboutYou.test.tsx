@@ -289,6 +289,12 @@ test("no Dutch string literal in AboutYou.tsx or the row builders", () => {
 
 const done = (answers: Record<string, string>) =>
   storeOf({
+    birthYear: { value: 1990, source: "stated", at: "2026-09-04" },
+    incomeRegularity: { value: "fixed", source: "stated", at: "2026-09-04" },
+    statedBanks: { value: ["other"], source: "stated", at: "2026-09-04" },
+    spendMix: { value: ["groceries"], source: "stated", at: "2026-09-04" },
+    foreignSpend: { value: "never", source: "stated", at: "2026-09-04" },
+    priorities: { value: ["save-more"], source: "stated", at: "2026-09-04" },
     intake: { blocksDone: 3, step0: "none" },
     risk: { answers, scaleId: RISK_SCALE.id, at: "2026-09-04" },
     knowledge: {
@@ -505,4 +511,27 @@ test("a freelancer who never answered the VAT question sees an editable 'Not fil
 test("employed-only profiles have no VAT row", async () => {
   await mount(baseProps({ store: storeOf({ work: workOf(["employed"]) }) }));
   expect(text()).not.toContain("Charges VAT");
+});
+
+test("Edit birth year is a single-year editor limited to the wizard's range", async () => {
+  const store = storeOf({
+    birthYear: { value: 1990, source: "stated", at: "2026-09-03" },
+  });
+  const props = baseProps({ store });
+  await mount(props);
+  await click(button("Edit: Birth year"));
+  const input = container!.querySelector<HTMLInputElement>('input[aria-label="Birth year"]')!;
+  expect(input.value).toBe("1990");
+  expect(container!.querySelector('input[aria-label="Birth years"]')).toBeNull();
+  await fill(input, "2020");
+  expect(saveBtn().disabled).toBe(true);
+  await fill(input, "1900");
+  expect(saveBtn().disabled).toBe(true);
+  await fill(input, "1985");
+  await click(saveBtn());
+  expect(lastSaved(props).current.birthYear).toEqual({
+    value: 1985,
+    source: "stated",
+    at: AS_OF,
+  });
 });

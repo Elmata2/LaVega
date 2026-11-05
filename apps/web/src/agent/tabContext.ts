@@ -10,6 +10,7 @@ import type {
   ConversionMode,
   FxRate,
   Invoice,
+  ProfileSummary,
   RewardsBalance,
   Rule,
   ScheduledFlow,
@@ -23,6 +24,7 @@ import {
   forecastCashflow,
   ownAccounts,
   resolveAccountRate,
+  sanitizeProfileSummary,
   scrubPersonalValuesDeep,
 } from "@lavega/core";
 
@@ -68,6 +70,8 @@ export type TabState = {
    *  what an all-EUR scope already computed before conversion existed. */
   fxHistory?: Record<string, Record<string, number>>;
   mode?: ConversionMode;
+  /** Enum-only profile answers (`profileSummaryOf`); sent on every tab. */
+  profileSummary?: ProfileSummary;
 };
 
 /** Cap for any array leaving the browser as context — keeps a tab's slice
@@ -111,7 +115,10 @@ export function buildTabContext(
   state: TabState,
 ): { tab: string; context: Record<string, unknown> } {
   const { tab, context } = buildTabSlice(view, state);
-  return { tab, context: scrubPersonalValuesDeep(context) };
+  const withProfile = state.profileSummary
+    ? { ...context, profile: sanitizeProfileSummary(state.profileSummary) }
+    : context;
+  return { tab, context: scrubPersonalValuesDeep(withProfile) };
 }
 
 function buildTabSlice(

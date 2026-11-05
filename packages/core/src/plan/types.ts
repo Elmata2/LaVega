@@ -161,6 +161,9 @@ export type HeldCardInput = {
   fxFeePct: number | null;
   pointsPerEuro: number | null;
   programId: string | null;
+  /** Yearly interest on a balance carried on the card, percentage points (like
+   *  the catalogue). Absent or null: unknown, never 0. */
+  interestPct?: number | null;
   /** Source and date of the fx and points figures (the web layer fills this
    *  from the catalogue entry). Absent: the figure is not shown. */
   provenance?: {

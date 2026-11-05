@@ -17,6 +17,7 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import ModuleGrid from "../components/ModuleGrid";
 import { IntakeInviteWidget } from "../components/blocks/IntakeInviteCard";
+import { ConnectChecklistWidget } from "../components/blocks/ConnectChecklist";
 import { RoomCardWidget } from "../components/blocks/RoomCard";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
@@ -104,6 +105,8 @@ type OverzichtProps = {
       spend: { lowCents: number; highCents: number };
     };
     onSave: (next: AdvisorProfileStore) => Promise<void>;
+    /** Opens the wizard in round 2 (the coaching questions). */
+    onOpenRound2?: () => void;
   };
 };
 
@@ -167,6 +170,8 @@ export default function Overzicht({
             asOf={asOf}
             onSave={intake.onSave}
             onOpenIntake={() => onNavigate("intake")}
+            {...(intake.onOpenRound2 ? { onOpenRound2: intake.onOpenRound2 } : {})}
+            hasTransactions={txs.length > 0}
           />
           <RoomCardWidget
             store={intake.store}
@@ -176,6 +181,11 @@ export default function Overzicht({
             onOpenIntake={() => onNavigate("intake")}
             onImport={() => onNavigate("profiel")}
             onOpenPlan={() => onNavigate("plan")}
+          />
+          <ConnectChecklistWidget
+            store={intake.store}
+            accounts={accounts}
+            onOpenAccounts={() => onNavigate("accounts")}
           />
         </>
       )}

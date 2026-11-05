@@ -305,14 +305,14 @@ export function profileResumingAt(screen: WizardStop, today: Date): AdvisorProfi
   const base = new AdvisorProfile({ removed: [], intake: { blocksDone: 0, step0: "none" } });
   const order: Record<WizardStop, { last?: ScreenId; blocks?: number }> = {
     start: {},
-    work: { last: "household" },
+    work: { last: "birth-year" },
     spend: { last: "income" },
-    "debit-cards": { last: "savings", blocks: 1 },
-    cards: { last: "has-cards" },
-    goal: { last: "savings", blocks: 1 },
+    "debit-cards": { last: "banks", blocks: 1 },
+    cards: { last: "debit-cards" },
+    goal: { last: "foreign-spend", blocks: 1 },
     debts: { last: "goal", blocks: 1 },
     "risk-first": { last: "buffer", blocks: 2 },
-    upload: { last: "invested", blocks: 3 },
+    upload: { last: "summary", blocks: 3 },
   };
   const o = order[screen];
   let p = base;

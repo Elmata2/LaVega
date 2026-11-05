@@ -74,6 +74,7 @@ export default function FromAnswers({
   const measured = room.kind === "computed" ? room : null;
   const incomeMiddle = month.figures.incomeMiddleCents;
   const statedLabel = household?.kind === "together" ? copy.statedTogether : copy.statedAlone;
+  const separate = household?.kind === "together" && household.moneySharing === "separate";
   const rows: {
     key: "income" | "spend";
     stated: Range | undefined;
@@ -130,7 +131,7 @@ export default function FromAnswers({
             </CardLink>
           </div>
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-            <dt className="text-muted">{statedLabel}</dt>
+            <dt className="text-muted">{separate ? copy.statedOwn[r.key] : statedLabel}</dt>
             <dd className="m-0 text-right" data-testid={`plan-from-answers-${r.key}-stated`}>
               {r.stated === undefined
                 ? copy.notStated
@@ -188,4 +189,14 @@ export function workNoteFor(
   const kinds: readonly WorkKind[] =
     section === "month" ? ["freelance", "business"] : ["freelance", "business", "jobseeking"];
   return work.some((w) => kinds.includes(w)) ? fromAnswersCopy[locale].notes[section] : null;
+}
+
+/** The note for income that varies from month to month. Null otherwise. */
+export function varyingIncomeNoteFor(
+  store: AdvisorProfileStore | null,
+  locale: "nl" | "en",
+): string | null {
+  return store?.current.incomeRegularity?.value === "varies"
+    ? fromAnswersCopy[locale].notes.varies
+    : null;
 }

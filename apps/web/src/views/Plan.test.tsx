@@ -136,6 +136,14 @@ test("store null or blocksDone 0 -> invitation card with Start and one sentence;
   }
 });
 
+test("a stated cards-points priority puts the cards card first on the page", () => {
+  const store = storeWith(1, {
+    priorities: { value: ["cards-points"], source: "stated", at: AS_OF },
+  });
+  const c = mount(<Plan {...props({ store })} />);
+  expect(sectionsInOrder(c)).toEqual(["cards", ...SECTION_IDS.filter((s) => s !== "cards")]);
+});
+
 test("blocksDone 1 with no bank data -> seven cards in the fixed order, each not-enough-data with its missing-input action, nothing estimated", () => {
   const p = props();
   const c = mount(<Plan {...p} />);

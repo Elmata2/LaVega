@@ -125,3 +125,15 @@ test("profileUpdatedAt sees work and statedCards", () => {
   });
   expect(profileUpdatedAt(laterWork)).toBe("2026-10-27");
 });
+
+test("an edit to only birthYear advances profileUpdatedAt", () => {
+  const p = new AdvisorProfile({
+    ...emptyProfile(),
+    work: { value: ["employed"], source: "stated", at: "2026-10-20" },
+  });
+  const edited = new AdvisorProfile({
+    ...p,
+    birthYear: { value: 1990, source: "stated", at: "2026-11-03" },
+  });
+  expect(profileUpdatedAt(edited)).toBe("2026-11-03");
+});

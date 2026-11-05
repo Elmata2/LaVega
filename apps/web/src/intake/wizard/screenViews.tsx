@@ -5,14 +5,13 @@ import AmountField from "./AmountField.js";
 import ChoiceTiles from "./ChoiceTiles.js";
 import CardPicker, { orderedCardIds } from "./CardPicker.js";
 import type { CardKind } from "./cardOptions.js";
-import MultiTiles from "./MultiTiles.js";
 import { WORK_ORDER } from "./screens.js";
+import MultiTiles from "./MultiTiles.js";
 
-type Kind = "rent" | "mortgage" | "other";
 type Busy = { busy: boolean };
 
 /** One screen body: Enter submits it when Verder is enabled. */
-function Form(p: { ok: boolean; onSubmit: () => void; children: ReactNode }) {
+export function Form(p: { ok: boolean; onSubmit: () => void; children: ReactNode }) {
   return (
     <form
       className="wz-form"
@@ -27,13 +26,39 @@ function Form(p: { ok: boolean; onSubmit: () => void; children: ReactNode }) {
   );
 }
 
-function Next(p: { label: string; disabled: boolean }) {
+export function Next(p: { label: string; disabled: boolean }) {
   return (
     <div className="wz-footer">
       <button type="submit" className="wz-next" disabled={p.disabled}>
         {p.label}
       </button>
     </div>
+  );
+}
+
+/** A single-choice screen. Tapping a tile only selects it; Verder moves on, the
+ *  same as every other screen. */
+export function ChoiceScreen<T extends string>(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    options: { value: T; label: string }[];
+    initial: T | null;
+    onSubmit: (value: T) => void;
+  },
+) {
+  const [picked, setPicked] = useState<T | null>(p.initial);
+  return (
+    <Form ok={picked !== null && !p.busy} onSubmit={() => picked !== null && p.onSubmit(picked)}>
+      <ChoiceTiles<T>
+        label={p.label}
+        options={p.options}
+        selected={picked}
+        onPick={setPicked}
+        disabled={p.busy}
+      />
+      <Next label={p.copy.next} disabled={picked === null || p.busy} />
+    </Form>
   );
 }
 
@@ -62,34 +87,25 @@ export function AmountScreen(
   );
 }
 
+/** Rent or mortgage is not asked: the amount is what the plan needs. */
 export function HousingScreen(
   p: Busy & {
     copy: WizardCopy;
     label: string;
-    initial: { kind: Kind; monthlyCents: number } | null;
-    onSubmit: (kind: Kind, monthlyCents: number) => void;
+    initialCents: number | null;
+    onSubmit: (monthlyCents: number) => void;
   },
 ) {
-  const [kind, setKind] = useState<Kind | null>(p.initial?.kind ?? null);
-  const [cents, setCents] = useState<number | null>(
-    p.initial?.monthlyCents ?? null,
-  );
-  const valid = kind !== null && cents !== null;
-  const k = p.copy.housingKinds;
+  const [cents, setCents] = useState<number | null>(p.initialCents);
   return (
-    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(kind, cents)}>
-      <ChoiceTiles<Kind>
+    <Form ok={cents !== null && !p.busy} onSubmit={() => cents !== null && p.onSubmit(cents)}>
+      <AmountField
         label={p.label}
-        selected={kind}
-        onPick={setKind}
-        options={[
-          { value: "rent", label: k.rent },
-          { value: "mortgage", label: k.mortgage },
-          { value: "other", label: k.other },
-        ]}
+        valueCents={cents}
+        onChange={setCents}
+        hint={p.copy.housingHint}
       />
-      <AmountField label={p.label} valueCents={cents} onChange={setCents} />
-      <Next label={p.copy.next} disabled={!valid || p.busy} />
+      <Next label={p.copy.next} disabled={cents === null || p.busy} />
     </Form>
   );
 }
@@ -303,6 +319,45 @@ export function DebtScreen(
   );
 }
 
+/** A multi-pick screen. `max` disables the unpicked tiles once reached; the
+ *  picks come back in option order. */
+export function MultiScreen<T extends string>(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    options: { value: T; label: string }[];
+    initial: readonly T[];
+    max?: number;
+    allowEmpty?: boolean;
+    hint?: string;
+    onSubmit: (v: T[]) => void;
+  },
+) {
+  const [picked, setPicked] = useState<readonly T[]>(p.initial);
+  const valid = p.allowEmpty === true || picked.length > 0;
+  const full = p.max !== undefined && picked.length >= p.max;
+  return (
+    <Form
+      ok={valid && !p.busy}
+      onSubmit={() =>
+        valid && p.onSubmit(p.options.map((o) => o.value).filter((v) => picked.includes(v)))
+      }
+    >
+      <MultiTiles<T>
+        label={p.label}
+        disabled={p.busy}
+        selected={picked}
+        onToggle={(k) =>
+          setPicked((all) => (all.includes(k) ? all.filter((x) => x !== k) : [...all, k]))
+        }
+        options={p.options.map((o) => ({ ...o, disabled: full && !picked.includes(o.value) }))}
+      />
+      {p.hint ? <p className="wz-hint">{p.hint}</p> : null}
+      <Next label={p.copy.next} disabled={!valid || p.busy} />
+    </Form>
+  );
+}
+
 export function WorkScreen(
   p: Busy & {
     copy: WizardCopy;
@@ -311,22 +366,52 @@ export function WorkScreen(
     onSubmit: (kinds: WorkKind[]) => void;
   },
 ) {
-  const [picked, setPicked] = useState<readonly WorkKind[]>(p.initial);
-  const valid = picked.length > 0;
   return (
-    <Form
-      ok={valid && !p.busy}
-      onSubmit={() => valid && p.onSubmit(WORK_ORDER.filter((k) => picked.includes(k)))}
-    >
-      <MultiTiles<WorkKind>
-        label={p.label}
-        disabled={p.busy}
-        selected={picked}
-        onToggle={(k) =>
-          setPicked((all) => (all.includes(k) ? all.filter((x) => x !== k) : [...all, k]))
-        }
-        options={WORK_ORDER.map((k) => ({ value: k, label: p.copy.workKinds[k] }))}
-      />
+    <MultiScreen<WorkKind>
+      copy={p.copy}
+      busy={p.busy}
+      label={p.label}
+      initial={p.initial}
+      options={WORK_ORDER.map((k) => ({ value: k, label: p.copy.workKinds[k] }))}
+      onSubmit={p.onSubmit}
+    />
+  );
+}
+
+/** Birth year as four digits, adult and not absurd: 16 to 100 years back. */
+export function BirthYearScreen(
+  p: Busy & {
+    copy: WizardCopy;
+    label: string;
+    initial: number | null;
+    currentYear: number;
+    onSubmit: (year: number) => void;
+  },
+) {
+  const id = useId();
+  const [text, setText] = useState(p.initial === null ? "" : String(p.initial));
+  const year = /^\d{4}$/.test(text.trim()) ? Number(text) : null;
+  const valid = year !== null && year >= p.currentYear - 100 && year <= p.currentYear - 16;
+  return (
+    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(year)}>
+      <div className="wz-amount">
+        <label className="wz-sr" htmlFor={id}>
+          {p.label}
+        </label>
+        <div className="wz-amount-row">
+          <input
+            id={id}
+            className="wz-amount-input"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={4}
+            placeholder={p.copy.birthYearPlaceholder}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+      </div>
       <Next label={p.copy.next} disabled={!valid || p.busy} />
     </Form>
   );
@@ -386,11 +471,12 @@ export function SpendScreen(
   }
   return (
     <>
-      <ChoiceTiles<string>
+      <ChoiceScreen<string>
+        copy={p.copy}
+        busy={p.busy}
         label={p.label}
-        disabled={p.busy}
-        selected={bandAt >= 0 ? String(bandAt) : null}
-        onPick={(v) => p.onBand(SPEND_BANDS[Number(v)] as (typeof SPEND_BANDS)[number])}
+        initial={bandAt >= 0 ? String(bandAt) : null}
+        onSubmit={(v) => p.onBand(SPEND_BANDS[Number(v)] as (typeof SPEND_BANDS)[number])}
         options={SPEND_BANDS.map((_, i) => ({
           value: String(i),
           label: p.copy.spendBands[i] as string,
@@ -414,21 +500,48 @@ export function CardsScreen(
     label: string;
     initial: readonly string[];
     kind?: CardKind;
+    /** Credit cards only: a tile for "I have none". Picking it clears the cards. */
+    noneLabel?: string;
+    initialNone?: boolean;
+    onNone?: () => void;
     onSubmit: (ids: string[]) => void;
   },
 ) {
   const [picked, setPicked] = useState<readonly string[]>(p.initial);
-  const valid = picked.length > 0;
+  const [none, setNone] = useState(p.initialNone === true && p.initial.length === 0);
+  const valid = none || picked.length > 0;
   return (
-    <Form ok={valid && !p.busy} onSubmit={() => valid && p.onSubmit(orderedCardIds(picked, p.kind))}>
+    <Form
+      ok={valid && !p.busy}
+      onSubmit={() => {
+        if (!valid) return;
+        if (none) p.onNone?.();
+        else p.onSubmit(orderedCardIds(picked, p.kind));
+      }}
+    >
       <CardPicker
         copy={p.copy}
         kind={p.kind}
         label={p.label}
         disabled={p.busy}
         picked={picked}
-        onChange={setPicked}
+        onChange={(ids) => {
+          setPicked(ids);
+          if (ids.length > 0) setNone(false);
+        }}
       />
+      {p.noneLabel !== undefined ? (
+        <MultiTiles<string>
+          label={p.noneLabel}
+          disabled={p.busy}
+          selected={none ? ["none"] : []}
+          onToggle={() => {
+            setNone((v) => !v);
+            setPicked([]);
+          }}
+          options={[{ value: "none", label: p.noneLabel }]}
+        />
+      ) : null}
       <Next label={p.copy.next} disabled={!valid || p.busy} />
     </Form>
   );
