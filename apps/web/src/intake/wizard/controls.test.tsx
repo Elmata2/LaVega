@@ -160,3 +160,28 @@ test("MultiTiles toggles aria-checked", () => {
   act(() => boxes()[0]!.click());
   expect(boxes().map((b) => b.getAttribute("aria-checked"))).toEqual(["false", "true"]);
 });
+
+test("MultiTiles arrow keys skip disabled options", () => {
+  const c = mount(
+    <MultiTiles
+      label="Q"
+      selected={[]}
+      onToggle={() => {}}
+      options={[
+        { value: "a", label: "A" },
+        { value: "b", label: "B", disabled: true },
+        { value: "c", label: "C" },
+      ]}
+    />,
+  );
+  const boxes = [...c.querySelectorAll("button")] as HTMLButtonElement[];
+  boxes[0]!.focus();
+  act(() => {
+    boxes[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  });
+  expect(document.activeElement).toBe(boxes[2]);
+  act(() => {
+    boxes[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  });
+  expect(document.activeElement).toBe(boxes[0]);
+});

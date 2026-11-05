@@ -214,6 +214,81 @@ test("freelance note in Je maand", () => {
   expect(c.textContent).toContain(fromAnswersCopy.nl.notes.month);
 });
 
+test("month section shows the varying income note", () => {
+  const store = withProfile({
+    work: stated(["freelance"]),
+    incomeRegularity: stated("varies"),
+  });
+  const result = resultFor(store);
+  const c = mount(<MonthSection result={result.sections.month} ctx={ctxFor(store, result)} />);
+  act(() => {
+    c.querySelectorAll<HTMLButtonElement>("button[aria-expanded='false']").forEach((b) =>
+      b.click(),
+    );
+  });
+  const count = (t: string) => c.textContent!.split(t).length - 1;
+  expect(count("Je inkomen wisselt per maand. Houd daarom een grotere buffer aan.")).toBe(1);
+  expect(count(fromAnswersCopy.nl.notes.month)).toBe(1);
+  unmountAll();
+  const fixed = withProfile({ work: stated(["employed"]), incomeRegularity: stated("fixed") });
+  const r2 = resultFor(fixed);
+  const c2 = mount(<MonthSection result={r2.sections.month} ctx={ctxFor(fixed, r2)} />);
+  act(() => {
+    c2.querySelectorAll<HTMLButtonElement>("button[aria-expanded='false']").forEach((b) =>
+      b.click(),
+    );
+  });
+  expect(c2.textContent).not.toContain(fromAnswersCopy.nl.notes.varies);
+  unmountAll();
+  setLocale("en");
+  const r3 = resultFor(store);
+  const c3 = mount(<MonthSection result={r3.sections.month} ctx={ctxFor(store, r3)} />);
+  act(() => {
+    c3.querySelectorAll<HTMLButtonElement>("button[aria-expanded='false']").forEach((b) =>
+      b.click(),
+    );
+  });
+  expect(c3.textContent).toContain(
+    "Your income varies from month to month, so keep a larger buffer.",
+  );
+});
+
+const togetherWith = (moneySharing: "separate" | "shared" | "mixed") =>
+  withProfile({
+    ...answers,
+    household: stated({ kind: "together", partnerIncomeInScope: true, moneySharing }),
+  });
+const renderAnswers = (store: AdvisorProfileStore) =>
+  mount(
+    <FromAnswers
+      store={store}
+      hasAccounts={true}
+      month={resultFor(store).sections.month}
+      onNavigate={vi.fn()}
+    />,
+  );
+
+test("separate money labels income as your own", () => {
+  const c = renderAnswers(togetherWith("separate"));
+  expect(q(c, "plan-from-answers-income")!.textContent).toContain("jouw eigen inkomen");
+  expect(q(c, "plan-from-answers-spend")!.textContent).toContain("jouw eigen uitgaven");
+  expect(c.textContent).not.toContain("voor jullie samen");
+  unmountAll();
+  setLocale("en");
+  const e = renderAnswers(togetherWith("separate"));
+  expect(q(e, "plan-from-answers-income")!.textContent).toContain("your own income");
+  expect(q(e, "plan-from-answers-spend")!.textContent).toContain("your own spending");
+});
+
+test("shared keeps the household wording", () => {
+  for (const kind of ["shared", "mixed"] as const) {
+    const c = renderAnswers(togetherWith(kind));
+    expect(q(c, "plan-from-answers-income")!.textContent).toContain("voor jullie samen");
+    expect(c.textContent).not.toContain("jouw eigen");
+    unmountAll();
+  }
+});
+
 test("jobseeking note in Buffer only", () => {
   const store = withProfile({ work: stated(["jobseeking"]) });
   const result = resultFor(store);

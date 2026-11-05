@@ -12,6 +12,7 @@ import {
 } from "../netBenefit.js";
 import { isStale } from "../rewards.js";
 import type { Tx } from "../model.js";
+import type { ForeignSpend, SpendArea } from "../advisor/profile.js";
 import { fig } from "./internal.js";
 import { spendHistory } from "./spending.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
@@ -116,6 +117,38 @@ export type PointsValueRange = {
   examples: number;
 } | null;
 
+/** Account key prefix of a card the person stated but the bank data lacks. */
+export const STATED_CARD_PREFIX = "stated:";
+const isStatedCard = (c: HeldCardInput): boolean => c.accountKey.startsWith(STATED_CARD_PREFIX);
+
+/** Share of spend abroad per stated answer; travel moves the answer one step up. */
+const FOREIGN_SHARE = { never: 0, sometimes: 0.05, often: 0.15 } as const;
+const FOREIGN_STEP_UP = {
+  never: "sometimes",
+  sometimes: "often",
+  often: "often",
+} as const;
+
+/** The share of card spend assumed to be in a foreign currency, from the stated
+ *  answer alone (null answer: nothing is assumed, as before). */
+export function foreignShareOf(
+  answer: ForeignSpend | null,
+  spendMix: readonly SpendArea[],
+): number {
+  if (answer === null) return 0;
+  return FOREIGN_SHARE[spendMix.includes("travel") ? FOREIGN_STEP_UP[answer] : answer];
+}
+
+export type CardInterest = {
+  cardKey: string;
+  name: string;
+  /** From the catalogue; null when the catalogue has none (nothing is invented). */
+  interestPct: number | null;
+  /** Yearly interest on one month of spend carried as a balance; null when
+   *  either the rate or the monthly spend is unknown. */
+  yearlyCents: number | null;
+};
+
 export type CardNet = {
   cardKey: string;
   name: string;
@@ -130,6 +163,10 @@ export type CardNet = {
   net: NetBenefit | null;
   /** From kinds net / no-recommendation only; null otherwise. Never 0 for unknown. */
   netCents: number | null;
+  /** Foreign-currency fees on the stated foreign share of the spend, already
+   *  included in `net` and `netCents`. Present only when a foreign share is
+   *  assumed; null = the card's fx fee is unknown, so nothing was taken off. */
+  fxFeeCents?: number | null;
   pointsEarned: number | null;
   pointsValueRange: {
     lowCents: number;
@@ -158,6 +195,9 @@ export type CardsFigures = {
   }[];
   /** Foreign-currency card spend left out (no conversion). */
   excludedForeignCount: number;
+  /** Only when the person said they do not always pay the card off. Cards are
+   *  listed lowest interest first, unknown last; `nets` follow the same order. */
+  interest?: { monthlySpendCents: number | null; cards: CardInterest[] };
   sharedCases: true;
 };
 
@@ -286,13 +326,19 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
   const view = personalView(i.accounts, i.txs, i.entityProfiles);
   const personalKeys = new Set(view.accounts.map((a) => a.key));
   const seen = new Set<string>();
-  const held = i.heldCards
-    .filter((c) => {
-      if (!personalKeys.has(c.accountKey) || seen.has(c.accountKey)) return false;
-      seen.add(c.accountKey);
-      return true;
-    })
-    .sort((a, b) => a.label.localeCompare(b.label) || a.accountKey.localeCompare(b.accountKey));
+  const byLabel = (a: HeldCardInput, b: HeldCardInput): number =>
+    a.label.localeCompare(b.label) || a.accountKey.localeCompare(b.accountKey);
+  const dedupe = (cards: HeldCardInput[], ok: (c: HeldCardInput) => boolean): HeldCardInput[] =>
+    cards
+      .filter((c) => {
+        if (!ok(c) || seen.has(c.accountKey)) return false;
+        seen.add(c.accountKey);
+        return true;
+      })
+      .sort(byLabel);
+  const held = dedupe(i.heldCards, (c) => !isStatedCard(c) && personalKeys.has(c.accountKey));
+  const stated = dedupe(i.heldCards, isStatedCard);
+  const candidates = [...held, ...stated].sort(byLabel);
 
   const history = (keys: ReadonlySet<string>) =>
     spendHistory({
@@ -334,28 +380,119 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
       cardInUseKey = c.accountKey;
   }
 
+  // Without cardable spend history the comparison runs on a year of the stated
+  // monthly spend: the midpoint of the range minus the stated housing (floor 0).
+  // Tax and the like are not taken out of a stated total.
+  const statedRange = i.profile.spendStatedRange;
+  const statedMonthlyCents =
+    statedRange === null
+      ? null
+      : Math.max(
+          0,
+          Math.round((statedRange.lowCents + statedRange.highCents) / 2) -
+            (i.profile.housingMonthlyCents ?? 0),
+        );
+  const statedBasis = stated.length > 0 && cardableSpendCents === 0 && statedMonthlyCents !== null;
+  const spendBasisCents = statedBasis ? statedMonthlyCents * FULL_YEAR_MONTHS : cardableSpendCents;
+  const basisHorizon = statedBasis ? FULL_YEAR_MONTHS : horizon;
+  const anySpend = spendBasisCents > 0;
+
+  // Bank cardable spend already leaves out foreign-currency lines, so the
+  // stated share only applies to a stated spend.
+  const foreignShare = statedBasis
+    ? foreignShareOf(i.profile.foreignSpend, i.profile.spendMix)
+    : 0;
+  const cashbackGoal = i.profile.pointsGoal === "cashback";
   const examples = i.preferences.redemptionExamples;
-  const nets: CardNet[] = held.map((c) => {
-    const n = netForCard(c, cardableSpendCents, horizon);
+  const nets: CardNet[] = candidates.map((c) => {
+    const n0 = netForCard(c, spendBasisCents, basisHorizon);
     const range = c.programId === null ? null : pointsValueRange(examples, c.programId);
-    return n.pointsEarned === null || range === null
-      ? n
-      : {
+    let n: CardNet =
+      n0.pointsEarned === null
+        ? n0
+        : cashbackGoal
+          ? {
+              ...n0,
+              pointsValueRange: { lowCents: 0, medianCents: 0, highCents: 0 },
+            }
+          : range === null
+            ? n0
+            : {
+                ...n0,
+                pointsValueRange: {
+                  lowCents: Math.round(n0.pointsEarned * range.lowCentsPerPoint),
+                  medianCents: Math.round(n0.pointsEarned * range.medianCentsPerPoint),
+                  highCents: Math.round(n0.pointsEarned * range.highCentsPerPoint),
+                },
+              };
+    if (foreignShare > 0) {
+      const fx =
+        c.fxFeePct === null || !Number.isFinite(c.fxFeePct) || c.fxFeePct < 0
+          ? null
+          : Math.round((spendBasisCents * foreignShare * c.fxFeePct) / 100);
+      n = { ...n, fxFeeCents: fx };
+      // One value: net and netCents both carry the fx fee.
+      if (fx !== null && n.net !== null && n.net.kind !== "gross-cost-unknown") {
+        const netCents = n.net.netCents - fx;
+        n = {
           ...n,
-          pointsValueRange: {
-            lowCents: Math.round(n.pointsEarned * range.lowCentsPerPoint),
-            medianCents: Math.round(n.pointsEarned * range.medianCentsPerPoint),
-            highCents: Math.round(n.pointsEarned * range.highCentsPerPoint),
+          netCents,
+          net: {
+            ...n.net,
+            kind: netCents > 0 ? "net" : "no-recommendation",
+            netCents,
+            costCents: n.net.costCents + fx,
           },
         };
+      }
+    }
+    return n;
   });
   nets.sort(byName<CardNet>((n) => n.cardKey));
+
+  // Someone who does not always pay in full: interest outweighs cashback, so
+  // the cards are ranked by interest, and one month of spend carried for a year
+  // is priced at each card's catalogue rate.
+  const revolver = i.profile.cardRepayment === "sometimes" || i.profile.cardRepayment === "rarely";
+  const interestMonthlyCents = statedBasis
+    ? statedMonthlyCents
+    : months > 0
+      ? Math.round(cardableSpendCents / months)
+      : null;
+  const validInterest = (c: HeldCardInput): number | null =>
+    c.interestPct != null && Number.isFinite(c.interestPct) && c.interestPct >= 0
+      ? c.interestPct
+      : null;
+  const interestCards: CardInterest[] = revolver
+    ? candidates
+        .map((c) => {
+          const pct = validInterest(c);
+          return {
+            cardKey: c.accountKey,
+            name: c.label,
+            interestPct: pct,
+            yearlyCents:
+              pct === null || interestMonthlyCents === null
+                ? null
+                : Math.round((interestMonthlyCents * pct) / 100),
+          };
+        })
+        .sort(
+          (a, b) =>
+            (a.interestPct ?? Infinity) - (b.interestPct ?? Infinity) ||
+            byName<CardInterest>((x) => x.cardKey)(a, b),
+        )
+    : [];
+  if (revolver) {
+    const rank = new Map(interestCards.map((c, idx) => [c.cardKey, idx]));
+    nets.sort((a, b) => rank.get(a.cardKey)! - rank.get(b.cardKey)!);
+  }
 
   const yearlyFee = (c: HeldCardInput): number | null => {
     const cost = holdingCostOfProduct(c.fee);
     return cost.kind === "known" ? cost.amount.perYearCents : null;
   };
-  const breakEven = held
+  const breakEven = candidates
     .map((c) => {
       const pct = validPct(c.cashback);
       const cost = holdingCostOfProduct(c.fee);
@@ -380,7 +517,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
         }
       : { cents: null, known: false, asOf: null, sourceUrl: null };
   };
-  const criteria: CardCriteriaRow[] = held.map((c) => {
+  const criteria: CardCriteriaRow[] = candidates.map((c) => {
     const cb = c.cashback;
     return {
       cardKey: c.accountKey,
@@ -425,6 +562,14 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     breakEven,
     balances,
     excludedForeignCount,
+    ...(revolver
+      ? {
+          interest: {
+            monthlySpendCents: interestMonthlyCents,
+            cards: interestCards,
+          },
+        }
+      : {}),
     sharedCases: true,
   };
 
@@ -432,7 +577,14 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
   const missing: Missing[] = [];
   let status: SectionResult<CardsFigures>["status"];
   let statusReason: StatusReason;
-  if (held.length === 0) {
+  // Stated cards alone, ranked on the stated spend: there is a comparison to
+  // show, so this is not "no card data". No card is in use, so nothing is
+  // compared to it.
+  const statedRanked = held.length === 0 && statedBasis && nets.some((n) => n.netCents !== null);
+  if (statedRanked) {
+    status = "on-track";
+    statusReason = { key: "no-better-card" };
+  } else if (held.length === 0) {
     status = "not-enough-data";
     statusReason = { key: "no-card-data" };
     missing.push({ kind: "cards", action: "import" });
@@ -471,9 +623,9 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
       },
       output: fig("cents", cardableSpendCents),
     });
-  if (cardableSpendCents > 0)
+  if (anySpend)
     for (const n of nets) {
-      const c = held.find((h) => h.accountKey === n.cardKey)!;
+      const c = candidates.find((h) => h.accountKey === n.cardKey)!;
       calc.push({
         id: "card-earned",
         inputs: {
@@ -485,9 +637,9 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
       calc.push({
         id: "card-fee",
         inputs: {
-          months: fig("months", horizon),
+          months: fig("months", basisHorizon),
           fee_year: fig("cents", yearlyFee(c)),
-          prorated: fig("count", horizon < FULL_YEAR_MONTHS ? 1 : 0),
+          prorated: fig("count", basisHorizon < FULL_YEAR_MONTHS ? 1 : 0),
         },
         output: fig("cents", n.feeShareCents),
       });
@@ -508,7 +660,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     }
   for (const b of breakEven) {
     if (b.annualSpendCents === null) continue;
-    const c = held.find((h) => h.accountKey === b.cardKey)!;
+    const c = candidates.find((h) => h.accountKey === b.cardKey)!;
     const cost = holdingCostOfProduct(c.fee);
     calc.push({
       id: "break-even",
@@ -546,7 +698,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
       factId,
     });
   };
-  if (cardableSpendCents > 0) {
+  if (anySpend) {
     for (const n of nets) {
       const h = hash(n.cardKey);
       if (n.netCents !== null)

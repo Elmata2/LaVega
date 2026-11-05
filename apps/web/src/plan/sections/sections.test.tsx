@@ -838,6 +838,22 @@ test("A7/B14: a month section that rests on stale data says so and asks for the 
   }
 });
 
+test("connect-bank action navigates to the accounts view, where bank linking lives", () => {
+  const base = richSections().month;
+  const stale: SectionResult<MonthFigures> = {
+    ...base,
+    status: "not-enough-data",
+    statusReason: { key: "data-stale" },
+    missing: [{ kind: "account-stale", action: "connect-bank", ref: "A1" }],
+  };
+  const { ctx } = cardsCtx();
+  const c = mount(<MonthSection result={stale} ctx={ctx} />);
+  openAll(c);
+  act(() => q(c, "plan-missing-action")!.click());
+  expect(ctx.onNavigate).toHaveBeenCalledWith("accounts");
+  unmount();
+});
+
 test("B4: a change in the unshown free-rate figure is not listed in the change log", () => {
   const diff: PlanDiff = {
     baseline: false,
@@ -1178,5 +1194,30 @@ test("catalogue conditions sit inside a closed details element, with the Dutch t
   expect(
     details.some((d) => d.textContent!.includes("Wisselkoersopslag op het omgewisselde")),
   ).toBe(true);
+  unmount();
+});
+
+test("lines of a card ranked on the stated spend say they are estimated from the answers", () => {
+  const { ctx, result } = cardsFor([], statedPatch);
+  const net = {
+    cardKey: "stated:ing-creditcard",
+    name: "ING creditcard",
+    spendCents: 600_000,
+    earnedCents: 6000,
+    feeShareCents: 0,
+    netCents: 4200,
+    fxFeeCents: 1800,
+    cashbackTier: "measured",
+    pointsEarned: null,
+    pointsValueRange: null,
+    net: { kind: "net", netCents: 4200, costCents: 1800 },
+  } as unknown as (typeof result.figures.nets)[number];
+  const stated = { ...result, figures: { ...result.figures, nets: [net] } };
+  const c = mount(<CardsSection result={stated} ctx={ctx} />);
+  openAll(c);
+  const text = c.textContent ?? "";
+  expect(text).toContain("foreign currency fees");
+  expect(text).toContain("(estimated from your answers).");
+  expect(text).not.toContain("Nothing has been estimated");
   unmount();
 });

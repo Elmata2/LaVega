@@ -1,6 +1,6 @@
 import type { MonthFigures } from "@lavega/core";
 import { DASH, factLine, monthCopy } from "../../copy/plan/index.js";
-import { workNoteFor } from "../FromAnswers.js";
+import { varyingIncomeNoteFor, workNoteFor } from "../FromAnswers.js";
 import SectionCard from "../SectionCard.js";
 import { CalcList, Lines, Rows, Sources, StatusBody, useSectionCopy } from "./common.js";
 import type { SectionProps } from "./types.js";
@@ -59,7 +59,12 @@ export default function MonthSection({ result, ctx }: SectionProps<MonthFigures>
           <div>
             <StatusBody section="month" result={result} ctx={ctx} />
             <Rows rows={result.status === "not-enough-data" && room.kind === "none" ? [] : rows} />
-            <Lines lines={[workNoteFor(ctx.profile.store, "month", locale)]} />
+            <Lines
+              lines={[
+                workNoteFor(ctx.profile.store, "month", locale),
+                varyingIncomeNoteFor(ctx.profile.store, locale),
+              ]}
+            />
           </div>
         ),
         assumptions: null,

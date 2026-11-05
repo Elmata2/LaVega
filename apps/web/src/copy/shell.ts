@@ -322,6 +322,11 @@ const nl: ShellCopy = {
         what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
         note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
       },
+      "connect-checklist": {
+        label: "Koppel voor het complete beeld",
+        what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
+        note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
+      },
       aandacht: {
         label: "Aandacht",
         what: "Een brede balk bovenaan met wat er misgaat: tekorten, gemiste betalingen, deadlines.",
@@ -671,6 +676,11 @@ const en: ShellCopy = {
         label: "Your room each month",
         what: "What is left on average each month, with the lowest and highest month as the range.",
         note: "Appears once you have answered the first questions.",
+      },
+      "connect-checklist": {
+        label: "Connect for the full picture",
+        what: "Which of your banks are not connected yet, with a link to Accounts.",
+        note: "Appears only when you named banks that are not connected yet.",
       },
       aandacht: {
         label: "Attention",

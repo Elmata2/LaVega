@@ -203,7 +203,7 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
             nowMs={today.getTime()}
             onChange={() => {}}
             onStartTest={() => {}}
-            onOpenKoppelingen={() => {}}
+            onOpenAccounts={() => {}}
           />
         </div>
       </OpenFirstButton>

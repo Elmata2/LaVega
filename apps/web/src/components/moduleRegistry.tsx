@@ -491,6 +491,7 @@ export type WidgetId =
   | "aandacht"
   | "intake-invite"
   | "room-card"
+  | "connect-checklist"
   | "positie"
   | "betaalagenda"
   | "facturen-open"
@@ -573,6 +574,25 @@ export const WIDGETS: WidgetDef[] = [
         <rect x="14" y="25" width="34" height="7" rx="3.5" fill="var(--pos)" opacity="0.7" />
         <rect x="14" y="38" width="60" height="3" rx="1.5" fill="var(--line)" />
         <rect x="30" y="38" width="28" height="3" rx="1.5" fill="var(--accent)" opacity="0.6" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "connect-checklist",
+    label: "Koppel voor het complete beeld",
+    what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
+    note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={17} w={36} strong />
+        <circle cx="16" cy="29" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={28} w={34} />
+        <Line x={68} y={28} w={14} strong />
+        <circle cx="16" cy="40" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={39} w={26} />
+        <Line x={68} y={39} w={14} strong />
       </Thumb>
     ),
   },

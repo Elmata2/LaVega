@@ -1012,7 +1012,7 @@ export default function Facturen({
               setClockMs(at);
               commitGuide(startTest(guideRef.current, newTestCode(), at));
             }}
-            onOpenKoppelingen={() => onNavigate("koppelingen")}
+            onOpenAccounts={() => onNavigate("koppelingen")}
           />
           <p className="cell-sub">{c.forms.auto.pullIntro(Math.round(PULL_INTERVAL_MS / 60000))}</p>
           <p className="cell-sub">{c.forms.auto.gateNote}</p>

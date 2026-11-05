@@ -189,6 +189,20 @@ describe("netForCard", () => {
 });
 
 describe("computeCards", () => {
+  test("a held card with bank spend takes no fx fee from the foreign-spend answer", () => {
+    const cards = [card("A", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })];
+    const r = computeCards(
+      planInput({
+        accounts: cards.map((c) => acct(c.accountKey)),
+        heldCards: cards,
+        txs: spendOn("A", 10_000),
+        profile: { foreignSpend: "often" },
+      }),
+    );
+    expect(r.figures.nets[0]!.fxFeeCents).toBeUndefined();
+    expect(r.figures.nets[0]!.netCents).toBe(1200);
+  });
+
   test("no card data -> not-enough-data cards; no cardable spend -> not-enough-data cardable-spend", () => {
     const none = run();
     expect(none.status).toBe("not-enough-data");
@@ -710,5 +724,188 @@ describe("computeCards", () => {
 
   test("AS_OF is the clock: nothing reads the real date", () => {
     expect(AS_OF).toBe("2026-10-24");
+  });
+
+  describe("plan profile fields", () => {
+    const stated = (id: string, o: Partial<HeldCardInput> = {}) =>
+      card(`stated:${id}`, { label: id, ...o });
+    /** 500_00 a month stated, so a year of 600_000 cents. */
+    const SPEND = { spendStatedRange: { lowCents: 40_000, highCents: 60_000 } };
+    const runStated = (
+      cards: HeldCardInput[],
+      profile: Partial<PlanInput["profile"]> = {},
+      extra: Partial<PlanInput> = {},
+    ) =>
+      computeCards(
+        planInput({ heldCards: cards, profile: { ...SPEND, ...profile }, ...extra }),
+      );
+
+    test("stated card with no bank data is ranked", () => {
+      const r = runStated([
+        stated("a", { cashback: measured(1), fee: fee(0) }),
+        stated("b", { cashback: measured(2), fee: fee(3000) }),
+      ]);
+      const byKey = Object.fromEntries(r.figures.nets.map((n) => [n.cardKey, n]));
+      expect(byKey["stated:a"]).toMatchObject({ spendCents: 600_000, netCents: 6000 });
+      expect(byKey["stated:b"]).toMatchObject({ spendCents: 600_000, netCents: 9000 });
+      expect(r.figures.criteria.map((c) => c.cardKey)).toEqual(["stated:a", "stated:b"]);
+      expect(r.status).toBe("on-track");
+      expect(r.statusReason).toEqual({ key: "no-better-card" });
+    });
+
+    test("stated cards whose cashback is unknown stay not-enough-data", () => {
+      const r = runStated([stated("a", { cashback: unknownCb })]);
+      expect(r.status).toBe("not-enough-data");
+      expect(r.statusReason).toEqual({ key: "no-card-data" });
+    });
+
+    test("revolver interest uses the bank-derived monthly spend when bank spend exists", () => {
+      const r = computeCards(
+        planInput({
+          accounts: [acct("A")],
+          txs: spendOn("A", 10_000),
+          profile: { ...SPEND, cardRepayment: "rarely" },
+          heldCards: [card("A", { interestPct: 10 }), stated("s", { interestPct: 10 })],
+        }),
+      );
+      expect(r.figures.interest?.monthlySpendCents).toBe(10_000);
+      expect(r.figures.interest?.cards.map((c) => c.yearlyCents)).toEqual([1000, 1000]);
+    });
+
+    test("a stated card without a stated spend range has no spend and no net", () => {
+      const r = runStated([stated("a")], { spendStatedRange: null });
+      expect(r.figures.nets[0]).toMatchObject({ spendCents: 0, netCents: 0 });
+    });
+
+    test("a stated card key appearing twice counts once", () => {
+      const r = runStated([stated("a"), stated("a")]);
+      expect(r.figures.nets).toHaveLength(1);
+    });
+
+    test("often foreign spend adds fx fees", () => {
+      const cards = [stated("a", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })];
+      const share = (foreignSpend: PlanInput["profile"]["foreignSpend"], mix: PlanInput["profile"]["spendMix"] = []) =>
+        runStated(cards, { foreignSpend, spendMix: mix }).figures.nets[0]!;
+      // 600_000 * 15% * 2% = 1800
+      expect(share("often")).toMatchObject({ fxFeeCents: 1800, netCents: 4200 });
+      // 5%: 600_000 * 5% * 2% = 600
+      expect(share("sometimes")).toMatchObject({ fxFeeCents: 600, netCents: 5400 });
+      expect(share("never").fxFeeCents).toBeUndefined();
+      expect(share("never").netCents).toBe(6000);
+      // travel moves one step up
+      expect(share("sometimes", ["travel"])).toMatchObject({ fxFeeCents: 1800 });
+      expect(share("never", ["travel"])).toMatchObject({ fxFeeCents: 600 });
+      expect(share("often", ["travel"])).toMatchObject({ fxFeeCents: 1800 });
+      // no answer: nothing assumed, even with travel
+      expect(share(null, ["travel"]).fxFeeCents).toBeUndefined();
+    });
+
+    test("net and netCents agree after the fx fee", () => {
+      const n = runStated(
+        [stated("a", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })],
+        { foreignSpend: "often" },
+      ).figures.nets[0]!;
+      expect(n.netCents).toBe(4200);
+      expect(n.net).toMatchObject({ kind: "net", netCents: 4200, costCents: 1800 });
+      // fx larger than the cashback: the sign flips and the kind with it
+      const loss = runStated(
+        [stated("a", { cashback: measured(0.1), fee: fee(0), fxFeePct: 2 })],
+        { foreignSpend: "often" },
+      ).figures.nets[0]!;
+      expect(loss.netCents).toBe(600 - 1800);
+      expect(loss.net).toMatchObject({ kind: "no-recommendation", netCents: -1200 });
+    });
+
+    test("stated cardable spend is the midpoint minus stated housing, floor 0", () => {
+      const spendOf = (profile: Partial<PlanInput["profile"]>) =>
+        runStated([stated("a")], profile).figures.nets[0]!.spendCents;
+      // midpoint 2500 a month, housing 1200 -> 1300 x 12
+      expect(
+        spendOf({
+          spendStatedRange: { lowCents: 200_000, highCents: 300_000 },
+          housingMonthlyCents: 120_000,
+        }),
+      ).toBe(130_000 * 12);
+      expect(
+        spendOf({
+          spendStatedRange: { lowCents: 100_000, highCents: 100_000 },
+          housingMonthlyCents: 120_000,
+        }),
+      ).toBe(0);
+    });
+
+    test("an unknown fx fee is not taken off and stays null, never 0", () => {
+      const r = runStated([stated("a", { fxFeePct: null })], { foreignSpend: "often" });
+      expect(r.figures.nets[0]).toMatchObject({ fxFeeCents: null, netCents: 6000 });
+    });
+
+    test("revolver ranks by interest and shows the interest figure", () => {
+      const r = runStated(
+        [
+          stated("x", { interestPct: 20 }),
+          stated("y", { interestPct: 15 }),
+          stated("z"),
+        ],
+        { cardRepayment: "rarely" },
+      );
+      expect(r.figures.interest).toEqual({
+        monthlySpendCents: 50_000,
+        cards: [
+          { cardKey: "stated:y", name: "y", interestPct: 15, yearlyCents: 7500 },
+          { cardKey: "stated:x", name: "x", interestPct: 20, yearlyCents: 10_000 },
+          { cardKey: "stated:z", name: "z", interestPct: null, yearlyCents: null },
+        ],
+      });
+      expect(r.figures.nets.map((n) => n.cardKey)).toEqual(["stated:y", "stated:x", "stated:z"]);
+      const sometimes = runStated([stated("x", { interestPct: 20 })], { cardRepayment: "sometimes" });
+      expect(sometimes.figures.interest?.cards[0]?.yearlyCents).toBe(10_000);
+      for (const full of ["full", null] as const)
+        expect(
+          runStated([stated("x", { interestPct: 20 })], { cardRepayment: full }).figures.interest,
+        ).toBeUndefined();
+    });
+
+    test("cashback goal values points at zero", () => {
+      const ex = {
+        id: "1",
+        programId: "avios",
+        pointsSpent: 10_000,
+        cashPriceSavedCents: 10_000,
+        at: "2026-09-01",
+      };
+      const prefs = { ...emptyPlanPreferences(), redemptionExamples: [ex] };
+      const cards = [
+        stated("a", { programId: "avios", pointsPerEuro: 1, provenance: PROV }),
+      ];
+      const valued = (pointsGoal: PlanInput["profile"]["pointsGoal"]) =>
+        runStated(cards, { pointsGoal }, { preferences: prefs }).figures.nets[0]!;
+      expect(valued("cashback")).toMatchObject({
+        pointsEarned: 6000,
+        pointsValueRange: { lowCents: 0, medianCents: 0, highCents: 0 },
+      });
+      expect(valued("flights").pointsValueRange).toMatchObject({ medianCents: 6000 });
+      expect(valued("no-preference").pointsValueRange).toMatchObject({ medianCents: 6000 });
+      expect(valued(null).pointsValueRange).toMatchObject({ medianCents: 6000 });
+    });
+
+    test("no new fields: the figures carry no new keys and keep today's values", () => {
+      const r = run({
+        cards: [card("A", { cashback: measured(1), fee: fee(1200), fxFeePct: 2 })],
+        txs: spendOn("A", 10_000),
+      });
+      expect(r.figures.interest).toBeUndefined();
+      expect(Object.keys(r.figures).sort()).toEqual(
+        [
+          "balances", "breakEven", "cardInUseKey", "cardableSpendCents", "criteria",
+          "excludedForeignCount", "months", "nets", "notCardableSpendCents", "sharedCases",
+        ].sort(),
+      );
+      expect(r.figures.nets[0]).toEqual({
+        cardKey: "A", name: "A", programId: null, spendCents: 120_000, earnedCents: 1200,
+        feeShareCents: 1200, cashbackTier: "measured",
+        net: expect.objectContaining({ kind: "no-recommendation", netCents: 0 }),
+        netCents: 0, pointsEarned: null, pointsValueRange: null,
+      });
+    });
   });
 });

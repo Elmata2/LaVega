@@ -256,7 +256,7 @@ describe("diffSnapshots", () => {
   });
 
   test("a plan-1 snapshot (subscriptions once counted fixed costs) gives a baseline, not a subscriptions drop", () => {
-    expect(PLAN_ENGINE_VERSION).toBe("plan-2");
+    expect(PLAN_ENGINE_VERSION).toBe("plan-3");
     const old = snap({
       engineVersion: "plan-1",
       flat: {

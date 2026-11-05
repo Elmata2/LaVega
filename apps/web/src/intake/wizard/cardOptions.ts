@@ -84,7 +84,7 @@ export const brandOrder = (kind: CardKind = "credit"): readonly CardBrand[] => [
 ];
 export const BRAND_ORDER: readonly CardBrand[] = brandOrder("credit");
 
-const BRAND_LABELS: Record<CreditBrand, string> = {
+export const BRAND_LABELS: Record<CreditBrand, string> = {
   amex: "American Express",
   ics: "ICS (Visa / Mastercard)",
   ing: "ING",
@@ -99,6 +99,13 @@ const BRAND_LABELS: Record<CreditBrand, string> = {
 
 export const brandOf = (id: string, kind: CardKind = "credit"): CardBrand =>
   PREFIXES[kind].find(([, ps]) => ps.some((p) => id.startsWith(p)))?.[0] ?? "other-brand";
+
+/** The bank or issuer brand a catalogue card id belongs to; null for an id
+ *  that matches no brand (including "other"). */
+export const brandOfCardId = (id: string, kind: CardKind): CardBrand | null => {
+  const b = brandOf(id, kind);
+  return b === "other-brand" ? null : b;
+};
 
 /** Case-blind and locale-free, so the order is the same on every device. */
 export const byName = (a: string, b: string): number => {
@@ -192,3 +199,11 @@ export const cardOptions = (otherLabel: string): { id: string; label: string }[]
 /** A stated card id as a name; an id the catalogue no longer holds shows as is. */
 export const cardLabel = (id: string, otherLabel: string, kind: CardKind = "credit"): string =>
   id === OTHER_CARD ? otherLabel : (CARDS_BY_KIND[kind].find((c) => c.id === id)?.label ?? id);
+
+/** Every bank or issuer brand id the card pickers know, debit first, each once.
+ *  The banks screen lists these plus "other". */
+export const bankBrandIds = (): string[] => [
+  ...new Set(
+    [...brandOrder("debit"), ...brandOrder("credit")].filter((b) => b !== "other-brand"),
+  ),
+];

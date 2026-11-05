@@ -8,8 +8,23 @@ import {
 import {
   addUserDebt,
   removeUserDebt,
+  applyBirthYear,
   applyBuffer,
+  applyCardRepayment,
+  applyCheckInCadence,
+  applyConfidence,
+  applyCutTargets,
+  applyFlightsPerYear,
+  applyForeignSpend,
+  applyHousehold,
+  applyIncomeRegularity,
   applyKnowledge,
+  applyMoneySharing,
+  applyPointsGoal,
+  applyPriorities,
+  applySpendMix,
+  applyStatedBanks,
+  applyStatedPrograms,
   applyRiskAnswers,
   applyStatedHousing,
   applyStatedRange,
@@ -108,4 +123,62 @@ test("block 2 debt edits touch only typed debts; block 1 debts keep evidence and
   p = removeUserDebt(p, "debt-9");
   expect(p.debts).toHaveLength(1);
   expect(p.debts![0]!.at).toBe("2026-09-01");
+});
+
+const stated = <T,>(value: T) => ({ value, source: "stated", at: AS_OF });
+const base = emptyProfile();
+
+test("personalisation writers store a stated field", () => {
+  expect(applyBirthYear(base, 1990, AS_OF).birthYear).toEqual(stated(1990));
+  expect(applyIncomeRegularity(base, "varies", AS_OF).incomeRegularity).toEqual(stated("varies"));
+  expect(applyStatedBanks(base, ["ing", "other"], AS_OF).statedBanks).toEqual(
+    stated(["ing", "other"]),
+  );
+  expect(applyCardRepayment(base, "full", AS_OF).cardRepayment).toEqual(stated("full"));
+  expect(applyForeignSpend(base, "often", AS_OF).foreignSpend).toEqual(stated("often"));
+  expect(applyPriorities(base, ["save-more", "spend-less"], AS_OF).priorities).toEqual(
+    stated(["save-more", "spend-less"]),
+  );
+  expect(applyCutTargets(base, ["fuel", "subscriptions"], AS_OF).cutTargets).toEqual(
+    stated(["fuel", "subscriptions"]),
+  );
+  expect(applyCheckInCadence(base, "weekly", AS_OF).checkInCadence).toEqual(stated("weekly"));
+  expect(applyConfidence(base, 3, AS_OF).confidence).toEqual(stated(3));
+  expect(applyStatedPrograms(base, ["flying-blue"], AS_OF).statedPrograms).toEqual(
+    stated(["flying-blue"]),
+  );
+  expect(applyPointsGoal(base, "flights", AS_OF).pointsGoal).toEqual(stated("flights"));
+  expect(applyFlightsPerYear(base, "1-2", AS_OF).flightsPerYear).toEqual(stated("1-2"));
+});
+
+test("applyMoneySharing writes into household and keeps kind", () => {
+  const together = applyHousehold(base, { kind: "together" }, AS_OF);
+  const p = applyMoneySharing(together, "mixed", AS_OF);
+  expect(p.household).toEqual(stated({ kind: "together", moneySharing: "mixed" }));
+});
+
+test("applySpendMix keeps the first three", () => {
+  const p = applySpendMix(base, ["travel", "fuel", "online", "groceries"], AS_OF);
+  expect(p.spendMix).toEqual(stated(["travel", "fuel", "online"]));
+});
+
+test("switching to alone drops moneySharing", () => {
+  const sharing = applyMoneySharing(applyHousehold(base, { kind: "together" }, AS_OF), "shared", AS_OF);
+  const alone = applyHousehold(sharing, { kind: "alone" }, AS_OF);
+  expect(alone.household?.value).toEqual({ kind: "alone" });
+});
+
+test("together again keeps the money-sharing answer", () => {
+  const sharing = applyMoneySharing(applyHousehold(base, { kind: "together" }, AS_OF), "mixed", AS_OF);
+  const again = applyHousehold(sharing, { kind: "together", partnerIncomeInScope: true }, AS_OF);
+  expect(again.household?.value).toEqual({
+    kind: "together",
+    partnerIncomeInScope: true,
+    moneySharing: "mixed",
+  });
+});
+
+test("applyMoneySharing leaves the profile alone when living alone", () => {
+  const alone = applyHousehold(base, { kind: "alone" }, AS_OF);
+  expect(applyMoneySharing(alone, "shared", AS_OF)).toBe(alone);
 });

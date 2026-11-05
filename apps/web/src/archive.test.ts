@@ -42,7 +42,7 @@ test("stored prefs naming archived ids are ignored, not an error", () => {
   ]);
   expect(
     enabledWidgets({ on: ["btw-stand", "aandacht"], seen: ["btw-stand", "aandacht"] }),
-  ).toEqual(["aandacht", "intake-invite", "room-card", "betaalagenda"]);
+  ).toEqual(["aandacht", "intake-invite", "room-card", "connect-checklist", "betaalagenda"]);
   expect(normaliseWidgets(["positie", "facturen-open", "btw-stand", "aandacht"])).toEqual([
     "aandacht",
   ]);

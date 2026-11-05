@@ -254,6 +254,12 @@ function EditorForm({
           ? (p) => editor.apply(p, years)
           : null;
       }
+      case "year": {
+        const y = Number(text.trim());
+        return /^\d{4}$/.test(text.trim()) && y >= editor.min && y <= editor.max
+          ? (p) => editor.apply(p, y)
+          : null;
+      }
       case "text":
         return (p) => editor.apply(p, text.trim());
       case "range": {
@@ -335,6 +341,15 @@ function EditorForm({
             onChange={(e) => setHigh(e.target.value)}
           />
         </>
+      ) : editor.kind === "year" ? (
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+          aria-label={c.editors.birthYear}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
       ) : editor.kind === "years" ? (
         <input
           type="text"
@@ -368,6 +383,8 @@ function initialText(e: Editor): string {
     case "euros":
       return centsToInput(e.initial);
     case "months":
+      return String(e.initial);
+    case "year":
       return String(e.initial);
     case "years":
       return e.initial.join(", ");
