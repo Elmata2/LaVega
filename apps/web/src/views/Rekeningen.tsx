@@ -19,6 +19,10 @@ import Card, { CardHeader } from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
 import Pill from "../components/ui/Pill.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import BankLink from "../components/BankLink";
+import { CATALOGUE_ENTRIES } from "../catalogue-rates";
+import { wizardCopy } from "../copy/wizard";
+import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import "../styles/views.css";
 
@@ -42,7 +46,16 @@ type RekeningenProps = {
    *  the FULL list in App; only groups touching the current scope are shown. */
   duplicateGroups: DuplicateGroup[];
   onMergeDuplicates: (survivorKey: string, duplicateKey: string) => void;
+  /** Cards the person named in the wizard (catalogue ids or "other"); the ones
+   *  no bank data stands in for yet are listed as not connected. */
+  statedCredit?: readonly string[];
+  statedDebit?: readonly string[];
+  /** Re-read every connected bank, passed on to the bank-linking flow. */
+  onRefreshBank?: () => void;
 };
+
+const NO_IDS: readonly string[] = [];
+const NO_REFRESH = () => {};
 
 /* ---------------------------------------------------------------------------
  * Grouping accounts under their bank — pure, so it is tested without a DOM.
@@ -899,6 +912,9 @@ export default function Rekeningen({
   onDeleteAccount,
   duplicateGroups,
   onMergeDuplicates,
+  statedCredit = NO_IDS,
+  statedDebit = NO_IDS,
+  onRefreshBank = NO_REFRESH,
 }: RekeningenProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].rekeningen;
@@ -914,6 +930,15 @@ export default function Rekeningen({
   const [selected, setSelected] = useState<Record<string, string>>({});
   // The bank a half-typed rename belongs to — see groupAccountsByBank.
   const [rename, setRename] = useState<{ key: string; bank: string } | null>(null);
+  const [linking, setLinking] = useState(false);
+  const wc = wizardCopy[locale];
+  const placeholders = statedCardPlaceholders({
+    credit: statedCredit,
+    debit: statedDebit,
+    accounts,
+    entries: CATALOGUE_ENTRIES,
+    otherLabels: { credit: wc.otherCard, debit: wc.otherDebitCard },
+  });
 
   const rows = accountSummaries(accounts, txs);
   const groups = groupAccountsByBank(rows, (a) =>
@@ -981,6 +1006,36 @@ export default function Rekeningen({
           </div>
         );
       })}
+
+      {placeholders.length > 0 && (
+        <div
+          className="border border-dashed border-line rounded p-4 mb-4"
+          data-testid="not-connected"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="m-0">{c.nietGekoppeldHeading}</h3>
+            <button
+              type="button"
+              className="cursor-pointer rounded-sm px-3 py-1 font-semibold bg-transparent text-ink border border-line"
+              aria-expanded={linking}
+              onClick={() => setLinking(!linking)}
+            >
+              {c.nietGekoppeldKoppelen}
+            </button>
+          </div>
+          <ul className="m-0 mt-2 pl-5">
+            {placeholders.map((p) => (
+              <li key={`${p.kind}:${p.id}`}>
+                {p.name}{" "}
+                <span className="text-muted">
+                  ({p.kind === "credit" ? c.nietGekoppeldCredit : c.nietGekoppeldDebit})
+                </span>
+              </li>
+            ))}
+          </ul>
+          {linking && <BankLink busy={busy} onRefresh={onRefreshBank} />}
+        </div>
+      )}
 
       {accounts.length === 0 ? (
         <p>{c.geenRekeningen}</p>

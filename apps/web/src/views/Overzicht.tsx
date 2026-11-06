@@ -110,6 +110,8 @@ type OverzichtProps = {
   };
 };
 
+const NO_STATED: readonly string[] = [];
+
 export default function Overzicht({
   accounts,
   txs,
@@ -253,7 +255,12 @@ export default function Overzicht({
       <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
       <TopUitgavenBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
 
-      <KaartenBlock accounts={accounts} onNavigate={onNavigate} />
+      <KaartenBlock
+        accounts={accounts}
+        onNavigate={onNavigate}
+        statedCredit={intake?.store?.current.statedCards?.value ?? NO_STATED}
+        statedDebit={intake?.store?.current.statedDebitCards?.value ?? NO_STATED}
+      />
 
       <TravelBlock {...travel} />
     </ModuleGrid>
