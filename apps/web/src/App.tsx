@@ -202,6 +202,15 @@ function isN8nNoticeLike(v: unknown): v is N8nNotice {
   );
 }
 
+/** The stated card ids from the read profile; none while it is not readable. */
+function statedOf(
+  read: ProfileRead | "loading" | "error",
+  key: "statedCards" | "statedDebitCards",
+): readonly string[] | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  return read.store.current[key]?.value;
+}
+
 export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
   const [openAttempt, setOpenAttempt] = useState(0);
@@ -1854,6 +1863,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onDeleteAccount={handleDeleteAccount}
               duplicateGroups={duplicateGroups}
               onMergeDuplicates={handleMergeDuplicates}
+              statedCredit={statedOf(profileRead, "statedCards")}
+              statedDebit={statedOf(profileRead, "statedDebitCards")}
+              onRefreshBank={() => void handleRefreshBank()}
               onSelectAccount={(key) => {
                 // Show just this account's transactions — clear the other
                 // filters so the list isn't silently narrowed by a stale one.
