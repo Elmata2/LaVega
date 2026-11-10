@@ -141,6 +141,20 @@ Port Kasoverzicht's parser suite into Vitest: synthetic export fixtures per bank
 3. Personal module (Alexander) + Investing module (cofounder) build-out.
 4. Later: hosted deployment (flip the adapters), multi-user, broad integrations, AI payments.
 
+### Sure reuse (2026-11)
+
+[Sure](https://github.com/we-promise/sure) (community fork of Maybe Finance, AGPL-3.0) is a
+**design and algorithm source, not a runtime dependency** ([ADR 0010](adr/0010-sure-as-port-source-not-runtime.md)).
+Selected workflows are reimplemented in TypeScript/Effect: first-class transfers, bills with
+occurrences and payment matching, budget carry, balance/report materialization, an encrypted
+statement vault, import/export interop, and one agent tool registry exposed as MCP. This
+upgrades roadmap item 2: the forecast stops detecting commitments and starts managing them.
+Owner decisions 2026-11-10: the personal side ships now; the ADR 0009 boundary stays; budgets
+use envelope carry-over; investing work goes deep (basis, realised/income, tax treatment), not
+wide; phase issues are filed in `Elmata2/lavega`. Read the plan before touching those areas:
+[`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](superpowers/specs/2026-11-10-sure-adoption-plan.md),
+teardown: [`docs/research/2026-11-10-sure-teardown.md`](research/2026-11-10-sure-teardown.md).
+
 ## Don't do
 
 - No FinnTell code/asset reuse. No PIS. No secrets in the repo.
