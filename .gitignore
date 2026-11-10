@@ -15,6 +15,11 @@ state.json
 !.env.example
 !**/.env.example
 .DS_Store
+# Finder / iCloud conflict copies ("agentRun 2.ts", "NOTICE 2"). Never tracked.
+* 2.*
+* 2
+* 3.*
+* 3
 .superpowers/
 .worktrees/
 .gstack/
