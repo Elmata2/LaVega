@@ -103,7 +103,8 @@ function Cell({
 export function PortfolioKpiRow({ data }: { data: InvestingDashboardData }) {
   const figures = portfolioFigures(data);
   const currency = data.presentationCurrency;
-  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn, previous } = figures;
+  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn, previous, since } =
+    figures;
   const valueNote = valueQualifier(figures);
   const reason = historyReason(figures, data.portfolio.All.length);
   return (
@@ -152,7 +153,11 @@ export function PortfolioKpiRow({ data }: { data: InvestingDashboardData }) {
             {totalReturn === null ? "Unknown" : formatSignedPercent(totalReturn)}
           </dd>
           <dd className="mt-1 text-xs text-muted-foreground">
-            {totalReturn === null ? reason : "TWR, after deposits and withdrawals"}
+            {totalReturn === null
+              ? reason
+              : since
+                ? `TWR since ${shortDate(since)}, after deposits and withdrawals`
+                : "TWR, after deposits and withdrawals"}
           </dd>
         </Cell>
       </dl>
