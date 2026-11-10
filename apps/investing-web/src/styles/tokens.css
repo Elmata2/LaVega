@@ -180,9 +180,9 @@
     color-scheme: light;
     --background: 40 27% 97%; /* warm paper */
     --foreground: 60 7% 10%; /* ink */
-    --card: 0 0% 100%;
+    --card: 40 20% 95%;
     --card-foreground: 60 7% 10%;
-    --popover: 0 0% 100%;
+    --popover: 40 20% 95%;
     --popover-foreground: 60 7% 10%;
     --primary: 13 96.7% 64.5%; /* #fc734d coral, unchanged */
     --primary-foreground: 202.5 66.7% 2.4%; /* #02070a */
@@ -192,8 +192,8 @@
     --muted-foreground: 48 5% 41%;
     --accent: 201 98% 33%; /* #0270a8 blue: links, active, focus */
     --accent-foreground: 40 27% 97%;
-    --border: 40 17% 88%;
-    --input: 40 17% 88%;
+    --border: 40 12% 82%;
+    --input: 40 12% 82%;
     --ring: 201 98% 33%;
     --pos: 101 38% 30%;
     --neg: 355 60% 42%; /* crimson: stays apart from the coral CTA */
