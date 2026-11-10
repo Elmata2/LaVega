@@ -69,10 +69,10 @@ export function LoginForm({
                 {error}
               </p>
             )}
+            <AuthHonestyLine />
             <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Signing in…" : "Sign in"}
             </Button>
-            <AuthHonestyLine />
             <FieldDescription className="text-center">
               New to LaVega?{" "}
               <Link

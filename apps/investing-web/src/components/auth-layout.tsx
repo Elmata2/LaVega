@@ -14,7 +14,7 @@ export const AUTH_HONESTY =
 
 export function AuthHonestyLine() {
   return (
-    <p className="text-center text-xs leading-relaxed text-muted-foreground">{AUTH_HONESTY}</p>
+    <p className="text-left text-sm leading-relaxed text-foreground">{AUTH_HONESTY}</p>
   );
 }
 

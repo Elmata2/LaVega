@@ -94,10 +94,10 @@ export function SignupForm({
                 </p>
               </div>
             )}
+            <AuthHonestyLine />
             <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Creating account…" : "Create account"}
             </Button>
-            <AuthHonestyLine />
             <FieldDescription className="text-center">
               Already have an account?{" "}
               <Link
