@@ -12,6 +12,7 @@ export type PortfolioFigures = {
   dailyChange: number | null;
   dailyChangePercentage: number | null;
   totalReturn: number | null;
+  since: string | null;
 };
 
 export function portfolioFigures(data: InvestingDashboardData): PortfolioFigures {
@@ -36,6 +37,8 @@ export function portfolioFigures(data: InvestingDashboardData): PortfolioFigures
     dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
   const totalReturn =
     buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
+  // `totalReturn` is measured across the whole series, so name its start date.
+  const since = data.portfolio.All[0]?.date ?? null;
   return {
     latest,
     previous,
@@ -44,6 +47,7 @@ export function portfolioFigures(data: InvestingDashboardData): PortfolioFigures
     dailyChange,
     dailyChangePercentage,
     totalReturn,
+    since,
   };
 }
 

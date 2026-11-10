@@ -236,6 +236,7 @@ export function PortfolioBenchmarkChart({
   );
   const label = mode === "euros" ? "Portfolio value" : "Indexed return";
   const summaryPoint = indexed[focusIndex ?? indexed.length - 1] ?? null;
+  const periodLabel = periodLabelFor(chart.window);
   const applyTypedDates = (event: React.FormEvent) => {
     event.preventDefault();
     chart.applyTypedDates();
@@ -546,12 +547,14 @@ export function PortfolioBenchmarkChart({
             </div>
             <p aria-live="polite" className="sr-only">
               {summaryPoint
-                ? accessiblePoint(summaryPoint, selectedSeries, currency)
+                ? accessiblePoint(summaryPoint, selectedSeries, currency, periodLabel)
                 : "No values available"}
             </p>
             <ul className="sr-only" aria-label="Exact chart values">
               {indexed.map((point) => (
-                <li key={point.date}>{accessiblePoint(point, selectedSeries, currency)}</li>
+                <li key={point.date}>
+                  {accessiblePoint(point, selectedSeries, currency, periodLabel)}
+                </li>
               ))}
             </ul>
             <div className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Chart series">
@@ -737,13 +740,22 @@ export function PerformanceTooltip({
   );
 }
 
+/** Name the window a TWR belongs to, so a short chart and the lifetime KPI
+ *  cannot read as contradictory numbers. Custom windows have no fixed label. */
+function periodLabelFor(activeWindow: ChartWindow): string {
+  if (activeWindow.kind === "custom") return "Custom";
+  const { range } = activeWindow;
+  return chartRanges.find((item) => item.value === range)?.label ?? "Selected period";
+}
+
 function accessiblePoint(
   point: IndexedSeriesPoint,
   benchmarks: BenchmarkSeries[],
   currency: string,
+  periodLabel: string,
 ): string {
   const unknown = [...point.unpriced, ...point.cashUnknown];
-  return `${dateLabel(point.date)}: portfolio ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmarkLabel(benchmark)} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, unknown: ${unknown.join(", ")}` : ""}`;
+  return `${dateLabel(point.date)}: portfolio ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, ${periodLabel} TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmarkLabel(benchmark)} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, unknown: ${unknown.join(", ")}` : ""}`;
 }
 
 function toggle(current: Set<string>, key: string): Set<string> {

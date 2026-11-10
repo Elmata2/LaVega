@@ -313,6 +313,9 @@ test("supports keyboard crosshair and announces exact unknown values", async () 
   expect(container.querySelector('ul[aria-label="Exact chart values"]')?.textContent).toContain(
     "AEX TWR",
   );
+  expect(container.querySelector('ul[aria-label="Exact chart values"]')?.textContent).toContain(
+    "1 month TWR",
+  );
   await act(async () => root.unmount());
 });
 

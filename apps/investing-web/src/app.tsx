@@ -48,7 +48,7 @@ import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
 import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
 import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
-import { longDate } from "./lib/dates.js";
+import { longDate, shortDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
@@ -369,7 +369,7 @@ function PositionList({
 
 function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
   const figures = portfolioFigures(data);
-  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn } = figures;
+  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn, since } = figures;
   const money = (value: number | null, signDisplay: "auto" | "always" = "auto") =>
     value === null ? "Value unknown" : formatMoney(value, data.presentationCurrency, signDisplay);
   const percentage = (value: number | null) =>
@@ -411,7 +411,11 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           >
             {percentage(totalReturn)}
           </dd>
-          <dd className="text-xs text-muted-foreground">TWR after deposits and withdrawals</dd>
+          <dd className="text-xs text-muted-foreground">
+            {since
+              ? `TWR since ${shortDate(since)}, after deposits and withdrawals`
+              : "TWR after deposits and withdrawals"}
+          </dd>
         </div>
       </dl>
       <PortfolioFigureNotes figures={figures} currency={data.presentationCurrency} />

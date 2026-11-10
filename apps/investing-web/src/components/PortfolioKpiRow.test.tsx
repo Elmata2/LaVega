@@ -42,6 +42,7 @@ test("populated: value, signed colored change and return", () => {
   expect(text).toContain("€9,800.00");
   expect(text).toContain("-€200.00");
   expect(text).toContain("-2%");
+  expect(text).toContain("TWR since 9 Nov 2026, after deposits and withdrawals");
   const change = Array.from(container.querySelectorAll("dd")).find((dd) =>
     dd.textContent?.includes("-€200.00"),
   )!;
