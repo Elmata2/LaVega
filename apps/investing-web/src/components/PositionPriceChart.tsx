@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { EmptyState } from "./EmptyState";
-import { Swatch } from "./Swatch";
+import { LineSwatch, Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer } from "./ui/chart";
@@ -69,7 +69,7 @@ function MarkerDetails({
     <section
       role="status"
       aria-live="polite"
-      className="rounded-xl border border-border bg-secondary/30 p-3 text-xs"
+      className="rounded-tile border border-border bg-secondary/30 p-3 text-xs"
     >
       <p className="font-semibold">
         {dateLabel(date)} · Close {priceLabel(close, currency)}
@@ -252,7 +252,7 @@ export function PositionPriceChart({
               role="img"
               tabIndex={0}
               aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-xl outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-pan-y select-none rounded-tile outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
                 chart.handlers.onKeyDown(event);
                 setActiveEventDate(null);
@@ -281,7 +281,7 @@ export function PositionPriceChart({
                     dataKey="close"
                     name="Price"
                     stroke="hsl(var(--chart-blue))"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     dot={false}
                     connectNulls={false}
                     isAnimationActive={false}
@@ -330,6 +330,12 @@ export function PositionPriceChart({
                 />
               </div>
             )}
+            <div aria-label="Chart series" className="mt-4 flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-2 px-2 py-1 font-semibold text-foreground">
+                <LineSwatch thick color="hsl(var(--chart-blue))" />
+                {symbol} price
+              </span>
+            </div>
             <div aria-label="Price markers" className="mt-4 flex flex-wrap gap-2 text-xs">
               {markers.map(({ marker, pointIndex, markerIndex }) => (
                 <button

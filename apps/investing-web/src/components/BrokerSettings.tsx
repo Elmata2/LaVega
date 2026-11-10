@@ -11,23 +11,20 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
 
 function BrokerSetupCard({
   name,
-  eyebrow,
   description,
   fields,
   steps,
   warning,
 }: {
   name: string;
-  eyebrow: string;
   description: string;
   fields: string[];
   steps: string[];
   warning?: string;
 }) {
   return (
-    <article className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6">
-      <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">{eyebrow}</p>
-      <h3 className="mt-2 font-display text-4xl">{name}</h3>
+    <article className="rounded-card border border-border bg-card p-5 sm:p-6">
+      <h3 className="font-display text-4xl">{name}</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       <div className="mt-6 border-t border-border pt-5">
         <p className="text-sm font-semibold">Data you need</p>
@@ -136,10 +133,7 @@ function BrokerSyncProgressCard() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
-            Broker sync
-          </p>
-          <h3 className="mt-2 font-display text-3xl">
+          <h3 className="font-display text-3xl">
             {completed ? "Trading 212 synced" : "Trading 212 syncing"}
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -269,10 +263,7 @@ function BrokerVaultUnlock() {
       className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
-          Existing vault
-        </p>
-        <h3 className="mt-2 font-display text-3xl">Unlock vault</h3>
+        <h3 className="font-display text-3xl">Unlock vault</h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Credentials are stored encrypted on disk. Enter only the vault password; broker keys are
           not needed again.
@@ -374,14 +365,10 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
-    >
+    <form onSubmit={submit} className="rounded-card border border-border bg-card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Step 2</p>
-          <h3 className="mt-2 font-display text-4xl">Save credentials</h3>
+          <h3 className="font-display text-4xl">Save credentials</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {passphraseMode === "unused"
               ? "LaVega encrypts these details with the server key before storing them. Sync then starts automatically."
@@ -522,7 +509,6 @@ export function BrokerSettings() {
       <div className="grid gap-5 lg:grid-cols-2">
         <BrokerSetupCard
           name="Interactive Brokers"
-          eyebrow="IBKR"
           description="Use IBKR Flex Web Service. This works with daily updated reports, without a local gateway or browser login."
           fields={[
             "Flex-token",
@@ -539,7 +525,6 @@ export function BrokerSettings() {
         />
         <BrokerSetupCard
           name="Trading 212"
-          eyebrow="Trading 212"
           description="Use the official Trading 212 API. LaVega reads positions, orders, transactions and dividends through your own credentials, and never writes."
           fields={["API key", "API secret"]}
           steps={[

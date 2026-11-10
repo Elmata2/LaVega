@@ -53,8 +53,7 @@ export function AgentThreads({
     <div className="mb-5 border-b border-border pb-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Memory</p>
-          <h3 className="mt-1 font-display text-3xl">Conversations</h3>
+          <h3 className="font-display text-3xl">Conversations</h3>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onNew}>
           New conversation
@@ -67,7 +66,7 @@ export function AgentThreads({
           {threads.map((thread) => (
             <li
               key={thread.id}
-              className={`flex items-center gap-2 rounded-xl px-3 py-2 ${thread.id === activeThreadId ? "bg-secondary" : "bg-secondary/60"}`}
+              className={`flex items-center gap-2 rounded-tile px-3 py-2 ${thread.id === activeThreadId ? "bg-secondary" : "bg-secondary/60"}`}
             >
               <button
                 type="button"

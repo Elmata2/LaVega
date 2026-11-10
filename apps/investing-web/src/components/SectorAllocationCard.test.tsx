@@ -60,7 +60,7 @@ test("no sector data yet reads as an honest empty state, not a broken card", () 
       />,
     ),
   );
-  expect(container.textContent).toContain("No sector data yet.");
+  expect(container.textContent).toContain("No sector data yet");
 });
 
 test("renders a loading placeholder without claiming an outcome", () => {

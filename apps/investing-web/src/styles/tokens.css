@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --radius-lg: var(--radius);
-  --radius-card: var(--radius-card);
-  --radius-frame: var(--radius-frame);
-  --radius-pill: var(--radius-pill);
+  --radius-lg: 20px;
+  --radius-card: 20px;
+  --radius-frame: 32px;
+  --radius-pill: 999px;
   --radius-tile: 14px;
   --radius-chip: 10px;
 
@@ -44,13 +44,13 @@
 
   --shadow-sm: none;
   --shadow-md: none;
-  --shadow-xl: var(--shadow-float);
+  /* Only floating layers (menus, popovers, tooltips) lift. */
+  --shadow-xl: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
 
-  --tracking-eyebrow: 0.16em;
   --text-2xs: 11px;
 
-  --font-display: var(--font-display);
-  --font-sans: var(--font-body);
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
 }
 
 @utility pressable {
@@ -70,6 +70,26 @@
 
 @utility mention-menu {
   animation: mention-menu-in 120ms ease-out;
+}
+
+/* Edge fade on a sideways-scrolling strip; JS sets data-fade when content
+ * overflows that side. */
+@utility scroll-fade-x {
+  &[data-fade="end"] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  &[data-fade="start"] {
+    mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  }
+  &[data-fade="both"] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 28px,
+      #000 calc(100% - 28px),
+      transparent
+    );
+  }
 }
 
 @utility net-worth-hatch {
@@ -135,15 +155,7 @@
     --chart-teal: 172.2 58.6% 56.5%; /* #4fd1c0 */
     --chart-amber: 40.1 100% 63.9%; /* #ffc247 */
     --chart-coral: 337 100% 74.9%; /* #ff7fb0 pink; never the CTA hue */
-    --radius: 20px;
-    --radius-card: 20px;
-    --radius-frame: 32px;
-    --radius-pill: 999px;
-    /* Only floating layers (menus, popovers, tooltips) lift. */
-    --shadow-float: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
     --scrim: rgba(2, 7, 10, 0.72);
-    --font-display: "Instrument Serif", Georgia, serif;
-    --font-body: "Inter", system-ui, sans-serif;
   }
 
   * {
@@ -151,7 +163,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: var(--font-body);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
   }
   /* Serif for headings; one weight, so size carries the hierarchy. */

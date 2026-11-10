@@ -238,10 +238,7 @@ export function StockResearch() {
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-            Research Stock
-          </p>
-          <h1 className="mt-1 font-display text-5xl">One company. Six perspectives.</h1>
+          <h1 className="font-display text-5xl">One company. Six perspectives.</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
             Compare company facts through all six investing philosophies. Select a view to ask
             deeper questions.

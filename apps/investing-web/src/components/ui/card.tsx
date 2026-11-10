@@ -5,8 +5,8 @@ import { cn } from "../../lib/utils";
 const cardVariants = cva("rounded-card border", {
   variants: {
     variant: {
-      default: "border-border bg-card shadow-md",
-      empty: "border-dashed border-border bg-transparent shadow-none",
+      default: "border-border bg-card",
+      empty: "border-dashed border-border bg-transparent",
     },
   },
   defaultVariants: { variant: "default" },

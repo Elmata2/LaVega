@@ -109,7 +109,7 @@ test("XIRR row shows percent-for-percent, not a pp spread", async () => {
       />,
     );
   });
-  expect(container.textContent).toContain("XIRR p.j. Portfolio +11.8% · AEX +29.4%");
+  expect(container.textContent).toContain("XIRR p.j. Your portfolio +11.8% · AEX +29.4%");
   expect(container.textContent).not.toContain("pp");
   await act(async () => root.unmount());
 });
@@ -434,6 +434,21 @@ test("the card has one title, not an eyebrow repeating it", async () => {
   expect(headings).toHaveLength(1);
   expect(["Portfolio value", "Indexed return"]).toContain(headings[0]);
   expect(container.textContent!.split(headings[0]!).length - 1).toBe(1);
+  await act(async () => root.unmount());
+});
+
+test("the legend lists Your portfolio first, then the benchmarks", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
+    await Promise.resolve();
+  });
+  const legend = container.querySelector('[aria-label="Chart series"]')!;
+  const labels = Array.from(legend.querySelectorAll("button")).map((b) => b.textContent);
+  expect(labels[0]).toBe("Your portfolio");
   await act(async () => root.unmount());
 });
 

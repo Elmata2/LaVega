@@ -11,13 +11,16 @@ import { continuePriceSync } from "../lib/syncSession";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
-import { Swatch } from "./Swatch";
+import { LineSwatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
-const colors = ["chart-blue", "chart-purple", "chart-teal"];
+// The portfolio series is always chart-blue; benchmarks take the rest in order.
+// Never pos/neg/coral: a series colour must not read as gain or loss.
+const portfolioColor = "chart-blue";
+const colors = ["chart-purple", "chart-teal", "chart-amber", "chart-coral"];
 type Props = {
   data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>;
   benchmarks?: BenchmarkSeries[];
@@ -231,10 +234,6 @@ export function PortfolioBenchmarkChart({
           }),
     [mode, points, indexed],
   );
-  const direction = useMemo(() => {
-    const values = points.flatMap((point) => (point.value === null ? [] : [point.value]));
-    return values.length < 2 || values.at(-1)! >= values[0]! ? "pos" : "neg";
-  }, [points]);
   const label = mode === "euros" ? "Portfolio value" : "Indexed return";
   const summaryPoint = indexed[focusIndex ?? indexed.length - 1] ?? null;
   const applyTypedDates = (event: React.FormEvent) => {
@@ -282,7 +281,7 @@ export function PortfolioBenchmarkChart({
                 key={symbol}
                 className="inline-flex items-center gap-2 rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold"
               >
-                <Swatch className="size-2 rounded-full" color={`hsl(var(--${colors[index]}))`} />
+                <LineSwatch dashed color={`hsl(var(--${colors[index]}))`} />
                 {item ? benchmarkLabel(item) : symbol}
                 <button
                   type="button"
@@ -326,13 +325,13 @@ export function PortfolioBenchmarkChart({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="AEX, DAX, ETF…"
-                  className="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-normal"
+                  className="mt-1.5 w-full rounded-tile border border-input bg-background px-3 py-2 text-sm font-normal"
                 />
               </label>
               <button
                 type="button"
                 onClick={() => setComparing(false)}
-                className="pressable self-end rounded-xl px-3 py-2 text-sm font-semibold"
+                className="pressable self-end rounded-tile px-3 py-2 text-sm font-semibold"
               >
                 Close
               </button>
@@ -353,7 +352,7 @@ export function PortfolioBenchmarkChart({
                       setComparing(false);
                       setQuery("");
                     }}
-                    className="pressable w-full rounded-xl px-3 py-2 text-left hover:bg-background"
+                    className="pressable w-full rounded-tile px-3 py-2 text-left hover:bg-background"
                   >
                     <span className="block text-sm font-semibold">{result.name}</span>
                     <span className="block text-xs text-muted-foreground">
@@ -444,13 +443,13 @@ export function PortfolioBenchmarkChart({
               role="img"
               tabIndex={0}
               aria-label={`${label}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-xl"
+              className="touch-pan-y select-none rounded-tile"
               {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
                 <LineChart
                   data={chartPoints}
-                  margin={{ top: 12, right: 12, left: 8, bottom: 0 }}
+                  margin={{ top: 20, right: 12, left: 8, bottom: 0 }}
                   onMouseMove={(state) => {
                     if (typeof state?.activeTooltipIndex === "number")
                       chart.focus(state.activeTooltipIndex);
@@ -511,14 +510,20 @@ export function PortfolioBenchmarkChart({
                   />
                   <Line
                     dataKey={mode === "euros" ? "value" : "portfolioReturn"}
-                    name="Portfolio"
+                    name="Your portfolio"
                     hide={!visible.has("portfolio")}
                     connectNulls={false}
-                    stroke={`hsl(var(--${mode === "euros" ? direction : "pos"}))`}
+                    stroke={`hsl(var(--${portfolioColor}))`}
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4 }}
                     isAnimationActive={false}
+                    label={
+                      <EndLabel
+                        last={chartPoints.length - 1}
+                        color={`hsl(var(--${portfolioColor}))`}
+                      />
+                    }
                   />
                   {mode === "indexed" &&
                     loadedSeries.map((benchmark, index) => (
@@ -529,7 +534,8 @@ export function PortfolioBenchmarkChart({
                         hide={!visible.has(benchmark.symbol)}
                         connectNulls={false}
                         stroke={`hsl(var(--${colors[index]}))`}
-                        strokeWidth={2}
+                        strokeWidth={1.5}
+                        strokeDasharray="5 3"
                         dot={false}
                         activeDot={{ r: 4 }}
                         isAnimationActive={false}
@@ -553,13 +559,10 @@ export function PortfolioBenchmarkChart({
                 type="button"
                 aria-pressed={visible.has("portfolio")}
                 onClick={() => setVisible(toggle(visible, "portfolio"))}
-                className="pressable inline-flex items-center gap-1.5 rounded-pill px-2 py-1 text-muted-foreground"
+                className="pressable inline-flex items-center gap-2 rounded-pill px-2 py-1 font-semibold text-foreground"
               >
-                <Swatch
-                  className="size-2 rounded-full"
-                  color={`hsl(var(--${mode === "euros" ? direction : "pos"}))`}
-                />
-                Portfolio
+                <LineSwatch thick color={`hsl(var(--${portfolioColor}))`} />
+                Your portfolio
               </button>
               {selectedSeries.map((benchmark, index) => (
                 <button
@@ -567,9 +570,9 @@ export function PortfolioBenchmarkChart({
                   type="button"
                   aria-pressed={visible.has(benchmark.symbol)}
                   onClick={() => setVisible(toggle(visible, benchmark.symbol))}
-                  className="pressable inline-flex items-center gap-1.5 rounded-pill px-2 py-1 text-muted-foreground"
+                  className="pressable inline-flex items-center gap-2 rounded-pill px-2 py-1 text-muted-foreground"
                 >
-                  <Swatch className="size-2 rounded-full" color={`hsl(var(--${colors[index]}))`} />
+                  <LineSwatch dashed color={`hsl(var(--${colors[index]}))`} />
                   {benchmarkLabel(benchmark)}
                 </button>
               ))}
@@ -578,6 +581,38 @@ export function PortfolioBenchmarkChart({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Direct label on the last point of the portfolio line. Recharts calls this
+ *  for every point; only the last one draws. Sits above the point, right-aligned
+ *  so it stays inside the plot. */
+function EndLabel({
+  x,
+  y,
+  index,
+  last,
+  color,
+}: {
+  x?: number;
+  y?: number;
+  index?: number;
+  last: number;
+  color: string;
+}) {
+  if (index !== last || typeof x !== "number" || typeof y !== "number") return null;
+  return (
+    <text
+      x={x}
+      y={y - 10}
+      textAnchor="end"
+      fill={color}
+      fontSize={11}
+      fontWeight={600}
+      aria-hidden="true"
+    >
+      You
+    </text>
   );
 }
 
@@ -605,10 +640,7 @@ function PerformanceSummary({
           const benchmarkTwr = point.benchmarkReturns[benchmark.symbol] ?? null;
           const benchmarkMwr = point.benchmarkXirr[benchmark.symbol] ?? null;
           return (
-            <div
-              key={benchmark.symbol}
-              className="min-w-[220px] flex-1 rounded-xl bg-card p-3 shadow-md"
-            >
+            <div key={benchmark.symbol} className="min-w-[220px] flex-1 rounded-tile bg-card p-3">
               <p className="mb-2 text-xs font-semibold">vs. {benchmarkLabel(benchmark)}</p>
               {!hasHistory ? (
                 <p className="text-xs text-muted-foreground">
@@ -667,11 +699,12 @@ export function PerformanceTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(420px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-xl">
+    <div className="max-w-[min(420px,80vw)] rounded-tile border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-2 text-muted-foreground">{dateLabel(point.date)}</p>
       {mode === "euros" ? (
-        <p className="font-semibold">
-          Portfolio: {valueOrUnknown(point.value, (value) => money(value, currency))}
+        <p className="flex items-center gap-2 font-semibold">
+          <LineSwatch thick color={`hsl(var(--${portfolioColor}))`} />
+          Your portfolio: {valueOrUnknown(point.value, (value) => money(value, currency))}
         </p>
       ) : (
         <div className="flex flex-wrap gap-3">
@@ -684,12 +717,12 @@ export function PerformanceTooltip({
               <div key={benchmark.symbol} className="min-w-[180px] flex-1">
                 <p className="mb-1 font-semibold">vs. {benchmarkLabel(benchmark)}</p>
                 <p className="mb-1 text-sm font-semibold">
-                  Portfolio {valueOrUnknown(portfolioTwr, signedPercent)} ·{" "}
+                  Your portfolio {valueOrUnknown(portfolioTwr, signedPercent)} ·{" "}
                   {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                 </p>
                 <p className="text-sm font-semibold">
-                  XIRR p.j. Portfolio {signedCappedXirr(portfolioMwr)} · {benchmarkLabel(benchmark)}{" "}
-                  {signedCappedXirr(benchmarkMwr)}
+                  XIRR p.j. Your portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
+                  {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
                 </p>
               </div>
             );

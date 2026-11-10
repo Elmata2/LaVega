@@ -7,6 +7,7 @@ import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
+import { LineSwatch } from "./Swatch";
 
 /** A portfolio point, optionally carrying the owner's opted-in Personal total
  *  (`@lavega/core`'s `mergeInPersonalNetWorth`). Both extra fields are
@@ -264,7 +265,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
               role="img"
               tabIndex={0}
               aria-label="Net worth: investments, cash and total. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom."
-              className="touch-pan-y select-none rounded-xl"
+              className="touch-pan-y select-none rounded-tile"
               {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
@@ -384,7 +385,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     name="Total"
                     connectNulls={false}
                     stroke="hsl(var(--foreground))"
-                    strokeWidth={2.25}
+                    strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4 }}
                     isAnimationActive={false}
@@ -404,6 +405,10 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
               className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground"
               aria-label="Net worth chart series"
             >
+              <span className="inline-flex items-center gap-2 font-semibold text-foreground">
+                <LineSwatch thick color="hsl(var(--foreground))" />
+                Your net worth
+              </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="size-2 rounded-full bg-chart-teal" />
                 Investments
@@ -418,10 +423,6 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                   Bank accounts (Personal, as of {dateLabel(personalAsOfDate)})
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-0.5 w-3 bg-foreground" />
-                Total
-              </span>
               {warnings.forwardFilled.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden="true" className="h-2.5 w-3 net-worth-hatch" />
@@ -483,8 +484,12 @@ function NetWorthTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-xl">
+    <div className="max-w-[min(320px,80vw)] rounded-tile border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 text-muted-foreground">{dateLabel(point.date)}</p>
+      <p className="flex items-center gap-2 font-semibold">
+        <LineSwatch thick color="hsl(var(--foreground))" />
+        Your net worth
+      </p>
       <p className="mb-2 text-base font-semibold tabular-nums">
         {displayValue(point.netTotal, currency)}
       </p>

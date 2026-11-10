@@ -1,5 +1,5 @@
 import { useChat } from "@ai-sdk/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -251,7 +251,7 @@ function PositionList({
               <button
                 type="button"
                 onClick={() => changeSort(column.key)}
-                className="rounded-xs text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="rounded-chip text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {column.label}
                 {sort === column.key ? (direction === "asc" ? " ↑" : " ↓") : ""}
@@ -523,20 +523,17 @@ function AgentView() {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-md">
+      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card">
         <div className="border-b border-border px-5 py-5 sm:px-6">
           <Link to="/" className="text-sm font-semibold text-accent hover:underline">
             ← Back to overview
           </Link>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-eyebrow text-accent">
-            Portfolio agent
-          </p>
-          <h2 className="mt-1 font-display text-5xl">{agent.displayName}</h2>
+          <h2 className="mt-6 font-display text-5xl">{agent.displayName}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
           <div className="flex justify-start">
-            <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+            <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
               I am {agent.displayName}. I look at your positions through this lens. Ask a question
               about a holding, concentration, return or risk.
             </p>
@@ -547,11 +544,11 @@ function AgentView() {
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {message.role === "user" ? (
-                <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-accent px-4 py-3 text-sm leading-6 text-accent-foreground">
+                <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-accent px-4 py-3 text-sm leading-6 text-accent-foreground">
                   <MentionText text={message.text} agents={agents} />
                 </p>
               ) : (
-                <div className="max-w-[86%] rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                <div className="max-w-[86%] rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
                   {message.speaker && (
                     <p className="mb-1 text-xs font-semibold text-accent">{message.speaker}</p>
                   )}
@@ -570,7 +567,7 @@ function AgentView() {
           <label htmlFor="agent-message" className="sr-only">
             Ask {agent.displayName}
           </label>
-          <div className="rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="rounded-tile border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
             <MentionInput
               id="agent-message"
               value={input}
@@ -604,7 +601,7 @@ function AgentView() {
       </section>
       <aside
         aria-label="Conversation context"
-        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-md lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
+        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
       >
         <AgentThreads
           agentId={agent.id}
@@ -616,8 +613,7 @@ function AgentView() {
         />
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Context</p>
-            <h3 className="mt-1 font-display text-3xl">Your positions</h3>
+            <h3 className="font-display text-3xl">Your positions</h3>
           </div>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {contextPositions.length}
@@ -631,7 +627,7 @@ function AgentView() {
               <Link
                 key={`${position.symbol}-${position.entity}`}
                 to={`/positions/${encodeURIComponent(position.symbol)}`}
-                className="pressable flex items-center justify-between gap-3 rounded-xl bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
+                className="pressable flex items-center justify-between gap-3 rounded-tile bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">
@@ -808,6 +804,58 @@ function ModuleRoute({
   return <>{children}</>;
 }
 
+/** The module pill track. On a phone it scrolls sideways: an edge fade says
+ *  more is off-screen, and the active pill is scrolled into view on navigation. */
+function ModuleNav({ moduleIds }: { moduleIds: Parameters<typeof investingModulePath>[0][] }) {
+  const ref = useRef<HTMLElement>(null);
+  const location = useLocation();
+  const [fade, setFade] = useState<"none" | "start" | "end" | "both">("none");
+  const measure = useCallback(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const start = nav.scrollLeft > 1;
+    const end = nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 1;
+    setFade(start && end ? "both" : start ? "start" : end ? "end" : "none");
+  }, []);
+  useEffect(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    // Not every environment (jsdom) implements scrollIntoView.
+    if (typeof active?.scrollIntoView === "function")
+      active.scrollIntoView({ inline: "center", block: "nearest" });
+    measure();
+    const frame = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+    };
+  }, [location.pathname, moduleIds.length, measure]);
+  return (
+    <nav
+      ref={ref}
+      aria-label="Main navigation"
+      data-fade={fade}
+      onScroll={measure}
+      className="scroll-fade-x flex max-w-full items-center gap-1 overflow-x-auto rounded-pill bg-secondary p-1 [scrollbar-width:none]"
+    >
+      {moduleIds.map((id) => (
+        <NavLink
+          key={id}
+          to={investingModulePath(id)}
+          end={id === HOME_MODULE}
+          className={({ isActive }) =>
+            `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
+          }
+        >
+          {MODULES.find((m) => m.id === id)?.label ?? id}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -834,28 +882,12 @@ function Layout() {
       <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background sm:min-h-[calc(100vh-3rem)]">
         <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <Link to="/" className="pressable group flex items-baseline gap-3">
-            <span className="font-display text-3xl leading-none">LaVega</span>
+            <span className="font-display text-3xl">LaVega</span>
             <h1 className="font-sans text-sm font-medium leading-none text-muted-foreground">
               Investing
             </h1>
           </Link>
-          <nav
-            aria-label="Main navigation"
-            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-pill bg-secondary p-1 [scrollbar-width:none]"
-          >
-            {(layout.status === "loading" ? [HOME_MODULE] : layout.modules).map((id) => (
-              <NavLink
-                key={id}
-                to={investingModulePath(id)}
-                end={id === HOME_MODULE}
-                className={({ isActive }) =>
-                  `rounded-pill px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
-                }
-              >
-                {MODULES.find((m) => m.id === id)?.label ?? id}
-              </NavLink>
-            ))}
-          </nav>
+          <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
           <div className="ml-auto flex items-center gap-2">
             {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
                 gewone cross-document link, want de persoonlijke app is een eigen
@@ -865,7 +897,7 @@ function Layout() {
             {PERSONAL_URL && (
               <a
                 href={PERSONAL_URL}
-                className="flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                className="flex min-h-11 items-center gap-2 rounded-pill px-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <svg
                   width="16"
@@ -888,7 +920,7 @@ function Layout() {
               <button
                 type="button"
                 onClick={() => navigate("/profile#widgets")}
-                className="pressable rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
+                className="pressable min-h-11 rounded-pill border border-border bg-card px-4 text-xs font-semibold transition-colors hover:bg-secondary"
               >
                 <span aria-hidden="true">+</span> Add widget
               </button>
@@ -896,7 +928,7 @@ function Layout() {
             <Link
               to="/profile"
               aria-label="Profile"
-              className={`pressable flex size-9 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
+              className={`pressable flex size-11 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
             >
               <svg
                 width="16"
@@ -1207,14 +1239,11 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="position-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
-            {position.status === "closed" ? "Closed position" : "Open position"}
-          </p>
-          <h3 id="position-title" className="mt-1 font-display text-4xl">
+          <h3 id="position-title" className="font-display text-4xl">
             {position.description ?? position.symbol}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -1311,7 +1340,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             aria-expanded={quantityOpen}
             aria-controls="quantity-history"
             onClick={() => setQuantityOpen((open) => !open)}
-            className="pressable mt-1 rounded-xs text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            className="pressable mt-1 rounded-chip text-xs font-semibold text-accent underline-offset-2 hover:underline"
           >
             {quantityOpen ? "Hide history" : "Show quantity history"}
           </button>
@@ -1411,7 +1440,7 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="activity-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
     >
       <h3 id="activity-title" className="font-display text-3xl">
         Activity

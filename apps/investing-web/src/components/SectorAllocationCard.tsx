@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SectorCoverage } from "@lavega/core";
 import type { SectorState } from "../lib/sectorResource.js";
+import { EmptyState } from "./EmptyState.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
 const barColors = [
@@ -176,6 +177,15 @@ export function SectorAllocationCard({
     );
   const { sectors, sectorCoverage } = state.data;
   const coverage = sectorCoverage ? coverageLine(sectorCoverage) : null;
+  if (sectors.length === 0)
+    return (
+      <div data-dashboard-section="sectors">
+        <EmptyState
+          title="No sector data yet"
+          description="Sector weights appear once your holdings have a sector profile."
+        />
+      </div>
+    );
   return (
     <Card data-dashboard-section="sectors">
       <CardHeader>
@@ -183,9 +193,6 @@ export function SectorAllocationCard({
       </CardHeader>
       <CardContent>
         <ul aria-label="Sector allocation" className="space-y-2">
-          {sectors.length === 0 && (
-            <li className="text-sm text-muted-foreground">No sector data yet.</li>
-          )}
           {sectors.map((sector, index) => (
             <li key={sector.sector}>
               <div className="flex items-center justify-between gap-3 text-sm">
@@ -207,12 +214,10 @@ export function SectorAllocationCard({
             </li>
           ))}
         </ul>
-        {sectors.length > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Fund holdings are looked through to their published sector weights; a small residual may
-            still show as Unknown.
-          </p>
-        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Fund holdings are looked through to their published sector weights; a small residual may
+          still show as Unknown.
+        </p>
         {coverage && <p className="mt-1 text-xs text-muted-foreground">{coverage}</p>}
         {currency && <p className="mt-3 text-xs text-muted-foreground">Amounts in {currency}.</p>}
       </CardContent>

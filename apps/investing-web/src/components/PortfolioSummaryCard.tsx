@@ -5,6 +5,7 @@ import type {
   RiskRange,
 } from "@lavega/core";
 import { shortDate } from "../lib/dates.js";
+import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 /** The view this card renders: the risk projection's metrics and report plus
@@ -119,14 +120,14 @@ export function PortfolioSummaryCard({
       </CardHeader>
       <CardContent spacing="loose">
         <div className="flex flex-wrap gap-3 text-sm">
-          <button type="button" className="self-end rounded-md border px-2 py-1" onClick={refresh}>
+          <Button type="button" variant="outline" size="sm" className="self-end" onClick={refresh}>
             Refresh risk
-          </button>
+          </Button>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Risk period</span>
             <select
               aria-label="Risk period"
-              className="rounded-md border bg-background px-2 py-1"
+              className="rounded-tile border border-input bg-background px-3 py-2 text-sm"
               value={range}
               onChange={(event) => onRangeChange(event.target.value as RiskRange)}
             >
@@ -140,7 +141,7 @@ export function PortfolioSummaryCard({
               <span className="text-xs text-muted-foreground">Risk benchmark</span>
               <select
                 aria-label="Risk benchmark"
-                className="max-w-full rounded-md border bg-background px-2 py-1"
+                className="max-w-full rounded-tile border border-input bg-background px-3 py-2 text-sm"
                 value={benchmark || risk.benchmark?.symbol || ""}
                 onChange={(event) => onBenchmarkChange(event.target.value)}
               >

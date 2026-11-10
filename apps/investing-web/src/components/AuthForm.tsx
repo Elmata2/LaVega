@@ -111,7 +111,7 @@ export function CheckEmailPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="font-display text-3xl leading-none">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">Check your email</CardTitle>
           <CardDescription>
             If this address is new to LaVega, a confirmation link is on its way
@@ -253,7 +253,7 @@ export function ForgotPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="font-display text-3xl leading-none">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">Reset your password</CardTitle>
           <CardDescription>
             Enter your account email. We will send a link to set a new password.
@@ -337,7 +337,7 @@ export function ResetPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="font-display text-3xl leading-none">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">{done ? "Password changed" : "Choose a new password"}</CardTitle>
           <CardDescription>
             {done
