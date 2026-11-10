@@ -177,9 +177,11 @@ Adjust the two fixture dates at the top of the test only if `point()` requires
 different arguments; `point` is the local helper used throughout that file.
 
 **Verify**: `pnpm --filter @lavega/core exec vitest run src/investing/portfolio.test.ts`
-→ the five new cases **fail** (produced starts are `2026-03-03`, `2026-01-03`,
-`2025-12-01`, `2024-03-02`, `2023-03-01`). If they pass, STOP — the helper
-already clamps and this plan does not apply.
+→ exactly **three** of the five new cases fail (`2026-03-31` minus `1M`,
+`2026-05-31` minus `6M`, `2024-02-29` minus `1Y`). The other two target 31-day
+months, where `setUTCMonth` happens to be correct, so they pass from the start —
+that is expected, not a broken test. If the three rollover cases pass, STOP —
+the helper already clamps and this plan does not apply.
 
 ### Step 2: Clamp the day to the target month
 
