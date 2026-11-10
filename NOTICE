@@ -7,3 +7,27 @@ packages/adapters/vendor/gloomberb/ — https://github.com/gloom-sh/gloomberb
 MIT License, Copyright (c) 2026 Gloomberb Contributors.
 See packages/adapters/vendor/gloomberb/README.md for the vendored commit and
 what was changed.
+
+## Sure
+
+LaVega ports domain logic, workflow contracts and adapted behavioural test fixtures from
+Sure, the community fork of Maybe Finance:
+
+- Upstream: https://github.com/we-promise/sure
+- Pinned commit: 562fe096d149cb4d1fb1e6d3446527572c1ec7f6 (2026-11-10)
+- Licence: GNU Affero General Public License v3.0 (AGPL-3.0). The repository's LICENSE is
+  AGPL-3.0 and covers the combined work.
+- Scope: independently reimplemented TypeScript modules and adapted behavioural test fixtures.
+  No Ruby source is vendored. Each derived file carries the upstream project, commit,
+  AGPL-3.0 notice, the words "independently reimplemented for LaVega" and its change date.
+  The provenance ledger is docs/superpowers/specs/2026-11-10-sure-adoption-plan.md, Appendix A.
+- Attribution: Sure is a fork of Maybe Finance. LaVega is not affiliated with or endorsed by
+  Maybe Finance Inc. or the Sure maintainers. "Maybe" and "Sure" identify the upstream source
+  only.
+- Source offer: LaVega is public at https://github.com/Elmata2/LaVega, which provides the
+  corresponding source. A distributor that provides binaries without repository access must
+  satisfy AGPL-3.0 section 6 for the combined work.
+
+If text from Sure's MIT-licensed `docs/llm-guides/wealth-blueprint.md` is adapted, its own
+notice applies: "Blueprint text (c) 2026 diegomarino, MIT License", reproduced with the
+adapted text.

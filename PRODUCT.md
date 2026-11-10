@@ -27,7 +27,8 @@ Local-first (data stays on the machine or in an encrypted vault, read-only broke
 - Broker sync (Trading 212, IBKR, DeGiro) is slow (minutes) and can be partial; unknown figures must show as unknown, with the reason, never as zero.
 - Prices default to Yahoo Finance locally; Trading 212 history can be incomplete.
 - Investing dashboard is live at lavega.dev/investing, authenticated.
-- Shipped surfaces today: investing-web dashboard, site (marketing), extension (checkout points). `apps/web` (personal vault) is not confirmed as shipping.
+- Shipped surfaces today: investing-web dashboard, site (marketing), extension (checkout points).
+- Personal vault (`apps/web`) ships now, per owner decision 2026-11-10. Build it for owner use first; public launch follows the Sure adoption plan gates.
 
 ## Capabilities and Constraints
 
@@ -35,7 +36,7 @@ Local-first (data stays on the machine or in an encrypted vault, read-only broke
 - Glossary (see `docs/CONTEXT.md`): Position detail, Activity, Quantity history, Closed position, Thread, Thesis, Dormant thesis, Goal, Observation. Use these terms in UI copy.
 - A user confirms and edits a thesis but cannot delete it on its own.
 - Agents: six investor personas (Analyse card, one typed judgment each) and per-persona chat threads; single-company research at `/investing/agents/research`.
-- Undecided: public commercial/hosted path; whether the personal vault app ships.
+- Undecided: public commercial/hosted path and hosted multi-user. The personal vault ships; it stays local-first.
 
 ## Brand Commitments
 
