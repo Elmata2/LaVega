@@ -30,7 +30,7 @@ export function LoginForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
+        <p className="font-display text-3xl leading-none">LaVega</p>
         <CardTitle as="h1">Sign in</CardTitle>
         <CardDescription>Enter your email and password to continue.</CardDescription>
       </CardHeader>
@@ -46,7 +46,7 @@ export function LoginForm({
                 <FieldLabel htmlFor="login-password">Password</FieldLabel>
                 <Link
                   to="/forgot-password"
-                  className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                  className="text-sm font-semibold text-accent underline-offset-4 hover:underline"
                 >
                   Forgot password?
                 </Link>
@@ -76,7 +76,7 @@ export function LoginForm({
               New to LaVega?{" "}
               <Link
                 to="/sign-up"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Create an account
               </Link>

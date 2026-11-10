@@ -42,7 +42,8 @@
   --color-chart-amber: hsl(var(--chart-amber));
   --color-chart-coral: hsl(var(--chart-coral));
 
-  --shadow-md: var(--shadow-soft);
+  --shadow-sm: none;
+  --shadow-md: none;
   --shadow-xl: var(--shadow-float);
 
   --tracking-eyebrow: 0.16em;
@@ -50,24 +51,6 @@
 
   --font-display: var(--font-display);
   --font-sans: var(--font-body);
-}
-
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
 }
 
 @utility pressable {
@@ -97,43 +80,69 @@
   );
 }
 
+/* Instrument Serif ships ONE weight (400). Declared over 100-900 so a stray
+ * `font-semibold` or `font-bold` resolves to the real glyphs instead of a
+ * synthesized faux-bold smear. Hierarchy comes from size, not weight. Same
+ * trick as apps/web/src/styles/tokens.css. Relative url() so Vite fingerprints
+ * and bundles the file. */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2")
+    format("woff2");
+}
+
+/* "Midnight": the lavega.dev palette (apps/web/src/styles/tokens.css) as HSL
+ * triplets, so `bg-primary/10` style alpha modifiers keep working. Hex source
+ * of each value in the trailing comment. */
 @layer base {
   :root {
-    --background: 40 27% 97%;
-    --foreground: 60 7% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 60 7% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 60 7% 10%;
-    --primary: 202 55% 27%;
-    --primary-foreground: 40 27% 97%;
-    --secondary: 40 20% 93%;
-    --secondary-foreground: 60 7% 10%;
-    --muted: 40 20% 93%;
-    --muted-foreground: 48 5% 41%;
-    --accent: 202 55% 27%;
-    --accent-foreground: 40 27% 97%;
-    --border: 40 17% 88%;
-    --input: 40 17% 88%;
-    --ring: 202 55% 27%;
-    --pos: 101 35% 35%;
-    --neg: 11 59% 44%;
+    color-scheme: dark;
+    --background: 202.5 66.7% 2.4%; /* #02070a */
+    --foreground: 0 0% 100%; /* #ffffff */
+    --card: 202.5 38.1% 8.2%; /* #0d171d surface */
+    --card-foreground: 0 0% 100%;
+    --popover: 202.5 38.1% 8.2%; /* #0d171d */
+    --popover-foreground: 0 0% 100%;
+    --primary: 13 96.7% 64.5%; /* #fc734d coral, the CTA */
+    --primary-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --secondary: 204 31.2% 12.5%; /* #16222a surface-2 */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 204 31.2% 12.5%; /* #16222a */
+    --muted-foreground: 203.3 11.7% 69.8%; /* #a9b4bb */
+    --accent: 199.4 98.2% 43.9%; /* #0297de blue: links, active, focus */
+    --accent-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --border: 0 0% 100% / 0.12; /* white at 12% hairline */
+    --input: 0 0% 100% / 0.12;
+    --ring: 199.4 98.2% 43.9%; /* #0297de */
+    --pos: 143.8 56.9% 60%; /* #5fd38d */
+    --neg: 0 100% 78%; /* #ff8f8f */
     --positive: var(--pos);
     --negative: var(--neg);
-    --warning: 39 71% 41%;
-    --chart-blue: 211 47% 44%;
-    --chart-purple: 249 42% 59%;
-    --chart-teal: 174 51% 37%;
-    --chart-amber: 39 71% 48%;
-    --chart-coral: 11 59% 55%;
-    --radius: 18px;
-    --radius-card: 22px;
-    --radius-frame: 26px;
+    --warning: 39.2 86.5% 62.2%; /* #f2b84b */
+    --chart-blue: 202.1 84.5% 62.2%; /* #4db4f0 */
+    --chart-purple: 248.4 100% 80.4%; /* #a99bff */
+    --chart-teal: 172.2 58.6% 56.5%; /* #4fd1c0 */
+    --chart-amber: 40.1 100% 63.9%; /* #ffc247 */
+    --chart-coral: 337 100% 74.9%; /* #ff7fb0 pink; never the CTA hue */
+    --radius: 20px;
+    --radius-card: 20px;
+    --radius-frame: 32px;
     --radius-pill: 999px;
-    --shadow-soft: 0 1px 2px rgba(26, 26, 23, 0.04), 0 18px 40px -28px rgba(26, 26, 23, 0.16);
-    --shadow-float:
-      0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
-    --font-display: "EB Garamond", Georgia, serif;
+    /* Only floating layers (menus, popovers, tooltips) lift. */
+    --shadow-float: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(2, 7, 10, 0.72);
+    --font-display: "Instrument Serif", Georgia, serif;
     --font-body: "Inter", system-ui, sans-serif;
   }
 
@@ -143,6 +152,15 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Serif for headings; one weight, so size carries the hierarchy. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 400;
   }
   :focus-visible {
     @apply outline-hidden ring-2 ring-ring ring-offset-2 ring-offset-background;

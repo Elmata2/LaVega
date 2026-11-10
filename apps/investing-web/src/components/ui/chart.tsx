@@ -18,8 +18,11 @@ export function ChartContainer({
   );
 }
 
+/** Axis tick props for every chart: muted text readable on the dark panel. */
+export const axisTick = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
+
 export function ChartTooltip(props: ComponentProps<typeof Tooltip>) {
-  return <Tooltip {...props} />;
+  return <Tooltip cursor={{ stroke: "hsl(var(--border))" }} {...props} />;
 }
 
 type TooltipEntry = {
@@ -48,7 +51,7 @@ export function ChartTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 text-muted-foreground">
         {labelFormatter ? labelFormatter(label ?? "") : label}
       </p>

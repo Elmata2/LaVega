@@ -43,11 +43,11 @@ export function Switch({
       disabled={disabled}
       aria-disabled={disabled}
       onClick={onToggle}
-      className={`relative h-6 w-11 shrink-0 rounded-pill border border-border transition-colors disabled:opacity-60 ${on ? "bg-primary" : "bg-secondary"}`}
+      className={`relative h-6 w-11 shrink-0 rounded-pill border border-border transition-colors disabled:opacity-60 ${on ? "bg-accent" : "bg-secondary"}`}
     >
       <span
         aria-hidden="true"
-        className={`absolute top-0.5 size-5 rounded-pill bg-background transition-transform ${on ? "translate-x-5" : "translate-x-0.5"}`}
+        className={`absolute top-0.5 size-5 rounded-pill bg-foreground transition-transform ${on ? "translate-x-5" : "translate-x-0.5"}`}
       />
     </button>
   );

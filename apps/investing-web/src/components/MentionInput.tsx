@@ -125,7 +125,7 @@ export function MentionInput({
           id={listId}
           role="listbox"
           aria-label="Tag an agent"
-          className="mention-menu absolute bottom-full left-0 z-10 mb-3 min-w-56 origin-bottom-left rounded-tile border border-border bg-card p-1 shadow-md"
+          className="mention-menu absolute bottom-full left-0 z-10 mb-3 min-w-56 origin-bottom-left rounded-tile border border-border bg-card p-1 shadow-xl"
         >
           {options.map((agent, index) => (
             <li

@@ -37,7 +37,7 @@ export function SignupForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
+        <p className="font-display text-3xl leading-none">LaVega</p>
         <CardTitle as="h1">Create your account</CardTitle>
         <CardDescription>Start with your name, email address, and a password.</CardDescription>
       </CardHeader>
@@ -101,7 +101,7 @@ export function SignupForm({
               Already have an account?{" "}
               <Link
                 to="/sign-in"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Sign in
               </Link>

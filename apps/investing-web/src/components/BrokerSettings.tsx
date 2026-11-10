@@ -26,15 +26,15 @@ function BrokerSetupCard({
 }) {
   return (
     <article className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6">
-      <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">{eyebrow}</p>
-      <h3 className="mt-2 font-display text-3xl font-semibold">{name}</h3>
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">{eyebrow}</p>
+      <h3 className="mt-2 font-display text-4xl">{name}</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       <div className="mt-6 border-t border-border pt-5">
         <p className="text-sm font-semibold">Data you need</p>
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
           {fields.map((field) => (
             <li key={field} className="flex gap-2">
-              <span className="text-primary">✓</span>
+              <span className="text-accent">✓</span>
               <span>{field}</span>
             </li>
           ))}
@@ -132,14 +132,14 @@ function BrokerSyncProgressCard() {
   return (
     <section
       aria-live="polite"
-      className={`rounded-card border p-5 ${completed ? "border-positive/30 bg-positive/5" : waiting ? "border-warning/30 bg-warning/10" : "border-primary/20 bg-secondary/40"}`}
+      className={`rounded-card border p-5 ${completed ? "border-positive/30 bg-positive/5" : waiting ? "border-warning/30 bg-warning/10" : "border-accent/20 bg-secondary/40"}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
             Broker sync
           </p>
-          <h3 className="mt-2 font-display text-2xl font-semibold">
+          <h3 className="mt-2 font-display text-3xl">
             {completed ? "Trading 212 synced" : "Trading 212 syncing"}
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -148,7 +148,7 @@ function BrokerSyncProgressCard() {
           </p>
         </div>
         <span
-          className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${completed ? "bg-positive/10 text-positive" : waiting ? "bg-warning/20 text-foreground" : "bg-primary/10 text-primary"}`}
+          className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${completed ? "bg-positive/10 text-positive" : waiting ? "bg-warning/20 text-foreground" : "bg-accent/10 text-accent"}`}
         >
           {completed ? "Completed" : waiting ? "API pause" : "In progress"}
         </span>
@@ -269,10 +269,10 @@ function BrokerVaultUnlock() {
       className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
+        <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
           Existing vault
         </p>
-        <h3 className="mt-2 font-display text-2xl font-semibold">Unlock vault</h3>
+        <h3 className="mt-2 font-display text-3xl">Unlock vault</h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Credentials are stored encrypted on disk. Enter only the vault password; broker keys are
           not needed again.
@@ -380,8 +380,8 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Step 2</p>
-          <h3 className="mt-2 font-display text-3xl font-semibold">Save credentials</h3>
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Step 2</p>
+          <h3 className="mt-2 font-display text-4xl">Save credentials</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {passphraseMode === "unused"
               ? "LaVega encrypts these details with the server key before storing them. Sync then starts automatically."

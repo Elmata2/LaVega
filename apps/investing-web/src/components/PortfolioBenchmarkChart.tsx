@@ -13,7 +13,7 @@ import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "rec
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer, ChartTooltip } from "./ui/chart";
+import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 const colors = ["chart-blue", "chart-purple", "chart-teal"];
@@ -317,7 +317,7 @@ export function PortfolioBenchmarkChart({
             <button
               type="button"
               onClick={() => setComparing(true)}
-              className="pressable rounded-pill border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-primary"
+              className="pressable rounded-pill border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-accent"
             >
               + Compare
             </button>
@@ -473,13 +473,13 @@ export function PortfolioBenchmarkChart({
                 >
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: string) => value.slice(5)}
                   />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     width={72}
@@ -682,7 +682,7 @@ export function PerformanceTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(420px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
+    <div className="max-w-[min(420px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-2 text-muted-foreground">{dateLabel(point.date)}</p>
       {mode === "euros" ? (
         <p className="font-semibold">

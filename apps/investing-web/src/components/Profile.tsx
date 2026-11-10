@@ -55,7 +55,7 @@ function AccountSection() {
               {PERSONAL_URL && (
                 <a
                   href={PERSONAL_URL}
-                  className="text-sm font-semibold text-primary hover:underline"
+                  className="text-sm font-semibold text-accent hover:underline"
                 >
                   Go to LaVega Personal
                 </a>
@@ -190,7 +190,7 @@ function StatusChip({
         : tone === "success"
           ? "border-positive/30 bg-positive/5"
           : tone === "active"
-            ? "border-primary/20 bg-secondary/40"
+            ? "border-accent/20 bg-secondary/40"
             : "border-border bg-secondary/20";
   const dotClass =
     tone === "problem"
@@ -200,7 +200,7 @@ function StatusChip({
         : tone === "success"
           ? "bg-positive"
           : tone === "active"
-            ? "bg-primary"
+            ? "bg-accent"
             : "bg-muted-foreground";
   return (
     <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>

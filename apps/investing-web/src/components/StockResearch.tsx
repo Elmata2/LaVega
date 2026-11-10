@@ -55,7 +55,7 @@ function ResearchConversation({
   return (
     <div className="flex min-h-[380px] flex-col">
       <div className="border-b border-border pb-4">
-        <h2 className="font-display text-2xl font-semibold">Talk with {judgment.displayName}</h2>
+        <h2 className="font-display text-3xl">Talk with {judgment.displayName}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{judgment.reasoning}</p>
       </div>
       <div
@@ -233,17 +233,15 @@ export function StockResearch() {
 
   return (
     <section className="space-y-5">
-      <Link to="/agents" className="text-sm font-semibold text-primary">
+      <Link to="/agents" className="text-sm font-semibold text-accent">
         ← All agents
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+          <p className="text-xs font-semibold uppercase tracking-wide text-accent">
             Research Stock
           </p>
-          <h1 className="mt-1 font-display text-4xl font-semibold">
-            One company. Six perspectives.
-          </h1>
+          <h1 className="mt-1 font-display text-5xl">One company. Six perspectives.</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
             Compare company facts through all six investing philosophies. Select a view to ask
             deeper questions.
@@ -310,7 +308,7 @@ export function StockResearch() {
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-primary">{company.providerSymbol}</p>
+                  <p className="text-xs font-semibold text-accent">{company.providerSymbol}</p>
                   <CardTitle as="h2" className="mt-1">
                     {company.name ?? report.symbol}
                   </CardTitle>
@@ -366,7 +364,7 @@ export function StockResearch() {
                 </div>
               ) : (
                 <div className="mt-6 space-y-4">
-                  <h2 className="font-display text-2xl font-semibold">Company overview</h2>
+                  <h2 className="font-display text-3xl">Company overview</h2>
                   <p className="text-sm leading-7">
                     {company.name ?? report.symbol} has a forward P/E of{" "}
                     {snapshot!.forwardPe === null
@@ -388,7 +386,7 @@ export function StockResearch() {
           </Card>
           <aside aria-label="Six investor views" className="space-y-3">
             <div>
-              <h2 className="font-display text-2xl font-semibold">Investor views</h2>
+              <h2 className="font-display text-3xl">Investor views</h2>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 Bullish probability classifies evidence. It does not predict future returns.
                 Confidence measures the selected view.
@@ -401,9 +399,9 @@ export function StockResearch() {
                 onClick={() => setSelected(item.agentId)}
                 disabled={pending}
                 aria-pressed={selected === item.agentId}
-                className={`pressable w-full rounded-card border bg-card p-4 text-left disabled:opacity-50 ${selected === item.agentId ? "border-primary ring-1 ring-primary" : "border-border hover:bg-secondary/40"}`}
+                className={`pressable w-full rounded-card border bg-card p-4 text-left disabled:opacity-50 ${selected === item.agentId ? "border-accent ring-1 ring-accent" : "border-border hover:bg-secondary/40"}`}
               >
-                <span className="block font-display text-xl font-semibold">{item.displayName}</span>
+                <span className="block font-display text-2xl">{item.displayName}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {LENSES[item.agentId]}
                 </span>
@@ -428,7 +426,7 @@ export function StockResearch() {
                 <span className="mt-2 block text-xs leading-5 text-muted-foreground">
                   {item.reasoning}
                 </span>
-                <span className="mt-3 block text-xs font-semibold text-primary">
+                <span className="mt-3 block text-xs font-semibold text-accent">
                   Explore this view →
                 </span>
               </button>

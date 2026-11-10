@@ -12,7 +12,7 @@ import {
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer } from "./ui/chart";
+import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 
@@ -269,9 +269,9 @@ export function PositionPriceChart({
             >
               <ChartContainer className="h-[300px]" aria-hidden="true">
                 <LineChart data={plotPoints} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="date" tick={axisTick} tickLine={false} axisLine={false} />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     width={60}

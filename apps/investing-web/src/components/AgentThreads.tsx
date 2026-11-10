@@ -53,8 +53,8 @@ export function AgentThreads({
     <div className="mb-5 border-b border-border pb-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Memory</p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">Conversations</h3>
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Memory</p>
+          <h3 className="mt-1 font-display text-3xl">Conversations</h3>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onNew}>
           New conversation

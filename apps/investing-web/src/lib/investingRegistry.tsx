@@ -101,7 +101,7 @@ export const MODULES: InvestingModuleDef[] = [
         <path
           d="M8 40 L26 34 L44 38 L62 24 L80 16"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -116,9 +116,9 @@ export const MODULES: InvestingModuleDef[] = [
     path: "/agents",
     preview: (
       <Thumb>
-        <circle cx="24" cy="30" r="12" className="fill-primary" opacity="0.35" />
-        <circle cx="56" cy="20" r="9" className="fill-primary" opacity="0.25" />
-        <circle cx="78" cy="38" r="9" className="fill-primary" opacity="0.2" />
+        <circle cx="24" cy="30" r="12" className="fill-accent" opacity="0.35" />
+        <circle cx="56" cy="20" r="9" className="fill-accent" opacity="0.25" />
+        <circle cx="78" cy="38" r="9" className="fill-accent" opacity="0.2" />
       </Thumb>
     ),
   },
@@ -153,7 +153,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
         <path
           d="M8 44 L28 30 L48 36 L68 18 L88 24"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -172,7 +172,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
           cy="30"
           r="18"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="8"
           opacity="0.7"
         />
@@ -210,9 +210,9 @@ export const WIDGETS: InvestingWidgetDef[] = [
     what: "What sector your priced holdings are concentrated in.",
     preview: (
       <Thumb>
-        <rect x="8" y="14" width="80" height="6" rx="3" className="fill-primary" opacity="0.7" />
-        <rect x="8" y="26" width="56" height="6" rx="3" className="fill-primary" opacity="0.5" />
-        <rect x="8" y="38" width="34" height="6" rx="3" className="fill-primary" opacity="0.35" />
+        <rect x="8" y="14" width="80" height="6" rx="3" className="fill-accent" opacity="0.7" />
+        <rect x="8" y="26" width="56" height="6" rx="3" className="fill-accent" opacity="0.5" />
+        <rect x="8" y="38" width="34" height="6" rx="3" className="fill-accent" opacity="0.35" />
       </Thumb>
     ),
   },
@@ -222,7 +222,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
     what: "Ask a chosen investor lens about your positions.",
     preview: (
       <Thumb>
-        <circle cx="24" cy="30" r="12" className="fill-primary" opacity="0.35" />
+        <circle cx="24" cy="30" r="12" className="fill-accent" opacity="0.35" />
         <Line x={44} y={22} w={40} strong />
         <Line x={44} y={34} w={30} />
       </Thumb>

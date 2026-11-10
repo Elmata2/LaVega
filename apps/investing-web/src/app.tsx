@@ -114,7 +114,7 @@ function DashboardProblems({ problems }: { problems: string[] }) {
             {/credentials cannot be read/i.test(problem) && (
               <Link
                 to="/brokers/connect"
-                className="font-semibold text-primary underline-offset-2 hover:underline"
+                className="font-semibold text-accent underline-offset-2 hover:underline"
               >
                 Reconnect broker
               </Link>
@@ -247,7 +247,7 @@ function PositionList({
               className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-hidden hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <div role="cell" className="min-w-0 pr-4">
-                <span className="block truncate font-semibold text-primary">
+                <span className="block truncate font-semibold text-accent">
                   {position.description ?? position.symbol}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
@@ -394,7 +394,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div>
           <dt className="text-xs text-muted-foreground">Portfolio value</dt>
           <dd
-            className={`mt-1 font-display text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
+            className={`mt-1 text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
           >
             {money(portfolioValue)}
           </dd>
@@ -407,7 +407,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div className="border-t border-border pt-4">
           <dt className="text-xs text-muted-foreground">Daily change</dt>
           <dd
-            className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
+            className={`mt-1 text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
           >
             {money(dailyChange, "always")}
           </dd>
@@ -416,7 +416,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div className="border-t border-border pt-4">
           <dt className="text-xs text-muted-foreground">Total return</dt>
           <dd
-            className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
+            className={`mt-1 text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
           >
             {percentage(totalReturn)}
           </dd>
@@ -521,7 +521,7 @@ function PersonaRadioGroup({
                 moveSelection(index, -1);
               }
             }}
-            className={`pressable rounded-tile border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
+            className={`pressable rounded-tile border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-accent bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
           >
             {agent.displayName}
           </button>
@@ -580,8 +580,8 @@ function PortfolioAgentCard() {
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Agent</p>
-          <h3 id="portfolio-agent-title" className="mt-1 font-display text-2xl font-semibold">
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Agent</p>
+          <h3 id="portfolio-agent-title" className="mt-1 font-display text-3xl">
             Investor lens
           </h3>
         </div>
@@ -613,7 +613,7 @@ function PortfolioAgentCard() {
           <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
           <Link
             to={`/agents/${active.id}`}
-            className="pressable mt-4 flex items-center justify-between rounded-tile border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
+            className="pressable mt-4 flex items-center justify-between rounded-tile border border-accent/20 bg-accent/5 px-4 py-3 text-sm font-semibold text-accent hover:bg-accent/10"
           >
             <span>Open conversation with {active.displayName}</span>
             <span aria-hidden="true">→</span>
@@ -753,13 +753,13 @@ function AgentView() {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-md">
         <div className="border-b border-border px-5 py-5 sm:px-6">
-          <Link to="/" className="text-sm font-semibold text-primary hover:underline">
+          <Link to="/" className="text-sm font-semibold text-accent hover:underline">
             ← Back to overview
           </Link>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-eyebrow text-primary">
+          <p className="mt-6 text-xs font-semibold uppercase tracking-eyebrow text-accent">
             Portfolio agent
           </p>
-          <h2 className="mt-1 font-display text-4xl font-semibold">{agent.displayName}</h2>
+          <h2 className="mt-1 font-display text-5xl">{agent.displayName}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
@@ -775,13 +775,13 @@ function AgentView() {
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {message.role === "user" ? (
-                <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+                <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-accent px-4 py-3 text-sm leading-6 text-accent-foreground">
                   <MentionText text={message.text} agents={agents} />
                 </p>
               ) : (
                 <div className="max-w-[86%] rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
                   {message.speaker && (
-                    <p className="mb-1 text-xs font-semibold text-primary">{message.speaker}</p>
+                    <p className="mb-1 text-xs font-semibold text-accent">{message.speaker}</p>
                   )}
                   <AgentMessageText text={message.text} />
                 </div>
@@ -844,8 +844,8 @@ function AgentView() {
         />
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Context</p>
-            <h3 className="mt-1 font-display text-2xl font-semibold">Your positions</h3>
+            <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Context</p>
+            <h3 className="mt-1 font-display text-3xl">Your positions</h3>
           </div>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {contextPositions.length}
@@ -884,7 +884,7 @@ function AgentView() {
         </div>
         <Link
           to="/positions"
-          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-primary hover:underline"
+          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-accent hover:underline"
         >
           View all positions →
         </Link>
@@ -958,7 +958,7 @@ function AppOpenSync() {
         aria-labelledby="yahoo-consent-title"
         className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm"
       >
-        <h3 id="yahoo-consent-title" className="font-semibold">
+        <h3 id="yahoo-consent-title" className="text-xl">
           Yahoo Finance consent
         </h3>
         <p className="mt-2 leading-6 text-muted-foreground">
@@ -1052,17 +1052,17 @@ function Layout() {
   const isOverview = location.pathname === "/";
   return (
     <div className="min-h-screen p-3 sm:p-6">
-      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background shadow-xl sm:min-h-[calc(100vh-3rem)]">
+      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background sm:min-h-[calc(100vh-3rem)]">
         <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <Link to="/" className="pressable group">
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-              LaVega
-            </span>
-            <h1 className="font-display text-3xl font-semibold leading-none">Investing</h1>
+          <Link to="/" className="pressable group flex items-baseline gap-3">
+            <span className="font-display text-3xl leading-none">LaVega</span>
+            <h1 className="font-sans text-sm font-medium leading-none text-muted-foreground">
+              Investing
+            </h1>
           </Link>
           <nav
             aria-label="Main navigation"
-            className="flex items-center gap-1 rounded-pill bg-secondary p-1"
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-pill bg-secondary p-1 [scrollbar-width:none]"
           >
             {(layout.status === "loading" ? [HOME_MODULE] : layout.modules).map((id) => (
               <NavLink
@@ -1070,7 +1070,7 @@ function Layout() {
                 to={investingModulePath(id)}
                 end={id === HOME_MODULE}
                 className={({ isActive }) =>
-                  `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
+                  `rounded-pill px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
                 }
               >
                 {MODULES.find((m) => m.id === id)?.label ?? id}
@@ -1140,7 +1140,7 @@ function Layout() {
           {!isProfile && !isStockResearch && (
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
-                <p className="mb-2 text-sm font-medium text-primary">
+                <p className="mb-2 text-sm font-medium text-accent">
                   {detail
                     ? "Position detail"
                     : agentView
@@ -1153,7 +1153,7 @@ function Layout() {
                             ? "Agents"
                             : "Your financial overview"}
                 </p>
-                <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
+                <h2 className="font-display text-5xl tracking-tight sm:text-6xl">
                   {detail
                     ? "Position"
                     : agentView
@@ -1459,10 +1459,10 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
+          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">
             {position.status === "closed" ? "Closed position" : "Open position"}
           </p>
-          <h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">
+          <h3 id="position-title" className="mt-1 font-display text-4xl">
             {position.description ?? position.symbol}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -1559,7 +1559,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             aria-expanded={quantityOpen}
             aria-controls="quantity-history"
             onClick={() => setQuantityOpen((open) => !open)}
-            className="pressable mt-1 rounded-xs text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            className="pressable mt-1 rounded-xs text-xs font-semibold text-accent underline-offset-2 hover:underline"
           >
             {quantityOpen ? "Hide history" : "Show quantity history"}
           </button>
@@ -1661,7 +1661,7 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
       aria-labelledby="activity-title"
       className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
     >
-      <h3 id="activity-title" className="font-display text-2xl font-semibold">
+      <h3 id="activity-title" className="font-display text-3xl">
         Activity
       </h3>
       {dates.length === 0 ? (
@@ -1748,7 +1748,7 @@ function PositionDetail() {
     <div className="space-y-5">
       <Link
         to={{ pathname: "/positions", search: query ? `?${query}` : "" }}
-        className="text-sm font-semibold text-primary hover:underline"
+        className="text-sm font-semibold text-accent hover:underline"
       >
         ← Back to positions
       </Link>

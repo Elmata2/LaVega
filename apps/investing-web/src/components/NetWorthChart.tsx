@@ -3,7 +3,7 @@ import { useCallback, useId, useMemo } from "react";
 import { Area, AreaChart, Line, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer, ChartTooltip } from "./ui/chart";
+import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 
@@ -150,7 +150,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <strong className="font-display text-2xl tabular-nums">
+              <strong className="text-2xl tabular-nums">
                 {displayValue(activePoint?.netTotal ?? null, currency)}
               </strong>
               <span className="text-xs text-muted-foreground">
@@ -304,13 +304,13 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                   </defs>
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: string) => value.slice(5)}
                   />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     width={72}
@@ -484,7 +484,7 @@ function NetWorthTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
+    <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 text-muted-foreground">{dateLabel(point.date)}</p>
       <p className="mb-2 text-base font-semibold tabular-nums">
         {displayValue(point.netTotal, currency)}
