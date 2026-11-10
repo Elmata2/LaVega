@@ -17,7 +17,7 @@ const cardHeaderVariants = cva("flex flex-col p-5 sm:p-6", {
   defaultVariants: { gap: "default" },
 });
 
-const cardTitleVariants = cva("font-display tracking-tight", {
+const cardTitleVariants = cva("font-display", {
   variants: { size: { default: "text-3xl", md: "text-2xl" } },
   defaultVariants: { size: "default" },
 });

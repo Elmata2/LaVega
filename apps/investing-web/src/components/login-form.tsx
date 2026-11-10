@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { AuthHonestyLine } from "@/components/auth-layout";
 import { Input } from "@/components/ui/input";
 
 export type LoginValues = { email: string; password: string };
@@ -30,7 +31,6 @@ export function LoginForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="font-display text-3xl leading-none">LaVega</p>
         <CardTitle as="h1">Sign in</CardTitle>
         <CardDescription>Enter your email and password to continue.</CardDescription>
       </CardHeader>
@@ -72,6 +72,7 @@ export function LoginForm({
             <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Signing in…" : "Sign in"}
             </Button>
+            <AuthHonestyLine />
             <FieldDescription className="text-center">
               New to LaVega?{" "}
               <Link

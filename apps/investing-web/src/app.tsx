@@ -981,7 +981,7 @@ function AppOpenSync() {
         role="status"
         className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground"
       >
-        Checking market data consent…
+        Checking your market data settings…
       </div>
     );
   if (problems.length === 0) return null;
@@ -1018,13 +1018,12 @@ export function HealthStatus() {
         setError(reason instanceof Error ? reason.message : "Health check failed"),
       );
   }, []);
-  if (error) return <span className="text-negative">Server unavailable: {error}</span>;
-  if (!health) return <span>Verbinden met investeringsserver…</span>;
-  return (
-    <span>
-      {health.service ?? "server"}: {health.ok ? "available" : "unavailable"}
-    </span>
-  );
+  /* Operator status stays out of the user's way: silent while the server is
+   * fine, one plain line when it is not. */
+  if (error || (health && !health.ok))
+    return <span>Investing data is offline. Figures may be out of date.</span>;
+  if (!health) return <span>Connecting to your investing data…</span>;
+  return null;
 }
 
 function ModuleRoute({

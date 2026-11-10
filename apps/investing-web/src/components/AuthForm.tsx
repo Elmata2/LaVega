@@ -9,6 +9,7 @@ import {
   signUp,
   verificationCallbackUrl,
 } from "../lib/auth-client";
+import { AuthLayout } from "./auth-layout";
 import { LoginForm, type LoginValues } from "./login-form";
 import { SignupForm, type SignupValues } from "./signup-form";
 import { Button } from "./ui/button";
@@ -67,7 +68,7 @@ export function AuthForm({ mode }: { mode: "sign-up" | "sign-in" }) {
   }
 
   return (
-    <AuthShell>
+    <AuthLayout>
       {mode === "sign-up" ? (
         <SignupForm onSubmit={createAccount} pending={pending} error={error} />
       ) : (
@@ -78,7 +79,7 @@ export function AuthForm({ mode }: { mode: "sign-up" | "sign-in" }) {
           verified={new URLSearchParams(location.search).get("verified") === "1"}
         />
       )}
-    </AuthShell>
+    </AuthLayout>
   );
 }
 
