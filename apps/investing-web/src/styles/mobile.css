@@ -12,8 +12,25 @@
      min-height/min-width (not transform/scale) grows the hit area. */
   [aria-label="Choose period"] button,
   [aria-label="Chart series"] button,
-  [aria-label="Allocation details"] button {
+  [aria-label="Allocation details"] button,
+  [aria-label="Group allocation"] button {
     min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* The remaining controls have no aria-label to key off (Refresh risk,
+     + Compare, Choose benchmark, Write letter now, the wordmark link and the
+     native selects). A 44px floor on every interactive control at phone width
+     is the only rule that covers them without touching component markup. */
+  button,
+  select,
+  a,
+  [role="button"],
+  [role="switch"] {
+    min-height: 44px;
+  }
+  select,
+  [role="switch"] {
     min-width: 44px;
   }
 
