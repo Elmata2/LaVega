@@ -28,9 +28,6 @@
   [role="button"],
   [role="switch"] {
     min-height: 44px;
-  }
-  select,
-  [role="switch"] {
     min-width: 44px;
   }
 
