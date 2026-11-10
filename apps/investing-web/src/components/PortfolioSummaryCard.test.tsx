@@ -91,6 +91,39 @@ test("renders metrics and top positions, and excludes sector content", async () 
   expect(container.querySelector('[data-dashboard-section="risk"]')).not.toBeNull();
 });
 
+test("composition and largest positions are visible, not hidden in the methodology details", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: {
+            ...summary,
+            risk: { ...summary.risk, reasons: ["Cash history missing: trading212:USD."] },
+          },
+        },
+      }),
+    ),
+  );
+  // The methodology summary keeps its data-limit count now that composition no
+  // longer sits behind it.
+  const methodologySummary = Array.from(container.querySelectorAll("summary")).find((node) =>
+    node.textContent?.includes("How these are calculated"),
+  );
+  expect(methodologySummary?.textContent).toContain("How these are calculated");
+  expect(methodologySummary?.textContent).toContain("1 data limit");
+  // The composition block is a direct, always-visible child of the card, never
+  // nested inside a closed <details>.
+  const largest = container.querySelector('[aria-label="Largest positions"]');
+  expect(largest).not.toBeNull();
+  expect(container.textContent).toContain("Current composition");
+  for (const details of container.querySelectorAll("details")) {
+    expect(details.textContent).not.toContain("Current composition");
+    expect(details.contains(largest!)).toBe(false);
+  }
+});
+
 test("the account basis explains cash flows and keeps dividends in returns", () => {
   const { container, root } = render();
   act(() => root.render(card()));
