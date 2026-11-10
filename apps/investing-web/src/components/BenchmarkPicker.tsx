@@ -69,7 +69,7 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="pressable rounded-pill border border-dashed border-border px-2.5 py-1 text-xs font-semibold text-primary"
+        className="pressable rounded-pill border border-dashed border-border px-2.5 py-1 text-xs font-semibold text-accent"
       >
         Choose benchmark
       </button>
