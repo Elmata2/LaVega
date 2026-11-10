@@ -200,8 +200,7 @@ export function continuePriceSync(): Promise<PriceSyncOutcome> {
   if (!priceRun) {
     publish({ priceProblem: null });
     priceRun = runPriceSyncUntilComplete((progress) => {
-      const refreshed = isPrice(progress) && publish({ price: progress });
-      if (!refreshed) dispatchDashboardRefresh();
+      if (isPrice(progress)) publish({ price: progress });
     })
       .then((outcome) => {
         if (outcome.kind === "incomplete") publish({ priceProblem: outcome.message });
