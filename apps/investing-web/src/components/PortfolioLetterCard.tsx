@@ -1,6 +1,6 @@
 import type { LetterState, LetterWriteState } from "../lib/portfolioLetter.js";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 const letterDate = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -43,8 +43,8 @@ export function PortfolioLetterCard({
     return (
       <Card variant="empty" aria-label="Letter from Charlie" data-dashboard-section="letter">
         <CardHeader>
-          <p className="text-sm font-medium text-muted-foreground">Letter from Charlie</p>
           <CardTitle size="md">No letter yet</CardTitle>
+          <CardDescription>Letter from Charlie</CardDescription>
         </CardHeader>
         <CardContent spacing="loose">
           <p className="text-sm text-muted-foreground">
@@ -59,10 +59,10 @@ export function PortfolioLetterCard({
   return (
     <Card aria-label="Letter from Charlie" data-dashboard-section="letter">
       <CardHeader>
-        <p className="text-sm font-medium text-muted-foreground">
-          Letter from Charlie · {letterDate.format(new Date(letter.createdAt))}
-        </p>
         <CardTitle size="md">{letter.verdict}</CardTitle>
+        <CardDescription>
+          Letter from Charlie · {letterDate.format(new Date(letter.createdAt))}
+        </CardDescription>
       </CardHeader>
       <CardContent spacing="loose">
         <ol className="space-y-4 text-sm">

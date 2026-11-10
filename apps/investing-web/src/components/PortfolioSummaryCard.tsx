@@ -84,19 +84,38 @@ export function PortfolioSummaryCard({
       : null;
   const today = new Date().toISOString().slice(0, 10);
   const asOfCaption = risk.to && risk.to < today ? ` (as of ${shortDate(risk.to)})` : "";
-  const stats: Array<[string, string, string | null]> = [
-    ["Annual volatility", percent(metrics.annualizedVolatility), null],
-    ["Beta", decimal(metrics.beta), null],
-    ["Regression alpha (annual)", percent(metrics.alpha), null],
-    ["Maximum drawdown", percent(metrics.maxDrawdown), drawdownCaption],
-    ["Valid daily returns", `${metrics.observationDays}`, null],
-    ["Benchmark pairs", `${metrics.pairedObservationDays}`, null],
+  /* Three headline figures, each with what it means in plain words. Beta is
+   * here with the other two because it is the one that compares you with the
+   * market; when it cannot be measured the card says what it needs. */
+  const headline: Array<{ label: string; value: string; meaning: string }> = [
+    {
+      label: "Volatility",
+      value: percent(metrics.annualizedVolatility),
+      meaning: "How much your value swings in a typical year",
+    },
+    {
+      label: "Max drawdown",
+      value: percent(metrics.maxDrawdown),
+      meaning: `Biggest fall from a peak${drawdownCaption ? `, ${drawdownCaption}` : ""}`,
+    },
+    {
+      label: "Beta",
+      value: decimal(metrics.beta),
+      meaning:
+        metrics.beta === null || !Number.isFinite(metrics.beta)
+          ? "Needs a benchmark with enough matching days"
+          : "Move per 1 move in the benchmark",
+    },
+  ];
+  const otherStats: Array<[string, string]> = [
+    ["Regression alpha (annual)", percent(metrics.alpha)],
+    ["Valid daily returns", `${metrics.observationDays}`],
+    ["Benchmark pairs", `${metrics.pairedObservationDays}`],
   ];
   return (
     <Card aria-label="Portfolio summary" data-dashboard-section="risk">
       <CardHeader>
-        <p className="text-sm font-medium text-muted-foreground">Risk &amp; composition</p>
-        <CardTitle size="md">Summary</CardTitle>
+        <CardTitle size="md">Risk &amp; composition</CardTitle>
       </CardHeader>
       <CardContent spacing="loose">
         <div className="flex flex-wrap gap-3 text-sm">
@@ -157,116 +176,148 @@ export function PortfolioSummaryCard({
               needs fixing.
             </p>
           ) : (
-            <p>Use Refresh risk after broker or price updates.</p>
-          )}
-          {risk.from && risk.to && (
-            <p>
-              {risk.from} to {risk.to} · {risk.currency}
-            </p>
-          )}
-          {risk.reasons.length > 0 && (
-            <ul aria-label="Risk data limits" className="list-disc space-y-1 pl-4">
-              {risk.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          )}
-          {(risk.missingPrices.length > 0 || risk.missingHoldings.length > 0) && (
-            <details>
-              <summary className="cursor-pointer">Affected instruments</summary>
-              <div className="mt-2 max-h-36 space-y-2 overflow-y-auto wrap-break-word">
-                {risk.missingPrices.length > 0 && (
-                  <p>Missing prices: {risk.missingPrices.join(", ")}</p>
-                )}
-                {risk.missingHoldings.length > 0 && (
-                  <p>Incomplete ownership: {risk.missingHoldings.join(", ")}</p>
-                )}
-              </div>
-            </details>
+            risk.status === "unavailable" &&
+            risk.reasons[0] && (
+              <p>
+                {risk.reasons[0]}
+                {risk.reasons.length > 1 ? ` (+${risk.reasons.length - 1} more below)` : ""}
+              </p>
+            )
           )}
         </div>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          {stats.map(([label, value, caption]) => (
-            <div key={label}>
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="font-semibold tabular-nums">{value}</dd>
-              {caption && <dd className="text-xs text-muted-foreground">{caption}</dd>}
+        <dl className="divide-y divide-border border-y border-border">
+          {headline.map(({ label, value, meaning }) => (
+            <div key={label} className="flex items-baseline justify-between gap-4 py-3">
+              <div className="min-w-0">
+                <dt className="text-sm">{label}</dt>
+                <dd className="mt-0.5 text-xs leading-4 text-muted-foreground">{meaning}</dd>
+              </div>
+              <dd className="shrink-0 text-lg font-semibold tabular-nums">{value}</dd>
             </div>
           ))}
         </dl>
         <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer text-foreground">How to read these metrics</summary>
-          <div className="mt-2 space-y-2 leading-relaxed">
-            {risk.basis === "holdings" ? (
+          <summary className="cursor-pointer text-foreground">
+            How these are calculated
+            {risk.reasons.length > 0
+              ? ` · ${risk.reasons.length} data ${risk.reasons.length === 1 ? "limit" : "limits"}`
+              : ""}
+          </summary>
+          <div className="mt-3 space-y-4">
+            <div className="space-y-2">
+              {!(stillLoading && risk.status === "unavailable") && (
+                <p>Use Refresh risk after broker or price updates.</p>
+              )}
+              {risk.from && risk.to && (
+                <p>
+                  {risk.from} to {risk.to} · {risk.currency}
+                </p>
+              )}
+              {risk.reasons.length > 0 && (
+                <ul aria-label="Risk data limits" className="list-disc space-y-1 pl-4">
+                  {risk.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
+              {(risk.missingPrices.length > 0 || risk.missingHoldings.length > 0) && (
+                <details>
+                  <summary className="cursor-pointer">Affected instruments</summary>
+                  <div className="mt-2 max-h-36 space-y-2 overflow-y-auto wrap-break-word">
+                    {risk.missingPrices.length > 0 && (
+                      <p>Missing prices: {risk.missingPrices.join(", ")}</p>
+                    )}
+                    {risk.missingHoldings.length > 0 && (
+                      <p>Incomplete ownership: {risk.missingHoldings.join(", ")}</p>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+            <dl className="grid grid-cols-3 gap-x-3 gap-y-3">
+              {otherStats.map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt>{label}</dt>
+                  <dd className="font-semibold tabular-nums text-foreground">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="space-y-2 leading-relaxed">
+              {risk.basis === "holdings" ? (
+                <p>
+                  Historical holdings returns, not a forecast for today’s holdings. Each day
+                  reprices the previous day’s holdings, so trades, deposits and withdrawals cannot
+                  move it. Cash, dividends and fees are left out.
+                </p>
+              ) : (
+                <p>
+                  Historical account returns, not a forecast for today’s holdings. Deposits and
+                  withdrawals are removed using an end-of-day cash-flow convention. Fees, dividends
+                  and interest remain in returns.
+                </p>
+              )}
               <p>
-                Historical holdings returns, not a forecast for today’s holdings. Each day reprices
-                the previous day’s holdings, so trades, deposits and withdrawals cannot move it.
-                Cash, dividends and fees are left out.
+                Annual volatility measures daily return variation, scaled by √252. It is not a
+                maximum possible loss.
               </p>
-            ) : (
               <p>
-                Historical account returns, not a forecast for today’s holdings. Deposits and
-                withdrawals are removed using an end-of-day cash-flow convention. Fees, dividends
-                and interest remain in returns.
+                Beta compares matching daily returns with the named benchmark. A beta of 1 means
+                similar market sensitivity; 2 means twice the sensitivity. This is not a forecast.
               </p>
-            )}
-            <p>
-              Annual volatility measures daily return variation, scaled by √252. It is not a maximum
-              possible loss.
-            </p>
-            <p>
-              Beta compares matching daily returns with the named benchmark. A beta of 1 means
-              similar market sensitivity; 2 means twice the sensitivity. This is not a forecast.
-            </p>
-            <p>
-              Regression alpha is the annualized regression intercept, assuming a 0% cash rate. The
-              benchmark uses price returns, excluding dividends. This is not total-return or
-              risk-free-rate-adjusted alpha.
-            </p>
-            <p>
-              Maximum drawdown measures the largest fall in the{" "}
-              {risk.basis === "holdings" ? "holdings" : "cash-flow-adjusted"} growth index, not in
-              the account balance.
-            </p>
-            <p>
-              Currency conversion uses fixed latest exchange rates. Historical currency gains and
-              losses are excluded. Complete dates and at least 60 valid daily returns are required.
-              Volatility, beta, alpha and the observation counts use every day in the selected
-              range, skipping only the daily intervals that touch a missing price, unknown cash or
-              unknown ownership. Maximum drawdown still uses only the most recent unbroken stretch
-              of complete dates. A day the market was closed keeps its last close. A still-settling
-              close, usually today, is dropped and the estimate is measured through the last
-              complete date instead.
-            </p>
+              <p>
+                Regression alpha is the annualized regression intercept, assuming a 0% cash rate.
+                The benchmark uses price returns, excluding dividends. This is not total-return or
+                risk-free-rate-adjusted alpha.
+              </p>
+              <p>
+                Maximum drawdown measures the largest fall in the{" "}
+                {risk.basis === "holdings" ? "holdings" : "cash-flow-adjusted"} growth index, not in
+                the account balance.
+              </p>
+              <p>
+                Currency conversion uses fixed latest exchange rates. Historical currency gains and
+                losses are excluded. Complete dates and at least 60 valid daily returns are
+                required. Volatility, beta, alpha and the observation counts use every day in the
+                selected range, skipping only the daily intervals that touch a missing price,
+                unknown cash or unknown ownership. Maximum drawdown still uses only the most recent
+                unbroken stretch of complete dates. A day the market was closed keeps its last
+                close. A still-settling close, usually today, is dropped and the estimate is
+                measured through the last complete date instead.
+              </p>
+            </div>
+            <div className="space-y-3">
+              <p>
+                Current composition · percentages of priced investments, excluding cash.
+                {` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
+              </p>
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
+                <ul aria-label="Largest positions" className="space-y-2 text-sm">
+                  {topPositions.length === 0 && (
+                    <li className="text-muted-foreground">No priced positions yet.</li>
+                  )}
+                  {topPositions.map((position) => (
+                    <li key={position.symbol} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="block truncate">
+                          {position.description ?? position.symbol}
+                        </span>
+                        {position.description && (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {position.symbol}
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {percent(position.weight)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </details>
-        <p className="text-xs text-muted-foreground">
-          Current composition · percentages of priced investments, excluding cash.
-          {` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
-        </p>
-        <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
-          <ul aria-label="Largest positions" className="space-y-2 text-sm">
-            {topPositions.length === 0 && (
-              <li className="text-muted-foreground">No priced positions yet.</li>
-            )}
-            {topPositions.map((position) => (
-              <li key={position.symbol} className="flex items-center justify-between gap-3">
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="block truncate">{position.description ?? position.symbol}</span>
-                  {position.description && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {position.symbol}
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums">
-                  {percent(position.weight)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
         {currency && <p className="text-xs text-muted-foreground">Amounts in {currency}.</p>}
       </CardContent>
     </Card>

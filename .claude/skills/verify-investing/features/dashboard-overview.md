@@ -4,7 +4,13 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
 
 ## Sub-features
 
-- headline figures widget (`Key figures`, section `aria-label="Portfolio KPIs"`,
+- headline row above the grid (`aria-label="Portfolio headline figures"`,
+  `data-dashboard-header="kpis"`, not a widget): `Portfolio value`, `Today`, `Total return`;
+  unknown shows `Unknown` plus a reason. Below it one status line
+  (`data-dashboard-status="problems"`, `role="alert"`, "N data problems: ..." with a
+  `Details` toggle) replaces the old `Refresh failed` / `Reading problems` / `Sync problems`
+  banners; their messages and the `Reconnect broker` link live in Details.
+- headline figures widget, off by default now (`Key figures`, section `aria-label="Portfolio KPIs"`,
   `data-dashboard-section="kpis"`) in the aside (`aria-label="Portfolio overview"`):
   `Portfolio value`, `Daily change`, `Total return`. `Value partly unknown` when the
   latest point has unpriced holdings (`No usable price: …`) or unknown cash
@@ -86,8 +92,8 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   above can be switched off there. Switching off every card replaces the grid with
   `Every Overview card is switched off. Add one to see your portfolio here.` and another
   `Add widget` button.
-- degraded and empty states: `Dashboard unavailable`, `Refresh failed`, `Reading problems`,
-  `Sync problems` (with `Broker sync failed.` when Allow Yahoo Finance's broker POST
+- degraded and empty states: `Dashboard unavailable`, `Refresh failed` (a line in the status Details),
+  sync problems (in the status line; with `Broker sync failed.` when Allow Yahoo Finance's broker POST
   fails), `Cached data remains visible`, `Still loading your history`.
 - the positions table and the net-worth chart are their own tabs (`/positions`, `/net-worth`),
   not part of this view.

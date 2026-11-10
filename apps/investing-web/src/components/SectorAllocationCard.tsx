@@ -179,7 +179,6 @@ export function SectorAllocationCard({
   return (
     <Card data-dashboard-section="sectors">
       <CardHeader>
-        <p className="text-sm font-medium text-muted-foreground">Composition</p>
         <CardTitle size="md">Sector allocation</CardTitle>
       </CardHeader>
       <CardContent>

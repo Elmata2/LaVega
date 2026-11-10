@@ -244,21 +244,7 @@ export function PortfolioBenchmarkChart({
   return (
     <Card>
       <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="grid h-5 text-sm font-medium text-muted-foreground">
-            <span
-              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
-            >
-              Portfolio value
-            </span>
-            <span
-              className={`axis-label col-start-1 row-start-1 whitespace-nowrap ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
-            >
-              Indexed return
-            </span>
-          </p>
-          <CardTitle>{mode === "euros" ? "Portfolio" : "Comparison"}</CardTitle>
-        </div>
+        <CardTitle>{mode === "euros" ? "Portfolio value" : "Indexed return"}</CardTitle>
         <div
           role="group"
           aria-label="Choose period"

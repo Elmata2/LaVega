@@ -22,6 +22,10 @@ export type InvestingWidgetDef = {
   id: InvestingWidgetId;
   label: string;
   what: string;
+  /** Whether the card shows for a reader who never chose. Absent means on.
+   *  A default is not stored: flipping it changes only readers who made no
+   *  explicit choice, and every saved layout still decodes unchanged. */
+  defaultOn?: boolean;
   preview: ReactNode;
 };
 
@@ -141,8 +145,8 @@ export function resolveModules(
   return chosen;
 }
 
-/** In the order they appear on Overview: left column, then right column,
- *  then full-width cards below (spec §3's table). */
+/** In the order the layout picker lists them. Overview places each card in its
+ *  own grid (app.tsx); the headline figures above that grid are not a widget. */
 export const WIDGETS: InvestingWidgetDef[] = [
   {
     id: "performance",
@@ -182,7 +186,8 @@ export const WIDGETS: InvestingWidgetDef[] = [
   {
     id: "kpis",
     label: "Key figures",
-    what: "Portfolio value, daily change and total return since inception.",
+    what: "Portfolio value, daily change and total return. The same figures head the Overview, so this card only repeats them in the grid.",
+    defaultOn: false,
     preview: (
       <Thumb>
         <Line x={8} y={12} w={40} strong />
@@ -230,9 +235,10 @@ export const WIDGETS: InvestingWidgetDef[] = [
   },
 ];
 
-/** Every widget defaults on (spec §3's table); an absent key means "on". */
+/** A widget defaults on unless its def says otherwise (spec §3's table); an
+ *  absent key means "the default", never "off". */
 export function resolveWidgets(
   stored: Partial<Record<InvestingWidgetId, boolean>>,
 ): InvestingWidgetId[] {
-  return WIDGETS.filter((w) => stored[w.id] ?? true).map((w) => w.id);
+  return WIDGETS.filter((w) => stored[w.id] ?? w.defaultOn ?? true).map((w) => w.id);
 }

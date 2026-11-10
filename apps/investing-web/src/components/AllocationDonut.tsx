@@ -94,10 +94,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
   return (
     <Card>
       <CardHeader gap="wide" className="flex-row items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Allocation</p>
-          <CardTitle>Portfolio</CardTitle>
-        </div>
+        <CardTitle>Allocation</CardTitle>
         <div
           aria-label="Group allocation"
           className="flex rounded-pill bg-secondary p-1"

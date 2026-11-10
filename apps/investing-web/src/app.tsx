@@ -13,7 +13,6 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  buildIndexedSeries,
   findMentions,
   type InvestingDashboardData,
   type InvestingPositionDetail,
@@ -44,6 +43,9 @@ import { PositionSectorControl } from "./components/PositionSectorControl.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
+import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
+import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
+import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
 import { longDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
@@ -92,37 +94,62 @@ function DashboardError({ message }: { message: string }) {
   return <EmptyState title="Dashboard unavailable" description={message} />;
 }
 
-function DashboardRefreshError({ message }: { message: string }) {
-  return (
-    <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
-      <p className="font-semibold">Refresh failed</p>
-      <p className="mt-1 text-muted-foreground">{message} Cached data remains visible.</p>
-    </div>
-  );
+/** Every reason the Overview's data may be wrong or stale, as one list for the
+ *  single status line. Broker credentials that cannot be read keep their
+ *  reconnect action. */
+function overviewStatusItems({
+  refreshError,
+  syncProblems,
+  readingProblems,
+  needsAttention,
+}: {
+  refreshError: string | null;
+  syncProblems: readonly string[];
+  readingProblems: readonly string[];
+  needsAttention: boolean;
+}): StatusItem[] {
+  const items: StatusItem[] = [];
+  if (refreshError)
+    items.push({
+      message: `Refresh failed: ${refreshError} Cached data remains visible.`,
+      severity: "warning",
+    });
+  for (const message of syncProblems) items.push({ message, severity: "problem" });
+  for (const message of filterVisibleSyncProblems([...readingProblems]))
+    items.push({
+      message,
+      severity: "problem",
+      action: /credentials cannot be read/i.test(message)
+        ? { to: "/brokers/connect", label: "Reconnect broker" }
+        : undefined,
+    });
+  if (needsAttention)
+    items.push({
+      message: "Broker or price status needs attention.",
+      severity: "warning",
+      action: { to: "/profile#brokers", label: "Review it in Profile" },
+    });
+  return mergeStatusItems(items);
 }
 
-function DashboardProblems({ problems }: { problems: string[] }) {
-  const visibleProblems = filterVisibleSyncProblems(problems);
-  if (visibleProblems.length === 0) return null;
+/** The status line for pages that show the dashboard read without the open-time
+ *  sync: refresh failure and reading problems, merged into one line. */
+function DashboardStatus({
+  data,
+  refreshError,
+}: {
+  data: InvestingDashboardData;
+  refreshError?: string;
+}) {
   return (
-    <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Reading problems</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
-        {visibleProblems.map((problem, index) => (
-          <li key={`${problem}-${index}`}>
-            {problem}{" "}
-            {/credentials cannot be read/i.test(problem) && (
-              <Link
-                to="/brokers/connect"
-                className="font-semibold text-accent underline-offset-2 hover:underline"
-              >
-                Reconnect broker
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <OverviewStatus
+      items={overviewStatusItems({
+        refreshError: refreshError ?? null,
+        syncProblems: [],
+        readingProblems: data.problems,
+        needsAttention: false,
+      })}
+    />
   );
 }
 
@@ -343,53 +370,19 @@ function PositionList({
 }
 
 function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
-  const points = data.portfolio.All;
-  const latest = points.at(-1);
-  const previous = points.at(-2);
-  const pricedPositionsValue = data.positions.reduce(
-    (sum, position) => sum + (position.marketValue ?? 0),
-    0,
-  );
-  const portfolioValue = latest?.value ?? (pricedPositionsValue > 0 ? pricedPositionsValue : null);
-  const usingPositionsFallback =
-    (latest?.value === null || latest?.value === undefined) && pricedPositionsValue > 0;
-  const dailyChange =
-    latest?.value !== null &&
-    latest?.value !== undefined &&
-    previous?.value !== null &&
-    previous?.value !== undefined
-      ? latest.value - previous.value
-      : null;
-  const dailyChangePercentage =
-    dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
-  const totalReturn =
-    buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
+  const figures = portfolioFigures(data);
+  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn } = figures;
   const money = (value: number | null, signDisplay: "auto" | "always" = "auto") =>
-    value === null
-      ? "Value unknown"
-      : value.toLocaleString("en-GB", {
-          style: "currency",
-          currency: data.presentationCurrency,
-          maximumFractionDigits: 2,
-          signDisplay,
-        });
+    value === null ? "Value unknown" : formatMoney(value, data.presentationCurrency, signDisplay);
   const percentage = (value: number | null) =>
-    value === null
-      ? "Return unknown"
-      : value.toLocaleString("en-GB", {
-          style: "percent",
-          maximumFractionDigits: 2,
-          signDisplay: "always",
-        });
+    value === null ? "Return unknown" : formatSignedPercent(value);
   return (
     <section
       aria-label="Portfolio KPIs"
-      className="rounded-card border border-border bg-card p-5 shadow-md"
+      className="rounded-card border border-border bg-card p-5"
       data-dashboard-section="kpis"
     >
-      <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-        Key figures
-      </p>
+      <h3 className="font-display text-2xl">Key figures</h3>
       <dl className="mt-4 space-y-4">
         <div>
           <dt className="text-xs text-muted-foreground">Portfolio value</dt>
@@ -398,7 +391,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           >
             {money(portfolioValue)}
           </dd>
-          {usingPositionsFallback && (
+          {figures.usingPositionsFallback && (
             <dd className="text-xs text-muted-foreground">
               Priced positions only; cash and history are still missing.
             </dd>
@@ -423,41 +416,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           <dd className="text-xs text-muted-foreground">TWR after deposits and withdrawals</dd>
         </div>
       </dl>
-      {latest && latest.forwardFilled.length > 0 && (
-        <details className="mt-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">
-            Estimated prices ({latest.forwardFilled.length})
-          </summary>
-          <p className="mt-1 break-words">
-            <span className="sr-only">Estimated price: </span>
-            {latest.forwardFilled.join(", ")}
-          </p>
-        </details>
-      )}
-      {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
-        <div
-          role="status"
-          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"
-        >
-          <p className="font-semibold">Value partly unknown</p>
-          {latest.unpriced.length > 0 && <p>No usable price: {latest.unpriced.join(", ")}</p>}
-          {latest.cashUnknown.length > 0 && (
-            <p>Cash history unknown: {latest.cashUnknown.join(", ")}</p>
-          )}
-          {Object.entries(latest.cashShortfall ?? {}).map(([wallet, amount]) => (
-            <p key={wallet}>
-              {wallet} is missing about {money(Math.abs(amount))} of{" "}
-              {amount < 0 ? "funding" : "spending"} before its balances add up.
-            </p>
-          ))}
-        </div>
-      )}
-      {latest && (latest.cashEstimated?.length ?? 0) > 0 && (
-        <p className="mt-4 text-xs text-muted-foreground">
-          Estimated cash: {latest.cashEstimated?.join(", ")}. Walked from movements your broker
-          reported without proving the history complete.
-        </p>
-      )}
+      <PortfolioFigureNotes figures={figures} currency={data.presentationCurrency} />
     </section>
   );
 }
@@ -575,16 +534,13 @@ function PortfolioAgentCard() {
   return (
     <section
       aria-labelledby="portfolio-agent-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md"
+      className="rounded-card border border-border bg-card p-5"
       data-dashboard-section="agent"
     >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-accent">Agent</p>
-          <h3 id="portfolio-agent-title" className="mt-1 font-display text-3xl">
-            Investor lens
-          </h3>
-        </div>
+        <h3 id="portfolio-agent-title" className="font-display text-3xl">
+          Investor lens
+        </h3>
         {insight && (
           <span className={`rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold ${tone}`}>
             {insight.signal} · {Math.round(insight.confidence)}%
@@ -893,10 +849,17 @@ function AgentView() {
   );
 }
 
-function AppOpenSync() {
+/** Runs the open-time sync and owns the Yahoo consent prompt. Its problems are
+ *  reported up through `onProblems` and shown in the Overview's one status
+ *  line; the consent prompt keeps showing its own error because that is the
+ *  reader's next action. */
+function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void }) {
   const [problems, setProblems] = useState<string[]>([]);
   const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
   const [consentBusy, setConsentBusy] = useState(false);
+  useEffect(() => {
+    onProblems(consent === "required" ? [] : problems);
+  }, [consent, problems, onProblems]);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
       const brokerResult = await startBrokerSync();
@@ -984,17 +947,7 @@ function AppOpenSync() {
         Checking your market data settings…
       </div>
     );
-  if (problems.length === 0) return null;
-  return (
-    <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Sync problems</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
-        {problems.map((problem, index) => (
-          <li key={`${problem}-${index}`}>{problem}</li>
-        ))}
-      </ul>
-    </div>
-  );
+  return null;
 }
 
 export function HealthStatus() {
@@ -1047,6 +1000,17 @@ function Layout() {
   const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
   const isStockResearch = location.pathname === "/agents/research";
+  const pageTitle = detail
+    ? "Position"
+    : agentView
+      ? "Agent"
+      : positionsList
+        ? "Positions"
+        : location.pathname === "/net-worth"
+          ? "Net worth"
+          : location.pathname === "/agents"
+            ? "Agents"
+            : null;
   const isProfile = location.pathname === "/profile";
   const isOverview = location.pathname === "/";
   return (
@@ -1136,37 +1100,11 @@ function Layout() {
           </div>
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
-          {!isProfile && !isStockResearch && (
-            <div className="mb-8 flex items-end justify-between gap-4">
-              <div>
-                <p className="mb-2 text-sm font-medium text-accent">
-                  {detail
-                    ? "Position detail"
-                    : agentView
-                      ? "Agent conversation"
-                      : positionsList
-                        ? "Positions"
-                        : location.pathname === "/net-worth"
-                          ? "Net worth"
-                          : location.pathname === "/agents"
-                            ? "Agents"
-                            : "Your financial overview"}
-                </p>
-                <h2 className="font-display text-5xl tracking-tight sm:text-6xl">
-                  {detail
-                    ? "Position"
-                    : agentView
-                      ? "Agent"
-                      : positionsList
-                        ? "Positions"
-                        : location.pathname === "/net-worth"
-                          ? "Net worth"
-                          : location.pathname === "/agents"
-                            ? "Agents"
-                            : "Overview"}
-                </h2>
-              </div>
-            </div>
+          {/* Overview has no title here: the headline figures are its title, and the
+              nav already says where you are. Its heading stays in the page for
+              screen readers. */}
+          {!isProfile && !isStockResearch && pageTitle && (
+            <h2 className="mb-8 font-display text-5xl sm:text-6xl">{pageTitle}</h2>
           )}
           <Outlet />
         </main>
@@ -1244,6 +1182,7 @@ function Overview() {
   const navigate = useNavigate();
   const { broker, price, priceProblem, connection, vault } = useSyncSession();
   const layout = useInvestingLayout();
+  const [syncProblems, setSyncProblems] = useState<string[]>([]);
   const gate = historyGate(broker?.history);
   /* Until the layout loads, the registry defaults would flash widgets the
    * reader switched off and start their reads, so none render yet. */
@@ -1305,100 +1244,65 @@ function Overview() {
     });
     navigate(`/agents/${LETTER_AGENT_ID}`);
   }
+  const needsAttention =
+    connection !== "online" ||
+    broker?.status === "problem" ||
+    price?.status === "problem" ||
+    !!priceProblem ||
+    vault === "locked";
+  const statusItems =
+    state.status === "ready" && gate.kind === "ready"
+      ? overviewStatusItems({
+          refreshError: state.refreshError ?? null,
+          syncProblems,
+          readingProblems: state.data.problems,
+          needsAttention,
+        })
+      : [];
   return (
-    <div className="space-y-5">
-      <AppOpenSync />
+    <div className="space-y-6">
+      <h2 className="sr-only">Overview</h2>
+      {state.status === "ready" && gate.kind === "ready" && <PortfolioKpiRow data={state.data} />}
+      <OverviewStatus items={statusItems} />
+      <AppOpenSync onProblems={setSyncProblems} />
       {state.status === "loading" ? (
         <DashboardLoading />
       ) : state.status === "error" ? (
         <DashboardError message={state.message} />
       ) : gate.kind === "first-sync" ? (
         <HistoryLoading brokers={gate.brokers} />
+      ) : !layoutReady ? null : widgets.size === 0 ? (
+        <OverviewEmptyState />
       ) : (
         <>
-          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-          <DashboardProblems problems={state.data.problems} />
-          {(connection !== "online" ||
-            broker?.status === "problem" ||
-            price?.status === "problem" ||
-            priceProblem ||
-            vault === "locked") && (
-            <div
-              role="alert"
-              className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"
-            >
-              <p>
-                Status needs attention.{" "}
-                <Link to="/profile#brokers" className="font-semibold underline">
-                  Review it in Profile
-                </Link>
-              </p>
-            </div>
-          )}
-          {!layoutReady ? null : widgets.size === 0 ? (
-            <OverviewEmptyState />
-          ) : (
-            <>
-              <div
-                className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
-                data-dashboard-layout="overview"
-              >
-                <div className="min-w-0 space-y-5">
-                  {widgets.has("performance") && (
-                    <div data-dashboard-section="performance">
-                      <PortfolioBenchmarkChart
-                        data={state.data.portfolio}
-                        benchmarks={state.data.benchmarks}
-                        externalCashFlows={state.data.externalCashFlows}
-                        currency={state.data.presentationCurrency}
-                      />
-                    </div>
-                  )}
-                  {widgets.has("allocation") && (
-                    <div data-dashboard-section="allocation">
-                      <AllocationDonut
-                        instrument={state.data.allocation.instrument}
-                        entity={state.data.allocation.entity}
-                        currency={state.data.presentationCurrency}
-                      />
-                    </div>
-                  )}
+          {/* Left stack: the wide, time-based cards. Right rail: the narrow,
+              read-and-act cards. Two stacks (not one shared row grid) so a tall
+              letter never leaves a hole under a short chart, and any subset a
+              saved layout switches on still packs from the top. */}
+          <div
+            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]"
+            data-dashboard-layout="overview"
+          >
+            <div className="min-w-0 space-y-5">
+              {widgets.has("performance") && (
+                <div data-dashboard-section="performance">
+                  <PortfolioBenchmarkChart
+                    data={state.data.portfolio}
+                    benchmarks={state.data.benchmarks}
+                    externalCashFlows={state.data.externalCashFlows}
+                    currency={state.data.presentationCurrency}
+                  />
                 </div>
-                <aside aria-label="Portfolio overview" className="space-y-5">
-                  {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
-                  {showRisk && (
-                    <PortfolioSummaryCard
-                      /* De kaart is presentational; of er nog iets binnenkomt weet
-                         dit scherm, dat de sync-sessie toch al leest. */
-                      stillLoading={
-                        gate.updating.length > 0 ||
-                        broker?.status === "running" ||
-                        broker?.status === "waiting" ||
-                        price?.status === "running" ||
-                        price?.status === "paused" ||
-                        (price?.remainingSymbols?.length ?? 0) > 0
-                      }
-                      currency={state.data.presentationCurrency}
-                      state={summaryState}
-                      refresh={refreshRisk}
-                      range={range}
-                      onRangeChange={setRange}
-                      benchmark={benchmark}
-                      onBenchmarkChange={(value) =>
-                        setBenchmarkSelection({ value, revision: benchmarksRevision })
-                      }
-                    />
-                  )}
-                  {showLetter && (
-                    <PortfolioLetterCard
-                      state={letter.state}
-                      writeState={letter.writeState}
-                      onDiscuss={discussLetter}
-                      onWrite={letter.write}
-                    />
-                  )}
-                </aside>
-              </div>
+              )}
+              {widgets.has("allocation") && (
+                <div data-dashboard-section="allocation">
+                  <AllocationDonut
+                    instrument={state.data.allocation.instrument}
+                    entity={state.data.allocation.entity}
+                    currency={state.data.presentationCurrency}
+                  />
+                </div>
+              )}
               {showSectors && (
                 <SectorAllocationCard
                   currency={state.data.presentationCurrency}
@@ -1406,9 +1310,43 @@ function Overview() {
                   refresh={refreshSectors}
                 />
               )}
+            </div>
+            <aside aria-label="Portfolio overview" className="min-w-0 space-y-5">
+              {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
+              {showRisk && (
+                <PortfolioSummaryCard
+                  /* De kaart is presentational; of er nog iets binnenkomt weet
+                     dit scherm, dat de sync-sessie toch al leest. */
+                  stillLoading={
+                    gate.updating.length > 0 ||
+                    broker?.status === "running" ||
+                    broker?.status === "waiting" ||
+                    price?.status === "running" ||
+                    price?.status === "paused" ||
+                    (price?.remainingSymbols?.length ?? 0) > 0
+                  }
+                  currency={state.data.presentationCurrency}
+                  state={summaryState}
+                  refresh={refreshRisk}
+                  range={range}
+                  onRangeChange={setRange}
+                  benchmark={benchmark}
+                  onBenchmarkChange={(value) =>
+                    setBenchmarkSelection({ value, revision: benchmarksRevision })
+                  }
+                />
+              )}
+              {showLetter && (
+                <PortfolioLetterCard
+                  state={letter.state}
+                  writeState={letter.writeState}
+                  onDiscuss={discussLetter}
+                  onWrite={letter.write}
+                />
+              )}
               {widgets.has("agent") && <PortfolioAgentCard />}
-            </>
-          )}
+            </aside>
+          </div>
         </>
       )}
     </div>
@@ -1421,8 +1359,7 @@ function Positions() {
   if (state.status === "error") return <DashboardError message={state.message} />;
   return (
     <>
-      {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-      <DashboardProblems problems={state.data.problems} />
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
       <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
     </>
   );
@@ -1762,8 +1699,7 @@ function PositionDetail() {
         <DashboardError message={state.message} />
       ) : state.data.position?.symbol.toUpperCase() === positionSymbol ? (
         <>
-          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-          <DashboardProblems problems={state.data.problems} />
+          <DashboardStatus data={state.data} refreshError={state.refreshError} />
           <CompletePositionDetail position={state.data.position} />
         </>
       ) : (

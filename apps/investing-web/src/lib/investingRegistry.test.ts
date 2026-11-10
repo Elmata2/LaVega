@@ -22,29 +22,26 @@ describe("investing registry", () => {
     ]);
   });
 
-  test("all widgets default on and follow registry order regardless of storage order", () => {
-    expect(resolveWidgets({})).toEqual([
-      "performance",
-      "allocation",
-      "kpis",
-      "risk",
-      "sectors",
-      "agent",
-    ]);
+  test("every widget but Key figures defaults on, in registry order regardless of storage order", () => {
+    expect(resolveWidgets({})).toEqual(["performance", "allocation", "risk", "sectors", "agent"]);
     expect(resolveWidgets({ agent: true, sectors: false, performance: true })).toEqual([
       "performance",
       "allocation",
-      "kpis",
       "risk",
       "agent",
     ]);
+  });
+
+  test("Key figures defaults off because the Overview header carries them, but a saved on still wins", () => {
+    expect(resolveWidgets({})).not.toContain("kpis");
+    expect(resolveWidgets({ kpis: true })).toContain("kpis");
+    expect(resolveWidgets({ kpis: false })).not.toContain("kpis");
   });
 
   test("unknown stored widget ids are dropped, never rendered as a card", () => {
     expect(resolveWidgets({ "old-widget": true } as never)).toEqual([
       "performance",
       "allocation",
-      "kpis",
       "risk",
       "sectors",
       "agent",
