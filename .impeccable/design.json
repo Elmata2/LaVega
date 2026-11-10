@@ -1,0 +1,225 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T19:20:09.660521+00:00",
+  "title": "Design System: LaVega Investing",
+  "extensions": {
+    "colorMeta": {
+      "ledger-blue": {
+        "role": "primary",
+        "displayName": "Ledger Blue",
+        "canonical": "hsl(202 55% 27%)",
+        "tonalRamp": [
+          "hsl(202 33% 15%)",
+          "hsl(202 55% 25%)",
+          "hsl(202 55% 35%)",
+          "hsl(202 55% 45%)",
+          "hsl(202 55% 60%)",
+          "hsl(202 55% 75%)",
+          "hsl(202 55% 88%)",
+          "hsl(202 33% 95%)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "hsl(40 27% 97%)",
+        "tonalRamp": [
+          "hsl(40 16% 15%)",
+          "hsl(40 27% 25%)",
+          "hsl(40 27% 35%)",
+          "hsl(40 27% 45%)",
+          "hsl(40 27% 60%)",
+          "hsl(40 27% 75%)",
+          "hsl(40 27% 88%)",
+          "hsl(40 16% 95%)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "hsl(60 7% 10%)",
+        "tonalRamp": [
+          "hsl(60 4% 15%)",
+          "hsl(60 7% 25%)",
+          "hsl(60 7% 35%)",
+          "hsl(60 7% 45%)",
+          "hsl(60 7% 60%)",
+          "hsl(60 7% 75%)",
+          "hsl(60 7% 88%)",
+          "hsl(60 4% 95%)"
+        ]
+      },
+      "gain-green": {
+        "role": "semantic",
+        "displayName": "Gain Green",
+        "canonical": "hsl(101 35% 35%)",
+        "tonalRamp": [
+          "hsl(101 21% 15%)",
+          "hsl(101 35% 25%)",
+          "hsl(101 35% 35%)",
+          "hsl(101 35% 45%)",
+          "hsl(101 35% 60%)",
+          "hsl(101 35% 75%)",
+          "hsl(101 35% 88%)",
+          "hsl(101 21% 95%)"
+        ]
+      },
+      "loss-rust": {
+        "role": "semantic",
+        "displayName": "Loss Rust",
+        "canonical": "hsl(11 59% 44%)",
+        "tonalRamp": [
+          "hsl(11 35% 15%)",
+          "hsl(11 59% 25%)",
+          "hsl(11 59% 35%)",
+          "hsl(11 59% 45%)",
+          "hsl(11 59% 60%)",
+          "hsl(11 59% 75%)",
+          "hsl(11 59% 88%)",
+          "hsl(11 35% 95%)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Card titles, EB Garamond 600."
+      },
+      "label": {
+        "displayName": "Eyebrow",
+        "purpose": "Uppercase section eyebrow, 0.16em tracking."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft",
+        "value": "0 1px 2px rgba(26,26,23,0.04), 0 18px 40px -28px rgba(26,26,23,0.16)",
+        "purpose": "Cards and primary buttons at rest."
+      },
+      {
+        "name": "float",
+        "value": "0 32px 64px -28px rgba(26,26,23,0.3), 0 6px 16px -10px rgba(26,26,23,0.12)",
+        "purpose": "Overlays and menus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press",
+        "value": "transform 150ms ease-out; scale(.98) on active",
+        "purpose": "Tactile press on buttons."
+      },
+      {
+        "name": "menu-in",
+        "value": "120ms ease-out; translateY(4px) scale(.97) to rest",
+        "purpose": "Mention menu entrance."
+      },
+      {
+        "name": "axis-label",
+        "value": "opacity 160ms ease-out",
+        "purpose": "Chart axis label fade."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action; pill, ledger blue.",
+      "html": "<button class=\"ds-btn-primary\">Sync broker</button>",
+      "css": ".ds-btn-primary{background:hsl(202 55% 27%);color:hsl(40 27% 97%);border:0;border-radius:999px;padding:10px 16px;font:600 14px Inter,system-ui,sans-serif;box-shadow:0 1px 2px rgba(26,26,23,.04),0 18px 40px -28px rgba(26,26,23,.16);transition:transform 150ms ease-out,background-color .15s}.ds-btn-primary:hover{background:hsl(202 55% 27% / .9)}.ds-btn-primary:active{transform:scale(.98)}.ds-btn-primary:focus-visible{outline:0;box-shadow:0 0 0 2px hsl(40 27% 97%),0 0 0 4px hsl(202 55% 27%)}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action on white.",
+      "html": "<button class=\"ds-btn-outline\">Export</button>",
+      "css": ".ds-btn-outline{background:#fff;color:hsl(60 7% 10%);border:1px solid hsl(40 17% 88%);border-radius:999px;padding:10px 16px;font:600 14px Inter,system-ui,sans-serif;transition:transform 150ms ease-out,background-color .15s}.ds-btn-outline:hover{background:hsl(40 20% 93%)}.ds-btn-outline:active{transform:scale(.98)}.ds-btn-outline:focus-visible{outline:0;box-shadow:0 0 0 2px hsl(40 27% 97%),0 0 0 4px hsl(202 55% 27%)}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis action.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost{background:transparent;color:hsl(48 5% 41%);border:0;border-radius:999px;padding:8px 12px;font:600 14px Inter,system-ui,sans-serif;transition:background-color .15s,color .15s}.ds-btn-ghost:hover{background:hsl(40 20% 93%);color:hsl(60 7% 10%)}.ds-btn-ghost:focus-visible{outline:0;box-shadow:0 0 0 2px hsl(40 27% 97%),0 0 0 4px hsl(202 55% 27%)}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Primary container; white on paper with soft shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-eyebrow\">Portfolio</div><h3 class=\"ds-card-title\">Net worth</h3><p class=\"ds-card-num\">€ 48,210.55</p><p class=\"ds-card-muted\">Priced 12 of 12 positions</p></div>",
+      "css": ".ds-card{background:#fff;border:1px solid hsl(40 17% 88%);border-radius:22px;padding:24px;box-shadow:0 1px 2px rgba(26,26,23,.04),0 18px 40px -28px rgba(26,26,23,.16);color:hsl(60 7% 10%);font-family:Inter,system-ui,sans-serif}.ds-eyebrow{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:hsl(48 5% 41%)}.ds-card-title{font:600 24px 'EB Garamond',Georgia,serif;letter-spacing:-.025em;margin:6px 0 0}.ds-card-num{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;margin:12px 0 4px}.ds-card-muted{font-size:14px;color:hsl(48 5% 41%);margin:0}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Paper-filled field, 14px radius.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search positions\" />",
+      "css": ".ds-input{display:block;width:240px;background:hsl(40 27% 97%);color:hsl(60 7% 10%);border:1px solid hsl(40 17% 88%);border-radius:14px;padding:10px 12px;font:400 14px Inter,system-ui,sans-serif}.ds-input:focus-visible{outline:0;box-shadow:0 0 0 2px hsl(40 27% 97%),0 0 0 4px hsl(202 55% 27%)}"
+    },
+    {
+      "name": "Gain / Loss Figure",
+      "kind": "custom",
+      "refersTo": "gain-green",
+      "description": "Tabular signed figure; green gain, rust loss.",
+      "html": "<span class=\"ds-pos\">+€ 1,204.10</span> <span class=\"ds-neg\">−€ 312.00</span>",
+      "css": ".ds-pos,.ds-neg{font:600 14px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-pos{color:hsl(101 35% 35%)}.ds-neg{color:hsl(11 59% 44%)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Private Ledger",
+    "overview": "A quiet, bookish record of what you own and why. Warm paper under white cards, a serif voice for headings, one deep ledger-blue for action. Numbers are the content: tabular, aligned, never decorated. The interface reads like a well-kept personal ledger, not a trading floor.\n\nDensity is calm and moderate. Surfaces are soft-lifted and rounded; controls are tactile, with a small press-scale. Color is rare and meaningful: blue means act, green and rust mean gain and loss, amber means caution.",
+    "keyCharacteristics": [
+      "Warm paper canvas, white cards, hairline borders.",
+      "EB Garamond for headings, Inter for everything else.",
+      "Generous radii: cards 22px, tiles 14px, pill buttons.",
+      "Diffuse, low-contrast shadows; no hard drop shadows.",
+      "Tabular numerals on every figure."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Ledger Blue is the single action color; it never doubles as a data series.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gain/Loss Rule",
+        "body": "Green and rust carry meaning only for gain and loss; never use them as decoration or series colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every figure uses tabular numerals so columns align and changes do not jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Shadow Rule",
+        "body": "Shadows are long, soft and low in opacity; empty cards drop the shadow and use a dashed border.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use tabular numerals for every figure.",
+      "Do keep Ledger Blue as the only action color.",
+      "Do show unknown figures as unknown with a reason.",
+      "Do honor `prefers-reduced-motion` for all transitions.",
+      "Do use the semantic radius tokens (card, tile, chip, pill), not ad hoc values."
+    ],
+    "donts": [
+      "Don't drift toward neon crypto-trading dashboards: no glow, gamified gradients, or dark-only terminals.",
+      "Don't use green or rust except for gain and loss.",
+      "Don't use hard, short drop shadows.",
+      "Don't use a sans-serif for card titles; headings stay EB Garamond."
+    ]
+  }
+}
