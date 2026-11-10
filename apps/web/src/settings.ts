@@ -260,15 +260,10 @@ export function clearLegacyN8nLocalStorage(): void {
  * --- */
 
 export const INVOICE_FORWARD_DOMAIN = "invoices.lavega.dev";
-/** A specific, readable address (his own choice, confirmed working 23 Aug)
- *  offered as a one-click suggestion in the empty state, alongside — not
- *  instead of — the random generator below. Cloudflare routes the whole
- *  domain as a catch-all, so this is one valid local part among many, not a
- *  default this file ever writes on its own. */
-export const SUGGESTED_INVOICE_FORWARD_ADDRESS = `ale@${INVOICE_FORWARD_DOMAIN}`;
 const FORWARD_KEY = "lavega.invoiceForwardAddress";
-/** Zo veel willekeur dat niemand hem kan raden, kort genoeg om over te typen. */
-const FORWARD_RANDOM_CHARS = 10;
+/** Zo veel willekeur dat niemand hem kan raden: het adres werkt als een sleutel
+ *  (wie het kent kan er post in leggen), dus 16 tekens, ~80 bits. */
+const FORWARD_RANDOM_CHARS = 16;
 const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: dit adres wordt overgetikt
 /* WELK ADRES GELDIG IS, en dit is bijgesteld nadat de echte er was.
  *
@@ -316,9 +311,6 @@ function randomLocalSuffix(): string {
   return Array.from(buf, (b) => FORWARD_ALPHABET[b % FORWARD_ALPHABET.length]).join("");
 }
 
-/** Het adres van deze kluis-browser: bestaat hij al, dan komt precies díe terug.
- *  `makeSuffix` is injecteerbaar zodat een test kan bewijzen dat een tweede
- *  aanroep met ándere willekeur tóch hetzelfde adres oplevert. */
 /** Zijn eigen adres, zoals Cloudflare het routeert. Leeg maakt het adres leeg —
  *  dat is een echte keuze en geen fout. Ongeldig wordt geweigerd en niet stil
  *  genegeerd: een adres dat niet wordt opgeslagen terwijl het scherm zegt van wel,
@@ -338,16 +330,13 @@ export function setInvoiceForwardAddress(address: string): boolean {
   }
 }
 
-export function ensureInvoiceForwardAddress(makeSuffix: () => string = randomLocalSuffix): string {
-  const existing = getInvoiceForwardAddress();
-  if (existing) return existing;
-  const address = `lavega-${makeSuffix()}@${INVOICE_FORWARD_DOMAIN}`;
-  try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(FORWARD_KEY, address);
-  } catch {
-    /* non-fatal for a preference */
-  }
-  return address;
+/** A fresh, unguessable address that is NOT stored. The caller records it on the
+ *  server first and persists it locally only after the server said yes, so a
+ *  failed or colliding attempt leaves nothing behind. */
+export function generateInvoiceForwardAddress(
+  makeSuffix: () => string = randomLocalSuffix,
+): string {
+  return `lavega-${makeSuffix()}@${INVOICE_FORWARD_DOMAIN}`;
 }
 
 const N8N_HANDLED_KEY = "lavega.n8nHandledMessageIds";

@@ -2308,6 +2308,7 @@ export type PuntenCopy = {
     factsSourceLabel: string;
     askPlaceholderEur: string;
     askPlaceholderPoints: string;
+    statedBalanceHint: string;
     askSave: string;
     askCancel: string;
     updateBalance: string;
@@ -2398,6 +2399,7 @@ const puntenCopy_nl: PuntenCopy = {
     factsSourceLabel: "Bron: ",
     askPlaceholderEur: "bijv. 42",
     askPlaceholderPoints: "bijv. 245000",
+    statedBalanceHint: "Vul je saldo in",
     askSave: "Opslaan",
     askCancel: "Annuleer",
     updateBalance: "Saldo bijwerken",
@@ -2486,6 +2488,7 @@ const puntenCopy_en: PuntenCopy = {
     factsSourceLabel: "Source: ",
     askPlaceholderEur: "e.g. 42",
     askPlaceholderPoints: "e.g. 245000",
+    statedBalanceHint: "Enter your balance",
     askSave: "Save",
     askCancel: "Cancel",
     updateBalance: "Update balance",

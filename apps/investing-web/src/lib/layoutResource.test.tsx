@@ -2,16 +2,12 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  resetInvestingLayoutStoreForTests,
-  setLayoutOwner,
-  useInvestingLayout,
-} from "./layoutResource.js";
+import { forgetLayout, setLayoutOwner, useInvestingLayout } from "./layoutResource.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-beforeEach(() => resetInvestingLayoutStoreForTests());
+beforeEach(() => forgetLayout());
 afterEach(() => vi.restoreAllMocks());
 
 function Probe() {

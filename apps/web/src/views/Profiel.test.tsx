@@ -2,6 +2,23 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("../archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import type { Account, LearnedFact } from "@lavega/core";
 import { entitySummaries, factId, TRAVEL_AGENT } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
@@ -278,13 +295,13 @@ test("the module picker is on the profile, with Overzicht locked on", async () =
   expect(home.disabled).toBe(true);
 });
 
-test("the country that drives the tax rules is set here, and says what it covers", async () => {
+test("the country that sets the card-terms market is set here, and says what it covers", async () => {
   const onHomeCountryChange = vi.fn();
   await render({ onHomeCountryChange });
   const select = section("Land en regio").querySelector("select") as HTMLSelectElement;
   expect(select.value).toBe("NL");
   expect(getHomeCountry()).toBe("NL"); // the same preference App reads
-  expect(section("Land en regio").textContent).toContain("alleen voor Nederland");
+  expect(section("Land en regio").textContent).toContain("voorwaarden van je kaarten");
 
   act(() => {
     select.value = "BE";
@@ -818,4 +835,15 @@ test("the language switch flips the page's copy live, without a remount", async 
 
   expect(section("Sign out")).toBeTruthy();
   expect(container!.querySelector('[aria-label="Uitloggen"]')).toBeNull();
+});
+
+test("a link card opens what LaVega knows about you", async () => {
+  const onNavigate = vi.fn();
+  await render({ onNavigate });
+  const card = section("Wat LaVega over je weet");
+  const open = [...card.querySelectorAll("button")].find(
+    (b) => b.textContent === "Bekijk wat LaVega weet",
+  )!;
+  act(() => open.click());
+  expect(onNavigate).toHaveBeenCalledWith("about-you");
 });

@@ -385,3 +385,70 @@ test("POST /api/n8n/forward-address passes the body's localPart to setLocalPart 
   expect(setLocalPartCalls).toHaveLength(1);
   expect(setLocalPartCalls[0]).toEqual({ userId: "user-123", localPart: "  Weird-Casing_Input  " });
 });
+
+test("POST /api/n8n/forward-address with ifAbsent and an address already on file: 409 already-set with the existing address, and nothing is written", async () => {
+  localParts.set("user-123", "lavega-existing");
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "lavega-newcomer", ifAbsent: true }),
+  });
+
+  expect(res.status).toBe(409);
+  const body = await res.json();
+  expect(body.code).toBe("n8n-address-already-set");
+  expect(body.localPart).toBe("lavega-existing");
+  expect(setLocalPartCalls).toHaveLength(0);
+});
+
+test("POST /api/n8n/forward-address with ifAbsent and no address on file: stores it", async () => {
+  setLocalPartResult = { status: "stored", localPart: "lavega-fresh" };
+  localParts.delete("user-123");
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "lavega-fresh", ifAbsent: true }),
+  });
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ localPart: "lavega-fresh" });
+  expect(setLocalPartCalls).toHaveLength(1);
+});
+
+test("POST /api/n8n/forward-address with ifAbsent still answers 409 taken for another account's address", async () => {
+  setLocalPartResult = { status: "taken" };
+  localParts.delete("user-123");
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "someone-elses", ifAbsent: true }),
+  });
+
+  expect(res.status).toBe(409);
+  expect((await res.json()).code).toBe("n8n-address-taken");
+});
+
+test("POST /api/n8n/forward-address without ifAbsent still replaces an existing address (the explicit own-address path)", async () => {
+  localParts.set("user-123", "lavega-existing");
+  setLocalPartResult = { status: "stored", localPart: "mine" };
+  const { impl } = fakeFetchQueue(200, {});
+  const app = buildApp(impl);
+
+  const res = await app.request("/api/n8n/forward-address", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ localPart: "mine" }),
+  });
+
+  expect(res.status).toBe(200);
+  expect(setLocalPartCalls).toHaveLength(1);
+});

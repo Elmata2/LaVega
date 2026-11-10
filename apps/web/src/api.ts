@@ -48,7 +48,7 @@ export async function apiErrorMessageIn(locale: Locale, res: Response): Promise<
     const parsed = (await res.json()) as { error?: string; code?: string; problems?: string[] };
     if (parsed?.error) msg = parsed.error;
     else if (parsed?.problems?.length) msg = parsed.problems.join(" ");
-    if (parsed?.code) msg = apiErrorText(locale, parsed.code, msg, res.status);
+    if (parsed?.code) msg = apiErrorText(locale, parsed.code, msg);
   } catch {
     /* non-JSON error body; keep the status-based message */
   }

@@ -1170,7 +1170,7 @@ export default function Optimalisatie({
 
   return (
     <>
-      <div className="flex items-baseline justify-between gap-[var(--sp-4)] flex-wrap pb-[var(--sp-2)] mt-[var(--sp-5)] mb-[var(--sp-4)] border-b-2 border-b-ink first:mt-0">
+      <div className="flex items-baseline justify-between gap-[var(--sp-4)] flex-wrap pb-[var(--sp-2)] mt-[var(--sp-5)] mb-[var(--sp-4)] border-b border-b-line first:mt-0">
         <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.header.title}
         </h2>
@@ -1937,7 +1937,7 @@ export default function Optimalisatie({
                           {r.capitalAtRisk ? (
                             <span
                               title={c.interest.benchmarkDetails.capitalAtRiskTooltip}
-                              style={{ color: "var(--warn, #b26a00)" }}
+                              style={{ color: "var(--warn)" }}
                             >
                               {" "}
                               *

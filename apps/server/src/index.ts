@@ -4,6 +4,7 @@ import { Hono, type Context, type Next } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
@@ -491,7 +492,14 @@ app.use("/*", serveStatic({ root: WEB_DIST }));
  * we had still saw 200s. Cloudflare then cached the HTML under the .js URL for
  * four hours. A file that is not there is a 404. */
 app.get("/*", (c, next) => (isStaticAssetPath(c.req.path) ? c.text("Not Found", 404) : next()));
-app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+/* The view fallback is the bare SPA shell (app-shell.html), not index.html: the
+ * build pre-renders index.html into the Dutch landing page for crawlers, and
+ * /app or /reset-password must not start from that markup. Older builds without
+ * app-shell.html still get index.html. */
+app.get("/*", (c, next) => {
+  const shell = existsSync(`${WEB_DIST}/app-shell.html`) ? "app-shell.html" : "index.html";
+  return serveStatic({ path: `${WEB_DIST}/${shell}` })(c, next);
+});
 
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
 if (import.meta.url === `file://${process.argv[1]}`) {

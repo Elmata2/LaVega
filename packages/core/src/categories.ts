@@ -1338,7 +1338,10 @@ function kindOf(token: string): TokenKind {
  * on its own and ONE person is enough — the vetoes are applied per part, which
  * is what lets "via Rabo Betaalverzoek" be refused while the name is accepted. */
 const splitNameParts = (raw: string): string[] =>
-  raw.split(/,|&|\s+en\/of\s+|\s+e\/o\s+|\s+und\s+|\s+via\s+/i);
+  // Whitespace is collapsed first (one pass, a single quantifier), so the
+  // separators need no `\s+` of their own: an unbounded run of spaces cannot
+  // make the split backtrack quadratically.
+  raw.replace(/\s+/g, " ").split(/,|&| en\/of | e\/o | und | via /i);
 
 function partIsPerson(part: string): boolean {
   const tokens = tokensOf(part);

@@ -56,12 +56,8 @@ export type ApiErrorCode =
   | "n8n-address-invalid"
   | "n8n-address-taken";
 
-/** Every entry is a plain sentence except `n8n-upstream-error`, which embeds
- *  the HTTP status n8n itself answered with — that shape lives in the type
- *  so a caller can never mix the two up. */
-type ApiErrorCopyShape = {
-  [K in ApiErrorCode]: K extends "n8n-upstream-error" ? (status: number) => string : string;
-};
+/** Every entry is a plain sentence. A status code is never user copy. */
+type ApiErrorCopyShape = Record<ApiErrorCode, string>;
 
 /* Byte-identical to the `error` literals the server routes return today
  * (agent-routes.ts, n8n-routes.ts) — do not retype or "improve" these. */
@@ -101,10 +97,10 @@ const nl: ApiErrorCopyShape = {
   "bad-input": "Ongeldige aanvraag.",
   "n8n-not-configured": "De factuur-wachtrij is niet ingesteld op de server.",
   "n8n-queue-unauthenticated": "Log in om je facturen op te halen.",
-  "n8n-misconfigured-url": "De n8n-URL op de server is ongeldig.",
-  "n8n-unreachable": "Kon n8n niet bereiken.",
-  "n8n-upstream-error": (status) => `n8n antwoordde met status ${status}.`,
-  "n8n-unreadable": "Onleesbaar antwoord van n8n.",
+  "n8n-misconfigured-url": "De server is voor het ophalen van facturen niet goed ingesteld.",
+  "n8n-unreachable": "De server kon je facturen nu niet bereiken.",
+  "n8n-upstream-error": "Het ophalen van facturen lukt nu niet. Probeer het straks opnieuw.",
+  "n8n-unreadable": "Het antwoord op het ophalen van facturen was niet te lezen.",
   "n8n-forward-address-read-unauthenticated": "Log in om je doorstuuradres te zien.",
   "n8n-forward-address-write-unauthenticated": "Log in om een doorstuuradres in te stellen.",
   "n8n-address-invalid": "Dat is geen geldig lokaal deel van een e-mailadres.",
@@ -151,10 +147,10 @@ const en: ApiErrorCopyShape = {
   "bad-input": "Invalid request.",
   "n8n-not-configured": "The invoice queue is not set up on the server.",
   "n8n-queue-unauthenticated": "Sign in to fetch your invoices.",
-  "n8n-misconfigured-url": "The n8n URL on the server is invalid.",
-  "n8n-unreachable": "Could not reach n8n.",
-  "n8n-upstream-error": (status) => `n8n responded with status ${status}.`,
-  "n8n-unreadable": "Unreadable response from n8n.",
+  "n8n-misconfigured-url": "The server isn't set up correctly for fetching invoices.",
+  "n8n-unreachable": "The server couldn't reach your invoices right now.",
+  "n8n-upstream-error": "Fetching invoices isn't working right now. Try again shortly.",
+  "n8n-unreadable": "The response to fetching invoices could not be read.",
   "n8n-forward-address-read-unauthenticated": "Sign in to see your forwarding address.",
   "n8n-forward-address-write-unauthenticated": "Sign in to set a forwarding address.",
   "n8n-address-invalid": "That is not a valid local part of an email address.",
@@ -163,20 +159,14 @@ const en: ApiErrorCopyShape = {
 
 export const apiErrorCopy: Record<Locale, ApiErrorCopyShape> = { nl, en };
 
-/** The sentence for a server error `code`, in `locale`. `status` feeds the one
- *  entry that embeds it (`n8n-upstream-error`); ignored by every other entry.
+/** The sentence for a server error `code`, in `locale`.
  *  `fallback` is the server's own `error` string (always Dutch, always
  *  present) — returned as-is when `code` is absent or not one this bundle
  *  recognises (an older or a newer server), so there is never a blank
  *  message, only ever Dutch-when-unrecognised-English-when-known. */
-export function apiErrorText(
-  locale: Locale,
-  code: string | undefined,
-  fallback: string,
-  status = 0,
-): string {
+export function apiErrorText(locale: Locale, code: string | undefined, fallback: string): string {
   if (!code) return fallback;
   const entry = apiErrorCopy[locale][code as ApiErrorCode];
   if (entry === undefined) return fallback;
-  return typeof entry === "function" ? entry(status) : entry;
+  return entry;
 }

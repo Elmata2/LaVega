@@ -1,4 +1,4 @@
-import { scrubPersonalValues, scrubPersonalValuesDeep } from "@lavega/core";
+import { sanitizeProfileSummary, scrubPersonalValues, scrubPersonalValuesDeep } from "@lavega/core";
 import { ValidationError } from "./validationError.js";
 
 export const CHAT_TABS = [
@@ -58,11 +58,20 @@ const ALLOW: Record<string, readonly string[]> = {
  *  is the thing that actually talks to Mistral and it cannot tell whether a
  *  builder was widened, so the value rule has to hold here too. */
 export function sanitizeChatContext(tab: string, raw: unknown): Record<string, unknown> {
-  const allow = ALLOW[tab] ?? [];
+  const allow = Object.hasOwn(ALLOW, tab) ? ALLOW[tab] : [];
   const out: Record<string, unknown> = {};
   if (raw && typeof raw === "object") {
     const r = raw as Record<string, unknown>;
     for (const k of allow) if (k in r) out[k] = scrubPersonalValuesDeep(r[k]);
+    // `profile` is the same on every tab (even one not in ALLOW), so it is not
+    // an ALLOW entry: it is rebuilt from known enum literals only, never copied,
+    // so no free text or unknown key can ride along.
+    // Scrubbed too as defence in depth, and omitted when it says nothing.
+    if (Object.hasOwn(r, "profile") && r.profile !== null && typeof r.profile === "object") {
+      const p = sanitizeProfileSummary(r.profile);
+      const empty = Object.values(p).every((v) => v === null || (Array.isArray(v) && v.length === 0));
+      if (!empty) out.profile = scrubPersonalValuesDeep(p);
+    }
   }
   if (JSON.stringify(out).length > MAX_CONTEXT_CHARS)
     throw new ValidationError("chat-context-too-large", "context te groot");

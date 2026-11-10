@@ -158,3 +158,136 @@ test("sanitizeChatContext scrubs an email or a phone number wherever it is neste
   expect(json).toContain("[EMAIL]");
   expect(json).toContain("[TEL]");
 });
+
+// --- profile summary (privacy path) ---
+import { CHAT_TABS } from "./chatContext.js";
+
+const goodProfile = {
+  priorities: ["save-more", "cards-points"],
+  cutTargets: ["eating-out", "subscriptions"],
+  checkInCadence: "weekly",
+  confidence: 3,
+  household: "together",
+  moneySharing: "mixed",
+  incomeRegularity: "varies",
+  spendMix: ["groceries"],
+  cardRepayment: "full",
+  pointsGoal: "flights",
+};
+
+test("server keeps a valid profile on every tab, including one not in ALLOW", () => {
+  for (const tab of [...CHAT_TABS, "hackerz"]) {
+    expect(sanitizeChatContext(tab, { profile: goodProfile }).profile).toEqual(goodProfile);
+  }
+});
+
+test("server drops unknown profile keys and non-enum values", () => {
+  const out = sanitizeChatContext("overview", {
+    profile: {
+      ...goodProfile,
+      birthYear: 1987,
+      statedBanks: ["ing"],
+      household: "NL91ABNA0417164300",
+      confidence: 9,
+      pointsGoal: { x: 1 },
+      spendMix: ["groceries", "bogus", 7],
+    },
+  });
+  expect(out.profile).toEqual({
+    ...goodProfile,
+    household: null,
+    confidence: null,
+    pointsGoal: null,
+    spendMix: ["groceries"],
+  });
+  expect(JSON.stringify(out)).not.toMatch(/birthYear|statedBanks|1987/);
+});
+
+test("a free-text value in priorities is dropped on the server", () => {
+  const out = sanitizeChatContext("forecast", {
+    profile: { priorities: ["save-more", "ik wil sparen voor NL91ABNA0417164300", "mijn partner heet Jan"] },
+  });
+  expect((out.profile as { priorities: string[] }).priorities).toEqual(["save-more"]);
+});
+
+test("a non-object profile is omitted", () => {
+  expect(sanitizeChatContext("overview", { profile: "free text" })).toEqual({});
+  expect(sanitizeChatContext("overview", { profile: null })).toEqual({});
+});
+
+test("enum strings survive the value scrub unchanged", () => {
+  const out = sanitizeChatContext("overview", { profile: goodProfile });
+  expect(out.profile).toEqual(goodProfile);
+});
+
+// --- fix round 1 ---
+test("prototype-named tabs return a clean result, not a throw", () => {
+  for (const tab of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    expect(() => sanitizeChatContext(tab, { profile: goodProfile })).not.toThrow();
+    expect(sanitizeChatContext(tab, { profile: goodProfile, x: 1 })).toEqual({
+      profile: goodProfile,
+    });
+  }
+});
+
+test("every enum literal survives the server scrub byte-identical", () => {
+  const all = {
+    priorities: [
+      "spend-less",
+      "save-more",
+      "pay-off-debt",
+      "cards-points",
+      "subscriptions",
+      "children",
+      "start-investing",
+    ],
+    cutTargets: ["groceries", "travel", "online", "fuel", "eating-out", "other", "subscriptions"],
+    checkInCadence: "when-it-matters",
+    confidence: 4,
+    household: "alone",
+    moneySharing: "separate",
+    incomeRegularity: "fixed",
+    spendMix: ["groceries", "travel", "online", "fuel", "eating-out", "other"],
+    cardRepayment: "sometimes",
+    pointsGoal: "no-preference",
+  };
+  const out = sanitizeChatContext("overview", { profile: all });
+  expect(JSON.stringify(out.profile)).toBe(JSON.stringify(all));
+  for (const c of ["daily", "weekly"])
+    expect(sanitizeChatContext("overview", { profile: { checkInCadence: c } }).profile).toMatchObject({
+      checkInCadence: c,
+    });
+  for (const v of ["rarely", "full"])
+    expect(sanitizeChatContext("overview", { profile: { cardRepayment: v } }).profile).toMatchObject({
+      cardRepayment: v,
+    });
+});
+
+test("an empty or fully invalid profile is omitted", () => {
+  expect(sanitizeChatContext("overview", { profile: {} })).toEqual({});
+  expect(sanitizeChatContext("overview", { profile: { priorities: ["x"], confidence: 9 } })).toEqual({});
+});
+
+test.each([
+  ["proto keys", JSON.parse('{"__proto__":{"a":1},"constructor":{"b":2},"priorities":["save-more"]}')],
+  ["huge array", { priorities: Array.from({ length: 100_000 }, (_, i) => (i % 2 ? "save-more" : `x${i}`)) }],
+  ["string confidence", { confidence: "3", priorities: ["save-more"] }],
+  ["NaN confidence", { confidence: NaN, priorities: ["save-more"] }],
+  ["confidence 9", { confidence: 9, priorities: ["save-more"] }],
+  ["mixed case", { priorities: ["Save-More", "SAVE-MORE", "save-more"], household: "Alone" }],
+  ["nested arrays", { priorities: [["save-more"], [[["save-more"]]], "save-more"] }],
+])("hostile profile neutralised: %s", (_n, profile) => {
+  const out = sanitizeChatContext("overview", { profile });
+  const p = out.profile as Record<string, unknown> | undefined;
+  expect(Object.keys(p ?? {}).every((k) => k !== "__proto__" && k !== "constructor")).toBe(true);
+  expect(Object.getPrototypeOf(p ?? {})).toBe(Object.prototype);
+  expect(JSON.stringify(out)).not.toMatch(/Save|SAVE|"3"|x\d|\[\[/);
+  if (p) {
+    expect(p.priorities).toEqual(["save-more"]);
+    expect(p.confidence ?? null).toBeNull();
+    expect(p.household ?? null).toBeNull();
+    expect(Object.keys(p).sort()).toEqual(
+      ["priorities","cutTargets","checkInCadence","confidence","household","moneySharing","incomeRegularity","spendMix","cardRepayment","pointsGoal"].sort(),
+    );
+  }
+});

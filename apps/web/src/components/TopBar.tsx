@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import type { EntityScope } from "@lavega/core";
 import Pill from "./ui/Pill.js";
 import type { View } from "../App";
+import { SHOW_SCOPE_SWITCH } from "../archive";
 import { SCOPE_ORDER } from "../scope.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -32,26 +33,28 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
   return (
     <div className="topbar">
       <div className="topbar-left">
-        <div className="eyebrow">LaVega · {c.scope[scope]}</div>
+        <div className="eyebrow">LaVega{SHOW_SCOPE_SWITCH ? ` · ${c.scope[scope]}` : ""}</div>
         <h1 className="topbar-title">{c.topBar.viewTitles[view]}</h1>
       </div>
 
       <div className="topbar-right">
-        <div className="scope-switch" role="group" aria-label={c.topBar.scopeGroupLabel}>
-          {SCOPE_ORDER.map((s, i) => (
-            <Fragment key={s}>
-              {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-              <button
-                type="button"
-                className={`scope-option${scope === s ? " scope-on" : ""}`}
-                aria-pressed={scope === s}
-                onClick={() => onScopeChange(s)}
-              >
-                {c.scope[s]}
-              </button>
-            </Fragment>
-          ))}
-        </div>
+        {SHOW_SCOPE_SWITCH && (
+          <div className="scope-switch" role="group" aria-label={c.topBar.scopeGroupLabel}>
+            {SCOPE_ORDER.map((s, i) => (
+              <Fragment key={s}>
+                {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+                <button
+                  type="button"
+                  className={`scope-option${scope === s ? " scope-on" : ""}`}
+                  aria-pressed={scope === s}
+                  onClick={() => onScopeChange(s)}
+                >
+                  {c.scope[s]}
+                </button>
+              </Fragment>
+            ))}
+          </div>
+        )}
 
         <Pill className="topbar-add" onClick={onAddWidget}>
           <span aria-hidden="true">+</span>

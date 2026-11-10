@@ -62,44 +62,19 @@ test("overview context computes real aggregates from raw state, never raw txs", 
   expect((context as any).bufferCents).toBe(0);
 });
 
+test("archived tabs (facturen, belasting, valuta) fall back to an empty context", () => {
+  for (const tab of ["facturen", "belasting", "valuta"]) {
+    const built = buildTabContext(tab, {
+      invoices: [{ amount: 1 }],
+      accounts: [{ currency: "USD" }],
+      vatSettings: [],
+    } as any);
+    expect(built).toEqual({ tab, context: {} });
+  }
+});
+
 test("unknown tab yields empty context", () => {
   expect(buildTabContext("zzz", {} as any).context).toEqual({});
-});
-
-test("facturen context carries capped invoices only, never raw txs", () => {
-  const { tab, context } = buildTabContext("facturen", {
-    invoices: Array.from({ length: 200 }, (_, i) => ({
-      counterparty: "X" + i,
-      amount: 1,
-      issueDate: "2026-01-01",
-      dueDate: "2026-01-31",
-      status: "expected",
-    })),
-    txs: [{ id: "t1", amount: 999 }],
-  } as any);
-  expect(tab).toBe("facturen");
-  expect(Array.isArray((context as any).invoices)).toBe(true);
-  expect((context as any).invoices.length).toBeLessThanOrEqual(100);
-  expect((context as any).txs).toBeUndefined();
-});
-
-test("valuta context has rate + holdings, no personal amounts", () => {
-  const { tab, context } = buildTabContext("valuta", {
-    fxRate: { base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } },
-    accounts: [{ currency: "USD" }, { currency: "EUR" }, { currency: "USD" }],
-    invoices: [{ amount: 500 }],
-  } as any);
-  expect(tab).toBe("valuta");
-  expect((context as any).rate).toBeTruthy();
-  expect((context as any).holdings).toContain("USD");
-  expect((context as any).holdings).not.toContain("EUR");
-  expect((context as any).invoices).toBeUndefined();
-});
-
-test("valuta omits rate when App has no fxRate (agent web-searches it)", () => {
-  const { context } = buildTabContext("valuta", { accounts: [{ currency: "GBP" }] } as any);
-  expect((context as any).rate).toBeUndefined();
-  expect((context as any).holdings).toContain("GBP");
 });
 
 test("punten context carries reward balances", () => {
@@ -189,33 +164,6 @@ test("forecast context carries a compact summary, never raw txs", () => {
   expect(tab).toBe("forecast");
   expect((context as any).summary).toBeTruthy();
   expect(typeof (context as any).summary).toBe("object");
-  expect((context as any).txs).toBeUndefined();
-  expect(JSON.stringify(context)).not.toContain('"accountKey"');
-});
-
-test("belasting context carries vat/deadlines/settings, never raw txs", () => {
-  const { tab, context } = buildTabContext("belasting", {
-    accounts: [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }],
-    txs: [
-      {
-        id: "t1",
-        accountKey: "k1",
-        date: "2026-07-10",
-        amount: 12100,
-        counterparty: "Klant",
-        description: "",
-        currency: "EUR",
-        category: "",
-        manual: false,
-      },
-    ],
-    vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false }],
-    asOf: "2026-08-05",
-  } as any);
-  expect(tab).toBe("belasting");
-  expect((context as any).settings).toBeTruthy();
-  expect(Array.isArray((context as any).deadlines)).toBe(true);
-  expect((context as any).vat).toBeTruthy();
   expect((context as any).txs).toBeUndefined();
   expect(JSON.stringify(context)).not.toContain('"accountKey"');
 });
@@ -345,4 +293,78 @@ test("punten sends no balance note: it is where a card number or a login lives",
     updatedAt: "2026-01-10",
   });
   expect(JSON.stringify(context)).not.toContain("example.com");
+});
+
+// --- profile summary (privacy path) ---
+import { AdvisorProfile, type ProfileSummary } from "@lavega/core";
+import { profileSummaryOf } from "./profileSummary.js";
+
+const stated = <T>(value: T) => ({ value, source: "stated" as const, at: "2026-11-03" });
+const richProfile = () =>
+  new AdvisorProfile({
+    household: stated({ kind: "together" as const, moneySharing: "mixed" as const }),
+    birthYear: stated(1987),
+    statedBanks: stated(["ing", "abn-amro"]),
+    statedCards: stated(["amex-gold"]),
+    statedPrograms: stated(["flying-blue"]),
+    worries: stated("IBAN NL91ABNA0417164300 en mijn schuld van 12000"),
+    priorities: stated(["save-more" as const, "save-more" as const, "cards-points" as const]),
+    cutTargets: stated(["eating-out" as const, "subscriptions" as const]),
+    checkInCadence: stated("weekly" as const),
+    confidence: stated(3),
+    incomeRegularity: stated("varies" as const),
+    spendMix: stated(["groceries" as const, "travel" as const]),
+    cardRepayment: stated("full" as const),
+    pointsGoal: stated("flights" as const),
+    removed: [],
+    intake: { blocksDone: 0, step0: null },
+  });
+
+test("summary carries only enums", () => {
+  const s = profileSummaryOf(richProfile());
+  expect(s).toEqual({
+    priorities: ["save-more", "cards-points"],
+    cutTargets: ["eating-out", "subscriptions"],
+    checkInCadence: "weekly",
+    confidence: 3,
+    household: "together",
+    moneySharing: "mixed",
+    incomeRegularity: "varies",
+    spendMix: ["groceries", "travel"],
+    cardRepayment: "full",
+    pointsGoal: "flights",
+  } satisfies ProfileSummary);
+});
+
+test("empty profile gives an empty summary", () => {
+  const s = profileSummaryOf(new AdvisorProfile({ removed: [], intake: { blocksDone: 0, step0: null } }));
+  expect(s.priorities).toEqual([]);
+  expect(s.household).toBeNull();
+  expect(s.confidence).toBeNull();
+});
+
+test("birthYear and statedBanks never appear, in the summary or the built context", () => {
+  const summary = profileSummaryOf(richProfile());
+  for (const view of ["overview", "forecast", "backup", "unknown-view"]) {
+    const { context } = buildTabContext(view, { profileSummary: summary });
+    const json = JSON.stringify(context);
+    for (const leak of ["1987", "birthYear", "statedBanks", "abn-amro", "ing", "amex", "flying-blue", "NL91", "12000", "worries"]) {
+      // "ing" is checked as a whole JSON string value, not as a substring
+      if (leak === "ing") expect(json).not.toContain('"ing"');
+      else expect(json).not.toContain(leak);
+    }
+    expect(context.profile).toEqual(summary);
+  }
+});
+
+test("buildTabContext adds no profile key without a summary", () => {
+  expect(buildTabContext("backup", {}).context).toEqual({});
+});
+
+test("a tampered summary is re-sanitized in the browser too", () => {
+  const { context } = buildTabContext("backup", {
+    profileSummary: { ...profileSummaryOf(richProfile()), priorities: ["NL91ABNA0417164300"], birthYear: 1987 } as never,
+  });
+  expect((context.profile as ProfileSummary).priorities).toEqual([]);
+  expect(JSON.stringify(context)).not.toContain("birthYear");
 });

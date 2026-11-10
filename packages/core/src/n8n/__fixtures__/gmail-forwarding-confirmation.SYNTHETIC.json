@@ -1,0 +1,14 @@
+{
+  "_note": "SYNTHETIC. Written from memory of Gmail's documented format, NOT captured. Shape is UNVERIFIED. Replace with gmail-forwarding-confirmation.json (real capture) before release.",
+  "_expectedCode": "123456789",
+  "to": "alexander-7f3a@invoices.lavega.dev",
+  "queueKey": "alexander-7f3a",
+  "from": "forwarding-noreply@google.com",
+  "subject": "(#123456789) Gmail Forwarding Confirmation - Receive Mail from someone@gmail.com",
+  "date": "Wed, 21 Oct 2026 13:58:02 +0000",
+  "messageId": "<synthetic-confirmation-1@mail.gmail.com>",
+  "text": "someone@gmail.com has requested to automatically forward mail to your email address alexander-7f3a@invoices.lavega.dev.\n\nConfirmation code: 123456789\n\nTo allow someone@gmail.com to automatically forward mail to your address, please click the link below to confirm the request:\n\nhttps://mail-settings.google.com/mail/vf-%5BSYNTHETIC%5D\n\nIf you do not approve of this request, please ignore this message.\n\nThanks for using Gmail!",
+  "html": "",
+  "auth": { "spf": "unknown", "dkim": "unknown", "dmarc": "unknown" },
+  "attachments": []
+}

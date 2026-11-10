@@ -1,0 +1,1938 @@
+# query browserSessionBootstrapQuery  (app-eNF866Ec.js)
+query browserSessionBootstrapQuery {
+  authSession {
+    user {
+      id
+      name
+      email
+      roles
+      enabledFeatureFlags
+      onboardingStep
+      profilePictureUrl
+      phoneNumber
+    }
+  }
+}
+
+# mutation ClientTelemetryEvent  (app-eNF866Ec.js)
+mutation ClientTelemetryEvent($events: [ClientTelemetryEventInput!]!) {
+        ingestClientTelemetryEvents(events: $events)
+    }
+
+# query EmailCollectStepPollQuery  (OnboardingPage-CMRiXp54.js)
+query EmailCollectStepPollQuery {
+  authSession {
+    user {
+      id
+      onboardingStep
+    }
+  }
+}
+
+# query FeedbackStatusPageQuery  (FeedbackStatusPage-CcTkuulS.js)
+query FeedbackStatusPageQuery(
+  $id: ID!
+) {
+  myUserFeedback(id: $id) {
+    id
+    content
+    status
+    createdAt
+    thread {
+      id
+      direction
+      content
+      createdAt
+    }
+  }
+}
+
+# query NativePasskeyPageChallengeQuery  (NativePasskeyPage-6rdYPfb7.js)
+query NativePasskeyPageChallengeQuery(
+  $id: String!
+) {
+  nativePasskeyChallenge(id: $id) {
+    optionsJson
+  }
+}
+
+# mutation NativePasskeyPageFinishMutation  (NativePasskeyPage-6rdYPfb7.js)
+mutation NativePasskeyPageFinishMutation(
+  $id: String!
+  $responseJson: String!
+) {
+  finishNativePasskeyLogin(id: $id, responseJson: $responseJson) {
+    callbackUrl
+  }
+}
+
+# query OnboardingGoogleConnectStepConnectionsQuery  (app-eNF866Ec.js)
+query OnboardingGoogleConnectStepConnectionsQuery {
+  googleWorkspaceConnections {
+    id
+    isRevoked
+  }
+}
+
+# mutation OnboardingGoogleConnectStepStartMutation  (app-eNF866Ec.js)
+mutation OnboardingGoogleConnectStepStartMutation(
+  $integrationId: String!
+  $scopeProfile: ConnectScopeProfile
+) {
+  startWebConnect(integrationId: $integrationId, scopeProfile: $scopeProfile) {
+    url
+  }
+}
+
+# mutation PageViewTelemetry  (app-eNF866Ec.js)
+mutation PageViewTelemetry($events: [ClientTelemetryEventInput!]!) {
+        ingestClientTelemetryEvents(events: $events)
+    }
+
+# mutation UpdateDraftField  (AgentChatPage-CmhyiyT0.js)
+mutation UpdateDraftField($chatId: ID!, $eventId: ID!, $value: String!) {
+        updateDraftField(chatId: $chatId, eventId: $eventId, value: $value) {
+            content
+            userValue
+        }
+    }
+
+# mutation useAgentChatGetOrCreateMutation  (AgentChatPage-CmhyiyT0.js)
+mutation useAgentChatGetOrCreateMutation {
+  getOrCreatePersistentChat(source: APP) {
+    id
+    title
+    source
+    status
+    pendingTurnStartedAt
+  }
+}
+
+# mutation useAgentChatSendPersistentChatMessageMutation  (AgentChatPage-CmhyiyT0.js)
+mutation useAgentChatSendPersistentChatMessageMutation(
+  $input: SendPersistentChatMessageInput!
+) {
+  sendPersistentChatMessage(input: $input) {
+    chatId
+    wakeId
+    ingressEventId
+  }
+}
+
+# mutation useAgentChatUpdateDraftFieldMutation  (AgentChatPage-CmhyiyT0.js)
+mutation useAgentChatUpdateDraftFieldMutation(
+  $chatId: ID!
+  $eventId: ID!
+  $value: String!
+) {
+  updateDraftField(chatId: $chatId, eventId: $eventId, value: $value) {
+    content
+    userValue
+  }
+}
+
+# query useAgentContactQuery  (app-eNF866Ec.js)
+query useAgentContactQuery {
+  agentContact {
+    smsPhoneNumber
+    voicePhoneNumber
+    voiceCallsEnabled
+    whatsAppChannelPhoneNumber
+    email
+    agentMailStatus
+    agentPhoneNumber
+    agentPhoneStatus
+  }
+}
+
+# query useAgentMailAddressAvailabilityQuery  (WorkspacePage-BBbe7afQ.js)
+query useAgentMailAddressAvailabilityQuery(
+  $localPart: String!
+) {
+  agentMailAddressAvailability(localPart: $localPart) {
+    address
+    valid
+    available
+    current
+    limitReached
+  }
+}
+
+# mutation useAgentMailAddressChangeMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useAgentMailAddressChangeMutation(
+  $localPart: String!
+) {
+  changeAgentMailAddress(localPart: $localPart) {
+    address
+    previousAddress
+    changed
+  }
+}
+
+# mutation useAgentMailEnabledMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useAgentMailEnabledMutation(
+  $enabled: Boolean!
+) {
+  setAgentMailEnabled(enabled: $enabled) {
+    smsPhoneNumber
+    voicePhoneNumber
+    voiceCallsEnabled
+    whatsAppChannelPhoneNumber
+    email
+    agentMailStatus
+    agentPhoneNumber
+    agentPhoneStatus
+  }
+}
+
+# mutation useAppleBusinessLinkMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useAppleBusinessLinkMutation {
+  createAppleBusinessLink {
+    url
+  }
+}
+
+# query useAuthSessionQuery  (app-eNF866Ec.js)
+query useAuthSessionQuery {
+  authSession {
+    user {
+      id
+      name
+      email
+      roles
+      enabledFeatureFlags
+      onboardingStep
+      profilePictureUrl
+      phoneNumber
+    }
+  }
+}
+
+# mutation useBrowserAuthStopSessionMutation  (app-eNF866Ec.js)
+mutation useBrowserAuthStopSessionMutation {
+  authStopSession
+}
+
+# mutation useBrowserPasskeyLoginBeginDirectMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginBeginDirectMutation {
+  beginDirectPasskeyLogin {
+    id
+    optionsJson
+  }
+}
+
+# mutation useBrowserPasskeyLoginCompleteWaitMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginCompleteWaitMutation(
+  $id: String!
+) {
+  browserCompletePasskeyRecoveryWait(id: $id) {
+    __typename
+    ... on BrowserSession {
+      user {
+        id
+        email
+        roles
+        onboardingStep
+      }
+    }
+    ... on AuthError {
+      status
+      message
+    }
+  }
+}
+
+# mutation useBrowserPasskeyLoginFinishDirectMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginFinishDirectMutation(
+  $id: String!
+  $responseJson: String!
+  $timezone: String!
+  $inviteToken: String
+) {
+  browserFinishDirectPasskeyLogin(id: $id, responseJson: $responseJson, timezone: $timezone, inviteToken: $inviteToken) {
+    __typename
+    ... on BrowserSession {
+      user {
+        id
+        email
+        roles
+        onboardingStep
+      }
+    }
+    ... on AuthError {
+      status
+      message
+    }
+  }
+}
+
+# mutation useBrowserPasskeyLoginMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginMutation(
+  $id: String!
+  $responseJson: String!
+) {
+  browserFinishPasskeyLogin(id: $id, responseJson: $responseJson) {
+    __typename
+    ... on BrowserSession {
+      user {
+        id
+        email
+        roles
+        onboardingStep
+      }
+    }
+    ... on AuthError {
+      status
+      message
+    }
+  }
+}
+
+# mutation useBrowserPasskeyLoginRecoverMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginRecoverMutation(
+  $id: String!
+  $recoveryCode: String!
+) {
+  browserRecoverPasskeyLogin(id: $id, recoveryCode: $recoveryCode) {
+    __typename
+    ... on BrowserSession {
+      user {
+        id
+        email
+        roles
+        onboardingStep
+      }
+    }
+    ... on AuthError {
+      status
+      message
+    }
+  }
+}
+
+# mutation useBrowserPasskeyLoginStartWaitMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserPasskeyLoginStartWaitMutation(
+  $id: String!
+) {
+  startPasskeyRecoveryWait(id: $id) {
+    endsAt
+    ready
+  }
+}
+
+# mutation useBrowserVerifySmsOtpMutation  (AuthFlow-DLlEgwlc.js)
+mutation useBrowserVerifySmsOtpMutation(
+  $phoneNumber: String!
+  $code: String!
+  $bindingToken: String!
+  $timezone: Timezone!
+  $name: String
+  $inviteToken: String
+  $websiteVisitId: String
+) {
+  browserVerifySmsOtp(phoneNumber: $phoneNumber, code: $code, bindingToken: $bindingToken, timezone: $timezone, name: $name, inviteToken: $inviteToken, websiteVisitId: $websiteVisitId) {
+    __typename
+    ... on BrowserSession {
+      user {
+        id
+        email
+        roles
+        onboardingStep
+      }
+    }
+    ... on AuthError {
+      status
+      message
+    }
+    ... on PasskeyLoginChallenge {
+      id
+      optionsJson
+      expiresInSeconds
+    }
+  }
+}
+
+# mutation useChangePhoneNumberMutation  (SettingsPage-Et2fAfzA.js)
+mutation useChangePhoneNumberMutation(
+  $phoneNumber: String!
+  $code: String!
+  $bindingToken: String!
+) {
+  changePhoneNumber(phoneNumber: $phoneNumber, code: $code, bindingToken: $bindingToken) {
+    phoneNumber
+  }
+}
+
+# query useChannelChoiceLayoutQuery  (OnboardingPage-CMRiXp54.js)
+query useChannelChoiceLayoutQuery {
+  clientDynamicSettings {
+    key
+    value
+  }
+}
+
+# query useChatHistoryQuery  (AgentChatPage-CmhyiyT0.js)
+query useChatHistoryQuery(
+  $chatId: ID!
+  $source: ChatSource
+  $limit: Int
+  $cursor: String
+) {
+  chat(chatId: $chatId) {
+    source
+    status
+    pendingInteractionId
+    id
+  }
+  chatHistory(chatId: $chatId, source: $source, limit: $limit, cursor: $cursor) {
+    pendingTurnStartedAt
+    cursor
+    events {
+      id
+      type
+      createdAt
+      message {
+        id
+        role
+        ingressEventId
+        readAt
+        content
+        origin {
+          kind
+          agentId
+          agentKind
+          agentDisplayName
+        }
+        attachments {
+          id
+          kind
+          mimeType
+          filename
+          byteSize
+          signedUrl
+        }
+        sentDraftEdits {
+          chatEventId
+          label
+        }
+      }
+      error {
+        message
+      }
+      toolInvocation {
+        toolName
+        toolId
+        arguments
+      }
+      toolResponse {
+        toolName
+        toolId
+        response
+        actionType
+        isError
+      }
+      interaction {
+        interactionId
+        interactionType
+        title
+        body
+        payloadJson
+        question
+        options
+        actionSummary
+        targetMode
+        deviceName
+        plan
+      }
+      interactionResponse {
+        interactionId
+        approved
+        selected
+        text
+        payloadJson
+        summary
+        dismissed
+      }
+      screenshot {
+        url
+      }
+      thinking {
+        thinking
+      }
+      action {
+        actionType
+        coordinate
+        text
+        key
+        scrollDirection
+        scrollAmount
+        command
+      }
+      draftField {
+        label
+        before
+        content
+        userValue
+        userEditedAt
+      }
+    }
+  }
+}
+
+# mutation useCliLoginRequestApproveProductMutation  (ProductCliAuthPage-C0GVmRcw.js)
+mutation useCliLoginRequestApproveProductMutation(
+  $code: String!
+) {
+  approveProductCliLogin(code: $code)
+}
+
+# query useCliLoginRequestProductQuery  (ProductCliAuthPage-C0GVmRcw.js)
+query useCliLoginRequestProductQuery(
+  $code: String!
+) {
+  productCliLoginRequest(code: $code) {
+    host
+    requestedAt
+    requesterIp
+    requesterCountry
+    requesterUserAgent
+  }
+}
+
+# mutation useConnectWhatsAppChannelMutation  (app-eNF866Ec.js)
+mutation useConnectWhatsAppChannelMutation(
+  $phoneNumber: String!
+  $code: String!
+  $bindingToken: String!
+  $signupToken: String
+) {
+  connectWhatsAppChannel(phoneNumber: $phoneNumber, code: $code, bindingToken: $bindingToken, signupToken: $signupToken) {
+    userId
+    phoneNumber
+  }
+}
+
+# mutation useDeleteIndexedActivityMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useDeleteIndexedActivityMutation {
+  deleteIndexedActivity {
+    deletedData
+  }
+}
+
+# query useDesktopReleaseQuery  (DownloadPage-DCPDrEYC.js)
+query useDesktopReleaseQuery {
+  latestAppRelease {
+    version
+    id
+  }
+}
+
+# query useDevicesQuery  (WorkspacePage-BBbe7afQ.js)
+query useDevicesQuery {
+  devices {
+    id
+    name
+    hostname
+    osVersion
+    isConnected
+    batteryLevel
+    isCharging
+    deviceType
+    createdAt
+  }
+}
+
+# mutation useDevicesRemoveMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useDevicesRemoveMutation(
+  $deviceId: ID!
+) {
+  removeDevice(deviceId: $deviceId)
+}
+
+# mutation useDevicesRenameMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useDevicesRenameMutation(
+  $deviceId: ID!
+  $name: String!
+) {
+  renameDevice(deviceId: $deviceId, name: $name) {
+    id
+    name
+  }
+}
+
+# mutation useGenerateReferralLinkMutation  (app-eNF866Ec.js)
+mutation useGenerateReferralLinkMutation(
+  $name: String
+) {
+  generateReferralLink(name: $name) {
+    id
+    url
+    createdAt
+    expiresAt
+    peopleJoined
+  }
+}
+
+# query useGoogleDataDeletionsQuery  (WorkspacePage-BBbe7afQ.js)
+query useGoogleDataDeletionsQuery {
+  googleDataDeletions {
+    id
+    connectionId
+    service
+    status
+    trackingStartedAt
+    requestedAt
+    completedAt
+    nextAttemptAt
+    attemptCount
+  }
+}
+
+# query useGranolaConnectRequestMcpAuthUrlQuery  (GranolaConnectPage-BQNKerNX.js)
+query useGranolaConnectRequestMcpAuthUrlQuery(
+  $token: String!
+) {
+  granolaMcpAuthUrl(token: $token)
+}
+
+# query useGranolaConnectRequestQuery  (GranolaConnectPage-BQNKerNX.js)
+query useGranolaConnectRequestQuery(
+  $token: String!
+) {
+  granolaConnectRequest(token: $token) {
+    status
+    boundUserDisplay
+  }
+}
+
+# query useGroupTrustQuery  (GroupTrustPage-CSX_XuK9.js)
+query useGroupTrustQuery(
+  $id: ID!
+) {
+  agentToAgentSettings {
+    enabled
+  }
+  trustedNetworkGroup(id: $id) {
+    id
+    displayName
+    memberCount
+    members {
+      handle
+      name
+      you
+    }
+    request {
+      id
+      generation
+      status
+      returnSmsPhoneNumber
+      returnWhatsAppPhoneNumber
+    }
+  }
+}
+
+# mutation useGroupTrustRequestMutation  (GroupTrustPage-CSX_XuK9.js)
+mutation useGroupTrustRequestMutation(
+  $id: ID!
+  $generation: Int!
+) {
+  requestGroupTrust(id: $id, generation: $generation) {
+    id
+    generation
+    status
+  }
+}
+
+# mutation useIcloudEmailLinkMutation  (LinkIcloudPage-B6Iwu7Qz.js)
+mutation useIcloudEmailLinkMutation(
+  $emailProofToken: String!
+  $replace: Boolean
+) {
+  linkIcloudEmail(emailProofToken: $emailProofToken, replace: $replace) {
+    icloudEmail
+  }
+}
+
+# mutation useIcloudEmailLinkRequestMutation  (LinkIcloudPage-B6Iwu7Qz.js)
+mutation useIcloudEmailLinkRequestMutation(
+  $emailHandle: String!
+  $turnstileToken: String
+) {
+  requestIcloudEmailOtp(emailHandle: $emailHandle, turnstileToken: $turnstileToken) {
+    bindingToken
+    resendAfterSeconds
+  }
+}
+
+# mutation useIcloudEmailLinkVerifyMutation  (LinkIcloudPage-B6Iwu7Qz.js)
+mutation useIcloudEmailLinkVerifyMutation(
+  $emailHandle: String!
+  $code: String!
+  $bindingToken: String!
+) {
+  verifyIcloudEmailOtp(emailHandle: $emailHandle, code: $code, bindingToken: $bindingToken) {
+    proofToken
+  }
+}
+
+# query useIcloudLinkAccountQuery  (LinkIcloudPage-B6Iwu7Qz.js)
+query useIcloudLinkAccountQuery {
+  imessageConnection {
+    phoneNumber
+    icloudEmail
+  }
+}
+
+# mutation useIMessageLocalConnectionConnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useIMessageLocalConnectionConnectMutation(
+  $deviceId: ID
+) {
+  imessageLocalConnect(deviceId: $deviceId) {
+    userId
+    connectedAt
+    preferredDeviceId
+    accountHandle
+  }
+}
+
+# mutation useIMessageLocalConnectionDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useIMessageLocalConnectionDisconnectMutation {
+  imessageLocalDisconnect
+}
+
+# query useIMessageLocalConnectionQuery  (WorkspacePage-BBbe7afQ.js)
+query useIMessageLocalConnectionQuery {
+  imessageLocalConnection {
+    userId
+    connectedAt
+    preferredDeviceId
+    accountHandle
+  }
+}
+
+# mutation useIMessageLocalConnectionSetPreferredDeviceMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useIMessageLocalConnectionSetPreferredDeviceMutation(
+  $deviceId: ID
+) {
+  imessageLocalSetPreferredDevice(deviceId: $deviceId) {
+    userId
+    connectedAt
+    preferredDeviceId
+    accountHandle
+  }
+}
+
+# query useIntegrationAuthConnectAuthUrlQuery  (ConnectPage-ClRYfFxh.js)
+query useIntegrationAuthConnectAuthUrlQuery(
+  $token: String!
+  $openedFrom: String
+) {
+  integrationAuthUrl(token: $token, openedFrom: $openedFrom)
+}
+
+# query useIntegrationAuthConnectValidateTokenQuery  (ConnectPage-ClRYfFxh.js)
+query useIntegrationAuthConnectValidateTokenQuery(
+  $token: String!
+) {
+  validateIntegrationAuthToken(token: $token) {
+    status
+    connectAvailability {
+      status
+      message
+      reasonCode
+    }
+    integrationId
+    integrationLabel
+    integrationDescription
+    boundUserDisplay
+  }
+}
+
+# query useIntegrationConnectAvailabilityQuery  (WorkspacePage-BBbe7afQ.js)
+query useIntegrationConnectAvailabilityQuery(
+  $integrationId: String!
+) {
+  integrationConnectAvailability(integrationId: $integrationId) {
+    status
+    message
+    reasonCode
+  }
+}
+
+# query useInviteStandingQuery  (app-eNF866Ec.js)
+query useInviteStandingQuery {
+  myReferralLinks {
+    links {
+      url
+      id
+    }
+    linksEnabled
+    totalCap
+    referralsTotal
+    totalCapExempt
+    exhausted
+    invitedBy
+    promptPlacement
+    onboardingInvitesStep
+  }
+}
+
+# query useLinkedIcloudEmailQuery  (SettingsPage-Et2fAfzA.js)
+query useLinkedIcloudEmailQuery {
+  imessageConnection {
+    icloudEmail
+  }
+}
+
+# query useLinkedProvidersQuery  (SettingsPage-Et2fAfzA.js)
+query useLinkedProvidersQuery {
+  linkedProviders {
+    provider
+    sub
+  }
+}
+
+# query useLocalBrowserDevicePickerQuery  (WorkspacePage-BBbe7afQ.js)
+query useLocalBrowserDevicePickerQuery {
+  authSession {
+    user {
+      preferences {
+        localBrowserDeviceId
+      }
+      id
+    }
+  }
+}
+
+# mutation useLocalBrowserDevicePickerReleaseMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useLocalBrowserDevicePickerReleaseMutation(
+  $deviceId: ID!
+) {
+  releaseLocalBrowserDevice(deviceId: $deviceId)
+}
+
+# mutation useLocalBrowserDevicePickerSetMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useLocalBrowserDevicePickerSetMutation(
+  $deviceId: ID
+) {
+  setLocalBrowserDevice(deviceId: $deviceId) {
+    preferences {
+      localBrowserDeviceId
+    }
+    id
+  }
+}
+
+# mutation useLocationDataDeleteMutation  (SettingsPage-Et2fAfzA.js)
+mutation useLocationDataDeleteMutation {
+  deleteLocationData {
+    deletedData
+  }
+}
+
+# query useLocationDataQuery  (SettingsPage-Et2fAfzA.js)
+query useLocationDataQuery {
+  locationDataStatus {
+    hasData
+  }
+}
+
+# query useMyReferralLinksQuery  (AppLayout-OszrBAfc.js)
+query useMyReferralLinksQuery {
+  myReferralLinks {
+    ...useMyReferralLinks_standing
+  }
+}
+
+fragment useMyReferralLinks_standing on MyReferralLinks {
+  linksEnabled
+  totalCap
+  referralsTotal
+  totalCapExempt
+  exhausted
+  links {
+    id
+    url
+    createdAt
+    expiresAt
+    peopleJoined
+  }
+}
+
+# mutation useOnePasswordCompleteMutation  (useOnePassword-jTIXdo0H.js)
+mutation useOnePasswordCompleteMutation(
+  $state: String!
+  $code: String!
+) {
+  completeOnePasswordConnect(state: $state, code: $code) {
+    status
+    doneUrl
+  }
+}
+
+# mutation useOnePasswordDisconnectMutation  (useOnePassword-jTIXdo0H.js)
+mutation useOnePasswordDisconnectMutation {
+  disconnectOnePassword
+}
+
+# mutation useOnePasswordSaveKeyMutation  (useOnePassword-jTIXdo0H.js)
+mutation useOnePasswordSaveKeyMutation(
+  $state: String!
+  $integrationKey: String!
+) {
+  saveOnePasswordIntegrationKey(state: $state, integrationKey: $integrationKey)
+}
+
+# mutation useOnePasswordStartMutation  (useOnePassword-jTIXdo0H.js)
+mutation useOnePasswordStartMutation(
+  $request: String
+  $openedFrom: String
+) {
+  startOnePasswordConnect(request: $request, openedFrom: $openedFrom)
+}
+
+# query usePasskeyDirectSignInOfferedQuery  (AuthFlow-DLlEgwlc.js)
+query usePasskeyDirectSignInOfferedQuery {
+  passkeyDirectSignInOffered
+}
+
+# mutation usePasskeysBeginAdditionMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysBeginAdditionMutation {
+  beginPasskeyAddition {
+    id
+    optionsJson
+  }
+}
+
+# mutation usePasskeysBeginDisableMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysBeginDisableMutation {
+  beginDisablePasskey {
+    id
+    optionsJson
+  }
+}
+
+# mutation usePasskeysBeginRegistrationMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysBeginRegistrationMutation {
+  beginPasskeyRegistration {
+    id
+    optionsJson
+  }
+}
+
+# mutation usePasskeysCancelRecoveryWaitMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysCancelRecoveryWaitMutation {
+  cancelPasskeyRecoveryWait {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# mutation usePasskeysConfirmRegistrationMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysConfirmRegistrationMutation(
+  $activationId: String!
+) {
+  confirmPasskeyRegistration(activationId: $activationId) {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# mutation usePasskeysFinishAdditionMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysFinishAdditionMutation(
+  $id: String!
+  $responseJson: String!
+) {
+  finishPasskeyAddition(id: $id, responseJson: $responseJson) {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# mutation usePasskeysFinishDisableMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysFinishDisableMutation(
+  $id: String!
+  $responseJson: String!
+  $passkeyId: ID
+) {
+  finishDisablePasskey(id: $id, responseJson: $responseJson, passkeyId: $passkeyId) {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# mutation usePasskeysFinishRegistrationMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysFinishRegistrationMutation(
+  $id: String!
+  $responseJson: String!
+) {
+  finishPasskeyRegistration(id: $id, responseJson: $responseJson) {
+    activationId
+    recoveryCodes
+  }
+}
+
+# mutation usePasskeysRenameMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysRenameMutation(
+  $passkeyId: ID!
+  $name: String!
+) {
+  renamePasskey(passkeyId: $passkeyId, name: $name) {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# query usePasskeysStatusQuery  (PasskeyRecoveryCodes-BmjvVitX.js)
+query usePasskeysStatusQuery {
+  passkeyStatus {
+    enabled
+    enrollmentAvailable
+    enrollmentUnavailableReason
+    setupUrl
+    createdAt
+    lastUsedAt
+    recoveryWaitEndsAt
+    passkeys {
+      id
+      name
+      createdAt
+      lastUsedAt
+    }
+  }
+}
+
+# mutation usePasskeysVerifyAdditionMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
+mutation usePasskeysVerifyAdditionMutation(
+  $id: String!
+  $responseJson: String!
+) {
+  verifyPasskeyAddition(id: $id, responseJson: $responseJson) {
+    id
+    optionsJson
+  }
+}
+
+# mutation useRedeemTextSignupMutation  (TextOnboardingPage-BWjsh3vf.js)
+mutation useRedeemTextSignupMutation(
+  $token: String!
+) {
+  redeemTextSignup(token: $token) {
+    userId
+    phoneNumber
+  }
+}
+
+# mutation useRequestOwnAccountDeletionMutation  (SettingsPage-Et2fAfzA.js)
+mutation useRequestOwnAccountDeletionMutation {
+  requestOwnAccountDeletion {
+    id
+  }
+}
+
+# mutation useRequestSmsOtpMutation  (useSmsSignupUsOnly-A__7rWqH.js)
+mutation useRequestSmsOtpMutation(
+  $phoneNumber: String!
+  $marketingConsent: Boolean!
+  $consentCopyVersion: String
+  $turnstileToken: String
+  $preferSms: Boolean!
+  $preferredChannel: SmsOtpDeliveryChannel
+) {
+  requestSmsOtp(phoneNumber: $phoneNumber, marketingConsent: $marketingConsent, consentCopyVersion: $consentCopyVersion, turnstileToken: $turnstileToken, preferSms: $preferSms, preferredChannel: $preferredChannel) {
+    bindingToken
+    deliveryChannel
+    resendAfterSeconds
+    canSendWhatsApp
+    canSendImessage
+    channelBound
+  }
+}
+
+# mutation useRequestWhatsAppChannelOtpMutation  (app-eNF866Ec.js)
+mutation useRequestWhatsAppChannelOtpMutation(
+  $phoneNumber: String!
+  $preferredChannel: SmsOtpDeliveryChannel
+) {
+  requestWhatsAppChannelPhoneOtp(phoneNumber: $phoneNumber, preferredChannel: $preferredChannel) {
+    bindingToken
+    deliveryChannel
+    resendAfterSeconds
+    canSendWhatsApp
+  }
+}
+
+# mutation useResetOwnSecurityTestAccountMutation  (SettingsPage-Et2fAfzA.js)
+mutation useResetOwnSecurityTestAccountMutation {
+  resetOwnSecurityTestAccount {
+    testId
+  }
+}
+
+# query useResolveInviteLinkQuery  (InvitePage-CuCpmfj7.js)
+query useResolveInviteLinkQuery(
+  $token: String!
+) {
+  resolveInviteLink(token: $token) {
+    state
+    referrerName
+  }
+}
+
+# mutation useRevalidateAccessMutation  (useRevalidateAccess-COsfroNS.js)
+mutation useRevalidateAccessMutation {
+  revalidateAccess
+}
+
+# mutation useRevokeInviteLinkMutation  (AppLayout-OszrBAfc.js)
+mutation useRevokeInviteLinkMutation(
+  $id: ID!
+) {
+  revokeInviteLink(id: $id) {
+    ...useMyReferralLinks_standing
+  }
+}
+
+fragment useMyReferralLinks_standing on MyReferralLinks {
+  linksEnabled
+  totalCap
+  referralsTotal
+  totalCapExempt
+  exhausted
+  links {
+    id
+    url
+    createdAt
+    expiresAt
+    peopleJoined
+  }
+}
+
+# query useSecurityTestAccountQuery  (SettingsPage-Et2fAfzA.js)
+query useSecurityTestAccountQuery {
+  securityTestAccount {
+    testId
+  }
+}
+
+# mutation useSetNameMutation  (SettingsPage-Et2fAfzA.js)
+mutation useSetNameMutation(
+  $name: String!
+) {
+  setName(name: $name) {
+    id
+    name
+  }
+}
+
+# mutation useSetOnboardingStepMutation  (useSetOnboardingStep-DsyOYFlR.js)
+mutation useSetOnboardingStepMutation(
+  $step: String
+) {
+  setOnboardingStep(step: $step) {
+    id
+    onboardingStep
+  }
+}
+
+# query useSmsMarketingConsentCopyQuery  (AuthFlow-DLlEgwlc.js)
+query useSmsMarketingConsentCopyQuery {
+  smsMarketingConsentCopy {
+    version
+    text
+    grantsMarketingConsent
+    requiresAcceptance
+  }
+}
+
+# query useSmsSignInContextQuery  (app-eNF866Ec.js)
+query useSmsSignInContextQuery(
+  $token: String!
+) {
+  smsSignInContext(token: $token) {
+    phoneNumber
+    emailHandle
+  }
+}
+
+# query useSmsSignupAllowedCountriesQuery  (useSmsSignupUsOnly-A__7rWqH.js)
+query useSmsSignupAllowedCountriesQuery {
+  smsSignupAllowedCountries
+}
+
+# query useSmsSignupCountryGuessQuery  (useSmsSignupUsOnly-A__7rWqH.js)
+query useSmsSignupCountryGuessQuery {
+  smsSignupCountryGuess
+}
+
+# query useSmsSignupTurnstileSiteKeyQuery  (TurnstileWidget-BFLmGKd-.js)
+query useSmsSignupTurnstileSiteKeyQuery {
+  smsSignupTurnstileSiteKey
+}
+
+# query useSmsSignupUsOnlyQuery  (useSmsSignupUsOnly-A__7rWqH.js)
+query useSmsSignupUsOnlyQuery {
+  smsSignupUsOnly
+}
+
+# mutation useSubmitSignupProfileMutation  (OnboardingPage-CMRiXp54.js)
+mutation useSubmitSignupProfileMutation(
+  $name: String!
+  $email: String!
+  $birthDate: String
+  $gender: UserGender
+) {
+  submitSignupProfile(name: $name, email: $email, birthDate: $birthDate, gender: $gender)
+}
+
+# mutation useSyncBrowserTimezoneMutation  (TextOnboardingPage-BWjsh3vf.js)
+mutation useSyncBrowserTimezoneMutation(
+  $timezone: Timezone!
+) {
+  setTimezone(timezone: $timezone) {
+    id
+  }
+}
+
+# mutation useTrainingDataPreferenceMutation  (SettingsPage-Et2fAfzA.js)
+mutation useTrainingDataPreferenceMutation(
+  $optOut: Boolean!
+) {
+  setTrainingDataOptOut(optOut: $optOut) {
+    id
+  }
+}
+
+# query useTrainingDataPreferenceQuery  (SettingsPage-Et2fAfzA.js)
+query useTrainingDataPreferenceQuery {
+  authSession {
+    user {
+      id
+      preferences {
+        trainingDataOptOut
+      }
+    }
+  }
+}
+
+# mutation useTrustedNetworkBlocksBlockMutation  (useTrustedNetworkBlocks-BSPwiryb.js)
+mutation useTrustedNetworkBlocksBlockMutation(
+  $id: ID!
+  $generation: Int!
+) {
+  blockTrustedNetworkPerson(id: $id, generation: $generation)
+}
+
+# mutation useTrustedNetworkBlocksUnblockMutation  (useTrustedNetworkBlocks-BSPwiryb.js)
+mutation useTrustedNetworkBlocksUnblockMutation(
+  $id: ID!
+  $decisionGeneration: String!
+) {
+  unblockTrustedNetworkPerson(id: $id, decisionGeneration: $decisionGeneration)
+}
+
+# query useTrustedNetworkJoinLinkMineQuery  (useTrustedNetworkJoinLink-CTMZEonZ.js)
+query useTrustedNetworkJoinLinkMineQuery {
+  myTrustedNetworkJoinLink {
+    url
+  }
+}
+
+# query useTrustedNetworkJoinLinkQuery  (useTrustedNetworkJoinLink-CTMZEonZ.js)
+query useTrustedNetworkJoinLinkQuery(
+  $token: String!
+) {
+  resolveTrustedNetworkJoinLink(token: $token) {
+    state
+    ownerName
+    ownerPhoneNumber
+    ownerEmail
+  }
+}
+
+# mutation useTrustedNetworkJoinLinkRequestMutation  (useTrustedNetworkJoinLink-CTMZEonZ.js)
+mutation useTrustedNetworkJoinLinkRequestMutation(
+  $token: String!
+) {
+  requestTrustedNetworkJoin(token: $token) {
+    outcome
+    requestedByMe
+    ownerName
+  }
+}
+
+# mutation useTrustedNetworkJoinLinkResetMutation  (useTrustedNetworkJoinLink-CTMZEonZ.js)
+mutation useTrustedNetworkJoinLinkResetMutation {
+  resetTrustedNetworkJoinLink {
+    url
+  }
+}
+
+# mutation useTrustedNetworkRequestAcceptMutation  (GroupChatMembers-DVwodGky.js)
+mutation useTrustedNetworkRequestAcceptMutation(
+  $id: ID!
+  $generation: Int!
+) {
+  acceptTrustedNetworkRequest(id: $id, generation: $generation) {
+    id
+    generation
+    groupId
+    memberCount
+    canBlock
+    status
+    displayName
+    phoneNumbers
+    createdAt
+    expiresAt
+    returnSmsPhoneNumber
+    returnWhatsAppPhoneNumber
+  }
+}
+
+# mutation useTrustedNetworkRequestDeclineMutation  (GroupChatMembers-DVwodGky.js)
+mutation useTrustedNetworkRequestDeclineMutation(
+  $id: ID!
+  $generation: Int!
+) {
+  declineTrustedNetworkRequest(id: $id, generation: $generation) {
+    id
+    generation
+    groupId
+    memberCount
+    canBlock
+    status
+    displayName
+    phoneNumbers
+    createdAt
+    expiresAt
+    returnSmsPhoneNumber
+    returnWhatsAppPhoneNumber
+  }
+}
+
+# query useTrustedNetworkRequestQuery  (GroupChatMembers-DVwodGky.js)
+query useTrustedNetworkRequestQuery(
+  $id: ID!
+) {
+  agentToAgentSettings {
+    enabled
+  }
+  trustedNetworkRequest(id: $id) {
+    id
+    generation
+    groupId
+    memberCount
+    canBlock
+    status
+    displayName
+    phoneNumbers
+    createdAt
+    expiresAt
+    returnSmsPhoneNumber
+    returnWhatsAppPhoneNumber
+  }
+}
+
+# query useTrustedNetworksQuery  (GroupChatMembers-DVwodGky.js)
+query useTrustedNetworksQuery(
+  $contactsCursor: String
+  $requestsCursor: String
+  $blockedCursor: String
+  $groupsCursor: String
+) {
+  trustedNetworkGroups(limit: 5, cursor: $groupsCursor) {
+    items {
+      id
+      displayName
+      memberCount
+      members {
+        handle
+        name
+        you
+      }
+      request {
+        id
+        generation
+        status
+      }
+    }
+    cursor
+  }
+  agentToAgentSettings {
+    enabled
+  }
+  trustedNetworkBlockedPeople(limit: 20, cursor: $blockedCursor) {
+    items {
+      id
+      decisionGeneration
+      displayName
+      phoneNumbers
+      createdAt
+    }
+    cursor
+  }
+  trustedNetworkContacts(limit: 20, cursor: $contactsCursor) {
+    items {
+      id
+      generation
+      displayName
+      phoneNumbers
+      createdAt
+    }
+    cursor
+  }
+  trustedNetworkSentRequests(limit: 20) {
+    id
+    phoneNumber
+    createdAt
+    expiresAt
+  }
+  trustedNetworkRequests(limit: 20, cursor: $requestsCursor) {
+    items {
+      id
+      generation
+      status
+      displayName
+      phoneNumbers
+      createdAt
+      expiresAt
+      returnSmsPhoneNumber
+      returnWhatsAppPhoneNumber
+    }
+    cursor
+  }
+}
+
+# mutation useTrustedNetworksRemoveMutation  (GroupChatMembers-DVwodGky.js)
+mutation useTrustedNetworksRemoveMutation(
+  $id: ID!
+  $generation: Int!
+) {
+  removeTrustedNetworkContact(id: $id, generation: $generation)
+}
+
+# mutation useTrustedNetworksSettingsMutation  (GroupChatMembers-DVwodGky.js)
+mutation useTrustedNetworksSettingsMutation(
+  $enabled: Boolean!
+) {
+  setAgentToAgentEnabled(enabled: $enabled) {
+    enabled
+  }
+}
+
+# mutation useVaultApprovalRequestDecideMutation  (VaultApprovalPage-B9W5nDRR.js)
+mutation useVaultApprovalRequestDecideMutation(
+  $token: String!
+  $decision: VaultApprovalDecision!
+) {
+  decideVaultApprovalRequest(token: $token, decision: $decision) {
+    decision
+    scope
+    name
+    site
+    vaultUrl
+    workspaceUrl
+  }
+}
+
+# query useVaultApprovalRequestQuery  (VaultApprovalPage-B9W5nDRR.js)
+query useVaultApprovalRequestQuery(
+  $token: String!
+) {
+  vaultApprovalRequest(token: $token) {
+    status
+    scope
+    kind
+    name
+    site
+    host
+    currentSites
+    iconPath
+    key
+    boundUserDisplay
+    returnSmsPhoneNumber
+  }
+}
+
+# mutation useVaultDeleteMutation  (vaultSubfieldInputs-B4fVyb8L.js)
+mutation useVaultDeleteMutation(
+  $kind: String!
+  $name: String!
+) {
+  deleteVaultEntry(kind: $kind, name: $name)
+}
+
+# query useVaultFillRequestQuery  (VaultLinkScreens-DTyUM6ns.js)
+query useVaultFillRequestQuery(
+  $token: String!
+) {
+  vaultFillRequest(token: $token) {
+    status
+    kind
+    name
+    fields {
+      key
+      prefill
+      format
+      optional
+    }
+    boundUserDisplay
+    returnSmsPhoneNumber
+    sites
+    suggestedSites
+    iconPath
+    siteIcons {
+      site
+      iconPath
+    }
+    suggestedSandboxAccess
+  }
+}
+
+# mutation useVaultFillRequestSubmitMutation  (VaultLinkScreens-DTyUM6ns.js)
+mutation useVaultFillRequestSubmitMutation(
+  $token: String!
+  $fields: [VaultFieldUpdate!]!
+  $addSites: [String!]
+  $removeSites: [String!]
+  $sandboxAccess: Boolean
+) {
+  submitVaultFillRequest(token: $token, fields: $fields, addSites: $addSites, removeSites: $removeSites, sandboxAccess: $sandboxAccess) {
+    kind
+    name
+    vaultUrl
+    workspaceUrl
+  }
+}
+
+# mutation useVaultLoadSubfieldMutation  (vaultSubfieldInputs-B4fVyb8L.js)
+mutation useVaultLoadSubfieldMutation(
+  $kind: String!
+  $name: String!
+  $key: String!
+) {
+  revealVaultSubfieldValue(kind: $kind, name: $name, key: $key)
+}
+
+# query useVaultQuery  (vaultSubfieldInputs-B4fVyb8L.js)
+query useVaultQuery {
+  vaultEntries {
+    kind
+    name
+    isAgentEntry
+    sites
+    sandboxAccess
+    anySite
+    iconPath
+    siteIcons {
+      site
+      iconPath
+    }
+    fields {
+      key
+      populated
+    }
+  }
+  vaultKinds {
+    kind
+    subfieldKeys
+  }
+}
+
+# mutation useVaultShareRequestConfirmMutation  (VaultShareConfirmPage-2mQIWI01.js)
+mutation useVaultShareRequestConfirmMutation(
+  $token: String!
+  $ttl: VaultShareTTL!
+) {
+  confirmVaultShareRequest(token: $token, ttl: $ttl) {
+    share {
+      name
+      sites
+      recipientName
+      isGroup
+      ttl
+      endsAt
+      id
+    }
+    vaultUrl
+  }
+}
+
+# mutation useVaultShareRequestDeclineMutation  (VaultShareConfirmPage-2mQIWI01.js)
+mutation useVaultShareRequestDeclineMutation(
+  $token: String!
+) {
+  declineVaultShareRequest(token: $token)
+}
+
+# query useVaultShareRequestQuery  (VaultShareConfirmPage-2mQIWI01.js)
+query useVaultShareRequestQuery(
+  $token: String!
+) {
+  vaultShareRequest(token: $token) {
+    status
+    boundUserDisplay
+    returnSmsPhoneNumber
+    share {
+      name
+      sites
+      iconPath
+      recipientName
+      isGroup
+      ttl
+      id
+    }
+  }
+}
+
+# mutation useVaultSharesEndMutation  (VaultPage-CoHtSWTy.js)
+mutation useVaultSharesEndMutation(
+  $id: ID!
+) {
+  endVaultShare(id: $id)
+}
+
+# query useVaultSharesGivenQuery  (VaultPage-CoHtSWTy.js)
+query useVaultSharesGivenQuery {
+  vaultSharesGiven {
+    id
+    name
+    recipientName
+    isGroup
+    ttl
+    endsAt
+    lastUsedAt
+    active
+    inactiveReason
+  }
+}
+
+# query useVaultSharesHeldQuery  (VaultPage-CoHtSWTy.js)
+query useVaultSharesHeldQuery {
+  vaultSharesHeld {
+    id
+    name
+    sites
+    iconPath
+    ownerName
+    recipientName
+    isGroup
+    ttl
+    endsAt
+  }
+}
+
+# mutation useVaultSharesRemoveMutation  (VaultPage-CoHtSWTy.js)
+mutation useVaultSharesRemoveMutation(
+  $id: ID!
+) {
+  removeSharedVaultItem(id: $id)
+}
+
+# mutation useVaultSharesShareMutation  (VaultPage-CoHtSWTy.js)
+mutation useVaultSharesShareMutation(
+  $name: String!
+  $linkId: ID!
+  $ttl: VaultShareTTL!
+) {
+  shareVaultEntry(name: $name, linkId: $linkId, ttl: $ttl) {
+    id
+  }
+}
+
+# query useVaultSharesTargetsQuery  (VaultPage-CoHtSWTy.js)
+query useVaultSharesTargetsQuery {
+  vaultShareTargets {
+    linkId
+    name
+    isGroup
+  }
+}
+
+# mutation useVaultUpsertMutation  (vaultSubfieldInputs-B4fVyb8L.js)
+mutation useVaultUpsertMutation(
+  $input: VaultUpsertInput!
+) {
+  upsertVaultEntry(input: $input) {
+    kind
+    name
+    isAgentEntry
+    sites
+    sandboxAccess
+    anySite
+    iconPath
+    siteIcons {
+      site
+      iconPath
+    }
+    fields {
+      key
+      populated
+    }
+  }
+}
+
+# query useWhatsAppChannelConnectionQuery  (app-eNF866Ec.js)
+query useWhatsAppChannelConnectionQuery {
+  whatsappChannelConnection {
+    userId
+    phoneNumber
+  }
+}
+
+# mutation useWorkspaceConnectionsGithubDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsGithubDisconnectMutation {
+  githubDisconnect
+}
+
+# mutation useWorkspaceConnectionsGoogleWorkspaceDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsGoogleWorkspaceDisconnectConnectionMutation(
+  $connectionId: ID!
+) {
+  googleWorkspaceDisconnectConnection(connectionId: $connectionId)
+}
+
+# mutation useWorkspaceConnectionsGoogleWorkspaceSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsGoogleWorkspaceSelectConnectionMutation(
+  $connectionId: ID!
+) {
+  googleWorkspaceSelectConnection(connectionId: $connectionId) {
+    id
+  }
+}
+
+# mutation useWorkspaceConnectionsGranolaDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsGranolaDisconnectMutation {
+  granolaDisconnect
+}
+
+# mutation useWorkspaceConnectionsLinearDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsLinearDisconnectConnectionMutation(
+  $connectionId: ID!
+) {
+  linearDisconnectConnection(connectionId: $connectionId)
+}
+
+# mutation useWorkspaceConnectionsLinearSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsLinearSelectConnectionMutation(
+  $connectionId: ID!
+) {
+  linearSelectConnection(connectionId: $connectionId) {
+    id
+  }
+}
+
+# mutation useWorkspaceConnectionsNotionDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsNotionDisconnectConnectionMutation(
+  $connectionId: ID!
+) {
+  notionDisconnectConnection(connectionId: $connectionId)
+}
+
+# mutation useWorkspaceConnectionsNotionSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsNotionSelectConnectionMutation(
+  $connectionId: ID!
+) {
+  notionSelectConnection(connectionId: $connectionId) {
+    id
+  }
+}
+
+# mutation useWorkspaceConnectionsOutlookDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsOutlookDisconnectConnectionMutation(
+  $connectionId: ID!
+) {
+  outlookDisconnectConnection(connectionId: $connectionId)
+}
+
+# mutation useWorkspaceConnectionsOutlookSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsOutlookSelectConnectionMutation(
+  $connectionId: ID!
+) {
+  outlookSelectConnection(connectionId: $connectionId) {
+    id
+  }
+}
+
+# query useWorkspaceConnectionsQuery  (WorkspacePage-BBbe7afQ.js)
+query useWorkspaceConnectionsQuery(
+  $showWhoop: Boolean!
+  $showStripeLink: Boolean!
+  $showSpotify: Boolean!
+) {
+  googleWorkspaceConnections {
+    id
+    email
+    isDefault
+    isRevoked
+    services {
+      serviceId
+      label
+      connected
+      notificationIssue
+      readOnly
+    }
+  }
+  outlookConnections {
+    id
+    email
+    displayName
+    isDefault
+    isRevoked
+  }
+  linearConnections {
+    id
+    organizationName
+    displayName
+    email
+    isDefault
+    isRevoked
+  }
+  notionConnections {
+    id
+    workspaceName
+    isDefault
+    isRevoked
+  }
+  githubConnection {
+    id
+    username
+    displayName
+    email
+    isRevoked
+  }
+  slackCanvasConnection {
+    teamId
+    teamName
+    isRevoked
+  }
+  granolaConnection {
+    id
+    workspaceName
+    accountEmail
+  }
+  shopWalletConnection {
+    id
+    email
+    isRevoked
+  }
+  whoopConnection @include(if: $showWhoop) {
+    id
+    email
+    firstName
+    lastName
+  }
+  stripeLinkConnection @include(if: $showStripeLink) {
+    connected
+  }
+  spotifyConnection @include(if: $showSpotify) {
+    id
+    accountLabel
+    isRevoked
+  }
+  onePassword {
+    status
+    canConnect
+  }
+}
+
+# mutation useWorkspaceConnectionsShopWalletDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsShopWalletDisconnectMutation {
+  shopWalletDisconnect
+}
+
+# mutation useWorkspaceConnectionsSlackCanvasDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsSlackCanvasDisconnectMutation {
+  slackCanvasDisconnect
+}
+
+# mutation useWorkspaceConnectionsSpotifyDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsSpotifyDisconnectMutation {
+  spotifyDisconnect
+}
+
+# mutation useWorkspaceConnectionsStartGranolaConnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsStartGranolaConnectMutation {
+  startGranolaConnect {
+    url
+  }
+}
+
+# mutation useWorkspaceConnectionsStartWebConnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsStartWebConnectMutation(
+  $integrationId: String!
+) {
+  startWebConnect(integrationId: $integrationId) {
+    url
+  }
+}
+
+# mutation useWorkspaceConnectionsStripeLinkDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsStripeLinkDisconnectMutation {
+  stripeLinkDisconnect
+}
+
+# mutation useWorkspaceConnectionsWhoopDisconnectMutation  (WorkspacePage-BBbe7afQ.js)
+mutation useWorkspaceConnectionsWhoopDisconnectMutation {
+  whoopDisconnect
+}
+
+# mutation WebTelemetry  (app-eNF866Ec.js)
+mutation WebTelemetry($events: [ClientTelemetryEventInput!]!) {
+        ingestClientTelemetryEvents(events: $events)
+    }

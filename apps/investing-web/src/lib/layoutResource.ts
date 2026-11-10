@@ -217,11 +217,6 @@ export function setLayoutOwner(userId: string | null): void {
   owner = userId;
 }
 
-/** Tests mount many apps in one module instance; each needs a fresh store. */
-export function resetInvestingLayoutStoreForTests(): void {
-  forgetLayout();
-}
-
 export function useInvestingLayout(): InvestingLayoutResource {
   const current = layoutStore();
   const snapshot = useSyncExternalStore(current.subscribe, current.getSnapshot);

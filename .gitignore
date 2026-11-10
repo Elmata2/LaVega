@@ -38,3 +38,6 @@ state.json
 .env.local
 # Vercel CLI global config when ~/Library is not writable (see .claude/skills/verify-investing)
 .vercel-cli/
+apps/site/dist
+apps/site/dist-preview
+apps/web/dist-ssr

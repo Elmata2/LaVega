@@ -21,7 +21,7 @@ test("pathname resolves back to the view", () => {
   expect(viewFromPathname("/app/")).toBe("overview");
   expect(viewFromPathname("/app/overview")).toBe("overview");
   expect(viewFromPathname("/app/transactions")).toBe("transactions");
-  expect(viewFromPathname("/app/facturen")).toBe("facturen");
+  expect(viewFromPathname("/app/forecast")).toBe("forecast");
   expect(viewFromPathname("/")).toBeNull();
   expect(viewFromPathname("/privacy")).toBeNull();
   expect(viewFromPathname("/app/unknown")).toBeNull();
@@ -106,4 +106,27 @@ test("error= outside /app is not treated as a failed link", () => {
   resetAuthLinkFailure();
   normalizeAppLocation({ pathname: "/", search: "?error=x", hash: "" }, () => {});
   expect(authLinkFailed()).toBe(false);
+});
+
+test("deep link to an archived route lands on overview", () => {
+  expect(viewFromPathname("/app/facturen")).toBe("overview");
+  expect(viewFromPathname("/app/valuta/")).toBe("overview");
+  expect(viewFromPathname("/app/belasting")).toBe("overview");
+  expect(viewFromPathname("/app/forecast")).toBe("forecast");
+});
+
+test("the intake has its own route", () => {
+  expect(pathForView("intake")).toBe("/app/intake");
+  expect(viewFromPathname("/app/intake")).toBe("intake");
+});
+
+test("what LaVega knows about you has its own route segment", () => {
+  expect(pathForView("about-you")).toBe("/app/about-you");
+  expect(viewFromPathname("/app/about-you")).toBe("about-you");
+});
+
+test("plan is a routed view at /app/plan", () => {
+  expect(pathForView("plan")).toBe("/app/plan");
+  expect(viewFromPathname("/app/plan")).toBe("plan");
+  expect(viewFromPathname("/app/plan/")).toBe("plan");
 });

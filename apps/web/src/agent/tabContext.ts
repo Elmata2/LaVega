@@ -10,6 +10,7 @@ import type {
   ConversionMode,
   FxRate,
   Invoice,
+  ProfileSummary,
   RewardsBalance,
   Rule,
   ScheduledFlow,
@@ -19,12 +20,11 @@ import type {
 import {
   categoryTotals,
   computeAlerts,
-  computeVatSetAside,
   detectSubscriptions,
   forecastCashflow,
-  nextBtwDeadline,
   ownAccounts,
   resolveAccountRate,
+  sanitizeProfileSummary,
   scrubPersonalValuesDeep,
 } from "@lavega/core";
 
@@ -70,6 +70,8 @@ export type TabState = {
    *  what an all-EUR scope already computed before conversion existed. */
   fxHistory?: Record<string, Record<string, number>>;
   mode?: ConversionMode;
+  /** Enum-only profile answers (`profileSummaryOf`); sent on every tab. */
+  profileSummary?: ProfileSummary;
 };
 
 /** Cap for any array leaving the browser as context — keeps a tab's slice
@@ -81,12 +83,6 @@ const MAX_ITEMS = 100;
  *  and thus the `tab` the widget forwards to the server — matches the
  *  allowlist EXACTLY. All other views already share their name with the tab. */
 const VIEW_TO_TAB: Record<string, string> = { accounts: "rekeningen", rules: "regels" };
-
-/** Fallback VAT config for an entity with no saved settings — mirrors the
- *  Belasting view's own default so the chat estimate matches what's shown. */
-function defaultVatSettings(entity: string): VatSettings {
-  return { entity, frequency: "quarterly", defaultRatePct: 21, mixedRates: false };
-}
 
 /** Per-entity balance aggregate: sums known account balances per entity;
  *  null when any account in that entity has no saldo yet (mirrors
@@ -104,11 +100,6 @@ function entityBalances(accounts: TabAccount[]): { entity: string; balance: numb
   });
 }
 
-/** Unique entities present in the scoped accounts, first-appearance order. */
-function entitiesOf(accounts: TabAccount[]): string[] {
-  return Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
-}
-
 /** The tab's slice, value-scrubbed before it leaves the device.
  *
  *  Picking safe FIELDS is not the same as sending safe VALUES, and three of
@@ -124,7 +115,10 @@ export function buildTabContext(
   state: TabState,
 ): { tab: string; context: Record<string, unknown> } {
   const { tab, context } = buildTabSlice(view, state);
-  return { tab, context: scrubPersonalValuesDeep(context) };
+  const withProfile = state.profileSummary
+    ? { ...context, profile: sanitizeProfileSummary(state.profileSummary) }
+    : context;
+  return { tab, context: scrubPersonalValuesDeep(withProfile) };
 }
 
 function buildTabSlice(
@@ -261,78 +255,6 @@ function buildTabSlice(
       // Live public benchmark: only if App already has it; else omitted so the
       // agent web-searches it (the design).
       if (state.bestBenchmark !== undefined) context.bestBenchmark = state.bestBenchmark;
-      return { tab, context };
-    }
-
-    case "valuta": {
-      const holdings = Array.from(
-        new Set(
-          (accounts as TabAccount[])
-            .map((a) => a.currency)
-            .filter((c): c is string => !!c && c !== "EUR"),
-        ),
-      );
-      const context: Record<string, unknown> = { holdings };
-      // ECB rate is live-fetched in the Valuta view, not in App scope — include
-      // only if present; otherwise omit and let the agent web-search it.
-      if (state.fxRate !== undefined) context.rate = state.fxRate;
-      return { tab, context };
-    }
-
-    case "belasting": {
-      const vatSettings = (state.vatSettings ?? []) as VatSettings[];
-      const savedByEntity = new Map(vatSettings.map((s) => [s.entity, s]));
-      const keyToEntity = new Map((accounts as Account[]).map((a) => [a.key, a.entity]));
-      // Entities to report on: those with accounts, plus any that only have
-      // saved VAT settings.
-      const entities = Array.from(
-        new Set([...entitiesOf(accounts), ...vatSettings.map((s) => s.entity)]),
-      );
-
-      const vat = entities.map((entity) => {
-        const settings = savedByEntity.get(entity) ?? defaultVatSettings(entity);
-        const entityTxs = (txs as Tx[]).filter((t) => keyToEntity.get(t.accountKey) === entity);
-        const setAside = computeVatSetAside(entityTxs, settings, asOf);
-        return {
-          entity,
-          amountCents: setAside ? setAside.amountCents : 0,
-          dueDate: setAside ? setAside.dueDate : null,
-          label: setAside ? setAside.label : null,
-        };
-      });
-
-      const deadlines = entities.map((entity) => {
-        const settings = savedByEntity.get(entity) ?? defaultVatSettings(entity);
-        const { periodLabel, deadline } = nextBtwDeadline(settings.frequency, asOf);
-        return { entity, frequency: settings.frequency, periodLabel, deadline };
-      });
-
-      const context = {
-        vat,
-        deadlines,
-        settings: vatSettings.map((s) => ({
-          entity: s.entity,
-          frequency: s.frequency,
-          defaultRatePct: s.defaultRatePct,
-          mixedRates: s.mixedRates,
-          manualCents: s.manualCents,
-        })),
-      };
-      return { tab, context };
-    }
-
-    case "facturen": {
-      const invoices = (state.invoices ?? []) as Invoice[];
-      const context = {
-        invoices: invoices.slice(0, MAX_ITEMS).map((i) => ({
-          counterparty: i.counterparty,
-          direction: i.direction,
-          amount: i.amount,
-          issueDate: i.issueDate,
-          dueDate: i.dueDate,
-          status: i.status,
-        })),
-      };
       return { tab, context };
     }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { composePrompt, loadAgentPrompt } from "./prompts.js";
+import { composePrompt, loadAgentPrompt, loadChatPrompt } from "./prompts.js";
 
 test("the agent files really are on disk — a typo must not silently yield base-only", () => {
   const base = composePrompt("_base.md");
@@ -33,4 +33,16 @@ test("composePrompt skips missing files and caches per file set", () => {
 test("a composition that resolves to nothing throws instead of returning an empty prompt", () => {
   expect(() => composePrompt("bestaat-niet.md")).toThrow(/agent prompt missing/);
   expect(() => composePrompt("")).toThrow(/agent prompt missing/);
+});
+
+test("archived tabs fall back to the two charters; the invoice extractor still loads", () => {
+  const charters = loadChatPrompt("bestaat-niet");
+  for (const tab of ["facturen", "belasting", "valuta"]) {
+    expect(loadChatPrompt(tab)).toBe(charters);
+  }
+  expect(loadAgentPrompt("facturen-extract")).not.toBe(composePrompt("_base.md"));
+});
+
+test("overview no longer points at the archived tabs", () => {
+  expect(composePrompt("overview.md")).not.toContain("Belasting, Facturen");
 });

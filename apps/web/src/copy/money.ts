@@ -536,12 +536,8 @@ type BetaalschemaCopy = {
    *  verder niets. `unit` is een token uit core ("points"), geen woord. */
   trackingQuestion: (t: { label: string; unit: string }) => string;
   flowLabel: (f: { label: string; labelParts?: FlowLabel }) => string;
-  datumAlVerstreken: (n: number) => string;
-  regelVoorspeld: (n: number) => string;
-  alleRegelsIngepland: string;
   nietsIngepland: string;
   voorspeldTag: string;
-  teLaatSuffix: string;
 };
 
 type RecenteTransactiesCopy = {
@@ -1212,14 +1208,9 @@ const nl: MoneyCopy = {
       labelParts
         ? `Factuur ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
         : label,
-    datumAlVerstreken: (n) => `${n} datum${n === 1 ? "" : "s"} al verstreken. `,
-    regelVoorspeld: (n) =>
-      `${n} regel${n === 1 ? "" : "s"} voorspeld uit je eigen geschiedenis, niet bevestigd.`,
-    alleRegelsIngepland: "Alle regels zijn ingeplande bedragen.",
     nietsIngepland:
       "Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.",
     voorspeldTag: "voorspeld",
-    teLaatSuffix: " · te laat",
   },
   recenteTransacties: {
     title: "Recente transacties",
@@ -1849,14 +1840,9 @@ const en: MoneyCopy = {
       labelParts
         ? `Invoice ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
         : label,
-    datumAlVerstreken: (n) => `${n} date${n === 1 ? "" : "s"} already passed. `,
-    regelVoorspeld: (n) =>
-      `${n} row${n === 1 ? "" : "s"} predicted from your own history, not confirmed.`,
-    alleRegelsIngepland: "All rows are scheduled amounts.",
     nietsIngepland:
       "Nothing scheduled yet — your VAT (BTW) set-asides, outstanding invoices and recognised fixed costs will show up here.",
     voorspeldTag: "predicted",
-    teLaatSuffix: " · overdue",
   },
   recenteTransacties: {
     title: "Recent transactions",

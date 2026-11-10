@@ -161,7 +161,7 @@ test("the surface is exactly three ways in, and nothing else", () => {
   expect(c.textContent).not.toContain("CSV of UBL/XML importeren");
 
   expect(c.querySelector("[data-testid=dropzone]")).not.toBeNull();
-  expect(byText("button", "Ophalen uit n8n")).toBeTruthy();
+  expect(byText("button", "Nieuwe facturen ophalen")).toBeTruthy();
 });
 
 test("a manual invoice without an amount is refused, out loud, and nothing is booked", () => {
@@ -179,7 +179,7 @@ test("a blank currency blocks the invoice instead of silently becoming EUR", () 
   click(byText("button", "Toevoegen"));
 
   expect(saved).toHaveLength(0);
-  expect(c.textContent).toContain("LaVega gokt geen euro's");
+  expect(c.textContent).toContain("gokt geen euro's");
 
   // Filled in, it books — with the currency he actually typed.
   fillManual({ Valuta: "USD" });
@@ -241,7 +241,7 @@ test("the confirm-first queue still stands between an n8n row and a booking", ()
   expect(c.textContent).toContain("Geen valuta gevonden");
   click(byText(".n8n-row button", "Bevestigen"));
   expect(saved).toHaveLength(0);
-  expect(c.textContent).toContain("LaVega gokt geen euro's");
+  expect(c.textContent).toContain("gokt geen euro's");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1); // kept, not lost
 });
 
@@ -295,7 +295,7 @@ test("zonder ondernemingen vraagt ook een n8n-regel er niet naar", () => {
     currency: "EUR",
   };
   const c = render([], [row], [], "Persoonlijk");
-  expect(c.querySelector('[aria-label="Entiteit (n8n)"]')).toBeNull();
+  expect(c.querySelector('[aria-label="Entiteit (te bevestigen)"]')).toBeNull();
 
   // Bevestigen boekt hem nog steeds, op diezelfde standaard.
   click(byText("button", "Bevestigen"));
@@ -338,19 +338,11 @@ test("de keuzelijst laat nooit iets anders zien dan waarop geboekt wordt", () =>
   expect(saved[0][0].entity).toBe("Holding BV");
 });
 
-test("met meerdere ondernemingen belooft het scherm geen automatische boeking", () => {
-  // De uitleg somt op waaróm iets zichzelf boekt. Met meer dan één onderneming
-  // gebeurt dat nooit, dus mag daar niet "je hebt één onderneming" staan — dat
-  // is een voorwaarde afvinken die juist níet klopt, en dan wacht hij op een
-  // boeking die niet komt.
-  const c = render([], [], ["Holding BV", "Werk BV"], "Holding BV");
-  expect(c.textContent).not.toContain("je hebt één onderneming");
-  expect(c.textContent).toContain("meer dan één onderneming");
-});
-
-test("met één onderneming staat die voorwaarde er wél, want dan klopt hij", () => {
-  const c = render();
-  expect(c.textContent).toContain("je hebt één onderneming");
+test("het scherm belooft nergens dat iets zichzelf boekt, ongeacht het aantal ondernemingen", () => {
+  const gate = adminCopy.nl.facturen.forms.auto.gateNote;
+  expect(render().textContent).toContain(gate);
+  expect(render([], [], ["Holding BV", "Werk BV"], "Holding BV").textContent).toContain(gate);
+  expect(gate).toContain("LaVega boekt niets zelf");
 });
 
 test("the lavega_locale cookie switches the surface to English", () => {

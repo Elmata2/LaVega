@@ -20,6 +20,7 @@
 import type { Invoice, N8nAutoBooked } from "@lavega/core";
 import { makeInvoice } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
+import { Option, Schema } from "effect";
 import { API_BASE } from "./api.js";
 
 /** Where a row came in, and whether the sending domain survived the mail
@@ -92,7 +93,14 @@ export type N8nNotice = {
 /** What a GET on the webhook ended in. Every failure is its own kind — none of
  *  them may be presented as a success. */
 export type FetchOutcome =
-  | { kind: "ok"; rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number }
+  | {
+      kind: "ok";
+      rows: N8nInvoiceRow[];
+      notices: N8nNotice[];
+      setup: N8nSetupSignal[];
+      setupDropped: number;
+      dropped: number;
+    }
   | { kind: "not-configured" }
   | { kind: "no-address" }
   | { kind: "unauthorized"; status: number }
@@ -118,6 +126,57 @@ function cents(v: unknown): number | null {
  * than booking a zero.
  */
 const NOTICE_KINDS: N8nNotice["kind"][] = ["notification", "reminder", "no-amount", "unreadable"];
+
+/** The two notices that are not mail to act on but signals for the forwarding
+ *  guide. Same wire array as notices, a separate type on this side: they must
+ *  never be persisted to the vault or listed under "Zelf ophalen". Only kind,
+ *  code and receivedAt are taken from the wire entry. */
+export type N8nSetupSignal = {
+  kind: "forwarding-confirmation" | "setup-test";
+  code: string;
+  receivedAt?: string;
+};
+
+const SetupSignalSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("forwarding-confirmation"),
+    code: Schema.String.check(Schema.isPattern(/^[0-9]{1,20}$/)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("setup-test"),
+    code: Schema.String.check(Schema.isPattern(/^[a-z0-9]{4}$/)),
+  }),
+]);
+const decodeSetupSignal = Schema.decodeUnknownOption(SetupSignalSchema);
+
+const SETUP_KINDS: readonly string[] = ["forwarding-confirmation", "setup-test"];
+
+/** Setup entries of the `notices` array. An entry of a setup kind whose code is
+ *  malformed is counted in `setupDropped`, not skipped silently and not mixed
+ *  into the invoice `dropped` count (whose message says "missing an amount"). */
+function parseSetupSignals(body: unknown): { setup: N8nSetupSignal[]; setupDropped: number } {
+  const list = (body as { notices?: unknown }).notices;
+  const setup: N8nSetupSignal[] = [];
+  let setupDropped = 0;
+  if (!Array.isArray(list)) return { setup, setupDropped };
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.kind !== "string" || !SETUP_KINDS.includes(r.kind)) continue;
+    const decoded = Option.getOrNull(decodeSetupSignal(raw));
+    if (!decoded) {
+      setupDropped++;
+      continue;
+    }
+    const receivedAt = str(r.receivedAt) ?? undefined;
+    setup.push({
+      kind: decoded.kind,
+      code: decoded.code,
+      ...(receivedAt ? { receivedAt } : {}),
+    });
+  }
+  return { setup, setupDropped };
+}
 
 /** The sender verdict, read the same way `normalizeInboundMail` writes it:
  *  anything that is not literally "passed" or "failed" is `unknown`. A missing
@@ -168,9 +227,13 @@ function parseNotices(body: unknown): N8nNotice[] {
   return notices;
 }
 
-export function parseQueue(
-  body: unknown,
-): { rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number } | null {
+export function parseQueue(body: unknown): {
+  rows: N8nInvoiceRow[];
+  notices: N8nNotice[];
+  setup: N8nSetupSignal[];
+  setupDropped: number;
+  dropped: number;
+} | null {
   if (!body || typeof body !== "object") return null;
   const list = (body as { invoices?: unknown }).invoices;
   if (!Array.isArray(list)) return null;
@@ -212,7 +275,7 @@ export function parseQueue(
       note: str(r.note) ?? undefined,
     });
   }
-  return { rows, notices: parseNotices(body), dropped };
+  return { rows, notices: parseNotices(body), ...parseSetupSignals(body), dropped };
 }
 
 /**
@@ -257,7 +320,14 @@ export async function fetchQueue(
   }
   const parsed = parseQueue(body);
   if (!parsed) return { kind: "unreadable" };
-  return { kind: "ok", rows: parsed.rows, notices: parsed.notices, dropped: parsed.dropped };
+  return {
+    kind: "ok",
+    rows: parsed.rows,
+    notices: parsed.notices,
+    setup: parsed.setup,
+    setupDropped: parsed.setupDropped,
+    dropped: parsed.dropped,
+  };
 }
 
 export type ForwardAddressReadOutcome =
@@ -291,27 +361,38 @@ export type ForwardAddressWriteOutcome =
   | { kind: "stored"; localPart: string }
   | { kind: "invalid" }
   | { kind: "taken" }
+  /** `ifAbsent` was set and this account already holds an address: nothing was written */
+  | { kind: "already-set"; localPart: string }
   | { kind: "unauthorized" }
   | { kind: "network" }
   | { kind: "http-error"; status: number };
 
+/** `ifAbsent` is the create path: the server refuses to replace an address the
+ *  account already has and answers `already-set` with that address instead. */
 export async function recordForwardAddress(
   localPart: string,
   fetchImpl: typeof fetch = globalThis.fetch,
+  options: { ifAbsent?: boolean } = {},
 ): Promise<ForwardAddressWriteOutcome> {
   let res: Response;
   try {
     res = await fetchImpl(`${API_BASE}/api/n8n/forward-address`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ localPart }),
+      body: JSON.stringify(options.ifAbsent ? { localPart, ifAbsent: true } : { localPart }),
     });
   } catch {
     return { kind: "network" };
   }
   if (res.status === 401 || res.status === 403) return { kind: "unauthorized" };
   if (res.status === 400) return { kind: "invalid" };
-  if (res.status === 409) return { kind: "taken" };
+  if (res.status === 409) {
+    const conflict = await res.json().catch(() => null);
+    const existing = (conflict as { code?: unknown; localPart?: unknown } | null) ?? {};
+    if (existing.code === "n8n-address-already-set" && typeof existing.localPart === "string")
+      return { kind: "already-set", localPart: existing.localPart };
+    return { kind: "taken" };
+  }
   if (!res.ok) return { kind: "http-error", status: res.status };
   let body: unknown;
   try {

@@ -34,7 +34,9 @@ import { moneyCopy } from "../../copy/money.js";
  * exactly as much as an outgoing one — DUO paying him is a date he can count on.
  *
  * LaVega never pays anything, so there is no action here — only the date, the
- * amount, where the row came from and whether it is late. */
+ * amount and where the row came from. A planned date that has already passed
+ * is not on the agenda: it is not "next", and six stale rows pushed every real
+ * upcoming date off the block (21 Oct 2026). */
 
 const ROWS = 6;
 
@@ -76,8 +78,8 @@ export function nextOccurrence(lastDate: string, cadenceDays: number, asOf: stri
   return shiftDate(lastDate, steps * cadenceDays);
 }
 
-/** Planned flows and detected recurring payments, merged and sorted by date.
- *  Pure — `asOf` decides what is late, never the clock. */
+/** Planned flows due on or after `asOf` and detected recurring payments,
+ *  merged and sorted by date. Pure — `asOf` decides what is past, never the clock. */
 export function agendaRows(
   scheduledFlows: ScheduledFlow[],
   txs: Tx[],
@@ -87,7 +89,7 @@ export function agendaRows(
 ): AgendaRow[] {
   const c = moneyCopy[locale].betaalschema;
   const planned: AgendaRow[] = scheduledFlows
-    .filter((f) => f.status !== "paid" && f.status !== "cancelled")
+    .filter((f) => f.status !== "paid" && f.status !== "cancelled" && f.dueDate >= asOf)
     .map((f) => ({
       id: `flow:${f.id}`,
       date: f.dueDate,
@@ -121,7 +123,7 @@ type BetaalschemaBlockProps = {
   scheduledFlows: ScheduledFlow[];
   /** Needed for the recurring detection; the same list Overzicht already has. */
   txs: Tx[];
-  /** Today, ISO — a date before it makes a row overdue. */
+  /** Today, ISO — a planned date before it is left off the agenda. */
   asOf: string;
 };
 
@@ -132,8 +134,6 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
     () => agendaRows(scheduledFlows, txs, asOf, ROWS, locale),
     [scheduledFlows, txs, asOf, locale],
   );
-  const overdueCount = upcoming.filter((r) => r.date < asOf).length;
-  const predictedCount = upcoming.filter((r) => r.predicted).length;
   /* De rij die OPEN staat, en waarom dat een toestand is en geen tooltip.
    *
    * REVIEW 4, PUNT 7 — EERST GEMETEN, EN DE UITKOMST IS DEELS EEN NEE. Hij noemde
@@ -171,21 +171,12 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
     <Module
       title={c.title}
       height="tall"
-      footer={
-        upcoming.length > 0 ? (
-          <>
-            {overdueCount > 0 && c.datumAlVerstreken(overdueCount)}
-            {predictedCount > 0 ? c.regelVoorspeld(predictedCount) : c.alleRegelsIngepland}
-          </>
-        ) : undefined
-      }
     >
       {upcoming.length === 0 ? (
         <p className="block-empty">{c.nietsIngepland}</p>
       ) : (
         <div className="flex flex-col">
           {upcoming.map((r) => {
-            const overdue = r.date < asOf;
             const isOpen = open === r.id;
             return (
               /* De hele rij is de knop, niet alleen de naam: hij vroeg om te
@@ -209,12 +200,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                 onClick={() => setOpen((cur) => (cur === r.id ? null : r.id))}
               >
                 <span
-                  className={`flex flex-col items-center justify-center flex-none w-[42px] py-1 px-0 rounded-sm leading-[1.1] ${
-                    overdue
-                      ? "bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] border border-[color-mix(in_srgb,var(--warn)_35%,transparent)]"
-                      : "bg-surface-2 border border-line"
-                  }`}
-                  data-overdue={overdue ? "true" : "false"}
+                  className="flex flex-col items-center justify-center flex-none w-[42px] py-1 px-0 rounded-sm leading-[1.1] bg-surface-2 border border-line"
                   aria-hidden="true"
                 >
                   <span className="font-bold text-[0.95rem] tabular-nums">
@@ -246,7 +232,6 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                   </span>
                   <span className="eyebrow w-full">
                     {r.date} · {r.note}
-                    {overdue ? c.teLaatSuffix : ""}
                   </span>
                 </span>
                 <span

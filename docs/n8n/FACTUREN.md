@@ -182,6 +182,9 @@ Wat je na _Import from File_ moet nalopen:
   op jouw instantie kunnen controleren.**
 - Kijk wat _Zet in de wachtrij_ teruggeeft: `{addedInvoices, addedNotices,
 inQueue, noticesInQueue, remembered}`.
+- Stuur een testmail met onderwerp `LaVega test abcd factuur` (EN-handleiding:
+  `LaVega test abcd invoice`) naar het doorstuuradres. Controleer dat de run eindigt
+  in "Melding: zelf ophalen" en dat **Bouw Claude-verzoek** niet gedraaid heeft.
 
 ## Meldingen: wat er wel binnenkwam maar geen factuur was
 
@@ -211,6 +214,11 @@ Een betaalbewijs (`receipt`) wordt niet eens een melding: dat geld is al
 afgeschreven en staat in je bankafschriften. Als verwachte factuur inboeken zou
 het dubbel in de prognose zetten. Die worden alleen geteld.
 
+Twee andere soorten staan op de draad maar zijn geen melding:
+`forwarding-confirmation` (Gmail's code) en `setup-test` (de testmail uit de
+handleiding). Ze dragen alleen `code`, komen nooit onder _Zelf ophalen_, en worden
+verwerkt door de handleiding voor doorsturen.
+
 ## Waar de code van de Code-nodes vandaan komt
 
 De logica van de Code-nodes stond als tekst in dit JSON-bestand, en niets
@@ -227,6 +235,17 @@ een node die uit de pas loopt laat de testsuite vallen.
 > test. Dat is de bedoeling — het is de enige manier waarop de twee uit elkaar
 > kunnen lopen. Wijzig liever het bestand in `packages/core/src/n8n/` en draai
 > `pnpm run sync:n8n`.
+
+## Workflow bijwerken bij een release
+
+Opnieuw provisionen past alleen de webhook-node aan. Plak daarom de `jsCode` uit
+`docs/n8n/lavega-facturen-workflow.json` in de **drie** gewijzigde Code-nodes van
+de live workflow: "Normaliseer binnengekomen mail", "Melding: zelf ophalen" en
+"Naar LaVega-vorm". Zet eerst de nieuwe web-build live, daarna de workflow.
+
+Draai vóór de release, nadat de echte Gmail-capture is toegevoegd:
+`REQUIRE_REAL_GMAIL_FIXTURE=1 pnpm --filter @lavega/core test`. De release is
+geblokkeerd tot die slaagt.
 
 ## Wat je moet controleren bij de eerste run
 

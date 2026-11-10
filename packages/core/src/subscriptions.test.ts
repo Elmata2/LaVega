@@ -1333,3 +1333,39 @@ describe("explainMerchant — de exacte Nederlandse reden per poort", () => {
     expect(explainMerchant(dates, cents, 0.35, addDays(base, 90))).toBeNull();
   });
 });
+
+describe("txIds on streams", () => {
+  it("equal exactly the member txs; an off-cycle extra is excluded", () => {
+    const members = [
+      tx("Gym Plus", "2026-01-05", -30),
+      tx("Gym Plus", "2026-02-05", -30),
+      tx("Gym Plus", "2026-03-05", -30),
+      tx("Gym Plus", "2026-04-05", -30),
+    ];
+    const extra = tx("Gym Plus", "2026-02-20", -9.5);
+    const all = [...members, extra];
+    const want = members.map((t) => t.id).sort();
+
+    const stream = detectScheduleStreams(all, { asOf: "2026-04-10" }).find(
+      (s) => s.amountCents === 3000,
+    );
+    expect(stream?.txIds.slice().sort()).toEqual(want);
+    expect(stream?.txIds).not.toContain(extra.id);
+
+    const sub = detectSubscriptions(all, { asOf: "2026-04-10" }).find(
+      (s) => s.lastAmountCents === 3000,
+    );
+    expect(sub?.txIds.slice().sort()).toEqual(want);
+    expect(sub?.txIds).not.toContain(extra.id);
+  });
+
+  it("two streams at one party keep separate ids", () => {
+    const a = ["01", "02", "03", "04"].map((m) => tx("Simyo", `2026-${m}-03`, -11.89));
+    const b = ["01", "02", "03", "04"].map((m) => tx("Simyo", `2026-${m}-17`, -25));
+    const streams = detectScheduleStreams([...a, ...b], { asOf: "2026-04-20" });
+    const s1189 = streams.find((s) => s.amountCents === 1189);
+    const s25 = streams.find((s) => s.amountCents === 2500);
+    expect(s1189?.txIds.slice().sort()).toEqual(a.map((t) => t.id).sort());
+    expect(s25?.txIds.slice().sort()).toEqual(b.map((t) => t.id).sort());
+  });
+});

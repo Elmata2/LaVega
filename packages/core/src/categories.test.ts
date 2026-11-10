@@ -552,3 +552,39 @@ describe("his own name goes to the own-transfer section", () => {
     expect(categorize(t, [])).toBe(PERSON_CATEGORY);
   });
 });
+
+describe("name splitting runs in linear time and keeps its results", () => {
+  const me = parseOwnName("Alexander Steunenberg")!;
+
+  test("separators with any amount of whitespace still split into the same people", () => {
+    for (const n of [
+      "Hr JAJ Wiebrens,Hr A Steunenberg",
+      "Jan Jansen en/of A Steunenberg",
+      "Jan Jansen   en/of    A Steunenberg",
+      "Jan Jansen\ten/of\nA Steunenberg",
+      "Jan Jansen und A Steunenberg",
+      "Jan Jansen & A Steunenberg",
+      "A Steunenberg via Rabo Betaalverzoek",
+      "A Steunenberg   VIA   Rabo Betaalverzoek",
+      "  A Steunenberg e/o Jan Jansen",
+    ]) {
+      expect(isOwnName(n, [me]), n).toBe(true);
+    }
+    expect(isOwnName("Jan Jansen en/of Piet Pietersen", [me])).toBe(false);
+    expect(isPersonName("Jan Jansen   en/of   Piet Pietersen")).toBe(true);
+    expect(isPersonName("Jan Jansen   via   Rabo Betaalverzoek")).toBe(true);
+    expect(isPersonName("Acme   BV   en/of   Jan Jansen")).toBe(false);
+  });
+
+  test("a 50,000-space string returns in well under 100 ms", () => {
+    for (const s of [
+      `A${" ".repeat(50_000)}x`,
+      `A${" ".repeat(50_000)}via`,
+      `A${" ".repeat(50_000)}und${" ".repeat(50_000)}`,
+    ]) {
+      const t0 = performance.now();
+      isOwnName(s, [me]);
+      expect(performance.now() - t0).toBeLessThan(100);
+    }
+  });
+});

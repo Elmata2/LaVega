@@ -13,6 +13,9 @@ type ImportProps = {
   problems: ShellNotice[];
   onRefreshBank: () => void;
   onImport: (file: File) => void;
+  /** Passed on to BankLink: runs just before the redirect to the bank. */
+  onBeforeBankRedirect?: () => void | Promise<void>;
+  bankDefaultPsuType?: "business" | "personal";
 };
 
 export default function Import({
@@ -22,6 +25,8 @@ export default function Import({
   problems,
   onImport,
   onRefreshBank,
+  onBeforeBankRedirect,
+  bankDefaultPsuType,
 }: ImportProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
@@ -56,7 +61,12 @@ export default function Import({
           {problems.map((n) => c.notice(n)).join(" ")}
         </p>
       )}
-      <BankLink busy={busy} onRefresh={onRefreshBank} />
+      <BankLink
+        busy={busy}
+        onRefresh={onRefreshBank}
+        {...(onBeforeBankRedirect ? { onBeforeRedirect: onBeforeBankRedirect } : {})}
+        {...(bankDefaultPsuType ? { defaultPsuType: bankDefaultPsuType } : {})}
+      />
     </Card>
   );
 }

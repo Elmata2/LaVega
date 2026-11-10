@@ -32,6 +32,12 @@
   #root {
     height: 100%;
   }
+  /* Instrument Serif is a condensed display face and reads about one size
+   * smaller than the sans it replaces; the whole rem scale moves up with it. */
+  html {
+    font-size: 17px;
+    background: var(--gutter);
+  }
 
   body {
     margin: 0;
@@ -40,7 +46,7 @@
     background: var(--gutter);
     color: var(--ink);
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: 1rem;
     line-height: 1.5;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
@@ -172,7 +178,7 @@
   }
   .kpi.highlight {
     background: var(--accent-soft);
-    border-color: rgba(31, 78, 107, 0.28);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .kpi-label {
     color: var(--muted);
@@ -394,10 +400,9 @@
     align-items: center;
     gap: 6px;
     flex: none;
-    padding: 8px 2px;
+    padding: 6px 16px;
     border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
+    border-radius: var(--pill);
     background: transparent;
     color: var(--muted);
     font-size: 0.95rem;
@@ -408,16 +413,16 @@
     cursor: pointer;
     transition:
       color 0.12s ease,
-      border-color 0.12s ease;
+      background-color 0.12s ease;
   }
   .nav-item:hover:not(:disabled) {
     color: var(--ink);
   }
-  /* Active = the reference's rule under the label, in ink. */
+  /* Active = the white pill with dark text, as on the marketing site. */
   .nav-item.active,
   .nav-item.active:hover {
-    color: var(--ink);
-    border-bottom-color: var(--ink);
+    color: var(--on-ink);
+    background: var(--ink);
     font-weight: 600;
   }
   .nav-item:disabled {
@@ -538,7 +543,7 @@
 
   .appbar-profile.active {
     color: var(--on-ink);
-    background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+    background: var(--ink);
     border-color: var(--ink);
   }
   .profile-avatar {
@@ -575,7 +580,7 @@
    * starts and ends exactly where the content does. */
     padding: var(--sp-5) 0 var(--sp-3);
     margin: 0 var(--sp-6) var(--sp-4);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--line);
     background: transparent;
     flex-wrap: wrap;
     flex: none;
@@ -756,7 +761,7 @@
       background 0.12s ease;
   }
   .mp-toggle.on {
-    background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+    background: var(--ink);
     border-color: var(--ink);
   }
   .mp-toggle.on .mp-knob {
@@ -1142,9 +1147,9 @@
     gap: var(--sp-2);
     border-radius: var(--pill);
     padding: 10px 18px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #fff;
+    border: 1px solid var(--cta);
+    background: var(--cta);
+    color: var(--on-cta);
     font-weight: 600;
     font-size: 0.9rem;
     cursor: pointer;
@@ -1231,7 +1236,7 @@
   .chat-msg-user {
     align-self: flex-end;
     background: var(--accent-soft);
-    border: 1px solid rgba(31, 78, 107, 0.28);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     color: var(--ink);
   }
   .chat-msg-assistant {

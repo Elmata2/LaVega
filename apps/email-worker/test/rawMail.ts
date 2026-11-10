@@ -210,3 +210,25 @@ export const RAW_FORGED_AUTH_RESULTS = [
   "rekening NL00 XXXX 0000 0000 00 om kosten te voorkomen.",
   "",
 ].join("\r\n");
+
+/** SYNTHETIC. Gmail's forwarding-confirmation mail as RFC 5322, written from
+ *  memory of the documented format. NOT a capture; the shape is UNVERIFIED. The
+ *  classifier itself is driven by core's __fixtures__/gmail-forwarding-
+ *  confirmation*.json; this one only proves the Worker passes the From header and
+ *  the text through. */
+export const RAW_GMAIL_CONFIRMATION = [
+  "From: Gmail Team <forwarding-noreply@google.com>",
+  "To: alexander-7f3a@invoices.lavega.dev",
+  "Subject: (#123456789) Gmail Forwarding Confirmation - Receive Mail from someone@gmail.com",
+  "Date: Wed, 21 Oct 2026 13:58:02 +0000",
+  "Message-ID: <synthetic-confirmation-raw@mail.gmail.com>",
+  "MIME-Version: 1.0",
+  'Content-Type: text/plain; charset="UTF-8"',
+  "",
+  "someone@gmail.com has requested to automatically forward mail to your email address alexander-7f3a@invoices.lavega.dev.",
+  "",
+  "Confirmation code: 123456789",
+  "",
+  "https://mail-settings.google.com/mail/vf-%5BSYNTHETIC%5D",
+  "",
+].join("\r\n");

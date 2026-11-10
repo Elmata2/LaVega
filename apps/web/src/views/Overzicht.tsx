@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import type {
   Account,
+  AdvisorProfileStore,
   Invoice,
   OwnAccounts,
+  RoomResult,
   Rule,
   Tx,
   ScheduledFlow,
@@ -14,6 +16,9 @@ import type { ConversionMode } from "../settings.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import ModuleGrid from "../components/ModuleGrid";
+import { IntakeInviteWidget } from "../components/blocks/IntakeInviteCard";
+import { ConnectChecklistWidget } from "../components/blocks/ConnectChecklist";
+import { RoomCardWidget } from "../components/blocks/RoomCard";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
 import StatistiekBlock from "../components/blocks/StatistiekBlock";
@@ -90,6 +95,19 @@ type OverzichtProps = {
    *  per-category "vs. gemiddelde" benchmark button). */
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
+  /** The adviser profile and the room worked out from it; absent while the
+   *  profile is still being read, in which case neither intake card shows. */
+  intake?: {
+    store: AdvisorProfileStore | null;
+    room: RoomResult;
+    statedInputs?: {
+      income: { lowCents: number; highCents: number };
+      spend: { lowCents: number; highCents: number };
+    };
+    onSave: (next: AdvisorProfileStore) => Promise<void>;
+    /** Opens the wizard in round 2 (the coaching questions). */
+    onOpenRound2?: () => void;
+  };
 };
 
 export default function Overzicht({
@@ -110,6 +128,7 @@ export default function Overzicht({
   onNavigate,
   onSelectCategory,
   travel,
+  intake,
 }: OverzichtProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
@@ -143,6 +162,33 @@ export default function Overzicht({
   return (
     <ModuleGrid label={c.overzicht.gridLabel}>
       <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
+
+      {intake && (
+        <>
+          <IntakeInviteWidget
+            store={intake.store}
+            asOf={asOf}
+            onSave={intake.onSave}
+            onOpenIntake={() => onNavigate("intake")}
+            {...(intake.onOpenRound2 ? { onOpenRound2: intake.onOpenRound2 } : {})}
+            hasTransactions={txs.length > 0}
+          />
+          <RoomCardWidget
+            store={intake.store}
+            result={intake.room}
+            accounts={accounts}
+            {...(intake.statedInputs ? { statedInputs: intake.statedInputs } : {})}
+            onOpenIntake={() => onNavigate("intake")}
+            onImport={() => onNavigate("profiel")}
+            onOpenPlan={() => onNavigate("plan")}
+          />
+          <ConnectChecklistWidget
+            store={intake.store}
+            accounts={accounts}
+            onOpenAccounts={() => onNavigate("accounts")}
+          />
+        </>
+      )}
 
       {/* Saldo is span-2 with Positie beside it and span-3 without: an absent
           widget should leave a wider card, not a gap. Only this view knows what

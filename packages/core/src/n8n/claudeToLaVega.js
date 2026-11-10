@@ -81,9 +81,10 @@
  * @property {string} subject
  * @property {string} from
  * @property {string} receivedAt
- * @property {'notification'|'reminder'|'no-amount'|'unreadable'} kind
+ * @property {'notification'|'reminder'|'no-amount'|'unreadable'|'forwarding-confirmation'|'setup-test'} kind
  * @property {string} reason
  * @property {string} mailUrl
+ * @property {string} [code]   alleen bij de twee setup-soorten: cijfers resp. vier tekens
  * @property {string} [deliveredTo]
  * @property {string} [queueKey]
  * @property {'passed'|'failed'|'unknown'} [senderCheck]
@@ -364,6 +365,35 @@ function noticeForUnreadable(msg) {
   );
 }
 
+/**
+ * Een setup-mail (Gmail-bevestiging of testmail) als melding: ALLEEN soort en
+ * code. Onderwerp en afzender blijven leeg met opzet: het onderwerp van Gmails
+ * bevestiging bevat het Gmail-adres van de eigenaar, en wat niet nodig is gaat
+ * niet mee. `messageId` valt terug op soort+code, want `addToQueue` slaat een
+ * melding zonder id stilzwijgend over (queue.js) en dan wacht de handleiding
+ * eeuwig.
+ * @param {{source: string, messageId: string, date: string, setup: {kind: 'forwarding-confirmation'|'setup-test', code: string}} & ProvenanceInput} msg
+ * @returns {QueueNotice}
+ */
+function noticeForSetup(msg) {
+  const kind = msg.setup.kind;
+  const code = String(msg.setup.code);
+  return Object.assign(
+    /** @type {QueueNotice} */ ({
+      source: msg.source,
+      messageId: msg.messageId || "setup-" + kind + "-" + code,
+      subject: "",
+      from: "",
+      receivedAt: String(msg.date || ""),
+      kind: kind,
+      code: code,
+      reason: "",
+      mailUrl: "",
+    }),
+    provenanceOf(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (msg))),
+  );
+}
+
 export {
   gmailUrl,
   mailUrlFor,
@@ -372,4 +402,5 @@ export {
   modelKind,
   toQueueEntry,
   noticeForUnreadable,
+  noticeForSetup,
 };

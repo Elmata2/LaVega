@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Koppelingen from "./views/Koppelingen";
+import type { View } from "./App";
 import { getInvoiceForwardAddress, setInvoiceForwardAddress } from "./settings";
 import { adminCopy } from "./copy/admin.js";
 
@@ -33,12 +34,12 @@ afterEach(() => {
   document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
-async function render(fetchImpl?: typeof fetch) {
+async function render(fetchImpl?: typeof fetch, onNavigate?: (view: View) => void) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<Koppelingen fetchImpl={fetchImpl} />);
+    root!.render(<Koppelingen fetchImpl={fetchImpl} onNavigate={onNavigate} />);
   });
   return container;
 }
@@ -51,18 +52,22 @@ function fakeFetch(opts: {
   get?: () => { localPart: string | null };
   post?: (localPart: string) => { status: number; body: unknown };
 }) {
-  const calls: { method: string; localPart?: string }[] = [];
+  const calls: { method: string; localPart?: string; ifAbsent?: boolean }[] = [];
   const impl = (async (_url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (method === "GET") {
       calls.push({ method });
       const localPart = opts.get ? opts.get().localPart : null;
-      return { ok: true, status: 200, json: async () => ({ localPart }) } as unknown as Response;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ localPart }),
+      } as unknown as Response;
     }
     const parsed = init?.body
-      ? (JSON.parse(init.body as string) as { localPart: string })
+      ? (JSON.parse(init.body as string) as { localPart: string; ifAbsent?: boolean })
       : { localPart: "" };
-    calls.push({ method, localPart: parsed.localPart });
+    calls.push({ method, localPart: parsed.localPart, ifAbsent: parsed.ifAbsent });
     if (!opts.post) throw new Error("unexpected POST in this test");
     const { status, body } = opts.post(parsed.localPart);
     return {
@@ -127,8 +132,11 @@ function blur(el: HTMLInputElement) {
  * blokken die hem hielpen n8n op te zetten; wat BLIJFT is het lokale adres. */
 
 test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", async () => {
-  const c = await render(noneFetch().impl);
-  // De n8n-provisioning is en blijft weg.
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: (lp) => ({ status: 200, body: { localPart: lp } }),
+  });
+  const c = await render(f.impl);
   expect(c.querySelector('[aria-label="n8n basis-URL"]')).toBeNull();
   expect(c.querySelector('[aria-label="n8n API-sleutel"]')).toBeNull();
   expect(
@@ -136,54 +144,140 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", asy
       (b.textContent ?? "").includes("Verbind met n8n"),
     ),
   ).toBe(false);
-  // Het adres is er nog niet, dus er staat een knop om er een te maken — en
-  // het scherm maakt er nog steeds NIET zelf een aan door open te gaan.
   expect(getInvoiceForwardAddress()).toBe("");
-  const maak = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("Genereer een willekeurig adres"),
-  );
-  expect(maak).not.toBeUndefined();
-  click(maak as HTMLButtonElement);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
   const made = getInvoiceForwardAddress();
   expect(made).toMatch(/^lavega-[a-z0-9]{4,32}@invoices\.lavega\.dev$/);
   expect((c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement).value).toBe(made);
-  // Nog steeds geen testknop: een test zou echte facturen opgebruiken.
   expect([...c.querySelectorAll("button")].some((b) => /test/i.test(b.textContent ?? ""))).toBe(
     false,
   );
 });
 
-/* ── De lege staat biedt twee opties, geen winnaar ──────────────────────────
- *
- * Hij vroeg om zijn eigen leesbare adres (ale@invoices.lavega.dev) als
- * één-klik-suggestie NAAST de generator, niet in plaats ervan — elk met één
- * regel over de afweging. */
-
-test("de lege staat biedt het leesbare adres en de generator naast elkaar, elk met zijn afweging", async () => {
+test("an empty state offers ONE create button, and no personal alias", async () => {
   const c = await render(noneFetch().impl);
-  const suggested = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-  );
-  const random = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("Genereer een willekeurig adres"),
-  );
-  expect(suggested).not.toBeUndefined();
-  expect(random).not.toBeUndefined();
-  // Elk heeft zijn eigen afwegingsregel, en ze zeggen niet hetzelfde.
-  expect(c.textContent).toContain("Makkelijk te onthouden en over te typen");
-  expect(c.textContent).toContain("Niet te raden");
+  expect(adminCopy.nl.koppelingen.forwardAddress.createButton).toBe("Maak mijn factuuradres");
+  byText("button", "Maak mijn factuuradres");
+  expect(c.textContent).not.toContain("ale@");
+  expect(c.textContent).not.toContain("Cloudflare");
+  expect(c.textContent).not.toContain("Genereer een willekeurig adres");
+  byText("button", "Eigen adres gebruiken");
+  expect(c.querySelector('[aria-label="Doorstuuradres"]')).toBeNull();
 });
 
-test("op het leesbare adres klikken slaat precies ale@invoices.lavega.dev op", async () => {
-  const c = await render(noneFetch().impl);
-  const suggested = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-  ) as HTMLButtonElement;
-  click(suggested);
-  expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
+test("creating generates an address AND records it on the server in one step", async () => {
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: (lp) => ({ status: 200, body: { localPart: lp } }),
+  });
+  const c = await render(f.impl);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
+  const posts = f.calls.filter((x) => x.method === "POST");
+  expect(posts).toHaveLength(1);
+  expect(getInvoiceForwardAddress()).toBe(`${posts[0].localPart}@invoices.lavega.dev`);
+  expect(f.calls.filter((x) => x.method === "POST")[0].ifAbsent).toBe(true);
+  expect(posts[0].localPart).toMatch(/^lavega-[a-z0-9]{16}$/);
   expect((c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement).value).toBe(
-    "ale@invoices.lavega.dev",
+    getInvoiceForwardAddress(),
   );
+});
+
+test("a 409 tries a fresh address, and a persistent failure stores nothing locally", async () => {
+  let n = 0;
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: () => (++n < 2 ? { status: 409, body: {} } : { status: 200, body: { localPart: "x" } }),
+  });
+  await render(f.impl);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
+  expect(f.calls.filter((x) => x.method === "POST")).toHaveLength(2);
+
+  localStorage.clear();
+  const bad = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: () => ({ status: 500, body: {} }),
+  });
+  const c = await render(bad.impl);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
+  expect(getInvoiceForwardAddress()).toBe("");
+  expect(c.textContent).toContain(adminCopy.nl.koppelingen.forwardAddress.createFailed);
+});
+
+test("three collisions in a row give a plain sentence and a way to try again", async () => {
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: () => ({ status: 409, body: {} }),
+  });
+  const c = await render(f.impl);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
+  const nl = adminCopy.nl.koppelingen.forwardAddress;
+  expect(f.calls.filter((x) => x.method === "POST")).toHaveLength(3);
+  expect(getInvoiceForwardAddress()).toBe("");
+  expect(c.textContent).toContain(nl.createTaken);
+  expect(c.textContent).not.toMatch(/409/);
+  byText("button", nl.createTakenRetry);
+});
+
+test("while the server read is loading there is a loading line and no create button", async () => {
+  const never = (() => new Promise(() => {})) as unknown as typeof fetch;
+  const c = await render(never);
+  expect(c.textContent).toContain(adminCopy.nl.koppelingen.forwardAddress.server.loading);
+  expect(
+    [...c.querySelectorAll("button")].some((b) =>
+      (b.textContent ?? "").includes("Maak mijn factuuradres"),
+    ),
+  ).toBe(false);
+});
+
+test("a failed server read shows an error line with a retry that reads again", async () => {
+  let ok = false;
+  const impl = (async () =>
+    ok
+      ? ({
+          ok: true,
+          status: 200,
+          json: async () => ({ localPart: null }),
+        } as unknown as Response)
+      : ({
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+        } as unknown as Response)) as unknown as typeof fetch;
+  const c = await render(impl);
+  const nl = adminCopy.nl.koppelingen.forwardAddress;
+  expect(c.textContent).toContain(nl.server.readFailed);
+  expect(c.textContent).not.toMatch(/\b500\b/);
+  expect(c.querySelector('[role="status"]')?.textContent).toContain(nl.server.readFailed);
+  ok = true;
+  await clickAsync(byText("button", nl.server.retryButton));
+  expect(c.textContent).not.toContain(nl.server.readFailed);
+  byText("button", "Maak mijn factuuradres");
+});
+
+test("when the server already holds an address, this browser is not offered a replacement", async () => {
+  const f = fakeFetch({ get: () => ({ localPart: "lavega-abcdefghij" }) });
+  const c = await render(f.impl);
+  expect(
+    [...c.querySelectorAll("button")].some((b) =>
+      (b.textContent ?? "").includes("Maak mijn factuuradres"),
+    ),
+  ).toBe(false);
+  expect(c.textContent).toContain(
+    adminCopy.nl.koppelingen.forwardAddress.server.active("lavega-abcdefghij"),
+  );
+  byText("button", "Eigen adres gebruiken");
+  expect(f.calls.filter((x) => x.method === "POST")).toHaveLength(0);
+});
+
+test("with an address set, a link leads to the guide in Facturen", async () => {
+  setInvoiceForwardAddress("lavega-abcdefghij@invoices.lavega.dev");
+  const go = vi.fn();
+  await render(noneFetch().impl, go);
+  click(byText("button", "Automatisch doorsturen instellen"));
+  expect(go).toHaveBeenCalledWith("facturen");
+  // lands on the guide card, not the top of Facturen
+  expect(window.location.hash).toBe("#forwarding-guide");
+  window.history.replaceState(null, "", window.location.pathname);
 });
 
 /* ── Kopieer-knop ────────────────────────────────────────────────────────── */
@@ -193,13 +287,13 @@ test("een gezet adres krijgt een kopieerknop, die het adres naar het klembord sc
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.assign(navigator, { clipboard: { writeText } });
   try {
-    const c = await render(noneFetch().impl);
+    const empty = await render(noneFetch().impl);
     // Nog geen adres: geen kopieerknop — er is niets om te kopiëren.
-    expect(c.querySelector('[aria-label="Doorstuuradres kopiëren"]')).toBeNull();
-    const suggested = [...c.querySelectorAll("button")].find((b) =>
-      (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-    ) as HTMLButtonElement;
-    click(suggested);
+    expect(empty.querySelector('[aria-label="Doorstuuradres kopiëren"]')).toBeNull();
+    act(() => root!.unmount());
+    empty.remove();
+    setInvoiceForwardAddress("ale@invoices.lavega.dev");
+    const c = await render(noneFetch().impl);
     const copyButton = c.querySelector(
       '[aria-label="Doorstuuradres kopiëren"]',
     ) as HTMLButtonElement;
@@ -219,6 +313,7 @@ test("hij kan het adres intypen dat Cloudflare werkelijk routeert", async () => 
    * dat LaVega verzon. Een adres dat wij bedenken en dat niets routeert is erger
    * dan geen adres — de post komt nergens aan terwijl het scherm zegt van wel. */
   const c = await render(noneFetch().impl);
+  click(byText("button", "Eigen adres gebruiken"));
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
   setValue(input, "ale@invoices.lavega.dev");
   blur(input);
@@ -227,6 +322,7 @@ test("hij kan het adres intypen dat Cloudflare werkelijk routeert", async () => 
 
 test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", async () => {
   const c = await render(noneFetch().impl);
+  click(byText("button", "Eigen adres gebruiken"));
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
   setValue(input, "ale@invoices.lavega.dev");
   blur(input);
@@ -272,6 +368,7 @@ test("het adres dat hij zelf typte, met een eigen domein, komt terug zoals hij h
     post: (localPart) => ({ status: 200, body: { localPart } }),
   });
   const c = await render(impl);
+  click(byText("button", "Eigen adres gebruiken"));
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
   setValue(input, "ale@work-example.com");
   blur(input);
@@ -287,11 +384,8 @@ test("een adres dat al bij een ander account hoort geeft de taken-melding", asyn
     get: () => ({ localPart: null }),
     post: () => ({ status: 409, body: { error: "taken" } }),
   });
+  setInvoiceForwardAddress("ale@invoices.lavega.dev");
   const c = await render(impl);
-  const suggested = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-  ) as HTMLButtonElement;
-  click(suggested);
   const nl = adminCopy.nl.koppelingen;
   await clickAsync(byText("button", nl.forwardAddress.server.recordButton));
   await clickAsync(byText("button", nl.forwardAddress.server.confirmButton));
@@ -303,11 +397,8 @@ test("een ongeldig adres geeft de invalid-melding", async () => {
     get: () => ({ localPart: null }),
     post: () => ({ status: 400, body: { error: "invalid" } }),
   });
+  setInvoiceForwardAddress("ale@invoices.lavega.dev");
   const c = await render(impl);
-  const suggested = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-  ) as HTMLButtonElement;
-  click(suggested);
   const nl = adminCopy.nl.koppelingen;
   await clickAsync(byText("button", nl.forwardAddress.server.recordButton));
   await clickAsync(byText("button", nl.forwardAddress.server.confirmButton));
@@ -333,11 +424,8 @@ test("de succesvolle opslag toont het nieuwe server-adres en sluit de bevestigin
     get: () => ({ localPart: null }),
     post: (localPart) => ({ status: 200, body: { localPart } }),
   });
+  setInvoiceForwardAddress("ale@invoices.lavega.dev");
   const c = await render(impl);
-  const suggested = [...c.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("ale@invoices.lavega.dev"),
-  ) as HTMLButtonElement;
-  click(suggested);
   const nl = adminCopy.nl.koppelingen;
   await clickAsync(byText("button", nl.forwardAddress.server.recordButton));
   await clickAsync(byText("button", nl.forwardAddress.server.confirmButton));
@@ -352,4 +440,63 @@ test("de succesvolle opslag toont het nieuwe server-adres en sluit de bevestigin
       (b) => (b.textContent ?? "") === nl.forwardAddress.server.cancelButton,
     ),
   ).toBe(false);
+});
+
+test("a create click that finds an address another tab made adopts it instead of replacing it", async () => {
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: () => ({
+      status: 409,
+      body: { code: "n8n-address-already-set", localPart: "lavega-fromothertab1" },
+    }),
+  });
+  const c = await render(f.impl);
+  await clickAsync(byText("button", "Maak mijn factuuradres"));
+  expect(f.calls.filter((x) => x.method === "POST")).toHaveLength(1);
+  expect(getInvoiceForwardAddress()).toBe("lavega-fromothertab1@invoices.lavega.dev");
+  expect(c.textContent).toContain(
+    adminCopy.nl.koppelingen.forwardAddress.createAlreadySet(
+      "lavega-fromothertab1@invoices.lavega.dev",
+    ),
+  );
+});
+
+test("a double click on create sends one request", async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  const inner = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: (lp) => ({ status: 200, body: { localPart: lp } }),
+  });
+  const slow = (async (url: string, init?: RequestInit) => {
+    if (init?.method === "POST") await gate;
+    return inner.impl(url, init);
+  }) as unknown as typeof fetch;
+  await render(slow);
+  const btn = byText("button", "Maak mijn factuuradres");
+  act(() => {
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await act(async () => release());
+  expect(inner.calls.filter((x) => x.method === "POST")).toHaveLength(1);
+});
+
+test("when localStorage refuses the address, the server address is still shown and nothing claims it was saved here", async () => {
+  const f = fakeFetch({
+    get: () => ({ localPart: null }),
+    post: (lp) => ({ status: 200, body: { localPart: lp } }),
+  });
+  const c = await render(f.impl);
+  const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("denied");
+  });
+  try {
+    await clickAsync(byText("button", "Maak mijn factuuradres"));
+  } finally {
+    spy.mockRestore();
+  }
+  expect(getInvoiceForwardAddress()).toBe("");
+  const posted = f.calls.find((x) => x.method === "POST")!.localPart!;
+  expect(c.textContent).toContain(adminCopy.nl.koppelingen.forwardAddress.server.active(posted));
 });

@@ -1,5 +1,19 @@
 import { openDB, type IDBPDatabase } from "idb";
+import { Effect } from "effect";
+import {
+  decodeProfileStore,
+  emptyPlanSection,
+  carryUnknownKeys,
+  encodeProfileStore,
+  mergeEvents,
+} from "@lavega/core";
 import type {
+  AdvisorProfileStore,
+  ProfileRead,
+  LearningSection,
+  PlanSection,
+  SectionValue,
+  VaultEvent,
   Account,
   Tx,
   Rule,
@@ -66,6 +80,15 @@ type VaultData = {
    *  euro figure already converted from a past date stays the same number
    *  offline, after the fact, or once the ECB has moved on. */
   fxHistory?: Record<string, Record<string, number>>;
+  /** The adviser profile store in its encoded (plain JSON) form: re-decoded on
+   *  every read so a blob from an older build is checked, never trusted. */
+  profile?: unknown;
+  /** The first undecodable profile blob a write replaced; kept so nothing the
+   *  user entered is silently lost. */
+  profileCorruptBackup?: unknown;
+  plan?: PlanSection;
+  learning?: LearningSection;
+  events?: VaultEvent[];
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
@@ -104,6 +127,15 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putPendingNotices(list: unknown[]): Promise<void>;
   getFxHistory(): Promise<Record<string, Record<string, number>>>;
   putFxHistory(h: Record<string, Record<string, number>>): Promise<void>;
+  /** `absent` on a legacy vault; `corrupt` when a stored blob no longer decodes
+   *  (the blob stays in place; a later putProfile moves it to a backup key). */
+  getProfile(): Promise<ProfileRead>;
+  putProfile(s: AdvisorProfileStore): Promise<void>;
+  /** Replace-all for `plan` and `learning`; events go through appendEvents. */
+  getSection<N extends "plan" | "learning" | "events">(name: N): Promise<SectionValue[N]>;
+  putSection<N extends "plan" | "learning">(name: N, value: SectionValue[N]): Promise<void>;
+  /** Union by event id with what is already stored; idempotent. */
+  appendEvents(events: readonly VaultEvent[]): Promise<void>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts. Plain byte encoding,
@@ -121,6 +153,16 @@ async function openPasswordBlob<T>(blob: PassphraseCipherBlob, passphrase: strin
 }
 
 const LOCKED_ERROR = "kluis vergrendeld";
+
+function readProfile(raw: unknown): ProfileRead {
+  if (raw == null) return { kind: "absent" };
+  return Effect.runSync(
+    decodeProfileStore(raw).pipe(
+      Effect.map((store): ProfileRead => ({ kind: "ok", store })),
+      Effect.catchTag("ProfileDecodeError", () => Effect.succeed<ProfileRead>({ kind: "corrupt" })),
+    ),
+  );
+}
 
 export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultStorage {
   // In-memory-only state. Never persisted. Dropped entirely on lock().
@@ -469,6 +511,54 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, fxHistory: { ...h } };
+        await persist();
+      });
+    },
+
+    // The adviser profile and the three sections that sit beside it. All are
+    // optional VaultData fields, so a legacy vault decrypts without them.
+    async getProfile(): Promise<ProfileRead> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return readProfile(data.profile);
+    },
+    putProfile(store: AdvisorProfileStore): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        const previous = readProfile(data.profile);
+        const encoded = encodeProfileStore(store);
+        data =
+          previous.kind === "corrupt"
+            ? {
+                ...data,
+                profile: encoded,
+                profileCorruptBackup: data.profileCorruptBackup ?? data.profile,
+              }
+            : { ...data, profile: carryUnknownKeys(data.profile, encoded) };
+        await persist();
+      });
+    },
+    async getSection<N extends "plan" | "learning" | "events">(name: N): Promise<SectionValue[N]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      // One cast: the three branches each return their own section type.
+      const value =
+        name === "plan"
+          ? (data.plan ?? emptyPlanSection())
+          : name === "learning"
+            ? (data.learning ?? {})
+            : (data.events ?? []);
+      return structuredClone(value) as SectionValue[N];
+    },
+    putSection<N extends "plan" | "learning">(name: N, value: SectionValue[N]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, [name]: structuredClone(value) };
+        await persist();
+      });
+    },
+    appendEvents(events: readonly VaultEvent[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, events: mergeEvents(data.events ?? [], events) };
         await persist();
       });
     },

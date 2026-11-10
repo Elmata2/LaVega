@@ -4,6 +4,18 @@ import { adminCopy } from "./admin.js";
 import { moneyCopy } from "./money.js";
 import { optimiseCopy } from "./optimise.js";
 import { apiErrorCopy } from "./apiErrors.js";
+import { intakeCopy } from "./intake.js";
+import {
+  assumptionsCopy,
+  bufferCopy,
+  cardsCopy,
+  debtsCopy,
+  goalsCopy,
+  monthCopy,
+  planShellCopy,
+  spendingCopy,
+  subscriptionsCopy,
+} from "./plan/index.js";
 
 /* The copy modules are typed `Record<Locale, T>`, so a missing English string
  * is normally a compile error. Normally is not always: a cast, an index
@@ -79,6 +91,16 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["money", moneyCopy],
   ["optimise", optimiseCopy],
   ["apiErrors", apiErrorCopy],
+  ["intake", intakeCopy],
+  ["plan/shell", planShellCopy],
+  ["plan/month", monthCopy],
+  ["plan/buffer", bufferCopy],
+  ["plan/debts", debtsCopy],
+  ["plan/spending", spendingCopy],
+  ["plan/subscriptions", subscriptionsCopy],
+  ["plan/cards", cardsCopy],
+  ["plan/goals", goalsCopy],
+  ["plan/assumptions", assumptionsCopy],
 ];
 
 test.each(MODULES)("%s has the same keys in both languages", (_name, copy) => {
@@ -113,4 +135,22 @@ test.each(MODULES)("%s English copy holds no Dutch", (_name, copy) => {
     .filter(([, v]) => DUTCH.some((w) => v.toLowerCase().includes(w)))
     .map(([k, v]) => `${k}: ${v}`);
   expect(leaks).toEqual([]);
+});
+
+/* A tester must never read the name of our plumbing. The allowlist is EMPTY on
+ * purpose: if a legitimate use turns up, add it HERE with a reason, not by
+ * loosening the pattern. */
+const INTERNALS = /n8n|webhook|messageid|workflow/i;
+const INTERNALS_ALLOWLIST: string[] = [];
+
+test.each(["nl", "en"] as const)("%s facturen, koppelingen copy names no internals", (lang) => {
+  const tree = {
+    facturen: adminCopy[lang].facturen,
+    koppelingen: adminCopy[lang].koppelingen,
+    apiErrors: apiErrorCopy[lang],
+  };
+  const hits = strings(tree)
+    .filter(([k, v]) => INTERNALS.test(v) && !INTERNALS_ALLOWLIST.includes(k))
+    .map(([k, v]) => `${k}: ${v}`);
+  expect(hits).toEqual([]);
 });

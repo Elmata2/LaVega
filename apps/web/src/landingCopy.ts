@@ -4,23 +4,34 @@ import type { Locale } from "./locale.js";
  * Every word on the landing page, in both languages.
  *
  * One shape, two values, so a string added to Dutch and forgotten in English is
- * a type error rather than a blank on the page. The English is written for a
- * different reader — investors and partners who arrive by link — so it is not a
- * literal translation of the Dutch: "van student tot ondernemer" is a Dutch
- * market segment, not an English one.
+ * a type error rather than a blank on the page. The English is the approved
+ * mockup's wording; the Dutch is written for a Dutch reader, not translated
+ * word for word.
  */
-type HowStep = { t: string; d: string };
+/** A heading whose last words are set in italics. */
+type Title = { lead: string; em: string };
+type TalkRow = [label: string, value: string, status: string];
+
+export type Talk = {
+  /** What the person asks, after "Hey LaVega,". */
+  q: string;
+  a: string;
+  label: string;
+  rows: [TalkRow, TalkRow, TalkRow];
+};
 
 export type LandingCopy = {
   meta: { title: string; description: string };
+  skip: string;
   nav: {
-    agents: string;
+    label: string;
     how: string;
-    signUp: string;
-    investing: string;
+    faq: string;
     login: string;
+    cta: string;
+    menu: string;
+    menuLanguage: string;
   };
-  beta: { lead: string; link: string };
   login: {
     intro: string;
     close: string;
@@ -32,329 +43,430 @@ export type LandingCopy = {
   };
   langSwitch: { label: string; to: string };
   hero: {
-    titleTop: string;
-    titleBottom: string;
+    eyebrow: string;
+    lineOne: string;
+    lineTwo: string;
+    em: string;
     sub: string;
-    ctaPrimary: string;
-    ctaSecondary: string;
+    shot: {
+      label: string;
+      tabs: [string, string, string, string, string];
+      title: string;
+      asOf: string;
+      source: string;
+      links: [string, string];
+      ok: string;
+      warn: string;
+      cards: Array<{ title: string; value: string; attention: boolean }>;
+    };
   };
-  device: {
-    eyebrow: string;
-    total: string;
-    delta: string;
-    rows: [{ label: string; value: string }, { label: string; value: string }];
-    returnLabel: string;
-    returnValue: string;
-    forecastLabel: string;
-    forecastValue: string;
-    lockChip: string;
+  view: { title: Title; lead: string };
+  problem: { title: Title; stat: string; note: string };
+  reveal: string;
+  does: {
+    title: Title;
+    stand: {
+      label: string;
+      total: string;
+      totalLabel: string;
+      accounts: [
+        { name: string; amount: string },
+        { name: string; amount: string },
+        { name: string; amount: string },
+      ];
+      title: string;
+      text: string;
+    };
+    move: {
+      gainLabel: string;
+      unit: string;
+      moves: [
+        { label: string; gain: number },
+        { label: string; gain: number },
+        { label: string; gain: number },
+      ];
+      title: string;
+      text: string;
+    };
+    watch: {
+      notes: [
+        { title: string; text: string },
+        { title: string; text: string },
+        { title: string; text: string },
+        { title: string; text: string },
+        { title: string; text: string },
+      ];
+      title: string;
+      text: string;
+      next: string;
+    };
   };
-  spiral: { ariaLabel: string; tagline: string };
-  agents: {
-    eyebrow: string;
+  quote: { text: string; cite: string };
+  acts: {
     title: string;
-    cards: Array<{ t: string; d: string }>;
+    hey: string;
+    who: string;
+    talks: [Talk, Talk];
+    soon: string;
   };
-  how: { eyebrow: string; title: string; steps: [HowStep, HowStep, HowStep] };
-  faq: { eyebrow: string; title: string; items: Array<{ q: string; a: string }> };
-  footer: {
-    cta: string;
-    note: string;
-    product: string;
-    legal: string;
-    privacy: string;
-    terms: string;
-    rights: string;
-  };
+  faq: { title: Title; items: Array<{ q: string; a: string }> };
+  end: { title: Title };
+  footer: { note: string; privacy: string; terms: string; contact: string };
 };
 
 const nl: LandingCopy = {
   meta: {
-    title: "LaVega – Al je rekeningen, één helder getal.",
+    title: "LaVega: je financieel adviseur met AI",
     description:
-      "Al je rekeningen en beleggingen in één overzicht: forecast, btw apart, abonnementen en rentes vergeleken. Alleen-lezen en versleuteld.",
+      "Zie al je geld in één beeld en vind je beste zet. Jij beslist, LaVega doet de rest.",
   },
+  skip: "Naar de inhoud",
   nav: {
-    agents: "Agents",
+    label: "Hoofdmenu",
     how: "Hoe het werkt",
-    signUp: "Account aanmaken",
-    investing: "Investing",
+    faq: "FAQ",
     login: "Inloggen",
-  },
-  beta: {
-    lead: "LaVega is in testfase. Iets onduidelijk of klopt er iets niet?",
-    link: "Laat het ons weten.",
+    cta: "Vraag vroege toegang aan",
+    menu: "Menu",
+    menuLanguage: "English",
   },
   login: {
     intro: "Log in met je LaVega-account.",
     close: "Sluiten",
-    signUpTitle: "Account aanmaken",
+    signUpTitle: "Vraag vroege toegang aan",
     signUpIntro:
       "Maak een LaVega-account aan. We sturen je een link om je e-mailadres te bevestigen.",
-    toSignUp: "Nog geen account? Account aanmaken",
+    toSignUp: "Nog geen account? Vraag vroege toegang aan",
     toSignIn: "Al een account? Inloggen",
     linkInvalid:
       "Deze bevestigingslink is ongeldig of verlopen. Log in met je e-mailadres en wachtwoord: we sturen dan een nieuwe link.",
   },
   langSwitch: { label: "EN", to: "Switch to English" },
   hero: {
-    titleTop: "Al je rekeningen,",
-    titleBottom: "één helder getal.",
-    sub: "LaVega bundelt al je rekeningen, bij elke bank, in één overzicht. Met LaVega Investing volg je ook je beleggingen.",
-    ctaPrimary: "Account aanmaken",
-    ctaSecondary: "Bekijk hoe het werkt",
+    eyebrow: "Je financieel adviseur met AI",
+    lineOne: "Haal het meeste",
+    lineTwo: "uit je",
+    em: "geld.",
+    sub: "Jij beslist, LaVega doet de rest.",
+    shot: {
+      label:
+        "Het scherm Jouw plan in LaVega, met je maand, buffer, schulden, uitgaven en abonnementen en bij elk een status",
+      tabs: ["Overzicht", "Jouw plan", "Rekeningen", "Forecast", "Optimalisatie"],
+      title: "Jouw plan",
+      asOf: "Plan per 2 november 2026",
+      source: "bankgegevens tot 1 november 2026; profiel bevestigd op 27 oktober 2026",
+      links: ["Wat LaVega weet", "Aannames"],
+      ok: "✓ Op koers",
+      warn: "! Aandacht",
+      cards: [
+        { title: "Jouw maand", value: "Doorsnee maand €842", attention: false },
+        { title: "Buffer", value: "2,4 maanden vaste lasten", attention: true },
+        { title: "Schulden", value: "€312 rente per jaar", attention: false },
+        { title: "Uitgaven per categorie", value: "Oktober: €1.946", attention: false },
+        { title: "Abonnementen", value: "€47 per maand", attention: true },
+        {
+          title: "Kaarten en punten",
+          value: "€1.420 aan uitgaven die op een kaart passen",
+          attention: false,
+        },
+      ],
+    },
   },
-  device: {
-    eyebrow: "Totaalpositie",
-    total: "€12.480",
-    delta: "▲ 4,6% deze maand",
-    rows: [
-      { label: "Bankrekeningen", value: "€8.130" },
-      { label: "Beleggingen", value: "€4.350" },
+  view: {
+    title: { lead: "Al je geld in", em: "beeld." },
+    lead: "Elke rekening, kaart en belegging in één beeld.",
+  },
+  problem: {
+    title: { lead: "De meeste mensen hebben hun financiën niet", em: "op orde." },
+    stat: "28%",
+    note: "van de Nederlanders scoort hoog op financiële geletterdheid. Flash Eurobarometer 525.",
+  },
+  reveal:
+    "De meeste geldapps laten één deel van je geld zien. LaVega kijkt naar alles en vindt je beste zet.",
+  does: {
+    title: { lead: "Je copiloot voor elke", em: "geldbeslissing" },
+    stand: {
+      label: "Toon de volgende rekening",
+      total: "€48.883,27",
+      totalLabel: "Alle rekeningen",
+      accounts: [
+        { name: "Betaalrekening", amount: "€4.218,40" },
+        { name: "Spaarrekening", amount: "€12.760,15" },
+        { name: "Beleggingen", amount: "€31.904,72" },
+      ],
+      title: "Waar sta ik?",
+      text: "Alles wat je bezit, op één scherm.",
+    },
+    move: {
+      gainLabel: "Beter af met",
+      unit: "per maand",
+      moves: [
+        { label: "3 abonnementen opzeggen", gain: 47 },
+        { label: "Meer rente op je spaargeld", gain: 18 },
+        { label: "Overstappen op een betere kaart", gain: 12 },
+      ],
+      title: "Wat is mijn beste zet?",
+      text: "Een plan rond jouw geld. Vink af wat je wilt.",
+    },
+    watch: {
+      notes: [
+        { title: "Wekelijkse check", text: "Je gaf €62 minder uit dan gewoonlijk" },
+        { title: "Salaris is binnen", text: "€400 naar je spaargeld verplaatsen?" },
+        { title: "Proefperiode loopt af", text: "Een gratis proef wordt over 3 dagen betaald" },
+        { title: "Huur is gestegen", text: "€35 meer dan vorige maand" },
+        { title: "Betere rente", text: "Je spaargeld kan meer opleveren" },
+      ],
+      title: "LaVega blijft opletten.",
+      text: "Een wekelijkse check en een seintje als er iets verandert.",
+      next: "Komt als volgende.",
+    },
+  },
+  quote: {
+    text: "“Het is een black box. Pas aan het einde van het kwartaal weet ik waar ik sta.”",
+    cite: "Nederlandse start-upondernemer",
+  },
+  acts: {
+    title: "Maak kennis met je AI financieel adviseur. Die geeft niet alleen advies. Die handelt",
+    hey: "Hey LaVega,",
+    who: "LaVega",
+    talks: [
+      {
+        q: "betaal ik voor dingen die ik niet gebruik, en kun je dat regelen?",
+        a: "Ik ben er al mee bezig. Je zei ja, dus ik heb drie abonnementen opgezegd en je overtollige geld naar je spaargeld verplaatst. Dit is het overzicht.",
+        label: "Overzicht",
+        rows: [
+          ["Abonnementen", "€47 per maand", "Opgezegd"],
+          ["Overtollig geld", "€3.200", "Verplaatst"],
+          ["Volgende check", "Maandag", "Gepland"],
+        ],
+      },
+      {
+        q: "verplaats elke maand €200 naar mijn spaargeld.",
+        a: "Gedaan. Ik verplaats het op de 1e, direct nadat je salaris binnen is, en laat je buffer intact. Dit is het plan.",
+        label: "Plan",
+        rows: [
+          ["Bedrag", "€200 per maand", "Ingesteld"],
+          ["Eerste keer", "1 december", "Gepland"],
+          ["Je buffer", "€1.500", "Intact"],
+        ],
+      },
     ],
-    returnLabel: "Rendement · 1 jaar",
-    returnValue: "+15,4%",
-    forecastLabel: "Forecast · 13 weken",
-    forecastValue: "geen tekort",
-    lockChip: "Versleuteld & alleen-lezen",
-  },
-  spiral: {
-    ariaLabel: "Al je geld in beeld",
-    tagline: "Al je geld in beeld, ook wat het laat liggen.",
-  },
-  agents: {
-    eyebrow: "Wat LaVega doet",
-    title: "Wat LaVega voor je doet",
-    cards: [
-      {
-        t: "Facturen",
-        d: "Voeg facturen toe via CSV, UBL of PDF. Met de AI-optie leest LaVega de PDF uit; jij bevestigt.",
-      },
-      {
-        t: "Belasting",
-        d: "Houdt je btw apart en elke aangifte-deadline in de gaten.",
-      },
-      {
-        t: "Valuta",
-        d: "Rangschikt banken op wat wisselen echt kost, met de actuele ECB-koers als maatstaf.",
-      },
-      {
-        t: "Punten",
-        d: "Houdt de saldi bij die jij invult, van spaarpunten tot reisprogramma's, op één plek.",
-      },
-      {
-        t: "LaVega Investing",
-        d: "Koppel Trading 212 en Interactive Brokers alleen-lezen en zie je echte rendement en risico.",
-      },
-      {
-        t: "Optimalisatie",
-        d: "Vindt abonnementen en betere spaarrentes in je transacties.",
-      },
-    ],
-  },
-  how: {
-    eyebrow: "Hoe het werkt",
-    title: "In een paar minuten opgezet",
-    steps: [
-      {
-        t: "Importeer of koppel",
-        d: "Sleep je bankexports erin, of koppel je bank of broker alleen-lezen.",
-      },
-      { t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
-      {
-        t: "Blijf vooruit",
-        d: "Een seintje als je buffer krap wordt, je btw al apart gezet en je beleggingen met je echte rendement in beeld.",
-      },
-    ],
+    soon: "Goedgekeurde acties komen als volgende.",
   },
   faq: {
-    eyebrow: "FAQ",
-    title: "Veelgestelde vragen",
+    title: { lead: "Vragen,", em: "beantwoord" },
     items: [
       {
-        q: "Is mijn data veilig?",
-        a: "Ja, met een kanttekening: wij bewaren de sleutels, dus technisch kunnen wij erbij. Je transacties staan versleuteld in je browser. Je beleggingsdata staat versleuteld op onze server, per account afgeschermd. Je bank loopt via onze server, maar transacties slaan we daar niet op. Bank en broker zijn alleen-lezen.",
+        q: "Zijn mijn gegevens veilig?",
+        a: "Je transacties worden in je browser versleuteld. Wij bewaren de sleutels, dus technisch kunnen wij erbij. Bank- en brokerkoppelingen zijn alleen-lezen.",
       },
       {
         q: "Kan LaVega geld verplaatsen?",
-        a: "Nee. LaVega leest alleen mee. De app heeft geen functie om betalingen te doen of orders te plaatsen.",
+        a: "Nu nog niet. LaVega leest alleen mee en heeft geen functie om betalingen te doen. Goedgekeurde acties komen als volgende, en er gebeurt niets voordat jij het goedkeurt.",
       },
       {
         q: "Moet ik mijn bank koppelen?",
-        a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
+        a: "Nee. Je kunt in plaats daarvan je bankexports importeren.",
       },
       {
-        q: "Welke brokers kan ik koppelen in LaVega Investing?",
-        a: "Trading 212 en Interactive Brokers (IBKR, via een Flex-query). De koppeling is alleen-lezen. Eén LaVega-account geeft je het persoonlijke deel én Investing.",
+        q: "Wat kost het?",
+        a: "€30 per maand na een gratis proefperiode van 30 dagen. Je hebt geen kaart nodig om te beginnen en je kunt altijd opzeggen.",
       },
       {
-        q: "Werkt het met meerdere rekeningen en BV's?",
-        a: "Ja. LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
+        q: "Geeft LaVega beleggingsadvies?",
+        a: "Nee. LaVega toont en verklaart je beleggingen. Het beveelt ze nooit aan en koopt ze nooit.",
       },
       {
-        q: "Voor wie is LaVega?",
-        a: "Voor iedereen die rekeningen bij meer dan één bank heeft of belegt bij Trading 212 of IBKR, en het overzicht kwijt is. Met Zakelijk ook voor zzp'ers en BV's: btw apart, privé en zakelijk gescheiden.",
-      },
-      {
-        q: "Kan ik mijn account en gegevens verwijderen?",
-        a: "Je gegevens op de server verwijder je zelf onder Back-up met de knop Servergegevens verwijderen: back-up, bank- en brokerkoppelingen, koersgeschiedenis, AI-runs en instellingen. Ook de kluissleutel gaat weg, dus de kluis in je browser en elke gedownloade back-up zijn daarna onleesbaar. Je inlogaccount zelf kun je in de app nog niet verwijderen.",
+        q: "Kan ik mijn gegevens verwijderen?",
+        a: "Ja. De gegevens op onze server verwijder je zelf, onder Back-up in de app. Je inlogaccount zelf kun je in de app nog niet verwijderen.",
       },
     ],
   },
+  end: { title: { lead: "Je hebt je geld", em: "onder controle." } },
   footer: {
-    cta: "Account aanmaken",
-    note: "Personal finance en beleggen in één account, van student tot ondernemer.",
-    product: "Product",
-    legal: "Juridisch",
+    note: "LaVega toont en verklaart je beleggingen. Het beveelt ze nooit aan en koopt ze nooit.",
     privacy: "Privacy",
     terms: "Voorwaarden",
-    rights: "© 2026 LaVega",
+    contact: "Contact",
   },
 };
 
 const en: LandingCopy = {
   meta: {
-    title: "LaVega – Every account, one clear number.",
+    title: "LaVega: your AI financial adviser",
     description:
-      "Every account and investment in one view: forecast, VAT set aside, subscriptions and savings rates compared. Read-only and encrypted.",
+      "See all your money in one picture and find your best move. You decide, LaVega does the rest.",
   },
+  skip: "Skip to content",
   nav: {
-    agents: "Agents",
+    label: "Main",
     how: "How it works",
-    signUp: "Create account",
-    investing: "Investing",
-    login: "Sign in",
+    faq: "FAQ",
+    login: "Log in",
+    cta: "Get early access",
+    menu: "Menu",
+    menuLanguage: "Nederlands",
   },
-  beta: { lead: "LaVega is in beta. Something unclear or wrong?", link: "Let us know." },
   login: {
-    intro: "Sign in with your LaVega account.",
+    intro: "Log in with your LaVega account.",
     close: "Close",
-    signUpTitle: "Create account",
+    signUpTitle: "Get early access",
     signUpIntro: "Create a LaVega account. We will email you a link to confirm your address.",
-    toSignUp: "No account yet? Create account",
-    toSignIn: "Already have an account? Sign in",
+    toSignUp: "No account yet? Get early access",
+    toSignIn: "Already have an account? Log in",
     linkInvalid:
-      "This confirmation link is invalid or has expired. Sign in with your email and password and we will send you a new one.",
+      "This confirmation link is invalid or has expired. Log in with your email and password and we will send you a new one.",
   },
   langSwitch: { label: "NL", to: "Bekijk deze pagina in het Nederlands" },
   hero: {
-    titleTop: "Every account,",
-    titleBottom: "one clear number.",
-    sub: "LaVega brings every account you hold, at any bank, into a single view. With LaVega Investing you follow your investments too.",
-    ctaPrimary: "Create account",
-    ctaSecondary: "See how it works",
+    eyebrow: "Your AI financial adviser",
+    lineOne: "Get the most",
+    lineTwo: "from your",
+    em: "money.",
+    sub: "You decide, LaVega does the rest.",
+    shot: {
+      label:
+        "The Your plan screen in LaVega, listing your month, buffer, debts, spending and subscriptions with a status for each",
+      tabs: ["Overview", "Your plan", "Accounts", "Forecast", "Optimise"],
+      title: "Your plan",
+      asOf: "Plan as of 2 November 2026",
+      source: "bank data to 1 November 2026; profile confirmed 27 October 2026",
+      links: ["What LaVega knows", "Assumptions"],
+      ok: "✓ On track",
+      warn: "! Attention",
+      cards: [
+        { title: "Your month", value: "Middle month €842", attention: false },
+        { title: "Buffer", value: "2.4 months of fixed costs", attention: true },
+        { title: "Debts", value: "€312 interest a year", attention: false },
+        { title: "Spending per category", value: "October: €1,946", attention: false },
+        { title: "Subscriptions", value: "€47 a month", attention: true },
+        {
+          title: "Cards and points",
+          value: "€1,420 of spending that fits on a card",
+          attention: false,
+        },
+      ],
+    },
   },
-  device: {
-    eyebrow: "Total position",
-    total: "€12,480",
-    delta: "▲ 4.6% this month",
-    rows: [
-      { label: "Bank accounts", value: "€8,130" },
-      { label: "Investments", value: "€4,350" },
+  view: {
+    title: { lead: "All your money in", em: "view." },
+    lead: "Every account, card and investment in one picture.",
+  },
+  problem: {
+    title: { lead: "Most people don't have their finances", em: "together." },
+    stat: "28%",
+    note: "of Dutch people score high on financial literacy. Flash Eurobarometer 525.",
+  },
+  reveal:
+    "Most money apps show one part of your money. LaVega looks at all of it and finds your best move.",
+  does: {
+    title: { lead: "Your copilot for every money", em: "decision" },
+    stand: {
+      label: "Show the next account",
+      total: "€48,883.27",
+      totalLabel: "All accounts",
+      accounts: [
+        { name: "Current account", amount: "€4,218.40" },
+        { name: "Savings", amount: "€12,760.15" },
+        { name: "Investments", amount: "€31,904.72" },
+      ],
+      title: "Where do I stand?",
+      text: "Everything you own, on one screen.",
+    },
+    move: {
+      gainLabel: "Better off by",
+      unit: "a month",
+      moves: [
+        { label: "Cancel 3 subscriptions", gain: 47 },
+        { label: "Earn more on savings", gain: 18 },
+        { label: "Switch to a better card", gain: 12 },
+      ],
+      title: "What's my best move?",
+      text: "A plan built around your money. Tick what you want.",
+    },
+    watch: {
+      notes: [
+        { title: "Weekly check", text: "You spent €62 less than usual" },
+        { title: "Salary is in", text: "Put €400 towards savings?" },
+        { title: "Trial ending", text: "A free trial turns paid in 3 days" },
+        { title: "Rent went up", text: "€35 more than last month" },
+        { title: "Better rate", text: "Your savings could earn more" },
+      ],
+      title: "LaVega keeps watching.",
+      text: "A weekly check, and a nudge when something changes.",
+      next: "Ships next.",
+    },
+  },
+  quote: {
+    text: "“It’s a black box. Only at the end of the quarter do I know where I am standing.”",
+    cite: "NL start-up owner",
+  },
+  acts: {
+    title: "Meet your AI financial adviser. It doesn't just advise. It acts",
+    hey: "Hey LaVega,",
+    who: "LaVega",
+    talks: [
+      {
+        q: "am I paying for things I don't use, and can you sort it out?",
+        a: "Already on it. You said yes, so I cancelled three subscriptions and moved your spare cash to savings. Here's the breakdown.",
+        label: "Breakdown",
+        rows: [
+          ["Subscriptions", "€47 a month", "Cancelled"],
+          ["Spare cash", "€3,200", "Moved"],
+          ["Next check", "Monday", "Planned"],
+        ],
+      },
+      {
+        q: "move €200 to savings every month.",
+        a: "Done. I'll move it on the 1st, right after your salary lands, and keep your buffer intact. Here's the plan.",
+        label: "Plan",
+        rows: [
+          ["Amount", "€200 a month", "Set"],
+          ["First move", "1 December", "Planned"],
+          ["Your buffer", "€1,500", "Kept"],
+        ],
+      },
     ],
-    returnLabel: "Return · 1 year",
-    returnValue: "+15.4%",
-    forecastLabel: "Forecast · 13 weeks",
-    forecastValue: "no shortfall",
-    lockChip: "Encrypted & read-only",
-  },
-  spiral: {
-    ariaLabel: "All your money in view",
-    tagline: "All your money in view, including what it leaves on the table.",
-  },
-  agents: {
-    eyebrow: "What LaVega does",
-    title: "What LaVega does for you",
-    cards: [
-      {
-        t: "Invoices",
-        d: "Add invoices via CSV, UBL or PDF. With the AI option LaVega reads the PDF and you confirm it.",
-      },
-      {
-        t: "Tax",
-        d: "Sets your VAT aside and watches every filing deadline.",
-      },
-      {
-        t: "Currency",
-        d: "Ranks banks by what converting really costs, with the current ECB rate as the yardstick.",
-      },
-      {
-        t: "Points",
-        d: "Keeps the reward and travel balances you enter in one place.",
-      },
-      {
-        t: "LaVega Investing",
-        d: "Connect Trading 212 and Interactive Brokers read-only and see your real return and risk.",
-      },
-      {
-        t: "Optimise",
-        d: "Finds subscriptions and better savings rates in your transactions.",
-      },
-    ],
-  },
-  how: {
-    eyebrow: "How it works",
-    title: "Set up in a few minutes",
-    steps: [
-      {
-        t: "Import or connect",
-        d: "Drop in your bank exports, or connect your bank or broker read-only.",
-      },
-      {
-        t: "LaVega does the maths",
-        d: "Categorises automatically and forecasts your cash position ahead.",
-      },
-      {
-        t: "Stay ahead",
-        d: "A heads-up when your buffer runs low, your VAT already set aside, and your investments in view with your real return.",
-      },
-    ],
+    soon: "Approved actions ship next.",
   },
   faq: {
-    eyebrow: "FAQ",
-    title: "Frequently asked questions",
+    title: { lead: "Questions,", em: "answered" },
     items: [
       {
         q: "Is my data safe?",
-        a: "Yes, with one caveat: we hold the keys, so technically we can access your data. Your transactions are encrypted in your browser. Your investing data is encrypted on our server, shielded per account. Your bank connection runs through our server, but we do not store transactions there. Bank and broker connections are read-only.",
+        a: "Your transactions are encrypted in your browser. We hold the keys, so technically we can access your data. Bank and broker connections are read only.",
       },
       {
         q: "Can LaVega move money?",
-        a: "No. LaVega only reads. The app has no function to make payments or place orders.",
+        a: "Not today. LaVega only reads, and it has no function to make payments. Approved actions ship next, and nothing happens until you approve it.",
       },
       {
         q: "Do I have to connect my bank?",
-        a: "No. You can simply import your bank exports. Connecting is available, and when you do it is read-only, never payments.",
+        a: "No. You can import your bank exports instead.",
       },
       {
-        q: "Which brokers can I connect in LaVega Investing?",
-        a: "Trading 212 and Interactive Brokers (IBKR, through a Flex query). The connection is read-only. One LaVega account gives you both Personal and Investing.",
+        q: "What does it cost?",
+        a: "€30 a month after a free 30 day trial. No card needed to start, and you can cancel any time.",
       },
       {
-        q: "Does it handle multiple accounts and entities?",
-        a: "Yes. LaVega brings every account together, personal and business, both per entity and consolidated.",
+        q: "Does LaVega give investment advice?",
+        a: "No. LaVega shows and explains your investments. It never recommends or buys them.",
       },
       {
-        q: "Who is LaVega for?",
-        a: "Anyone with accounts at more than one bank, or investing through Trading 212 or IBKR, who has lost the overview. With Business mode also for freelancers and limited companies: VAT set aside, personal and business kept apart.",
-      },
-      {
-        q: "Can I delete my account and data?",
-        a: "You delete the data on the server yourself under Backup with the Delete server data button: backup, bank and broker connections, price history, AI runs and settings. The vault key goes too, so the vault in your browser and every downloaded backup are unreadable afterwards. You cannot yet delete the sign-in account itself from within the app.",
+        q: "Can I delete my data?",
+        a: "Yes. You delete the data on our server yourself, under Backup in the app. You cannot yet delete the sign-in account itself from within the app.",
       },
     ],
   },
+  end: { title: { lead: "You've got your money", em: "handled." } },
   footer: {
-    cta: "Create account",
-    note: "Personal finance and investing in one account, for people whose income does not arrive neatly.",
+    note: "LaVega shows and explains your investments. It never recommends or buys them.",
     /* The policy and terms themselves stay Dutch: they are legal documents for a
      * Dutch company and the Dutch text is the operative one. Translating them
      * would invite someone to rely on a version that is not. */
-    product: "Product",
-    legal: "Legal",
     privacy: "Privacy",
     terms: "Terms",
-    rights: "© 2026 LaVega",
+    contact: "Contact",
   },
 };
 

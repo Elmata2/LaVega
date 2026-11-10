@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { CSP_FALLBACK_META } from "./src/csp.js";
+import { previewPlugin } from "./vite-preview-plugin";
 
 /* A <meta http-equiv="Content-Security-Policy"> fallback for the built shell,
  * mirroring the header that `scripts/vercel-build.mjs` sets on the CDN (see
@@ -40,11 +41,12 @@ const sentryProject = process.env.SENTRY_PROJECT;
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 const uploadSourceMaps = Boolean(sentryOrg && sentryProject && sentryAuthToken);
 
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     react(),
     cspMetaPlugin(),
-    ...(uploadSourceMaps
+    ...(process.env.LAVEGA_PREVIEW === "1" ? [previewPlugin()] : []),
+    ...(uploadSourceMaps && !isSsrBuild
       ? sentryVitePlugin({
           org: sentryOrg,
           project: sentryProject,
@@ -60,10 +62,16 @@ export default defineConfig({
         }).map((plugin) => ({ ...plugin, apply: "build" as const }))
       : []),
   ],
-  build: { sourcemap: uploadSourceMaps ? "hidden" : false },
+  /* The pre-render SSR build (`vite build --ssr`) is a throwaway Node bundle: no
+   * source-map upload and no hidden maps, or it would land under the browser release. */
+  build: { sourcemap: uploadSourceMaps && !isSsrBuild ? "hidden" : false },
+  /* It also gets no VITE_ variables. With the deployment's VITE_POSTHOG_KEY in the
+   * bundle, posthog.ts calls posthog.init at import, which is not a function under
+   * Node, and the deploy failed. The pre-render only emits static markup. */
+  envPrefix: isSsrBuild ? "LAVEGA_PRERENDER_ONLY_" : "VITE_",
   define: { __LAVEGA_BUILD__: JSON.stringify(`${sha} \u00b7 ${day}`) },
   test: {
     setupFiles: ["./src/testSetup.ts"],
     globalSetup: ["./src/test-support/buildSheet.ts"],
   },
-});
+}));

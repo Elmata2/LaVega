@@ -323,21 +323,6 @@ test("Server-Timing names a built dashboard's phases and a stored one's, and not
   expect(stored.phases).toEqual(["stored"]);
 });
 
-test("the in-process cache recomputes only after its data version changes", async () => {
-  const priceStore = createInMemoryPriceStore();
-  const getRange = vi.spyOn(priceStore, "getRange");
-  const sources = makeSources({ data: snapshot(), priceStore });
-
-  await runRead(sources);
-  const afterFirst = getRange.mock.calls.length;
-  await runRead(sources);
-  expect(getRange).toHaveBeenCalledTimes(afterFirst);
-
-  sources.dashboardCache.invalidate();
-  await runRead(sources);
-  expect(getRange.mock.calls.length).toBeGreaterThan(afterFirst);
-});
-
 test("the read never hands Postgres a year-zero date", async () => {
   const priceStore = createInMemoryPriceStore();
   const getRange = vi

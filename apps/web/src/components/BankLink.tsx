@@ -34,10 +34,17 @@ function isHttpsUrl(value: string): boolean {
 export default function BankLink({
   busy,
   onRefresh,
+  onBeforeRedirect,
+  defaultPsuType = "business",
 }: {
   busy: boolean;
   /** Re-read every connected bank. See App's `handleRefreshBank`. */
   onRefresh: () => void;
+  /** Awaited just before the browser leaves for the bank. The intake saves its
+   *  place here, so the return trip can resume. A throw cancels the redirect
+   *  and shows as the usual bank-link error. */
+  onBeforeRedirect?: () => void | Promise<void>;
+  defaultPsuType?: PsuType;
 }) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale];
@@ -45,7 +52,7 @@ export default function BankLink({
     business: c.bankLink.zakelijk,
     personal: c.bankLink.particulier,
   };
-  const [psuType, setPsuType] = useState<PsuType>("business");
+  const [psuType, setPsuType] = useState<PsuType>(defaultPsuType);
   const [aspsps, setAspsps] = useState<Aspsp[] | null>(null);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
@@ -110,6 +117,7 @@ export default function BankLink({
         setLoading(false);
         return;
       }
+      await onBeforeRedirect?.();
       window.location.href = data.url; // hand off to the bank's authorisation page
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

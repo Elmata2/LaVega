@@ -40,14 +40,17 @@ test("the English copy is not just the Dutch copy", () => {
   const en = new Map(leaves(landingCopy("en")));
   // Some strings are legitimately identical across both — brand and loanwords.
   const SHARED = new Set([
-    "nav.agents",
-    "nav.investing",
-    "faq.eyebrow",
-    "footer.product",
+    // Product name, a loanword and the bare statistic.
+    "nav.faq",
+    "acts.hey",
+    "acts.who",
     "footer.privacy",
-    // Product name and the bare copyright line.
-    "agents.cards[4].t",
-    "footer.rights",
+    "footer.contact",
+    "problem.stat",
+    "nav.menu",
+    "hero.shot.tabs[3]",
+    "hero.shot.cards[1].title",
+    "acts.talks[1].label",
   ]);
   const untranslated = [...nl.entries()].filter(([k, v]) => !SHARED.has(k) && en.get(k) === v);
   expect(untranslated.map(([k]) => k)).toEqual([]);
@@ -74,11 +77,15 @@ test("LANDING_COPY covers every locale the app can route to", () => {
 });
 
 test("no landing component hardcodes Dutch copy instead of reading it from landingCopy", () => {
-  const componentFiles = ["views/Landing.tsx", "views/CardSpiral.tsx"];
-  // Found by rendering /en and grepping the output for Dutch: CardSpiral's section
-  // aria-label and its tagline were literals, not `landingCopy` lookups, so they
-  // never switched with the locale.
-  const dutchLeaks = ["Al je geld in beeld", "wat het laat liggen"];
+  const componentFiles = [
+    "views/Landing.tsx",
+    "views/landing/Conversation.tsx",
+    "views/landing/ThreeBoxes.tsx",
+    "views/landing/RevealWords.tsx",
+  ];
+  // Found by rendering /en and grepping the output for Dutch: literals instead of
+  // `landingCopy` lookups never switch with the locale.
+  const dutchLeaks = ["Al je geld", "Vraag vroege toegang", "Hoe het werkt", "Inloggen"];
   for (const file of componentFiles) {
     const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
     for (const leak of dutchLeaks) {
