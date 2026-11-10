@@ -1,6 +1,6 @@
 // Renders brand PNGs with headless Chrome. Run: pnpm --filter @lavega/site exec tsx scripts/make-images.mjs
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,7 +9,7 @@ import { landingCopy } from "../../web/src/landingCopy.ts";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../../..");
-const serif = resolve(repo, "apps/site/assets/fonts/instrument-serif-latin-400-normal.woff2");
+const serif = resolve(repo, "apps/site/assets/fonts/libron-regular.woff2");
 const logo = resolve(repo, "LaVega_wordmark_hires_white.png");
 const outBrand = resolve(here, "../assets/brand");
 const outOg = resolve(here, "../assets/og");
@@ -25,24 +25,44 @@ const tmp = mkdtempSync(join(tmpdir(), "lavega-og-"));
 const url = (p) => pathToFileURL(p).href;
 
 function shot(pageUrl, out, w, h) {
-  execFileSync(
-    CHROME,
-    [
-      "--headless=new",
-      "--disable-gpu",
-      "--hide-scrollbars",
-      "--default-background-color=00000000",
-      `--screenshot=${out}`,
-      `--window-size=${w},${h}`,
-      "--virtual-time-budget=3000",
-      pageUrl,
-    ],
-    { stdio: "ignore" },
-  );
+  try {
+    execFileSync(
+      CHROME,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        "--default-background-color=00000000",
+        `--screenshot=${out}`,
+        `--window-size=${w},${h}`,
+        "--virtual-time-budget=3000",
+        pageUrl,
+      ],
+      { stdio: "ignore" },
+    );
+  } catch (error) {
+    /* Headless Chrome on macOS writes the screenshot and then trips its teardown
+     * watchdog, exiting non-zero ("Teardown watchdog expired"). The image is
+     * already on disk, so accept a written, non-empty PNG instead of failing the
+     * whole run; anything else (no file, empty file) is still an error. */
+    if (!isWrittenPng(out)) throw error;
+  }
+  if (!isWrittenPng(out)) throw new Error(`headless Chrome wrote no screenshot to ${out}`);
 }
 
+function isWrittenPng(file) {
+  try {
+    const head = readFileSync(file).subarray(0, 8);
+    return statSync(file).size > 0 && head.equals(PNG_SIGNATURE);
+  } catch {
+    return false;
+  }
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 const template = readFileSync(resolve(here, "og-card.html"), "utf8")
-  .replace("__SERIF_400__", url(serif))
+  .replace("__LIBRON_400__", url(serif))
   .replace("__LOGO__", url(logo));
 const card = join(tmp, "og-card.html");
 writeFileSync(card, template);

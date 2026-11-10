@@ -32,8 +32,10 @@
   #root {
     height: 100%;
   }
-  /* Instrument Serif is a condensed display face and reads about one size
-   * smaller than the sans it replaces; the whole rem scale moves up with it. */
+  /* Libron and the Instrument Serif it replaced have the same cap height
+   * (0.709 vs 0.720 em), so the 17px rem scale still holds. Libron is a book
+   * serif rather than a condensed display face: it is wider per glyph and has a
+   * slightly larger x-height, so lines set wider and read calmer. */
   html {
     font-size: 17px;
     background: var(--gutter);

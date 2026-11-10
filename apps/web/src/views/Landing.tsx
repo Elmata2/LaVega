@@ -49,7 +49,7 @@ function Heading({ lead, em }: { lead: string; em: string }) {
   );
 }
 
-/** Public marketing landing page: midnight palette, Instrument Serif, the
+/** Public marketing landing page: midnight palette, Libron, the
  *  gradient only in the hero and the closing call to action. Every "get early
  *  access" button opens the auth dialog on its sign-up view; "Log in" opens it
  *  on sign-in and enters the vault (`/app`) via `onEnter`. */

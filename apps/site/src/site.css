@@ -1,10 +1,31 @@
-/* LaVega content pages. Midnight tokens and Instrument Serif from apps/web/src/styles/landing.css. */
+/* LaVega content pages. Midnight tokens and Libron from apps/web/src/styles/landing.css. */
 @font-face {
-  font-family: "Instrument Serif";
+  font-family: "Libron";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+  src: url("/fonts/libron-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Libron";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/libron-bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Libron";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/libron-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Libron";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/libron-bold-italic.woff2") format("woff2");
 }
 :root {
   color-scheme: dark;
@@ -18,8 +39,8 @@
   --accent-soft: rgba(2, 151, 222, 0.12);
   --warn: #fc734d;
   --on-warn: #02070a;
-  --font-display: "Instrument Serif", Georgia, serif;
-  --font-body: "Instrument Serif", Georgia, serif;
+  --font-display: "Libron", Georgia, serif;
+  --font-body: "Libron", Georgia, serif;
   --r-sm: 12px;
 }
 *,

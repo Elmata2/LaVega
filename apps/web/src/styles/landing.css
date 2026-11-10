@@ -1,6 +1,6 @@
 /* LaVega public landing page. Ported from the approved mockup
  * (docs/superpowers/specs/2026-11-02-website-redesign-mockup.html): midnight
- * palette, Instrument Serif everywhere on the page, the cantaloupe gradient
+ * palette, Libron everywhere on the page, the cantaloupe gradient
  * only in the hero and the closing call to action.
  *
  * Every page rule is scoped under `.lp` so it never reaches the app, and sits
@@ -37,7 +37,7 @@
     --gutter: clamp(20px, 5vw, 80px);
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --space: clamp(112px, 15vw, 216px);
-    --serif: "Instrument Serif", Georgia, serif;
+    --serif: "Libron", Georgia, serif;
 
     min-height: 100vh;
     color: var(--text);
@@ -975,7 +975,7 @@
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   width: 100%;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-size: 1.15rem;
   line-height: 1.4;
   color: #fff;
@@ -1014,7 +1014,7 @@
   }
 }
 .lp-signin-dialog h2 {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-weight: 400;
   font-size: 2.2rem;
   line-height: 1.05;
@@ -1027,7 +1027,7 @@
 .lp-signin-dialog input,
 .lp-signin-dialog button,
 .lp-signin-dialog span {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
 }
 .lp-signin-dialog p {
   margin: 0 0 16px;
@@ -1151,7 +1151,7 @@
   background: #16222a;
   border: 0;
   border-radius: 999px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-size: 1.6rem;
   line-height: 1;
   color: #fff;
