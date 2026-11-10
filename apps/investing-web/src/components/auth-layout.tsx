@@ -13,9 +13,7 @@ export const AUTH_HONESTY =
   "Your data is encrypted. We hold the keys, so technically we can access your data. Broker connections are read only.";
 
 export function AuthHonestyLine() {
-  return (
-    <p className="text-left text-sm leading-relaxed text-foreground">{AUTH_HONESTY}</p>
-  );
+  return <p className="text-left text-sm leading-relaxed text-foreground">{AUTH_HONESTY}</p>;
 }
 
 /* Context above the form: wordmark, headline and the read-only promise. Wide
