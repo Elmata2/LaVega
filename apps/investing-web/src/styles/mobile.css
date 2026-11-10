@@ -1,0 +1,42 @@
+/* Mobile touch targets + sideways-scroll affordance for investing-web.
+   Imported after tokens.css (see main.tsx) so these plain-CSS rules win the
+   cascade. Everything here is scoped to <=640px; >=641px is left untouched.
+   tokens.css (the [data-fade] mask and all color vars) is owned elsewhere and
+   is never edited here. */
+
+@media (max-width: 640px) {
+  /* Impeccable P3 @390px: these toggles measured well under the 44x44 CSS px
+     minimum. Selectors are the real aria-labels on the controls — the period
+     segment, the chart legend ("Your portfolio"), and the allocation list's
+     "Other (N)" toggle. No invented classes; no copy, numbers or data change.
+     min-height/min-width (not transform/scale) grows the hit area. */
+  [aria-label="Choose period"] button,
+  [aria-label="Chart series"] button,
+  [aria-label="Allocation details"] button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* The existing @utility scroll-fade-x mask (set via [data-fade]) stays intact;
+     this only ADDS a cue. Sticky pins the chevron 30px inside the right edge —
+     past the 28px mask fade — so it is always visible, needs no hover, and reads
+     on both the midnight and paper palettes. Clicks pass through to the pills. */
+  .scroll-fade-x::after {
+    content: "→";
+    position: sticky;
+    right: 30px;
+    flex: none;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: hsl(var(--background) / 0.85);
+    color: hsl(var(--muted-foreground));
+    font-size: 14px;
+    line-height: 1;
+    pointer-events: none;
+  }
+}
