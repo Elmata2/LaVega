@@ -6,15 +6,19 @@
 import { readFileSync } from "node:fs";
 
 const css = readFileSync(new URL("../src/styles/tokens.css", import.meta.url), "utf8");
-const start = css.indexOf(":root {");
-if (start < 0) throw new Error("no :root block in tokens.css");
-const block = css.slice(start, css.indexOf("\n  }", start));
-const tokens = Object.fromEntries(
-  [...block.matchAll(/--([\w-]+):\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*;/g)].map((m) => [
-    m[1],
-    [Number(m[2]), Number(m[3]) / 100, Number(m[4]) / 100],
-  ]),
-);
+const parse = (selector) => {
+  const start = css.indexOf(`${selector} {`);
+  if (start < 0) throw new Error(`no ${selector} block in tokens.css`);
+  const block = css.slice(start, css.indexOf("\n  }", start));
+  return Object.fromEntries(
+    [...block.matchAll(/--([\w-]+):\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*;/g)].map((m) => [
+      m[1],
+      [Number(m[2]), Number(m[3]) / 100, Number(m[4]) / 100],
+    ]),
+  );
+};
+const themes = { dark: parse(":root"), light: parse(':root[data-theme="light"]') };
+let tokens = themes.dark;
 
 const rgb = ([h, s, l]) => {
   const a = s * Math.min(l, 1 - l);
@@ -36,30 +40,31 @@ const ratio = (a, b) => {
 };
 
 const grounds = ["background", "card", "secondary"];
-const text = [
-  "foreground",
-  "muted-foreground",
-  "accent",
-  "primary",
-  "pos",
-  "neg",
-  "warning",
-  "chart-blue",
-  "chart-purple",
-  "chart-teal",
-  "chart-amber",
-  "chart-coral",
-];
-const pairs = [
-  ...text.flatMap((t) => grounds.map((g) => [t, g])),
-  ["primary-foreground", "primary"],
-  ["accent-foreground", "accent"],
-];
+// Text and semantic tokens: WCAG AA text, 4.5:1.
+const text = ["foreground", "muted-foreground", "accent", "pos", "neg", "warning"];
+// Chart series are non-text graphics: WCAG 1.4.11, 3:1 on the card.
+const series = ["chart-blue", "chart-purple", "chart-teal", "chart-amber", "chart-coral"];
 let bad = 0;
-for (const [fg, bg] of pairs) {
+const check = (theme, fg, bg, min) => {
   const r = ratio(fg, bg);
-  const ok = r >= 4.5;
+  const ok = r >= min;
   if (!ok) bad++;
-  console.log(`${ok ? "ok  " : "FAIL"} ${fg.padEnd(19)} on ${bg.padEnd(11)} ${r.toFixed(2)}`);
+  console.log(
+    `${ok ? "ok  " : "FAIL"} ${theme.padEnd(5)} ${fg.padEnd(19)} on ${bg.padEnd(11)} ${r.toFixed(2)} (>= ${min})`,
+  );
+};
+for (const [theme, set] of Object.entries(themes)) {
+  tokens = set;
+  for (const t of text) for (const g of grounds) check(theme, t, g, 4.5);
+  // Coral is a fill, never text, in both themes; only its label is text.
+  check(theme, "primary-foreground", "primary", 4.5);
+  check(theme, "accent-foreground", "accent", 4.5);
+  for (const t of series) check(theme, t, "card", 3);
+  // The dark theme also ran series as 4.5:1 text-grade on every ground.
+  if (theme === "dark") for (const t of series) for (const g of grounds) check(theme, t, g, 4.5);
+  // Informational: coral fill vs ground (non-text boundary; label carries the meaning).
+  console.log(
+    `info ${theme.padEnd(5)} primary fill vs background ${ratio("primary", "background").toFixed(2)}, vs card ${ratio("primary", "card").toFixed(2)}`,
+  );
 }
 process.exit(bad ? 1 : 0);

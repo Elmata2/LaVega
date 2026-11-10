@@ -106,7 +106,7 @@ Visual anti-references: neon crypto-trading dashboards (glow, gradient numbers, 
 
 **Key Characteristics:**
 
-- Dark only (`color-scheme: dark`); there is no light theme.
+- Dark by default (`color-scheme: dark`) with an opt-in light "warm paper" theme; see Themes.
 - Instrument Serif for the wordmark and headings, Inter with tabular numerals for everything else.
 - Tone-plus-hairline depth; only floating layers cast a shadow.
 - Coral is the one filled call to action; blue carries links, active state and focus.
@@ -146,6 +146,35 @@ Blue (#4db4f0), purple (#a99bff), teal (#4fd1c0), amber (#ffc247), pink (#ff7fb0
 **The Blue Orientation Rule.** Blue (#0297de) marks links, the active item and keyboard focus. It is never a fill for a primary action.
 **The Gain/Loss Rule.** Green and rose carry meaning only for gain, loss and problem. Chart series never use green, rose, or the coral hue.
 **The Contrast Rule.** Every text and semantic token must reach 4.5:1 on midnight, surface and surface-2; `apps/investing-web/scripts/check-contrast.mjs` proves it. Lowest measured: signal blue on surface-2 at 5.00:1; foreground on midnight is 20.23:1, mist on surface-2 is 7.67:1, gain 8.65:1 and rose 7.39:1 on surface-2.
+
+## Themes
+
+Two themes, same type, radii and components; only color tokens change. Dark is the default and the brand. Light is opt-in. `prefers-color-scheme` is ignored.
+
+**Switch.** An icon button (`ThemeToggle`, `role="switch"`, `aria-checked` = light is on, fixed accessible name "Light theme", tooltip names the action) sits in the top bar before the Profile button, 44px target. Sign-in and sign-up have no toggle; they follow the stored choice.
+
+**Persistence.** `localStorage["lavega-investing-theme"]` = `"dark"` or `"light"`. Every access is in try/catch; missing or blocked storage means dark, and a toggle still works in memory for that page view. Logic: `src/lib/theme.ts`.
+
+**No flash.** `public/theme-init.js` is a classic external script in `<head>` (CSP `script-src 'self'` forbids inline). It sets `document.documentElement.dataset.theme` and `style.colorScheme` before first paint. Vite rewrites its `src` with the build `base` (`/theme-init.js` standalone, `/investing/theme-init.js` when `VITE_INVESTING_BASE=/investing/`). The script duplicates the key and fallback of `theme.ts`; a test runs the real file.
+
+**Tokens.** Dark values live on `:root`; light overrides on `:root[data-theme="light"]` (with `color-scheme: light`). Same HSL-triplet format.
+
+| Role                                      | Light value                                                                     | Contrast (background / card / secondary) |
+| ----------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- |
+| background / card / secondary             | hsl(40 27% 97%) / #fff / hsl(40 20% 93%)                                        |                                          |
+| foreground                                | hsl(60 7% 10%)                                                                  | 16.23 / 17.22 / 14.91                    |
+| muted-foreground                          | hsl(48 5% 41%)                                                                  | 4.98 / 5.29 / 4.58                       |
+| border, input                             | hsl(40 17% 88%)                                                                 | hairline                                 |
+| accent, ring (#0270a8)                    | hsl(201 98% 33%)                                                                | 5.29 / 5.61 / 4.86                       |
+| pos                                       | hsl(101 38% 30%)                                                                | see script, all >= 4.5                   |
+| neg (crimson, apart from coral)           | hsl(355 60% 42%)                                                                | 6.31 / 6.70 / 5.80                       |
+| warning                                   | hsl(39 85% 28%)                                                                 | see script, all >= 4.5                   |
+| primary (coral)                           | unchanged #fc734d, text #02070a (7.41:1)                                        | fill vs paper 2.57, vs card 2.73         |
+| chart blue / purple / teal / amber / pink | hsl(205 75% 38%) / (250 45% 50%) / (174 70% 30%) / (38 90% 38%) / (335 60% 48%) | each >= 3:1 on card                      |
+
+The coral button boundary is below 3:1 on paper; its label (7.41:1) identifies it, so it is not the sole boundary. Selected segmented pill and switch knob use `bg-foreground` / `text-background`: white pill on dark, ink pill on paper. Floating layers use `--shadow-float` (soft paper shadow in light); panels stay tone plus hairline. Scrim in light is `rgba(26,26,23,0.4)`.
+
+`check-contrast.mjs` checks both themes (text and semantic tokens 4.5:1 on all three grounds; chart series 3:1 on card) and exits 1 on failure.
 
 ## Typography
 

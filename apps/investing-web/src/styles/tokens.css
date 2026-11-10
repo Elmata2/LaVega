@@ -45,7 +45,7 @@
   --shadow-sm: none;
   --shadow-md: none;
   /* Only floating layers (menus, popovers, tooltips) lift. */
-  --shadow-xl: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  --shadow-xl: var(--shadow-float);
 
   --text-2xs: 11px;
 
@@ -156,6 +156,42 @@
     --chart-amber: 40.1 100% 63.9%; /* #ffc247 */
     --chart-coral: 337 100% 74.9%; /* #ff7fb0 pink; never the CTA hue */
     --scrim: rgba(2, 7, 10, 0.72);
+    --shadow-float: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Light "warm paper": same roles, same hue order, only color changes.
+   * Selected segmented pill and switch knob use bg-foreground / text-background,
+   * which flip on their own (white pill on dark, ink pill on paper).
+   * Proved by scripts/check-contrast.mjs. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --background: 40 27% 97%; /* warm paper */
+    --foreground: 60 7% 10%; /* ink */
+    --card: 0 0% 100%;
+    --card-foreground: 60 7% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 60 7% 10%;
+    --primary: 13 96.7% 64.5%; /* #fc734d coral, unchanged */
+    --primary-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --secondary: 40 20% 93%; /* linen */
+    --secondary-foreground: 60 7% 10%;
+    --muted: 40 20% 93%;
+    --muted-foreground: 48 5% 41%;
+    --accent: 201 98% 33%; /* #0270a8 blue: links, active, focus */
+    --accent-foreground: 40 27% 97%;
+    --border: 40 17% 88%;
+    --input: 40 17% 88%;
+    --ring: 201 98% 33%;
+    --pos: 101 38% 30%;
+    --neg: 355 60% 42%; /* crimson: stays apart from the coral CTA */
+    --warning: 39 85% 28%;
+    --chart-blue: 205 75% 38%;
+    --chart-purple: 250 45% 50%;
+    --chart-teal: 174 70% 30%;
+    --chart-amber: 38 90% 38%;
+    --chart-coral: 335 60% 48%; /* pink; never the CTA hue */
+    --scrim: rgba(26, 26, 23, 0.4);
+    --shadow-float: 0 1px 2px rgba(26, 26, 23, 0.06), 0 18px 40px -16px rgba(26, 26, 23, 0.28);
   }
 
   * {

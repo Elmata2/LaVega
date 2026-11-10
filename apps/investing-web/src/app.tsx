@@ -30,6 +30,7 @@ import {
   ResetPasswordPage,
 } from "./components/AuthForm";
 import { Profile } from "./components/Profile";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { NetWorthPage } from "./components/NetWorthPage.js";
 import { AgentsList } from "./components/AgentsList.js";
 import { StockResearch } from "./components/StockResearch.js";
@@ -925,6 +926,7 @@ function Layout() {
                 <span aria-hidden="true">+</span> Add widget
               </button>
             )}
+            <ThemeToggle />
             <Link
               to="/profile"
               aria-label="Profile"
