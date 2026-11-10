@@ -275,7 +275,7 @@ test("an exhausted price run with a subscriber stops polling afterwards", async 
   unsubscribe();
 });
 
-test("each price round invalidates the dashboard once, including the final one", async () => {
+test("price sync invalidates the dashboard once, when it finishes", async () => {
   statusServer({
     [BROKER]: [broker("idle")],
     [PRICE]: [price("idle")],
@@ -288,6 +288,23 @@ test("each price round invalidates the dashboard once, including the final one",
   const outcome = await session.continuePriceSync();
 
   expect(outcome.kind).toBe("finished");
-  expect(refreshes).toHaveBeenCalledTimes(3);
+  expect(refreshes).toHaveBeenCalledTimes(1);
+  window.removeEventListener("lavega:dashboard-refresh", refreshes);
+});
+
+test("a price sync that never finishes invalidates nothing", async () => {
+  statusServer({
+    [BROKER]: [broker("idle")],
+    [PRICE]: [price("idle")],
+    [VAULT]: [{ status: "unlocked" }],
+    "/api/prices/sync": [price("paused")],
+  });
+  const refreshes = vi.fn();
+  window.addEventListener("lavega:dashboard-refresh", refreshes);
+
+  const outcome = await session.continuePriceSync();
+
+  expect(outcome.kind).toBe("incomplete");
+  expect(refreshes).toHaveBeenCalledTimes(0);
   window.removeEventListener("lavega:dashboard-refresh", refreshes);
 });
