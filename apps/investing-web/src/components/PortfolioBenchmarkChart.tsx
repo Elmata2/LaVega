@@ -25,6 +25,9 @@ type Props = {
 };
 type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; problems?: string[] };
 export type VisibleWindow = ChartWindow;
+// Stable identities: a fresh `[]` default prop would bust the derived memos on every render.
+const noBenchmarks: BenchmarkSeries[] = [];
+const noExternalCashFlows: NonNullable<Props["externalCashFlows"]> = [];
 
 const money = (value: number, currency: string) =>
   value.toLocaleString("en-GB", { style: "currency", currency, maximumFractionDigits: 2 });
@@ -68,8 +71,8 @@ export function pointsForWindow(data: Props["data"], window: VisibleWindow): Por
 
 export function PortfolioBenchmarkChart({
   data,
-  benchmarks = [],
-  externalCashFlows = [],
+  benchmarks = noBenchmarks,
+  externalCashFlows = noExternalCashFlows,
   currency = "EUR",
 }: Props) {
   const [selected, setSelected] = useState<string[]>(
@@ -195,29 +198,38 @@ export function PortfolioBenchmarkChart({
     [selected, benchmarks],
   );
   // Saved selection can arrive before benchmark prices. Ignore placeholders.
-  const loadedSeries = selectedSeries.filter((benchmark) => benchmark.points.length > 0);
-  const visibleBenchmarks = selectedSeries.filter((benchmark) => visible.has(benchmark.symbol));
+  const loadedSeries = useMemo(
+    () => selectedSeries.filter((benchmark) => benchmark.points.length > 0),
+    [selectedSeries],
+  );
+  const visibleBenchmarks = useMemo(
+    () => selectedSeries.filter((benchmark) => visible.has(benchmark.symbol)),
+    [selectedSeries, visible],
+  );
   const mode = deriveChartMode(selected);
   const indexed = useMemo(
     () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
     [points, loadedSeries, externalCashFlows],
   );
-  const chartPoints =
-    mode === "euros"
-      ? points
-      : points.map((base, index) => {
-          const point = indexed[index]!;
-          return {
-            ...base,
-            ...point,
-            ...Object.fromEntries(
-              Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
-                `benchmark:${symbol}`,
-                value,
-              ]),
-            ),
-          };
-        });
+  const chartPoints = useMemo(
+    () =>
+      mode === "euros"
+        ? points
+        : points.map((base, index) => {
+            const point = indexed[index]!;
+            return {
+              ...base,
+              ...point,
+              ...Object.fromEntries(
+                Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
+                  `benchmark:${symbol}`,
+                  value,
+                ]),
+              ),
+            };
+          }),
+    [mode, points, indexed],
+  );
   const direction = useMemo(() => {
     const values = points.flatMap((point) => (point.value === null ? [] : [point.value]));
     return values.length < 2 || values.at(-1)! >= values[0]! ? "pos" : "neg";
