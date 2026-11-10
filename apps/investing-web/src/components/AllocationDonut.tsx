@@ -3,7 +3,7 @@ import { Cell, Pie, PieChart } from "recharts";
 import type { Allocation } from "@lavega/core";
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
-import { Button } from "./ui/button";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
 
@@ -95,33 +95,29 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
     <Card>
       <CardHeader gap="wide" className="flex-row items-start justify-between">
         <CardTitle>Allocation</CardTitle>
-        <div
-          aria-label="Group allocation"
-          className="flex rounded-pill bg-secondary p-1"
-          role="group"
-        >
-          <Button
+        <div aria-label="Group allocation" className={segmentedTrack} role="group">
+          <button
+            type="button"
             aria-pressed={group === "instrument"}
             onClick={() => {
               setGroup("instrument");
               setShowOverige(false);
             }}
-            size="sm"
-            variant={group === "instrument" ? "default" : "ghost"}
+            className={segmentedItem(group === "instrument")}
           >
             Holding
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             aria-pressed={group === "entity"}
             onClick={() => {
               setGroup("entity");
               setShowOverige(false);
             }}
-            size="sm"
-            variant={group === "entity" ? "default" : "ghost"}
+            className={segmentedItem(group === "entity")}
           >
             Entity
-          </Button>
+          </button>
         </div>
       </CardHeader>
       <CardContent>

@@ -13,6 +13,7 @@ import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "rec
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
@@ -245,18 +246,16 @@ export function PortfolioBenchmarkChart({
     <Card>
       <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
         <CardTitle>{mode === "euros" ? "Portfolio value" : "Indexed return"}</CardTitle>
-        <div
-          role="group"
-          aria-label="Choose period"
-          className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
-        >
+        <div role="group" aria-label="Choose period" className={segmentedTrack}>
           {chartRanges.map((item) => (
             <button
               key={item.value}
               type="button"
               aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value}
               onClick={() => chart.applyPreset(item.value)}
-              className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "preset" && chart.window.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+              className={segmentedItem(
+                chart.window.kind === "preset" && chart.window.range === item.value,
+              )}
             >
               {item.label}
             </button>
@@ -268,7 +267,7 @@ export function PortfolioBenchmarkChart({
               if (points.length === 0) return;
               chart.openCustom(points[0]!.date, points.at(-1)!.date);
             }}
-            className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "custom" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            className={segmentedItem(chart.window.kind === "custom")}
           >
             Custom
           </button>

@@ -3,6 +3,7 @@ import { useCallback, useId, useMemo } from "react";
 import { Area, AreaChart, Line, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
@@ -123,18 +124,16 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
           <p className="text-sm font-medium text-muted-foreground">Net worth</p>
           <CardTitle>Investments and cash</CardTitle>
         </div>
-        <div
-          role="group"
-          aria-label="Choose net worth period"
-          className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
-        >
+        <div role="group" aria-label="Choose net worth period" className={segmentedTrack}>
           {chartRanges.map((item) => (
             <button
               key={item.value}
               type="button"
               aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value}
               onClick={() => chart.applyPreset(item.value)}
-              className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "preset" && chart.window.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+              className={segmentedItem(
+                chart.window.kind === "preset" && chart.window.range === item.value,
+              )}
             >
               {item.label}
             </button>

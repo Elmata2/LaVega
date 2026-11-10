@@ -1,5 +1,5 @@
 import { useChat } from "@ai-sdk/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Link,
   NavLink,
@@ -37,6 +37,7 @@ import { AgentThreads } from "./components/AgentThreads.js";
 import { fetchThreadMessages } from "./lib/agentMemory.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
+import { AgentCatalogProblem, PortfolioAgentCard } from "./components/PortfolioAgentCard.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
@@ -60,11 +61,7 @@ import {
   portfolioChat,
   selectThread,
   startNewThread,
-  runPortfolioAgent,
   useAgentCatalog,
-  useAgentRequests,
-  type PortfolioAgentDefinition,
-  type PortfolioAgentInsight,
 } from "./lib/portfolioAgents";
 import { priceOutcomeProblems } from "./lib/priceSync";
 import {
@@ -417,187 +414,6 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         </div>
       </dl>
       <PortfolioFigureNotes figures={figures} currency={data.presentationCurrency} />
-    </section>
-  );
-}
-
-function AgentCatalogProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="mt-4">
-      <p role="alert" className="text-sm text-negative">
-        {message}
-      </p>
-      <Button type="button" variant="outline" className="mt-3" onClick={onRetry}>
-        Try again
-      </Button>
-    </div>
-  );
-}
-
-function PersonaRadioGroup({
-  agents,
-  selectedId,
-  onSelect,
-  onOpen,
-}: {
-  agents: PortfolioAgentDefinition[];
-  selectedId: string;
-  onSelect: (agentId: string) => void;
-  onOpen: (agentId: string) => void;
-}) {
-  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
-
-  function moveSelection(from: number, step: number) {
-    const next = (from + step + agents.length) % agents.length;
-    onSelect(agents[next].id);
-    buttons.current[next]?.focus();
-  }
-
-  return (
-    <div role="radiogroup" aria-label="Choose agent" className="mt-4 grid grid-cols-2 gap-2">
-      {agents.map((agent, index) => {
-        const checked = agent.id === selectedId;
-        return (
-          <button
-            key={agent.id}
-            ref={(element) => {
-              buttons.current[index] = element;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            onClick={() => {
-              onSelect(agent.id);
-              onOpen(agent.id);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                event.preventDefault();
-                moveSelection(index, 1);
-              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                event.preventDefault();
-                moveSelection(index, -1);
-              }
-            }}
-            className={`pressable rounded-tile border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-accent bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
-          >
-            {agent.displayName}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PortfolioAgentCard() {
-  const { catalog, reload } = useAgentCatalog();
-  const { requestFor, start, settle } = useAgentRequests();
-  const [selectedId, setSelectedId] = useState("");
-  const [insights, setInsights] = useState<Record<string, PortfolioAgentInsight>>({});
-  const navigate = useNavigate();
-
-  const agents = catalog.status === "ready" ? catalog.agents : [];
-  /* Selection is derived, so a catalog reload that drops the chosen persona
-   * falls back to the first one instead of leaving Analyse pointed at an id
-   * the reader can no longer see. */
-  const active = agents.find((agent) => agent.id === selectedId) ?? agents[0];
-  const request = requestFor(active?.id ?? "");
-  const insight = active ? insights[active.id] : undefined;
-
-  async function run() {
-    if (!active) return;
-    const agentId = active.id;
-    start(agentId);
-    try {
-      const result = await runPortfolioAgent(agentId);
-      setInsights((current) => ({ ...current, [agentId]: result }));
-      settle(agentId, null);
-    } catch (error) {
-      settle(agentId, error instanceof Error ? error.message : "Agent run failed.");
-    }
-  }
-
-  function openAgentTab(agentId: string) {
-    const base = window.location.pathname.startsWith("/investing") ? "/investing" : "";
-    const target = `${base}/agents/${encodeURIComponent(agentId)}`;
-    const tab = window.open(target, "_blank");
-    if (!tab) navigate(`/agents/${encodeURIComponent(agentId)}`);
-  }
-
-  const tone =
-    insight?.signal === "bullish"
-      ? "text-positive"
-      : insight?.signal === "bearish"
-        ? "text-negative"
-        : "text-muted-foreground";
-  return (
-    <section
-      aria-labelledby="portfolio-agent-title"
-      className="rounded-card border border-border bg-card p-5"
-      data-dashboard-section="agent"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <h3 id="portfolio-agent-title" className="font-display text-3xl">
-          Investor lens
-        </h3>
-        {insight && (
-          <span className={`rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold ${tone}`}>
-            {insight.signal} · {Math.round(insight.confidence)}%
-          </span>
-        )}
-      </div>
-      {catalog.status === "loading" && (
-        <p role="status" className="mt-4 text-sm text-muted-foreground">
-          Loading agents…
-        </p>
-      )}
-      {catalog.status === "error" && (
-        <AgentCatalogProblem message={catalog.message} onRetry={reload} />
-      )}
-      {catalog.status === "empty" && (
-        <AgentCatalogProblem message="No portfolio agents available." onRetry={reload} />
-      )}
-      {active && (
-        <>
-          <PersonaRadioGroup
-            agents={agents}
-            selectedId={active.id}
-            onSelect={setSelectedId}
-            onOpen={openAgentTab}
-          />
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
-          <Link
-            to={`/agents/${active.id}`}
-            className="pressable mt-4 flex items-center justify-between rounded-tile border border-accent/20 bg-accent/5 px-4 py-3 text-sm font-semibold text-accent hover:bg-accent/10"
-          >
-            <span>Open conversation with {active.displayName}</span>
-            <span aria-hidden="true">→</span>
-          </Link>
-          <Button type="button" className="mt-4 w-full" onClick={run} disabled={request.pending}>
-            {request.pending ? "Agent reading…" : "Analyse portfolio"}
-          </Button>
-          {request.error && (
-            <p role="alert" className="mt-3 text-sm text-negative">
-              {request.error}
-            </p>
-          )}
-          {insight && (
-            <article className="mt-4 rounded-tile border border-border bg-secondary/30 p-4">
-              <p className="text-sm font-semibold">{insight.displayName}</p>
-              <p className="mt-2 text-sm leading-6">{insight.summary}</p>
-              {insight.insights.length > 0 && (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
-                  {insight.insights.map((item, index) => (
-                    <li key={`${insight.snapshotHash}-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">{insight.reasoning}</p>
-            </article>
-          )}
-        </>
-      )}
     </section>
   );
 }

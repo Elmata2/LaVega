@@ -12,6 +12,7 @@ import {
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
@@ -165,11 +166,7 @@ export function PositionPriceChart({
           <p className="text-sm font-medium text-muted-foreground">Price history</p>
           <CardTitle>{symbol}</CardTitle>
         </div>
-        <div
-          role="group"
-          aria-label="Choose period"
-          className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
-        >
+        <div role="group" aria-label="Choose period" className={segmentedTrack}>
           {chartRanges.map((range) => (
             <button
               key={range.value}
@@ -179,7 +176,9 @@ export function PositionPriceChart({
                 chart.applyPreset(range.value);
                 setActiveEventDate(null);
               }}
-              className="pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              className={segmentedItem(
+                chart.window.kind === "preset" && chart.window.range === range.value,
+              )}
             >
               {range.label}
             </button>
