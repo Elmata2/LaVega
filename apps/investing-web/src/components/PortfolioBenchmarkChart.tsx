@@ -519,7 +519,7 @@ export function PortfolioBenchmarkChart({
                     activeDot={{ r: 4 }}
                     isAnimationActive={false}
                     label={
-                      <EndLabel
+                      <EndMarker
                         last={chartPoints.length - 1}
                         color={`hsl(var(--${portfolioColor}))`}
                       />
@@ -584,10 +584,11 @@ export function PortfolioBenchmarkChart({
   );
 }
 
-/** Direct label on the last point of the portfolio line. Recharts calls this
- *  for every point; only the last one draws. Sits above the point, right-aligned
- *  so it stays inside the plot. */
-function EndLabel({
+/** Solid marker on the last point of the portfolio line, ringed in the page
+ *  color so it reads on any line crossing. A text label here collided with the
+ *  line itself; the legend already names the series. Recharts calls this for
+ *  every point; only the last one draws. */
+function EndMarker({
   x,
   y,
   index,
@@ -602,17 +603,15 @@ function EndLabel({
 }) {
   if (index !== last || typeof x !== "number" || typeof y !== "number") return null;
   return (
-    <text
-      x={x}
-      y={y - 10}
-      textAnchor="end"
+    <circle
+      cx={x}
+      cy={y}
+      r={5}
       fill={color}
-      fontSize={11}
-      fontWeight={600}
+      stroke="var(--color-card)"
+      strokeWidth={2}
       aria-hidden="true"
-    >
-      You
-    </text>
+    />
   );
 }
 
