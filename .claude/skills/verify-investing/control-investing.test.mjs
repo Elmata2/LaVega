@@ -46,6 +46,25 @@ function stateRoot() {
   return underTmp(tmpdir()) ? tmpdir() : "/tmp";
 }
 
+/**
+ * A temp dir that is not under /tmp, for "screenshot defaults under /tmp when
+ * the state dir is not". HOME is the natural parent, but a sandbox can block
+ * every write outside the workspace. Fall back to the skill dir then; the test
+ * needs a writable state dir outside /tmp, not that parent in particular.
+ */
+function outsideTmpDir() {
+  const underTmp = (candidate) => realpathSync(candidate).startsWith(realpathSync("/tmp"));
+  for (const parent of [process.env.HOME, dirname(fileURLToPath(import.meta.url))]) {
+    if (!parent || underTmp(parent)) continue;
+    try {
+      return mkdtempSync(join(parent, "control-investing-outside-"));
+    } catch {
+      // parent is not writable in this sandbox; try the next one
+    }
+  }
+  throw new Error("no writable parent dir outside /tmp");
+}
+
 let server;
 let port;
 let routes;
@@ -1165,7 +1184,7 @@ echo "browse-ok $1"
 
   test("screenshot defaults under /tmp when the state dir is not", async () => {
     pngBrowse();
-    const outside = mkdtempSync(join(process.env.HOME, "control-investing-outside-"));
+    const outside = outsideTmpDir();
     try {
       const result = await run(["browser", "screenshot"], { VERIFY_INVESTING_DIR: outside });
       assert.equal(result.code, 0, result.stderr);
