@@ -978,6 +978,16 @@ test("each tenant gets its own runtime, so no cache is shared between users", as
   ]);
 });
 
+test("an account with no stored benchmark reads MSCI World by default", async () => {
+  const priceStore = createInMemoryPriceStore();
+  const getRange = vi.spyOn(priceStore, "getRange");
+  const runtimeApp = await createRuntimeApp({ priceStore });
+
+  const dashboard = await runtimeApp.request("/api/investing/dashboard");
+  expect(dashboard.status).toBe(200);
+  expect(getRange.mock.calls.map(([, symbol]) => symbol)).toContain("IWDA.AS");
+});
+
 test("a tenant's broker sync status is its own, not the last caller's", async () => {
   let tenantId = "user-a";
   const runtimeApp = await createRuntimeApp({

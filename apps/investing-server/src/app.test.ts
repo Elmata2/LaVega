@@ -183,6 +183,44 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
   expect(invalid.status).toBe(400);
 });
 
+test("benchmark API starts an unselected account on MSCI World", async () => {
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const investingApp = createApp({
+    benchmarkSelectionStore,
+    priceSyncTargets: () => [],
+    priceSyncPaceMs: 0,
+  });
+
+  /* An account that never chose is measured against MSCI World instead of
+   * leaving beta and alpha structurally unavailable. */
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["IWDA.AS"],
+  });
+
+  await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: ["^AEX"] }),
+  });
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["^AEX"],
+  });
+
+  /* Removing every choice returns the account to the default rather than to a
+   * state where the card can never compute beta. */
+  await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: [] }),
+  });
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["IWDA.AS"],
+  });
+});
+
 test("layout route persists per-tenant choices and drops unknown ids", async () => {
   const investingLayoutStore = createInMemoryInvestingLayoutStore();
   const investingApp = createApp({ investingLayoutStore });

@@ -4,7 +4,9 @@ import type {
   PortfolioMetrics,
   RiskRange,
 } from "@lavega/core";
+import type { ReactNode } from "react";
 import { shortDate } from "../lib/dates.js";
+import { BenchmarkPicker } from "./BenchmarkPicker";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -87,8 +89,14 @@ export function PortfolioSummaryCard({
   const asOfCaption = risk.to && risk.to < today ? ` (as of ${shortDate(risk.to)})` : "";
   /* Three headline figures, each with what it means in plain words. Beta is
    * here with the other two because it is the one that compares you with the
-   * market; when it cannot be measured the card says what it needs. */
-  const headline: Array<{ label: string; value: string; meaning: string }> = [
+   * market; when it cannot be measured the card says what it needs and offers
+   * the benchmark chooser that fixes it. */
+  const headline: Array<{
+    label: string;
+    value: string;
+    meaning: string;
+    action?: ReactNode;
+  }> = [
     {
       label: "Volatility",
       value: percent(metrics.annualizedVolatility),
@@ -106,6 +114,10 @@ export function PortfolioSummaryCard({
         metrics.beta === null || !Number.isFinite(metrics.beta)
           ? "Needs a benchmark with enough matching days"
           : "Move per 1 move in the benchmark",
+      action:
+        metrics.beta === null ? (
+          <BenchmarkPicker selected={risk.benchmarks.map((item) => item.symbol)} />
+        ) : null,
     },
   ];
   const otherStats: Array<[string, string]> = [
@@ -187,11 +199,12 @@ export function PortfolioSummaryCard({
           )}
         </div>
         <dl className="divide-y divide-border border-y border-border">
-          {headline.map(({ label, value, meaning }) => (
+          {headline.map(({ label, value, meaning, action }) => (
             <div key={label} className="flex items-baseline justify-between gap-4 py-3">
               <div className="min-w-0">
                 <dt className="text-sm">{label}</dt>
                 <dd className="mt-0.5 text-xs leading-4 text-muted-foreground">{meaning}</dd>
+                {action && <dd className="mt-2">{action}</dd>}
               </div>
               <dd className="shrink-0 text-lg font-semibold tabular-nums">{value}</dd>
             </div>

@@ -81,7 +81,7 @@ function card(overrides: Partial<React.ComponentProps<typeof PortfolioSummaryCar
 test("renders metrics and top positions, and excludes sector content", async () => {
   const { container, root } = render();
   act(() => root.render(card()));
-  expect(container.textContent).toContain("Annual volatility");
+  expect(container.textContent).toContain("Volatility");
   expect(container.textContent).toContain("AAPL");
   expect(container.textContent).toContain("currency moves excluded");
   expect(container.textContent).toContain("excluding cash");
@@ -299,6 +299,159 @@ test("choosing a risk benchmark calls onBenchmarkChange", () => {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(onBenchmarkChange).toHaveBeenCalledWith("URTH");
+});
+
+/* Beta without a benchmark is not a dead end. The card names the fix where the
+ * missing number sits, and the fix is user-initiated: rendering the card alone
+ * still makes no request. */
+const unpairedSummary: PortfolioSummaryView = {
+  ...summary,
+  metrics: { ...summary.metrics, beta: null, alpha: null, pairedObservationDays: 0 },
+  risk: {
+    ...summary.risk,
+    status: "unavailable",
+    reasons: ["At least 60 valid daily returns are required."],
+  },
+};
+
+const benchmarkResult = {
+  symbol: "IWDA.AS",
+  name: "iShares Core MSCI World",
+  exchange: "Amsterdam",
+  currency: "EUR",
+};
+
+const priceSyncCompleted = {
+  status: "completed",
+  total: 0,
+  completed: 0,
+  remainingSymbols: [],
+  currentSymbol: null,
+  waitUntil: null,
+  updatedAt: "2026-09-17T10:00:00Z",
+  message: null,
+  problems: [],
+};
+
+function changeInput(input: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+const chooseBenchmarkButton = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll("button")).find(
+    (element) => element.textContent === "Choose benchmark",
+  );
+
+test("beta without a benchmark offers a Choose benchmark action next to it", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = render();
+  act(() => root.render(card({ state: { status: "ready", data: unpairedSummary } })));
+  const button = chooseBenchmarkButton(container);
+  expect(button).toBeTruthy();
+  expect(button!.closest("div")?.textContent).toContain("Beta");
+  expect(button!.closest("div")?.textContent).not.toContain("Volatility");
+  expect(fetchMock).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
+test("choosing a benchmark saves it, refreshes the dashboard and starts price sync", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.startsWith("/api/investing/benchmarks/search"))
+        return new Response(
+          JSON.stringify({ results: [benchmarkResult], fallback: false, problems: [] }),
+        );
+      if (url === "/api/investing/benchmarks" && init?.method === "PUT")
+        return new Response(
+          JSON.stringify({ tenantId: "local", symbols: [benchmarkResult.symbol] }),
+        );
+      if (url === "/api/prices/sync")
+        return new Response(JSON.stringify(priceSyncCompleted), { status: 202 });
+      throw new Error(`Unexpected request: ${url}`);
+    }),
+  );
+  const refreshes = vi.fn();
+  window.addEventListener("lavega:dashboard-refresh", refreshes);
+  const { container, root } = render();
+  try {
+    act(() => root.render(card({ state: { status: "ready", data: unpairedSummary } })));
+    act(() => chooseBenchmarkButton(container)!.click());
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search benchmarks"]',
+    )!;
+    act(() => changeInput(input, "IWDA"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 280));
+    });
+    const option = container.querySelector<HTMLButtonElement>('[role="option"] button')!;
+    expect(option.textContent).toContain("IWDA.AS");
+    await act(async () => {
+      option.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    const saved = requests.find(
+      ({ url, init }) => url === "/api/investing/benchmarks" && init?.method === "PUT",
+    );
+    expect(saved?.init?.body).toBe(JSON.stringify({ symbols: [benchmarkResult.symbol] }));
+    expect(refreshes).toHaveBeenCalled();
+    expect(
+      requests.some(({ url, init }) => url === "/api/prices/sync" && init?.method === "POST"),
+    ).toBe(true);
+  } finally {
+    window.removeEventListener("lavega:dashboard-refresh", refreshes);
+    await act(async () => root.unmount());
+  }
+});
+
+test("a search without Yahoo consent says so instead of showing an empty list", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ consentRequired: true, problems: ["Yahoo Finance consent required"] }),
+          { status: 428 },
+        ),
+    ),
+  );
+  const { container, root } = render();
+  act(() => root.render(card({ state: { status: "ready", data: unpairedSummary } })));
+  act(() => chooseBenchmarkButton(container)!.click());
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Search benchmarks"]')!;
+  act(() => changeInput(input, "IWDA"));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 280));
+  });
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "Yahoo Finance consent is required",
+  );
+  expect(container.textContent).not.toContain("No benchmarks found.");
+  await act(async () => root.unmount());
+});
+
+test("with beta unavailable the existing Unavailable rendering is unchanged", async () => {
+  const { container, root } = render();
+  act(() => root.render(card({ state: { status: "ready", data: unpairedSummary } })));
+  const text = container.textContent ?? "";
+  expect(text).toContain("Regression alpha (annual)");
+  /* The headline row is label, plain-language meaning, then value, so the
+   * value no longer sits next to the label. Assert on the row itself. */
+  const betaRow = Array.from(container.querySelectorAll("dl > div")).find(
+    (row) => row.querySelector("dt")?.textContent === "Beta",
+  );
+  expect(betaRow?.textContent).toContain("Needs a benchmark with enough matching days");
+  expect(betaRow?.textContent).toContain("Unavailable");
+  expect(text).toMatch(/Regression alpha \(annual\)\s*Unavailable/);
+  expect(text).toContain("At least 60 valid daily returns are required.");
+  expect(text).toContain("Use Refresh risk after broker or price updates.");
+  await act(async () => root.unmount());
 });
 
 test("clicking Refresh risk calls refresh", () => {
