@@ -105,6 +105,7 @@ import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
 import { attachLetterRoutes } from "./letterRoutes.js";
 import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
+import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
@@ -505,7 +506,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         fxProvider,
         benchmarks: benchmarkSymbols
           ? (id) => Promise.resolve(benchmarkSymbols(id))
-          : async (id) => (await benchmarkSelectionStore.get(id)).symbols,
+          : (id) => effectiveBenchmarkSymbols(benchmarkSelectionStore, id),
         priceDataVersion: () => priceDataVersion,
       }),
     );
@@ -663,7 +664,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         const { positions, trades } = await brokerSnapshot.read("fresh");
         const benchmarkSymbols = options.benchmarkSymbols
           ? await options.benchmarkSymbols(tenantId)
-          : (await benchmarkSelectionStore.get(tenantId)).symbols;
+          : await effectiveBenchmarkSymbols(benchmarkSelectionStore, tenantId);
         return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
       },
       runPortfolioAgentOnce,

@@ -78,6 +78,7 @@ import {
 } from "./sectorInferenceSetting.js";
 import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./sectorRevision.js";
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
+import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
 
 /** The read model crosses the wire through its shared schema, so a field the
@@ -572,9 +573,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       );
     }
   });
-  investingApp.get("/api/investing/benchmarks", async (c) =>
-    c.json(await benchmarkSelectionStore.get(await resolveTenantId())),
-  );
+  investingApp.get("/api/investing/benchmarks", async (c) => {
+    const tenantId = await resolveTenantId();
+    return c.json({
+      tenantId,
+      symbols: await effectiveBenchmarkSymbols(benchmarkSelectionStore, tenantId),
+    });
+  });
   investingApp.put("/api/investing/benchmarks", async (c) => {
     const body: { symbols?: unknown } = await c.req.json<{ symbols?: unknown }>().catch(() => ({}));
     const symbols = body.symbols;

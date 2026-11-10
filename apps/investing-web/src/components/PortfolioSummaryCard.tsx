@@ -4,7 +4,9 @@ import type {
   PortfolioMetrics,
   RiskRange,
 } from "@lavega/core";
+import type { ReactNode } from "react";
 import { shortDate } from "../lib/dates.js";
+import { BenchmarkPicker } from "./BenchmarkPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 /** The view this card renders: the risk projection's metrics and report plus
@@ -84,13 +86,28 @@ export function PortfolioSummaryCard({
       : null;
   const today = new Date().toISOString().slice(0, 10);
   const asOfCaption = risk.to && risk.to < today ? ` (as of ${shortDate(risk.to)})` : "";
-  const stats: Array<[string, string, string | null]> = [
-    ["Annual volatility", percent(metrics.annualizedVolatility), null],
-    ["Beta", decimal(metrics.beta), null],
-    ["Regression alpha (annual)", percent(metrics.alpha), null],
-    ["Maximum drawdown", percent(metrics.maxDrawdown), drawdownCaption],
-    ["Valid daily returns", `${metrics.observationDays}`, null],
-    ["Benchmark pairs", `${metrics.pairedObservationDays}`, null],
+  const stats: Array<{
+    label: string;
+    value: string;
+    caption: string | null;
+    action?: ReactNode;
+  }> = [
+    { label: "Annual volatility", value: percent(metrics.annualizedVolatility), caption: null },
+    {
+      label: "Beta",
+      value: decimal(metrics.beta),
+      caption: null,
+      /* Beta needs a benchmark to pair daily returns with. When there is none
+       * the honest answer is not just "Unavailable" but the way to fix it. */
+      action:
+        metrics.beta === null ? (
+          <BenchmarkPicker selected={risk.benchmarks.map((item) => item.symbol)} />
+        ) : null,
+    },
+    { label: "Regression alpha (annual)", value: percent(metrics.alpha), caption: null },
+    { label: "Maximum drawdown", value: percent(metrics.maxDrawdown), caption: drawdownCaption },
+    { label: "Valid daily returns", value: `${metrics.observationDays}`, caption: null },
+    { label: "Benchmark pairs", value: `${metrics.pairedObservationDays}`, caption: null },
   ];
   return (
     <Card aria-label="Portfolio summary" data-dashboard-section="risk">
@@ -186,11 +203,12 @@ export function PortfolioSummaryCard({
           )}
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          {stats.map(([label, value, caption]) => (
+          {stats.map(({ label, value, caption, action }) => (
             <div key={label}>
               <dt className="text-xs text-muted-foreground">{label}</dt>
               <dd className="font-semibold tabular-nums">{value}</dd>
               {caption && <dd className="text-xs text-muted-foreground">{caption}</dd>}
+              {action && <dd className="mt-1">{action}</dd>}
             </div>
           ))}
         </dl>

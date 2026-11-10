@@ -8,7 +8,6 @@ import {
 } from "./dashboard.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 import {
-  benchmarkCurrencyMismatchReason,
   buildHistoricalRisk,
   RISK_MAX_STALE_BUSINESS_DAYS,
   RISK_MINIMUM_OBSERVATIONS,
@@ -345,7 +344,7 @@ test("includes a last day whose close is still settling when the position is imm
   expect(report.risk.coverage!).toBeLessThan(1);
   expect(report.risk.reasons).toEqual([
     expect.stringMatching(/^Estimate covers \d+\.\d{2}% of portfolio value/),
-    "Add a benchmark with Compare above to calculate beta and alpha.",
+    "Choose a benchmark to calculate beta and alpha.",
   ]);
 });
 
@@ -380,31 +379,10 @@ test("keeps beta and alpha null when no benchmark is selected", () => {
   expect(report.metrics.annualizedVolatility).not.toBeNull();
   expect(report.metrics.beta).toBeNull();
   expect(report.metrics.alpha).toBeNull();
-  expect(report.risk.reasons).toContain(
-    "Add a benchmark with Compare above to calculate beta and alpha.",
-  );
+  expect(report.risk.reasons).toContain("Choose a benchmark to calculate beta and alpha.");
 });
 
-test("rejects benchmark quoted outside presentation currency", () => {
-  const returns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
-    index % 2 ? 0.01 : -0.005,
-  );
-  const report = buildHistoricalRisk(
-    dashboard(pointsFromReturns(returns), {
-      benchmarks: [benchmarkFromReturns(returns, "USD")],
-    }),
-  );
-
-  expect(report.risk.status).toBe("estimate");
-  expect(report.metrics.annualizedVolatility).not.toBeNull();
-  expect(report.metrics.beta).toBeNull();
-  expect(report.metrics.alpha).toBeNull();
-  expect(report.risk.reasons).toContain(
-    "Beta and alpha need a EUR-quoted benchmark; BENCH is quoted in USD.",
-  );
-});
-
-test("a benchmark converted by buildInvestingDashboard resolves comparable without touching risk.ts", () => {
+test("measures against the converted EUR benchmark that buildInvestingDashboard supplies", () => {
   const dates = businessDates(RISK_MINIMUM_OBSERVATIONS + 1);
   const benchmarkReturns = Array.from({ length: RISK_MINIMUM_OBSERVATIONS }, (_, index) =>
     index % 4 === 0 ? 0.012 : index % 4 === 1 ? -0.007 : index % 4 === 2 ? 0.004 : -0.002,
@@ -443,12 +421,6 @@ test("a benchmark converted by buildInvestingDashboard resolves comparable witho
   expect(report.metrics.alpha).toBeCloseTo(0.0007 * 252, 6);
   expect(report.risk.reasons.some((reason) => reason.startsWith("Beta and alpha need a"))).toBe(
     false,
-  );
-});
-
-test("benchmarkCurrencyMismatchReason builds the mismatch sentence", () => {
-  expect(benchmarkCurrencyMismatchReason("EUR", { symbol: "SPY", currency: "USD" })).toBe(
-    "Beta and alpha need a EUR-quoted benchmark; SPY is quoted in USD.",
   );
 });
 
