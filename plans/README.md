@@ -19,8 +19,8 @@ and update your row when done.
 | 001  | Remove the untracked conflict-copy files and restore the verification baseline | P1 | S | — | DONE (merged 71d9f07f8) |
 | 002  | Honour the sector-inference setting in the sector read | P1 | S | 001 | DONE (merged b12d5dbcd) |
 | 003  | Clamp month arithmetic so range windows stop rolling over | P1 | S | 001 | DONE (merged b0a1a30fd) |
-| 004  | Stop rebuilding chart series on every pointer move | P2 | S | 001 | IN PROGRESS |
-| 005  | Stop invalidating the dashboard on every price-sync poll | P2 | S | 001 | IN PROGRESS |
+| 004  | Stop rebuilding chart series on every pointer move | P2 | S | 001 | DONE (merged 28be44725) |
+| 005  | Stop invalidating the dashboard on every price-sync poll | P2 | S | 001 | DONE (merged 8339027df) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 
