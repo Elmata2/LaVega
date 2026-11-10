@@ -299,39 +299,39 @@ export function PortfolioSummaryCard({
                 measured through the last complete date instead.
               </p>
             </div>
-            <div className="space-y-3">
-              <p>
-                Current composition · percentages of priced investments, excluding cash.
-                {` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
-              </p>
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
-                <ul aria-label="Largest positions" className="space-y-2 text-sm">
-                  {topPositions.length === 0 && (
-                    <li className="text-muted-foreground">No priced positions yet.</li>
-                  )}
-                  {topPositions.map((position) => (
-                    <li key={position.symbol} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className="block truncate">
-                          {position.description ?? position.symbol}
-                        </span>
-                        {position.description && (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {position.symbol}
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 font-semibold tabular-nums">
-                        {percent(position.weight)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
           </div>
         </details>
+        <div className="space-y-3 text-xs text-muted-foreground">
+          <p>
+            Current composition · percentages of priced investments, excluding cash.
+            {` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
+          </p>
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
+            <ul aria-label="Largest positions" className="space-y-2 text-sm">
+              {topPositions.length === 0 && (
+                <li className="text-muted-foreground">No priced positions yet.</li>
+              )}
+              {topPositions.map((position) => (
+                <li key={position.symbol} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="block truncate">
+                      {position.description ?? position.symbol}
+                    </span>
+                    {position.description && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {position.symbol}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums">
+                    {percent(position.weight)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
         {currency && <p className="text-xs text-muted-foreground">Amounts in {currency}.</p>}
       </CardContent>
     </Card>
