@@ -135,12 +135,12 @@ export class SectorRead extends Context.Service<
       const resolveWeights = async (
         tenantId: string,
         positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
-        gates: { consented: boolean; corrections: Record<string, string> },
+        gates: { consented: boolean; showInferred: boolean; corrections: Record<string, string> },
       ): Promise<Map<string, SectorWeight[]>> => {
         const result = await resolvePortfolioSectors(positions, {
           store,
           correction: async (symbol) => gates.corrections[symbol.toUpperCase()] ?? null,
-          showInferred: gates.consented,
+          showInferred: gates.showInferred,
           resolveListing: (symbol) => resolveListing(tenantId, symbol),
           ...(gates.consented ? { fetchProfile } : {}),
         });
@@ -173,6 +173,7 @@ export class SectorRead extends Context.Service<
             const correctionsForTenant = await corrections.getAll(tenantId);
             const resolved = await resolveWeights(tenantId, unseen, {
               consented,
+              showInferred,
               corrections: correctionsForTenant,
             });
             weightsBySymbol = new Map([...cached.weightsBySymbol, ...resolved]);
@@ -182,6 +183,7 @@ export class SectorRead extends Context.Service<
           const correctionsForTenant = await corrections.getAll(tenantId);
           weightsBySymbol = await resolveWeights(tenantId, positions, {
             consented,
+            showInferred,
             corrections: correctionsForTenant,
           });
           cache.set(tenantId, { key, weightsBySymbol });
