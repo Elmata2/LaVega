@@ -20,19 +20,19 @@ colors:
   chart-pink: "#ff7fb0"
 typography:
   display:
-    fontFamily: "Instrument Serif, Georgia, serif"
+    fontFamily: "Libron, Georgia, serif"
     fontSize: "3.75rem"
     fontWeight: 400
     lineHeight: 1.18
     letterSpacing: "0.01em"
   headline:
-    fontFamily: "Instrument Serif, Georgia, serif"
+    fontFamily: "Libron, Georgia, serif"
     fontSize: "1.875rem"
     fontWeight: 400
     lineHeight: 1.18
     letterSpacing: "0.01em"
   title:
-    fontFamily: "Instrument Serif, Georgia, serif"
+    fontFamily: "Libron, Georgia, serif"
     fontSize: "1.5rem"
     fontWeight: 400
     lineHeight: 1.18
@@ -107,7 +107,7 @@ Visual anti-references: neon crypto-trading dashboards (glow, gradient numbers, 
 **Key Characteristics:**
 
 - Dark by default (`color-scheme: dark`) with an opt-in light "warm paper" theme; see Themes.
-- Instrument Serif for the wordmark and headings, Inter with tabular numerals for everything else.
+- Libron for the wordmark and headings, Inter with tabular numerals for everything else.
 - Tone-plus-hairline depth; only floating layers cast a shadow.
 - Coral is the one filled call to action; blue carries links, active state and focus.
 - Radii follow the lavega.dev scale: pill buttons, 20px cards, 14px tiles.
@@ -178,7 +178,7 @@ The coral button boundary is below 3:1 on paper; its label (7.41:1) identifies i
 
 ## Typography
 
-**Display Font:** Instrument Serif (Georgia, serif), one weight (400), roman and italic
+**Display Font:** Libron (Georgia, serif), four styles (400, 700, both italics)
 **Body Font:** Inter (system-ui, sans-serif), weights 400 to 700
 
 **Character:** A condensed literary serif over a plain grotesque. The serif gives the product its voice; Inter keeps every figure, control and small label honest.
@@ -194,9 +194,9 @@ The coral button boundary is below 3:1 on paper; its label (7.41:1) identifies i
 
 ### Named Rules
 
-**The One Weight Rule.** Instrument Serif has one weight. Hierarchy comes from size. The face is declared over weight 100 to 900 so a stray `font-semibold` renders the real glyphs, not a faux bold; do not add bold to serif on purpose.
-**The Serif Breathing Rule.** Instrument Serif is condensed with tall ascenders and long descenders, so serif text takes `line-height: 1.18`, `letter-spacing: 0.01em` and `padding-block: 0.04em`. This rule is unlayered in `tokens.css` so it beats Tailwind `text-*`, `leading-*` and `tracking-*` utilities, which otherwise crop headings. Never put `leading-none` or `tracking-tight` on serif.
-**The Tabular Rule.** Instrument Serif has no tabular numerals. Every figure, table, input, small control and text under 14px is Inter with `tabular-nums` (set on `body`), so columns align and values do not jitter.
+**The Size Rule.** Libron has a real Bold, but headings stay at 400 on purpose: hierarchy comes from size. Use 700 for emphasis inside running text, never to make a heading heavier.
+**The Serif Breathing Rule.** Libron is a book serif with tall ascenders and long descenders, so serif text takes `line-height: 1.18`, `letter-spacing: 0.01em` and `padding-block: 0.04em`. This rule is unlayered in `tokens.css` so it beats Tailwind `text-*`, `leading-*` and `tracking-*` utilities, which otherwise crop headings. Never put `leading-none` or `tracking-tight` on serif.
+**The Tabular Rule.** Figures, tables, inputs, small controls and text under 14px are Inter with `tabular-nums` (set on `body`), so columns align and values do not jitter. Libron also carries `tnum`, but the figures belong to Inter: one numeric voice across the product.
 
 ## Layout
 
@@ -234,7 +234,7 @@ Soft and generous, on the lavega.dev scale: pill (999px) for buttons, nav and ch
 ### Cards / Containers
 
 - **Corner Style:** 20px. **Background:** Surface. **Border:** hairline. **Shadow:** none. **Padding:** 20px (24px at sm).
-- **Title:** Instrument Serif, 1.875rem (1.5rem compact).
+- **Title:** Libron, 1.875rem (1.5rem compact).
 - **Empty variant:** transparent, dashed hairline, no shadow.
 
 ### Inputs / Fields
@@ -287,4 +287,4 @@ Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; m
 - **Don't** use green or rose except for gain, loss and problem; chart series never use green, rose or coral hues.
 - **Don't** put a shadow on a resting panel; only floating layers lift.
 - **Don't** set `leading-none` or `tracking-tight` on serif text, or add bold to it.
-- **Don't** set figures, tables or inputs in Instrument Serif.
+- **Don't** set figures, tables or inputs in Libron; numbers are Inter.
