@@ -1225,6 +1225,28 @@ test.each([
   );
 });
 
+test.each([
+  ["2026-03-31", "1M", "2026-02-28"],
+  ["2026-01-31", "1M", "2025-12-31"],
+  ["2026-05-31", "6M", "2025-11-30"],
+  ["2024-03-31", "1Y", "2023-03-31"],
+  ["2024-02-29", "1Y", "2023-02-28"],
+] as const)("clamps %s minus %s to %s", (latest, range, expectedStart) => {
+  const points = [point("2000-01-01", 1), point(latest, 2)];
+  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual([latest]);
+  // The start date is observable through the filter boundary: a point placed
+  // on the expected start must be kept, and one day earlier dropped.
+  const boundary = [
+    point("1999-01-01", 1),
+    point(expectedStart, 2),
+    point(latest, 3),
+  ];
+  expect(filterPortfolioValueRange(boundary, range).map(({ date }) => date)).toEqual([
+    expectedStart,
+    latest,
+  ]);
+});
+
 /* Live account, 2026-10-04: a Sunday sync dated the only Trading 212 balance
  * after the last market day, with interest and a card payment booked in
  * between, and a history ~7,900 EUR short of closing. Every point of the
