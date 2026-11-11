@@ -63,10 +63,3 @@ Een overzicht van je rekeningen en een voorspelling van je kaspositie maken deze
 ## Wat LaVega hierin doet
 
 LaVega brengt je rekeningen samen in één overzicht, maakt een forecast van je kaspositie en geeft een seintje als je saldo onder een grens komt die jij zelf instelt. LaVega bepaalt niet hoe groot jouw buffer hoort te zijn. Daarvoor verwijzen we naar het Nibud. LaVega geeft informatie en uitleg en is geen financieel advies; LaVega heeft geen AFM-vergunning.
-
-## Gerelateerd
-
-- [Hoe werkt box 3?](/vragen/hoe-werkt-box-3), over de belasting op spaargeld.
-- [Abonnementen opschonen in vier stappen](/gids/abonnementen-opschonen), over vaste lasten.
-
-Dit is informatie, geen advies.

@@ -86,11 +86,36 @@ main,
 }
 .site-header {
   padding-block: 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 .site-header img {
   display: block;
   height: 28px;
   width: auto;
+}
+.locale-switch {
+  font-size: 0.875rem;
+}
+.locale-switch a {
+  color: var(--muted);
+}
+.toc {
+  margin: 1.5em 0;
+  font-size: 0.95rem;
+}
+.toc-label {
+  margin: 0 0 0.4em;
+  color: var(--muted);
+}
+.toc ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+.toc li {
+  margin-bottom: 0.3em;
 }
 main {
   padding-block: 8px 40px;
@@ -161,12 +186,25 @@ h3 {
   background: var(--accent-soft);
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
 }
-.body table {
+.table-hint {
+  display: none;
+  margin: 0 0 0.4em;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.body .table-scroll {
   display: block;
   max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   margin: 0 0 1em;
+}
+.body .table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.body table {
+  border-collapse: collapse;
+  margin: 0;
 }
 .body th,
 .body td {
@@ -256,4 +294,10 @@ h3 {
   font-weight: 600;
   padding: 8px 16px;
   letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .table-hint {
+    display: block;
+  }
 }

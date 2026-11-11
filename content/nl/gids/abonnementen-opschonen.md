@@ -77,5 +77,3 @@ Je kunt dit alles met de hand doen, in een spreadsheet of op papier. Sommige app
 ## Maak er een gewoonte van
 
 Plan twee keer per jaar een kwartier om de lijst langs te lopen. Prijsverhogingen en proefabonnementen sluipen er anders weer in. Hoeveel ruimte een opgeschoonde lijst oplevert, hangt helemaal af van je eigen uitgaven. Wil je weten hoe groot een buffer voor tegenvallers kan zijn, lees dan [Hoeveel spaargeld is normaal als buffer?](/vragen/hoeveel-spaargeld-is-normaal-als-buffer). En wat een persoonlijke CFO is, staat in [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo).
-
-Dit is informatie, geen advies.

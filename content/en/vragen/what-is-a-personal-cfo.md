@@ -83,5 +83,3 @@ The method works on paper or in a spreadsheet. Once a month, take half an hour:
 4. Go through the fixed costs.
 
 Software takes over the manual work. The questions stay the same.
-
-This is information, not advice.

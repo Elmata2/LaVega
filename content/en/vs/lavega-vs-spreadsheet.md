@@ -64,5 +64,3 @@ With a spreadsheet, everything sits on your own computer or in your own cloud. L
 That is your call and depends on your situation. A spreadsheet suits someone who likes building their own and has few accounts. A tool that imports and categorises suits someone who would rather not do the upkeep. You can also combine them: a home-made sheet for one unusual item, next to an overview of the rest.
 
 More to read: [What is a personal CFO?](/en/questions/what-is-a-personal-cfo), [How to clean up your subscriptions](/en/guides/clean-up-your-subscriptions) and [LaVega vs bunq's budgeting features](/en/vs/lavega-vs-budgeting-apps).
-
-This is information, not advice.

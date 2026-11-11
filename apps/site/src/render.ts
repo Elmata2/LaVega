@@ -27,6 +27,9 @@ const T = {
     sources: "Bronnen",
     accessed: "geraadpleegd",
     related: "Meer in deze categorie",
+    toc: "Op deze pagina",
+    tableHint: "Veeg horizontaal om alle kolommen te zien.",
+    tableRegion: "Tabel, horizontaal scrollbaar",
     disclaimer: "Dit is informatie, geen advies.",
     breadcrumb: "Kruimelpad",
     draft: "DRAFT: niet gepubliceerd",
@@ -39,6 +42,9 @@ const T = {
     sources: "Sources",
     accessed: "accessed",
     related: "More in this section",
+    toc: "On this page",
+    tableHint: "Scroll horizontally to see all columns.",
+    tableRegion: "Table, scrollable horizontally",
     disclaimer: "This is information, not advice.",
     breadcrumb: "Breadcrumb",
     draft: "DRAFT: not published",
@@ -46,6 +52,20 @@ const T = {
     dateLocale: "en-GB",
   },
 } as const;
+
+/** About hub copy. Factual, one column, no new visual motif. */
+const ABOUT_COPY: Record<Locale, string> = {
+  nl: "LaVega is een lokale, privacy-eerst financiële agent. Je gegevens blijven op je eigen machine of in een versleutelde kluis; koppelingen met banken en brokers zijn alleen-lezen. Geen betalingen, geen cloud-verplichting, zelf te hosten onder AGPL-3.0. Agenten geven getypeerde oordelen die terug te voeren zijn op je eigen thesis, geen vrij advies.",
+  en: "LaVega is a local-first, privacy-first finance agent. Your data stays on your machine or in an encrypted vault; bank and broker connections are read-only. No payments, no cloud requirement, self-hostable under AGPL-3.0. Agents return typed judgments traceable to your own thesis, not free-form advice.",
+};
+
+const slug = (s: string): string =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 export function esc(s: string): string {
   return s
@@ -74,10 +94,10 @@ md.use({
     html(token: Tokens.HTML | Tokens.Tag) {
       return esc(token.text);
     },
-    // The page title is the only h1.
+    // The page title is the only h1. Section headings get ids for the ToC.
     heading(token: Tokens.Heading) {
       const depth = Math.min(6, Math.max(2, token.depth));
-      return `<h${depth}>${this.parser.parseInline(token.tokens)}</h${depth}>\n`;
+      return `<h${depth} id="${esc(slug(token.text))}">${this.parser.parseInline(token.tokens)}</h${depth}>\n`;
     },
     link(token: Tokens.Link) {
       const inner = this.parser.parseInline(token.tokens);
@@ -92,8 +112,27 @@ md.use({
   },
 });
 
-function renderMarkdown(src: string): string {
-  return md.parse(src, { async: false });
+function renderMarkdown(src: string, l: Locale): string {
+  const html = md.parse(src, { async: false });
+  // Keep table semantics: the scroll wrapper owns overflow, not the table.
+  return html
+    .replace(
+      /<table>/g,
+      `<p class="table-hint">${esc(T[l].tableHint)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="${esc(T[l].tableRegion)}"><table>`,
+    )
+    .replace(/<\/table>/g, "</table></div>");
+}
+
+/** Text-only orientation for long articles. No progress bar, no new motif. */
+function toc(src: string, l: Locale): string {
+  const heads = md
+    .lexer(src)
+    .filter((t): t is Tokens.Heading => t.type === "heading" && t.depth >= 2);
+  if (heads.length < 3) return "";
+  const items = heads
+    .map((h) => `<li><a href="#${esc(slug(h.text))}">${esc(h.text)}</a></li>`)
+    .join("");
+  return `<nav class="toc" aria-label="${esc(T[l].toc)}"><p class="toc-label">${esc(T[l].toc)}</p><ol>${items}</ol></nav>`;
 }
 
 function fmtDate(iso: string, l: Locale): string {
@@ -149,13 +188,15 @@ function head(o: {
     `<meta name="twitter:description" content="${esc(o.description)}">`,
     `<meta name="twitter:image" content="${esc(img)}">`,
     `<link rel="stylesheet" href="${STYLESHEET}">`,
+    `<link rel="icon" href="${WORDMARK}" type="image/png">`,
     ...o.jsonLd.map((j) => `<script type="application/ld+json">${safeJsonLd(j)}</script>`),
   ];
   return lines.join("\n");
 }
 
 function header(l: Locale): string {
-  return `<header class="site-header"><a href="${homePath(l)}"><img src="${WORDMARK}" alt="LaVega" height="28"></a></header>`;
+  const other = l === "nl" ? { href: "/en", label: "EN" } : { href: "/", label: "NL" };
+  return `<header class="site-header"><a href="${homePath(l)}"><img src="${WORDMARK}" alt="LaVega" height="28"></a><nav class="locale-switch" aria-label="Taal / Language"><a href="${other.href}">${other.label}</a></nav></header>`;
 }
 
 function footer(l: Locale, hubs: Set<string>): string {
@@ -201,6 +242,7 @@ function crumbs(l: Locale, crumbList: { name: string; href?: string }[]): string
 export function renderPage(p: Page, all: Page[], opts: RenderOpts): string {
   const l = p.locale;
   const t = T[l];
+  const isDraft = p.status === "draft";
   const pool = visible(all, opts.draft);
   const canonical = opts.origin + urlFor(p);
   const hubs = builtHubs(pool);
@@ -254,8 +296,9 @@ ${crumbs(l, [
 ])}
 <h1>${esc(p.title)}</h1>
 <p class="meta">${t.by} ${authorHtml} · ${t.updated}: <time datetime="${p.updated}">${esc(fmtDate(p.updated, l))}</time></p>
+${toc(p.bodyMarkdown, l)}
 <div class="body">
-${renderMarkdown(p.bodyMarkdown)}</div>
+${renderMarkdown(p.bodyMarkdown, l)}</div>
 <p class="disclaimer">${t.disclaimer}</p>
 ${sources}
 </article>
@@ -270,13 +313,13 @@ ${relatedHtml}
       description: p.description,
       canonical,
       origin: opts.origin,
-      draft: opts.draft,
+      draft: isDraft,
       alternates,
       jsonLd: jsonLdForPage(p, opts.origin, pool),
       ogType: "article",
     }),
     body,
-    opts.draft,
+    isDraft,
     hubs,
   );
 }
@@ -315,10 +358,12 @@ export function renderHub(
   const items = list
     .map((x) => `<li><a href="${urlFor(x)}">${esc(x.title)}</a><p>${esc(x.description)}</p></li>`)
     .join("\n");
+  const about = family === "over" ? `<p>${esc(ABOUT_COPY[locale])}</p>` : "";
   const body = `<main>
 ${crumbs(locale, [{ name: "LaVega", href: homePath(locale) }, { name: title }])}
 <h1>${esc(title)}</h1>
 <p>${esc(description)}</p>
+${about}
 <ul class="hub-list">
 ${items}
 </ul>

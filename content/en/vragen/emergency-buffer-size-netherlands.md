@@ -65,10 +65,3 @@ An overview of your accounts and a forecast of your cash position make these que
 ## What LaVega does here
 
 LaVega brings your accounts into one overview, builds a forecast of your cash position and signals when your balance drops under a line you set yourself. LaVega does not set the size of your buffer. For that we point to Nibud. LaVega provides information and explanation and is not financial advice; LaVega has no AFM licence.
-
-## Related
-
-- [How does box 3 work?](/en/questions/how-does-box-3-work), on the tax on savings.
-- [How to clean up your subscriptions](/en/guides/clean-up-your-subscriptions), on fixed costs.
-
-This is information, not advice.

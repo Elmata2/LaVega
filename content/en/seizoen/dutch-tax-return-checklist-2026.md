@@ -84,5 +84,3 @@ An overview of all accounts and investments in one place helps. LaVega is one su
 ## A first step this week
 
 Create the folder, drop in your mortgage details and WOZ notice, and note when your employer sends the annual statement. That is enough for now.
-
-This is information, not advice.

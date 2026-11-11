@@ -77,5 +77,3 @@ You can do all of this by hand, in a spreadsheet or on paper. Some apps detect r
 ## Make it a habit
 
 Set aside fifteen minutes twice a year to go through the list again. Price increases and trial plans creep back in otherwise. How much a cleaned-up list frees up depends entirely on your own spending. For what a personal CFO is, see [What is a personal CFO?](/en/questions/what-is-a-personal-cfo).
-
-This is information, not advice.

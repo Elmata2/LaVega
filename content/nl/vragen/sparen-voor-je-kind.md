@@ -72,5 +72,3 @@ Schenken is geen derde soort rekening: het bepaalt van wie het geld is, niet waa
 ## Wat doet LaVega hiermee?
 
 LaVega brengt rekeningen en beleggingen in één overzicht, zodat je kunt zien wat er al staat voor een doel en hoe je kaspositie eruitziet. Zie [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo). Op deze pagina noemen we geen banken, fondsen of aanbieders. LaVega kiest geen vorm voor je. LaVega geeft informatie en uitleg en heeft geen AFM-vergunning.
-
-Dit is informatie, geen advies.

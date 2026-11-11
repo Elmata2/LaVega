@@ -82,5 +82,3 @@ Een overzicht van al je rekeningen en beleggingen op één plek helpt daarbij. L
 ## Eerste stap deze week
 
 Maak de map aan, leg er alvast je hypotheekgegevens en je WOZ-beschikking in en noteer wanneer je werkgever de jaaropgaaf stuurt. Meer hoeft nu niet.
-
-Dit is informatie, geen advies.

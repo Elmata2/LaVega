@@ -74,5 +74,3 @@ Over de eerdere vragen:
 ## Wat je er zelf mee doet
 
 Gebruik een AI-assistent als hulpmiddel om je cijfers te begrijpen, en controleer wat je belangrijk vindt. Vergelijk een getal met je eigen bankafschrift. Zoek een belastingbedrag op in de bron. Zie ook [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo) voor de vraag welk werk software kan overnemen.
-
-Dit is informatie, geen advies.

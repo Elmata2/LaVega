@@ -76,5 +76,3 @@ On the questions above:
 ## What you do with it
 
 Use an AI assistant as a tool for understanding your numbers, and check what matters to you. Compare a figure with your own bank statement. Look up a tax amount at the source. See also [What is a personal CFO?](/en/questions/what-is-a-personal-cfo) for the question of which work software can take over.
-
-This is information, not advice.

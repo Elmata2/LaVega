@@ -83,5 +83,3 @@ De aanpak werkt ook op papier of in een spreadsheet. Neem eenmaal per maand een 
 4. Loop de vaste lasten langs.
 
 Software neemt het handwerk over. De vragen blijven dezelfde.
-
-Dit is informatie, geen advies.

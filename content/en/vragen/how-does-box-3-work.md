@@ -79,11 +79,3 @@ What happens in the meantime, we leave out: for the Eerste Kamer (Senate) and la
 ## What LaVega does here
 
 LaVega shows your accounts and investments together, so you can see what stood where on a given date such as 1 January. LaVega does not calculate or check your tax return. It provides information and explanation; LaVega has no AFM licence and is not a tax adviser.
-
-## Related
-
-- [Dutch tax return for 2026, filed in 2027: checklist](/en/seasonal/dutch-tax-return-checklist-2026)
-- [Saving for your child in the Netherlands: the options](/en/questions/saving-for-your-child-in-the-netherlands)
-- [How big is an emergency buffer in the Netherlands?](/en/questions/emergency-buffer-size-netherlands)
-
-This is information, not advice.

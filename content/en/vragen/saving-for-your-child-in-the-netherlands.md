@@ -74,5 +74,3 @@ Gifting is not a third kind of account: it settles whose money it is, not where 
 ## What LaVega does here
 
 LaVega brings accounts and investments into one overview, so you can see what already stands for a goal and what your cash position looks like. See [What is a personal CFO?](/en/questions/what-is-a-personal-cfo). This page names no banks, funds or providers. LaVega does not pick a route for you. It provides information and explanation and has no AFM licence.
-
-This is information, not advice.
