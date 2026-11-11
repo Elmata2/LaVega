@@ -205,23 +205,56 @@ test("one subscriber leaving keeps polling for the others", async () => {
   expect(vi.getTimerCount()).toBe(0);
 });
 
-test("a broker start resumes price sync once even when callers overlap", async () => {
+test("a broker start reads holdings, then history, then resumes price sync once even when callers overlap", async () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    if (String(input) === "/api/brokers/sync?force=true")
+    const url = String(input);
+    if (url === "/api/brokers/sync?force=true&lane=holdings")
       return new Response(JSON.stringify({ problems: [] }));
-    if (String(input) === "/api/prices/sync")
-      return new Response(JSON.stringify(price("completed")));
-    throw new Error(`Unexpected request: ${String(input)}`);
+    if (url === "/api/brokers/sync?force=true&lane=history")
+      return new Response(JSON.stringify({ problems: [] }));
+    if (url === "/api/prices/sync") return new Response(JSON.stringify(price("completed")));
+    throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
 
   await Promise.all([session.startBrokerSync(true), session.startBrokerSync(true)]);
   await vi.advanceTimersByTimeAsync(0);
 
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(fetchMock).toHaveBeenCalledWith("/api/brokers/sync?force=true", { method: "POST" });
+  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+    "/api/brokers/sync?force=true&lane=holdings",
+    "/api/brokers/sync?force=true&lane=history",
+    "/api/prices/sync",
+  ]);
+  expect(fetchMock).toHaveBeenCalledWith("/api/brokers/sync?force=true&lane=holdings", {
+    method: "POST",
+  });
+  expect(fetchMock).toHaveBeenCalledWith("/api/brokers/sync?force=true&lane=history", {
+    method: "POST",
+  });
   expect(fetchMock).toHaveBeenCalledWith("/api/prices/sync", { method: "POST" });
   expect(session.readSyncSnapshot().price?.status).toBe("completed");
+});
+
+test("a failed holdings lane does not stop the history lane", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "/api/brokers/sync?lane=holdings")
+      return new Response(JSON.stringify({ problems: ["holdings failed"] }), { status: 503 });
+    if (url === "/api/brokers/sync?lane=history")
+      return new Response(JSON.stringify({ problems: [] }));
+    if (url === "/api/prices/sync") return new Response(JSON.stringify(price("completed")));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await session.startBrokerSync(false);
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+    "/api/brokers/sync?lane=holdings",
+    "/api/brokers/sync?lane=history",
+    "/api/prices/sync",
+  ]);
 });
 
 test("price rounds that run out leave a visible incomplete result", async () => {

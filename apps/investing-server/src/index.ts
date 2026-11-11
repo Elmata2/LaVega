@@ -48,6 +48,7 @@ import {
   syncScheduledBrokers,
   PartnerBudget,
   YahooHttpClient,
+  type BrokerSyncLane,
   type BrokerSyncOperationStore,
   type PartnerBudgetClient,
   type PriceStore,
@@ -187,7 +188,12 @@ export function createRuntimeBrokerSync(
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
   partnerBudget?: PartnerBudgetClient,
-): (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => Promise<ScheduledSyncResult> {
+): (
+  force: boolean,
+  lanes: readonly BrokerSyncLane[],
+  deadlineMs?: number,
+  rebuildOrders?: boolean,
+) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
@@ -195,13 +201,14 @@ export function createRuntimeBrokerSync(
     onTrading212Diagnostic,
     partnerBudget,
   });
-  return async (force, deadlineMs, rebuildOrders) => {
+  return async (force, lanes, deadlineMs, rebuildOrders) => {
     const result = await syncScheduledBrokers({
       adapters,
       credentials,
       operations,
       tenantId,
       entity,
+      lanes,
       force,
       rebuildOrders,
       deadlineMs,
@@ -472,7 +479,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       tenantId,
       partnerBudget,
     );
-    const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+    const brokerSync = async (
+      force: boolean,
+      lanes: readonly BrokerSyncLane[],
+      deadlineMs?: number,
+      rebuildOrders?: boolean,
+    ) => {
       if (devFixtureEnabled) {
         syncProgress = {
           status: "completed",
@@ -501,7 +513,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
       }
       try {
-        const result = await scheduledBrokerSync(force, deadlineMs, rebuildOrders);
+        const result = await scheduledBrokerSync(force, lanes, deadlineMs, rebuildOrders);
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
@@ -734,11 +746,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+  const brokerSync = async (
+    force: boolean,
+    lanes: readonly BrokerSyncLane[],
+    deadlineMs?: number,
+    rebuildOrders?: boolean,
+  ) => {
     const tenantId = await resolveTenantId();
     const result = await (
       await tenantRuntime(tenantId)
-    ).brokerSync(force, deadlineMs, rebuildOrders);
+    ).brokerSync(force, lanes, deadlineMs, rebuildOrders);
     dashboardCache.invalidate(tenantId);
     return result;
   };

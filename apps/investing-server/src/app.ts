@@ -38,6 +38,7 @@ import {
   type ScheduledBroker,
   type YahooPriceRequest,
 } from "@lavega/adapters";
+import type { BrokerSyncLane } from "@lavega/adapters";
 import {
   createInMemoryPriceSyncProgressStore,
   createPriceOrchestrator,
@@ -171,6 +172,7 @@ type PriceDependencies = {
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
   brokerSync: (
     force: boolean,
+    lanes: readonly BrokerSyncLane[],
     deadlineMs?: number,
     rebuildOrders?: boolean,
   ) => Promise<{ outcomes: unknown[]; problems: string[] }>;
@@ -745,18 +747,33 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     return c.json(await dependencies.brokerSyncStatus());
   });
   investingApp.post("/api/brokers/sync", async (c) => {
+    const requestedLane = c.req.query("lane");
+    if (requestedLane !== undefined && requestedLane !== "holdings" && requestedLane !== "history")
+      return c.json({ problems: [`Unknown lane: ${requestedLane}`] }, 400);
+    // Absent lane = both, which is what a caller that predates lanes means.
+    const lanes: readonly BrokerSyncLane[] =
+      requestedLane === "holdings"
+        ? ["holdings"]
+        : requestedLane === "history"
+          ? ["history"]
+          : ["holdings", "history"];
     const deadline = priceSyncDeadline();
     try {
       const result = await brokerSync(
         c.req.query("force") === "true",
+        lanes,
         deadline,
         c.req.query("rebuildOrders") === "true",
       );
       problemReporter({ source: "broker-sync", problems: result.problems });
       /* Awaited, not detached. Work started after the response is not
        * guaranteed to run at all on a serverless host, which is how prices
-       * went months without a bar while every call looked successful. */
-      await runPriceSyncIfConsented(await resolveTenantId(), deadline);
+       * went months without a bar while every call looked successful. The
+       * holdings lane never starts it: two broker requests must answer in
+       * under the 5 s dashboard budget, and a price slice is not what the
+       * user opened the app for. */
+      if (lanes.includes("history"))
+        await runPriceSyncIfConsented(await resolveTenantId(), deadline);
       return c.json(result);
     } catch {
       const result = { outcomes: [], problems: ["Broker synchronization failed"] };

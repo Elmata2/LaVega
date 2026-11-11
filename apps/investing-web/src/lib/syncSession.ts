@@ -215,24 +215,53 @@ export function continuePriceSync(): Promise<PriceSyncOutcome> {
   return priceRun;
 }
 
+async function requestLane(
+  lane: "holdings" | "history",
+  force: boolean,
+): Promise<{
+  response: Response;
+  result: SyncResult;
+}> {
+  const query = `${force ? "?force=true&" : "?"}lane=${lane}`;
+  const response = await fetch(`/api/brokers/sync${query}`, { method: "POST" });
+  return { response, result: await readSyncResult(response) };
+}
+
 /** Starts a broker sync, or joins the one already running, then continues
- * price sync. Every start path (app open, manual, save, unlock) goes through
- * here so they share polling, invalidation and terminal outcomes. */
+ *  price sync. Two steps so the expensive lane cannot delay the cheap one:
+ *
+ *  1. holdings (`lane=holdings`): two broker requests, current enough to be
+ *     60 s old, and it never starts price sync;
+ *  2. history (`lane=history`): tail-or-full history, then price sync.
+ *
+ *  Every start path (app open, manual, save, unlock) goes through here so they
+ *  share polling, invalidation and terminal outcomes. A failed holdings read
+ *  does not stop the history read: half a sync is still better than none. */
 export function startBrokerSync(force = false): Promise<SyncResult> {
   if (!brokerRun) {
     brokerRun = (async () => {
-      const response = await fetch(`/api/brokers/sync${force ? "?force=true" : ""}`, {
-        method: "POST",
-      });
-      const result = await readSyncResult(response);
-      /* A non-OK answer without a JSON body is a proxy cutting the request off
-       * (Cloudflare 524 after ~100 s) while the server keeps syncing, so the
-       * run continues as if it succeeded. Only the server's own JSON error
-       * fails the start. */
+      let holdings: SyncResult = null;
+      try {
+        const { response, result } = await requestLane("holdings", force);
+        holdings = result;
+        /* A non-OK answer without a JSON body is a proxy cutting the request off
+         * (Cloudflare 524 after ~100 s) while the server keeps syncing, so the
+         * run continues as if it succeeded. Only the server's own JSON error
+         * fails the start. */
+        if (!response.ok && result) throw new Error(result.problems?.[0] ?? "Broker sync failed.");
+      } catch (error) {
+        // The history lane still runs; this only records why holdings failed.
+        holdings = {
+          problems: [error instanceof Error ? error.message : "Broker holdings sync failed."],
+        };
+      }
+      dispatchDashboardRefresh();
+
+      const { response, result } = await requestLane("history", force);
       if (!response.ok && result) throw new Error(result.problems?.[0] ?? "Broker sync failed.");
       dispatchDashboardRefresh();
       void continuePriceSync();
-      return result;
+      return result ?? holdings;
     })().finally(() => {
       brokerRun = null;
       wakeSyncSession();

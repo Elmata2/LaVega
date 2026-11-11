@@ -178,7 +178,10 @@ test("a second concurrent run waits instead of spending the same rate limit", as
   } as unknown as ReturnType<typeof createFileCredentialStore>;
   const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore());
 
-  const [first, second] = await Promise.all([sync(true), sync(true)]);
+  const [first, second] = await Promise.all([
+    sync(true, ["holdings", "history"]),
+    sync(true, ["holdings", "history"]),
+  ]);
 
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
@@ -224,7 +227,7 @@ test("runtime broker sync passes the signed-in tenant to credential-aware adapte
     "user-123",
   );
 
-  const result = await sync(true);
+  const result = await sync(true, ["holdings", "history"]);
 
   expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
   expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");

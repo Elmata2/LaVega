@@ -764,11 +764,11 @@ test("broker sync route forwards force and keeps problems in response", async ()
     outcomes: [{ status: "synced" }],
     problems: ["ibkr: unavailable"],
   });
-  expect(brokerSync).toHaveBeenCalledWith(true, undefined, false);
+  expect(brokerSync).toHaveBeenCalledWith(true, ["holdings", "history"], undefined, false);
   await investingApp.request("/api/brokers/sync?force=true&rebuildOrders=true", {
     method: "POST",
   });
-  expect(brokerSync).toHaveBeenLastCalledWith(true, undefined, true);
+  expect(brokerSync).toHaveBeenLastCalledWith(true, ["holdings", "history"], undefined, true);
 });
 
 test("broker sync passes host deadline to broker work", async () => {
@@ -778,7 +778,7 @@ test("broker sync passes host deadline to broker work", async () => {
   const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(brokerSync).toHaveBeenCalledWith(false, 1_234, false);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings", "history"], 1_234, false);
 });
 
 test("broker sync starts server-side price orchestration despite broker problems", async () => {
@@ -805,6 +805,80 @@ test("broker sync starts server-side price orchestration despite broker problems
 
   await investingApp.request("/api/brokers/sync", { method: "POST" });
   expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("the holdings lane request never starts price sync", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=holdings", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings"], undefined, false);
+  expect(provider.get).not.toHaveBeenCalled();
+});
+
+test("the history lane request starts price sync and asks only for history", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  await investingApp.request("/api/brokers/sync?lane=history", { method: "POST" });
+
+  expect(brokerSync).toHaveBeenCalledWith(false, ["history"], undefined, false);
+  expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("an unknown lane is rejected without starting any work", async () => {
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({ brokerSync });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=everything", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["Unknown lane: everything"] });
+  expect(brokerSync).not.toHaveBeenCalled();
 });
 
 test("broker sync route converts unexpected failures into a useful response", async () => {
