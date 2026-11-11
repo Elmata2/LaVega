@@ -1795,21 +1795,21 @@ aggregate file live under `.lavega/baselines/`, which is gitignored.
 | Metric                       | Definition                                                                                                                                                                                                           | Phase 0 source                                                    |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Forecast error 30/60/90      | Median absolute percentage error of the forecast's predicted balance against the realised balance, per horizon (30, 60, 90 days), over the last 3 complete months (`packages/core/src/forecast.ts`, forecast screen) | Owner records the forecast now, compares at +30/+60/+90 days      |
-| Internal-transfer match rate | Confirmed transfer pairs ÷ (confirmed + rejected + still-suggested pairs after 30 days) on the Transfers screen                                                                                                      | Owner counts from the screen over the last 3 months               |
-| Uncategorized share          | Transactions with no category ÷ all transactions in the last 3 complete months (Transacties, "geen categorie" filter)                                                                                                | Owner counts from the filter                                      |
-| Statement coverage           | Months with at least one statement/imported document ÷ months since the first account opened                                                                                                                         | Pending documents feature (WS3.4); record `pending`, do not guess |
+| Internal-transfer match rate | Confirmed transfer pairs ÷ (confirmed + rejected + still-suggested pairs after 30 days) in Transacties → Mogelijke overboekingen (`/app/transactions`)                                                              | Owner counts from the screen over the last 3 months               |
+| Uncategorized share          | Transactions with no category ÷ all transactions in the last 3 complete months (Transacties, category filter "onbekend")                                                                                                | Owner counts from the filter                                      |
+| Statement coverage           | Months with at least one statement/imported document ÷ months since the first account opened                                                                                                                         | Documents card live (WS3.4/WS3.5, #293) at Profiel → Documenten; count months with ≥1 statement. Record `pending` until statements exist |
 | Realised-gain reconciliation | Realised gains + income from the report − the broker's own realised/cash movement; `unknown` when the broker does not report it (never 0 by default)                                                                 | Investing report vs broker statement for the last closed year     |
-| MCP usage                    | Tool calls per week and tool error rate (`investing.mcp_audit` / stdout audit lines)                                                                                                                                 | Server audit, `ok                                                 | refused | error` counts |
+| MCP usage                    | Tool calls per week and tool error rate (`investing.mcp_audit` / stdout audit lines)                                                                                                                                 | Server audit, `ok`/`refused`/`error` counts |
 | AI spend                     | EUR cents per operation and per account per month (`personal.ai_usage`)                                                                                                                                              | `/api/agent/budget` + ledger rows                                 |
 | Time to close a month        | Wall-clock minutes from starting the month-close routine to the point the owner trusts the numbers                                                                                                                   | Owner times one close with a stopwatch                            |
 
 **Phase 0 baseline runbook (owner, about one hour):**
 
-1. Open the app on the owner's own machine with the real vault unlocked; do not
+1. Open https://www.lavega.dev/app on the owner's own machine and sign in; do not
    share the screen or export plaintext.
 2. For each row above that can be read from a screen today, note the aggregate
    only (rate, percentage, median, minutes) — never a transaction, amount, name
-   or IBAN. Rows whose feature has not shipped (statement coverage) are recorded
+   or IBAN. Rows with no data in the vault yet (statement coverage) are recorded
    as `pending` with the reason.
 3. Write the aggregates to `.lavega/baselines/phase0.json` (gitignored) as
    `{metric, value, unit, asOf, method}`, and paste only those aggregate values
