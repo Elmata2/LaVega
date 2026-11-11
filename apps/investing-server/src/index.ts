@@ -102,6 +102,7 @@ import {
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { attachMcpReadRoutes } from "./tools/readRoutes.js";
 import { attachLetterRoutes } from "./letterRoutes.js";
 import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
@@ -767,6 +768,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       consent: marketDataConsentStore,
       fundamentals: freshFundamentals,
       chatModel: options.chatModel,
+    });
+    /* The reads the external MCP tools call (#285). Projected from the same
+     * tenant-scoped context the chat uses, so the dashboard and `/mcp` cannot
+     * disagree about a position, a trade or a price. */
+    attachMcpReadRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      context: portfolioChatContext,
+      consent: async () => (await marketDataConsentStore.get(await resolveTenantId())).accepted,
     });
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
