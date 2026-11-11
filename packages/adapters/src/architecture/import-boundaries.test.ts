@@ -269,8 +269,8 @@ describe("import boundaries", () => {
     const violations = collectImports(await collectModules()).filter(({ file, specifier }) => {
       if (isStorageAdapterFile(file)) return false;
       return /(?:^|\/)storage\/(?:indexeddb|encryptedStorage)(?:\.js)?$/.test(specifier);
-    }, 30_000);
+    });
 
     expect(violations).toEqual([]);
-  });
+  }, 30_000);
 });
