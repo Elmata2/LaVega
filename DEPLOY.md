@@ -158,7 +158,7 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
   | Store                              | Table                                 |
   | ---------------------------------- | ------------------------------------- |
   | Broker credentials and snapshots   | `investing.broker_vaults` (encrypted) |
-  | Daily price bars                   | `investing.price_bars`                |
+  | Daily price bars (shared)          | `investing.instrument_price_bars`     |
   | Benchmarks and market-data consent | `investing.preferences`               |
   | Broker sync state                  | `investing.sync_state` (per broker)   |
   | Price sync progress                | `investing.sync_state` (key `prices`) |

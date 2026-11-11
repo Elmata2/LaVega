@@ -47,22 +47,24 @@ Some rows belong to no user, and a row-level policy would hide what every tenant
 
 ### Amendment 2026-11-11 — shared market data (issue #307)
 
-The per-user `investing.price_bars` and `investing.price_coverage` tables stay in place, unread and unwritten, for one release; a follow-up drops them and their `price_bars_raise_dashboard_version` trigger. All reads and writes go to the shared tables above through `SharedPriceStore`; no query in `packages/database` names the old price tables except the erase list, which keeps deleting them until they are dropped.
+The per-user `investing.price_bars` and `investing.price_coverage` tables stayed in place, unread and unwritten, for one release.
 
-**`dashboard_snapshots.price_keys` records the instrument keys a build read.** The per-user version trigger cannot see a shared write, so a stored dashboard counts only while its version and UTC day still hold *and* no key in `price_keys` has a coverage `updated_at` later than the row's `updated_at`. That column names, in clear, which instruments a user's dashboard read. It is the same exposure the per-user `price_bars` rows have today (which symbols a user holds), moved to the snapshot row; it does not get worse, and the bars themselves no longer reveal it one row per date.
+### Amendment 2026-11-11 — the per-user price tables are dropped (issue #310)
+
+The shared store then served one release, so `0037` dropped both tables and, with them, the `price_bars_raise_dashboard_version` trigger. All reads and writes go to the shared tables above through `SharedPriceStore`; no query in `packages/database` names the old price tables, including the erase list.
+
+**`dashboard_snapshots.price_keys` records the instrument keys a build read.** The per-user version trigger cannot see a shared write, so a stored dashboard counts only while its version and UTC day still hold _and_ no key in `price_keys` has a coverage `updated_at` later than the row's `updated_at`. That column names, in clear, which instruments a user's dashboard read. It is the same exposure the old per-user `price_bars` rows had (which symbols a user holds), moved to the snapshot row; it does not get worse, and the bars themselves no longer reveal it one row per date.
 
 ## Table ownership
 
-| Table                       | Cardinality                         | Purpose                                                                                                                         |
-| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `personal.vaults`           | One per user                        | Encrypted personal finance vault.                                                                                               |
-| `investing.broker_vaults`   | One per user and broker             | Encrypted broker credentials and latest encrypted snapshot.                                                                     |
-| `investing.price_bars`      | One per user, symbol, date          | Queryable daily market data.                                                                                                    |
-| `investing.price_coverage`  | One per user and symbol             | Date window the provider answered, its listing/currency (0015), and a closed position's confirmed-delisted date, if any (0021). |
-| `investing.preferences`     | One per user                        | Up to three benchmark symbols and market-data consent JSON.                                                                     |
-| `investing.sync_state`      | One per user and broker/sync key    | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`.                        |
-| `investing.agent_runs`      | One latest row per user             | Latest agent run status and result JSON.                                                                                        |
-| `investing.partner_budgets` | One per partner, endpoint and scope | Next allowed request time per partner key (0033). No user; see above.                                                           |
+| Table                       | Cardinality                         | Purpose                                                                                                  |
+| --------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `personal.vaults`           | One per user                        | Encrypted personal finance vault.                                                                        |
+| `investing.broker_vaults`   | One per user and broker             | Encrypted broker credentials and latest encrypted snapshot.                                              |
+| `investing.preferences`     | One per user                        | Up to three benchmark symbols and market-data consent JSON.                                              |
+| `investing.sync_state`      | One per user and broker/sync key    | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`. |
+| `investing.agent_runs`      | One latest row per user             | Latest agent run status and result JSON.                                                                 |
+| `investing.partner_budgets` | One per partner, endpoint and scope | Next allowed request time per partner key (0033). No user; see above.                                    |
 
 ## Consequences
 

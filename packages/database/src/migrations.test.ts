@@ -33,6 +33,28 @@ test("every migration file applies without error", () => {
   expect(migrationErrors).toEqual([]);
 });
 
+test("the dropped per-user price tables are gone and the shared instrument-keyed ones remain (#310)", async () => {
+  const rows = await db.query<{
+    legacy_bars: string | null;
+    legacy_coverage: string | null;
+    shared_bars: string | null;
+    shared_coverage: string | null;
+  }>(
+    `SELECT to_regclass('investing.price_bars') AS legacy_bars,
+            to_regclass('investing.price_coverage') AS legacy_coverage,
+            to_regclass('investing.instrument_price_bars') AS shared_bars,
+            to_regclass('investing.instrument_price_coverage') AS shared_coverage`,
+  );
+  expect(rows.rows).toEqual([
+    {
+      legacy_bars: null,
+      legacy_coverage: null,
+      shared_bars: "investing.instrument_price_bars",
+      shared_coverage: "investing.instrument_price_coverage",
+    },
+  ]);
+});
+
 test("lavega_runtime is granted select, insert, update, delete on every table in personal and investing", async () => {
   const tables = await db.query<{ table_schema: string; table_name: string }>(
     `SELECT table_schema, table_name FROM information_schema.tables

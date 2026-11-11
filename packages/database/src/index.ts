@@ -1538,8 +1538,6 @@ const USER_DATA_TABLES = [
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
-  "investing.price_coverage",
-  "investing.price_bars",
   "investing.broker_vaults",
   // After the tables above: deleting their rows raises this user's dashboard version.
   "investing.dashboard_snapshots",
