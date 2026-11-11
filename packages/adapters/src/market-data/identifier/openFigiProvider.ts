@@ -1,17 +1,36 @@
 import type { Provider } from "../providerRouter.js";
 import type { IdentifierProviderResult, IdentifierRequest } from "../lanes.js";
+import {
+  createMemoryPartnerBudgetClient,
+  type PartnerBudgetClient,
+} from "../../partnerBudget/PartnerBudget.js";
+import { partnerKey } from "../../partnerBudget/limits.js";
 type OpenFigiClient = { postJson(url: string, body: unknown): Promise<unknown> };
 
-/** Unauthenticated OpenFIGI budget is 25 requests/min; stay under it regardless
- *  of how fast the caller paces symbols. */
-const MIN_INTERVAL_MS = 2_500;
+/* The unauthenticated OpenFIGI budget is 25 requests/min, shared by every user
+ * of the deployment. The spacing lives in the PartnerBudget limit table
+ * (`openfigi:mapping`), so it holds across invocations and instances. */
 const MAX_ATTEMPTS = 5;
+/** A Retry-After longer than this is not worth holding the key for. */
+const MAX_RETRY_AFTER_MS = 120_000;
+const OPENFIGI_KEY = partnerKey("openfigi:mapping");
+
+/** Retry-After is seconds or an HTTP date. Returns the wait in ms, or undefined. */
+function retryAfterMsOf(header: string | null, nowMs: number): number | undefined {
+  const raw = header?.trim();
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return seconds > 0 ? seconds * 1_000 : undefined;
+  const at = Date.parse(raw);
+  return Number.isFinite(at) && at > nowMs ? at - nowMs : undefined;
+}
 
 export function createOpenFigiIdentifierProvider(
   input: {
     client?: OpenFigiClient;
     now?: () => number;
-    sleep?: (ms: number) => Promise<void>;
+    /** Where request slots come from. Defaults to a budget of this provider's own. */
+    partnerBudget?: PartnerBudgetClient;
   } = {},
 ): Provider<IdentifierRequest, IdentifierProviderResult> {
   const cache = new Map<string, IdentifierProviderResult>();
@@ -29,33 +48,35 @@ export function createOpenFigiIdentifierProvider(
           retryAfterMs?: number;
         };
         error.status = response.status;
-        const retryAfter = Number(response.headers.get("retry-after"));
-        if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1_000;
+        const retryAfterMs = retryAfterMsOf(response.headers.get("retry-after"), Date.now());
+        if (retryAfterMs !== undefined) error.retryAfterMs = retryAfterMs;
         throw error;
       }
       return response.json();
     });
   const now = input.now ?? Date.now;
-  const sleep =
-    input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  let lastRequestAt = 0;
+  const budget = input.partnerBudget ?? createMemoryPartnerBudgetClient();
 
   const requestWithBudget = async (body: unknown): Promise<unknown> => {
     let lastError: unknown;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-      const wait = lastRequestAt + MIN_INTERVAL_MS - now();
-      if (wait > 0) await sleep(wait);
-      lastRequestAt = now();
+      // A failure of the budget itself is not retried: no request goes out.
+      await budget.awaitSlot(OPENFIGI_KEY);
       try {
         return await postJson("https://api.openfigi.com/v3/mapping", body);
       } catch (error) {
         lastError = error;
         const status = (error as { status?: number }).status;
-        // Rate limit or transient provider issue: back off and retry. Honor
-        // Retry-After when present, otherwise exponential backoff.
+        // Rate limit or transient provider issue: tell the budget when the key
+        // may be used again; the next slot waits for it. Honor Retry-After when
+        // present (capped), otherwise back off.
         if (status !== 429 && (status === undefined || status < 500)) break;
         const retryAfterMs = (error as { retryAfterMs?: number }).retryAfterMs;
-        await sleep(retryAfterMs ?? Math.min(60_000, 5_000 * attempt));
+        const holdMs =
+          retryAfterMs !== undefined
+            ? Math.min(retryAfterMs, MAX_RETRY_AFTER_MS)
+            : Math.min(60_000, 5_000 * attempt);
+        await budget.reject(OPENFIGI_KEY, now() + holdMs);
       }
     }
     throw lastError;
