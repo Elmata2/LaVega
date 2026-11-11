@@ -818,6 +818,63 @@ Divergences from the plan text, each deliberate:
   window is a constant, not a clock read.
 - **Tests are plain vitest**, like the rest of the core package.
 
+**As built (WS3.3, [#292](https://github.com/Elmata2/LaVega/issues/292), 2026-11-11).**
+The balance sheet and the income statement landed as `packages/core/src/reports.ts`,
+computed inside `computePlan` (`PlanResult.reports`) and shown by a new `ReportsCard` on the
+Plan page. Nothing is stored: both statements are derived from the vault arrays the plan
+already reads, and there is no cash-flow statement, no Sankey and no reports route in this
+slice. Divergences from the plan text, each deliberate:
+
+- **Only the two missing assemblies are new; the pipeline is reused.** Personal scope
+  (`personalView`), own-transfer and card-settlement cleaning (`cleanTxs`), the plan's copy
+  of `ownAccounts` (`scopedOwn`), category derivation (`categorize`), FX conversion
+  (`toEur`, `separate` mode leaves a row out and counts it) and the balance series (#291
+  `accountBalanceSeries` / `netWorthSeries`) are the existing primitives. `reports.ts` adds
+  the netting, the two totals, equity and the "how calculated" steps — not a second ledger.
+- **The balance sheet is Sure's, with LaVega's signed ledger.** Assets sum positive; a
+  liability reports the amount OWED as a positive (Sure's shape, and how Rekeningen already
+  shows a debt), while each account row keeps the vault's signed balance. Equity is
+  `assets − liabilities`; the #291 net-worth series is computed independently and the two
+  figures are asserted equal, which is the balance check.
+- **An unknown valuation is a GAP in the sheet too.** When any included account cannot be
+  valued on `asOf`, `assetsCents`, `liabilitiesCents`, `equityCents` and `balanced` are
+  `null`, the unknown keys are named, and the known partial sums are exposed BESIDE the gap
+  and never presented as totals. A carried anchor older than the #291 stale window stays a
+  labelled value (not a gap) exactly as the series says.
+- **Refunds are netted per category BEFORE the sides are split**, Sure's
+  `net_category_totals`: a category whose spending refunds out flips to income of that
+  magnitude, and the two totals are the sums of the netted categories. Income − spend is
+  therefore the netted ledger by construction; the test also asserts it against an
+  independent sign-normalized ledger pass.
+- **Owner-excluded and pending rows are skipped, and that is a divergence from the plan
+  pipeline.** The plan's sections read `cleanTxs` without consulting the WS1.6 tx states;
+  a statement must not count a row the owner excluded or that has not settled, so the
+  report filters both (and says nothing about them — they are not money that moved).
+- **The savings rate is net savings over income, NULL when income is not positive.** Zero
+  income is unknown, never 0 and never Infinity; a negative net saving keeps its negative
+  rate. This is the same `ratio` rule `plan/month.ts` uses, applied to the statement's own
+  netted totals instead of the room's median months.
+- **Periods are calendar months, and the month in progress is marked PARTIAL.** The card
+  shows `asOf`'s month clipped at `asOf` plus the two previous full months, newest first,
+  so "per period" is visible without a second call. The plan's month-coverage rule is NOT
+  applied here: a statement reports what is booked, and a thin month is shown with its
+  partial badge rather than hidden (a balance statement is not a forecast input).
+- **Categories stay flat.** Sure nets by persisted category tree; LaVega's categories are
+  flat strings (WS2.9 added an explicit group map for budgets only), so the statement
+  reports the flat category names and never invents a parent.
+- **The UI is a card on the existing Plan page, not a new section or route.** It reuses the
+  plan frame (`Card`, `Rows`, `useSectionCopy`) and renders the engine's own calc steps in
+  plain sentences, so the numbers shown are the numbers used. Both copy packs carry the
+  sentences; the advice-language scan applies to them like every other plan string.
+- **Acceptance evidence is a hand-worked household.**
+  `packages/core/src/__fixtures__/reports-292.json` holds one partial month, two full
+  months, a mixed category whose refunds net it, an owner-excluded row, a pending row, an
+  unconvertible row, an own transfer pair, and a balance sheet with a house valuation.
+  `reports.test.ts` asserts the cross-foot, the category-to-ledger reconciliation, the
+  zero-income unknown rate, the balance-sheet balance against the #291 series, the unknown
+  gap and the stale label: 15 tests. `ReportsCard.test.tsx` pins the rendered statement,
+  the partial badge, the gap sentence and the how-calculated lines: 5 tests.
+
 ### WS4 — Investing depth (investing)
 
 **Goal.** Make the existing investment dashboard defensible for tax and income: basis
