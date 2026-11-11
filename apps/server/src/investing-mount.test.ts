@@ -426,6 +426,7 @@ test("a failing tenant listing is a 503 with a fixed message, not a leak", async
 test("the cron hop chain visits 7 tenants in 3 hops, each exactly once, in list order", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_CHAIN = "on";
   process.env.INVESTING_SYNC_BUDGET_MS = "140000";
   process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
   const tenants = ["a", "b", "c", "d", "e", "f", "g"];
@@ -459,10 +460,10 @@ test("the cron hop chain visits 7 tenants in 3 hops, each exactly once, in list 
   expect(first.pathname).toBe("/api/cron/investing-sync");
   expect(first.searchParams.get("after")).toBe("c");
   expect(first.searchParams.get("hop")).toBe("1");
+  delete process.env.INVESTING_SYNC_CHAIN;
 });
 
-test("INVESTING_SYNC_CHAIN=off stops the cron chain and leaves the rest for the next trigger", async () => {
-  process.env.INVESTING_SYNC_CHAIN = "off";
+test("the cron chain is off by default: one pass leaves the rest for the next trigger", async () => {
   process.env.INVESTING_SYNC_BUDGET_MS = "140000";
   process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -477,7 +478,6 @@ test("INVESTING_SYNC_CHAIN=off stops the cron chain and leaves the rest for the 
 
   expect(body).toMatchObject({ skipped: 1, continued: false });
   expect(continueFetch).not.toHaveBeenCalled();
-  delete process.env.INVESTING_SYNC_CHAIN;
 });
 
 test("a cron hop above the cap is a 400, not a silent restart", async () => {

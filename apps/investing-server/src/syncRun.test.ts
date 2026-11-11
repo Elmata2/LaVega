@@ -149,7 +149,7 @@ test("a wait longer than the budget releases the lease and asks for one continua
         waitUntilMs: Date.now() + 230_000,
       }),
     },
-    env: { INVESTING_SYNC_BUDGET_MS: "240000" },
+    env: { INVESTING_SYNC_CHAIN: "on", INVESTING_SYNC_BUDGET_MS: "240000" },
   });
   await syncRun.requestRefresh(false);
   await Promise.all(runs);
@@ -160,9 +160,9 @@ test("a wait longer than the budget releases the lease and asks for one continua
   expect(row?.outcome).toBeNull();
 });
 
-test("INVESTING_SYNC_CHAIN=off sends no continuation and keeps the resume point", async () => {
+test("the chain is off by default: no self-request, the resume point stays for the next trigger", async () => {
   const { syncRun, store, continuations, runs } = harness({
-    env: { INVESTING_SYNC_CHAIN: "off", INVESTING_SYNC_BUDGET_MS: "240000" },
+    env: { INVESTING_SYNC_BUDGET_MS: "240000" },
     lanes: {
       history: async () => ({
         status: "waiting",
@@ -186,7 +186,7 @@ test("at the hop limit work left stops the run instead of continuing", async () 
         waitUntilMs: Date.now() + 230_000,
       }),
     },
-    env: { INVESTING_SYNC_BUDGET_MS: "240000" },
+    env: { INVESTING_SYNC_CHAIN: "on", INVESTING_SYNC_BUDGET_MS: "240000" },
   });
   await syncRun.requestRefresh(false);
   await Promise.all(runs);

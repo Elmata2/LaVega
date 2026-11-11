@@ -264,10 +264,11 @@ export async function forwardInvesting(request: Request, tenantId: string): Prom
  *  about 2.5 h of tenant work, the cap the issue states for Hobby. */
 export const CRON_MAX_HOPS = 40;
 
-/** The kill switch covers the cron chain too: `off` means every trigger
- *  advances the work by one budget and nothing calls itself. */
+/** The cron chain has the same Vercel limit as the run chain (508 after the
+ *  fifth self-request, issue #306), so it is off unless a deployment explicitly
+ *  turns it on: every trigger advances the work by one budget. */
 function cronChainEnabled(): boolean {
-  return process.env.INVESTING_SYNC_CHAIN !== "off";
+  return process.env.INVESTING_SYNC_CHAIN === "on";
 }
 
 /**

@@ -134,7 +134,10 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const parsed = raw === undefined ? Number.NaN : Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
-  const chainEnabled = () => env("INVESTING_SYNC_CHAIN") !== "off";
+  /* Vercel answers its own 5th self-request with 508 INFINITE_LOOP_DETECTED
+   * (issue #306 spike, 2026-11-11), so self-continuation is off unless a
+   * deployment explicitly turns it on. One trigger buys one budget of work. */
+  const chainEnabled = () => env("INVESTING_SYNC_CHAIN") === "on";
 
   const store = dependencies.store;
 
