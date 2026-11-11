@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
-import { bucketPricedAllocation } from "./allocation.js";
+import { bucketPricedAllocation, buildAllocationLadder } from "./allocation.js";
 import {
   computePortfolioValueSeries,
   filterPortfolioValueRange,
@@ -147,6 +147,28 @@ const AllocationSchema = Schema.Struct({
   buckets: Schema.Array(AllocationBucketSchema),
   unpriced: StringList,
 });
+const AllocationLadderRowSchema = Schema.Struct({
+  key: Schema.String,
+  label: Schema.String,
+  kind: Schema.Union([
+    Schema.Literal("holding"),
+    Schema.Literal("cash"),
+    Schema.Literal("unclassified"),
+  ]),
+  value: NullableNumber,
+  weight: NullableNumber,
+  unpriced: Schema.Boolean,
+});
+const AllocationLadderSchema = Schema.Struct({
+  rows: Schema.Array(AllocationLadderRowSchema),
+  cash: NullableNumber,
+  holdings: NullableNumber,
+  total: NullableNumber,
+  denominator: NullableNumber,
+  denominatorRule: Schema.String,
+  weightsSum: NullableNumber,
+  unpriced: StringList,
+});
 const PortfolioValuePointSchema = Schema.Struct({
   date: Schema.String,
   positionsValue: NullableNumber,
@@ -212,6 +234,9 @@ const CurrentPositionSchema = Schema.Struct({
   symbol: Schema.String,
   entity: Schema.String,
   isin: Schema.optional(Schema.String),
+  /** ISIN-first canonical identity (WS4.5, #297). Optional so a row shaped
+   *  before the security master still decodes. */
+  instrumentKey: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
   quantity: Schema.Number,
   currency: Schema.String,
@@ -369,7 +394,15 @@ export const InvestingDashboardDataSchema = Schema.Struct({
   ),
   benchmarks: Schema.Array(BenchmarkSeriesSchema),
   externalCashFlows: Schema.Array(ExternalCashFlowSchema),
-  allocation: Schema.Struct({ instrument: AllocationSchema, entity: AllocationSchema }),
+  allocation: Schema.Struct({
+    instrument: AllocationSchema,
+    entity: AllocationSchema,
+    /** Cash-aware ladder with the documented denominator (WS4.6, #297).
+     *  Optional so a dashboard stored before it still decodes. */
+    ladder: Schema.optional(
+      Schema.Struct({ instrument: AllocationLadderSchema, entity: AllocationLadderSchema }),
+    ),
+  }),
   positions: Schema.Array(CurrentPositionSchema),
   position: Schema.NullOr(PositionDetailSchema),
   problems: StringList,
@@ -462,6 +495,18 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     risk: { byBenchmark: {}, defaultBenchmark: null },
     composition: buildCompositionProjection([]),
   };
+}
+
+/** The newest cash anchor per account, because a snapshot can carry one row
+ *  per statement date and summing them would double count. */
+function latestCashBalances(balances: readonly CashBalance[]): CashBalance[] {
+  const latest = new Map<string, CashBalance>();
+  for (const balance of balances) {
+    const key = `${balance.entity}\u0000${balance.broker}\u0000${balance.currency}`;
+    const existing = latest.get(key);
+    if (!existing || balance.asOf > existing.asOf) latest.set(key, balance);
+  }
+  return [...latest.values()];
 }
 
 /** Shape local domain records once, before they cross the server boundary. */
@@ -591,6 +636,44 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     );
   }
 
+  /* Cash-aware ladder (WS4.6): the newest anchor per account, converted at its
+   * own date, is one labelled Cash bucket; holdings keep their instrument and
+   * entity grouping and an empty/unknown key folds into Unclassified. */
+  const cashRows = latestCashBalances(input.cashBalances ?? []).map((balance) => {
+    let value: number | null = null;
+    try {
+      value = convertCurrency(
+        balance.amount,
+        balance.currency,
+        input.presentationCurrency,
+        balance.asOf,
+        input.fxRates,
+      );
+    } catch {
+      // A missing FX rate leaves the cash bucket unpriced, never guessed.
+    }
+    return { label: `${balance.broker} ${balance.currency} cash`, value };
+  });
+  const ladder = {
+    instrument: buildAllocationLadder({
+      holdings: positions.map((position) => ({
+        key: position.symbol,
+        label: position.description ?? position.symbol,
+        value: position.marketValue,
+        parentKey: position.entity,
+      })),
+      cash: cashRows,
+    }),
+    entity: buildAllocationLadder({
+      holdings: positions.map((position) => ({
+        key: position.entity,
+        label: position.entity,
+        value: position.marketValue,
+      })),
+      cash: cashRows,
+    }),
+  };
+
   const dashboard: InvestingDashboardData = {
     dataVersion: input.dataVersion ?? 0,
     presentationCurrency: input.presentationCurrency,
@@ -630,6 +713,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     allocation: {
       instrument: bucketPricedAllocation(positions, "instrument"),
       entity: bucketPricedAllocation(positions, "entity"),
+      ladder,
     },
     positions,
     position: positionWithRealized,

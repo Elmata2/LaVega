@@ -5,6 +5,7 @@ import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.j
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
+import { instrumentKey } from "./securities.js";
 import { valuePosition, type QuoteQuality } from "./valuation.js";
 
 export type PositionPriceStatus = QuoteQuality;
@@ -36,6 +37,8 @@ export type CurrentPosition = {
   symbol: string;
   entity: string;
   isin?: string;
+  /** ISIN-first canonical identity (WS4.5, #297), when the snapshot names one. */
+  instrumentKey?: string;
   description?: string;
   quantity: number;
   currency: string;
@@ -382,10 +385,12 @@ export function buildCurrentPositions(input: {
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
         ? { ...calculatedReturns, status: "missing-fx" as const }
         : calculatedReturns;
+    const canonicalKey = instrumentKey({ isin: sample.isin, ticker: sample.symbol });
     const row = {
       symbol: sample.symbol,
       entity: sample.entity,
       ...(sample.isin ? { isin: sample.isin } : {}),
+      ...(canonicalKey ? { instrumentKey: canonicalKey } : {}),
       ...(sample.description ? { description: sample.description } : {}),
       quantity,
       currency: sample.currency,
