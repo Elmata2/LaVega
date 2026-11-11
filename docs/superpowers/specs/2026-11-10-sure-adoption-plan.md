@@ -981,6 +981,48 @@ one slice. Divergences from the plan text, each deliberate:
   tests prove the partial unique index, the review flag, the applied migration
   and summary matching by key; a server test proves the migration route.
 
+**As built (WS4.7, [#298](https://github.com/Elmata2/LaVega/issues/298), 2026-11-11).**
+Investment-contribution classification landed without a new matcher and without a new
+storage shape. Divergences from the plan text, each deliberate:
+
+- **The kind derivation already existed; this slice adds the consumers.** #282's
+  `deriveTransferKind` returns `investment_contribution` for a pair whose destination is an
+  investment account and `funds_movement` when both legs are investment accounts (Sure
+  `transfer.rb:31-47`). #298 adds `isInvestmentAccount` (one rule for both legs),
+  `isInvestmentContribution` (CONFIRMED pairs only — a suggestion must never move a total)
+  and `summarizeConfirmedTransfers`, which sums confirmed pairs per kind in integer EUR
+  cents. A pair in another currency is named in `unconvertedPairIds` and never converted
+  1:1: a pair stores the decision day, not the movement day, so there is no honest rate
+  date (ADR 0011).
+- **Crypto is recognised by an explicit account type only.** LaVega's `ACCOUNT_TYPES` has
+  five names and no crypto entry. An account whose owner-set/imported `type` spells crypto
+  is investment scope; the name is deliberately not consulted, because a "Crypto" card is a
+  card. Adding a real sixth account type would change the Rekeningen editor and every
+  stored vault for one label, so that stays out.
+- **Spending already excluded confirmed transfer legs; the slice keeps that predicate.**
+  `applyTransferDecisions` projects both legs of a CONFIRMED pair into
+  `Eigen overboeking`, which `MOVED_CATEGORIES` excludes. The contribution fixture asserts
+  that the same two legs the kind derivation saw are the ones the spend surface drops, so
+  contribution and spending cannot disagree. Investment → investment is excluded from
+  spending for the same reason and from the contribution total because its kind is
+  `funds_movement`.
+- **The net-worth bridge counts each euro once by splitting the scopes.** The Personal
+  share is bank money only: `personalShareAccounts` (in `investing/personalNetWorth.ts`)
+  removes investment accounts, because the Investing portfolio series counts those. A
+  confirmed contribution then lowers the Personal total and raises the portfolio value by
+  the same cents, so `mergeInPersonalNetWorth`'s `netWorth` is unchanged. The rule is the
+  same `isInvestmentAccount` the transfer classification uses, so the two sides cannot
+  drift. **Divergence:** the shared total is therefore no longer identical to Overzicht's
+  SaldoBlock when the owner has a `Beleggingsrekening`; DASHBOARD.md states the new
+  contract. An investment account that the owner typed in Personal but never connected to
+  Investing is outside the combined figure — a coverage limit of the two-ledger model, not
+  a double count.
+- **Coverage.** `transfers.test.ts` proves the contribution fixture (kind, spend exclusion,
+  EUR cents), the investment → investment exclusion, confirmed-only counting, the non-EUR
+  no-guess rule and the crypto spelling. `personalNetWorth.test.ts` proves the scope split
+  and the unchanged combined net worth. `netWorthShare.test.ts` proves the bank-only
+  shared total and the contribution bridge through the real `computeShareableTotalCents`.
+
 ### WS5 — Agent platform (both sides)
 
 **Goal.** One tool contract, two surfaces; read-first external access; provenance the model
