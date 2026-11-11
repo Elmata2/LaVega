@@ -1104,6 +1104,71 @@ on the issue. Deliberate divergences and carried items:
   yet — WS5.4 stays gated. WS5.3 (chat tools routed through the registry) is still
   open; the registry and the docs drift test are the seam for it.
 
+**As built (WS5.3/WS5.4/WS5.6/WS5.7, [#299](https://github.com/Elmata2/LaVega/issues/299), 2026-11-11).**
+The chat now reads the one registry, the write pair exists behind a separate
+write token, the tool loop is capped and honest about failure, and the spend gate
+covers every MCP call. Divergences from the plan text, each deliberate:
+
+- **One definition set, two bindings.** `apps/investing-server/src/tools/
+investingTools.ts` holds `INVESTING_TOOL_SPECS` (name, description, schema,
+  scope, handler). `createInvestingTools(source)` binds them to an
+  `InvestingToolSource`: `/mcp` supplies the HTTP read source, the chat supplies
+  an in-process source (`tools/chatTools.ts`) over the context it already has.
+  The chat's `get_positions`, `get_portfolio_value`, `get_price`,
+  `get_fundamentals`, `get_sector_exposure`, `get_risk` and `get_trades` inline
+  definitions are gone; `get_agent_memory` is now available to the chat too. The
+  memory tools stay chat-only (owner-confirmed memory writes, not investing
+  data) but are registry definitions with the same adapter, not inline tools.
+  A test asserts the chat and MCP registries are the same names, descriptions,
+  scopes and schemas.
+- **The write pair is `preview_rule`/`apply_rule` over the account tax-treatment
+  rule map.** The plan names the pair but not the rule; the one structural write
+  this slice opens is the owner's own `(broker, account)` wrapper map from WS4.4,
+  which is already persisted per tenant. `preview_rule` validates the entries
+  with the same validator the API uses, reads the stored labels, returns the
+  dry-run `changes` and a single-use `previewToken`; it changes nothing.
+  `apply_rule` takes only the token, which is bound to the token identity and
+  tenant, single-use and expires after **30 minutes** (`RULE_PREVIEW_TTL_MS`).
+  The apply forwards one allowlisted PUT (`apps/server/src/mcp/investingWrite.ts`)
+  and re-serialises the validated entries, so the caller's body is never
+  forwarded. Preview tokens live in memory like sessions: a cold start
+  invalidates them and the owner previews again.
+- **Write is a separate credential.** The token table's `write` scope now has a
+  real tool set, and the no-database fallback gains `MCP_WRITE_API_TOKEN`
+  (read stays `MCP_API_TOKEN`; the read token is checked first, so one shared
+  value yields read-only). `scripts/mcp-token.ts create --scopes write` issues a
+  table token. A read token never lists or dispatches `preview_rule`/`apply_rule`
+  — the same filtered array backs `tools/list` and dispatch. `apply_rule` is also
+  `preview: true`, so a write caller must hold the write scope to see it.
+- **The loop policy is pure and tested without a model.** `toolLoop.ts` caps the
+  turn at **8 rounds**; the last round returns `{toolChoice: "none",
+activeTools: []}`, so a provider that cached a tool schema cannot still emit a
+  call, and appends the "answer in text now" instruction. History is trimmed in
+  whole call/result pairs (`trimToolHistory`), and a turn that ends with no text,
+  errors or is aborted is classified failed (`toolLoopTurnStatus`). The chat
+  route persists a failed turn as an assistant message with
+  `metadata.failed: true` (and keeps usable text, marked failed, when a provider
+  errors after producing it) instead of an empty completed answer.
+- **Caps and safe errors are one adapter, not per-tool code.** `toAiSdkTools`
+  wraps every registry definition with `capAgentToolResult` (200 rows / 256 KiB,
+  truncation marked) and the shared `safeAgentToolError` (`{error, hint}`, one
+  retry, no exception text). `/mcp` uses the same two helpers, so the surfaces
+  cannot answer differently for the same failure.
+- **The spend gate is a peek before every MCP call.** `checkBudget(undefined,
+tenantId)` runs in `tools/call` before dispatch; an over-cap call returns safe
+  `budget_exhausted` data and executes nothing, and an unreadable gate fails
+  closed as `budget_unavailable`. MCP calls buy no model tokens, but the same
+  per-account cap bounds the endpoint. Per-operation usage rows are the existing
+  `investing.mcp_audit` rows (method, tool, outcome `ok|refused|error`, duration);
+  cache-token columns in `ai_usage` and usage rows for the investing chat's own
+  model calls are carried, because no acceptance item needs them and the chat's
+  provider usage is not exposed at this boundary yet.
+- **Docs are generated from the registry.** `docs/investing/MCP.md`'s tool table
+  now includes the write tools and their scopes, and
+  `apps/investing-server/src/tools/docs.test.ts` fails if a documented name or
+  scope drifts from the registry. The write-token rules, preview/apply semantics
+  and spend gate are documented there.
+
 ### WS6 — Interop, attribution, hardening
 
 **Goal.** Leave the product portable, attributable and measurable.
