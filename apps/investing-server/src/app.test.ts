@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { SectorProfile } from "@lavega/adapters";
 import { app, createApp } from "./app.js";
 import {
   createFrankfurterFxProvider,
@@ -964,6 +963,14 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
       },
     },
   );
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
+  const sectorProfile = vi.fn(async () => null);
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({
       ...dashboard,
@@ -971,27 +978,14 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
       composition: buildCompositionProjection(dashboard.positions),
       problems: [],
     })),
-    sectorProfile: vi.fn(async (symbol: string) =>
-      symbol === "MYST"
-        ? null
-        : {
-            kind: "stock" as const,
-            sector: "Technology",
-            industry: "Hardware",
-            source: "provider" as const,
-          },
-    ),
-    sectorStore: (() => {
-      const map = new Map<string, SectorProfile>();
-      return {
-        get: async (symbol: string) => map.get(symbol) ?? null,
-        set: async (symbol: string, profile: SectorProfile) => void map.set(symbol, profile),
-      };
-    })(),
+    sectorProfile,
+    sectorStore,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
   const response = await investingApp.request("/api/investing/summary");
+  /* #309: even with consent, the summary reads stored profiles only. */
+  expect(sectorProfile).not.toHaveBeenCalled();
   expect(response.status).toBe(200);
   const payload = (await response.json()) as {
     metrics: unknown;
@@ -1014,7 +1008,7 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
   ]);
 });
 
-test("summary route fetches a renamed holding's sector under the ticker price sync resolved it to", async () => {
+test("summary route reads a renamed holding's stored sector under the ticker price sync resolved it to, without a provider call", async () => {
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push({
     symbol: "OAC_US_EQ",
@@ -1056,10 +1050,18 @@ test("summary route fetches a renamed holding's sector under the ticker price sy
         }
       : null,
   );
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
     store,
     sectorProfile,
+    sectorStore,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
@@ -1068,8 +1070,48 @@ test("summary route fetches a renamed holding's sector under the ticker price sy
   expect(response.status).toBe(200);
   const payload = (await response.json()) as { sectors: Array<{ sector: string; weight: number }> };
   expect(payload.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
+  expect(sectorProfile).not.toHaveBeenCalled();
+});
+
+test("GET sectors with consent still fetches a never-attempted symbol under its listing ticker and stores the profile", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("OAC_US_EQ", 100));
+  const store = createInMemoryPriceStore();
+  await store.putCoverage("local", {
+    symbol: "OAC_US_EQ",
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+  });
+  const sectorStore = createInMemorySectorProfileStore();
+  const sectorProfile = vi.fn(async (symbol: string) =>
+    symbol === "HIMS"
+      ? {
+          kind: "stock" as const,
+          sector: "Healthcare",
+          industry: "Health Information Services",
+          source: "provider" as const,
+        }
+      : null,
+  );
+  const investingApp = createApp({
+    dashboardReader: async () => dashboard,
+    store,
+    sectorProfile,
+    sectorStore,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/investing/sectors");
+
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { sectors: unknown }).sectors).toEqual([
+    { sector: "Healthcare", weight: 1 },
+  ]);
   expect(sectorProfile).toHaveBeenCalledWith("HIMS");
   expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare" });
 });
 
 test("summary route includes a position's description in top positions when set", async () => {

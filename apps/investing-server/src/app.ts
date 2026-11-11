@@ -368,13 +368,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
        * positions and the priced/missing/estimated counts ride the dashboard
        * snapshot, so this route never recomputes them. */
       const composition = data.composition;
-      /* Same classification rule as the portfolio-agent snapshot, which
-       * passes no fetchProfile. This route keeps the fetch-and-persist
-       * fallback; only the resolution itself is shared. Without consent,
-       * omit fetchProfile entirely: resolvePortfolioSectors still answers
-       * from cached profiles, it just never calls Yahoo for a fresh one.
-       * classifier is never passed here: classification runs off this
-       * critical path, only from POST /api/investing/sectors/infer. */
+      /* Same classification rule as the portfolio-agent snapshot: stored
+       * profiles only. This route never calls Yahoo (#309); fetching a
+       * missing profile belongs to GET /api/investing/sectors, which bounds
+       * it. classifier is never passed here either: classification runs off
+       * this critical path, only from POST /api/investing/sectors/infer. */
       const tenantId = await resolveTenantId();
       const consented = await hasYahooConsent(tenantId);
       /* A cached inferred profile is a global fact (no tenantId on
@@ -389,7 +387,6 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
         showInferred: consented && inferenceEnabled,
         resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
-        ...(consented ? { fetchProfile: sectorProfile } : {}),
       });
       return c.json({
         ...data.risk.byBenchmark[riskKey]?.[range],

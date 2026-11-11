@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
+import { describeSectorAttemptContract } from "./sectorProfileStoreContract.testing.js";
 
 test("a stock profile round-trips unchanged", async () => {
   const store = createInMemorySectorProfileStore();
@@ -142,3 +143,5 @@ test("an inferred write still replaces an existing inferred profile", async () =
 
   expect(await store.get("MYST")).toMatchObject({ sector: "Healthcare", confidence: 0.9 });
 });
+
+describeSectorAttemptContract("in-memory store", () => createInMemorySectorProfileStore());
