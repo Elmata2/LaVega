@@ -18,10 +18,13 @@ END $$;
 /*
  * Drop the per-user price tables (issue #310, follow-up to #307).
  *
- * The shared instrument-keyed store served one release before this file. The
- * only thing the version trigger still gave the dashboard,
- * `dashboard_snapshots.price_keys`, replaced it, and a table drop removes its
- * own triggers.
+ * The shared instrument-keyed store landed and served one release: no code
+ * reads or writes these two tables, and `dashboard_snapshots.price_keys`
+ * replaced the only signal the version trigger gave the dashboard. Dropping a
+ * table drops its own triggers, so `price_bars_raise_dashboard_version` goes
+ * with `investing.price_bars`.
+ *
+ * `IF EXISTS` keeps the file rerunnable: a second run is a no-op.
  */
 DROP TABLE IF EXISTS investing.price_bars;
 DROP TABLE IF EXISTS investing.price_coverage;
