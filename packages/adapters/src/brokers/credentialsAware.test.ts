@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { afterEach, expect, test, vi } from "vitest";
 import type { CredentialStore } from "@lavega/core";
 import { createCredentialsAwareBrokerAdapters } from "./credentialsAware.js";
+import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -88,6 +89,7 @@ test("stored credentials reach the broker adapters together with env config", as
     return json(response, 200, { items: [], nextPagePath: null });
   });
   const events: unknown[] = [];
+  const partnerBudget = createImmediatePartnerBudget();
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials: memoryCredentials({
       ibkr: { broker: "ibkr", tenantId: "local", token: "flex-token", queryId: "42" },
@@ -100,11 +102,18 @@ test("stored credentials reach the broker adapters together with env config", as
     }),
     environment: (name) => (name === "TRADING212_BASE_URL" ? baseUrl : undefined),
     onTrading212Diagnostic: (event) => events.push(event),
+    partnerBudget,
   });
 
   const trading212 = await adapters[1].adapter.sync({ entity: "personal" });
   expect(trading212.problems).toEqual([]);
   expect(trading212.sections.positions.rows).toEqual([]);
+
+  // Every request asked the one budget the caller passed for a slot.
+  expect(new Set(partnerBudget.calls.map((call) => call.key.partner))).toEqual(
+    new Set(["trading212"]),
+  );
+  expect(partnerBudget.calls.length).toBeGreaterThan(0);
 
   // Diagnostics flow through to the caller and keep the structured-log line.
   const log = vi.spyOn(console, "log").mockImplementation(() => {});

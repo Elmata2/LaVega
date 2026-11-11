@@ -1,6 +1,13 @@
 // First-party client based on Gloomberb implementation.
 import { httpFetch } from "../../../vendor/gloomberb/http-transport.js";
 import { hasBrokerSyncTime } from "../BrokerAccessAdapter.js";
+import {
+  createMemoryPartnerBudgetClient,
+  isPartnerBudgetUnavailable,
+  isPartnerWait,
+  type PartnerBudgetClient,
+} from "../../partnerBudget/PartnerBudget.js";
+import { accountScopeId, partnerKey, type PartnerKey } from "../../partnerBudget/limits.js";
 
 export interface FlexQueryConfig {
   token: string;
@@ -12,6 +19,8 @@ export interface FlexQueryConfig {
   maxDownloadAttempts?: number;
   /** Absolute Unix time. Undefined keeps local sync unlimited. */
   deadlineMs?: number;
+  /** Where request slots come from. Defaults to a budget of this call's own. */
+  partnerBudget?: PartnerBudgetClient;
 }
 
 export const IBKR_STATEMENT_URL =
@@ -24,6 +33,8 @@ const FLEX_STATEMENT_POLL_DELAY_MS = 5_000;
 const FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS = 60;
 const FLEX_DEADLINE_MESSAGE =
   "IBKR Flex sync paused before the host time limit; retry on the next sync";
+const FLEX_BUDGET_UNAVAILABLE_MESSAGE =
+  "IBKR Flex sync paused: the shared request budget is unavailable; retry on the next sync";
 
 type FlexRequestPhase = "request" | "download";
 
@@ -138,7 +149,29 @@ function throwIfFlexDeadline(deadlineMs: number | undefined, workMs = 0): void {
   if (!hasBrokerSyncTime(deadlineMs, workMs)) throw new Error(FLEX_DEADLINE_MESSAGE);
 }
 
+/** Flex's budget is per token: `SendRequest` and every `GetStatement` poll share one key. */
+async function flexKey(token: string): Promise<PartnerKey> {
+  return partnerKey("ibkr:flex", await accountScopeId(token));
+}
+
+/** A slot after the deadline, or a dead budget store, pauses the sync with a
+ *  problem string the adapter already knows how to report. Nothing is sent. */
+async function awaitFlexSlot(
+  budget: PartnerBudgetClient,
+  key: PartnerKey,
+  deadlineMs: number | undefined,
+): Promise<void> {
+  try {
+    await budget.awaitSlot(key, deadlineMs);
+  } catch (error) {
+    if (isPartnerWait(error)) throw new Error(FLEX_DEADLINE_MESSAGE);
+    if (isPartnerBudgetUnavailable(error)) throw new Error(FLEX_BUDGET_UNAVAILABLE_MESSAGE);
+    throw error;
+  }
+}
+
 export async function requestFlexStatement(config: FlexQueryConfig): Promise<string> {
+  const budget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
   const endpoint = config.endpoint || IBKR_STATEMENT_URL;
   const url = buildFlexUrl(endpoint, {
     t: config.token,
@@ -148,6 +181,7 @@ export async function requestFlexStatement(config: FlexQueryConfig): Promise<str
   let resp: Response;
   let text: string;
   throwIfFlexDeadline(config.deadlineMs);
+  await awaitFlexSlot(budget, await flexKey(config.token), config.deadlineMs);
   try {
     resp = await httpFetch(url, flexRequestInit());
     text = await resp.text();
@@ -186,9 +220,12 @@ async function getFlexStatement(
       | "pollDelayMs"
       | "maxDownloadAttempts"
       | "deadlineMs"
+      | "partnerBudget"
     >
   > = {},
 ): Promise<string> {
+  const budget = context.partnerBudget ?? createMemoryPartnerBudgetClient();
+  const key = await flexKey(token);
   const initialWaitMs = context.initialWaitMs ?? FLEX_STATEMENT_INITIAL_WAIT_MS;
   throwIfFlexDeadline(context.deadlineMs, initialWaitMs);
   await new Promise((resolve) => setTimeout(resolve, initialWaitMs));
@@ -207,6 +244,7 @@ async function getFlexStatement(
     let resp: Response;
     let text: string;
     throwIfFlexDeadline(context.deadlineMs);
+    await awaitFlexSlot(budget, key, context.deadlineMs);
     try {
       resp = await httpFetch(url, flexRequestInit());
       text = await resp.text();
@@ -271,6 +309,8 @@ async function getFlexStatement(
 }
 
 export async function loadFlexStatement(config: FlexQueryConfig): Promise<string> {
-  const referenceCode = await requestFlexStatement(config);
-  return getFlexStatement(config.token, referenceCode, config);
+  // One budget for the whole load, so the polls queue behind the request.
+  const partnerBudget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
+  const referenceCode = await requestFlexStatement({ ...config, partnerBudget });
+  return getFlexStatement(config.token, referenceCode, { ...config, partnerBudget });
 }
