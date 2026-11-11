@@ -3,6 +3,7 @@ export * from "./model.js";
 export * from "./balance.js";
 export * from "./balanceSeries.js";
 export * from "./reports.js";
+export * from "./statements/index.js";
 export * from "./hash.js";
 export * from "./money.js";
 export * from "./budget.js";
