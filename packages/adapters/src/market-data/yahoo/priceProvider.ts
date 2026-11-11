@@ -2,6 +2,7 @@ import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { YahooHttpClient } from "./http.js";
+import { isPartnerWait, type PartnerBudgetClient } from "../../partnerBudget/PartnerBudget.js";
 
 export type YahooPriceRequest = {
   ticker: string;
@@ -30,11 +31,15 @@ export type PriceProviderResult = {
 export function createYahooPriceProvider(
   input: {
     client?: YahooHttpClient;
+    /** Where request slots come from, for the client this builds when none is given. */
+    partnerBudget?: PartnerBudgetClient;
     today?: () => string;
     resolveMissingListing?: (request: YahooPriceRequest) => Promise<string | null>;
   } = {},
 ): Provider<YahooPriceRequest, PriceProviderResult> {
-  const client = input.client ?? new YahooHttpClient();
+  const client =
+    input.client ??
+    new YahooHttpClient(undefined, undefined, undefined, { partnerBudget: input.partnerBudget });
   return {
     sourceKey: "yahoo",
     priority: 10,
@@ -97,6 +102,9 @@ export function createYahooPriceProvider(
         }
         return { bars, problems: [], listing: history.symbol };
       } catch (error) {
+        // The budget has no slot before the host deadline. This is not a price
+        // problem for the symbol: the run pauses and the symbol is tried again.
+        if (isPartnerWait(error)) throw error;
         return {
           bars: [],
           problems: [readableYahooProblem(error)],

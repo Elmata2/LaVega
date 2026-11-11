@@ -5,6 +5,7 @@ import { createYahooPriceProvider } from "./yahoo/priceProvider.js";
 import { createInMemoryPriceStore } from "../prices/inMemoryPriceStore.js";
 import { syncPrices } from "./priceSync.js";
 import { YahooHttpClient } from "./yahoo/http.js";
+import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
 
 const request = {
   ticker: "ASML",
@@ -60,7 +61,11 @@ test.each([
     if (target.includes("getcrumb")) return new Response("crumb");
     return new Response(fixture.body, { status: fixture.status });
   }) as unknown as typeof fetch;
-  const provider = createYahooPriceProvider({ client: new YahooHttpClient(fetchFn, 20_000, 0) });
+  const provider = createYahooPriceProvider({
+    client: new YahooHttpClient(fetchFn, 20_000, 0, {
+      partnerBudget: createImmediatePartnerBudget(),
+    }),
+  });
   await expect(provider.get(request)).resolves.toMatchObject({
     problems: [expect.stringContaining(expected)],
   });

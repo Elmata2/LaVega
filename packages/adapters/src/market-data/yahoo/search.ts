@@ -3,6 +3,7 @@ import {
   normalizeCurrencyCode,
   type BenchmarkInstrument,
 } from "@lavega/core";
+import { isPartnerWait } from "../../partnerBudget/PartnerBudget.js";
 import { YahooHttpClient } from "./http.js";
 import { isKnownYahooExchange } from "./symbols.js";
 import type { YahooChartResponse } from "./types.js";
@@ -81,7 +82,9 @@ export async function resolveYahooSymbolByIsin(
     }
     const knownExchange = quotes.find((quote) => isKnownYahooExchange(quote.exchange ?? ""));
     return (knownExchange ?? first).symbol.toUpperCase();
-  } catch {
+  } catch (error) {
+    // No slot before the host deadline: the price run pauses, it does not guess listings.
+    if (isPartnerWait(error)) throw error;
     return null;
   }
 }

@@ -1,3 +1,5 @@
+import { isPartnerWait } from "../partnerBudget/PartnerBudget.js";
+
 /** A source for one market-data capability. Higher priority wins. */
 export type Provider<Request, Result> = {
   sourceKey: string;
@@ -35,6 +37,8 @@ export async function firstProviderResult<Request, Result>(
         return problems.length > 0 ? withProviderProblems(result, problems) : result;
       }
     } catch (error) {
+      // A slot after the host deadline is the caller's to handle, not a failed provider.
+      if (isPartnerWait(error)) throw error;
       log(provider.sourceKey, error);
       problems.push(
         `${provider.sourceKey}: ${error instanceof Error ? error.message : String(error)}`,
