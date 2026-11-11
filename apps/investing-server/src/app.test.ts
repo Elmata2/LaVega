@@ -588,7 +588,9 @@ test("price sync resolves ISIN before asking price provider", async () => {
   });
   await investingApp.request("/api/prices/sync", { method: "POST" });
   expect(provider.get).toHaveBeenCalled();
-  expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
+  expect(identifierProvider.get).toHaveBeenCalledWith(
+    expect.objectContaining({ isin: "NL0010273215" }),
+  );
   expect(provider.get).toHaveBeenCalledWith(
     expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }),
   );
@@ -733,7 +735,8 @@ test.each([
 
     expect((await investingApp.request("/api/prices/sync", { method: "POST" })).status).toBe(200);
 
-    if (isin) expect(identifierProvider.get).toHaveBeenCalledWith({ isin });
+    if (isin)
+      expect(identifierProvider.get).toHaveBeenCalledWith(expect.objectContaining({ isin }));
     else expect(identifierProvider.get).not.toHaveBeenCalled();
     expect(requested[0]).toBe("TSFA.DE");
     if (resolved) {
@@ -2561,4 +2564,143 @@ test("POST /api/sync/refresh names the missing CRON_SECRET on a hosted host", as
 
   expect(response.status).toBe(500);
   expect(JSON.stringify(await response.json())).toContain("CRON_SECRET");
+});
+
+/* Jev-03 (issue #136): the app is the tenant-aware caller of the identifier
+ * seam. It supplies the owner's override, and it passes the model-selection
+ * flag only when market-data consent AND the owner's enable setting agree. */
+
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
+
+const identifierProviderReturning = () => {
+  const calls: unknown[] = [];
+  return {
+    calls,
+    provider: {
+      sourceKey: "openfigi",
+      priority: 10,
+      get: vi.fn(async (request: unknown) => {
+        calls.push(request);
+        return {
+          match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" },
+          problems: [],
+          resolution: { tier: "provider", confidence: null, candidates: [] },
+        };
+      }),
+    },
+  };
+};
+
+const acceptedConsent = () => ({
+  get: vi.fn(async () => ({
+    tenantId: "local",
+    accepted: true,
+    decidedAt: "2026-11-11T00:00:00.000Z",
+    disclosureVersion: "yahoo-finance-v1",
+  })),
+  set: vi.fn(async () => undefined),
+});
+
+test("identifier selection is allowed only with market-data consent AND the enable setting", async () => {
+  const { calls, provider } = identifierProviderReturning();
+  const setting = createInMemoryIdentifierSelectionSettingStore();
+  const consent = acceptedConsent();
+
+  const withoutSetting = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: consent as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await withoutSetting.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(calls.at(-1)).toMatchObject({ isin: "NL0010273215", allowModelSelection: false });
+
+  await setting.set("local", true);
+  const withSetting = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: consent as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await withSetting.request("/api/market-data/identifier?isin=NL0010273215&name=ASML&currency=EUR");
+  expect(calls.at(-1)).toMatchObject({
+    isin: "NL0010273215",
+    allowModelSelection: true,
+    instrument: { name: "ASML", currency: "EUR" },
+  });
+
+  // Consent is the other half of the gate.
+  const noConsent = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: {
+      get: async () => ({
+        tenantId: "local",
+        accepted: false,
+        decidedAt: null,
+        disclosureVersion: "yahoo-finance-v1",
+      }),
+      set: async () => undefined,
+    } as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await noConsent.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(calls.at(-1)).toMatchObject({ allowModelSelection: false });
+});
+
+test("the owner's identifier override is passed to the seam and outranks it", async () => {
+  const { calls, provider } = identifierProviderReturning();
+  const overrides = createInMemoryIdentifierOverrideStore();
+  await overrides.set("local", { NL0010273215: { ticker: "ASML", exchange: "AMS" } });
+  const investingApp = createApp({
+    identifierProvider: provider as never,
+    identifierOverrideStore: overrides,
+  });
+
+  await investingApp.request("/api/market-data/identifier?isin=nl0010273215");
+
+  expect(calls.at(-1)).toMatchObject({
+    isin: "NL0010273215",
+    override: { ticker: "ASML", exchange: "AMS" },
+  });
+});
+
+test("the identifier-selection and override routes persist per tenant and validate input", async () => {
+  const setting = createInMemoryIdentifierSelectionSettingStore();
+  const overrides = createInMemoryIdentifierOverrideStore();
+  const investingApp = createApp({
+    identifierSelectionSettingStore: setting,
+    identifierOverrideStore: overrides,
+    identifierSelectorForTenant: () => undefined,
+  });
+
+  const initial = await investingApp.request("/api/investing/identifier-selection");
+  expect(await initial.json()).toEqual({ enabled: false, available: true });
+
+  const put = await investingApp.request("/api/investing/identifier-selection", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  });
+  expect(put.status).toBe(200);
+  expect(await setting.get("local")).toBe(true);
+
+  const putOverrides = await investingApp.request("/api/investing/identifier-overrides", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      overrides: {
+        nl0010273215: { ticker: "asml", exchange: "ams" },
+        "not-an-isin": { ticker: "X" },
+        NL0000000002: { ticker: "" },
+      },
+    }),
+  });
+  expect(await putOverrides.json()).toEqual({
+    overrides: { NL0010273215: { ticker: "ASML", exchange: "AMS" } },
+  });
+  const read = await investingApp.request("/api/investing/identifier-overrides");
+  expect(await read.json()).toEqual({
+    overrides: { NL0010273215: { ticker: "ASML", exchange: "AMS" } },
+  });
 });

@@ -36,6 +36,7 @@ import {
   searchYahooBenchmarks,
   syncPrices,
   type PriceStore,
+  type IdentifierCandidateSelector,
   type ScheduledBroker,
   type YahooPriceRequest,
 } from "@lavega/adapters";
@@ -95,6 +96,14 @@ import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./s
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
 import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+  validateIdentifierOverrides,
+  type IdentifierOverrideMap,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
 import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 
 /** The read model crosses the wire through its shared schema, so a field the
@@ -165,6 +174,12 @@ type PriceDependencies = {
   provider: ReturnType<typeof createYahooPriceProvider>;
   fxProvider: ReturnType<typeof createFrankfurterFxProvider>;
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
+  /** Build the Jev selector for one tenant, or undefined when the deployment
+   *  has no TypeSafe key. The provider only calls it on ambiguity and only
+   *  when the caller passed consent + the owner's enable setting (#136). */
+  identifierSelectorForTenant?: (tenantId: string) => IdentifierCandidateSelector | undefined;
+  identifierSelectionSettingStore: IdentifierSelectionSettingStore;
+  identifierOverrideStore: IdentifierOverrideStore;
   benchmarkSelectionStore: BenchmarkSelectionStore;
   investingLayoutStore: InvestingLayoutStore;
   accountWrapperStore: AccountWrapperStore;
@@ -236,19 +251,48 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const partnerBudget =
     dependencies.partnerBudgetClient ??
     createPartnerBudgetClient(dependencies.partnerBudget ?? PartnerBudget.memoryLayer);
-  const identifierProvider =
-    dependencies.identifierProvider ?? createOpenFigiIdentifierProvider({ partnerBudget });
+  /* One provider per tenant when selection is possible: the selector needs the
+   * tenant for consent, the enable switch and usage billing, while the partner
+   * budget (rate limiting) stays shared. Without selection, one provider is
+   * enough and keeps the cache shared exactly as before. */
+  const identifierProvidersByTenant = new Map<
+    string,
+    ReturnType<typeof createOpenFigiIdentifierProvider>
+  >();
+  const identifierProviderFor = (tenantId: string) => {
+    if (dependencies.identifierProvider) return dependencies.identifierProvider;
+    const known = identifierProvidersByTenant.get(tenantId);
+    if (known) return known;
+    const selector = dependencies.identifierSelectorForTenant?.(tenantId);
+    const provider = createOpenFigiIdentifierProvider({
+      partnerBudget,
+      ...(selector ? { selector } : {}),
+    });
+    identifierProvidersByTenant.set(tenantId, provider);
+    return provider;
+  };
   /* One client per app: its crumb and cookie are negotiated once and reused. A
    * price run takes a view of it with the run's own deadline, so a slot after the
    * deadline ends the slice instead of sleeping past it. */
   const yahooClient = new YahooHttpClient(undefined, undefined, undefined, { partnerBudget });
   const resolveMissingListing = async (
-    request: { isin?: string; ticker: string },
+    request: { isin?: string; ticker: string; currency?: string },
     deadline: number | undefined,
+    tenantId: string,
   ) => {
     if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
     const isin = request.isin.trim().toUpperCase();
-    const identifier = await identifierProvider.get({ isin, deadlineMs: deadline });
+    const identifier = await mapIdentifier(
+      {
+        isin,
+        deadlineMs: deadline,
+        instrument: {
+          name: request.ticker,
+          ...(request.currency ? { currency: request.currency } : {}),
+        },
+      },
+      tenantId,
+    ).then((resolved) => resolved?.value);
     if (
       !identifier ||
       identifier.problems.length ||
@@ -258,12 +302,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return null;
     return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
   };
-  const priceProviderFor = (deadline: number | undefined) =>
+  const priceProviderFor = (deadline: number | undefined, tenantId: string) =>
     dependencies.provider ??
     createYahooPriceProvider({
       client: yahooClient.withDeadline(deadline),
-      resolveMissingListing: (request) => resolveMissingListing(request, deadline),
+      resolveMissingListing: (request) => resolveMissingListing(request, deadline, tenantId),
     });
+  const identifierSelectionSettingStore =
+    dependencies.identifierSelectionSettingStore ?? createInMemoryIdentifierSelectionSettingStore();
+  const identifierOverrideStore =
+    dependencies.identifierOverrideStore ?? createInMemoryIdentifierOverrideStore();
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
   const configureBroker = dependencies.configureBroker;
@@ -302,9 +350,29 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * the server holds the key to has nothing to ask for. */
   const passphraseMode = dependencies.passphraseMode ?? (() => "required" as const);
   const fxProviders = [fxProvider];
-  const identifierProviders = [identifierProvider];
-  const mapIdentifier = (request: IdentifierRequest) =>
-    firstProviderResult(identifierProviders, request, undefined, hasProblems);
+  /* The identifier seam, per tenant: the owner's override wins, then the
+   * provider's answer, then a model selection when consent AND the enable
+   * setting allow it (issue #136). */
+  const mapIdentifier = async (request: IdentifierRequest, tenantId: string) => {
+    const isin = request.isin.trim().toUpperCase();
+    const [overrides, consent, selectionEnabled] = await Promise.all([
+      identifierOverrideStore.get(tenantId).catch((): IdentifierOverrideMap => ({})),
+      marketDataConsentStore.get(tenantId).catch(() => ({ accepted: false })),
+      identifierSelectionSettingStore.get(tenantId).catch(() => false),
+    ]);
+    const override = overrides[isin];
+    return firstProviderResult(
+      [identifierProviderFor(tenantId)],
+      {
+        ...request,
+        isin,
+        allowModelSelection: consent.accepted && selectionEnabled,
+        ...(override ? { override } : {}),
+      },
+      undefined,
+      hasProblems,
+    );
+  };
   /* One invocation's worth of time. Anchored where the request starts, so a
    * route that already spent the host budget on a broker sync hands the price
    * run a deadline that has passed and it pauses instead of overrunning. */
@@ -316,7 +384,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
     sync: async (target, tenantId, { deadline }) => {
-      const priceProviders = [priceProviderFor(deadline)];
+      const priceProviders = [priceProviderFor(deadline, tenantId)];
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
         today?: string;
         backfillFrom?: string;
@@ -325,7 +393,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
-        const identifier = await mapIdentifier({ isin: target.isin, deadlineMs: deadline });
+        const identifier = await mapIdentifier(
+          {
+            isin: target.isin,
+            deadlineMs: deadline,
+            instrument: {
+              name: target.symbol,
+              ...(target.currency ? { currency: target.currency } : {}),
+            },
+          },
+          tenantId,
+        );
         if (
           identifier &&
           identifier.value.problems.length === 0 &&
@@ -676,6 +754,35 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     await sectorInferenceSettingStore.set(await resolveTenantId(), body.enabled);
     await sectorRevisionStore.raise(await resolveTenantId());
     return c.json({ enabled: body.enabled });
+  });
+  /* Identifier candidate selection (Jev-03, issue #136): the owner's switch
+   * for sending an instrument's identity to Jev on ambiguity, and the owner's
+   * own symbol choice per ISIN (the most trusted resolution tier). */
+  investingApp.get("/api/investing/identifier-selection", async (c) =>
+    c.json({
+      enabled: await identifierSelectionSettingStore.get(await resolveTenantId()),
+      available: dependencies.identifierSelectorForTenant !== undefined,
+    }),
+  );
+  investingApp.put("/api/investing/identifier-selection", async (c) => {
+    const body: { enabled?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.enabled !== "boolean")
+      return c.json({ message: "enabled must be boolean" }, 400);
+    const tenantId = await resolveTenantId();
+    await identifierSelectionSettingStore.set(tenantId, body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+  investingApp.get("/api/investing/identifier-overrides", async (c) =>
+    c.json({
+      overrides: await identifierOverrideStore.get(await resolveTenantId()),
+    }),
+  );
+  investingApp.put("/api/investing/identifier-overrides", async (c) => {
+    const body: { overrides?: unknown } = await c.req.json().catch(() => ({}));
+    const overrides = validateIdentifierOverrides(body.overrides);
+    const tenantId = await resolveTenantId();
+    await identifierOverrideStore.set(tenantId, overrides);
+    return c.json({ overrides });
   });
   investingApp.post("/api/investing/sectors/infer", async (c) => {
     const tenantId = await resolveTenantId();
@@ -1091,9 +1198,24 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/market-data/identifier", async (c) => {
     const isin = c.req.query("isin")?.trim().toUpperCase();
     if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400);
+    const name = c.req.query("name")?.trim();
+    const currency = c.req.query("currency")?.trim().toUpperCase();
     let result;
     try {
-      result = await mapIdentifier({ isin });
+      result = await mapIdentifier(
+        {
+          isin,
+          ...(name || currency
+            ? {
+                instrument: {
+                  ...(name ? { name } : {}),
+                  ...(currency ? { currency } : {}),
+                },
+              }
+            : {}),
+        },
+        await resolveTenantId(),
+      );
     } catch (error) {
       if (!isPartnerBudgetStop(error)) throw error;
       return c.json(

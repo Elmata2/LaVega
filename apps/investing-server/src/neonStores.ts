@@ -28,6 +28,11 @@ import {
 } from "./marketDataConsent.js";
 import type { SectorCorrectionStore } from "./sectorCorrectionStore.js";
 import type { SectorInferenceSettingStore } from "./sectorInferenceSetting.js";
+import {
+  validateIdentifierOverrides,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
@@ -234,6 +239,32 @@ export function createNeonSectorInferenceSettingStore(db: Database): SectorInfer
     get: (tenantId) => createPreferencesRepository(db, tenantId).getSectorInferenceEnabled(),
     set: (tenantId, enabled) =>
       createPreferencesRepository(db, tenantId).setSectorInferenceEnabled(enabled),
+  };
+}
+
+/** The identifier-selection switch and the owner's symbol overrides (Jev-03,
+ *  issue #136), on the same per-tenant preferences row as the other switches. */
+export function createNeonIdentifierSelectionSettingStore(
+  db: Database,
+): IdentifierSelectionSettingStore {
+  return {
+    get: (tenantId) => createPreferencesRepository(db, tenantId).getIdentifierSelectionEnabled(),
+    set: (tenantId, enabled) =>
+      createPreferencesRepository(db, tenantId).setIdentifierSelectionEnabled(enabled),
+  };
+}
+
+export function createNeonIdentifierOverrideStore(db: Database): IdentifierOverrideStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getIdentifierOverrides();
+      return validateIdentifierOverrides(stored);
+    },
+    async set(tenantId, map) {
+      await createPreferencesRepository(db, tenantId).setIdentifierOverrides(
+        validateIdentifierOverrides(map),
+      );
+    },
   };
 }
 

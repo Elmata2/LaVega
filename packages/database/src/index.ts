@@ -893,6 +893,12 @@ export type PreferencesRepository = {
   /** Account tax-treatment labels (plan §3 WS4.4, #296). */
   getAccountWrappers(): Promise<unknown | null>;
   setAccountWrappers(entries: unknown): Promise<void>;
+  /** The owner's switch for identifier candidate selection (Jev-03, #136). */
+  getIdentifierSelectionEnabled(): Promise<boolean>;
+  setIdentifierSelectionEnabled(enabled: boolean): Promise<void>;
+  /** The owner's symbol choice per ISIN, most trusted resolution tier (#136). */
+  getIdentifierOverrides(): Promise<unknown | null>;
+  setIdentifierOverrides(overrides: unknown): Promise<void>;
   getSectorCorrections(): Promise<Record<string, string>>;
   setSectorCorrection(symbol: string, sector: string): Promise<void>;
   clearSectorCorrection(symbol: string): Promise<void>;
@@ -945,6 +951,11 @@ export function createPreferencesRepository(
     setLayout: (layout) => write("layout", layout),
     getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
     setAccountWrappers: (entries) => write("account_wrappers", entries),
+    getIdentifierSelectionEnabled: () => read<boolean>("identifier_selection_enabled", false),
+    setIdentifierSelectionEnabled: (enabled) =>
+      writeBoolean("identifier_selection_enabled", enabled),
+    getIdentifierOverrides: () => read<unknown | null>("identifier_overrides", null),
+    setIdentifierOverrides: (overrides) => write("identifier_overrides", overrides),
     getSectorCorrections: readCorrections,
     async setSectorCorrection(symbol, sector) {
       const current = await readCorrections();
@@ -1975,7 +1986,8 @@ export type AiUsage = {
     | "chat"
     | "travel"
     | "portfolio-persona"
-    | "sector-inference";
+    | "sector-inference"
+    | "identifier-selection";
   model: string;
   inputTokens: number;
   outputTokens: number;
