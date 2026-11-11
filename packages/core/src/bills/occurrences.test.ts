@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import type { Bill, BillOccurrence } from "./model.js";
 import { billOccurrenceId, resolveBillAmountCents } from "./model.js";
 import {
-  billsOutlook,
   generateBillOccurrences,
   occurrenceAmountCents,
   occurrenceView,
@@ -258,7 +257,7 @@ describe("amounts", () => {
   });
 });
 
-describe("one-screen outlook", () => {
+describe("open rows and derived state", () => {
   const rent = bill({
     id: "huur",
     amountCents: 10_000,
@@ -266,12 +265,6 @@ describe("one-screen outlook", () => {
     anchorDate: "2026-11-20",
   });
   const card = bill({ id: "kaart", amountCents: 2_000, anchorDate: "2026-11-01" });
-  const care = bill({
-    id: "zorg",
-    amountCents: 5_000,
-    anchorDate: "2026-10-10",
-    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 10 }],
-  });
   const salary = bill({
     id: "salaris",
     type: "income",
@@ -280,36 +273,8 @@ describe("one-screen outlook", () => {
     rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
     anchorDate: "2026-10-25",
   });
-  const bills = [rent, card, care, salary];
+  const bills = [rent, card, salary];
   const generated = generateBillOccurrences(bills, [], AS_OF).occurrences;
-  const withPaidCare = generated.map((o) =>
-    o.billId === "zorg" && o.dueOn === "2026-11-10"
-      ? { ...o, status: "paid" as const, paidOn: "2026-11-10", paidAmountCents: 5_000 }
-      : o,
-  );
-
-  test("due, paid and short-before-payday", () => {
-    const outlook = billsOutlook(bills, withPaidCare, AS_OF, 5_000);
-    expect(outlook.nextIncomeOn).toBe("2026-11-25");
-    expect(outlook.nextIncomeCents).toBe(300_000);
-    expect(outlook.periodEndsOn).toBe("2026-11-25");
-    expect(outlook.overdueCents).toBe(2_000); // card, Nov 1
-    expect(outlook.dueCents).toBe(10_000); // rent, Nov 20
-    expect(outlook.toCoverCents).toBe(12_000);
-    expect(outlook.paidLastMonthCents).toBe(5_000);
-    expect(outlook.shortfallCents).toBe(7_000);
-  });
-
-  test("no income series means no invented payday and no shortfall number", () => {
-    const outlook = billsOutlook([rent, card], generated, AS_OF, 5_000);
-    expect(outlook.nextIncomeOn).toBeNull();
-    expect(outlook.shortfallCents).toBeNull();
-    expect(outlook.periodEndsOn).toBe("2027-02-09");
-  });
-
-  test("an unknown cash balance keeps the shortfall unknown", () => {
-    expect(billsOutlook(bills, generated, AS_OF, null).shortfallCents).toBeNull();
-  });
 
   test("upcoming rows stay inside the horizon and skip income-as-debt logic", () => {
     const upcoming = upcomingOccurrences(bills, generated, AS_OF);
