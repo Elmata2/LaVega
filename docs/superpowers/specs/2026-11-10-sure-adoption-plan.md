@@ -833,6 +833,74 @@ ladder (WS4.6) stay out. Divergences from the plan text, each deliberate:
   dashboard/wire integration. Server tests prove the route, the wrapper store and
   the read wiring; the migration test proves the column.
 
+**As built (WS4.5/WS4.6, [#297](https://github.com/Elmata2/LaVega/issues/297), 2026-11-11).**
+The security master, the thesis-key migration and the allocation ladder landed in
+one slice. Divergences from the plan text, each deliberate:
+
+- **Identity is `packages/core/src/investing/securities.ts`, ISIN-first.**
+  `instrumentKey` is `isin:<ISIN>` when the ISIN is well formed (ISO 6166 shape
+  and check digit), else `sym:<TICKER>@<MIC>` with a canonicalised MIC, else
+  `sym:<TICKER>`. `resolveSecurityIdentities` groups the broker snapshot's rows
+  into one identity per ISIN, so the same ISIN from two brokers is one security
+  and one thesis key; a symbol change with the same ISIN does not split history.
+  Distinct share classes (distinct ISINs, one ticker) stay apart, and a ticker
+  that points at two identities is reported in `ambiguousSymbols` and left out
+  of the symbol map rather than silently folded into one. Sure has no ISIN
+  column and treats one ticker on two venues as two securities; LaVega stores
+  ISIN on positions and trades, so it can be stricter.
+- **Price hardening is wired, not just declared.** `PriceCoverage` gains
+  `provider`, `listingStart` and `provisionalThrough` (migration 0029; file
+  store passes them through). `syncPrices` remembers the provider that earned
+  the coverage and asks only that provider; when it is unavailable the symbol is
+  skipped with a reason, never handed to another provider. A backfill is clamped
+  to the listing start. A provisional close is re-fetched until its seven-day
+  window closes. **Divergence:** the Yahoo seam returns completed daily closes,
+  so no current provider emits a provisional row; the flag, window and refetch
+  path are wired and tested with a stub provider, ready for an intraday or LOCF
+  provider. Sure's LOCF gap-fill itself stays out (LaVega forward-fills at read
+  time, see `valuation.ts`).
+- **Thesis identity moves to the canonical key without ever merging a conflict.**
+  Migration 0030 adds `instrument_key` (nullable) and `review_required` to
+  `investing.theses`, plus a partial unique index on `(user_id, instrument_key)`
+  where the row is not under review. `planThesisMigration` in core plans the
+  move: theses of one instrument with an identical body and status fold into one
+  row, conflicting confirmed theses keep every row and are flagged for review,
+  and a thesis whose symbol the snapshot cannot place keeps a null key. The
+  repository applies the plan (`applyThesisMigration`), `confirmThesis` accepts
+  the canonical key and stores a second confirmed thesis for the same key under
+  review instead of overwriting the first, and the turn summary matches a thesis
+  by symbol OR key. The primary key stays `(user_id, symbol)` so the symbol
+  remains the row's stable edit handle. The migration runs through
+  `POST /api/memory/instruments/migrate`, whose identity source is the current
+  broker snapshot (holdings and trades); the owner UI shows a "Needs review"
+  badge. The agent memory read path is unchanged for a user with no cross-broker
+  duplicates.
+- **The allocation ladder is generic and the denominator rule travels with it.**
+  `buildAllocationLadder` takes already-converted values, sums a labelled Cash
+  bucket, folds blank/"unknown"/"unclassified" keys into one labelled
+  Unclassified bucket, leaves unpriced rows without a weight, and computes
+  `weight = value / max(cash + holdings, holdings)` with
+  `ALLOCATION_DENOMINATOR_RULE` attached to every ladder. The dashboard carries
+  `allocation.ladder` for instrument and entity (optional, so a stored payload
+  still decodes) and the Allocation card renders a Ladder block with the cash
+  row, the unclassified row and the rule. **Divergence:** LaVega has no
+  asset-class/sub-class/region hierarchy, so the ladder's classification is the
+  existing instrument/entity grouping and the parent scope is entity →
+  instrument (`ladderDrillDown`); Sure's four classification dimensions are not
+  ported.
+- **No returns math moved.** No TWR/XIRR/risk fixture changed; the ladder and
+  the identity fields are additive. The dev fixture gains a settled cash anchor
+  and a legacy position with no entity, so the local run shows the Cash and
+  Unclassified buckets.
+- **Coverage.** `securities.test.ts` proves the ISIN check, two-broker identity,
+  symbol-change continuity, share-class separation, ambiguous tickers, the
+  thesis merge/review plan, provider affinity, the provisional window and the
+  listing clamp. `allocation.test.ts` proves cash in the ladder, the negative-cash
+  floor, the labelled unclassified bucket, unpriced rows and the drill-down.
+  Price-sync tests prove affinity, clamp and the provisional refetch. Database
+  tests prove the partial unique index, the review flag, the applied migration
+  and summary matching by key; a server test proves the migration route.
+
 ### WS5 — Agent platform (both sides)
 
 **Goal.** One tool contract, two surfaces; read-first external access; provenance the model

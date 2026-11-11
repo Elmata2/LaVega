@@ -53,7 +53,45 @@ Each turn the agent gets a small fixed summary: risk tolerance and the user's go
 
 ## Consequences
 
-- Thesis identity currently uses the normalized broker symbol, not a cross-broker instrument identifier. Different symbols for the same security can therefore hold separate theses. The preview holdings include `GOOGL_US_EQ` and `ABEAd_EQ`, both with ISIN `US02079K3059`. Cross-broker memory needs a canonical instrument key, broker-symbol aliases, and a migration that preserves conflicting confirmed theses for user review. Existing position ISINs provide an identity source; holdings and trade records can keep their broker symbols. Missing ISINs and distinct share classes must remain separate until identity is established. This is a follow-up, not a requirement to rewrite the holdings database.
+- Thesis identity was originally the normalized broker symbol, not a cross-broker instrument identifier, so different symbols for the same security could hold separate theses (the preview holdings include `GOOGL_US_EQ` and `ABEAd_EQ`, both with ISIN `US02079K3059`). **Resolved by the canonical instrument key in the update below (WS4.5, #297).** Holdings and trade records still keep their broker symbols; the key is the identity the agent reads by.
 - Encrypting free text rules out SQL full-text search over memory. `recall_memory` filters by agent, symbol, and date instead. Semantic recall, if it comes, needs its own decision on how encrypted text is indexed.
 - The user can list, reopen, and delete threads, and edit theses and goals. A thesis cannot be deleted on its own; erase all data removes it.
 - The data export must include threads, theses, goals, observations, and risk tolerance. It also includes portfolio letters (ADR 0008).
+
+## Update: canonical instrument keys (WS4.5, #297)
+
+Status: accepted. The follow-up named in Consequences is now the decision.
+
+Thesis identity moves from the broker symbol to the ISIN-first canonical
+instrument key defined by `packages/core/src/investing/securities.ts`:
+`isin:<ISIN>` when the ISIN is well formed (ISO 6166 shape and check digit),
+else `sym:<TICKER>@<MIC>` with a canonicalised MIC, else `sym:<TICKER>`.
+
+- **One instrument, one key.** `resolveSecurityIdentities` groups the broker
+  snapshot's rows by ISIN, so the same ISIN from two brokers resolves to one
+  identity and one thesis key, and a symbol change with the same ISIN does not
+  split history. A ticker that points at two identities is reported as
+  ambiguous and left out of the symbol map rather than silently folded.
+  Missing ISINs and distinct share classes stay separate, as Consequences
+  required.
+- **The storage shape.** Migration `0030_thesis_instruments.sql` adds a nullable
+  `instrument_key` and a `review_required` flag to `investing.theses`. The
+  primary key stays `(user_id, symbol)`: the symbol is the row's stable edit
+  handle, the key is the identity the agent reads by. A partial unique index on
+  `(user_id, instrument_key)` where the row is not under review makes "one
+  instrument, one thesis key" a database fact.
+- **Migration never merges a conflict.** Theses of one instrument with an
+  identical body and status fold into one row. Confirmed theses that disagree
+  keep every row and are flagged for review, and the owner resolves them. A
+  thesis whose symbol the snapshot cannot place keeps a null key. The plan is
+  computed by `planThesisMigration` in core and applied by
+  `applyThesisMigration`; `POST /api/memory/instruments/migrate` runs it with the
+  current broker snapshot as the identity source.
+- **Reads follow the key.** The turn summary matches a thesis by symbol or by
+  canonical key, and the chat passes the held and named holdings' keys, so a
+  thesis stored under another broker's spelling of the same ISIN is found. The
+  owner UI shows a "Needs review" badge on a conflicting thesis.
+- **What stays out.** The agent tools still speak broker symbols; the key is
+  resolved at the memory boundary. `Security` master data (asset class, sector,
+  region) is not stored in LaVega, so the allocation ladder uses the existing
+  instrument/entity grouping rather than Sure's classification dimensions.
