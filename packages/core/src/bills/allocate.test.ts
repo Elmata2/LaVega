@@ -302,6 +302,27 @@ describe("mark paid without a transaction", () => {
 });
 
 describe("repair of replaced entries", () => {
+  test("a row closed before decisions existed is not reopened", () => {
+    const series = bill();
+    const row: BillOccurrence = {
+      ...occurrence(series, "2026-10-01"),
+      status: "paid",
+      paidOn: "2026-10-01",
+      paidAmountCents: 100_000,
+      closedAt: AS_OF,
+      closedSource: "auto",
+    };
+    const repaired = reconcileBillDecisions({
+      bills: [series],
+      occurrences: [row],
+      decisions: decisionsWith({}),
+      txs: [],
+    });
+    expect(repaired.reopened).toEqual([]);
+    expect(repaired.occurrences[0].status).toBe("paid");
+    expect(repaired.changed).toBe(false);
+  });
+
   test("an auto-closed row whose transaction disappeared is reopened", () => {
     const series = bill();
     const row = occurrence(series, "2026-11-01");

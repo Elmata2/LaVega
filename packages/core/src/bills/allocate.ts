@@ -408,6 +408,12 @@ export function reconcileBillDecisions(input: BillReconcileInput): BillReconcile
     rejections: [],
     priceChanges: [],
   };
+  // Occurrences that HAD a stored allocation before this pass. A row that was
+  // already closed without one (a #286 vault with fixture history, or a close
+  // written by an older build) is not reopened: the repair pass exists for a
+  // payment whose transaction disappeared, not to reopen settled history.
+  const hadMatches = new Set<string>();
+  for (const match of decisions.matches) hadMatches.add(match.occurrenceId);
   const matchIds = new Set<string>();
   decisions.matches = decisions.matches.filter((match) => {
     const keep =
@@ -435,7 +441,9 @@ export function reconcileBillDecisions(input: BillReconcileInput): BillReconcile
   const reopened: BillOccurrence[] = [];
   const occurrences = input.occurrences.map((occurrence) => {
     const autoClosed = occurrence.status === "paid" && occurrence.closedSource === "auto";
-    if (!autoClosed || matchIds.has(occurrence.id)) return occurrence;
+    if (!autoClosed || !hadMatches.has(occurrence.id) || matchIds.has(occurrence.id)) {
+      return occurrence;
+    }
     const next: BillOccurrence = { ...occurrence, status: "scheduled" };
     delete next.paidOn;
     delete next.paidAmountCents;
