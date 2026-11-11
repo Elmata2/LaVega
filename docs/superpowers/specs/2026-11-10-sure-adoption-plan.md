@@ -556,6 +556,68 @@ learned)` is not proposed at all (Sure scores it 0 and the candidate dies). Cons
   matcher tiers, the five Sure edge fixtures, allocation/close, learning, marks, repair,
   the UI interactions and the measured real-shaped run.
 
+**As built (WS2.7, [#288](https://github.com/Elmata2/LaVega/issues/288), 2026-11-11).**
+The paycheck planner landed as `packages/core/src/bills/paycheck.ts` plus the
+Betaalschema/bills screen reading it. Nothing new is stored: the plan is derived from the
+series, their occurrence rows and the #287 decisions, so there is no vault field and no
+migration. Divergences from the plan text, each deliberate:
+
+- **Declared income only, and no detector.** A payday is the open occurrence of an active
+  series with `type: "income"` and `direction: "in"`. An active `other`/in inflow is not a
+  payday even though money arrives. Detected inflows never enter: the planner has no ledger
+  argument at all, so `forecast.ts` stays the only detector and WS2.6 still claims its
+  output later.
+- **The slice is Sure's boundary model.** Today up to the first paycheck is the leading
+  window; every payday opens the next one, ending the day before the following payday.
+  `periodsLimit` defaults to Sure's 3, which yields the leading window plus up to three
+  income windows. When `asOf` is itself a payday there is no dedupe gap: the leading window
+  starts with income and is funded by that paycheck, so it is not a bridge.
+- **Due versus reserved.** Each obligation is funded from the paycheck of the window it
+  falls due in. Only what that paycheck cannot cover cascades backward as a reserve, nearest
+  paycheck first; the earliest income window absorbs the overflow, so a gap shows today
+  instead of the week the bill lands. A bridge window has no income, so it never carries a
+  reserve: it carries only what genuinely falls due inside it.
+- **Shortfall is measured against cash on hand.** A bridge is short only when its known cash
+  cannot cover its obligations; its shortfall is `obligation - cash`, and an unknown cash
+  balance reports `shortfallCents: null` with `shortfallUnknown: true`, never zero. Nothing
+  in the plan subtracts the paycheck that arrives after the bridge: future income is not
+  cash. A non-bridge window is short when income minus its obligations is negative.
+- **Cash on hand is a separate honest read.** `cashOnHandCents` sums the known EUR balances
+  of current and savings accounts only. A credit card is a liability, an investment account
+  is not cash, and an "other" account is not claimed as cash. One unknown balance makes the
+  total null (a partial sum would read as "short" while the missing account might cover
+  everything); no cash account at all is null, not zero. Sure additionally excludes its
+  family's tax-advantaged accounts; LaVega has no such flag, so the account kind is the
+  whole rule. The caller passes accounts already rolled forward to `asOf`.
+- **#286's `billsOutlook` is superseded, not duplicated.** `paycheckOverview` returns the
+  preview the summary card shows (due before payday, paid in the last 31 days, reserved,
+  shortfall or unknown) and the full `plan` for the slice, so there is one shortfall
+  implementation. Without a declared income there is no invented payday: the plan is null,
+  the due figure still covers the 90-day horizon, and the shortfall is null.
+- **#287's allocation decisions are the only payment truth.** A partially paid occurrence
+  funds `expected - allocated`, so the plan never asks for money already paid; slips, marks
+  and matcher results arrive through the same `BillDecisions` the screen already holds.
+- **Other currencies are counted, never converted.** The plan counts one currency (EUR by
+  default); active series in another currency are left out of every total and reported in
+  `excludedCurrencyCount`, because LaVega bills have no FX path. Sure converts and counts
+  what it cannot convert.
+- **The screen answers from the slice, and mark-paid is unchanged.** The Bills summary card
+  now reads the preview, a new "Salarisperiodes" section renders each window (income, due,
+  reserved, remaining, bridge cash and gap, the items behind each number), and
+  `BetaalschemaBlock` takes an optional `paycheck` preview above its agenda (Overzicht
+  threads the bills lane from `App.tsx`). Mark-paid without a transaction keeps working; the
+  regression test pins it after the restructure.
+- **Acceptance evidence is a labelled scenario matrix.**
+  `packages/core/src/bills/__fixtures__/paycheck-scenarios.json` holds six hand-worked
+  scenarios: monthly income on the 25th, twice-monthly income (1st and 15th), weekly income
+  with a two-paycheck reserve cascade, a reserve overflow that shows as short, a last-day
+  payday whose bridge crosses month end (EUR 500 cash against EUR 1.000 due, with
+  EUR 3.000 arriving after it), and the same bridge with unknown cash. `paycheck.test.ts` asserts the
+  slice, the due/reserved split, the bridge shortfall against cash, the unknown-cash null,
+  and payments through #287 allocations: 28 tests. The web tests add the rendered slice, the
+  preview in BetaalschemaBlock and the mark-paid regression.
+- **Tests are plain vitest**, like the rest of the package.
+
 ### WS3 — Wealth view and evidence (personal)
 
 **Goal.** One statement of assets and liabilities with a defensible audit trail, and a path
@@ -1149,7 +1211,7 @@ reimplemented for LaVega", and the change date.
 | `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb` | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10     | 1     |
 | `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                              | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10 | 1     |
 | `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                              | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                   | 1     |
-| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`               | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine (#286); matcher pending; 2026-11-11   | 2     |
+| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`, `recurring_transaction/paycheck_planner.rb` | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine, matcher/allocation and paycheck plan (#286/#287/#288); 2026-11-11 | 2 |
 | `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`              | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                         | 2     |
 | `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`                                               | 562fe09 | AGPL-3.0 | re-expressed over vault arrays                                                           | 3     |
 | `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                           | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                              | 3     |
