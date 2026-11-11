@@ -1730,8 +1730,13 @@ export function createAiUsageRepository(db: Database) {
      *  sets cost 0 — nothing was billed with certainty — and marks
      *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
      *
-     *  Guarded by `reconciled_at IS NULL` exactly like reconcile/release, so the
-     *  first of the three to run on a row wins and the others are no-ops. */
+     *  `costCents` applies only when the row was NOT already reconciled. The
+     *  provider call sites deliberately record their worst-case/ceiling usage
+     *  BEFORE they throw ("a failed call was still billed"), so a row marked
+     *  failed afterwards usually already carries a real charge: that charge and
+     *  its cache counts are KEPT and only the outcome/error columns are added.
+     *  Either way the row ends up `reconciled_at`-stamped, so it counts exactly
+     *  once in the cap sums. */
     async fail(
       failure: {
         id: number;
@@ -1740,6 +1745,7 @@ export function createAiUsageRepository(db: Database) {
         httpStatus?: number;
         cacheWriteTokens?: number;
         cacheReadTokens?: number;
+        costCents?: number;
       },
       userId: string,
     ): Promise<void> {
@@ -1747,11 +1753,17 @@ export function createAiUsageRepository(db: Database) {
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
           `UPDATE personal.ai_usage
-           SET model = $2, input_tokens = 0, output_tokens = 0, pages = 0, searches = 0,
-               cost_cents = 0, cache_write_tokens = $4, cache_read_tokens = $5,
+           SET model = $2,
+               input_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE input_tokens END,
+               output_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE output_tokens END,
+               pages = CASE WHEN reconciled_at IS NULL THEN 0 ELSE pages END,
+               searches = CASE WHEN reconciled_at IS NULL THEN 0 ELSE searches END,
+               cost_cents = CASE WHEN reconciled_at IS NULL THEN $8 ELSE cost_cents END,
+               cache_write_tokens = CASE WHEN reconciled_at IS NULL THEN $4 ELSE cache_write_tokens END,
+               cache_read_tokens = CASE WHEN reconciled_at IS NULL THEN $5 ELSE cache_read_tokens END,
                outcome = 'failed', error_code = $3, http_status = $6,
-               reconciled_at = CURRENT_TIMESTAMP
-           WHERE id = $1 AND user_id = $7 AND reconciled_at IS NULL`,
+               reconciled_at = COALESCE(reconciled_at, CURRENT_TIMESTAMP)
+           WHERE id = $1 AND user_id = $7`,
           [
             failure.id,
             failure.model,
@@ -1760,6 +1772,7 @@ export function createAiUsageRepository(db: Database) {
             failure.cacheReadTokens ?? 0,
             failure.httpStatus ?? null,
             identity,
+            Math.max(0, Math.round(failure.costCents ?? 0)),
           ],
         );
       });

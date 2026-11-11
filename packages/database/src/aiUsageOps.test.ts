@@ -110,7 +110,7 @@ test("a failed row no longer holds budget: the cap sums see cost 0", async () =>
   ).toEqual({ dayCents: 0, monthCents: 0 });
 });
 
-test("fail() is a no-op after the row was already reconciled, so a late failure cannot rewrite a charged call", async () => {
+test("fail() after the provider already charged the call keeps the charge and adds the failure reason", async () => {
   const repo = createAiUsageRepository(db);
   const reserved = await repo.reserve({
     userId: "usage-race",
@@ -136,10 +136,15 @@ test("fail() is a no-op after the row was already reconciled, so a late failure 
     "usage-race",
   );
   await repo.fail(
-    { id: reserved.id, model: "mistral-medium-latest", errorCode: "ai-fault" },
+    { id: reserved.id, model: "mistral-medium-latest", errorCode: "ai-fault", httpStatus: 500 },
     "usage-race",
   );
-  expect(await row("usage-race")).toMatchObject({ cost_cents: 3, outcome: "ok", error_code: null });
+  expect(await row("usage-race")).toMatchObject({
+    cost_cents: 3,
+    outcome: "failed",
+    error_code: "ai-fault",
+    http_status: 500,
+  });
 });
 
 test("the migration constrains the new columns", async () => {

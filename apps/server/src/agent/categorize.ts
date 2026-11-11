@@ -59,7 +59,12 @@ export async function categorizeTransactions(
   input: { items: CategorizeItem[] },
   apiKey: string,
   facts: readonly LearnedFact[] = [],
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>,
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+  }) => void | Promise<void>,
   userId?: string,
 ): Promise<{ id: string; category: string }[]> {
   const provider = createMistralProvider(
@@ -86,7 +91,16 @@ export async function categorizeTransactions(
   }
   // Called regardless of what happens to res.text below — tokens were spent
   // either way, whether or not the JSON that follows parses.
-  await onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
+  await onUsage?.({
+    inputTokens: res.usage.input,
+    outputTokens: res.usage.output,
+    ...(res.usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: res.usage.cacheWriteTokens }),
+    ...(res.usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: res.usage.cacheReadTokens }),
+  });
   let parsed: unknown;
   try {
     parsed = JSON.parse(res.text);

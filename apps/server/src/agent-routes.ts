@@ -4,6 +4,7 @@ import type { SSEStreamingApi } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
 import {
   checkBudget,
+  recordFailure,
   recordUsage,
   releaseReservation,
   spentCents,
@@ -12,6 +13,7 @@ import {
 import type { AiUsage } from "@lavega/database";
 import { MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
 import { MistralHttpError } from "./agent/mistral.js";
+import { aiFailureCode, upstreamHttpStatus } from "./agent/failure.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
 import { extractInvoiceFields } from "./agent/invoiceExtract.js";
 import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
@@ -297,9 +299,22 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       );
       return c.json(result);
     } catch (e) {
-      await releaseReservation(budget.reservation);
-      logAiError("extract-invoice", e);
+      /* The provider may already have charged this call at its ceiling before
+       * throwing (invoiceExtract.ts's own catch). Mark that same row failed with
+       * the reason instead of merely releasing it (#300, WS5.7). */
       const { code, message } = aiFailure(e);
+      await recordFailure(
+        {
+          route: "extract-invoice",
+          model: MISTRAL_SMALL,
+          errorCode: aiFailureCode(e),
+          ...(upstreamHttpStatus(e) === undefined
+            ? {}
+            : { httpStatus: upstreamHttpStatus(e) }),
+        },
+        budget.reservation,
+      );
+      logAiError("extract-invoice", e);
       return c.json({ error: message, code }, 502);
     }
   });
@@ -389,7 +404,17 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         }
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
-        await releaseReservation(budget.reservation);
+        await recordFailure(
+          {
+            route: "chat",
+            model: MISTRAL_MEDIUM,
+            errorCode: aiFailureCode(e),
+            ...(upstreamHttpStatus(e) === undefined
+              ? {}
+              : { httpStatus: upstreamHttpStatus(e) }),
+          },
+          budget.reservation,
+        );
         logAiError("chat", e);
         /* aiFailure(e), not the bare AI_ERROR_MESSAGE this used to send. The
          * other two AI routes already told a provider ceiling apart from a
@@ -457,9 +482,19 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       );
       return c.json(result);
     } catch (e) {
-      await releaseReservation(budget.reservation);
-      logAiError("categorize", e);
       const { code, message } = aiFailure(e);
+      await recordFailure(
+        {
+          route: "categorize",
+          model: MISTRAL_SMALL,
+          errorCode: aiFailureCode(e),
+          ...(upstreamHttpStatus(e) === undefined
+            ? {}
+            : { httpStatus: upstreamHttpStatus(e) }),
+        },
+        budget.reservation,
+      );
+      logAiError("categorize", e);
       return c.json({ error: message, code }, 502);
     }
   });
