@@ -205,6 +205,41 @@ regex DoS (document dialect, length cap, timeout or linear-time engine); double-
 `crossScope.ts` (make one predicate: confirmed transfer pair is authoritative); account merge
 orphans references (see §2.2); UI cost of two match panels (co-locate on Transacties).
 
+**As built (WS1.1/WS1.2, [#282](https://github.com/Elmata2/LaVega/issues/282), 2026-11-10).**
+The two tasks below landed in one slice. Divergences from the plan text, each deliberate:
+
+- **Suggestions are derived, not stored.** `suggestTransfers()` runs over the current ledger on
+  read; only decisions (`confirmed`, `rejected`) persist in `VaultData.transfers`. A stored
+  pending row would go stale on the next import, so Sure's pending table becomes a pure
+  function. Rejection memory is a stored `rejected` pair, exactly Sure's pair-keyed
+  `rejected_transfers` join: it suppresses that combination only, and its legs stay matchable
+  with other rows.
+- **Auto-confirm is only the unambiguous exact two-leg proof:** same currency, equal to the
+  cent, two different accounts, `|date diff| <= 4` days, and no competing candidate for either
+  leg. FX pairs and ambiguous exact pairs are suggestions the owner decides. (Sure itself
+  inserts even exact matches as pending; the plan's acceptance evidence asks for the stronger
+  auto-confirm.)
+- **One authoritative predicate on read:** `applyTransferDecisions()` projects the two legs of
+  a confirmed pair into `Eigen overboeking`, which every existing spend surface already
+  excludes (`MOVED_CATEGORIES`, forecast incidentals, `cleanTxs`, `categoryComparison`, plan
+  `movedCategories`). Nothing is rewritten in the vault, so rejecting restores what each row
+  said before.
+- **`crossScopeTransfers` accepts `transfers`** and consumes a confirmed pair as the
+  authoritative two-legged crossing before its own heuristic; a BV<->private link is measured,
+  never swallowed. The archived Belasting/Grens screen does not pass the list yet; its route
+  is archived today, so the wiring belongs with that screen's return, not this slice.
+- **Merge safety:** `mergeAccounts` now also returns `txIdRemap` (old id -> new id, or null
+  when an overlap was absorbed). `reconcileTransfers()` re-keys or drops pairs and their fee
+  legs; Rekeningen prints how many links a merge/delete dropped.
+- **Fee legs** exist on the record and survive reconciliation, but nothing creates them in
+  this slice: Sure only creates them through the manual creator, and this slice has no manual
+  create flow.
+- **`loan_payment`** needs an account that reads as a loan. LaVega has no liability account
+  kind before WS3.1, so derivation requires explicit account type `Overig` AND a loan-like
+  name; everything else that is not credit, investment or savings stays `funds_movement`.
+- **Tests are plain vitest, not `@effect/vitest`** (§2.3): the package is not installed and
+  Phase 0 did not add it. The first `it.effect` suite is still an open convention.
+
 ### WS2 — Bills and budgets (personal, the wedge)
 
 **Goal.** LaVega manages commitments, not just detects them: series → occurrences → payment
