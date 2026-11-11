@@ -115,6 +115,110 @@ export type CashHistoryCoverage = {
   | { status: "unknown"; reason: string }
 );
 
+/* ---------------------------------------------------------------------------
+ * Account tax treatment (plan §3 WS4.4, #296)
+ *
+ * A grouping label and nothing more. LaVega has no account record of its own —
+ * the broker snapshot is the only place an account exists — so the wrapper is
+ * stored as a map keyed by `(broker, account)`. The taxonomy exists so the
+ * realised/income report can group by treatment; it never decides a tax amount
+ * and the report copy says so. "No tax-filing claims" is an acceptance
+ * criterion, not a disclaimer bolted on later.
+ * ------------------------------------------------------------------------- */
+
+/** The four treatments the plan names, plus `unknown` for an account nobody
+ *  labelled. `unknown` is a real value, not a fallback to `taxable`: guessing
+ *  a treatment would silently group an ISA with a taxable account. */
+export type TaxTreatment = "taxable" | "tax-deferred" | "tax-exempt" | "tax-advantaged" | "unknown";
+
+export const TAX_TREATMENTS: readonly TaxTreatment[] = [
+  "taxable",
+  "tax-deferred",
+  "tax-exempt",
+  "tax-advantaged",
+  "unknown",
+];
+
+/** The wrapper labels the plan names (EU + UK + US), plus the plain taxable
+ *  brokerage account. `unknown` means the user has not labelled the account. */
+export type AccountWrapper =
+  | "brokerage"
+  | "isa"
+  | "lisa"
+  | "sipp"
+  | "pea"
+  | "assurance-vie"
+  | "pillar-3a"
+  | "pillar-3b"
+  | "private-pension"
+  | "ira"
+  | "roth-ira"
+  | "401k"
+  | "unknown";
+
+export const ACCOUNT_WRAPPERS: readonly AccountWrapper[] = [
+  "brokerage",
+  "isa",
+  "lisa",
+  "sipp",
+  "pea",
+  "assurance-vie",
+  "pillar-3a",
+  "pillar-3b",
+  "private-pension",
+  "ira",
+  "roth-ira",
+  "401k",
+  "unknown",
+];
+
+/** One account's label. Keyed by the pair the broker snapshot actually names;
+ *  an account with no entry resolves to `unknown`, never to a guess. */
+export type AccountWrapperEntry = {
+  broker: string;
+  account: string;
+  wrapper: AccountWrapper;
+};
+
+export function isAccountWrapper(value: unknown): value is AccountWrapper {
+  return typeof value === "string" && (ACCOUNT_WRAPPERS as readonly string[]).includes(value);
+}
+
+/** JSON-encoded pair, so no broker or account name can be spelled to collide
+ *  with another pair (the same rule as `ownershipKey`). */
+export function accountWrapperKey(broker: string, account: string): string {
+  return JSON.stringify([broker, account]);
+}
+
+/** Normalizes any JSON value into a well-formed wrapper map: unknown wrapper
+ *  labels and non-string keys are dropped, never rejected, exactly like
+ *  `validateInvestingLayout`. A GET and a PUT therefore agree on what valid
+ *  means. */
+export function validateAccountWrapperMap(input: unknown): AccountWrapperEntry[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const entries: AccountWrapperEntry[] = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as { broker?: unknown; account?: unknown; wrapper?: unknown };
+    if (typeof record.broker !== "string" || typeof record.account !== "string") continue;
+    if (!isAccountWrapper(record.wrapper)) continue;
+    const key = accountWrapperKey(record.broker, record.account);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ broker: record.broker, account: record.account, wrapper: record.wrapper });
+  }
+  return entries;
+}
+
+/** The wrapper map's persisted shape: one tenant's account labels. */
+export type AccountWrapperSelection = { tenantId: string; entries: AccountWrapperEntry[] };
+
+export interface AccountWrapperStore {
+  get(tenantId: string): Promise<AccountWrapperEntry[]>;
+  set(selection: AccountWrapperSelection): Promise<void>;
+}
+
 export type TradeSide = "buy" | "sell" | "other";
 
 /** A broker-reported execution. `quantity` is a positive magnitude; `side`

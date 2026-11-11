@@ -34,6 +34,13 @@ import { valuePosition } from "./valuation.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { orderTrades, tradeDelta } from "./quantity.js";
 import { buildRiskProjection } from "./risk.js";
+import {
+  buildRealizedReport,
+  RealizedIncomeReportSchema,
+  summarizeDisposals,
+  type PositionRealizedSummary,
+} from "./realized.js";
+import type { AccountWrapperEntry } from "./model.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -65,6 +72,9 @@ export type InvestingPositionDetail = {
   /** Why the cost basis is known or unknown (WS4.2); absent on rows built
    *  before the provenance slice. */
   basis?: CurrentPosition["basis"];
+  /** Realised disposals of this security (WS4.3, #296). A summary, not the
+   *  whole report: the report route carries the per-disposal detail. */
+  realized?: PositionRealizedSummary;
   firstBuyDate: string | null;
   quantityHistory: PositionQuantityChange[];
   activity: PositionActivity[];
@@ -250,6 +260,12 @@ const PositionActivitySchema = Schema.Struct({
   currency: Schema.String,
   sourceOrder: Schema.Number,
 });
+const PositionRealizedSummarySchema = Schema.Struct({
+  disposals: Schema.Number,
+  unknownDisposals: Schema.Number,
+  netProceedsCents: NullableNumber,
+  realizedGainCents: NullableNumber,
+});
 const PositionDetailSchema = Schema.Struct({
   symbol: Schema.String,
   description: Schema.optional(Schema.String),
@@ -267,6 +283,7 @@ const PositionDetailSchema = Schema.Struct({
   returns: PositionReturnSchema,
   returnStatus: PositionReturnStatusSchema,
   basis: Schema.optional(CostBasisSummarySchema),
+  realized: Schema.optional(PositionRealizedSummarySchema),
   firstBuyDate: NullableString,
   quantityHistory: Schema.Array(PositionQuantityChangeSchema),
   activity: Schema.Array(PositionActivitySchema),
@@ -358,6 +375,9 @@ export const InvestingDashboardDataSchema = Schema.Struct({
   problems: StringList,
   risk: RiskProjectionSchema,
   composition: CompositionSchema,
+  /** Realised-gain and income report (WS4.3/WS4.4, #296). Optional so a
+   *  dashboard stored before the report existed still decodes. */
+  realized: Schema.optional(RealizedIncomeReportSchema),
 });
 
 export type InvestingDashboardData = DeepMutable<
@@ -380,6 +400,8 @@ export type InvestingDashboardInput = {
   problems?: readonly string[];
   today?: string;
   dataVersion?: number;
+  /** Account tax-treatment labels keyed by `(broker, account)` (WS4.4). */
+  accountWrappers?: readonly AccountWrapperEntry[];
 };
 
 /** The most the composition projection ever names. */
@@ -520,6 +542,27 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
         })
       : null;
 
+  /* The report is built from the snapshot rows as reported: `buildRealizedReport`
+   * restates splits itself, and `input` above is already restated. */
+  const realized = buildRealizedReport({
+    positions: reported.positions,
+    trades: reported.trades,
+    dividends: reported.dividends,
+    cashFlows: reported.cashFlows,
+    priceBars: reported.priceBars,
+    presentationCurrency: reported.presentationCurrency,
+    fxRates: reported.fxRates,
+    ...(reported.accountWrappers ? { accountWrappers: reported.accountWrappers } : {}),
+    today,
+  });
+  const selectedDisposals = selected
+    ? realized.disposals.filter((row) => row.symbol.toUpperCase() === selected)
+    : [];
+  const positionWithRealized =
+    position && selectedDisposals.length > 0
+      ? { ...position, realized: summarizeDisposals(selectedDisposals) }
+      : position;
+
   const externalByDate = new Map<string, number | null>();
   const seenFlows = new Set<string>();
   for (const flow of input.cashFlows ?? []) {
@@ -589,8 +632,9 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
       entity: bucketPricedAllocation(positions, "entity"),
     },
     positions,
-    position,
+    position: positionWithRealized,
     problems: [...(input.problems ?? []), ...positionProblems],
+    realized,
     risk: { byBenchmark: {}, defaultBenchmark: null },
     composition: buildCompositionProjection(positions),
   };
