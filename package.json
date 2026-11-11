@@ -18,6 +18,7 @@
     "db:migrate:baseline": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts baseline",
     "db:migrate:adopt": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts adopt",
     "lint": "oxlint . --ignore-pattern \"repos/**\" --max-warnings 0",
+    "check:attribution": "node scripts/check-attribution.mjs",
     "lint:fix": "oxlint --fix . --ignore-pattern \"repos/**\"",
     "format": "oxfmt --check",
     "format:fix": "oxfmt .",

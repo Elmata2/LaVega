@@ -1,3 +1,11 @@
+/**
+ * Aandacht — the alert centre's formulas (WS1.7, issue #284).
+ *
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-10.
+ * Sure sources: `app/models/insight/generators/*` — AGPL-3.0. No Ruby is
+ * copied; the three formulas LaVega lacked are reimplemented over vault arrays.
+ */
 import type { Account, ScheduledFlow, Tx } from "./model.js";
 import { isEurCurrency } from "./model.js";
 import { accountTypeKind } from "./balance.js";

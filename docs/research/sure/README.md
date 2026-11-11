@@ -34,6 +34,15 @@ is still in scope (plan WS3.6).
   run. Every claim is code/schema/doc evidence with `path:line` citations; inferences are
   marked as such. "Unverified" is called out per note.
 
+## Attribution gate
+
+`node scripts/check-attribution.mjs` (also `pnpm run check:attribution`) is the mechanical
+check behind the provenance claims in this note and in the plan's Appendix A. It fails when a
+runtime source file with a "Ported from Sure" header has no Appendix A row, when a row points
+at a file that is missing or not ported, when a header misses the pinned commit, licence,
+independent-reimplementation wording or change date, or when `NOTICE`/this README drifts from
+the pinned commit. Run it after adding or removing a ported module.
+
 ## Ground rules for anyone editing these notes
 
 1. Cite the pinned commit, not `main`. Sure is a moving development tree.

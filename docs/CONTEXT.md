@@ -155,6 +155,22 @@ wide; phase issues are filed in `Elmata2/lavega`. Read the plan before touching 
 [`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](superpowers/specs/2026-11-10-sure-adoption-plan.md),
 teardown: [`docs/research/2026-11-10-sure-teardown.md`](research/2026-11-10-sure-teardown.md).
 
+**Program closed 2026-11-11 (#302).** Every workstream shipped; the closeout artifacts are the
+contract for anyone touching this area later:
+
+- **Portable export** — `packages/core/src/interop/export.ts` (versioned ZIP + manifest +
+  NDJSON/CSV, readback-verified) and the "Draagbare export" action on Backup. The encrypted
+  `.lavega` bundle stays the restore artifact; the export is the readable one. No importer and
+  no cross-format dedupe promise ([ADR 0013](adr/0013-program-closeout-boundaries.md)).
+- **Attribution gate** — `pnpm run check:attribution` proves every ported module has a Sure
+  header, an Appendix A row and `NOTICE` coverage, in both directions.
+- **Metrics** — [`docs/metrics/2026-11-11-sure-program-metrics.md`](metrics/2026-11-11-sure-program-metrics.md)
+  records before/after aggregates on synthetic fixtures and names the eight live-vault metrics
+  as owner-pending (#303, owner-blocked). Do not estimate them.
+- **Boundaries** — [ADR 0013](adr/0013-program-closeout-boundaries.md): personal plaintext
+  stays browser-only (ADR 0009/0012), family sharing waits for a key-ownership ADR, budget stays
+  envelope + signed carry, Sure stays a port source with no runtime deployment.
+
 ## Don't do
 
 - No FinnTell code/asset reuse. No PIS. No secrets in the repo.

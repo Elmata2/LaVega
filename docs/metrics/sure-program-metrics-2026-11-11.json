@@ -1,0 +1,111 @@
+{
+  "program": "sure-adoption",
+  "asOf": "2026-11-11",
+  "basis": "aggregates only; measured rows come from committed synthetic real-shaped fixtures because the owner's vault is local-first and not agent-readable (ADR 0009); owner-pending rows are stated, never estimated",
+  "measured": [
+    {
+      "id": "forecast-error-30d",
+      "label": "Forecast absolute error at 30d",
+      "valuePct": 0.01,
+      "beforePct": 0.62,
+      "afterPct": 0.01,
+      "unit": "percent",
+      "basis": "synthetic-fixture",
+      "method": "absolute error of the projected close vs the actual ledger at the 30/60/90-day checkpoint, as a percentage of the opening position; #290 real-shaped fixture"
+    },
+    {
+      "id": "forecast-error-60d",
+      "label": "Forecast absolute error at 60d",
+      "valuePct": 0.01,
+      "beforePct": 1.42,
+      "afterPct": 0.01,
+      "unit": "percent",
+      "basis": "synthetic-fixture",
+      "method": "absolute error of the projected close vs the actual ledger at the 30/60/90-day checkpoint, as a percentage of the opening position; #290 real-shaped fixture"
+    },
+    {
+      "id": "forecast-error-90d",
+      "label": "Forecast absolute error at 90d",
+      "valuePct": 0.04,
+      "beforePct": 2.18,
+      "afterPct": 0.04,
+      "unit": "percent",
+      "basis": "synthetic-fixture",
+      "method": "absolute error of the projected close vs the actual ledger at the 30/60/90-day checkpoint, as a percentage of the opening position; #290 real-shaped fixture"
+    },
+    {
+      "id": "internal-transfer-match-rate",
+      "label": "Internal-transfer match rate",
+      "valuePct": 100,
+      "unit": "percent",
+      "basis": "synthetic-fixture",
+      "method": "12 of 12 labelled same-day pairs auto-confirmed, 0 pairs left as suggestions; real-shaped synthetic vault"
+    },
+    {
+      "id": "uncategorized-share",
+      "label": "Uncategorized share",
+      "valuePct": 0,
+      "unit": "percent",
+      "basis": "synthetic-fixture",
+      "method": "0 of 160 fixture transactions have no category under the built-in tiers; synthetic vault"
+    }
+  ],
+  "ownerPending": [
+    {
+      "id": "forecast-error-live",
+      "label": "Forecast error on the owner's history",
+      "reason": "the personal vault is encrypted and local-first (ADR 0009); #303 owner-blocked",
+      "definition": "as above, on the last three complete months of the owner's own ledger",
+      "status": "owner-pending"
+    },
+    {
+      "id": "internal-transfer-match-rate-live",
+      "label": "Internal-transfer match rate on the owner's vault",
+      "reason": "needs the owner's ledger and 30 days of decisions; #303 owner-blocked",
+      "definition": "confirmed pairs / (confirmed + rejected + still-suggested after 30 days)",
+      "status": "owner-pending"
+    },
+    {
+      "id": "uncategorized-share-live",
+      "label": "Uncategorized share on the owner's ledger",
+      "reason": "needs the owner's last three complete months; #303 owner-blocked",
+      "definition": "transactions without a category / all transactions",
+      "status": "owner-pending"
+    },
+    {
+      "id": "statement-coverage",
+      "label": "Statement coverage",
+      "reason": "needs the owner's first-account date and imported-document months; #303 owner-blocked",
+      "definition": "months with at least one statement document / months since the first account opened",
+      "status": "owner-pending"
+    },
+    {
+      "id": "realised-gain-reconciliation",
+      "label": "Realised-gain reconciliation",
+      "reason": "needs the broker's own realised/cash statement; fixture tests prove the report runs, not an independent reconciliation",
+      "definition": "realised gains + income from the report minus the broker's reported movement; unknown when the broker does not report it",
+      "status": "owner-pending"
+    },
+    {
+      "id": "mcp-usage",
+      "label": "MCP tool calls per week and error rate",
+      "reason": "needs the production server audit rows; no live MCP traffic exists from a local check",
+      "definition": "tool calls per week and the ok/refused/error counts from the audit table",
+      "status": "owner-pending"
+    },
+    {
+      "id": "ai-spend",
+      "label": "AI spend per operation and per account per month",
+      "reason": "needs live agent usage; a local check makes no model calls",
+      "definition": "cost per operation and per account per month from the AI usage ledger",
+      "status": "owner-pending"
+    },
+    {
+      "id": "time-to-close-month",
+      "label": "Time to close a month",
+      "reason": "a wall-clock measurement only the owner can take",
+      "definition": "minutes from starting the month-close routine to trusting the numbers",
+      "status": "owner-pending"
+    }
+  ]
+}

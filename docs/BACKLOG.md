@@ -15,6 +15,29 @@ hij, dan het volgende.
 
 ---
 
+## Sure-adoptieprogramma — afgerond 11 november 2026 (#302)
+
+Het volledige Sure-programma (plan §3, WS1–WS6) is afgerond en gesloten. Wat er nu ligt en waar
+je moet kijken voordat je eraan zit:
+
+- **Draagbare export**: `packages/core/src/interop/export.ts` maakt een versie-ZIP met manifest,
+  NDJSON en CSV; het scherm Back-up leest het bestand na en zegt pas dan dat het klopt. De
+  versleutelde `.lavega`-back-up blijft het herstelbestand; er is geen importeur en er wordt geen
+  dedupe over formaten beloofd (ADR 0013).
+- **Attributie**: `pnpm run check:attribution` controleert in beide richtingen dat elk geport
+  bestand een Sure-header, een Appendix A-rij en `NOTICE`-dekking heeft. Nu: 42 bestanden,
+  23 rijen.
+- **Metrieken**: `docs/metrics/2026-11-11-sure-program-metrics.md` met gemeten aggregaten op
+  synthetische fixtures en de acht owner-pending metrieken (o.a. forecast-fout op echte historie,
+  transferdekking, statement-dekking, MCP-gebruik). #303 is owner-blocked; vul die aan met de
+  runbook uit plan §8 en verzin geen getal.
+- **Grenzen**: ADR 0013 legt vast dat persoonlijke plaintext browser-only blijft, family sharing
+  wacht op een key-ownership-ADR, het budget envelop + carry blijft en Sure geen runtime is.
+- **Dode experimenten**: de losse terminal-transcript in de root is verwijderd. `.scratch/` blijft,
+  want dat is de gedocumenteerde plek voor batch-run-logs.
+
+---
+
 ## 0. Afgesloten sinds 19 augustus — verdwijnt uit deze backlog
 
 Alle drie de reviews van 20 augustus zijn verwerkt, in de 50 commits die die dag draagt. Wat
