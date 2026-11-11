@@ -8,7 +8,9 @@ import {
   carryUnknownKeys,
   encodeProfileStore,
   mergeEvents,
+  migrateAccountTypes,
   migrateTxStates,
+  normalizeValuation,
   billDecisionsOf,
 } from "@lavega/core";
 import type {
@@ -39,6 +41,7 @@ import type {
   Bill,
   BillDecisions,
   BillOccurrence,
+  Valuation,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
@@ -127,6 +130,10 @@ type VaultData = {
   /** The explicit category -> group map. Optional like `budgetPeriods`: absent
    *  means every category is its own top-level budget line. */
   categoryGroups?: CategoryGroup[];
+  /** Dated absolute valuations (WS3.1, issue #291): one row per account per
+   *  day, a hard reset the balance series replays from. Additive optional
+   *  field; a legacy vault decrypts without it and reads []. */
+  valuations?: Valuation[];
   learning?: LearningSection;
   events?: VaultEvent[];
 };
@@ -164,6 +171,11 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** The category-group map; a legacy vault reads []. */
   getCategoryGroups(): Promise<CategoryGroup[]>;
   putCategoryGroups(groups: CategoryGroup[]): Promise<void>;
+  /** Dated absolute valuations, oldest first; a legacy vault reads []. */
+  getValuations(): Promise<Valuation[]>;
+  /** Replace-all: a merge or delete rewrites the whole list in one save, so a
+   *  valuation can never point at an account the vault no longer holds. */
+  putValuations(valuations: Valuation[]): Promise<void>;
   /** The owner's merchant aliases; a legacy vault has none and reads []. */
   getMerchants(): Promise<Merchant[]>;
   putMerchants(m: Merchant[]): Promise<void>;
@@ -331,11 +343,25 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       : { vault: { ...vault, budgetPeriods: [first] }, changed: true };
   }
 
-  /** Both open-time migration passes, so an old vault still re-seals once. */
+  /** The WS3.1 account-type migration: known spellings become the canonical
+   *  Dutch strings once. An unknown value is left alone (it already reads as
+   *  "other"), so the pass never renames data it does not understand. */
+  function withMigratedAccountTypes(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const migrated = migrateAccountTypes(vault.accounts ?? []);
+    return migrated.changed
+      ? { vault: { ...vault, accounts: migrated.accounts }, changed: true }
+      : { vault, changed: false };
+  }
+
+  /** Every open-time migration pass, so an old vault still re-seals once. */
   function withMigrations(vault: VaultData): { vault: VaultData; changed: boolean } {
-    const tx = withMigratedTxStates(vault);
+    const types = withMigratedAccountTypes(vault);
+    const tx = withMigratedTxStates(types.vault);
     const budget = withMigratedBudgets(tx.vault);
-    return { vault: budget.vault, changed: tx.changed || budget.changed };
+    return {
+      vault: budget.vault,
+      changed: types.changed || tx.changed || budget.changed,
+    };
   }
 
   return {
@@ -600,6 +626,18 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     },
     // merchants is the same additive optional field shape: replace-all, and a
     // legacy vault reads [] so `labels.ts` falls back to its token key.
+    async getValuations(): Promise<Valuation[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.valuations ?? [])];
+    },
+    putValuations(valuations: Valuation[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, valuations: valuations.map(normalizeValuation) };
+        await persist();
+      });
+    },
+
     async getMerchants(): Promise<Merchant[]> {
       if (data == null) throw new Error(LOCKED_ERROR);
       return [...(data.merchants ?? [])];

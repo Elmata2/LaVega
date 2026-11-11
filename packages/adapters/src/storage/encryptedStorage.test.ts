@@ -3,7 +3,15 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
-import type { Account, Bill, BillOccurrence, Merchant, TransferPair, Tx } from "@lavega/core";
+import type {
+  Account,
+  Bill,
+  BillOccurrence,
+  Merchant,
+  TransferPair,
+  Tx,
+  Valuation,
+} from "@lavega/core";
 import {
   AdvisorProfile,
   type ProfileRead,
@@ -863,6 +871,49 @@ test("budget periods and category groups round-trip; fields are optional", async
   expect(await v.open(KEY, "user:a")).toBe("opened");
   expect(await v.getBudgetPeriods()).toEqual(periods);
   expect(await v.getCategoryGroups()).toEqual(groups);
+});
+
+test("valuations round-trip; a legacy vault defaults to [] and a rewrite is replace-all", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-valuations");
+  await s.open(KEY, "user:a");
+  expect(await s.getValuations()).toEqual([]); // legacy vault default
+
+  const valuation: Valuation = {
+    id: "A|2026-11-05",
+    accountKey: "A",
+    date: "2026-11-05",
+    amountCents: 42_000_000,
+    currency: "EUR",
+    kind: "reconciliation",
+    source: "manual",
+    createdAt: "2026-11-11",
+  };
+  await s.putValuations([valuation]);
+  expect(await s.getValuations()).toEqual([valuation]);
+
+  // Replace-all: a merge/delete rewrites the whole list, so a removed row can
+  // never come back from a stale snapshot.
+  await s.putValuations([]);
+  expect(await s.getValuations()).toEqual([]);
+  await s.putValuations([valuation]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getValuations()).toEqual([valuation]);
+});
+
+test("opening a vault migrates a known account-type spelling once", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-types");
+  await s.open(KEY, "user:a");
+  await s.putAccounts([{ ...acc("A"), type: "Savings" }]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getAccounts())[0]?.type).toBe("Spaarrekening");
+  // Canonical already: a second open changes nothing.
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getAccounts())[0]?.type).toBe("Spaarrekening");
 });
 
 test("bills + occurrences round-trip in one save; legacy vault defaults to []", async () => {
