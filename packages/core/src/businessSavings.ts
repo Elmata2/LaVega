@@ -68,7 +68,7 @@ export const BUSINESS_SAVINGS_OFFERS: readonly BusinessSavingsOffer[] = [
       "https://www.revolut.com/en-NL/business/savings/",
       "https://www.revolut.com/en-NL/legal/business-deposit-information-sheet/",
     ],
-    checkedOn: "2026-10-15",
+    checkedOn: "2026-11-11",
   },
 ];
 
