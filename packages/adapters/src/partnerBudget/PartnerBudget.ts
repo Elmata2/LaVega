@@ -258,7 +258,8 @@ function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
 /**
  * Reserves a slot, sleeps until it, or fails with `PartnerWait` when the slot
  * is after `deadlineMs`; then no slot was consumed. A slot exactly one second
- * before the deadline still proceeds. With no deadline it always sleeps.
+ * before the deadline still proceeds. With no deadline it always sleeps. A caller
+ * that slept reads the block once on waking and honors it.
  */
 export const awaitSlot = Effect.fnUntraced(function* (key: PartnerKey, deadlineMs?: number) {
   const budget = yield* PartnerBudget;
@@ -277,7 +278,19 @@ export const awaitSlot = Effect.fnUntraced(function* (key: PartnerKey, deadlineM
   }
   const slotMs = DateTime.toEpochMillis(slot);
   const now = yield* Clock.currentTimeMillis;
-  if (slotMs > now) yield* Effect.sleep(slotMs - now);
+  if (slotMs <= now) return;
+  yield* Effect.sleep(slotMs - now);
+  // A block can arrive while this caller sleeps (another caller got a 429). The
+  // slot was reserved before it, so the caller re-checks once: no loop, a block
+  // that arrives during the second sleep is the next caller's to meet.
+  const blockedUntil = yield* budget.blockedUntil(key);
+  if (blockedUntil === null) return;
+  const blockedMs = DateTime.toEpochMillis(blockedUntil);
+  const afterSleep = yield* Clock.currentTimeMillis;
+  if (blockedMs <= afterSleep) return;
+  if (deadlineMs !== undefined && blockedMs > deadlineMs - DEADLINE_MARGIN_MS)
+    return yield* new PartnerWait({ until: blockedUntil });
+  yield* Effect.sleep(blockedMs - afterSleep);
 });
 
 /**

@@ -259,3 +259,54 @@ itEffect("awaitSlot: callers refused at their deadline do not push the queue int
     expect(ms(yield* budget.reserve(key))).toBe(900);
   }).pipe(memory),
 );
+
+itEffect("awaitSlot: a block set while the caller sleeps holds it until the block ends", () =>
+  Effect.gen(function* () {
+    const budget = yield* PartnerBudget;
+    const done = yield* Ref.make(false);
+    yield* budget.reserve(key); // next slot 300
+    const fiber = yield* Effect.forkChild(
+      awaitSlot(key).pipe(Effect.tap(() => Ref.set(done, true))),
+    );
+    yield* TestClock.adjust(100);
+    yield* budget.reject(key, at(5_000)); // another caller got a 429
+    yield* TestClock.adjust(200); // wakes at its slot, 300
+    yield* TestClock.adjust(4_699); // now 4_999
+    expect(yield* Ref.get(done)).toBe(false);
+    yield* TestClock.adjust(1);
+    yield* Fiber.join(fiber);
+    expect(yield* Ref.get(done)).toBe(true);
+  }).pipe(memory),
+);
+
+itEffect(
+  "awaitSlot: a block set while the caller sleeps fails it with PartnerWait when it ends after the deadline",
+  () =>
+    Effect.gen(function* () {
+      const budget = yield* PartnerBudget;
+      yield* budget.reserve(key); // next slot 300
+      const fiber = yield* Effect.forkChild(Effect.flip(awaitSlot(key, 2_000)));
+      yield* TestClock.adjust(100);
+      yield* budget.reject(key, at(5_000)); // 5_000 > 2_000 - 1_000
+      yield* TestClock.adjust(200);
+      const error = yield* Fiber.join(fiber);
+      expect(isPartnerWait(error)).toBe(true);
+      expect(ms((error as PartnerWait).until)).toBe(5_000);
+    }).pipe(memory),
+);
+
+itEffect("awaitSlot: a caller that did not sleep makes exactly one store call", () => {
+  const calls: string[] = [];
+  const store: PartnerBudgetStore = {
+    reserve: async () => (calls.push("reserve"), new Date(0)),
+    reserveBefore: async () => (calls.push("reserveBefore"), { slot: new Date(0), granted: true }),
+    blockedUntil: async () => (calls.push("blockedUntil"), null),
+    observe: async () => undefined,
+    reject: async () => undefined,
+  };
+  return Effect.gen(function* () {
+    yield* awaitSlot(key);
+    yield* awaitSlot(key, 100_000);
+    expect(calls).toEqual(["reserve", "reserveBefore"]);
+  }).pipe(Effect.provide(PartnerBudget.storeLayer(store)));
+});
