@@ -301,6 +301,10 @@ await writeFile(
   JSON.stringify(
     {
       version: 3,
+      /* One daily pass is the backstop for an owner who does not open the app.
+       * The app-open path refreshes holdings on its own lane; this pass runs
+       * both lanes, and the history gate no longer reads "synced 18 h ago" as
+       * fresh, so a user who synced at 10:00 is not skipped the next morning. */
       crons: [{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }],
       routes: [
         /* Applied to every response, then `continue` so routing carries on and

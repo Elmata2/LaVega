@@ -150,6 +150,8 @@ Price backfill runs on the server, separate from broker sync ([Backfill set and 
 
 After broker sync completes, start the price orchestrator. Its symbol set is every traded symbol, including closed positions, plus the selected benchmarks. Backfill a position symbol from its first trade. Backfill a benchmark from the portfolio's first trade.
 
+**App open reads holdings first, then history.** The browser posts `POST /api/brokers/sync?lane=holdings` and then `POST /api/brokers/sync?lane=history` (both with `force` when the user asked for one). The holdings lane answers with positions and cash from two Trading 212 requests and does not start price sync, so the overview has current holdings even when history is still catching up or the host budget has run out. The history lane then reads the history streams, and price sync runs only after it. A failed holdings call does not stop the history call. [[#304](https://github.com/Elmata2/LaVega/issues/304)]
+
 Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. The browser waits for that run to settle, then starts a fresh discovery so a benchmark chosen during the run is included. A paused slice also includes selected benchmarks, including ones chosen since the previous slice. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
 
 Fetch in this order:
