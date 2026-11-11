@@ -240,6 +240,49 @@ The two tasks below landed in one slice. Divergences from the plan text, each de
 - **Tests are plain vitest, not `@effect/vitest`** (§2.3): the package is not installed and
   Phase 0 did not add it. The first `it.effect` suite is still an open convention.
 
+**As built (WS1.3/WS1.4, [#283](https://github.com/Elmata2/LaVega/issues/283), 2026-11-11).**
+The engine and the editor landed in one slice. Divergences from the plan text, each deliberate:
+
+- **One canonical shape at the boundary.** `Rule = LegacyRule | RuleV2`. `upgradeRules` parses
+  the stored array once when the vault opens and lowers legacy `{match, category}` to
+  `text contains + setCategory + stopProcessing`. The OLD categorize body is embedded verbatim
+  as an oracle in `rules/legacy.test.ts` and compared against the new engine over the real
+  fixture corpus, so byte-identity is proven, not assumed. Storage keeps the union: a legacy
+  row is not rewritten until the owner saves a rule, so a downgraded build still reads it.
+- **Array order is the only priority.** There is no `priority` field and no named rule group;
+  a second ordering authority drifts, and LaVega has one owner per vault, so a rule group would
+  be a sharing scope this plan does not have. The editor shows the stored order and moves rows
+  with Up/Down; the old alphabetical display (and its "the top row is not the winner" note) is
+  gone because the order is now editable.
+- **`effectiveFrom` gates on the transaction date, not on `asOf`.** A rule written today must
+  not relabel last year's rows, and the categorization pass has to stay re-runnable. Comparing
+  `tx.date` keeps core clock-free (§2.3) and makes the dry run and execution agree by
+  construction. The consequence is stated in the editor: "geldt voor transacties vanaf".
+- **Claims, not writes.** Attribute claims are first-wins across rules; `stopProcessing` ends
+  the walk; `addTag` accumulates. Only the CATEGORY claim is applied to a transaction. Display
+  name, merchant, tags, exclude and transfer are evaluated, shown in the dry run, and never
+  persisted: `tx.id` hashes counterparty/description (ADR 0011), so renaming a tx through a
+  rule would re-key it and orphan transfer pairs. The `Tx` fields and the totals wiring belong
+  to WS1.5/WS1.6. The editor and the preview say this in plain words.
+- **Locks are per attribute, but only the category can be locked today.** `tx.manual` is the
+  only owner-edited attribute on `Tx`; `locksForTx` is the single extension point WS1.6
+  widens. A manual row with an EMPTY category keeps its old fall-through to the rules
+  (byte compatibility); a manual stored category short-circuits before the engine, as before.
+- **Category conditions read the transaction's stored category.** The tier chain returns a
+  stored category before the engine, so an `equals` category condition mainly helps ordered
+  preview chains, it cannot re-label a row that already holds a category.
+- **`run log` is derived, not stored.** `dryRunRules` returns one entry per matched rule with
+  the condition fields that held and the attributes it claimed; the same trace is available
+  from execution through `categorizeDetailed`. Persisting a duplicate would go stale the way
+  the WS1.1 pending rows would have.
+- **`changed` in the dry run is measured against the built-in tiers, not the stored category.**
+  Categories are derived on read, so every imported row stores `""`; comparing to storage
+  reported "131 of 131 changed" in the browser pass. Comparing a rule decision to what the
+  built-ins would have said is the number the owner can act on.
+- **No regex dialect.** Text conditions are literal normalized comparisons (`matchNorm`, the
+  same normalizer the legacy loop used), so the plan's rules-regex-DoS risk (#R4) does not
+  exist in this implementation; the only rule-count cost is O(n·r), unchanged from before.
+
 ### WS2 — Bills and budgets (personal, the wedge)
 
 **Goal.** LaVega manages commitments, not just detects them: series → occurrences → payment
