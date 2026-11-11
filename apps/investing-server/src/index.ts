@@ -44,6 +44,8 @@ import {
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
+  type PartnerBudget,
+  type PartnerBudgetClient,
   type PriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
@@ -109,7 +111,7 @@ import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
-import { ManagedRuntime } from "effect";
+import { ManagedRuntime, type Layer } from "effect";
 import { createAgentRunController } from "./agentRun.js";
 
 export { app };
@@ -225,6 +227,11 @@ export type RuntimeAppOptions = {
   dashboardCache?: DashboardCache;
   /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
   agentMemory?: (tenantId: string) => AgentMemoryRepository;
+  /** Where partner request slots come from. Built into one runtime per app.
+   *  Defaults to a memory budget. */
+  partnerBudget?: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged, for a runtime that outlives the app. */
+  partnerBudgetClient?: PartnerBudgetClient;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {

@@ -4,10 +4,13 @@ import {
   createPersonalNetWorthRepository,
   createPreferencesRepository,
   createPriceBarRepository,
+  createPartnerBudgetRepository,
   createPriceSyncStateRepository,
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
+import type { Layer } from "effect";
+import { PartnerBudget } from "@lavega/adapters";
 import type { PersonalNetWorthStore } from "./personalNetWorthStore.js";
 import {
   validateBenchmarkSymbols,
@@ -207,4 +210,11 @@ export function createNeonAgentRunStore(db: Database, tenantId: string): AgentRu
     start: (record) => repository.start(record),
     finish: (record) => repository.finish(record),
   };
+}
+
+/** The hosted partner request budget: slots come from `investing.partner_budgets`,
+ *  so every invocation and every tenant counts against the same partner limits.
+ *  Built per request from the request-scoped pool, like the stores above. */
+export function createNeonPartnerBudget(db: Database): Layer.Layer<PartnerBudget> {
+  return PartnerBudget.storeLayer(createPartnerBudgetRepository(db));
 }

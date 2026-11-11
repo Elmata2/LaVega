@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hasBrokerSyncTime } from "@lavega/adapters";
+import { createPartnerBudgetClient, hasBrokerSyncTime, PartnerBudget } from "@lavega/adapters";
 import * as Sentry from "@sentry/node";
 import { LOCAL_TENANT_ID } from "@lavega/core";
 import { listBrokerSyncTenants } from "@lavega/database";
@@ -33,6 +33,7 @@ import {
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
+  createNeonPartnerBudget,
   createNeonPersonalNetWorthStore,
   createNeonPriceStore,
   createNeonSectorCorrectionStore,
@@ -58,6 +59,10 @@ const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
 /* Runtime dependencies must die with each request. Dashboard data may survive
  * for its bounded TTL because it is tenant-keyed and contains no connections. */
 const dashboardCache = createDashboardCache();
+/* Without a database the budget is this process's own, so it has to outlive
+ * the per-request runtime like the dashboard cache does. With a database it is
+ * Neon's, and the runtime builds it from that request's pool. */
+const localPartnerBudget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
 
 /** Built investing SPA path. Set in production Docker (`INVESTING_WEB_DIST`). */
 export function investingDist(): string {
@@ -176,6 +181,9 @@ async function getInvestingFetch(): Promise<{
       ? createNeonSectorInferenceSettingStore(database)
       : createFileSectorInferenceSettingStore(runtimeSectorInferenceSettingFile()),
     dashboardCache,
+    ...(database
+      ? { partnerBudget: createNeonPartnerBudget(database) }
+      : { partnerBudgetClient: localPartnerBudget }),
   });
   const apiNamespaces = new Set(
     runtimeApp.routes
