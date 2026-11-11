@@ -13,9 +13,11 @@ import {
   buildCompositionProjection,
   buildRiskProjection,
   emptyInvestingDashboard,
+  emptyRealizedReport,
 } from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
 import { createInMemorySectorInferenceSettingStore } from "./sectorInferenceSetting.js";
 
@@ -2187,4 +2189,74 @@ test("a correction write raises the sector revision so the very next sector read
   };
   expect(after.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
   expect(after.revision).toBe(1);
+});
+
+test("report route serves the dashboard's realised section", async () => {
+  const report = emptyRealizedReport("EUR", "2026-11-11", ["A label needs attention."]);
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...emptyInvestingDashboard(), realized: report }),
+  });
+
+  const response = await investingApp.request("/api/investing/reports/realized");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(report);
+});
+
+test("report route degrades to an empty report when the read fails", async () => {
+  const problemReporter = vi.fn();
+  const investingApp = createApp({
+    dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")),
+    problemReporter,
+  });
+
+  const response = await investingApp.request("/api/investing/reports/realized");
+
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as {
+    notice: string;
+    problems: string[];
+    disposals: unknown[];
+  };
+  expect(body.disposals).toEqual([]);
+  expect(body.notice).toMatch(/does not file taxes/);
+  expect(body.problems).toEqual(["The realised report could not be loaded."]);
+  expect(problemReporter).toHaveBeenCalledWith({
+    source: "realized-report-read",
+    problems: ["read failed"],
+  });
+});
+
+test("account-wrapper route persists labels, drops unknown ones and rejects a non-array body", async () => {
+  const accountWrapperStore = createInMemoryAccountWrapperStore();
+  const investingApp = createApp({ accountWrapperStore });
+
+  const put = await investingApp.request("/api/investing/account-wrappers", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      entries: [
+        { broker: "trading212", account: "ISA", wrapper: "isa" },
+        { broker: "ibkr", account: "Main", wrapper: "not-a-wrapper" },
+      ],
+    }),
+  });
+  expect(put.status).toBe(200);
+  expect(await put.json()).toEqual({
+    tenantId: "local",
+    entries: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+  });
+
+  const get = await investingApp.request("/api/investing/account-wrappers");
+  expect(await get.json()).toEqual({
+    tenantId: "local",
+    entries: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+  });
+
+  const rejected = await investingApp.request("/api/investing/account-wrappers", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries: "nope" }),
+  });
+  expect(rejected.status).toBe(400);
 });

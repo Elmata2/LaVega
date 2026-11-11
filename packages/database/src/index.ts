@@ -553,6 +553,9 @@ export type PreferencesRepository = {
   setMarketDataConsent(decision: unknown): Promise<void>;
   getLayout(): Promise<unknown | null>;
   setLayout(layout: unknown): Promise<void>;
+  /** Account tax-treatment labels (plan §3 WS4.4, #296). */
+  getAccountWrappers(): Promise<unknown | null>;
+  setAccountWrappers(entries: unknown): Promise<void>;
   getSectorCorrections(): Promise<Record<string, string>>;
   setSectorCorrection(symbol: string, sector: string): Promise<void>;
   clearSectorCorrection(symbol: string): Promise<void>;
@@ -603,6 +606,8 @@ export function createPreferencesRepository(
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
     getLayout: () => read<unknown | null>("layout", null),
     setLayout: (layout) => write("layout", layout),
+    getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
+    setAccountWrappers: (entries) => write("account_wrappers", entries),
     getSectorCorrections: readCorrections,
     async setSectorCorrection(symbol, sector) {
       const current = await readCorrections();

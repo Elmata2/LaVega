@@ -30,6 +30,7 @@ import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolutio
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
   sentryOptions,
+  type AccountWrapperStore,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
   type InvestingLayoutStore,
@@ -60,6 +61,7 @@ import {
   createNeonBrokerSyncStateStore,
   createNeonPriceSyncProgressStore,
 } from "./neonStores.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 import {
   createFileBrokerSyncStateStore,
   runtimeBrokerSyncStateFile,
@@ -209,6 +211,9 @@ export type RuntimeAppOptions = {
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   investingLayoutStore?: InvestingLayoutStore;
+  /** Account tax-treatment labels (WS4.4, #296). Defaults to Neon with a
+   *  database, in-memory without one. */
+  accountWrapperStore?: AccountWrapperStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
   personalNetWorthStore?: PersonalNetWorthStore;
@@ -255,6 +260,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       ? createStoredFxProvider(createFxRateRepository(database), createFrankfurterFxProvider())
       : createFrankfurterFxProvider();
   const dashboardCache = options.dashboardCache ?? createDashboardCache();
+  /* Wrapper labels are account metadata with no data path of their own: a
+   * runtime that can persist them injects its store (Neon when a database
+   * exists, a file locally). The default is in-memory so a bare runtime and a
+   * test still answer the same empty map instead of reaching for a database
+   * it may not have. */
+  const accountWrapperStore = options.accountWrapperStore ?? createInMemoryAccountWrapperStore();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
     priceDataVersion += 1;
@@ -508,6 +519,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         benchmarks: benchmarkSymbols
           ? (id) => Promise.resolve(benchmarkSymbols(id))
           : (id) => effectiveBenchmarkSymbols(benchmarkSelectionStore, id),
+        accountWrappers: (id) => accountWrapperStore.get(id),
         priceDataVersion: () => priceDataVersion,
       }),
     );
@@ -902,10 +914,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         fxProvider,
         benchmarkSelectionStore,
         investingLayoutStore,
+        accountWrapperStore,
         marketDataConsentStore,
         personalNetWorthStore,
         dashboardReader,
         onPriceDataChanged,
+        onAccountWrappersChanged: onPriceDataChanged,
         priceSyncProgressStore,
       }),
     );
@@ -926,10 +940,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       fxProvider,
       benchmarkSelectionStore,
       investingLayoutStore,
+      accountWrapperStore,
       marketDataConsentStore,
       personalNetWorthStore,
       dashboardReader,
       onPriceDataChanged,
+      onAccountWrappersChanged: onPriceDataChanged,
       priceSyncProgressStore,
       problemReporter: createProblemReporter({ dsn, sentry }),
     }),

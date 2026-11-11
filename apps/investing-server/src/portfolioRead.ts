@@ -3,6 +3,7 @@ import {
   benchmarkDisplayName,
   buildCompositionProjection,
   buildInvestingDashboard,
+  type AccountWrapperEntry,
   type InvestingDashboardData,
 } from "@lavega/core";
 import {
@@ -58,6 +59,8 @@ export type PortfolioReadSources = {
   syncState: SyncStateReader;
   fxProvider: FxProvider;
   benchmarks: (tenantId: string) => Promise<readonly string[]> | readonly string[];
+  /** Account tax-treatment labels, read per tenant (WS4.4, #296). */
+  accountWrappers: (tenantId: string) => Promise<readonly AccountWrapperEntry[]>;
   priceDataVersion: () => number;
 };
 
@@ -109,6 +112,11 @@ export class PortfolioReadPriceVersion extends Context.Service<
   () => number
 >()("lavega/investing/PortfolioRead/PriceVersion") {}
 
+export class PortfolioReadAccountWrappers extends Context.Service<
+  PortfolioReadAccountWrappers,
+  (tenantId: string) => Promise<readonly AccountWrapperEntry[]>
+>()("lavega/investing/PortfolioRead/AccountWrappers") {}
+
 type PortfolioReadRequirements =
   | PortfolioReadPriceStore
   | PortfolioReadLoader
@@ -119,6 +127,7 @@ type PortfolioReadRequirements =
   | PortfolioReadSyncState
   | PortfolioReadFx
   | PortfolioReadBenchmarks
+  | PortfolioReadAccountWrappers
   | PortfolioReadPriceVersion;
 
 /** A dashboard stored before the composition projection existed still carries
@@ -172,6 +181,7 @@ export class PortfolioRead extends Context.Service<
         const syncState = yield* PortfolioReadSyncState;
         const fxProvider = yield* PortfolioReadFx;
         const benchmarks = yield* PortfolioReadBenchmarks;
+        const accountWrappers = yield* PortfolioReadAccountWrappers;
         const priceDataVersion = yield* PortfolioReadPriceVersion;
 
         const executeRead = async ({
@@ -228,7 +238,10 @@ export class PortfolioRead extends Context.Service<
           );
           const version = dataVersion + priceDataVersion();
           const selectedBenchmarks = await benchmarks(tenantId);
-          const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
+          const wrappers = await accountWrappers(tenantId);
+          /* The wrapper map is part of the cache identity: relabelling an
+           * account must regroup the report, not serve the old grouping. */
+          const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}\u0000${JSON.stringify(wrappers)}`;
           const cached = dashboardCache.get({ tenantId, key: cacheKey });
           if (cached) {
             if (refreshProblems.length > 0)
@@ -333,6 +346,7 @@ export class PortfolioRead extends Context.Service<
                 })),
                 presentationCurrency: "EUR",
                 fxRates: [...historicalFx.rates, ...(latestFx.rate ? [latestFx.rate] : [])],
+                accountWrappers: wrappers,
                 selectedSymbol: symbol,
                 problems: [
                   ...new Set([...problems, ...storedBrokerProblems]),
@@ -400,6 +414,7 @@ export function portfolioReadLayer(
         Layer.succeed(PortfolioReadSyncState, sources.syncState),
         Layer.succeed(PortfolioReadFx, sources.fxProvider),
         Layer.succeed(PortfolioReadBenchmarks, sources.benchmarks),
+        Layer.succeed(PortfolioReadAccountWrappers, sources.accountWrappers),
         Layer.succeed(PortfolioReadPriceVersion, sources.priceDataVersion),
       ),
     ),

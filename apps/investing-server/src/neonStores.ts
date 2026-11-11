@@ -10,8 +10,10 @@ import {
 } from "@lavega/database";
 import type { PersonalNetWorthStore } from "./personalNetWorthStore.js";
 import {
+  validateAccountWrapperMap,
   validateBenchmarkSymbols,
   validateInvestingLayout,
+  type AccountWrapperStore,
   type BenchmarkSelectionStore,
   type InvestingLayoutStore,
 } from "@lavega/core";
@@ -98,6 +100,23 @@ export function createNeonInvestingLayoutStore(db: Database): InvestingLayoutSto
     async set(selection) {
       await createPreferencesRepository(db, selection.tenantId).setLayout(
         validateInvestingLayout(selection),
+      );
+    },
+  };
+}
+
+/** Account tax-treatment labels (plan §3 WS4.4, #296). They ride the same
+ *  per-tenant preferences row as the layout, so the existing RLS policy scopes
+ *  them and an unknown label is dropped on read instead of trusted. */
+export function createNeonAccountWrapperStore(db: Database): AccountWrapperStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getAccountWrappers();
+      return validateAccountWrapperMap(stored);
+    },
+    async set(selection) {
+      await createPreferencesRepository(db, selection.tenantId).setAccountWrappers(
+        validateAccountWrapperMap(selection.entries),
       );
     },
   };

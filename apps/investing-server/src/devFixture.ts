@@ -17,6 +17,7 @@ const TENANT_ID = "local";
 const TRANSFER_IN_SYMBOL = "TSLA";
 const ENTITY = "personal";
 const FIXTURE_BROKER = "trading212";
+const FIXTURE_ACCOUNT = "ISA";
 const HISTORY_DAYS = 270;
 
 type FixtureSymbol = {
@@ -33,7 +34,7 @@ const SYMBOLS: FixtureSymbol[] = [
   {
     symbol: "AAPL",
     currency: "USD",
-    quantity: 25,
+    quantity: 20,
     averagePrice: 178.4,
     marketPrice: 231.2,
     startClose: 150,
@@ -96,6 +97,8 @@ function trade(
   return {
     id,
     entity: ENTITY,
+    broker: FIXTURE_BROKER,
+    account: FIXTURE_ACCOUNT,
     date: isoDate(daysAgo(now, daysAgoCount)),
     symbol,
     side,
@@ -118,6 +121,7 @@ function dividend(
     id,
     entity: ENTITY,
     broker: FIXTURE_BROKER,
+    account: FIXTURE_ACCOUNT,
     date: isoDate(daysAgo(now, daysAgoCount)),
     symbol,
     amount,
@@ -130,6 +134,8 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
   const positions: Position[] = SYMBOLS.map((entry) => ({
     tenantId: TENANT_ID,
     entity: ENTITY,
+    broker: FIXTURE_BROKER,
+    account: FIXTURE_ACCOUNT,
     symbol: entry.symbol,
     quantity: entry.quantity,
     brokerCost:
@@ -159,6 +165,7 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
       id: "fixture-7",
       entity: ENTITY,
       broker: FIXTURE_BROKER,
+      account: FIXTURE_ACCOUNT,
       date: isoDate(daysAgo(now, 30)),
       symbol: TRANSFER_IN_SYMBOL,
       side: "other",
@@ -167,6 +174,54 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
       amount: null,
       currency: currencyOf(TRANSFER_IN_SYMBOL),
       commission: null,
+    },
+    // WS4.3 (#296): a real disposal. The wallet settlement is the broker's own
+    // net cash, so the realised report reconciles it against gross minus fee.
+    {
+      id: "fixture-8",
+      entity: ENTITY,
+      broker: FIXTURE_BROKER,
+      account: FIXTURE_ACCOUNT,
+      date: isoDate(daysAgo(now, 40)),
+      symbol: "AAPL",
+      side: "sell",
+      quantity: 5,
+      price: 231.2,
+      amount: 1156,
+      currency: "USD",
+      commission: 1,
+      settlement: { currency: "USD", amount: 1155 },
+    },
+    // WS4.3 (#296): a closed position in a currency the fixture's FX provider
+    // has no rate for. The report shows the disposal's gain as unknown; it must
+    // never convert 1:1.
+    {
+      id: "fixture-9",
+      entity: ENTITY,
+      broker: FIXTURE_BROKER,
+      account: FIXTURE_ACCOUNT,
+      date: isoDate(daysAgo(now, 100)),
+      symbol: "NESN",
+      side: "buy",
+      quantity: 2,
+      price: 90,
+      amount: 180,
+      currency: "CHF",
+      commission: 0,
+    },
+    {
+      id: "fixture-10",
+      entity: ENTITY,
+      broker: FIXTURE_BROKER,
+      account: FIXTURE_ACCOUNT,
+      date: isoDate(daysAgo(now, 20)),
+      symbol: "NESN",
+      side: "sell",
+      quantity: 2,
+      price: 100,
+      amount: 200,
+      currency: "CHF",
+      commission: 0,
     },
   ];
   const dividends: Dividend[] = [

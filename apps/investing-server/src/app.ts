@@ -7,14 +7,18 @@ import {
   InvestingLayoutSchema,
   LOCAL_TENANT_ID,
   PersonalNetWorthTotalsSchema,
+  validateAccountWrapperMap,
   validateBenchmarkSymbols,
   validateInvestingLayout,
+  RealizedIncomeReportSchema,
+  emptyRealizedReport,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
   type InvestingLayout,
   type InvestingLayoutStore,
   type RiskRange,
+  type AccountWrapperStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import {
@@ -80,6 +84,7 @@ import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./s
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
 import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 
 /** The read model crosses the wire through its shared schema, so a field the
  *  contract declares is always present in the response. */
@@ -151,6 +156,7 @@ type PriceDependencies = {
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
   benchmarkSelectionStore: BenchmarkSelectionStore;
   investingLayoutStore: InvestingLayoutStore;
+  accountWrapperStore: AccountWrapperStore;
   benchmarkSearch: (
     query: string,
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
@@ -172,6 +178,9 @@ type PriceDependencies = {
   problemReporter: ProblemReporter;
   dashboardReader: InvestingDashboardReader;
   onPriceDataChanged: () => void;
+  /** Raised when an account label changes: the report's grouping is part of
+   *  the read model, so the cached dashboard must be rebuilt. */
+  onAccountWrappersChanged?: () => void;
   marketDataConsentStore: MarketDataConsentStore;
   personalNetWorthStore: PersonalNetWorthStore;
   sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
@@ -191,6 +200,8 @@ type PriceDependencies = {
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
+  const accountWrapperStore =
+    dependencies.accountWrapperStore ?? createInMemoryAccountWrapperStore();
   const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
   const provider =
     dependencies.provider ??
@@ -572,6 +583,47 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         }),
       );
     }
+  });
+  /* Realised-gain + income report (plan §3 WS4.3/WS4.4, #296). It rides the
+   * dashboard read model: the report is built from the same broker snapshot,
+   * FX rates and price bars, so this route only serves the section. A
+   * dashboard stored before the report existed answers with an empty report
+   * and a problem line rather than an error, so the surface still renders. */
+  investingApp.get("/api/investing/reports/realized", async (c) => {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const dashboard = await dashboardReader({});
+      const report =
+        dashboard.realized ??
+        emptyRealizedReport(dashboard.presentationCurrency, today, [
+          "The realised report is not built for this snapshot yet. Refresh the dashboard.",
+        ]);
+      return c.json(Schema.encodeSync(RealizedIncomeReportSchema)(report));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Report read failed";
+      problemReporter({ source: "realized-report-read", problems: [message] });
+      return c.json(
+        emptyRealizedReport("EUR", today, ["The realised report could not be loaded."]),
+      );
+    }
+  });
+  /* Account tax-treatment labels (WS4.4). The map is account metadata only:
+   * it decides which treatment bucket the report groups a row under. Unknown
+   * labels are dropped, exactly like the layout's unknown ids, so a stored
+   * map and a PUT body agree on what valid means. */
+  investingApp.get("/api/investing/account-wrappers", async (c) => {
+    const tenantId = await resolveTenantId();
+    return c.json({ tenantId, entries: await accountWrapperStore.get(tenantId) });
+  });
+  investingApp.put("/api/investing/account-wrappers", async (c) => {
+    const body: { entries?: unknown } = await c.req.json<{ entries?: unknown }>().catch(() => ({}));
+    if (!Array.isArray(body.entries))
+      return c.json({ problems: ["entries must be an array"] }, 400);
+    const tenantId = await resolveTenantId();
+    const selection = { tenantId, entries: validateAccountWrapperMap(body.entries) };
+    await accountWrapperStore.set(selection);
+    dependencies.onAccountWrappersChanged?.();
+    return c.json(selection);
   });
   investingApp.get("/api/investing/benchmarks", async (c) => {
     const tenantId = await resolveTenantId();

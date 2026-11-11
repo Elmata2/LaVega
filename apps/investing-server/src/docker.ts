@@ -16,6 +16,10 @@ import {
   createFileInvestingLayoutStore,
   runtimeInvestingLayoutFile,
 } from "./fileInvestingLayoutStore.js";
+import {
+  createFileAccountWrapperStore,
+  runtimeAccountWrapperFile,
+} from "./fileAccountWrapperStore.js";
 
 const port = Number(process.env.PORT) || 8788;
 const staticRoot =
@@ -75,6 +79,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
     investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    accountWrapperStore: createFileAccountWrapperStore(runtimeAccountWrapperFile()),
   });
   serve(
     { fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" },

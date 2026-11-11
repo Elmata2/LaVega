@@ -234,6 +234,23 @@ test("a tenant with no preferences row reads an empty layout rather than throwin
   expect(await repository.getLayout()).toBeNull();
 });
 
+test("account wrappers share the preferences row and round-trip independently of the layout", async () => {
+  const { db, calls } = fakeDatabase([
+    { layout: { modules: { positions: false } }, account_wrappers: [] },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getAccountWrappers()).toEqual([]);
+
+  await repository.setAccountWrappers([{ broker: "trading212", account: "ISA", wrapper: "isa" }]);
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("account_wrappers");
+  expect(write.sql).not.toContain("layout");
+  expect(write.values).toEqual([
+    JSON.stringify([{ broker: "trading212", account: "ISA", wrapper: "isa" }]),
+  ]);
+});
+
 test("sector corrections round-trip upper-cased and merge into the existing map without touching other columns", async () => {
   const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Technology" } }]);
   const repository = createPreferencesRepository(db, "user-123");

@@ -25,11 +25,16 @@ import {
   runtimeInvestingLayoutFile,
 } from "@lavega/investing-server/src/fileInvestingLayoutStore.js";
 import {
+  createFileAccountWrapperStore,
+  runtimeAccountWrapperFile,
+} from "@lavega/investing-server/src/fileAccountWrapperStore.js";
+import {
   createFilePriceStore,
   runtimePriceStoreFile,
 } from "@lavega/investing-server/src/filePriceStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import {
+  createNeonAccountWrapperStore,
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
@@ -166,6 +171,9 @@ async function getInvestingFetch(): Promise<{
     investingLayoutStore: database
       ? createNeonInvestingLayoutStore(database)
       : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    accountWrapperStore: database
+      ? createNeonAccountWrapperStore(database)
+      : createFileAccountWrapperStore(runtimeAccountWrapperFile()),
     sectorStore: database
       ? createNeonSectorProfileStore(database)
       : createFileSectorProfileStore(runtimeSectorStoreFile()),

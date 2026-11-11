@@ -77,6 +77,7 @@ function makeSources(
     priceStore?: PriceStore;
     priceDataVersion?: () => number;
     benchmarks?: readonly string[];
+    accountWrappers?: readonly import("@lavega/core").AccountWrapperEntry[];
   } = {},
 ): PortfolioReadSources {
   const brokerData = createBrokerDataCache(input.data ?? {});
@@ -97,6 +98,7 @@ function makeSources(
     syncState: input.sync ?? syncState(),
     fxProvider: healthyFx,
     benchmarks: () => input.benchmarks ?? [],
+    accountWrappers: async () => input.accountWrappers ?? [],
     priceDataVersion: input.priceDataVersion ?? (() => 0),
   };
 }
@@ -366,4 +368,75 @@ test("the read fails with a typed error when there is no broker data at all", as
 
   expect(error).toBeInstanceOf(PortfolioReadError);
   expect((error as PortfolioReadError).message).toBe("credential vault is locked");
+});
+
+test("the read builds the realised report and groups it by the injected account labels", async () => {
+  const data: BrokerDataSnapshot = {
+    trading212: {
+      positions: [
+        {
+          symbol: "AAPL",
+          broker: "trading212",
+          account: "ISA",
+          quantity: 5,
+          averagePrice: 100,
+          marketPrice: 120,
+          marketValue: 600,
+          currency: "EUR",
+          entity: "personal",
+          asOf: "2026-04-01",
+          brokerCost: { status: "known", amount: 500, currency: "EUR" },
+        },
+      ],
+      trades: [
+        {
+          id: "buy-1",
+          entity: "personal",
+          broker: "trading212",
+          account: "ISA",
+          date: "2026-03-02",
+          symbol: "AAPL",
+          side: "buy",
+          quantity: 10,
+          price: 100,
+          amount: 1000,
+          currency: "EUR",
+          commission: 1,
+        },
+        {
+          id: "sell-1",
+          entity: "personal",
+          broker: "trading212",
+          account: "ISA",
+          date: "2026-04-01",
+          symbol: "AAPL",
+          side: "sell",
+          quantity: 5,
+          price: 120,
+          amount: 600,
+          currency: "EUR",
+          commission: 1,
+          settlement: { currency: "EUR", amount: 599 },
+        },
+      ],
+      dividends: [],
+    },
+  };
+  const result = await runRead(
+    makeSources({
+      data,
+      accountWrappers: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+    }),
+  );
+
+  expect(result.realized?.disposals).toHaveLength(1);
+  expect(result.realized?.disposals[0]?.reconciliation).toMatchObject({
+    status: "reconciled",
+    brokerCashCents: 59_900,
+    netProceedsCents: 59_900,
+  });
+  expect(result.realized?.byTreatment.map((group) => group.treatment)).toEqual(["tax-exempt"]);
+  expect(result.realized?.accounts).toEqual([
+    expect.objectContaining({ broker: "trading212", account: "ISA", treatment: "tax-exempt" }),
+  ]);
 });

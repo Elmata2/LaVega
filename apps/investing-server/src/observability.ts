@@ -1,7 +1,7 @@
 import { redactProblem } from "@lavega/core";
 
 export type ProblemContext = {
-  source: "broker-sync" | "dashboard-read";
+  source: "broker-sync" | "dashboard-read" | "realized-report-read";
   broker?: string;
   problems: string[];
 };
