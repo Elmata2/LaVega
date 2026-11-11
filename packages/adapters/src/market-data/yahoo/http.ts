@@ -1,7 +1,9 @@
+import { DateTime } from "effect";
 import {
   createMemoryPartnerBudgetClient,
   isPartnerBudgetUnavailable,
   isPartnerWait,
+  PartnerWait,
   type PartnerBudgetClient,
 } from "../../partnerBudget/PartnerBudget.js";
 import { partnerKey } from "../../partnerBudget/limits.js";
@@ -17,6 +19,9 @@ const REJECTED = /\[(?:429|403|401)\]|Failed to get crumb: (?:429|403|401)/;
 const MAX_RETRY_AFTER_MS = 120_000;
 /** Chart, search, quoteSummary and crumb requests are one budget: Yahoo counts our IP. */
 const YAHOO_KEY = partnerKey("yahoo:any");
+/** The crumb and cookie negotiation, shared by every caller, has this bound from
+ *  its start whatever deadline the caller that started it has. */
+const CREDENTIALS_BOUND_MS = 10_000;
 
 export type YahooFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -136,11 +141,37 @@ export class YahooHttpClient {
     }
   }
 
-  private async ensureCrumb(): Promise<void> {
+  /** Every caller waits for the one shared negotiation, but only as long as its
+   *  own deadline allows. The caller that starts it does not lend it its deadline:
+   *  the negotiation has a bound of its own, so a short-deadline starter cannot
+   *  fail it for the callers that joined. */
+  private ensureCrumb(): Promise<void> {
     const session = this.session;
-    if (session.crumb && session.cookie) return;
-    if (session.crumbPromise) return session.crumbPromise;
-    session.crumbPromise = (async () => {
+    if (session.crumb && session.cookie) return Promise.resolve();
+    session.crumbPromise ??= this.withDeadline(Date.now() + CREDENTIALS_BOUND_MS).negotiate();
+    return this.untilOwnDeadline(session.crumbPromise);
+  }
+
+  /** The shared promise, or `PartnerWait` for this caller alone at its deadline.
+   *  The negotiation goes on for the others. */
+  private untilOwnDeadline(shared: Promise<void>): Promise<void> {
+    const deadlineMs = this.deadlineMs;
+    if (deadlineMs === undefined) return shared;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new PartnerWait({ until: DateTime.makeUnsafe(deadlineMs) })),
+        Math.max(0, deadlineMs - Date.now()),
+      );
+    });
+    return Promise.race([shared, expired]).finally(() => clearTimeout(timer));
+  }
+
+  /** Runs on a view that carries the negotiation's own deadline. A failure is not
+   *  cached: the `finally` clears the promise, so the next caller starts again. */
+  private negotiate(): Promise<void> {
+    const session = this.session;
+    const run = (async () => {
       try {
         await this.slot();
         const cookieResponse = await this.fetchFn("https://fc.yahoo.com/", {
@@ -164,7 +195,10 @@ export class YahooHttpClient {
         session.crumbPromise = null;
       }
     })();
-    return session.crumbPromise;
+    // Nobody may be awaiting it when every caller has given up: that is not an
+    // unhandled rejection. Callers that do await still see the error.
+    run.catch(() => undefined);
+    return run;
   }
 
   private async withRetry<T>(fn: () => Promise<T>): Promise<T> {

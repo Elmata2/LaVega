@@ -2283,7 +2283,17 @@ test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb 
   const slots = partnerBudget.calls.filter((call) => call.call === "awaitSlot");
   expect(new Set(slots.map((call) => call.key.partner))).toEqual(new Set(["openfigi", "yahoo"]));
   expect(slots.length).toBe(urls.length);
-  for (const call of slots) expect(call).toMatchObject({ deadlineMs: deadline });
+  // The two crumb slots belong to the shared negotiation, which has its own 10 s
+  // bound; every other slot carries the run's deadline.
+  const own = slots.filter((call) => call.deadlineMs === deadline);
+  const negotiation = slots.filter((call) => call.deadlineMs !== deadline);
+  expect(negotiation).toHaveLength(2);
+  for (const call of negotiation) {
+    expect(call.key.partner).toBe("yahoo");
+    expect(call.deadlineMs).toBeLessThanOrEqual(Date.now() + 10_000);
+    expect(call.deadlineMs).toBeGreaterThan(Date.now());
+  }
+  expect(own).toHaveLength(slots.length - 2);
 });
 
 /* A budget stop on the OpenFIGI fallback is "no slot", not "no such listing".

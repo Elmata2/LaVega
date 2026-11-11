@@ -207,13 +207,14 @@ test("20 sector reads that each hit a blocked budget send nothing and leave the 
   // No read waited for the block or sent a request, and no refused read took a slot.
   expect(yahoo.fetchFn).not.toHaveBeenCalled();
   expect(Date.now()).toBe(START);
-  // The next price run slot is the end of the block, not 20 intervals past it.
+  // Once the block ends, the next price run starts at its end: the refused reads
+  // did not queue 20 intervals ahead of it.
+  await vi.advanceTimersByTimeAsync(120_000);
   const run = orchestratorFor("alice", 1, client).run("alice");
-  await vi.advanceTimersByTimeAsync(121_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   const progress = await run;
   expect(progress.status).toBe("completed");
-  const first = Math.min(...yahoo.times);
-  expect(first).toBe(START + 120_000);
+  expect(Math.min(...yahoo.times)).toBe(START + 120_000);
 });
 
 test("a fundamentals fetch under a 120 s block returns inside its 10 s deadline", async () => {

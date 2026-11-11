@@ -211,15 +211,17 @@ test("a deadline view hands its deadline to every slot and shares the crumb", as
   const budget = createImmediatePartnerBudget();
   const { fetchFn, log } = yahooFetch(ok);
   const client = new YahooHttpClient(fetchFn, 20_000, 1, { partnerBudget: budget });
+  const started = Date.now();
   await client.fetchJsonWithCrumb("https://query1.finance.yahoo.com/v1/a");
   await client.withDeadline(NOW).fetchJsonWithCrumb("https://query1.finance.yahoo.com/v1/b");
   expect(log.map((entry) => entry.step)).toEqual(["cookie", "crumb", "data", "data"]);
-  expect(budget.calls.map((call) => (call as { deadlineMs?: number }).deadlineMs)).toEqual([
-    undefined,
-    undefined,
-    undefined,
-    NOW,
-  ]);
+  const deadlines = budget.calls.map((call) => (call as { deadlineMs?: number }).deadlineMs);
+  // The shared negotiation has its own 10 s bound, not the starter's deadline.
+  for (const deadline of deadlines.slice(0, 2)) {
+    expect(deadline).toBeGreaterThanOrEqual(started + 10_000);
+    expect(deadline).toBeLessThanOrEqual(Date.now() + 10_000);
+  }
+  expect(deadlines.slice(2)).toEqual([undefined, NOW]);
 });
 
 test("the price provider lets a slot past the deadline through instead of calling it a price problem", async () => {
