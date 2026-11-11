@@ -3,12 +3,17 @@ import type { Account } from "../model.js";
 import { isInvestmentAccount } from "../transfers.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
+import { ProvenanceCitationSchema, type ProvenanceCitation } from "../provenance.js";
 
 /** One day's opted-in Personal total, as apps/server's
  *  personal.net_worth_totals row reports it. */
 export const PersonalNetWorthTotalSchema = Schema.Struct({
   date: Schema.String,
   totalCents: Schema.Number,
+  /* The agent-path citation for a valuation (#300, WS5.5). Absent on rows the
+   * browser's own share flow wrote, which cites nothing because the owner is
+   * looking at their own number. */
+  provenance: Schema.optional(ProvenanceCitationSchema),
 });
 
 export type PersonalNetWorthTotal = DeepMutable<

@@ -164,7 +164,7 @@ test("personal.rate_limit_buckets deliberately has neither RLS nor FORCE — the
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
-test("personal.net_worth_totals has the shape opting into Investing's net worth relies on", async () => {
+test("personal.net_worth_totals has the shape opting into Investing's net worth relies on, including the #300 provenance column", async () => {
   const columns = await db.query<{
     column_name: string;
     data_type: string;
@@ -183,6 +183,12 @@ test("personal.net_worth_totals has the shape opting into Investing's net worth 
       is_nullable: "NO",
     },
     { column_name: "date", data_type: "date", column_default: null, is_nullable: "NO" },
+    {
+      column_name: "provenance",
+      data_type: "jsonb",
+      column_default: null,
+      is_nullable: "YES",
+    },
     {
       column_name: "total_cents",
       data_type: "bigint",

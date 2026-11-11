@@ -8,7 +8,10 @@ import {
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
-import type { PersonalNetWorthStore } from "./personalNetWorthStore.js";
+import type {
+  PersonalNetWorthStore,
+  PersonalNetWorthTotal,
+} from "./personalNetWorthStore.js";
 import {
   validateAccountWrapperMap,
   validateBenchmarkSymbols,
@@ -87,7 +90,16 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
  *  (personal.net_worth_totals), through apps/server's own repository call. */
 export function createNeonPersonalNetWorthStore(db: Database): PersonalNetWorthStore {
   return {
-    list: (tenantId) => createPersonalNetWorthRepository(db, tenantId).list(),
+    list: async (tenantId) =>
+      (await createPersonalNetWorthRepository(db, tenantId).list()).map((row) => ({
+        date: row.date,
+        totalCents: row.totalCents,
+        /* Stored rows are validated before they are written (#300 WS5.5); this
+         * is a trust-the-database cast, not a second decode. */
+        ...(row.provenance
+          ? { provenance: row.provenance as PersonalNetWorthTotal["provenance"] }
+          : {}),
+      })),
   };
 }
 

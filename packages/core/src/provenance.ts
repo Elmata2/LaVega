@@ -44,6 +44,18 @@ export type ProvenanceCitation = {
   estimated?: boolean;
 };
 
+/** The wire schema for an already-validated citation (a stored row, a read
+ *  model field). Untrusted input goes through `decodeProvenanceCitation`, which
+ *  is stricter; this schema describes the trusted shape and is what the net
+ *  worth read model carries to the UI. */
+export const ProvenanceCitationSchema = Schema.Struct({
+  source: Schema.String,
+  grade: Schema.Literals(PROVENANCE_GRADES),
+  date: Schema.String,
+  documentId: Schema.optional(Schema.String),
+  estimated: Schema.optional(Schema.Boolean),
+});
+
 /** The only fields a citation may carry. An unknown key is refused, not
  *  stripped: a free-text "note" is exactly how Sure's citation leaked back into
  *  prose, and a model must not smuggle one through. */
@@ -83,9 +95,9 @@ export function isValidProvenanceDate(value: unknown): value is string {
   );
 }
 
-const fail = (field: string, message: string): never => {
+function fail(field: string, message: string): never {
   throw new ProvenanceError({ message, field });
-};
+}
 
 const cleanText = (
   value: unknown,
@@ -117,11 +129,13 @@ export function decodeProvenanceCitation(input: unknown): ProvenanceCitation {
       fail("citation", `citation has an unknown field "${key}"; prose does not belong here`);
 
   const source = cleanText(record.source, "source", MAX_PROVENANCE_SOURCE_LENGTH);
-  if (!isProvenanceGrade(record.grade))
+  const grade = record.grade;
+  if (!isProvenanceGrade(grade))
     fail("grade", "grade must be A, B or C (A = official document, B = derived, C = proxy)");
-  if (!isValidProvenanceDate(record.date))
+  const date = record.date;
+  if (!isValidProvenanceDate(date))
     fail("date", "date must be a real calendar date, YYYY-MM-DD");
-  const citation: ProvenanceCitation = { source, grade: record.grade, date: record.date };
+  const citation: ProvenanceCitation = { source, grade, date };
 
   if (record.documentId !== undefined)
     citation.documentId = cleanText(
@@ -130,9 +144,10 @@ export function decodeProvenanceCitation(input: unknown): ProvenanceCitation {
       MAX_PROVENANCE_DOCUMENT_ID_LENGTH,
     );
   if (record.estimated !== undefined) {
-    if (typeof record.estimated !== "boolean")
+    const estimated = record.estimated;
+    if (typeof estimated !== "boolean")
       fail("estimated", "estimated must be a boolean when present");
-    citation.estimated = record.estimated;
+    citation.estimated = estimated;
   }
   return citation;
 }

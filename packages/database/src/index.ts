@@ -1200,7 +1200,13 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-export type PersonalNetWorthTotal = { date: string; totalCents: number };
+export type PersonalNetWorthTotal = {
+  date: string;
+  totalCents: number;
+  /** The agent-path citation for this valuation (#300, WS5.5), as stored JSON.
+   *  Absent on rows the browser's own share flow wrote. */
+  provenance?: Record<string, unknown>;
+};
 
 /**
  * Personal's opt-in share of its own "Totale positie" into Investing's net
@@ -1214,15 +1220,20 @@ export type PersonalNetWorthTotal = { date: string; totalCents: number };
 export function createPersonalNetWorthRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
-    async put(date: string, totalCents: number): Promise<void> {
+    async put(
+      date: string,
+      totalCents: number,
+      provenance?: Record<string, unknown>,
+    ): Promise<void> {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency)
-           VALUES (current_setting('app.user_id'), $1, $2, 'EUR')
+          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency, provenance)
+           VALUES (current_setting('app.user_id'), $1, $2, 'EUR', $3::jsonb)
            ON CONFLICT (user_id, date) DO UPDATE SET
              total_cents = EXCLUDED.total_cents,
+             provenance = EXCLUDED.provenance,
              updated_at = CURRENT_TIMESTAMP`,
-          [date, totalCents],
+          [date, totalCents, provenance === undefined ? null : JSON.stringify(provenance)],
         );
       });
     },
@@ -1235,12 +1246,15 @@ export function createPersonalNetWorthRepository(db: Database, userId: string | 
     async list(): Promise<PersonalNetWorthTotal[]> {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents
+          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents, provenance
            FROM personal.net_worth_totals ORDER BY date ASC`,
         );
         return result.rows.map((row) => ({
           date: row.date as string,
           totalCents: Number(row.total_cents),
+          ...(row.provenance && typeof row.provenance === "object"
+            ? { provenance: row.provenance as Record<string, unknown> }
+            : {}),
         }));
       });
     },
@@ -1542,6 +1556,8 @@ export function createEbFlowRepository(db: Database) {
   };
 }
 
+export type AiUsageOutcome = "ok" | "failed";
+
 export type AiUsage = {
   day: string; // "YYYY-MM-DD"
   route:
@@ -1557,6 +1573,16 @@ export type AiUsage = {
   pages: number;
   searches: number;
   costCents: number;
+  /** Provider-reported prompt-cache usage (#300, WS5.7). 0 when it reports none. */
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+  /** "ok" for a call that completed; "failed" for one that reached the model
+   *  and threw. Failed rows carry cost 0 and error metadata instead of a price. */
+  outcome?: AiUsageOutcome;
+  /** The route's own machine code for a failure; never a provider message. */
+  errorCode?: string;
+  /** Upstream HTTP status for a failure, 0 for timeout/transport. */
+  httpStatus?: number;
 };
 
 export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope: "day" | "month" };
@@ -1676,7 +1702,8 @@ export function createAiUsageRepository(db: Database) {
         await client.query(
           `UPDATE personal.ai_usage
            SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
-               cost_cents = $7, reconciled_at = CURRENT_TIMESTAMP
+               cost_cents = $7, cache_write_tokens = $9, cache_read_tokens = $10,
+               outcome = 'ok', reconciled_at = CURRENT_TIMESTAMP
            WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
           [
             usage.id,
@@ -1686,6 +1713,52 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            identity,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+          ],
+        );
+      });
+    },
+
+    /** Turn a reservation into a FAILED ledger row (#300, WS5.7 leftover).
+     *
+     *  Before this, the failure path deleted the placeholder, so a provider
+     *  refusal, timeout or 5xx left no trace and an operator could not see why
+     *  spend stopped. The row keeps the reservation id, records the route's own
+     *  machine error code and the upstream HTTP status (0 = timeout/transport),
+     *  sets cost 0 — nothing was billed with certainty — and marks
+     *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
+     *
+     *  Guarded by `reconciled_at IS NULL` exactly like reconcile/release, so the
+     *  first of the three to run on a row wins and the others are no-ops. */
+    async fail(
+      failure: {
+        id: number;
+        model: string;
+        errorCode: string;
+        httpStatus?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+      },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2, input_tokens = 0, output_tokens = 0, pages = 0, searches = 0,
+               cost_cents = 0, cache_write_tokens = $4, cache_read_tokens = $5,
+               outcome = 'failed', error_code = $3, http_status = $6,
+               reconciled_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND user_id = $7 AND reconciled_at IS NULL`,
+          [
+            failure.id,
+            failure.model,
+            failure.errorCode,
+            failure.cacheWriteTokens ?? 0,
+            failure.cacheReadTokens ?? 0,
+            failure.httpStatus ?? null,
             identity,
           ],
         );
@@ -1713,7 +1786,10 @@ export function createAiUsageRepository(db: Database) {
       const identity = requireUserId(usage.userId);
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+          `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             usage.day,
             usage.route,
@@ -1723,6 +1799,11 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+            usage.outcome ?? "ok",
+            usage.errorCode ?? null,
+            usage.httpStatus ?? null,
             identity,
           ],
         );
