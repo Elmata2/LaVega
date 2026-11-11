@@ -42,6 +42,8 @@ import { AgentCatalogProblem, PortfolioAgentCard } from "./components/PortfolioA
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
+import { RealizedReport } from "./components/RealizedReport.js";
+import { saveAccountWrappers, withWrapper } from "./lib/accountWrappers.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
@@ -904,7 +906,9 @@ function Layout() {
           ? "Net worth"
           : location.pathname === "/agents"
             ? "Agents"
-            : null;
+            : location.pathname === "/reports"
+              ? "Reports"
+              : null;
   const isProfile = location.pathname === "/profile";
   const isOverview = location.pathname === "/";
   return (
@@ -917,7 +921,17 @@ function Layout() {
               Investing
             </h1>
           </Link>
-          <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
+          <div className="flex items-center gap-2">
+            <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
+            <NavLink
+              to="/reports"
+              className={({ isActive }) =>
+                `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`
+              }
+            >
+              Reports
+            </NavLink>
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
                 gewone cross-document link, want de persoonlijke app is een eigen
@@ -1244,6 +1258,59 @@ function Positions() {
   );
 }
 
+/** Realised-gain + income report (plan §3 WS4.3/WS4.4, #296). The report rides
+ *  the dashboard payload, so this page reads one resource and no extra fetch.
+ *  A dashboard stored before the report existed renders the empty state until
+ *  the next refresh builds it. */
+function Reports() {
+  const state = useDashboard();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  if (state.status === "loading") return <DashboardLoading />;
+  if (state.status === "error") return <DashboardError message={state.message} />;
+  const report = state.data.realized;
+  if (!report)
+    return (
+      <EmptyState
+        title="Realised report not ready"
+        description="Refresh the dashboard to build the realised-gain and income report from the current broker snapshot."
+      />
+    );
+  const entries = report.accounts.map((account) => ({
+    broker: account.broker,
+    account: account.account,
+    wrapper: account.wrapper,
+  }));
+  const setWrapper = async (entry: {
+    broker: string;
+    account: string;
+    wrapper: Parameters<typeof withWrapper>[3];
+  }) => {
+    const saved = await saveAccountWrappers(
+      withWrapper(entries, entry.broker, entry.account, entry.wrapper),
+    );
+    if (!saved) {
+      setSaveError("Could not save the account type. Try again.");
+      return;
+    }
+    setSaveError(null);
+    readDashboard();
+  };
+  return (
+    <>
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
+      {saveError && (
+        <p
+          role="status"
+          className="mb-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+        >
+          {saveError}
+        </p>
+      )}
+      <RealizedReport report={report} onSetWrapper={setWrapper} />
+    </>
+  );
+}
+
 const detailDate = longDate;
 
 function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
@@ -1417,6 +1484,15 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           <dd className="mt-1 font-semibold tabular-nums">
             {money(position.returns.realizedGain)}
           </dd>
+          {position.realized && (
+            <Link
+              to="/reports"
+              className="mt-1 inline-block text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              {position.realized.disposals} disposal
+              {position.realized.disposals === 1 ? "" : "s"} in the realised report
+            </Link>
+          )}
         </div>
         <div>
           <dt className="text-muted-foreground">Dividends received</dt>
@@ -1635,6 +1711,9 @@ export function App() {
               </ModuleRoute>
             }
           />
+          {/* Reports is always available: a stored layout has no id for it, so
+              making it a toggleable module would change every saved layout. */}
+          <Route path="/reports" element={<Reports />} />
           <Route
             path="/agents"
             element={
