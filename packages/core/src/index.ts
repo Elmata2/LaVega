@@ -6,6 +6,9 @@ export * from "./money.js";
 export * from "./transfers.js";
 export * from "./ingest.js";
 export * from "./views.js";
+/* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
+ * it); its barrel exports only the engine, the types and the dry run. */
+export * from "./rules/index.js";
 export * from "./accounts.js";
 export * from "./entities.js";
 export * from "./tracking.js";

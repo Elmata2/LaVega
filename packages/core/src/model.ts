@@ -116,7 +116,11 @@ export function isEurCurrency(currency: string | null | undefined): boolean {
   return (currency || "EUR").trim().toUpperCase() === "EUR";
 }
 
-export type Rule = { id: string; match: string; category: string };
+/* The rules domain lives in `rules/model.ts` (legacy row shape + the v2 AST).
+ * Re-exported here so every existing `import type { Rule } from "./model.js"`
+ * keeps working; `categorize.ts`, the adapters and the web app import it from
+ * both places. */
+export type { LegacyRule, Rule, RuleV2 } from "./rules/model.js";
 
 /** A signed, dated future cash movement the forecast can see BEFORE the bank
  *  transaction lands (a VAT set-aside, an expected invoice, a manual plan).
