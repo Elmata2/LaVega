@@ -1,4 +1,7 @@
 /**
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * Rules evaluator v2 — the vault boundary.
  *
  * Two stored shapes exist (`LegacyRule` and `RuleV2`, see `model.ts`). This

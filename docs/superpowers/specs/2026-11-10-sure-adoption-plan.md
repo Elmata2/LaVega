@@ -146,6 +146,56 @@ works.
   ambiguity, month-end clamp, split rounding, partial payments). Do not port Rails specs
   that only exercise ActiveRecord.
 
+### 2.6 Export scrub rules (Phase 0)
+
+Real financial data never enters this repository, a fixture or a commit. These
+rules apply to every artifact derived from the owner's vault: an export, a
+support bundle, a baseline run, a fixture, a screenshot or a log excerpt.
+
+**Replace with synthetic values before the data leaves the owner's browser:**
+
+| Keep                                                   | Replace with                                              |
+| ------------------------------------------------------ | --------------------------------------------------------- |
+| IBAN / account numbers                                 | a synthetic IBAN, or `NL00TEST0000000000`                 |
+| Account holder and account names                       | `Testrekening`, `Test Spaar`, `Broker A`                  |
+| Counterparties and merchant names                      | `Leverancier A`, `Winkel B`, `Werkgever`                  |
+| Exact amounts, balances, prices, quantities            | round synthetic numbers that preserve sign and rough size |
+| Free-text descriptions that embed any of the above     | a short synthetic description                             |
+| Document ids, file names and hashes of real statements | synthetic ids/names                                       |
+
+**Keep unchanged:** dates, signs/direction (`amount < 0` = outflow, ADR 0011),
+transaction types, categories/labels, currencies, row counts and the shape of the
+data. Those are what a test or metric needs; the identities are what must go.
+
+Rules:
+
+1. **The browser is the scrub boundary.** The vault plaintext exists only in the
+   owner's browser (ADR 0009). Any scrubbing happens there or on the owner's own
+   machine; no server route and no agent receives unscrubbed data.
+2. **Committed fixtures are hand-built synthetic data**, not scrubbed copies.
+   A scrubbed copy is still a derivative of the real vault, so it stays local.
+   `__fixtures__/*.json` files must be synthetic from the start and say so in
+   their header/README.
+3. **Scrubbed fixtures are gitignored, never committed.** Local scrub output
+   lives under `.lavega/scrub/` (gitignored). The same applies to the pinned
+   reference clone (`.lavega/reference/`) and baseline aggregates
+   (`.lavega/baselines/`).
+4. **CI, build and test never read those paths.** A test that needs a fixture
+   uses a committed synthetic one; if it cannot, the behaviour needs a
+   hand-built fixture first.
+5. **Before committing any fixture**, skim it for the fields above (IBAN pattern,
+   a real name, an exact balance). Reviewers do the same in the diff.
+
+### 2.7 Metric baselines (Phase 0, owner-run)
+
+The Phase 0 baselines are measurements of the **owner's real vault**, so an agent
+cannot produce them: the ledger is encrypted and client-side (ADR 0009), there is
+no plaintext export, and the repository may hold aggregates only. **Do not invent
+numbers; a baseline that was not measured is recorded as `pending`, not as 0.**
+The runbook is in §8 (Program metrics). Aggregates are stored outside the repo in
+`.lavega/baselines/phase0.json` (gitignored); once measured, the aggregate values
+are also written in §9 so a later phase can compare against them.
+
 ## 3. Workstreams
 
 Each workstream lists: Sure source, target, tasks, storage/UI, acceptance evidence, effort,
@@ -1527,18 +1577,36 @@ Do not add it to the roadmap without new owner input.
 | R12 | MCP endpoint serves local tenant or 401s                 | High     | mount in `apps/server`; token→tenant lookup; 401 without match; ADR 0012                   | WS5 gate           |
 | R13 | Backup restore loses documents                           | High     | versioned bundle includes document store; restore-first test                               | WS3 gate           |
 
-**Program metrics** (capture the baseline in Phase 0/1 before WS2; record after in WS6.4).
-Store only aggregate counts, percentages and rates. Real amounts, names, IBANs and transaction
-text stay out of the repo; local detail belongs in a gitignored file.
+**Program metrics** (capture the Phase 0 baseline before WS2; record after in WS6.4).
+Store only aggregate counts, percentages and rates. Real amounts, names, IBANs and
+transaction text stay out of the repo (scrub rules: §2.6); local detail and the
+aggregate file live under `.lavega/baselines/`, which is gitignored.
 
-- forecast absolute error at 30/60/90 days on own history;
-- share of internal transfers matched/confirmed vs manually edited;
-- share of transactions categorized by rules vs AI vs manual;
-- statement coverage (months covered / months expected);
-- realised-gain reconciliation difference vs broker cash (should be zero or unknown);
-- MCP tool calls per week and tool error rate;
-- AI spend per operation and per user per month;
-- time to produce a month close (manual minutes).
+| Metric                       | Definition                                                                                                                                                                                                           | Phase 0 source                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Forecast error 30/60/90      | Median absolute percentage error of the forecast's predicted balance against the realised balance, per horizon (30, 60, 90 days), over the last 3 complete months (`packages/core/src/forecast.ts`, forecast screen) | Owner records the forecast now, compares at +30/+60/+90 days      |
+| Internal-transfer match rate | Confirmed transfer pairs ÷ (confirmed + rejected + still-suggested pairs after 30 days) on the Transfers screen                                                                                                      | Owner counts from the screen over the last 3 months               |
+| Uncategorized share          | Transactions with no category ÷ all transactions in the last 3 complete months (Transacties, "geen categorie" filter)                                                                                                | Owner counts from the filter                                      |
+| Statement coverage           | Months with at least one statement/imported document ÷ months since the first account opened                                                                                                                         | Pending documents feature (WS3.4); record `pending`, do not guess |
+| Realised-gain reconciliation | Realised gains + income from the report − the broker's own realised/cash movement; `unknown` when the broker does not report it (never 0 by default)                                                                 | Investing report vs broker statement for the last closed year     |
+| MCP usage                    | Tool calls per week and tool error rate (`investing.mcp_audit` / stdout audit lines)                                                                                                                                 | Server audit, `ok                                                 | refused | error` counts |
+| AI spend                     | EUR cents per operation and per account per month (`personal.ai_usage`)                                                                                                                                              | `/api/agent/budget` + ledger rows                                 |
+| Time to close a month        | Wall-clock minutes from starting the month-close routine to the point the owner trusts the numbers                                                                                                                   | Owner times one close with a stopwatch                            |
+
+**Phase 0 baseline runbook (owner, about one hour):**
+
+1. Open the app on the owner's own machine with the real vault unlocked; do not
+   share the screen or export plaintext.
+2. For each row above that can be read from a screen today, note the aggregate
+   only (rate, percentage, median, minutes) — never a transaction, amount, name
+   or IBAN. Rows whose feature has not shipped (statement coverage) are recorded
+   as `pending` with the reason.
+3. Write the aggregates to `.lavega/baselines/phase0.json` (gitignored) as
+   `{metric, value, unit, asOf, method}`, and paste only those aggregate values
+   into §9 when they are ready.
+4. Forecast error has no instant value: record the forecast at t0, then append the
+   comparison at +30, +60 and +90 days. Until then it is `pending`.
+5. The owner approves the completed baseline before Phase 1 is declared done.
 
 ## 9. Decisions recorded (owner, 2026-11-10)
 
@@ -1554,7 +1622,17 @@ text stay out of the repo; local detail belongs in a gitignored file.
 | 8   | [#288](https://github.com/Elmata2/LaVega/issues/288) | MCP auth/mounting                                                                                                                                                                  | **Approve the Phase 0 design**: `/mcp` in `apps/server`, bearer token → tenant via hashed token table, read-only first, separate write token later. ADR 0012 records it. |
 
 Remaining owner input: approve the Phase 0 artifacts before Phase 1 starts; the metric
-baselines need the personal app running on the owner's data.
+baselines need the personal app running on the owner's data (runbook §8, scrub rules §2.6).
+Baseline values are `pending` until the owner runs that procedure — not zero, not estimated.
+
+**Phase 0 audit (#303, 2026-11-11).** ADR 0011 and ADR 0012 are Accepted; `NOTICE` carries
+the project, pinned commit `562fe09`, AGPL-3.0, reuse scope, non-affiliation and the source
+offer; `scripts/fetch-sure-reference.sh` was run from a clean checkout and pins
+`562fe096d149cb4d1fb1e6d3446527572c1ec7f6` with a one-commit shallow fetch, outside the
+tracked tree and never imported by build/test; the export scrub rules are recorded in §2.6
+with explicit gitignore paths; every landed derived module carries the attribution header and
+Appendix A matches the files that exist. **Only the metric baselines remain owner-blocked** — an
+agent cannot read the encrypted local vault (ADR 0009) and must not invent numbers.
 
 ## 10. What we explicitly will not do
 
@@ -1648,25 +1726,34 @@ record and the review checklist. The `NOTICE` entry lands in Phase 0, before the
 ships. Every header carries the upstream commit, the AGPL-3.0 notice, the words "independently
 reimplemented for LaVega", and the change date.
 
-| LaVega module                               | Sure source (path)                                                                                                          | Commit  | Licence  | Change summary                                                                                                         | Phase |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------- | ----- |
-| `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb`                                | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10                                   | 1     |
-| `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                                                             | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10                               | 1     |
-| `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                                                             | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                                                 | 1     |
-| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`, `recurring_transaction/paycheck_planner.rb` | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine, matcher/allocation and paycheck plan (#286/#287/#288); 2026-11-11  | 2     |
-| `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`                                             | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                                                       | 2     |
-| `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`, `balance/materializer.rb`                                                   | 562fe09 | AGPL-3.0 | independently reimplemented over vault arrays: forward/reverse replay, hard resets, gaps, net worth (#291); 2026-11-11 | 3     |
-| `packages/core/src/balance.ts`              | `app/models/account.rb`, `account/**` (classification, balance types, valuation anchors)                                    | 562fe09 | AGPL-3.0 | asset/liability kinds, classification, dated absolute valuations; no amortization/sync; 2026-11-11                     | 3     |
-| `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                                                          | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                                                            | 3     |
-| `packages/core/src/statements/*`            | `account_statement*`, `account_statement/*`                                                                                 | 562fe09 | AGPL-3.0 | client-side encrypted store, no Active Storage                                                                         | 3     |
-| `packages/core/src/csvImport.ts`            | `import.rb`, `import/row.rb`, `import/mapping.rb`                                                                           | 562fe09 | AGPL-3.0 | column mapping/preflight subset                                                                                        | 3     |
-| `packages/core/src/investing/costBasis.ts`  | `holding/lot_book.rb`, `holding/forward_calculator.rb`                                                                      | 562fe09 | AGPL-3.0 | moving-average lot book                                                                                                | 4     |
-| `packages/core/src/investing/realized.ts`   | `trade.rb:159-267`, `investment_statement/totals.rb`                                                                        | 562fe09 | AGPL-3.0 | realised + income report                                                                                               | 4     |
-| `packages/core/src/investing/securities.ts` | `security.rb`, `security/price/importer.rb`                                                                                 | 562fe09 | AGPL-3.0 | ISIN-first canonical identity                                                                                          | 4     |
-| `packages/core/src/agentTools.ts`           | `assistant/function/*`, `assistant.rb`                                                                                      | 562fe09 | AGPL-3.0 | typed registry, read-first scopes                                                                                      | 5     |
-| `apps/server/src/mcp.ts`                    | `mcp_controller.rb`                                                                                                         | 562fe09 | AGPL-3.0 | JSON-RPC transport, stricter auth                                                                                      | 5     |
-| `packages/core/src/provenance.ts`           | `assistant/function/record_valuation.rb`                                                                                    | 562fe09 | AGPL-3.0 | structured citation grammar                                                                                            | 5     |
-| `packages/core/src/interop/export.ts`       | `family/data_exporter.rb`                                                                                                   | 562fe09 | AGPL-3.0 | LaVega export, Sure vocabulary; changed 2026-11-10                                                                     | 6     |
+| LaVega module                                                                                    | Sure source (path)                                                                                                          | Commit  | Licence  | Change summary                                                                                                                 | Phase |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| `packages/core/src/transfers.ts`                                                                 | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb`, `rejected_transfer.rb`        | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10                                           | 1     |
+| `packages/core/src/rules/{model,evaluate,compile,parse,dryrun,index}.ts`                         | `app/models/rule.rb`, `rule/**`                                                                                             | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10                                       | 1     |
+| `packages/core/src/labels.ts`                                                                    | `transaction/label_normalizer*`                                                                                             | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs; changed 2026-11-10                                                                                     | 1     |
+| `packages/core/src/alerts.ts`                                                                    | `app/models/insight/generators/*`                                                                                           | 562fe09 | AGPL-3.0 | insights section only: the three formulas LaVega lacked; changed 2026-11-10                                                    | 1     |
+| `packages/core/src/bills/{model,schedule,occurrences,match,allocate,paycheck,forecast,index}.ts` | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`, `recurring_transaction/paycheck_planner.rb` | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine, matcher/allocation and paycheck plan (#286/#287/#288); changed 2026-11-11  | 2     |
+| `packages/core/src/budget.ts`                                                                    | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`                                             | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain; changed 2026-11-11                                                                           | 2     |
+| `packages/core/src/balanceSeries.ts`                                                             | `balance/{base,forward,reverse}_calculator.rb`, `balance/materializer.rb`                                                   | 562fe09 | AGPL-3.0 | independently reimplemented over vault arrays: forward/reverse replay, hard resets, gaps, net worth (#291); changed 2026-11-11 | 3     |
+| `packages/core/src/balance.ts`                                                                   | `app/models/account.rb`, `account/**` (classification, balance types, valuation anchors)                                    | 562fe09 | AGPL-3.0 | asset/liability kinds, classification, dated absolute valuations; no amortization/sync; changed 2026-11-11                     | 3     |
+| `packages/core/src/reports.ts`                                                                   | `income_statement*`, `balance_sheet*`, `period.rb`                                                                          | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal; changed 2026-11-11                                                | 3     |
+| `packages/core/src/investing/allocation.ts`                                                      | `app/models/investment_statement.rb:82-124`                                                                                 | 562fe09 | AGPL-3.0 | allocation ladder over vault arrays; changed 2026-11-11                                                                        | 4     |
+| `packages/core/src/investing/costBasis.ts`                                                       | `holding/lot_book.rb`, `holding/forward_calculator.rb`                                                                      | 562fe09 | AGPL-3.0 | moving-average lot book; changed 2026-11-11                                                                                    | 4     |
+| `packages/core/src/investing/realized.ts`                                                        | `trade.rb:159-267`, `investment_statement/totals.rb`                                                                        | 562fe09 | AGPL-3.0 | realised + income report; changed 2026-11-11                                                                                   | 4     |
+| `packages/core/src/investing/securities.ts`                                                      | `security.rb`, `security/price/importer.rb`                                                                                 | 562fe09 | AGPL-3.0 | ISIN-first canonical identity; changed 2026-11-11                                                                              | 4     |
+| `packages/core/src/agentTools.ts`                                                                | `assistant/function/*`, `assistant.rb`, `function_tool_caller.rb`                                                           | 562fe09 | AGPL-3.0 | typed registry, read-first scopes; changed 2026-11-11                                                                          | 5     |
+| `packages/core/src/provenance.ts`                                                                | `assistant/function/record_valuation.rb`, `Provenance::Citation.parse!`                                                     | 562fe09 | AGPL-3.0 | structured citation grammar; changed 2026-11-11                                                                                | 5     |
+| `apps/investing-server/src/tools/{investingTools,chatTools,writeTools}.ts`                       | `assistant/function/*`, `function_tool_caller.rb`                                                                           | 562fe09 | AGPL-3.0 | one definition set bound to chat and `/mcp`; changed 2026-11-11                                                                | 5     |
+| `apps/investing-server/src/toolLoop.ts`                                                          | `assistant/responder.rb`, `assistant/history_trimmer.rb`                                                                    | 562fe09 | AGPL-3.0 | round cap, forced text, pair-safe trim, failed-turn status; changed 2026-11-11                                                 | 5     |
+| `apps/investing-server/src/evals/harness.ts`                                                     | `llm-evals.yml`, eval dataset concept (`docs/research/sure/02-platform-ai.md` §1.7)                                         | 562fe09 | AGPL-3.0 | offline fixture harness + reviewed contract snapshot; changed 2026-11-11                                                       | 5     |
+| `apps/server/src/mcp/{routes,protocol,sessions,tokens}.ts`                                       | `app/controllers/mcp_controller.rb`                                                                                         | 562fe09 | AGPL-3.0 | JSON-RPC transport, sessions, bearer token → tenant, stricter auth; changed 2026-11-11                                         | 5     |
+| `packages/database/src/mcpTokens.ts`                                                             | `app/controllers/mcp_controller.rb`, `app/models/llm_usage.rb`                                                              | 562fe09 | AGPL-3.0 | hashed token table + audit row; failed-call and cache columns; changed 2026-11-11                                              | 5     |
+
+Rows are added when a module lands, not when it is planned. Three earlier rows
+were removed because their modules have not landed and the ledger must not read as
+attribution of shipped code: `packages/core/src/statements/*` (#293, in flight),
+`packages/core/src/csvImport.ts` (#294) and `packages/core/src/interop/export.ts`
+(WS6.1). Add them back when the file exists; verify existence before citing a row.
 
 If text from the MIT-licensed `docs/llm-guides/wealth-blueprint.md` is adapted, add a separate
 row and notice: "Blueprint text © 2026 diegomarino, MIT" (do not fold MIT text into the AGPL

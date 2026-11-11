@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * Bearer-token authentication for `/mcp` (ADR 0012 §2, §3).
  *
  * Sure source: `app/controllers/mcp_controller.rb` at pinned commit 562fe09.

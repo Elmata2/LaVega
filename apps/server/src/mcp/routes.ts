@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * The `/mcp` endpoint: JSON-RPC 2.0 over HTTP for external agents
  * (#285, ADR 0012; plan §3 WS5.2).
  *

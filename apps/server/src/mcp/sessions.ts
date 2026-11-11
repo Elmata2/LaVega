@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * MCP sessions (ADR 0012 §7, plan WS5.2 "session id").
  *
  * Sure source: `app/controllers/mcp_controller.rb` at pinned commit 562fe09 —
@@ -32,10 +35,12 @@ export type McpSessionStore = {
   matches(sessionId: string, identity: McpTokenIdentity, at: number): boolean;
 };
 
-export function createMcpSessionStore(options: {
-  ttlMs?: number;
-  newId?: () => string;
-} = {}): McpSessionStore {
+export function createMcpSessionStore(
+  options: {
+    ttlMs?: number;
+    newId?: () => string;
+  } = {},
+): McpSessionStore {
   const ttlMs = options.ttlMs ?? MCP_SESSION_TTL_MS;
   const newId = options.newId ?? randomUUID;
   const sessions = new Map<string, SessionRecord>();

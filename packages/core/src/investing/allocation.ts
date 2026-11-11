@@ -1,3 +1,8 @@
+/*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ */
+
 import type { Position } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
 
@@ -115,7 +120,7 @@ export function bucketPricedAllocation(
 /* ---------------------------------------------------------------------------
  * Allocation ladder (plan §3 WS4.6, #297)
  *
- * Ported from Sure commit 562fe09 (AGPL-3.0):
+ * Sure sources (AGPL-3.0, pinned commit above):
  *  - `app/models/investment_statement.rb:82-124` — weight is
  *    `value / max(portfolio_value, holdings_total)`, a floor over stale cached
  *    balances and negative cash. Weights are a share of the invested part and

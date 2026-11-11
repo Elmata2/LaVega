@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * The investing WRITE tools: preview → apply, behind a separate write token
  * (plan §3 WS5.4, #299).
  *

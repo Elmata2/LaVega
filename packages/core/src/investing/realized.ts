@@ -1,3 +1,8 @@
+/*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ */
+
 import { Schema } from "effect";
 import { toCents } from "../money.js";
 import type { CashFlow, Position, PriceBar, Trade } from "./model.js";
@@ -28,7 +33,7 @@ import { valuePosition } from "./valuation.js";
 
 /* Realised-gain and income report (plan §3 WS4.3 + WS4.4, #296).
  *
- * Ported from Sure commit 562fe09 (AGPL-3.0):
+ * Sure sources (AGPL-3.0, pinned commit above):
  *  - `app/models/trade.rb:159-267` — realised gain per disposal is proceeds
  *    minus basis; the basis is the holding snapshot's average cost, so a
  *    partial trade history still answers; proceeds are converted at the

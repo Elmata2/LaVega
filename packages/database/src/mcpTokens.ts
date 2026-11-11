@@ -1,6 +1,9 @@
 import type { Database } from "./index.js";
 
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * Read-only MCP tokens and their audit rows (#285, ADR 0012).
  *
  * Sure source: `app/controllers/mcp_controller.rb` at pinned commit 562fe09.
@@ -76,7 +79,13 @@ export function createMcpTokenRepository(db: Database): McpTokenRepository {
       await db.http.query(
         `INSERT INTO investing.mcp_audit (token_id, method, tool, duration_ms, outcome)
          VALUES ($1, $2, $3, $4, $5)`,
-        [entry.tokenId, entry.method, entry.tool, Math.max(0, Math.round(entry.durationMs)), entry.outcome],
+        [
+          entry.tokenId,
+          entry.method,
+          entry.tool,
+          Math.max(0, Math.round(entry.durationMs)),
+          entry.outcome,
+        ],
       );
     },
 

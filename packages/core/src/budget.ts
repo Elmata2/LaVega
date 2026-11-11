@@ -1,9 +1,11 @@
 /**
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * Budget envelopes with an explicit category-group map and signed carry
  * rollover (plan §3 WS2.9).
  *
- * Independent reimplementation of the envelope + carry contract in
- * we-promise/sure (AGPL-3.0), pinned at commit 562fe09 (2026-11-10):
+ * Sure sources (AGPL-3.0, pinned commit above):
  * `app/models/budget.rb`, `app/models/budget/rollover_calculator.rb` and
  * `app/models/budget_category.rb`. Sure stores outflow positive and keeps the
  * carry per budget category; this module uses integer cents and LaVega's flat

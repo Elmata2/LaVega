@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * The one tool registry (plan §3 WS5.1).
  *
  * Sure source: `app/models/assistant/function/*`, `function_tool_caller.rb`,

@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * The agent eval harness (plan §3 WS5.9, #300).
  *
  * Sure source: CI includes `llm-evals.yml` and an eval dataset concept at pinned

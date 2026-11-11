@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * Tool-loop hardening for the investing chat (plan §3 WS5.6, #299).
  *
  * Sure source: `app/models/assistant/responder.rb` and

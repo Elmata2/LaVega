@@ -1,3 +1,8 @@
+/*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ */
+
 import type { ManualCostBasis, Position, Trade } from "./model.js";
 import { fromCents, toCents } from "../money.js";
 import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
@@ -5,7 +10,7 @@ import { orderTrades } from "./quantity.js";
 
 /* Cost-basis lot book and basis provenance (plan §3 WS4.1 + WS4.2, #295).
  *
- * Ported from Sure commit 562fe09 (AGPL-3.0):
+ * Sure sources (AGPL-3.0, pinned commit above):
  *  - `app/models/holding/lot_book.rb` — moving average, acquisition fee inside
  *    the basis, full-liquidation reset, transfer-in as unknown cost, exact
  *    split restatement.

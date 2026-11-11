@@ -1,6 +1,11 @@
+/*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ */
+
 /* Security master (plan §3 WS4.5, #297).
  *
- * Ported from Sure commit 562fe09 (AGPL-3.0):
+ * Sure sources (AGPL-3.0, pinned commit above):
  *  - `app/models/security.rb:12-16, 93-94, 179-232` — identity is
  *    `(ticker, exchange_operating_mic)`, MIC aliases are canonicalised, and a
  *    ticker is unique only inside its MIC.

@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * JSON-RPC 2.0 over HTTP, as MCP's Streamable HTTP transport defines it
  * (#285, ADR 0012 §7).
  *

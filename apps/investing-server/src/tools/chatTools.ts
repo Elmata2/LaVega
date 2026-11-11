@@ -1,4 +1,7 @@
 /*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ *
  * The in-app chat's binding of the ONE investing tool registry (plan §3 WS5.3,
  * #299), plus the memory tools that only the chat may use.
  *
