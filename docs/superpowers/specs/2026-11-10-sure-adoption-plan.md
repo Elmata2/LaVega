@@ -282,6 +282,42 @@ The engine and the editor landed in one slice. Divergences from the plan text, e
 - **No regex dialect.** Text conditions are literal normalized comparisons (`matchNorm`, the
   same normalizer the legacy loop used), so the plan's rules-regex-DoS risk (#R4) does not
   exist in this implementation; the only rule-count cost is O(n·r), unchanged from before.
+**As built (WS1.5–WS1.7, [#284](https://github.com/Elmata2/LaVega/issues/284), 2026-11-10).**
+The three tasks landed in one slice. Divergences from the plan text, each deliberate:
+
+- **Label normalizer** is `packages/core/src/labels.ts` with NL, DE and EN packs only
+  (`en_US` and `en_GB` split, because `en_US` writes the month first). Sure ships nine packs;
+  the three shipped are the ones LaVega's data meets. All packs are always active, and the
+  day/month order comes from the pack whose marker matched; `region` is only the fallback.
+  `KENMERK` is added to the truncators (Sure's list has no Dutch reference marker). A
+  `hasName` fact keeps a reference-only descriptor from inventing a merchant: its canonical
+  key is `""`, not the rail token.
+- **One key, not a fork.** `canonicalMerchantKey` normalizes the descriptor first, then
+  delegates to the existing `merchantKey` in `subscriptions.ts`, so an unregistered merchant
+  and a registered one share one key space. The registry is the additive
+  `VaultData.merchants` (replace-all `getMerchants`/`putMerchants`); alias learning UI is not
+  in this slice.
+- **Transaction states** are four optional `Tx` fields. `hash.ts`'s `txBase` is untouched, so
+  `tx.id` cannot change and no fixture re-keys. `migrateTxStates` is the ONE pass: it runs
+  inside the vault adapter on open/adopt/restore (not in `apps/web`, which keeps the #283 lane
+  clear), fills the defaults only where a row is missing them, and re-seals the vault once
+  only when something changed. A second open migrates nothing and writes nothing. `notes`
+  defaults to `""` on purpose — it states "no note", it does not fabricate an unknown amount
+  (ADR 0011 §8 governs magnitudes and rates, not text).
+- **Insights** are three pure functions in `alerts.ts`, each returning typed facts plus an
+  `InsightHowCalculated` block (formula id, the threshold table in force, the exact inputs).
+  The spending anomaly compares the projected month against the trailing **median** of three
+  complete months (Sure uses the mean; the plan asks for the median, and one outlier month
+  cannot pull it). A coverage guard suppresses the insight when the ledger does not reach into
+  the baseline months, instead of reading an import gap as a zero month. Idle cash covers the
+  current and savings account kinds (Sure's Depository), EUR only. Savings rate is
+  `(income - spending) / income` over the two last complete months; a month with no income
+  suppresses rather than returning an undefined rate. They are not wired into
+  `computeAlerts`/AandachtBlock in this slice: that needs copy and view work, and the
+  subscription price increase already covers the existing alert surface.
+- **Tests are plain vitest**, not `@effect/vitest` — same state as the #282 slice; the package
+  is still not installed.
+
 
 ### WS2 — Bills and budgets (personal, the wedge)
 
