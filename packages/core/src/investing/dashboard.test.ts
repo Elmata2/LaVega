@@ -893,3 +893,42 @@ test("the read model schema accepts the empty dashboard and rejects a missing re
     Result.isSuccess(Schema.decodeUnknownResult(InvestingDashboardDataSchema)(withoutBenchmarks)),
   ).toBe(false);
 });
+
+test("dashboard carries the cash-aware allocation ladder and the canonical instrument key", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [
+      { ...POSITIONS[0]!, isin: "US0378331005", broker: "ibkr" },
+      { ...POSITIONS[1]!, broker: "trading212" },
+    ],
+    trades: TRADES,
+    dividends: [],
+    cashBalances: [
+      {
+        entity: "personal",
+        broker: "trading212",
+        currency: "EUR",
+        amount: 300,
+        asOf: "2026-02-02",
+      },
+    ],
+    priceBars: PRICE_BARS,
+    benchmarkBars: [],
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    today: "2026-02-02",
+  });
+
+  const ladder = dashboard.allocation.ladder!.instrument;
+  expect(ladder.denominatorRule).toMatch(/max\(cash \+ holdings, holdings\)/);
+  expect(ladder.cash).toBe(300);
+  expect(ladder.rows.find((row) => row.kind === "cash")).toMatchObject({
+    label: "Cash",
+    value: 300,
+  });
+  expect(ladder.weightsSum).not.toBeNull();
+  expect(ladder.weightsSum!).toBeLessThanOrEqual(1);
+  // The same ISIN from a second broker would be one instrument; here the
+  // position's ISIN is what names the canonical key.
+  expect(dashboard.positions[0]!.instrumentKey).toBe("isin:US0378331005");
+  expect(dashboard.positions[1]!.instrumentKey).toBe("sym:MSFT");
+});

@@ -3,7 +3,7 @@ id: vs-budget-apps
 family: vs
 title: "LaVega vs bunq's budgeting features"
 description: "What bunq's budgeting features do, what LaVega does and where they differ. Facts from the companies' own websites, with dates. Other apps are left out."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -70,5 +70,3 @@ LaVega is in beta; no price has been published yet.
 Do you want to organise money in practical pots inside one bank, or mainly want an overview and a look ahead across several providers? That decides which type of tool fits your situation. You can also use both.
 
 See also [LaVega vs a spreadsheet](/en/vs/lavega-vs-spreadsheet), [How to clean up your subscriptions](/en/guides/clean-up-your-subscriptions) and [What is a personal CFO?](/en/questions/what-is-a-personal-cfo).
-
-This is information, not advice.

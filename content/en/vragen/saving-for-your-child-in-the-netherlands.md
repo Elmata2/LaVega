@@ -3,7 +3,7 @@ id: saving-for-a-child
 family: vragen
 title: "Saving for your child in the Netherlands: the options"
 description: "An overview of ways to set money aside for a child in the Netherlands: savings account, investment account and gifting, with the 2026 gift exemption."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -74,5 +74,3 @@ Gifting is not a third kind of account: it settles whose money it is, not where 
 ## What LaVega does here
 
 LaVega brings accounts and investments into one overview, so you can see what already stands for a goal and what your cash position looks like. See [What is a personal CFO?](/en/questions/what-is-a-personal-cfo). This page names no banks, funds or providers. LaVega does not pick a route for you. It provides information and explanation and has no AFM licence.
-
-This is information, not advice.

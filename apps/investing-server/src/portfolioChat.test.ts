@@ -113,9 +113,11 @@ test("fetches fundamentals before the model call and survives a failing symbol",
   expect(instructions).toContain(
     "Write concise plain-text paragraphs without Markdown formatting: no headings, no bold or italic asterisks, no numbered or bulleted list syntax.",
   );
+  /* WS5.3: the chat lists the SAME registry definitions as `/mcp`. */
   expect(Object.keys(agent.tools).sort()).toEqual([
-    "compute_portfolio_value",
+    "get_agent_memory",
     "get_fundamentals",
+    "get_portfolio_value",
     "get_positions",
     "get_price",
     "get_risk",

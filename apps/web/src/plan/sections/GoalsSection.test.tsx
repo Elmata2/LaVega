@@ -73,6 +73,7 @@ function withProfile(
     writeError: false,
     recompute: async () => {},
     setPreference: vi.fn(async () => {}),
+    setLimit: vi.fn(async () => {}),
     appendPlanEvent: vi.fn(async () => {}),
   } as UsePlan;
   const ctx: PlanCtx = {

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, URL as NodeURL } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Tx } from "@lavega/core";
+import type { PaycheckPreview, Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import { BetaalschemaBlock, agendaRows, cadenceLabel, nextOccurrence } from "./BetaalschemaBlock";
 import { ASOF, scheduledFlows } from "./fixtures";
@@ -82,6 +82,61 @@ test("nextOccurrence rolls a stream forward past today, never back", () => {
   expect(nextOccurrence("2026-09-01", 30, ASOF)).toBe("2026-10-01");
   // Several cadences behind: it lands on or after asOf, not on the first step.
   expect(nextOccurrence("2026-01-05", 30, ASOF) >= ASOF).toBe(true);
+});
+
+const paycheck = (overrides: Partial<PaycheckPreview> = {}): PaycheckPreview => ({
+  asOf: ASOF,
+  hasIncome: true,
+  paydayOn: "2026-08-25",
+  cashCents: 70_000,
+  dueBeforePaydayCents: 100_000,
+  reservedCents: 150_000,
+  paidRecentlyCents: 0,
+  shortfallCents: 30_000,
+  shortfallUnknown: false,
+  coversUntil: "2026-09-24",
+  ...overrides,
+});
+
+test("the block reads the declared-income paycheck preview above the agenda", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck()}
+    />,
+  );
+  expect(html).toContain('data-testid="betaalschema-paycheck"');
+  expect(html).toContain("te betalen");
+  expect(html).toContain("gereserveerd");
+  expect(html).toContain("tekort");
+  expect(html).toContain(formatEuro(1_000));
+});
+
+test("an unknown cash figure says unknown in the preview, never zero", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck({ cashCents: null, shortfallCents: null, shortfallUnknown: true })}
+    />,
+  );
+  expect(html).toContain("saldo onbekend");
+  expect(html).not.toContain(formatEuro(0));
+});
+
+test("without a declared income the preview says so instead of inventing a payday", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck({ hasIncome: false, paydayOn: null, shortfallCents: null })}
+    />,
+  );
+  expect(html).toContain("Nog geen inkomensreeks");
 });
 
 test("cadenceLabel names the cadences core snaps to", () => {

@@ -7,6 +7,7 @@ import { ownAccounts, ownAccountNamed, type OwnAccounts } from "./views.js";
 import { merchantKey } from "./subscriptions.js";
 import { findIban } from "./parsers/primitives.js";
 import type { FactSource } from "./facts.js";
+import type { TransferPair } from "./transfers.js";
 
 /* ── DE GRENS TUSSEN PRIVÉ EN ZAKELIJK ──────────────────────────────────────
  *
@@ -230,6 +231,13 @@ export type CrossScopeInput = {
    *  `eigen-naam-genoemd` class simply yields nothing. */
   names?: readonly OwnName[];
   answers?: readonly CrossScopeAnswer[];
+  /** Stored transfer pairs (WS1.1). A CONFIRMED pair is a stronger fact than
+   *  any heuristic in this module: when both its legs are in the window, the
+   *  pair is the crossing, whatever the four-day heuristic would have said
+   *  (the legs may be further apart, or carry no own-account evidence at all).
+   *  The boundary is still MEASURED here — this module does not swallow it.
+   *  Suggestions and rejections prove nothing and are ignored. */
+  transfers?: readonly TransferPair[];
 };
 
 /** What every state carries, measured or not. */
@@ -645,7 +653,59 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     );
   };
 
+  /* ── THE CONFIRMED PAIR WINS BEFORE THE HEURISTIC ──────────────────────────
+   *
+   * A stored CONFIRMED transfer (WS1.1) is a decision, not another guess: the
+   * owner said these two rows are one movement. So it is consumed first, and
+   * its two legs are claimed before the four-day heuristic looks at them —
+   * otherwise a pair whose legs the heuristic could not have joined (different
+   * amounts from both banks' keys, more than four days apart) would be
+   * re-measured as two unrelated rows, or worse, paired with somebody else's
+   * money. The pair does NOT swallow the crossing: it becomes the
+   * `twee-benen` crossing this module already reports, and `resolveKind` still
+   * finds any answer given for that crossing or its stream.
+   *
+   * A confirmed pair with both legs on the SAME side of the boundary is not a
+   * crossing and creates none; its legs are still claimed, because a decided
+   * pair must not seed a heuristic match with a third row. A pair with only one
+   * leg inside the window claims that leg and reports nothing: the movement's
+   * date (the outflow) is outside the measured window, and re-reading the leg
+   * as a one-legged crossing would be a second, weaker account of a movement
+   * this vault already knows exactly. */
+  const legById = new Map(legs.map((l) => [l.tx.id, l]));
+  for (const pair of input.transfers ?? []) {
+    if (pair.status !== "confirmed") continue; // a suggestion proves nothing; a rejection was a "no"
+    const outflow = legById.get(pair.outflowTxId);
+    const inflow = legById.get(pair.inflowTxId);
+    // A stale record (the sign no longer matches the leg it names) is not
+    // authoritative for anything: skip it instead of claiming a row it no
+    // longer describes.
+    if (outflow && outflow.sign !== -1) continue;
+    if (inflow && inflow.sign !== 1) continue;
+    if (outflow) claimed.add(outflow.tx.id);
+    if (inflow) claimed.add(inflow.tx.id);
+    if (!outflow || !inflow || outflow.scope === inflow.scope) continue;
+    const streamKey = crossScopeStreamKey(outflow.entity, inflow.entity);
+    const id = crossingId([outflow.tx.id, inflow.tx.id]);
+    crossings.push({
+      id,
+      streamKey,
+      fromEntity: outflow.entity,
+      toEntity: inflow.entity,
+      fromScope: outflow.scope,
+      toScope: inflow.scope,
+      date: outflow.tx.date, // the day the money left
+      amountCents: outflow.cents, // ONE amount for TWO legs
+      currency: outflow.tx.currency,
+      matched: true,
+      evidence: "twee-benen",
+      legs: [legOf(outflow), legOf(inflow)],
+      ...resolveKind(answers, [id, streamKey]),
+    });
+  }
+
   for (const out of outs) {
+    if (claimed.has(out.tx.id)) continue; // a confirmed pair already owns this leg
     const pool = pools.get(out.cents) ?? [];
     let best: Leg | null = null;
     let bestScore: [number, number, string] | null = null;

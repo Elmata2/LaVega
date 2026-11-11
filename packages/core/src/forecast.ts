@@ -314,7 +314,52 @@ export type ForecastPoint = {
   upperCents: number | null;
 };
 export type Shortfall = { date: string; balanceCents: number };
-export type Driver = { label: string; sign: 1 | -1; perWeekCents: number };
+
+/** WS2.10 (#290): how well a bills series' recurrence has been OBSERVED.
+ *  - "high": at least three occurrences of the series already closed before
+ *    `asOf` — the cadence has been seen repeating.
+ *  - "medium": one or two closed occurrences.
+ *  - "low": none yet; the series is declared but has never been paid, so the
+ *    projection rests on the declaration alone.
+ *  It is a rule over the ledger, not a tuned weight. */
+export type ForecastCommitmentConfidence = "low" | "medium" | "high";
+
+/** One real committed payment coming out of the bills workstream: an open
+ *  occurrence with its own date and amount (WS2.10, #290). The bills adapter
+ *  (`bills/forecast.ts`) produces these; the forecast projects them instead of
+ *  extrapolating the matching detected stream, and never both. */
+export type ForecastCommitment = {
+  /** The occurrence id (`billId|originalDueOn`), so a caller can trace it. */
+  id: string;
+  /** Entity the commitment belongs to; "" when the series has no resolvable
+   *  account entity, in which case it counts only in the consolidated scope. */
+  entity?: string;
+  label: string;
+  sign: 1 | -1;
+  /** Integer cents, positive magnitude (ADR 0011). */
+  amountCents: number;
+  /** ISO date of the occurrence — the real committed date, not an extrapolation. */
+  dueDate: string;
+  confidence: ForecastCommitmentConfidence;
+};
+
+/** A detected stream the bills workstream explains: its real occurrence dates
+ *  and amounts are projected through `commitments`, so the stream's own
+ *  extrapolated dates are suppressed or the same money lands twice. */
+export type ClaimedStream = { key: string; entity?: string };
+
+export type Driver = {
+  label: string;
+  sign: 1 | -1;
+  perWeekCents: number;
+  /** WS2.10: the committed dates behind a bills driver, ascending. Absent on a
+   *  detected-stream driver, whose dates are extrapolated, not committed. */
+  dates?: string[];
+  /** WS2.10: the committed confidence for a bills driver. Absent on a stream. */
+  commitmentConfidence?: ForecastCommitmentConfidence;
+  /** WS2.10: where the driver came from. Absent on older forecasts. */
+  source?: "stream" | "commitment";
+};
 
 /** Where the band's width comes from. "streams" = the measured spread of the
  *  recurring amounts themselves; "incidental" = the week-to-week spread of
@@ -361,6 +406,11 @@ export type ForecastBasis = {
   overdueFlowCount: number;
   /** Scheduled flows that ARE in the line (due inside the horizon). */
   projectedFlowCount: number;
+  /** WS2.10: bills occurrences projected in the line, and detected streams
+   *  suppressed because bills now carry their real dates. Optional on older
+   *  fixtures, which predate the bills integration. */
+  commitmentsProjected?: number;
+  claimedStreams?: number;
   confidence: ForecastConfidence;
 };
 
@@ -378,6 +428,10 @@ export type EntityForecast = {
    *  when `shortfall` is null; a real shortfall says it louder already.
    *  Optional so forecasts written by hand in tests/fixtures stay valid. */
   atRisk?: Shortfall | null;
+  /** The bills occurrences projected into this scope (WS2.10, #290), with
+   *  their real dates and commitment confidence. Optional so forecasts written
+   *  by hand in tests/fixtures stay valid. */
+  commitments?: ForecastCommitment[];
   /** Optional for the same reason. `forecastCashflow` always produces it. */
   basis?: ForecastBasis;
 };
@@ -391,6 +445,13 @@ export type ForecastOptions = {
    *  choice the caller must make explicitly, exactly like `consolidate()`. */
   fxHistory: Record<string, Record<string, number>>;
   mode: ConversionMode;
+  /** WS2.10 (#290): real committed payments from the bills workstream. When
+   *  present they are projected on their own dates and amounts; absent keeps
+   *  the pre-integration streams-only model exactly. */
+  commitments?: ForecastCommitment[];
+  /** Detected streams the bills occurrences explain. Their extrapolated dates
+   *  are suppressed so the same money is not projected twice. */
+  claimedStreams?: ClaimedStream[];
 };
 
 /** Per-week "recurring flow" contribution of a stream, used for the driver
@@ -412,6 +473,8 @@ function buildForecast(
   bufferCents: number,
   scheduledFlows: ScheduledFlow[] = [],
   conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
+  commitments: ForecastCommitment[] = [],
+  claimedStreams: ReadonlySet<string> = new Set<string>(),
 ): EntityForecast {
   const horizonEnd = addDays(asOf, horizonDays);
 
@@ -557,7 +620,10 @@ function buildForecast(
   // is a known amount on a known date and contributes none.
   const deltaByDate = new Map<string, number>();
   const varianceByDate = new Map<string, number>();
-  for (const s of liveStreams) {
+  // A stream a bills series explains is NOT projected from its extrapolated
+  // dates: the series' real occurrences carry that money (WS2.10).
+  const projectedStreams = liveStreams.filter((s) => !claimedStreams.has(s.key));
+  for (const s of projectedStreams) {
     const sd = amountStdByKey.get(s.key) ?? 0;
     for (const d of streamOccurrences(s, asOf, horizonEnd)) {
       deltaByDate.set(d, (deltaByDate.get(d) ?? 0) + s.sign * s.amountCents);
@@ -580,6 +646,21 @@ function buildForecast(
     if (f.dueDate > horizonEnd) continue;
     deltaByDate.set(f.dueDate, (deltaByDate.get(f.dueDate) ?? 0) + f.sign * f.amountCents);
     projectedFlowCount += 1;
+  }
+
+  // Real committed bills occurrences (WS2.10): a known amount on a known date,
+  // like a scheduled flow, so it adds no measured variance. Only occurrences
+  // inside (asOf, horizonEnd] count; a due-today occurrence is already in the
+  // opening position.
+  const projectedCommitments: ForecastCommitment[] = [];
+  for (const commitment of commitments) {
+    if (commitment.dueDate <= asOf || commitment.dueDate > horizonEnd) continue;
+    if (commitment.amountCents <= 0) continue;
+    deltaByDate.set(
+      commitment.dueDate,
+      (deltaByDate.get(commitment.dueDate) ?? 0) + commitment.sign * commitment.amountCents,
+    );
+    projectedCommitments.push(commitment);
   }
 
   // Day-by-day roll-forward, capturing a weekly closing point every 7th day.
@@ -631,8 +712,43 @@ function buildForecast(
     if (shortfall !== null) atRisk = null; // the louder statement wins
   }
 
-  const drivers: Driver[] = liveStreams
-    .map((s) => ({ label: s.counterparty, sign: s.sign, perWeekCents: perWeekCents(s) }))
+  // Detected-stream drivers, minus the streams bills now carry.
+  const streamDrivers: Driver[] = projectedStreams.map((s) => ({
+    label: s.counterparty,
+    sign: s.sign,
+    perWeekCents: perWeekCents(s),
+    source: "stream" as const,
+  }));
+  // Bills drivers: one per series, carrying the committed dates and the
+  // confidence the ledger earned. Rate is the series' committed money over the
+  // horizon, so the ranking is comparable with a stream's per-week rate.
+  const commitmentDrivers = new Map<string, Driver & { totalCents: number }>();
+  for (const commitment of projectedCommitments) {
+    const key = `${commitment.sign}|${commitment.label}`;
+    const current = commitmentDrivers.get(key);
+    const dates = current?.dates ? [...current.dates, commitment.dueDate] : [commitment.dueDate];
+    const confidence = moreConservativeConfidence(
+      current?.commitmentConfidence ?? "high",
+      commitment.confidence,
+    );
+    commitmentDrivers.set(key, {
+      label: commitment.label,
+      sign: commitment.sign,
+      perWeekCents: 0,
+      dates,
+      commitmentConfidence: confidence,
+      source: "commitment",
+      totalCents: (current?.totalCents ?? 0) + Math.abs(commitment.amountCents),
+    });
+  }
+  const commitmentDriverList: Driver[] = [...commitmentDrivers.values()]
+    .map(({ totalCents, ...driver }) => ({
+      ...driver,
+      dates: [...(driver.dates ?? [])].sort(),
+      perWeekCents: Math.round((totalCents * 7) / horizonDays),
+    }))
+    .sort((a, b) => Math.abs(b.perWeekCents) - Math.abs(a.perWeekCents));
+  const drivers: Driver[] = [...commitmentDriverList, ...streamDrivers]
     .sort((a, b) => Math.abs(b.perWeekCents) - Math.abs(a.perWeekCents))
     .slice(0, 8);
 
@@ -652,8 +768,14 @@ function buildForecast(
     overdueFlowsCents,
     overdueFlowCount,
     projectedFlowCount,
+    commitmentsProjected: projectedCommitments.length,
+    claimedStreams: claimedStreams.size,
     confidence: gradeConfidence({
-      hasEvidence: liveStreams.length > 0 || incidentalIncluded || projectedFlowCount > 0,
+      hasEvidence:
+        liveStreams.length > 0 ||
+        incidentalIncluded ||
+        projectedFlowCount > 0 ||
+        projectedCommitments.length > 0,
       historyDays,
       accountsTotal: scopeAccounts.length,
       accountsWithHistory: spanByAccount.size,
@@ -672,8 +794,19 @@ function buildForecast(
     atRisk,
     streams,
     drivers,
+    commitments: projectedCommitments,
     basis,
   };
+}
+
+/** The weaker of two commitment confidences: a driver is only as trustworthy
+ *  as its least-observed occurrence. */
+function moreConservativeConfidence(
+  a: ForecastCommitmentConfidence,
+  b: ForecastCommitmentConfidence,
+): ForecastCommitmentConfidence {
+  const rank: Record<ForecastCommitmentConfidence, number> = { low: 0, medium: 1, high: 2 };
+  return rank[a] <= rank[b] ? a : b;
 }
 
 /** The confidence ladder, as a rule anyone can check against the basis:
@@ -795,6 +928,15 @@ export function forecastCashflow(
     }
   }
 
+  const allCommitments = opts.commitments ?? [];
+  const allClaimed = opts.claimedStreams ?? [];
+  const claimedFor = (entity: string | null): Set<string> =>
+    new Set(
+      allClaimed
+        .filter((claimed) => entity === null || (claimed.entity ?? "") === entity)
+        .map((claimed) => claimed.key),
+    );
+
   const byEntity: Record<string, EntityForecast> = {};
   for (const e of entities) {
     byEntity[e] = buildForecast(
@@ -806,6 +948,8 @@ export function forecastCashflow(
       bufferCents,
       scheduledFlowsForScope(allFlows, e),
       conversion,
+      allCommitments.filter((commitment) => (commitment.entity ?? "") === e),
+      claimedFor(e),
     );
   }
 
@@ -818,6 +962,8 @@ export function forecastCashflow(
     bufferCents,
     allFlows,
     conversion,
+    allCommitments,
+    claimedFor(null),
   );
 
   return { byEntity, consolidated };

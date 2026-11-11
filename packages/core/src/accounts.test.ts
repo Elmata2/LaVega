@@ -128,6 +128,41 @@ test("mergeAccounts enriches an IBAN-less survivor with the duplicate's IBAN, ke
   expect(kept.balance).toBe(99);
 });
 
+test("mergeAccounts reports every re-keyed or absorbed duplicate tx in txIdRemap", () => {
+  const survivor = acc({
+    key: "NL12INGB0123456789",
+    iban: "NL12INGB0123456789",
+    bank: "ING",
+  });
+  const duplicate = acc({ key: "0123456789", iban: "", bank: "ING" });
+  const sTxs = assignTxIds([
+    tx({ accountKey: survivor.key, date: "2026-08-01", amount: -10, description: "Albert Heijn" }),
+  ]);
+  const dTxs = assignTxIds([
+    tx({ accountKey: duplicate.key, date: "2026-08-01", amount: -10, description: "Albert Heijn" }),
+    tx({ accountKey: duplicate.key, date: "2026-07-15", amount: -20, description: "Shell" }),
+  ]);
+  const merged = mergeAccounts(
+    [survivor, duplicate],
+    [...sTxs, ...dTxs],
+    survivor.key,
+    duplicate.key,
+  );
+
+  // The overlapping copy is absorbed: its old id maps to null.
+  expect(merged.txIdRemap.get(dTxs[0].id)).toBeNull();
+  // The distinct copy is re-keyed: old id -> the id it now has on the survivor.
+  const rekeyedId = merged.txIdRemap.get(dTxs[1].id);
+  expect(rekeyedId).toBeTruthy();
+  const rekeyed = merged.txs.find((t) => t.id === rekeyedId)!;
+  expect(rekeyed.accountKey).toBe(survivor.key);
+  expect(rekeyed.description).toBe("Shell");
+  // The survivor's own rows were not touched, so they are absent: absence means
+  // "keep the id", which is what a stored transfer pair needs to know.
+  expect(merged.txIdRemap.has(sTxs[0].id)).toBe(false);
+  expect(merged.txIdRemap.size).toBe(2); // only the duplicate's two rows
+});
+
 test("mergeAccounts is a no-op when keys are equal or an account is missing", () => {
   const a = acc({ key: "A" });
   expect(mergeAccounts([a], [], "A", "A").accounts).toHaveLength(1);

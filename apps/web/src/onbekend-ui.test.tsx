@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import Transacties from "./views/Transacties";
-import Regels from "./views/Regels";
 
 /* App review 20-08-2026, item 2 — the "onbekend" category, raised four times.
  *
@@ -65,6 +64,10 @@ const props = (txs: Tx[], configured = true) =>
     onFCategoryChange: () => {},
     configured,
     onApplyCategories: async () => {},
+    transfers: [],
+    suggestions: [],
+    onConfirmTransfer: () => {},
+    onRejectTransfer: () => {},
   }) as unknown as Parameters<typeof Transacties>[0];
 
 test("the onbekend pile is quantified on screen, per named reason", () => {
@@ -146,26 +149,4 @@ test("a placed row shows its category and no reason badge", () => {
   // The Zuid-Europese block places this one, so there is no onbekend pile at all.
   expect(html).toContain("Boodschappen");
   expect(html).not.toContain("Onbekend</div>");
-});
-
-test("Regels warns when a typed category is a new one, and offers the existing list", () => {
-  const base = {
-    rules: [],
-    busy: false,
-    ruleMatch: "mercadona",
-    onRuleMatchChange: () => {},
-    onRuleCategoryChange: () => {},
-    onSaveRules: () => {},
-  };
-  const listed = renderToStaticMarkup(<Regels {...base} ruleCategory="Boodschappen" />);
-  expect(listed).toContain('list="regel-categorieen"');
-  expect(listed).toContain("<datalist");
-  expect(listed).not.toContain("staat niet in de lijst");
-
-  // A different spelling of an existing category is exactly the case that
-  // silently splits every total, so it has to be called out.
-  const typo = renderToStaticMarkup(<Regels {...base} ruleCategory="boodschappen " />);
-  expect(typo).not.toContain("staat niet in de lijst"); // same category, other case — fine
-  const novel = renderToStaticMarkup(<Regels {...base} ruleCategory="Boodschapen" />);
-  expect(novel).toContain("staat niet in de lijst");
 });

@@ -1,3 +1,8 @@
+/*
+ * Ported from Sure (we-promise/sure) commit 562fe09 — AGPL-3.0 — independently
+ * reimplemented for LaVega; changed 2026-11-11.
+ */
+
 import type { Position } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
 
@@ -110,4 +115,196 @@ export function bucketPricedAllocation(
     buckets: [...buckets.values()].sort((left, right) => left.label.localeCompare(right.label)),
     unpriced: [...unpriced].sort(),
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * Allocation ladder (plan §3 WS4.6, #297)
+ *
+ * Sure sources (AGPL-3.0, pinned commit above):
+ *  - `app/models/investment_statement.rb:82-124` — weight is
+ *    `value / max(portfolio_value, holdings_total)`, a floor over stale cached
+ *    balances and negative cash. Weights are a share of the invested part and
+ *    sum below 100 when cash exists.
+ *  - `:126-170, 376-517` — `security.<column>.presence || "unclassified"` is a
+ *    real bucket, so a fully unclassified portfolio is told exactly that; and
+ *    account cash is placed where the grouping says cash belongs.
+ *
+ * Deliberately different: LaVega has no asset-class/sub-class/region hierarchy,
+ * so the ladder's classification is the existing instrument/entity grouping and
+ * the parent scope is entity → instrument. Cash is one labelled bucket per
+ * ladder, not one row per account: LaVega already shows account cash on the net
+ * worth chart.
+ * ------------------------------------------------------------------------- */
+
+/** The documented denominator rule. It travels with every ladder so a reader
+ *  never has to guess what the weights are a share of. */
+export const ALLOCATION_DENOMINATOR_RULE =
+  "Weights use max(cash + holdings, holdings) as the denominator. Cash counts as part of the portfolio, and a negative or stale cash balance cannot shrink the invested part below the holdings themselves, so the weights sum to at most 100%.";
+
+export type AllocationLadderRowKind = "holding" | "cash" | "unclassified";
+
+export type AllocationLadderRow = {
+  key: string;
+  label: string;
+  kind: AllocationLadderRowKind;
+  /** Presentation-currency value, or null when nothing priced it. */
+  value: number | null;
+  /** `value / denominator`, or null when the value or the denominator is unknown. */
+  weight: number | null;
+  unpriced: boolean;
+};
+
+export type AllocationLadder = {
+  rows: AllocationLadderRow[];
+  cash: number | null;
+  holdings: number | null;
+  total: number | null;
+  denominator: number | null;
+  denominatorRule: string;
+  /** Sum of the known weights; never above 1. */
+  weightsSum: number | null;
+  unpriced: string[];
+};
+
+export type LadderHolding = {
+  key: string;
+  label: string;
+  value: number | null;
+  /** The parent bucket this holding belongs to, for the entity → instrument
+   *  drill-down. */
+  parentKey?: string;
+};
+
+export type LadderCash = { key?: string; label?: string; value: number | null };
+
+const UNCLASSIFIED_KEYS = new Set(["", "unclassified", "unknown", "n/a"]);
+
+function isUnclassifiedKey(key: string): boolean {
+  return UNCLASSIFIED_KEYS.has(key.trim().toLowerCase());
+}
+
+function sumKnown(values: readonly (number | null)[]): number | null {
+  let total = 0;
+  let known = false;
+  for (const value of values) {
+    if (value === null) continue;
+    total += value;
+    known = true;
+  }
+  return known ? total : null;
+}
+
+/** Build the ladder from already-converted presentation-currency values.
+ *
+ *  Cash is a bucket of its own and counts in the denominator; holdings whose
+ *  grouping key is blank, "unknown" or "unclassified" fold into one labelled
+ *  `unclassified` row; a null value is unpriced and carries no weight. */
+export function buildAllocationLadder(input: {
+  holdings: readonly LadderHolding[];
+  cash?: readonly LadderCash[];
+  unclassifiedLabel?: string;
+  cashLabel?: string;
+}): AllocationLadder {
+  const holdingBuckets = new Map<
+    string,
+    { key: string; label: string; value: number | null; unpriced: boolean; parentKey?: string }
+  >();
+  const unpriced = new Set<string>();
+  for (const holding of input.holdings) {
+    const key = isUnclassifiedKey(holding.key) ? "unclassified" : holding.key;
+    const label = isUnclassifiedKey(holding.key)
+      ? (input.unclassifiedLabel ?? "Unclassified")
+      : holding.label || holding.key;
+    const existing = holdingBuckets.get(key);
+    if (existing) {
+      if (holding.value === null) {
+        existing.unpriced = true;
+        unpriced.add(holding.label || holding.key);
+      } else existing.value = (existing.value ?? 0) + holding.value;
+      continue;
+    }
+    if (holding.value === null) unpriced.add(holding.label || holding.key);
+    holdingBuckets.set(key, {
+      key,
+      label,
+      value: holding.value,
+      unpriced: holding.value === null,
+      ...(holding.parentKey ? { parentKey: holding.parentKey } : {}),
+    });
+  }
+
+  const cashRows = input.cash ?? [];
+  const cashKnown = cashRows.every((row) => row.value !== null);
+  const cash =
+    cashRows.length === 0 ? 0 : cashKnown ? sumKnown(cashRows.map((row) => row.value)) : null;
+  if (!cashKnown) for (const row of cashRows) unpriced.add(row.label ?? "Cash");
+  const holdings = sumKnown([...holdingBuckets.values()].map((bucket) => bucket.value));
+  const total = cash === null || holdings === null ? null : cash + holdings;
+  const denominator = holdings === null ? null : Math.max((cash ?? 0) + holdings, holdings);
+
+  const rows: AllocationLadderRow[] = [...holdingBuckets.values()]
+    .filter((bucket) => bucket.key !== "unclassified")
+    .sort(
+      (left, right) =>
+        (right.value ?? -1) - (left.value ?? -1) || left.label.localeCompare(right.label),
+    )
+    .map((bucket) => ({
+      key: bucket.key,
+      label: bucket.label,
+      kind: "holding",
+      value: bucket.value,
+      weight:
+        bucket.value !== null && denominator !== null && denominator > 0
+          ? bucket.value / denominator
+          : null,
+      unpriced: bucket.unpriced,
+    }));
+
+  const unclassifiedBucket = holdingBuckets.get("unclassified");
+  if (unclassifiedBucket)
+    rows.push({
+      key: "unclassified",
+      label: unclassifiedBucket.label,
+      kind: "unclassified",
+      value: unclassifiedBucket.value,
+      weight:
+        unclassifiedBucket.value !== null && denominator !== null && denominator > 0
+          ? unclassifiedBucket.value / denominator
+          : null,
+      unpriced: unclassifiedBucket.unpriced,
+    });
+
+  if (cashRows.length > 0)
+    rows.push({
+      key: "cash",
+      label: input.cashLabel ?? "Cash",
+      kind: "cash",
+      value: cash,
+      weight: cash !== null && denominator !== null && denominator > 0 ? cash / denominator : null,
+      unpriced: cash === null,
+    });
+
+  const weights = rows
+    .map((row) => row.weight)
+    .filter((weight): weight is number => weight !== null);
+  return {
+    rows,
+    cash,
+    holdings,
+    total,
+    denominator,
+    denominatorRule: ALLOCATION_DENOMINATOR_RULE,
+    weightsSum: weights.length === 0 ? null : weights.reduce((sum, weight) => sum + weight, 0),
+    unpriced: [...unpriced].sort(),
+  };
+}
+
+/** The instrument rows inside one parent entity, for the ladder's drill-down.
+ *  Scoping by parent is what keeps a repeated bucket name ("unclassified",
+ *  "cash") from merging two entities' rows. */
+export function ladderDrillDown(
+  holdings: readonly LadderHolding[],
+  parentKey: string,
+): LadderHolding[] {
+  return holdings.filter((holding) => holding.parentKey === parentKey);
 }

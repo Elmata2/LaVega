@@ -1,0 +1,99 @@
+{
+  "_comment": "Carry-chain fixture for packages/core/src/budget.ts (WS2.9). Three consecutive EUR months carry a surplus; a negative period stops at zero; a currency change breaks the chain; the grouped children roll up once into the group total. Numbers in integer cents.",
+  "groups": [{ "name": "Huishouden", "categories": ["Boodschappen", "Horeca"] }],
+  "periods": [
+    {
+      "month": "2026-01",
+      "currency": "EUR",
+      "budgetedSpendingCents": 100000,
+      "rollover": true,
+      "billsReservedCents": null,
+      "lines": [
+        { "category": "Boodschappen", "allocationCents": 40000, "rollover": true },
+        { "category": "Horeca", "allocationCents": 10000, "rollover": true },
+        { "category": "Vervoer", "allocationCents": 20000, "rollover": false },
+        { "category": "Overig", "allocationCents": 10000 }
+      ]
+    },
+    {
+      "month": "2026-02",
+      "currency": "EUR",
+      "budgetedSpendingCents": 100000,
+      "rollover": true,
+      "billsReservedCents": null,
+      "lines": [
+        { "category": "Boodschappen", "allocationCents": 40000, "rollover": true },
+        { "category": "Horeca", "allocationCents": 10000, "rollover": true },
+        { "category": "Vervoer", "allocationCents": 20000, "rollover": false },
+        { "category": "Overig", "allocationCents": 10000 }
+      ]
+    },
+    {
+      "month": "2026-03",
+      "currency": "EUR",
+      "budgetedSpendingCents": 30000,
+      "rollover": true,
+      "billsReservedCents": null,
+      "lines": [{ "category": "Boodschappen", "allocationCents": 15000, "rollover": true }]
+    },
+    {
+      "month": "2026-04",
+      "currency": "USD",
+      "budgetedSpendingCents": 30000,
+      "rollover": true,
+      "billsReservedCents": null,
+      "lines": [{ "category": "Boodschappen", "allocationCents": 15000, "rollover": true }]
+    },
+    {
+      "month": "2026-05",
+      "currency": "EUR",
+      "budgetedSpendingCents": 30000,
+      "rollover": true,
+      "billsReservedCents": null,
+      "lines": [{ "category": "Boodschappen", "allocationCents": 15000, "rollover": true }]
+    }
+  ],
+  "actuals": {
+    "2026-01": { "Boodschappen": 30000, "Horeca": 10000, "Vervoer": 25000, "Overig": 5000 },
+    "2026-02": { "Boodschappen": 50000, "Horeca": 12000, "Vervoer": 20000, "Overig": 15000 },
+    "2026-03": { "Boodschappen": 10000 },
+    "2026-04": { "Boodschappen": 20000 },
+    "2026-05": { "Boodschappen": 1000 }
+  },
+  "expected": {
+    "2026-01": {
+      "allocatedCents": 80000,
+      "availableToAllocateCents": 20000,
+      "actualCents": 70000,
+      "carryInCents": 0,
+      "remainingCents": 30000,
+      "carryOutCents": 30000,
+      "groupAllocatedCents": 50000,
+      "groupCarryOutCents": 10000
+    },
+    "2026-02": {
+      "allocatedCents": 80000,
+      "availableToAllocateCents": 20000,
+      "actualCents": 97000,
+      "carryInCents": 30000,
+      "remainingCents": 33000,
+      "carryOutCents": 33000,
+      "groupAllocatedCents": 50000,
+      "groupCarryOutCents": 0
+    },
+    "2026-03": {
+      "actualCents": 10000,
+      "carryInCents": 33000,
+      "remainingCents": 53000,
+      "carryOutCents": 53000
+    },
+    "2026-04": {
+      "carryInCents": 0,
+      "carryOutCents": 10000
+    },
+    "2026-05": {
+      "carryInCents": 0,
+      "carryOutCents": 29000
+    }
+  }
+}

@@ -286,3 +286,17 @@ test("without a database memory answers 503 and the chat still works", async () 
   expect((await app.request("http://localhost/api/memory")).status).toBe(503);
   expect((await turn(app, "hi", { id: null })).body).toContain("Hello.");
 });
+
+test("a turn that produces no text is persisted as failed, not as a completed answer", async () => {
+  const app = await runtime(scriptedModel([{ text: "" }]));
+  await turn(app, "What about ASML?");
+
+  const { thread } = (await json(app, `/api/memory/threads/${THREAD}`)) as {
+    thread: { messages: Array<{ role: string; metadata?: { failed?: boolean } }> };
+  };
+  expect(thread.messages[0]).toMatchObject({ role: "user" });
+  expect(thread.messages[1]).toMatchObject({
+    role: "assistant",
+    metadata: { failed: true },
+  });
+});

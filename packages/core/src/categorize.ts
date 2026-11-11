@@ -1,5 +1,6 @@
 import type { Tx, Rule } from "./model.js";
 import { categorize, type OwnAccounts } from "./views.js";
+import { ruleCategoryValue, ruleTextValue } from "./rules/parse.js";
 import { hash, norm } from "./hash.js";
 import {
   CREDIT_CARD_PAYMENT_CATEGORY,
@@ -385,7 +386,12 @@ export function applyCategorizations(
   );
 
   // One rule per (counterparty, category), deduped against existing rules + within the batch.
-  const seen = new Set(rules.map((r) => `${norm(r.match)}|${r.category}`));
+  // Both shapes are read through the helpers: a v2 rule has no `.match` and no
+  // `.category`, so reading those fields would silently stop deduping the day a
+  // vault holds a v2 rule.
+  const seen = new Set(
+    rules.map((r) => `${norm(ruleTextValue(r) ?? "")}|${ruleCategoryValue(r) ?? ""}`),
+  );
   const nextRules = [...rules];
   for (const t of txs) {
     const cat = byId.get(t.id);
@@ -395,7 +401,15 @@ export function applyCategorizations(
     const key = `${norm(match)}|${cat}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    nextRules.push({ id: hash([norm(match), cat].join("|")), match, category: cat });
+    // Canonical RuleV2: text contains + setCategory, and deliberately NO
+    // `stopProcessing` — a generated rule must not silence the rules the owner
+    // wrote after it.
+    nextRules.push({
+      v: 2,
+      id: hash([norm(match), cat].join("|")),
+      conditions: [{ kind: "text", target: "text", op: "contains", value: match }],
+      actions: [{ kind: "setCategory", category: cat }],
+    });
   }
   return { txs: nextTxs, rules: nextRules };
 }

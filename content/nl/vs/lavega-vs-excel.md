@@ -3,7 +3,7 @@ id: vs-excel
 family: vs
 title: "LaVega vs Excel"
 description: "Een eerlijke vergelijking tussen een eigen spreadsheet en LaVega voor je geldzaken: flexibiliteit en kosten tegenover import, forecast en categorisering."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -64,5 +64,3 @@ Bij een spreadsheet staat alles op je eigen computer of in je eigen cloud. LaVeg
 Dat is jouw keuze en hangt van je situatie af. Een spreadsheet past wie graag zelf bouwt en weinig rekeningen heeft. Een tool die importeert en categoriseert past wie het bijhouden zelf liever niet doet. Je kunt ze ook combineren: bijvoorbeeld een eigen sheet voor een bijzonder onderdeel, naast een overzicht van de rest.
 
 Meer lezen? Zie [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo), [Abonnementen opschonen in vier stappen](/gids/abonnementen-opschonen) en [LaVega vs de budgetfuncties van bunq](/vs/lavega-vs-budget-apps).
-
-Dit is informatie, geen advies.

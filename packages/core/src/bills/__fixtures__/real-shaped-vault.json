@@ -1,0 +1,2502 @@
+{
+  "asOf": "2026-11-11",
+  "accounts": [
+    {
+      "key": "betaal",
+      "name": "Betaalrekening",
+      "kind": "current",
+      "currency": "EUR"
+    },
+    {
+      "key": "spaar",
+      "name": "Spaarrekening",
+      "kind": "savings",
+      "currency": "EUR"
+    }
+  ],
+  "bills": [
+    {
+      "id": "huur",
+      "name": "Huur",
+      "type": "bill",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 125000,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 1
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "before",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Woonstad Verhuur",
+      "category": "Wonen"
+    },
+    {
+      "id": "energie",
+      "name": "Energie",
+      "type": "bill",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 11840,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 3
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Vattenfall",
+      "category": "Wonen"
+    },
+    {
+      "id": "zorg",
+      "name": "Zorgverzekering",
+      "type": "bill",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 14250,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 5
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Delta Zorgverzekering",
+      "category": "Verzekeringen"
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "type": "subscription",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 1399,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 7
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Netflix",
+      "category": "Abonnementen"
+    },
+    {
+      "id": "spotify",
+      "name": "Spotify",
+      "type": "subscription",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 1099,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 9
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Spotify",
+      "category": "Abonnementen"
+    },
+    {
+      "id": "sportschool",
+      "name": "Sportschool",
+      "type": "subscription",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 2995,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 11
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Basic-Fit",
+      "category": "Sport"
+    },
+    {
+      "id": "studie",
+      "name": "Studieschuld",
+      "type": "installment",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 14500,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 25
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "DUO",
+      "category": "Studieschuld"
+    },
+    {
+      "id": "inboedel",
+      "name": "Inboedelverzekering",
+      "type": "bill",
+      "status": "active",
+      "direction": "out",
+      "amountCents": 48000,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "yearly",
+          "interval": 1,
+          "monthOfYear": 3,
+          "dayOfMonth": 20
+        }
+      ],
+      "anchorDate": "2025-03-20",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Allianz Direct",
+      "category": "Verzekeringen"
+    },
+    {
+      "id": "salaris",
+      "name": "Salaris",
+      "type": "income",
+      "status": "active",
+      "direction": "in",
+      "amountCents": 380000,
+      "amountStrategy": "fixed",
+      "currency": "EUR",
+      "rules": [
+        {
+          "frequency": "monthly",
+          "interval": 1,
+          "dayOfMonth": 25
+        }
+      ],
+      "anchorDate": "2025-01-01",
+      "weekendAdjust": "none",
+      "endMode": "never",
+      "tags": [],
+      "accountKey": "betaal",
+      "merchant": "Brightwave Studio",
+      "category": "Inkomen"
+    }
+  ],
+  "txs": [
+    {
+      "id": "tx-001",
+      "accountKey": "betaal",
+      "date": "2025-11-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2025-11-01"
+      }
+    },
+    {
+      "id": "tx-100",
+      "accountKey": "betaal",
+      "date": "2025-11-02",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-013",
+      "accountKey": "betaal",
+      "date": "2025-11-03",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2025-11-03"
+      }
+    },
+    {
+      "id": "tx-025",
+      "accountKey": "betaal",
+      "date": "2025-11-05",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2025-11-05"
+      }
+    },
+    {
+      "id": "tx-037",
+      "accountKey": "betaal",
+      "date": "2025-11-07",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2025-11-07"
+      }
+    },
+    {
+      "id": "tx-049",
+      "accountKey": "betaal",
+      "date": "2025-11-09",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2025-11-09"
+      }
+    },
+    {
+      "id": "tx-101",
+      "accountKey": "betaal",
+      "date": "2025-11-09",
+      "amount": -41.75,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-061",
+      "accountKey": "betaal",
+      "date": "2025-11-11",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2025-11-11"
+      }
+    },
+    {
+      "id": "tx-103",
+      "accountKey": "betaal",
+      "date": "2025-11-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-104",
+      "accountKey": "spaar",
+      "date": "2025-11-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-102",
+      "accountKey": "betaal",
+      "date": "2025-11-16",
+      "amount": -33.4,
+      "currency": "EUR",
+      "counterparty": "Lidl",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-078",
+      "accountKey": "betaal",
+      "date": "2025-11-25",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2025-11-25"
+      }
+    },
+    {
+      "id": "tx-088",
+      "accountKey": "betaal",
+      "date": "2025-11-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-002",
+      "accountKey": "betaal",
+      "date": "2025-12-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2025-12-01"
+      }
+    },
+    {
+      "id": "tx-105",
+      "accountKey": "betaal",
+      "date": "2025-12-03",
+      "amount": -22.45,
+      "currency": "EUR",
+      "counterparty": "HEMA",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-014",
+      "accountKey": "betaal",
+      "date": "2025-12-04",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2025-12-03"
+      }
+    },
+    {
+      "id": "tx-026",
+      "accountKey": "betaal",
+      "date": "2025-12-06",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2025-12-05"
+      }
+    },
+    {
+      "id": "tx-038",
+      "accountKey": "betaal",
+      "date": "2025-12-08",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2025-12-07"
+      }
+    },
+    {
+      "id": "tx-050",
+      "accountKey": "betaal",
+      "date": "2025-12-10",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2025-12-09"
+      }
+    },
+    {
+      "id": "tx-106",
+      "accountKey": "betaal",
+      "date": "2025-12-10",
+      "amount": -28.6,
+      "currency": "EUR",
+      "counterparty": "Thuisbezorgd",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-062",
+      "accountKey": "betaal",
+      "date": "2025-12-12",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2025-12-11"
+      }
+    },
+    {
+      "id": "tx-108",
+      "accountKey": "betaal",
+      "date": "2025-12-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-109",
+      "accountKey": "spaar",
+      "date": "2025-12-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-107",
+      "accountKey": "betaal",
+      "date": "2025-12-17",
+      "amount": -19.8,
+      "currency": "EUR",
+      "counterparty": "NS Reizigers",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-089",
+      "accountKey": "betaal",
+      "date": "2025-12-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-079",
+      "accountKey": "betaal",
+      "date": "2025-12-26",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2025-12-25"
+      }
+    },
+    {
+      "id": "tx-003",
+      "accountKey": "betaal",
+      "date": "2026-01-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-01-01"
+      }
+    },
+    {
+      "id": "tx-015",
+      "accountKey": "betaal",
+      "date": "2026-01-02",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-01-03"
+      }
+    },
+    {
+      "id": "tx-027",
+      "accountKey": "betaal",
+      "date": "2026-01-04",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-01-05"
+      }
+    },
+    {
+      "id": "tx-110",
+      "accountKey": "betaal",
+      "date": "2026-01-04",
+      "amount": -36.99,
+      "currency": "EUR",
+      "counterparty": "Bol.com",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-039",
+      "accountKey": "betaal",
+      "date": "2026-01-06",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-01-07"
+      }
+    },
+    {
+      "id": "tx-051",
+      "accountKey": "betaal",
+      "date": "2026-01-08",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-01-09"
+      }
+    },
+    {
+      "id": "tx-063",
+      "accountKey": "betaal",
+      "date": "2026-01-10",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-01-11"
+      }
+    },
+    {
+      "id": "tx-111",
+      "accountKey": "betaal",
+      "date": "2026-01-11",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-113",
+      "accountKey": "betaal",
+      "date": "2026-01-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-114",
+      "accountKey": "spaar",
+      "date": "2026-01-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-112",
+      "accountKey": "betaal",
+      "date": "2026-01-18",
+      "amount": -41.75,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-074",
+      "accountKey": "betaal",
+      "date": "2026-01-25",
+      "amount": -100,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-01-25"
+      }
+    },
+    {
+      "id": "tx-090",
+      "accountKey": "betaal",
+      "date": "2026-01-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-075",
+      "accountKey": "betaal",
+      "date": "2026-01-27",
+      "amount": -45,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-01-25"
+      }
+    },
+    {
+      "id": "tx-004",
+      "accountKey": "betaal",
+      "date": "2026-02-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-02-01"
+      }
+    },
+    {
+      "id": "tx-115",
+      "accountKey": "betaal",
+      "date": "2026-02-02",
+      "amount": -33.4,
+      "currency": "EUR",
+      "counterparty": "Lidl",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-016",
+      "accountKey": "betaal",
+      "date": "2026-02-03",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-02-03"
+      }
+    },
+    {
+      "id": "tx-028",
+      "accountKey": "betaal",
+      "date": "2026-02-05",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-02-05"
+      }
+    },
+    {
+      "id": "tx-040",
+      "accountKey": "betaal",
+      "date": "2026-02-07",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-02-07"
+      }
+    },
+    {
+      "id": "tx-052",
+      "accountKey": "betaal",
+      "date": "2026-02-09",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-02-09"
+      }
+    },
+    {
+      "id": "tx-116",
+      "accountKey": "betaal",
+      "date": "2026-02-09",
+      "amount": -22.45,
+      "currency": "EUR",
+      "counterparty": "HEMA",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-064",
+      "accountKey": "betaal",
+      "date": "2026-02-11",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-02-11"
+      }
+    },
+    {
+      "id": "tx-118",
+      "accountKey": "betaal",
+      "date": "2026-02-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-119",
+      "accountKey": "spaar",
+      "date": "2026-02-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-117",
+      "accountKey": "betaal",
+      "date": "2026-02-16",
+      "amount": -28.6,
+      "currency": "EUR",
+      "counterparty": "Thuisbezorgd",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-091",
+      "accountKey": "betaal",
+      "date": "2026-02-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-080",
+      "accountKey": "betaal",
+      "date": "2026-02-26",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-02-25"
+      }
+    },
+    {
+      "id": "tx-005",
+      "accountKey": "betaal",
+      "date": "2026-03-01",
+      "amount": -1300,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-03-01"
+      }
+    },
+    {
+      "id": "tx-120",
+      "accountKey": "betaal",
+      "date": "2026-03-03",
+      "amount": -19.8,
+      "currency": "EUR",
+      "counterparty": "NS Reizigers",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-017",
+      "accountKey": "betaal",
+      "date": "2026-03-04",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-03-03"
+      }
+    },
+    {
+      "id": "tx-029",
+      "accountKey": "betaal",
+      "date": "2026-03-06",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-03-05"
+      }
+    },
+    {
+      "id": "tx-041",
+      "accountKey": "betaal",
+      "date": "2026-03-08",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-03-07"
+      }
+    },
+    {
+      "id": "tx-053",
+      "accountKey": "betaal",
+      "date": "2026-03-10",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-03-09"
+      }
+    },
+    {
+      "id": "tx-121",
+      "accountKey": "betaal",
+      "date": "2026-03-10",
+      "amount": -36.99,
+      "currency": "EUR",
+      "counterparty": "Bol.com",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-065",
+      "accountKey": "betaal",
+      "date": "2026-03-12",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-03-11"
+      }
+    },
+    {
+      "id": "tx-123",
+      "accountKey": "betaal",
+      "date": "2026-03-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-124",
+      "accountKey": "spaar",
+      "date": "2026-03-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-122",
+      "accountKey": "betaal",
+      "date": "2026-03-17",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-073",
+      "accountKey": "betaal",
+      "date": "2026-03-20",
+      "amount": -480,
+      "currency": "EUR",
+      "counterparty": "Allianz Direct",
+      "description": "Inboedelverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "inboedel",
+        "originalDueOn": "2026-03-20"
+      }
+    },
+    {
+      "id": "tx-081",
+      "accountKey": "betaal",
+      "date": "2026-03-25",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-03-25"
+      }
+    },
+    {
+      "id": "tx-092",
+      "accountKey": "betaal",
+      "date": "2026-03-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-006",
+      "accountKey": "betaal",
+      "date": "2026-04-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-04-01"
+      }
+    },
+    {
+      "id": "tx-018",
+      "accountKey": "betaal",
+      "date": "2026-04-02",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-04-03"
+      }
+    },
+    {
+      "id": "tx-030",
+      "accountKey": "betaal",
+      "date": "2026-04-04",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-04-05"
+      }
+    },
+    {
+      "id": "tx-125",
+      "accountKey": "betaal",
+      "date": "2026-04-04",
+      "amount": -41.75,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-042",
+      "accountKey": "betaal",
+      "date": "2026-04-06",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-04-07"
+      }
+    },
+    {
+      "id": "tx-054",
+      "accountKey": "betaal",
+      "date": "2026-04-08",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-04-09"
+      }
+    },
+    {
+      "id": "tx-066",
+      "accountKey": "betaal",
+      "date": "2026-04-10",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-04-11"
+      }
+    },
+    {
+      "id": "tx-126",
+      "accountKey": "betaal",
+      "date": "2026-04-11",
+      "amount": -33.4,
+      "currency": "EUR",
+      "counterparty": "Lidl",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-128",
+      "accountKey": "betaal",
+      "date": "2026-04-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-129",
+      "accountKey": "spaar",
+      "date": "2026-04-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-127",
+      "accountKey": "betaal",
+      "date": "2026-04-18",
+      "amount": -22.45,
+      "currency": "EUR",
+      "counterparty": "HEMA",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-093",
+      "accountKey": "betaal",
+      "date": "2026-04-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-082",
+      "accountKey": "betaal",
+      "date": "2026-04-26",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-04-25"
+      }
+    },
+    {
+      "id": "tx-007",
+      "accountKey": "betaal",
+      "date": "2026-05-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-05-01"
+      }
+    },
+    {
+      "id": "tx-130",
+      "accountKey": "betaal",
+      "date": "2026-05-02",
+      "amount": -28.6,
+      "currency": "EUR",
+      "counterparty": "Thuisbezorgd",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-019",
+      "accountKey": "betaal",
+      "date": "2026-05-03",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-05-03"
+      }
+    },
+    {
+      "id": "tx-031",
+      "accountKey": "betaal",
+      "date": "2026-05-05",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-05-05"
+      }
+    },
+    {
+      "id": "tx-043",
+      "accountKey": "betaal",
+      "date": "2026-05-07",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-05-07"
+      }
+    },
+    {
+      "id": "tx-055",
+      "accountKey": "betaal",
+      "date": "2026-05-09",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-05-09"
+      }
+    },
+    {
+      "id": "tx-131",
+      "accountKey": "betaal",
+      "date": "2026-05-09",
+      "amount": -19.8,
+      "currency": "EUR",
+      "counterparty": "NS Reizigers",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-067",
+      "accountKey": "betaal",
+      "date": "2026-05-11",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-05-11"
+      }
+    },
+    {
+      "id": "tx-133",
+      "accountKey": "betaal",
+      "date": "2026-05-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-134",
+      "accountKey": "spaar",
+      "date": "2026-05-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-132",
+      "accountKey": "betaal",
+      "date": "2026-05-16",
+      "amount": -36.99,
+      "currency": "EUR",
+      "counterparty": "Bol.com",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-083",
+      "accountKey": "betaal",
+      "date": "2026-05-25",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-05-25"
+      }
+    },
+    {
+      "id": "tx-094",
+      "accountKey": "betaal",
+      "date": "2026-05-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-008",
+      "accountKey": "betaal",
+      "date": "2026-06-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-06-01"
+      }
+    },
+    {
+      "id": "tx-135",
+      "accountKey": "betaal",
+      "date": "2026-06-03",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-020",
+      "accountKey": "betaal",
+      "date": "2026-06-04",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-06-03"
+      }
+    },
+    {
+      "id": "tx-032",
+      "accountKey": "betaal",
+      "date": "2026-06-06",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-06-05"
+      }
+    },
+    {
+      "id": "tx-044",
+      "accountKey": "betaal",
+      "date": "2026-06-08",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-06-07"
+      }
+    },
+    {
+      "id": "tx-160",
+      "accountKey": "betaal",
+      "date": "2026-06-09",
+      "amount": -11.49,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-056",
+      "accountKey": "betaal",
+      "date": "2026-06-10",
+      "amount": -10.99,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-06-09"
+      }
+    },
+    {
+      "id": "tx-136",
+      "accountKey": "betaal",
+      "date": "2026-06-10",
+      "amount": -41.75,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-068",
+      "accountKey": "betaal",
+      "date": "2026-06-12",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-06-11"
+      }
+    },
+    {
+      "id": "tx-138",
+      "accountKey": "betaal",
+      "date": "2026-06-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-139",
+      "accountKey": "spaar",
+      "date": "2026-06-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-137",
+      "accountKey": "betaal",
+      "date": "2026-06-17",
+      "amount": -33.4,
+      "currency": "EUR",
+      "counterparty": "Lidl",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-076",
+      "accountKey": "betaal",
+      "date": "2026-06-25",
+      "amount": -80,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-06-25"
+      }
+    },
+    {
+      "id": "tx-095",
+      "accountKey": "betaal",
+      "date": "2026-06-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-077",
+      "accountKey": "betaal",
+      "date": "2026-06-27",
+      "amount": -65,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-06-25"
+      }
+    },
+    {
+      "id": "tx-009",
+      "accountKey": "betaal",
+      "date": "2026-07-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-07-01"
+      }
+    },
+    {
+      "id": "tx-021",
+      "accountKey": "betaal",
+      "date": "2026-07-02",
+      "amount": -118.4,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-07-03"
+      }
+    },
+    {
+      "id": "tx-033",
+      "accountKey": "betaal",
+      "date": "2026-07-04",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-07-05"
+      }
+    },
+    {
+      "id": "tx-140",
+      "accountKey": "betaal",
+      "date": "2026-07-04",
+      "amount": -22.45,
+      "currency": "EUR",
+      "counterparty": "HEMA",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-045",
+      "accountKey": "betaal",
+      "date": "2026-07-06",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": true
+    },
+    {
+      "id": "tx-057",
+      "accountKey": "betaal",
+      "date": "2026-07-08",
+      "amount": -11.49,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-07-09"
+      }
+    },
+    {
+      "id": "tx-069",
+      "accountKey": "betaal",
+      "date": "2026-07-10",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-07-11"
+      }
+    },
+    {
+      "id": "tx-141",
+      "accountKey": "betaal",
+      "date": "2026-07-11",
+      "amount": -28.6,
+      "currency": "EUR",
+      "counterparty": "Thuisbezorgd",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-143",
+      "accountKey": "betaal",
+      "date": "2026-07-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-144",
+      "accountKey": "spaar",
+      "date": "2026-07-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-142",
+      "accountKey": "betaal",
+      "date": "2026-07-18",
+      "amount": -19.8,
+      "currency": "EUR",
+      "counterparty": "NS Reizigers",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-084",
+      "accountKey": "betaal",
+      "date": "2026-07-25",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-07-25"
+      }
+    },
+    {
+      "id": "tx-096",
+      "accountKey": "betaal",
+      "date": "2026-07-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-010",
+      "accountKey": "betaal",
+      "date": "2026-08-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-08-01"
+      }
+    },
+    {
+      "id": "tx-145",
+      "accountKey": "betaal",
+      "date": "2026-08-02",
+      "amount": -36.99,
+      "currency": "EUR",
+      "counterparty": "Bol.com",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-022",
+      "accountKey": "betaal",
+      "date": "2026-08-03",
+      "amount": -126.75,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-08-03"
+      }
+    },
+    {
+      "id": "tx-034",
+      "accountKey": "betaal",
+      "date": "2026-08-05",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-08-05"
+      }
+    },
+    {
+      "id": "tx-046",
+      "accountKey": "betaal",
+      "date": "2026-08-07",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-08-07"
+      }
+    },
+    {
+      "id": "tx-058",
+      "accountKey": "betaal",
+      "date": "2026-08-09",
+      "amount": -11.49,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-08-09"
+      }
+    },
+    {
+      "id": "tx-146",
+      "accountKey": "betaal",
+      "date": "2026-08-09",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-070",
+      "accountKey": "betaal",
+      "date": "2026-08-11",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-08-11"
+      }
+    },
+    {
+      "id": "tx-148",
+      "accountKey": "betaal",
+      "date": "2026-08-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-149",
+      "accountKey": "spaar",
+      "date": "2026-08-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-147",
+      "accountKey": "betaal",
+      "date": "2026-08-16",
+      "amount": -41.75,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-097",
+      "accountKey": "betaal",
+      "date": "2026-08-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-085",
+      "accountKey": "betaal",
+      "date": "2026-08-26",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-08-25"
+      }
+    },
+    {
+      "id": "tx-011",
+      "accountKey": "betaal",
+      "date": "2026-09-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-09-01"
+      }
+    },
+    {
+      "id": "tx-150",
+      "accountKey": "betaal",
+      "date": "2026-09-03",
+      "amount": -33.4,
+      "currency": "EUR",
+      "counterparty": "Lidl",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-023",
+      "accountKey": "betaal",
+      "date": "2026-09-04",
+      "amount": -126.75,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-09-03"
+      }
+    },
+    {
+      "id": "tx-035",
+      "accountKey": "betaal",
+      "date": "2026-09-06",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-09-05"
+      }
+    },
+    {
+      "id": "tx-047",
+      "accountKey": "betaal",
+      "date": "2026-09-08",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-09-07"
+      }
+    },
+    {
+      "id": "tx-059",
+      "accountKey": "betaal",
+      "date": "2026-09-10",
+      "amount": -11.49,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-09-09"
+      }
+    },
+    {
+      "id": "tx-151",
+      "accountKey": "betaal",
+      "date": "2026-09-10",
+      "amount": -22.45,
+      "currency": "EUR",
+      "counterparty": "HEMA",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-071",
+      "accountKey": "betaal",
+      "date": "2026-09-12",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-09-11"
+      }
+    },
+    {
+      "id": "tx-153",
+      "accountKey": "betaal",
+      "date": "2026-09-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-154",
+      "accountKey": "spaar",
+      "date": "2026-09-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-152",
+      "accountKey": "betaal",
+      "date": "2026-09-17",
+      "amount": -28.6,
+      "currency": "EUR",
+      "counterparty": "Thuisbezorgd",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-086",
+      "accountKey": "betaal",
+      "date": "2026-09-25",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-09-25"
+      }
+    },
+    {
+      "id": "tx-098",
+      "accountKey": "betaal",
+      "date": "2026-09-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-012",
+      "accountKey": "betaal",
+      "date": "2026-10-01",
+      "amount": -1250,
+      "currency": "EUR",
+      "counterparty": "Woonstad Verhuur",
+      "description": "Huur",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "huur",
+        "originalDueOn": "2026-10-01"
+      }
+    },
+    {
+      "id": "tx-024",
+      "accountKey": "betaal",
+      "date": "2026-10-02",
+      "amount": -126.75,
+      "currency": "EUR",
+      "counterparty": "Vattenfall Energie",
+      "description": "Energie",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "energie",
+        "originalDueOn": "2026-10-03"
+      }
+    },
+    {
+      "id": "tx-036",
+      "accountKey": "betaal",
+      "date": "2026-10-04",
+      "amount": -142.5,
+      "currency": "EUR",
+      "counterparty": "Delta Zorgverzekering",
+      "description": "Zorgverzekering",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "zorg",
+        "originalDueOn": "2026-10-05"
+      }
+    },
+    {
+      "id": "tx-155",
+      "accountKey": "betaal",
+      "date": "2026-10-04",
+      "amount": -19.8,
+      "currency": "EUR",
+      "counterparty": "NS Reizigers",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-048",
+      "accountKey": "betaal",
+      "date": "2026-10-06",
+      "amount": -13.99,
+      "currency": "EUR",
+      "counterparty": "Netflix",
+      "description": "Netflix",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "netflix",
+        "originalDueOn": "2026-10-07"
+      }
+    },
+    {
+      "id": "tx-060",
+      "accountKey": "betaal",
+      "date": "2026-10-08",
+      "amount": -11.49,
+      "currency": "EUR",
+      "counterparty": "Spotify",
+      "description": "Spotify",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "spotify",
+        "originalDueOn": "2026-10-09"
+      }
+    },
+    {
+      "id": "tx-072",
+      "accountKey": "betaal",
+      "date": "2026-10-10",
+      "amount": -29.95,
+      "currency": "EUR",
+      "counterparty": "Basic-Fit",
+      "description": "Sportschool",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "sportschool",
+        "originalDueOn": "2026-10-11"
+      }
+    },
+    {
+      "id": "tx-156",
+      "accountKey": "betaal",
+      "date": "2026-10-11",
+      "amount": -36.99,
+      "currency": "EUR",
+      "counterparty": "Bol.com",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-158",
+      "accountKey": "betaal",
+      "date": "2026-10-15",
+      "amount": -350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Naar spaarrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-159",
+      "accountKey": "spaar",
+      "date": "2026-10-15",
+      "amount": 350,
+      "currency": "EUR",
+      "counterparty": "Eigen overboeking",
+      "description": "Van betaalrekening",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-157",
+      "accountKey": "betaal",
+      "date": "2026-10-18",
+      "amount": -64.2,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-099",
+      "accountKey": "betaal",
+      "date": "2026-10-25",
+      "amount": 3800,
+      "currency": "EUR",
+      "counterparty": "Brightwave Studio B.V.",
+      "description": "Salaris",
+      "category": "",
+      "manual": false,
+      "pending": false
+    },
+    {
+      "id": "tx-087",
+      "accountKey": "betaal",
+      "date": "2026-10-26",
+      "amount": -145,
+      "currency": "EUR",
+      "counterparty": "DUO",
+      "description": "Studieschuld",
+      "category": "",
+      "manual": false,
+      "pending": false,
+      "groundTruth": {
+        "billId": "studie",
+        "originalDueOn": "2026-10-25"
+      }
+    }
+  ]
+}

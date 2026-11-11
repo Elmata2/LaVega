@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import {
+  describeProvenanceCitation,
+  latestPersonalNetWorthTotal,
   PORTFOLIO_RANGES,
   mergeInPersonalNetWorth,
   type PersonalNetWorthTotal,
@@ -59,15 +61,29 @@ export function NetWorthPage() {
     () => mergeInPersonalNetWorth([], totalsInPresentationCurrency).latestPersonalDate,
     [totalsInPresentationCurrency],
   );
+  /* Provenance of the newest shared total, when the agent path recorded one
+   * (#300 WS5.5). Structured fields rendered as one line — never stored prose.
+   * Absent for every total the browser's own share flow wrote. */
+  const latestProvenance = useMemo(
+    () => latestPersonalNetWorthTotal(totalsInPresentationCurrency)?.provenance,
+    [totalsInPresentationCurrency],
+  );
 
   if (state.status === "loading") return <Loading />;
   if (state.status === "error")
     return <EmptyState title="Dashboard unavailable" description={state.message} />;
   return (
-    <NetWorthChart
-      data={netWorthData!}
-      currency={state.data.presentationCurrency}
-      personalAsOfDate={latestPersonalDate}
-    />
+    <>
+      <NetWorthChart
+        data={netWorthData!}
+        currency={state.data.presentationCurrency}
+        personalAsOfDate={latestPersonalDate}
+      />
+      {latestProvenance ? (
+        <p className="mt-2 text-xs text-muted-foreground" data-testid="personal-total-provenance">
+          Personal total source: {describeProvenanceCitation(latestProvenance)}
+        </p>
+      ) : null}
+    </>
   );
 }

@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   checkBudget,
+  recordFailure,
   recordUsage,
   releaseReservation,
   resetBudgetMemory,
   spentCents,
   WORST_CASE_CENTS,
 } from "./budget.js";
-import { MISTRAL_SMALL } from "./models.js";
+import { MISTRAL_MEDIUM, MISTRAL_SMALL } from "./models.js";
 
 let prevDay: string | undefined;
 let prevMonth: string | undefined;
@@ -226,4 +227,42 @@ test("one account's spend does not fill another account's cap", async () => {
   expect((await checkBudget("categorize", "user-a")).ok).toBe(true);
   expect((await checkBudget("categorize", "user-b")).ok).toBe(true);
   expect(await checkBudget("categorize", "user-a")).toEqual({ ok: false, scope: "day" });
+});
+
+/* AI-ops ledger: cache-token pricing and the failed-call row (#300, WS5.7). */
+test("recordUsage with provider cache tokens charges the cache premium, so the cap sees it", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "14";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "2000";
+  // 1M cache-read tokens on mistral-small: 15 USD cents = 13.8 -> 14 EUR cents.
+  recordUsage({
+    route: "chat",
+    model: MISTRAL_SMALL,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 1_000_000,
+  });
+  await tick();
+  expect(await checkBudget()).toEqual({ ok: false, scope: "day" });
+});
+
+test("recordFailure gives the held worst-case room back instead of leaving it stuck", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "1000";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "10000";
+  const gate = await checkBudget("chat");
+  expect(gate.ok).toBe(true);
+  if (!gate.ok) return;
+
+  await recordFailure(
+    { route: "chat", model: MISTRAL_MEDIUM, errorCode: "ai-upstream-limit", httpStatus: 429 },
+    gate.reservation,
+  );
+
+  // The failure wrote no local spend, so the day is back to zero.
+  expect(await spentCents()).toEqual({ dayCents: 0, monthCents: 0 });
+});
+
+test("recordFailure never throws when there is no reservation and no database", async () => {
+  await expect(
+    recordFailure({ route: "chat", model: MISTRAL_MEDIUM, errorCode: "ai-fault" }),
+  ).resolves.toBeUndefined();
 });

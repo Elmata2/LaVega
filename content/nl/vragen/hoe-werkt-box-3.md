@@ -3,7 +3,7 @@ id: box-3
 family: vragen
 title: "Hoe werkt box 3?"
 description: "Hoe box 3 in 2026 werkt: het forfaitaire rendement, het heffingsvrij vermogen, het tarief en de geplande overstap naar belasting op werkelijk rendement."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -77,11 +77,3 @@ Wat er in de tussentijd gebeurt, laten we hier buiten beschouwing: voor de Eerst
 ## Wat doet LaVega hiermee?
 
 LaVega toont je rekeningen en beleggingen samen, zodat je kunt zien wat er op een bepaalde datum stond, zoals 1 januari. LaVega berekent of beoordeelt je aangifte niet. Het is informatie en uitleg; LaVega heeft geen AFM-vergunning en is geen belastingadviseur.
-
-## Gerelateerd
-
-- [Checklist aangifte inkomstenbelasting over 2026 (indienen in 2027)](/seizoen/checklist-belastingaangifte-2026)
-- [Sparen voor je kind: welke mogelijkheden zijn er?](/vragen/sparen-voor-je-kind)
-- [Hoeveel spaargeld is normaal als buffer?](/vragen/hoeveel-spaargeld-is-normaal-als-buffer)
-
-Dit is informatie, geen advies.

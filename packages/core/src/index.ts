@@ -1,9 +1,20 @@
 export const VERSION = "0.0.0";
 export * from "./model.js";
 export * from "./balance.js";
+export * from "./balanceSeries.js";
+export * from "./reports.js";
+export * from "./statements/index.js";
 export * from "./hash.js";
+export * from "./money.js";
+export * from "./budget.js";
+export * from "./transfers.js";
+export * from "./labels.js";
 export * from "./ingest.js";
+export * from "./csvImport.js";
 export * from "./views.js";
+/* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
+ * it); its barrel exports only the engine, the types and the dry run. */
+export * from "./rules/index.js";
 export * from "./accounts.js";
 export * from "./entities.js";
 export * from "./tracking.js";
@@ -48,6 +59,8 @@ export * from "./spendPercentile.js";
 export * from "./plan/index.js";
 export * from "./localeRedirect.js";
 export * from "./redact.js";
+export * from "./agentTools.js";
+export * from "./provenance.js";
 export * from "./sentryScrub.js";
 export * from "./advisor/evidence.js";
 export * from "./advisor/profile.js";
@@ -71,3 +84,5 @@ export * from "./advisor/capacity.js";
 export * from "./advisor/riskScale.js";
 export * from "./advisor/knowledge.js";
 export * from "./advisor/resolve.js";
+export * from "./bills/index.js";
+export * from "./assistant.js";

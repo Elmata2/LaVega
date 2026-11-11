@@ -17,7 +17,18 @@ export type AccountCipherBlob = {
   ct: string;
 };
 
-export type CipherBlob = PassphraseCipherBlob | AccountCipherBlob;
+/** A full back-up bundle (issue #293): the vault data AND the sealed document
+ *  bytes, sealed together under the account's vault key. New format version so
+ *  an older reader refuses it instead of silently restoring the vault without
+ *  its documents. */
+export type BundleBlob = {
+  v: 3;
+  kdf: "account-key";
+  iv: string;
+  ct: string;
+};
+
+export type CipherBlob = PassphraseCipherBlob | AccountCipherBlob | BundleBlob;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -121,6 +132,29 @@ export async function encryptJSON(
     iv: toB64(iv),
     ct: toB64(new Uint8Array(ct)),
   };
+}
+
+/** Seal raw bytes (a document) with the same AES-GCM path as the vault. The
+ *  bytes never enter the vault blob: they live in their own object store. */
+export async function sealBytes(key: CryptoKey, bytes: Uint8Array): Promise<AccountCipherBlob> {
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const ct = await globalThis.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    bytes as BufferSource,
+  );
+  return { v: 2, kdf: "account-key", iv: toB64(iv), ct: toB64(new Uint8Array(ct)) };
+}
+
+/** Open sealed document bytes; throws on tampering or a wrong key, exactly like
+ *  decryptJSON. */
+export async function openBytes(key: CryptoKey, blob: AccountCipherBlob): Promise<Uint8Array> {
+  const pt = await globalThis.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromB64(blob.iv) as BufferSource },
+    key,
+    fromB64(blob.ct) as BufferSource,
+  );
+  return new Uint8Array(pt);
 }
 
 export async function decryptJSON<T>(key: CryptoKey, blob: CipherBlob): Promise<T> {

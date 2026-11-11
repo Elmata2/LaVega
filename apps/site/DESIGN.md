@@ -75,19 +75,22 @@ Fonts are served from `/fonts/` as four WOFF2 with the OFL license beside them i
 ## Blocks
 
 - **Breadcrumbs** — 0.875rem mist, `/` separators, wrap instead of truncating.
+- **Locale switch** — one 0.875rem mist text link in the header to the other locale. No button, no flag, no menu.
+- **On this page** — text-only anchor list, 0.95rem, shown when an article has 3+ section headings. Headings carry `id`s.
 - **Body** — paragraphs 1em apart; lists indented 1.4em with 0.3em between items; blockquote is a 3px blue left rule on `--accent-soft` with a 12px right radius.
-- **Tables** — hairline borders, 8px 12px cells, header on surface-2, horizontally scrollable rather than squeezed.
-- **Disclaimer** — surface fill, hairline, 12px radius, 0.95rem: the "this is information, not advice" note.
+- **Tables** — hairline borders, 8px 12px cells, header on surface-2. A `.table-scroll` wrapper owns `overflow-x: auto` and `tabindex="0"`, so the table keeps its semantics and keyboard users can scroll it. Below 760px a 0.9rem mist hint says the columns scroll horizontally.
+- **Disclaimer** — surface fill, hairline, 12px radius, 0.95rem: the "this is information, not advice" note. Emitted once by `render.ts`; never written into content markdown.
 - **Sources** — 0.9rem mist with a 1.15rem heading; every claim links out.
-- **Related** — hairline top rule, then a plain list of sibling pages.
+- **Related** — hairline top rule, then a plain list of sibling pages. Emitted once by `render.ts`; no `## Gerelateerd` / `## Related` section in content markdown.
 - **Hub list** — 14px rows separated by hairlines, each with a mist summary line.
-- **Draft banner** — full-bleed amber strip with midnight text, uppercase-leaning tracking. Drafts never ship to production.
+- **Draft banner** — full-bleed amber strip with midnight text, uppercase-leaning tracking. Only pages with `status: draft` get the banner and `noindex`. Drafts never ship to production (`build.ts` filters them).
 
 ## Rules
 
 - **Do** keep one column. A sidebar or a second measure is a redesign.
 - **Do** keep headings at 400 and let size do the work.
 - **Do** write links as text, coloured blue; no buttons in body copy.
+- **Do** keep the disclaimer and related list in the renderer. Content markdown ends at the last section, with no trailing boilerplate.
 - **Don't** add a light theme or a colour outside the token list.
 - **Don't** set body copy in the monospace face; it is for code only.
 - **Don't** hand-write an OG card. `scripts/make-images.mjs` renders them from `og-card.html` with Libron, shrinking the headline to fit one line after the webfont loads.

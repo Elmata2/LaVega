@@ -4,7 +4,9 @@ import type { CatalogueEntryLike } from "../catalogRates.js";
 import type { EntityProfile } from "../entities.js";
 import type { ConversionMode } from "../fx.js";
 import type { RateBenchmark } from "../interest.js";
+import type { BudgetPeriod, CategoryGroup } from "../budget.js";
 import type { Account, Rule, Tx } from "../model.js";
+import type { Valuation } from "../balance.js";
 import type { RewardsBalance } from "../rewards.js";
 import type { OwnAccounts } from "../views.js";
 import type { PlanEvent, PlanPreferences } from "./preferences.js";
@@ -24,14 +26,7 @@ export type SectionId = (typeof SECTION_IDS)[number];
 export type PlanStatus = "on-track" | "attention" | "not-enough-data";
 
 /** `ratio` is a fraction (0.25 = 25%); `pct` is percentage points (2.5 = 2.5%). */
-export type FigureUnit =
-  | "cents"
-  | "months"
-  | "ratio"
-  | "pct"
-  | "count"
-  | "date"
-  | "years";
+export type FigureUnit = "cents" | "months" | "ratio" | "pct" | "count" | "date" | "years";
 export type FigureValue = { unit: FigureUnit; value: number | string | null };
 export type FigureMap = Record<string, FigureValue>;
 
@@ -106,11 +101,7 @@ export const MISSING_KINDS = [
 ] as const;
 export type MissingKind = (typeof MISSING_KINDS)[number];
 
-export type MissingAction =
-  | "connect-bank"
-  | "import"
-  | "intake-question"
-  | "enter-figure";
+export type MissingAction = "connect-bank" | "import" | "intake-question" | "enter-figure";
 export type Missing = {
   kind: MissingKind;
   action: MissingAction;
@@ -191,6 +182,16 @@ export type PlanInput = {
   /** The VAT filing frequency the person saved, when there is one (default: the pack's). */
   vatFrequency?: "monthly" | "quarterly" | "yearly" | null;
   asOf: string;
+  /** Budget envelopes (WS2.9). Absent means an older caller: the spending
+   *  section then migrates the legacy `categoryLimits` to the first period on
+   *  read. Never a reason to fail a computation. */
+  budgetPeriods?: readonly BudgetPeriod[];
+  /** The explicit parent map. Empty means every category is a top-level line
+   *  (no parent is invented). */
+  categoryGroups?: readonly CategoryGroup[];
+  /** Dated absolute valuations (WS3.1). The reports read them for the balance
+   *  sheet; a plan without them still computes, with the sheet's gaps shown. */
+  valuations?: readonly Valuation[];
 };
 
 /* CALC_IDS convention (ruling P11): each section module exports

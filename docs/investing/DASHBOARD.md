@@ -192,7 +192,7 @@ Sectors are not a projection of the dashboard. They come from tenant stores (mar
 
 A sector read may call the provider (Yahoo) for a symbol. Three rules in `apps/investing-server/src/sectorResolution.ts` limit that (#309):
 
-1. **Attempt memory.** When a provider fetch returns no profile (or throws), the store records the time of the attempt for that symbol. The provider is not asked again for that symbol for `PROVIDER_RETRY_HOURS` (24 hours). A timeout (rule 3) is not an answer and records nothing. The time lives in the existing JSON row of `investing.sector_profiles` as the key `providerAttemptedAt`. A symbol with no profile gets a row `{"kind": "none", "providerAttemptedAt": ...}`, which `get` reads as no profile; migration `0027_sector_profiles_attempt_rows.sql` allows `kind: "none"` in the table check. Writing a non-provider profile (an inference) keeps the attempt time; writing a provider profile replaces the row. Apply the migration before you deploy this code.
+1. **Attempt memory.** When a provider fetch returns no profile (or throws), the store records the time of the attempt for that symbol. The provider is not asked again for that symbol for `PROVIDER_RETRY_HOURS` (24 hours). A timeout (rule 3) is not an answer and records nothing. The time lives in the existing JSON row of `investing.sector_profiles` as the key `providerAttemptedAt`. A symbol with no profile gets a row `{"kind": "none", "providerAttemptedAt": ...}`, which `get` reads as no profile; migration `0032_sector_profiles_attempt_rows.sql` allows `kind: "none"` in the table check. Writing a non-provider profile (an inference) keeps the attempt time; writing a provider profile replaces the row. Apply the migration before you deploy this code.
 2. **One freshness rule.** `needsProviderFetch(profile, lastAttempt, now)` is the only test that decides if a symbol needs a provider fetch. A fresh provider profile never needs one (a fund is fresh for `FUND_PROFILE_REFRESH_DAYS`, 90 days). A symbol with no profile, an inferred profile, or a stale or undated provider fund needs one only if the last attempt is missing, unparseable, or older than 24 hours.
 3. **Time budget.** One read spends at most `SECTOR_FETCH_BUDGET_MS` (8 seconds) on provider fetches. Each provider call is raced against the time that is left. After the budget, the remaining symbols resolve from stored data only.
 
@@ -452,12 +452,21 @@ Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega
 ### Personal's opt-in share (owner's own bank money)
 
 The owner may opt in, from Personal's (`apps/web`) own profile settings, to
-share their Personal "Totale positie" (the same EUR total Overzicht's
-SaldoBlock shows — `positionSeries` in `apps/web/src/totalePositie.ts`) into
-this chart. Off by default; nothing crosses the network until the owner turns
-the switch on. The switch is **per device**: turning it on only shares totals
-from visits on that browser, and a total already shared stays with Investing
-until the switch is turned off again on a device where it is on.
+share their Personal bank position into this chart. The figure is
+`positionSeries` (`apps/web/src/totalePositie.ts`) over the accounts that are
+NOT investment accounts: a `Beleggingsrekening` (or an explicitly crypto-typed
+account) is the Investing portfolio's own figure, so adding its Personal
+balance too would count the same euro twice. This is a deliberate difference
+from Overzicht's SaldoBlock, which still sums every account for the Personal
+card; the shared total is the bank half only, and `personalShareAccounts`
+(`@lavega/core`) is the one rule both the share and the transfer
+classification use. A confirmed contribution from a bank account into an
+investment account therefore lowers the shared total and raises the portfolio
+by the same cents, leaving the combined net worth unchanged. Off by default;
+nothing crosses the network until the owner turns the switch on. The switch is
+**per device**: turning it on only shares totals from visits on that browser,
+and a total already shared stays with Investing until the switch is turned off
+again on a device where it is on.
 
 What crosses the boundary, and nothing else: while the switch is on and the
 Personal vault is unlocked, after every sync/import and on unlock, Personal
@@ -484,8 +493,10 @@ into each range's portfolio series with `mergeInPersonalNetWorth`
 (`@lavega/core`): the latest total on or before a date is carried forward,
 a date before the owner's first shared total gets no Personal part, and the
 chart's own "Total" line and headline figure become portfolio value plus
-Personal value. Returns, risk, and allocation elsewhere keep reading the
-unmerged, portfolio-only series and never include Personal money.
+Personal value. Because the shared total excludes investment accounts, that
+sum counts each euro once and a confirmed contribution does not change it.
+Returns, risk, and allocation elsewhere keep reading the unmerged,
+portfolio-only series and never include Personal money.
 
 Personal's total always arrives in EUR (the PUT body is hardcoded
 `currency: "EUR"`), so `NetWorthPage.tsx` only performs this merge while

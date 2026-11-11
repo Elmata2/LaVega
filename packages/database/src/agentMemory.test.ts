@@ -328,3 +328,77 @@ test("a letter is stored once per snapshot, encrypted, and private to its owner"
   await pglite.exec("SET ROLE lavega_runtime;");
   expect(Buffer.from(stored.rows[0]!.body_blob).toString("utf8")).not.toContain("quality");
 });
+
+/* WS4.5 (#297): theses keyed by the canonical instrument identity, and a
+ * migration that never silently merges conflicting confirmed claims. */
+
+const ALPHABET_KEY = "isin:US02079K3059";
+
+test("a second confirmed thesis for one canonical key is stored for review, not overwritten", async () => {
+  const memory = createAgentMemoryRepository(db, "alice");
+  const first = await memory.confirmThesis("GOOGL", thesis("Search winner"), ALPHABET_KEY);
+  const second = await memory.confirmThesis("GOOGL_US_EQ", thesis("Cloud winner"), ALPHABET_KEY);
+
+  expect(first).toMatchObject({ instrumentKey: ALPHABET_KEY, reviewRequired: false });
+  expect(second).toMatchObject({ instrumentKey: ALPHABET_KEY, reviewRequired: true });
+  const theses = await memory.listTheses();
+  expect(theses).toHaveLength(2);
+  expect(theses.map((entry) => entry.reviewRequired).sort()).toEqual([false, true]);
+  expect(theses.every((entry) => entry.instrumentKey === ALPHABET_KEY)).toBe(true);
+});
+
+test("the migration fills canonical keys, folds identical theses and flags conflicts", async () => {
+  const memory = createAgentMemoryRepository(db, "alice");
+  // Two broker spellings of one instrument with the SAME confirmed claim.
+  await memory.confirmThesis("FB", thesis("Ad monopoly"));
+  await memory.confirmThesis("META", thesis("Ad monopoly"));
+  // Two spellings with conflicting claims.
+  await memory.confirmThesis("GOOGL", thesis("Search winner"));
+  await memory.confirmThesis("GOOGL_US_EQ", thesis("Cloud winner"));
+
+  const result = await memory.applyThesisMigration({
+    assignments: [
+      { symbol: "FB", instrumentKey: "isin:US30303M1027" },
+      { symbol: "META", instrumentKey: "isin:US30303M1027" },
+      { symbol: "GOOGL", instrumentKey: ALPHABET_KEY },
+      { symbol: "GOOGL_US_EQ", instrumentKey: ALPHABET_KEY },
+    ],
+    merges: [
+      {
+        instrumentKey: "isin:US30303M1027",
+        keptSymbol: "FB",
+        mergedSymbols: ["META"],
+      },
+    ],
+    reviews: [{ instrumentKey: ALPHABET_KEY, symbols: ["GOOGL", "GOOGL_US_EQ"] }],
+  });
+
+  // The kept row and both review rows get the key; one duplicate is folded.
+  expect(result).toEqual({ updated: 3, merged: 1, reviewed: 2 });
+  const theses = await memory.listTheses();
+  // The identical pair is one key; the conflicting pair keeps both claims.
+  expect(theses).toHaveLength(3);
+  expect(theses.find((entry) => entry.symbol === "FB")).toMatchObject({
+    instrumentKey: "isin:US30303M1027",
+    reviewRequired: false,
+  });
+  const conflict = theses.filter((entry) => entry.instrumentKey === ALPHABET_KEY);
+  expect(conflict).toHaveLength(2);
+  expect(conflict.every((entry) => entry.reviewRequired)).toBe(true);
+  expect(conflict.map((entry) => entry.why).sort()).toEqual(["Cloud winner", "Search winner"]);
+});
+
+test("the turn summary finds a thesis by canonical key under another broker symbol", async () => {
+  const memory = createAgentMemoryRepository(db, "alice");
+  await memory.confirmThesis("GOOGL", thesis("Search winner"), ALPHABET_KEY);
+
+  const summary = await memory.summary({
+    held: ["GOOGL_US_EQ"],
+    named: ["GOOGL_US_EQ"],
+    heldKeys: [ALPHABET_KEY],
+    namedKeys: [ALPHABET_KEY],
+    closeUnheld: true,
+  });
+  expect(summary.theses.map((entry) => entry.symbol)).toEqual(["GOOGL"]);
+  expect(summary.theses[0]).toMatchObject({ instrumentKey: ALPHABET_KEY });
+});

@@ -174,6 +174,11 @@ function props(): Props {
     onDeleteAccount: noop,
     duplicateGroups: [],
     onMergeDuplicates: noop,
+    valuations: [],
+    asOf: "2026-11-11",
+    onOpeningCommit: noop,
+    onValuationCommit: noop,
+    onValuationRemove: noop,
   };
 }
 
@@ -223,6 +228,112 @@ function blur(el: HTMLElement) {
     el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   });
 }
+
+/* ── WS3.1: asset/liability kinds and dated valuations ─────────────────── */
+
+test("a liability kind is offered, read as the amount owed, and carries a valuation editor", () => {
+  const loan = acc({
+    key: "L",
+    name: "Hypotheek",
+    bank: "ING",
+    type: "Lening",
+    balance: -180_000,
+    balanceDate: "2026-11-01",
+  });
+  render({ accounts: [loan] });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const select = container!.querySelector<HTMLSelectElement>('[aria-label="Type Hypotheek"]')!;
+  expect([...select.options].map((o) => o.value)).toContain("Lening");
+  expect([...select.options].map((o) => o.value)).toContain("Woning");
+  // A liability stores a negative balance but the owner reads the debt positive.
+  const saldo = container!.querySelector<HTMLInputElement>(
+    '[aria-label="Openstaand bedrag Hypotheek"]',
+  )!;
+  expect(saldo.value).toBe("180000");
+  expect(container!.querySelector('[data-testid="account-valuations"]')).not.toBeNull();
+  expect(container!.querySelector('[data-testid="valuation-status"]')!.textContent).toContain(
+    "Laatste waardering",
+  );
+});
+
+test("an account with no anchor at all says its value is unknown, not zero", () => {
+  const car = acc({ key: "C", name: "Auto", bank: "ING", type: "Voertuig" });
+  render({ accounts: [car] });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const status = container!.querySelector('[data-testid="valuation-status"]')!.textContent ?? "";
+  expect(status).toContain("onbekend");
+  expect(status).toContain("Onbekend telt niet als nul");
+  expect(container!.querySelector('[data-testid="valuation-list"]')).toBeNull();
+});
+
+test("adding a valuation commits the account, the date and integer cents", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const commits: Array<[string, string, number]> = [];
+  render({
+    accounts: [house],
+    onValuationCommit: (key, date, cents) => commits.push([key, date, cents]),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  type(
+    container!.querySelector<HTMLInputElement>('[aria-label="Waarderingsdatum van Woning"]')!,
+    "2026-11-05",
+  );
+  type(
+    container!.querySelector<HTMLInputElement>('[aria-label="Waarderingsbedrag van Woning"]')!,
+    "420000",
+  );
+  click(container!.querySelector<HTMLElement>('[data-testid="valuation-add"]')!);
+  expect(commits).toEqual([["W", "2026-11-05", 42_000_000]]);
+});
+
+test("a dated valuation is listed and can be removed", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const removed: string[] = [];
+  render({
+    accounts: [house],
+    valuations: [
+      {
+        id: "W|2026-11-05",
+        accountKey: "W",
+        date: "2026-11-05",
+        amountCents: 42_000_000,
+        currency: "EUR",
+        kind: "reconciliation",
+        source: "manual",
+        createdAt: "2026-11-11",
+      },
+    ],
+    onValuationRemove: (id) => removed.push(id),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const list = container!.querySelector('[data-testid="valuation-list"]')!.textContent ?? "";
+  expect(list).toContain("november 2026");
+  expect(list).toContain("420.000,00");
+  click(container!.querySelector<HTMLElement>('[aria-label^="Waardering van"]')!);
+  expect(removed).toEqual(["W|2026-11-05"]);
+});
+
+test("an opening balance commits both halves of the anchor", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const commits: Array<[string, string, string]> = [];
+  render({
+    accounts: [house],
+    onOpeningCommit: (key, field, value) => commits.push([key, field, value]),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const amount = container!.querySelector<HTMLInputElement>(
+    '[aria-label="Beginsaldo van Woning"]',
+  )!;
+  type(amount, "1000");
+  blur(amount);
+  const date = container!.querySelector<HTMLInputElement>('[aria-label="Begindatum van Woning"]')!;
+  type(date, "2026-01-01");
+  blur(date);
+  expect(commits).toEqual([
+    ["W", "openingBalanceCents", "1000"],
+    ["W", "openingDate", "2026-01-01"],
+  ]);
+});
 
 test("the banks are listed collapsed, each saying what it holds", () => {
   render();

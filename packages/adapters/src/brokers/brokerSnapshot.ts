@@ -1,3 +1,4 @@
+import { carryForwardCostBasis } from "@lavega/core";
 import type {
   CashBalance,
   CashFlow,
@@ -267,11 +268,18 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           statementEnd !== undefined &&
           storedLatest !== undefined &&
           statementEnd < storedLatest;
-        if (sections.positions.status === "complete" && !backfill)
+        if (sections.positions.status === "complete" && !backfill) {
+          // A provider sync has no authority over a user-entered basis and its
+          // lock, and an unchanged row may carry a basis forward (WS4.2).
+          const stored = positionsByBroker.get(outcome.broker) ?? [];
           positionsByBroker.set(
             outcome.broker,
-            restorePositions(outcome.broker, sections.positions.rows),
+            carryForwardCostBasis(
+              stored,
+              restorePositions(outcome.broker, sections.positions.rows),
+            ),
           );
+        }
         const mappedTrades = sections.trades.rows.map((trade) => ({
           ...withBroker(outcome.broker, [trade])[0],
           id: `${outcome.broker}:${stableTradeId(trade)}`,

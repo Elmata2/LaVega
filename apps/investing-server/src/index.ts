@@ -29,7 +29,9 @@ import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
+  resolveSecurityIdentities,
   sentryOptions,
+  type AccountWrapperStore,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
   type InvestingLayoutStore,
@@ -64,6 +66,7 @@ import {
   createNeonBrokerSyncStateStore,
   createNeonPriceSyncProgressStore,
 } from "./neonStores.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 import {
   createFileBrokerSyncStateStore,
   runtimeBrokerSyncStateFile,
@@ -106,6 +109,8 @@ import {
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { trimToolHistory, type ToolLoopTurnStatus } from "./toolLoop.js";
+import { attachMcpReadRoutes } from "./tools/readRoutes.js";
 import { attachLetterRoutes } from "./letterRoutes.js";
 import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
@@ -214,6 +219,9 @@ export type RuntimeAppOptions = {
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   investingLayoutStore?: InvestingLayoutStore;
+  /** Account tax-treatment labels (WS4.4, #296). Defaults to Neon with a
+   *  database, in-memory without one. */
+  accountWrapperStore?: AccountWrapperStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
   personalNetWorthStore?: PersonalNetWorthStore;
@@ -270,6 +278,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       ? createStoredFxProvider(createFxRateRepository(database), createFrankfurterFxProvider())
       : createFrankfurterFxProvider();
   const dashboardCache = options.dashboardCache ?? createDashboardCache();
+  /* Wrapper labels are account metadata with no data path of their own: a
+   * runtime that can persist them injects its store (Neon when a database
+   * exists, a file locally). The default is in-memory so a bare runtime and a
+   * test still answer the same empty map instead of reaching for a database
+   * it may not have. */
+  const accountWrapperStore = options.accountWrapperStore ?? createInMemoryAccountWrapperStore();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
     priceDataVersion += 1;
@@ -524,6 +538,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         benchmarks: benchmarkSymbols
           ? (id) => Promise.resolve(benchmarkSymbols(id))
           : (id) => effectiveBenchmarkSymbols(benchmarkSelectionStore, id),
+        accountWrappers: (id) => accountWrapperStore.get(id),
         priceDataVersion: () => priceDataVersion,
       }),
     );
@@ -778,6 +793,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     attachMemoryRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
       memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      /* The thesis migration's identity source (WS4.5, #297): the current
+       * broker snapshot's holdings and trades, grouped by ISIN first. */
+      instrumentKeys: async () => {
+        const tenantId = await resolveTenantId();
+        const data = await (await tenantRuntime(tenantId)).portfolioChatData();
+        const rows = [
+          ...data.dashboard.positions.map((position) => ({
+            symbol: position.symbol,
+            ...(position.isin ? { isin: position.isin } : {}),
+          })),
+          ...data.trades().map((trade) => ({
+            symbol: trade.symbol,
+            ...(trade.isin ? { isin: trade.isin } : {}),
+            ...(trade.broker ? { broker: trade.broker } : {}),
+          })),
+        ];
+        return resolveSecurityIdentities(rows).bySymbol;
+      },
     });
     attachLetterRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
@@ -790,6 +823,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       consent: marketDataConsentStore,
       fundamentals: freshFundamentals,
       chatModel: options.chatModel,
+    });
+    /* The reads the external MCP tools call (#285). Projected from the same
+     * tenant-scoped context the chat uses, so the dashboard and `/mcp` cannot
+     * disagree about a position, a trade or a price. */
+    attachMcpReadRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      context: portfolioChatContext,
+      consent: async () => (await marketDataConsentStore.get(await resolveTenantId())).accepted,
     });
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
@@ -818,8 +859,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         .catch(() => ({}));
       if (!isPortfolioAgentId(body.agentId))
         return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      /* Pair-safe trim: never hand the model a tool result whose assistant
+       * call was cut off (WS5.6). */
       const messages = Array.isArray(body.messages)
-        ? (body.messages as UIMessage[]).slice(-12)
+        ? trimToolHistory(body.messages as UIMessage[], 12)
         : [];
       const last = messages.at(-1);
       const message =
@@ -839,6 +882,29 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return c.json({ problems: ["Conversation thread id is required"] }, 400);
       const title = message.trim().replace(/\s+/g, " ").slice(0, THREAD_TITLE_LENGTH);
       try {
+        /* The hardened turn status (WS5.6): a turn that ran out of rounds
+         * without text, errored or was aborted is persisted as FAILED, never as
+         * a completed answer. */
+        let turnStatus: ToolLoopTurnStatus | null = null;
+        let streamError = false;
+        const persistFailedTurn = async (reason: string) => {
+          if (!repository || !threadId) return;
+          await repository
+            .appendMessages(threadId, host, title, [
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                parts: [
+                  {
+                    type: "text",
+                    text: "The agent could not finish this answer. Try again.",
+                  },
+                ],
+                metadata: { failed: true, reason },
+              },
+            ])
+            .catch((error: unknown) => console.error("[memory] failed turn not saved", error));
+        };
         const [agent] = await Promise.all([
           portfolioChatContext().then((context) =>
             createPortfolioChatAgent({
@@ -850,6 +916,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 ? { memory: { repository, agentId: host, threadId } }
                 : {}),
               ...(options.chatModel ? { model: options.chatModel } : {}),
+              onTurnStatus: (status) => {
+                turnStatus = status;
+              },
             }),
           ),
           repository && threadId
@@ -861,12 +930,35 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           uiMessages: attributeHistory(messages, responder, host),
           messageMetadata: () => ({ agentId: responder }),
           abortSignal: c.req.raw.signal,
-          onError: () => "The agent could not answer. Try again.",
+          onError: () => {
+            /* Remembered, not persisted here: a provider can error after
+             * producing usable text, and onEnd decides what the turn was. */
+            streamError = true;
+            return "The agent could not answer. Try again.";
+          },
           generateMessageId: () => crypto.randomUUID(),
           onEnd: async ({ responseMessage }) => {
-            if (!repository || !threadId || responseMessage.parts.length === 0) return;
+            if (!repository || !threadId) return;
+            const status = turnStatus as ToolLoopTurnStatus | null;
+            const failedTurn = status?.status === "failed" || streamError;
+            const hasText = responseMessage.parts.some((part) => part.type === "text");
+            /* A turn with no usable text is persisted as FAILED, never as an
+             * empty completed answer (WS5.6). A turn that produced text but
+             * ended on an error keeps the text and is marked failed. */
+            if (failedTurn && !hasText) {
+              await persistFailedTurn(status?.status === "failed" ? status.reason : "error");
+              return;
+            }
+            if (responseMessage.parts.length === 0) return;
             await repository
-              .appendMessages(threadId, host, title, [responseMessage])
+              .appendMessages(threadId, host, title, [
+                failedTurn
+                  ? {
+                      ...responseMessage,
+                      metadata: { ...responseMessage.metadata, failed: true },
+                    }
+                  : responseMessage,
+              ])
               .catch((error: unknown) => console.error("[memory] reply not saved", error));
           },
         });
@@ -917,10 +1009,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         fxProvider,
         benchmarkSelectionStore,
         investingLayoutStore,
+        accountWrapperStore,
         marketDataConsentStore,
         personalNetWorthStore,
         dashboardReader,
         onPriceDataChanged,
+        onAccountWrappersChanged: onPriceDataChanged,
         priceSyncProgressStore,
       }),
     );
@@ -942,10 +1036,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       fxProvider,
       benchmarkSelectionStore,
       investingLayoutStore,
+      accountWrapperStore,
       marketDataConsentStore,
       personalNetWorthStore,
       dashboardReader,
       onPriceDataChanged,
+      onAccountWrappersChanged: onPriceDataChanged,
       priceSyncProgressStore,
       problemReporter: createProblemReporter({ dsn, sentry }),
     }),

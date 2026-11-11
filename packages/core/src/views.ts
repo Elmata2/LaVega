@@ -1,4 +1,6 @@
 import type { Account, Tx, Rule } from "./model.js";
+import type { DryRunResult, RuleDecision, RuleTx } from "./rules/model.js";
+import { compileRules, evaluateRules, dryRunRules } from "./rules/index.js";
 import { norm } from "./hash.js";
 import {
   NL_CATEGORY_RULES_NORMALIZED,
@@ -158,7 +160,7 @@ export function ownAccountNamed(
 /** Category for a tx, in precedence order: a non-empty tx.category (manual
  *  override) wins; else — when `own` is supplied — an "Eigen overboeking" if the
  *  counterparty/description names another of the user's own accounts; else the
- *  first user rule whose match text is a substring of counterparty+description;
+ *  user rules engine (v2; legacy rows are lowered to the old substring test);
  *  else the first built-in Dutch default (NL_CATEGORY_RULES) that matches; else
  *  one of the three last-resort readings of WHO the counterparty is (an incasso
  *  code, another person's name, the payment mechanism — see the block at the end
@@ -180,32 +182,69 @@ export function ownAccountNamed(
  *  transaction text go through it, so a user rule typed with a hyphen or an
  *  accent keeps matching. */
 export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
-  if (tx.category) return tx.category;
+  return categorizeDetailed(tx, rules, own).category;
+}
+
+/** `categorize` plus the PROVENANCE of the answer (WS1.3).
+ *
+ *  Same precedence as before, tier by tier: a non-empty stored category; an
+ *  own-account IBAN; the owner's own name; the user rules engine; the strong
+ *  built-in Dutch defaults; a foreign terminal; an incasso; a person's name; the
+ *  weak mechanism defaults; finally "onbekend". `source` says which tier spoke,
+ *  so the Regels editor can say "de ingebouwde lijst deed dit" instead of
+ *  blaming a user rule.
+ *
+ *  The rules tier is the v2 engine. Legacy `{match, category}` rows are lowered
+ *  in `rules/parse.ts` to exactly the old substring test, so this is
+ *  byte-identical to the old loop on existing vaults. When the engine matches
+ *  but claims no CATEGORY (a v2 rule that only tags or renames), the walk
+ *  continues into the built-in chain — a rule that says nothing about the
+ *  category must not hide the defaults.
+ *
+ *  NO LOCKS ARE PASSED to the engine here: a `manual` row with an empty category
+ *  used to fall through to the rules (its `manual` flag locked nothing, because
+ *  only a non-empty `tx.category` short-circuits), and passing locks would
+ *  change that byte-compatible outcome. `locksForTx` is used by the dry run,
+ *  where the lock is what the preview must show. */
+export function categorizeDetailed(
+  tx: RuleTx,
+  rules: readonly Rule[],
+  own?: OwnAccounts,
+): RuleDecision {
+  if (tx.category)
+    return { category: tx.category, source: "stored", ruleId: null, locked: tx.manual };
   const hay = matchNorm(tx.counterparty + " " + tx.description);
   if (own && own.all.length) {
     // Compare against a space-stripped haystack so an IBAN printed with spaces
     // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
     if (ownAccountIn(hay.replace(/\s+/g, ""), tx.accountKey, own) !== null)
-      return "Eigen overboeking";
+      return { category: "Eigen overboeking", source: "own", ruleId: null, locked: false };
   }
   // HIS OWN NAME on the other side of the row is the same fact as his own IBAN
   // on it: his own money moving. It sits here, above the rules, for that reason
   // — and it only ever fires on a name he typed himself (see OwnAccounts.names).
-  if (own?.names?.length && isOwnName(tx.counterparty, own.names)) return "Eigen overboeking";
-  for (const r of rules) {
-    // Guard on the NORMALIZED match: a whitespace-only (or punctuation-only)
-    // match normalizes to "" and would otherwise substring-match every tx,
-    // mislabeling the whole dataset.
-    const m = matchNorm(r.match);
-    if (m && hay.includes(m)) return r.category;
-  }
+  if (own?.names?.length && isOwnName(tx.counterparty, own.names))
+    return { category: "Eigen overboeking", source: "own", ruleId: null, locked: false };
+
+  const outcome = evaluateRules(tx, compileRules(rules));
+  // `!== undefined`, not truthiness: a legacy rule with `category: ""` returned
+  // the empty string immediately and must keep doing so.
+  if (outcome.patch.category !== undefined)
+    return {
+      category: outcome.patch.category,
+      source: "rule",
+      ruleId: outcome.claims.category ?? null,
+      locked: false,
+    };
+
   // A direction-specific built-in (e.g. "salaris" -> Inkomen) only applies to
   // its own direction; an entry without a `sign` applies to both.
   const sign = tx.amount >= 0 ? "in" : "out";
   for (const r of NL_CATEGORY_RULES_NORMALIZED) {
     if (r.weak) continue; // a mechanism, not a merchant — held back to the end
     if (r.sign && r.sign !== sign) continue;
-    if (hay.includes(r.m)) return r.category;
+    if (hay.includes(r.m))
+      return { category: r.category, source: "builtin", ruleId: null, locked: false };
   }
   // LAST, AND ONLY WHERE NOTHING ELSE SPOKE: a card payment made at a terminal
   // abroad. His three Barcelona rows were reaching "onbekend" while the app had
@@ -218,8 +257,10 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   // is what makes "spending while travelling" the honest reading. A foreign ONLINE
   // purchase has no terminal, and calling that travel would be a guess — it stays
   // unknown, which is the right answer for it.
-  const abroad = foreignTerminalCategory(tx);
-  if (abroad) return abroad;
+  // (`tx` is a full Tx whenever this comes from the app; the rule keys are all
+  // this helper reads, but its type predates RuleTx, so the widening is local.)
+  const abroad = foreignTerminalCategory(tx as Tx);
+  if (abroad) return { category: abroad, source: "builtin", ruleId: null, locked: false };
 
   /* ── WHO the counterparty is (review 20-08-2026, item 6) ─────────────────
    * Everything below is a last resort, in order of how much the row proves.
@@ -232,15 +273,38 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
    *    a terminal — a till receipt is a purchase whatever the shop is called.
    * 3. Only then the mechanism rules (betaalverzoek/tikkie), so a payment
    *    request from a person lands between people and not in "Overboekingen". */
-  if (directDebit(tx)) return DIRECT_DEBIT_CATEGORY;
+  if (directDebit(tx))
+    return { category: DIRECT_DEBIT_CATEGORY, source: "builtin", ruleId: null, locked: false };
   const raw = `${tx.counterparty} ${tx.description}`;
-  if (isPersonName(tx.counterparty) && !isMerchantRow(raw)) return PERSON_CATEGORY;
+  if (isPersonName(tx.counterparty) && !isMerchantRow(raw))
+    return { category: PERSON_CATEGORY, source: "builtin", ruleId: null, locked: false };
   for (const r of NL_CATEGORY_RULES_NORMALIZED) {
     if (!r.weak) continue;
     if (r.sign && r.sign !== sign) continue;
-    if (hay.includes(r.m)) return r.category;
+    if (hay.includes(r.m))
+      return { category: r.category, source: "builtin", ruleId: null, locked: false };
   }
-  return "onbekend";
+  return { category: "onbekend", source: "unknown", ruleId: null, locked: false };
+}
+
+/** What the Regels editor calls to preview a rule change.
+ *
+ *  `decide` is `categorizeDetailed` itself, so the preview's winner is the
+ *  winner execution will use — the same precedence, the same locks
+ *  (`locksForTx` is applied inside `dryRunRules`). `samples` holds the rows a
+ *  rule actually matched, in input order; `limit` caps that list only, while the
+ *  counters always cover every transaction. */
+export function dryRunRuleChanges(
+  txs: readonly RuleTx[],
+  rules: readonly Rule[],
+  own?: OwnAccounts,
+  limit = 50,
+): DryRunResult {
+  return dryRunRules(txs, rules, {
+    decide: (t) => categorizeDetailed(t, rules, own),
+    baseline: (t) => categorizeDetailed(t, [], own).category,
+    limit,
+  });
 }
 
 /** Words that place a foreign in-person payment more precisely than "travel".

@@ -1,0 +1,200 @@
+{
+  "asOf": "2026-11-11",
+  "from": "2026-11-01",
+  "to": "2026-11-11",
+  "accounts": [
+    {
+      "key": "betaal",
+      "name": "Betaalrekening",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Betaalrekening",
+      "openingBalanceCents": 100000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "spaar",
+      "name": "Spaarrekening",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Spaarrekening",
+      "openingBalanceCents": 500000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "lening",
+      "name": "Hypotheek",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "type": "Lening",
+      "openingBalanceCents": -900000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "woning",
+      "name": "Woning",
+      "bank": "",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Woning"
+    }
+  ],
+  "txs": [
+    {
+      "id": "t1",
+      "accountKey": "betaal",
+      "date": "2026-11-03",
+      "amount": -250,
+      "currency": "EUR",
+      "counterparty": "Woonstad",
+      "description": "Huur",
+      "category": "Housing & energy",
+      "manual": false
+    },
+    {
+      "id": "t2",
+      "accountKey": "betaal",
+      "date": "2026-11-05",
+      "amount": 3000,
+      "currency": "EUR",
+      "counterparty": "Werkgever",
+      "description": "Salaris",
+      "category": "Income",
+      "manual": false
+    },
+    {
+      "id": "t3",
+      "accountKey": "betaal",
+      "date": "2026-11-07",
+      "amount": -125,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Boodschappen",
+      "category": "Groceries",
+      "manual": false
+    },
+    {
+      "id": "t4",
+      "accountKey": "spaar",
+      "date": "2026-11-10",
+      "amount": 250,
+      "currency": "EUR",
+      "counterparty": "ING",
+      "description": "Naar spaarrekening",
+      "category": "Eigen overboeking",
+      "manual": false
+    },
+    {
+      "id": "t5",
+      "accountKey": "lening",
+      "date": "2026-11-11",
+      "amount": -1000,
+      "currency": "EUR",
+      "counterparty": "ING",
+      "description": "Aflossing",
+      "category": "Housing & energy",
+      "manual": false
+    }
+  ],
+  "valuations": [
+    {
+      "id": "woning|2026-11-05",
+      "accountKey": "woning",
+      "date": "2026-11-05",
+      "amountCents": 42000000,
+      "currency": "EUR",
+      "kind": "reconciliation",
+      "source": "manual",
+      "createdAt": "2026-11-11"
+    }
+  ],
+  "expected": {
+    "series": {
+      "betaal": {
+        "2026-11-01": 100000,
+        "2026-11-02": 100000,
+        "2026-11-03": 75000,
+        "2026-11-04": 75000,
+        "2026-11-05": 375000,
+        "2026-11-06": 375000,
+        "2026-11-07": 362500,
+        "2026-11-08": 362500,
+        "2026-11-09": 362500,
+        "2026-11-10": 362500,
+        "2026-11-11": 362500
+      },
+      "spaar": {
+        "2026-11-01": 500000,
+        "2026-11-02": 500000,
+        "2026-11-03": 500000,
+        "2026-11-04": 500000,
+        "2026-11-05": 500000,
+        "2026-11-06": 500000,
+        "2026-11-07": 500000,
+        "2026-11-08": 500000,
+        "2026-11-09": 500000,
+        "2026-11-10": 525000,
+        "2026-11-11": 525000
+      },
+      "lening": {
+        "2026-11-01": -900000,
+        "2026-11-02": -900000,
+        "2026-11-03": -900000,
+        "2026-11-04": -900000,
+        "2026-11-05": -900000,
+        "2026-11-06": -900000,
+        "2026-11-07": -900000,
+        "2026-11-08": -900000,
+        "2026-11-09": -900000,
+        "2026-11-10": -900000,
+        "2026-11-11": -800000
+      },
+      "woning": {
+        "2026-11-01": null,
+        "2026-11-02": null,
+        "2026-11-03": null,
+        "2026-11-04": null,
+        "2026-11-05": 42000000,
+        "2026-11-06": 42000000,
+        "2026-11-07": 42000000,
+        "2026-11-08": 42000000,
+        "2026-11-09": 42000000,
+        "2026-11-10": 42000000,
+        "2026-11-11": 42000000
+      }
+    },
+    "netWorth": {
+      "2026-11-01": null,
+      "2026-11-02": null,
+      "2026-11-03": null,
+      "2026-11-04": null,
+      "2026-11-05": 41975000,
+      "2026-11-06": 41975000,
+      "2026-11-07": 41962500,
+      "2026-11-08": 41962500,
+      "2026-11-09": 41962500,
+      "2026-11-10": 41987500,
+      "2026-11-11": 42087500
+    },
+    "unknownDays": {
+      "2026-11-01": [
+        "woning"
+      ],
+      "2026-11-02": [
+        "woning"
+      ],
+      "2026-11-03": [
+        "woning"
+      ],
+      "2026-11-04": [
+        "woning"
+      ]
+    }
+  }
+}

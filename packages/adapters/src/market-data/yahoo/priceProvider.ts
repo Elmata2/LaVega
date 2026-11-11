@@ -29,6 +29,10 @@ export type PriceProviderResult = {
   problems: string[];
   listing?: string;
   notFound?: boolean;
+  /** The newest close that is still provisional and must be re-fetched until
+   *  its window closes (WS4.5, #297). A provider that returns completed daily
+   *  closes omits it. */
+  provisionalThrough?: string;
 };
 
 export function createYahooPriceProvider(

@@ -45,6 +45,7 @@ is still in scope (plan WS3.6).
    research record, not a snapshot.
 5. Never paste real financial data (IBANs, names, counterparties, exact amounts) into this
    repo, a fixture or a commit. Scrub exports before use; keep local real-data artifacts
-   gitignored.
+   gitignored. The binding rules, the keep/replace table and the gitignored paths are in
+   `docs/superpowers/specs/2026-11-10-sure-adoption-plan.md` §2.6.
 6. Say "independent reimplementation", not "clean-room". The reuse method reads Sure's Ruby
    and tests.

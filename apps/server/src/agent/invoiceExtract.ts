@@ -64,14 +64,12 @@ export async function extractInvoiceFields(
     inputTokens: number;
     outputTokens: number;
     pages: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
   }) => void | Promise<void>,
   userId?: string,
 ): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
-  const provider = createMistralProvider(
-    apiKey,
-    MISTRAL_SMALL,
-    createAiObservationContext(userId),
-  );
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL, createAiObservationContext(userId));
 
   let markdown: string | undefined;
   let pages = 0;
@@ -116,7 +114,17 @@ export async function extractInvoiceFields(
   }
   // One row covers both the OCR pass and the completion — call it once, after
   // complete() resolves, so it reflects the full cost of this extraction.
-  await onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output, pages });
+  await onUsage?.({
+    inputTokens: res.usage.input,
+    outputTokens: res.usage.output,
+    pages,
+    ...(res.usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: res.usage.cacheWriteTokens }),
+    ...(res.usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: res.usage.cacheReadTokens }),
+  });
 
   let parsed: unknown;
   try {

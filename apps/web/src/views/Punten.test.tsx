@@ -248,6 +248,11 @@ function rekProps(): RekProps {
     onDeleteAccount: noop,
     duplicateGroups: [],
     onMergeDuplicates: noop,
+    valuations: [],
+    asOf: "2026-11-11",
+    onOpeningCommit: noop,
+    onValuationCommit: noop,
+    onValuationRemove: noop,
   };
 }
 

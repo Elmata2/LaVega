@@ -29,7 +29,28 @@ export type ThesisBody = {
   entry: string | null;
   wrongIf: string | null;
 };
-export type Thesis = ThesisBody & { symbol: string; status: ThesisStatus; updatedAt: string };
+export type Thesis = ThesisBody & {
+  symbol: string;
+  status: ThesisStatus;
+  /** ISIN-first canonical identity (WS4.5, #297); null until the broker
+   *  snapshot places the symbol. */
+  instrumentKey: string | null;
+  /** Two confirmed theses of one instrument disagree and the owner must
+   *  resolve them. A migration never silently merges that group. */
+  reviewRequired: boolean;
+  updatedAt: string;
+};
+
+/** The canonical-key migration, computed by `planThesisMigration` in core and
+ *  applied here. Structural on purpose: the database package does not depend
+ *  on core, and this is the whole shape it needs. */
+export type ThesisMigrationPlanInput = {
+  assignments: Array<{ symbol: string; instrumentKey: string | null }>;
+  merges: Array<{ instrumentKey: string; keptSymbol: string; mergedSymbols: string[] }>;
+  reviews: Array<{ instrumentKey: string; symbols: string[] }>;
+};
+
+export type ThesisMigrationResult = { updated: number; merged: number; reviewed: number };
 
 export type Goal = {
   id: string;
@@ -107,7 +128,15 @@ export type AgentMemoryRepository = {
    * held symbols this turn is about. With `closeUnheld`, an active thesis of a
    * symbol no longer held turns dormant in the same statement.
    */
-  summary(input: { held: string[]; named: string[]; closeUnheld: boolean }): Promise<MemorySummary>;
+  summary(input: {
+    held: string[];
+    named: string[];
+    /** The same holdings' canonical instrument keys (WS4.5, #297), so a thesis
+     *  stored under another broker symbol for the same ISIN is still found. */
+    heldKeys?: string[];
+    namedKeys?: string[];
+    closeUnheld: boolean;
+  }): Promise<MemorySummary>;
   /** Creates the thread on first use. Refuses a thread of another agent. */
   appendMessages(
     threadId: string,
@@ -119,8 +148,14 @@ export type AgentMemoryRepository = {
   getThread(threadId: string): Promise<(ThreadSummary & { messages: unknown[] }) | null>;
   /** Deletes its messages and observations. Theses and goals stay. */
   deleteThread(threadId: string): Promise<boolean>;
-  /** The owner confirmed it: stores it and makes it active. */
-  confirmThesis(symbol: string, body: ThesisBody): Promise<Thesis>;
+  /** The owner confirmed it: stores it and makes it active. The canonical key
+   *  is optional; a second confirmed thesis for the same key is marked for
+   *  review instead of overwriting the first. */
+  confirmThesis(symbol: string, body: ThesisBody, instrumentKey?: string | null): Promise<Thesis>;
+  /** Applies the canonical-key migration: fills keys, folds identical theses,
+   *  and flags conflicting groups for review. Never deletes a conflicting
+   *  confirmed claim. */
+  applyThesisMigration(plan: ThesisMigrationPlanInput): Promise<ThesisMigrationResult>;
   /** Changes the text of an existing thesis and keeps its status. */
   editThesis(symbol: string, body: ThesisBody): Promise<Thesis | null>;
   listTheses(): Promise<Thesis[]>;
@@ -152,6 +187,10 @@ const iso = (value: unknown): string =>
   value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
 const normalizeSymbol = (symbol: string): string => symbol.trim().toUpperCase();
 const open = <T>(blob: unknown): T => decryptBlob<T>(blob as Buffer);
+/** Postgres unique violation. The driver keeps the code on the error object. */
+function isUniqueViolation(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "23505";
+}
 
 export function isRiskTolerance(value: unknown): value is RiskTolerance {
   return (RISK_TOLERANCES as readonly unknown[]).includes(value);
@@ -161,6 +200,8 @@ function thesisRow(row: QueryResultRow): Thesis {
   return {
     symbol: row.symbol as string,
     status: row.status as ThesisStatus,
+    instrumentKey: (row.instrument_key as string | null) ?? null,
+    reviewRequired: row.review_required === true,
     ...open<ThesisBody>(row.body_blob),
     updatedAt: iso(row.updated_at),
   };
@@ -211,7 +252,7 @@ function letterRow(row: QueryResultRow): PortfolioLetter {
   };
 }
 
-const THESIS_COLUMNS = "symbol, status, body_blob, updated_at";
+const THESIS_COLUMNS = "symbol, status, body_blob, instrument_key, review_required, updated_at";
 const GOAL_COLUMNS = "id, symbol, body_blob, source_thread_id, updated_at";
 const OBSERVATION_COLUMNS = "id, agent_id, thread_id, symbol, body_blob, created_at";
 const LETTER_COLUMNS = "id, snapshot_hash, holdings_hash, body_blob, created_at";
@@ -226,30 +267,38 @@ export function createAgentMemoryRepository(
     withTenantStatement(db, tenantId, (client) => client.query<R>(text, params));
 
   return {
-    async summary({ held, named, closeUnheld }) {
+    async summary({ held, named, heldKeys, namedKeys, closeUnheld }) {
       const heldSymbols = held.map(normalizeSymbol);
       const namedSymbols = named.map(normalizeSymbol);
+      const heldInstrumentKeys = (heldKeys ?? []).map((key) => key.trim()).filter(Boolean);
+      const namedInstrumentKeys = (namedKeys ?? []).map((key) => key.trim()).filter(Boolean);
       /* The UPDATE and the SELECTs share one snapshot, so the rows below show
        * the status from before this statement. That is harmless: only theses
        * of held symbols are selected, and only unheld ones are closed. */
       const result = await one(
         `WITH closed AS (
            UPDATE investing.theses SET status = 'dormant', updated_at = CURRENT_TIMESTAMP
-           WHERE $3::boolean AND status = 'active' AND NOT (symbol = ANY($1::text[]))
+           WHERE $3::boolean AND status = 'active'
+             AND NOT (symbol = ANY($1::text[]) OR instrument_key = ANY($4::text[]))
            RETURNING symbol
          )
          SELECT 'risk' AS kind, risk_tolerance AS value, NULL::text AS symbol, NULL::text AS status,
                 NULL::bytea AS body_blob, NULL::uuid AS id, NULL::uuid AS source_thread_id,
-                updated_at
+                NULL::text AS instrument_key, false AS review_required, updated_at
            FROM investing.preferences
          UNION ALL
-         (SELECT 'goal', NULL, symbol, NULL, body_blob, id, source_thread_id, updated_at
+         (SELECT 'goal', NULL, symbol, NULL, body_blob, id, source_thread_id,
+                 NULL::text, false, updated_at
             FROM investing.goals ORDER BY updated_at DESC LIMIT ${SUMMARY_GOALS})
          UNION ALL
-         SELECT 'thesis', NULL, symbol, status, body_blob, NULL, NULL, updated_at
+         SELECT 'thesis', NULL, symbol, status, body_blob, NULL, NULL,
+                instrument_key, review_required, updated_at
            FROM investing.theses
-          WHERE symbol = ANY($1::text[]) AND (symbol = ANY($2::text[]) OR status = 'dormant')`,
-        [heldSymbols, namedSymbols, closeUnheld],
+          WHERE (symbol = ANY($1::text[]) OR instrument_key = ANY($4::text[]))
+            AND (
+              symbol = ANY($2::text[]) OR instrument_key = ANY($5::text[]) OR status = 'dormant'
+            )`,
+        [heldSymbols, namedSymbols, closeUnheld, heldInstrumentKeys, namedInstrumentKeys],
       );
       const summary: MemorySummary = { riskTolerance: null, goals: [], theses: [] };
       for (const row of result.rows) {
@@ -320,16 +369,74 @@ export function createAgentMemoryRepository(
       return result.rows.length > 0;
     },
 
-    async confirmThesis(symbol, body) {
-      const result = await one(
-        `INSERT INTO investing.theses (user_id, symbol, status, body_blob)
-         VALUES (current_setting('app.user_id'), $1, 'active', $2)
-         ON CONFLICT (user_id, symbol) DO UPDATE
-           SET status = 'active', body_blob = EXCLUDED.body_blob, updated_at = CURRENT_TIMESTAMP
-         RETURNING ${THESIS_COLUMNS}`,
-        [normalizeSymbol(symbol), encryptBlob(body)],
+    async confirmThesis(symbol, body, instrumentKey = null) {
+      const write = async (reviewRequired: boolean) => {
+        const result = await one(
+          `INSERT INTO investing.theses
+             (user_id, symbol, status, body_blob, instrument_key, review_required)
+           VALUES (current_setting('app.user_id'), $1, 'active', $2, $3, $4)
+           ON CONFLICT (user_id, symbol) DO UPDATE
+             SET status = 'active', body_blob = EXCLUDED.body_blob,
+                 instrument_key = EXCLUDED.instrument_key,
+                 review_required = EXCLUDED.review_required,
+                 updated_at = CURRENT_TIMESTAMP
+           RETURNING ${THESIS_COLUMNS}`,
+          [normalizeSymbol(symbol), encryptBlob(body), instrumentKey, reviewRequired],
+        );
+        return thesisRow(result.rows[0]!);
+      };
+      try {
+        return await write(false);
+      } catch (error) {
+        /* The partial unique index keeps one thesis per canonical key. A second
+         * confirmed thesis for the same instrument is a conflict the owner must
+         * resolve, so it is stored under review rather than replacing the first. */
+        if (!isUniqueViolation(error)) throw error;
+        return write(true);
+      }
+    },
+
+    async applyThesisMigration(plan) {
+      let updated = 0;
+      let merged = 0;
+      let reviewed = 0;
+      /* One statement per call: the tenant helper scopes each statement to the
+       * caller's tenant, and a migration has no cross-row invariant that needs
+       * a single transaction. Reviews first, so a conflicting group leaves the
+       * partial unique index before its second row keeps the same key. */
+      for (const review of plan.reviews) {
+        const result = await one(
+          "UPDATE investing.theses SET review_required = true, updated_at = CURRENT_TIMESTAMP WHERE symbol = ANY($1::text[]) RETURNING symbol",
+          [review.symbols.map(normalizeSymbol)],
+        );
+        reviewed += result.rows.length;
+      }
+      for (const merge of plan.merges) {
+        const removed = await one(
+          "DELETE FROM investing.theses WHERE symbol = ANY($1::text[]) RETURNING symbol",
+          [merge.mergedSymbols.map(normalizeSymbol)],
+        );
+        merged += removed.rows.length;
+        const kept = await one(
+          "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
+          [normalizeSymbol(merge.keptSymbol), merge.instrumentKey],
+        );
+        updated += kept.rows.length;
+      }
+      const handled = new Set(
+        plan.merges.flatMap((merge) =>
+          [merge.keptSymbol, ...merge.mergedSymbols].map(normalizeSymbol),
+        ),
       );
-      return thesisRow(result.rows[0]!);
+      for (const assignment of plan.assignments) {
+        if (handled.has(normalizeSymbol(assignment.symbol))) continue;
+        const result = await one(
+          "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
+          [normalizeSymbol(assignment.symbol), assignment.instrumentKey],
+        );
+        updated += result.rows.length;
+      }
+      return { updated, merged, reviewed };
     },
 
     async editThesis(symbol, body) {
@@ -393,7 +500,8 @@ export function createAgentMemoryRepository(
            * only when its symbol is held again. */
           const result = await one(
             `SELECT ${THESIS_COLUMNS} FROM investing.theses
-              WHERE status = 'active' AND ($1::text IS NULL OR symbol = $1)
+              WHERE status = 'active'
+                AND ($1::text IS NULL OR symbol = $1 OR instrument_key = $1)
               ORDER BY symbol LIMIT $2`,
             [symbol, limit],
           );

@@ -187,12 +187,12 @@ test("investing.partner_budgets holds timing only: no user, no credential, no RL
   ]);
 });
 
-test("0028 is rerunnable on a database that already has the table", async () => {
-  const file = migrationFiles.find((name) => name.startsWith("0028_partner_budgets"))!;
+test("0033 is rerunnable on a database that already has the table", async () => {
+  const file = migrationFiles.find((name) => name.startsWith("0033_partner_budgets"))!;
   await db.exec(readFileSync(join(migrationsDir, file), "utf8"));
 });
 
-test("personal.net_worth_totals has the shape opting into Investing's net worth relies on", async () => {
+test("personal.net_worth_totals has the shape opting into Investing's net worth relies on, including the #300 provenance column", async () => {
   const columns = await db.query<{
     column_name: string;
     data_type: string;
@@ -211,6 +211,12 @@ test("personal.net_worth_totals has the shape opting into Investing's net worth 
       is_nullable: "NO",
     },
     { column_name: "date", data_type: "date", column_default: null, is_nullable: "NO" },
+    {
+      column_name: "provenance",
+      data_type: "jsonb",
+      column_default: null,
+      is_nullable: "YES",
+    },
     {
       column_name: "total_cents",
       data_type: "bigint",
@@ -269,4 +275,25 @@ test(`running ${lastMigrationFile} as a non-owner role is refused`, async () => 
     await db.exec("ROLLBACK").catch(() => {});
     await db.exec("RESET ROLE");
   }
+});
+
+test("investing.preferences gains an account_wrappers array column with an empty default", async () => {
+  const rows = await db.query<{
+    column_name: string;
+    data_type: string;
+    column_default: string | null;
+    is_nullable: string;
+  }>(
+    `SELECT column_name, data_type, column_default, is_nullable FROM information_schema.columns
+     WHERE table_schema = 'investing' AND table_name = 'preferences'
+       AND column_name = 'account_wrappers'`,
+  );
+  expect(rows.rows).toEqual([
+    {
+      column_name: "account_wrappers",
+      data_type: "jsonb",
+      column_default: "'[]'::jsonb",
+      is_nullable: "NO",
+    },
+  ]);
 });

@@ -392,6 +392,11 @@ export type PriceCoverageRow = {
   currency: string;
   delistedSince?: string;
   listingMissingSince?: string;
+  /** Security-master hardening (WS4.5, #297): provider affinity, the listing
+   *  start a backfill is clamped to, and the newest provisional close. */
+  provider?: string;
+  listingStart?: string;
+  provisionalThrough?: string;
 };
 
 /** The repository is built for one tenant, so a row never names its own. */
@@ -502,13 +507,16 @@ export function createPriceBarRepository(
     async getCoverage(symbol) {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince" FROM investing.price_coverage WHERE symbol = $1`,
+          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince", provider, to_char(listing_start, 'YYYY-MM-DD') AS "listingStart", to_char(provisional_through, 'YYYY-MM-DD') AS "provisionalThrough" FROM investing.price_coverage WHERE symbol = $1`,
           [symbol],
         );
         const row = result.rows[0] as
           | (PriceCoverageRow & {
               delistedSince: string | null;
               listingMissingSince: string | null;
+              provider: string | null;
+              listingStart: string | null;
+              provisionalThrough: string | null;
             })
           | undefined;
         return row
@@ -516,6 +524,9 @@ export function createPriceBarRepository(
               ...row,
               delistedSince: row.delistedSince ?? undefined,
               listingMissingSince: row.listingMissingSince ?? undefined,
+              provider: row.provider ?? undefined,
+              listingStart: row.listingStart ?? undefined,
+              provisionalThrough: row.provisionalThrough ?? undefined,
             }
           : null;
       });
@@ -523,7 +534,7 @@ export function createPriceBarRepository(
     async putCoverage(coverage) {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since, provider, listing_start, provisional_through) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, provider = EXCLUDED.provider, listing_start = EXCLUDED.listing_start, provisional_through = EXCLUDED.provisional_through, updated_at = CURRENT_TIMESTAMP",
           [
             coverage.symbol,
             coverage.from,
@@ -532,6 +543,9 @@ export function createPriceBarRepository(
             coverage.currency,
             coverage.delistedSince ?? null,
             coverage.listingMissingSince ?? null,
+            coverage.provider ?? null,
+            coverage.listingStart ?? null,
+            coverage.provisionalThrough ?? null,
           ],
         );
       });
@@ -553,6 +567,9 @@ export type PreferencesRepository = {
   setMarketDataConsent(decision: unknown): Promise<void>;
   getLayout(): Promise<unknown | null>;
   setLayout(layout: unknown): Promise<void>;
+  /** Account tax-treatment labels (plan §3 WS4.4, #296). */
+  getAccountWrappers(): Promise<unknown | null>;
+  setAccountWrappers(entries: unknown): Promise<void>;
   getSectorCorrections(): Promise<Record<string, string>>;
   setSectorCorrection(symbol: string, sector: string): Promise<void>;
   clearSectorCorrection(symbol: string): Promise<void>;
@@ -603,6 +620,8 @@ export function createPreferencesRepository(
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
     getLayout: () => read<unknown | null>("layout", null),
     setLayout: (layout) => write("layout", layout),
+    getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
+    setAccountWrappers: (entries) => write("account_wrappers", entries),
     getSectorCorrections: readCorrections,
     async setSectorCorrection(symbol, sector) {
       const current = await readCorrections();
@@ -1181,7 +1200,13 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-export type PersonalNetWorthTotal = { date: string; totalCents: number };
+export type PersonalNetWorthTotal = {
+  date: string;
+  totalCents: number;
+  /** The agent-path citation for this valuation (#300, WS5.5), as stored JSON.
+   *  Absent on rows the browser's own share flow wrote. */
+  provenance?: Record<string, unknown>;
+};
 
 /**
  * Personal's opt-in share of its own "Totale positie" into Investing's net
@@ -1195,15 +1220,20 @@ export type PersonalNetWorthTotal = { date: string; totalCents: number };
 export function createPersonalNetWorthRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
-    async put(date: string, totalCents: number): Promise<void> {
+    async put(
+      date: string,
+      totalCents: number,
+      provenance?: Record<string, unknown>,
+    ): Promise<void> {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency)
-           VALUES (current_setting('app.user_id'), $1, $2, 'EUR')
+          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency, provenance)
+           VALUES (current_setting('app.user_id'), $1, $2, 'EUR', $3::jsonb)
            ON CONFLICT (user_id, date) DO UPDATE SET
              total_cents = EXCLUDED.total_cents,
+             provenance = EXCLUDED.provenance,
              updated_at = CURRENT_TIMESTAMP`,
-          [date, totalCents],
+          [date, totalCents, provenance === undefined ? null : JSON.stringify(provenance)],
         );
       });
     },
@@ -1216,12 +1246,15 @@ export function createPersonalNetWorthRepository(db: Database, userId: string | 
     async list(): Promise<PersonalNetWorthTotal[]> {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents
+          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents, provenance
            FROM personal.net_worth_totals ORDER BY date ASC`,
         );
         return result.rows.map((row) => ({
           date: row.date as string,
           totalCents: Number(row.total_cents),
+          ...(row.provenance && typeof row.provenance === "object"
+            ? { provenance: row.provenance as Record<string, unknown> }
+            : {}),
         }));
       });
     },
@@ -1523,6 +1556,8 @@ export function createEbFlowRepository(db: Database) {
   };
 }
 
+export type AiUsageOutcome = "ok" | "failed";
+
 export type AiUsage = {
   day: string; // "YYYY-MM-DD"
   route:
@@ -1538,6 +1573,16 @@ export type AiUsage = {
   pages: number;
   searches: number;
   costCents: number;
+  /** Provider-reported prompt-cache usage (#300, WS5.7). 0 when it reports none. */
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+  /** "ok" for a call that completed; "failed" for one that reached the model
+   *  and threw. Failed rows carry cost 0 and error metadata instead of a price. */
+  outcome?: AiUsageOutcome;
+  /** The route's own machine code for a failure; never a provider message. */
+  errorCode?: string;
+  /** Upstream HTTP status for a failure, 0 for timeout/transport. */
+  httpStatus?: number;
 };
 
 export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope: "day" | "month" };
@@ -1657,7 +1702,8 @@ export function createAiUsageRepository(db: Database) {
         await client.query(
           `UPDATE personal.ai_usage
            SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
-               cost_cents = $7, reconciled_at = CURRENT_TIMESTAMP
+               cost_cents = $7, cache_write_tokens = $9, cache_read_tokens = $10,
+               outcome = 'ok', reconciled_at = CURRENT_TIMESTAMP
            WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
           [
             usage.id,
@@ -1668,6 +1714,65 @@ export function createAiUsageRepository(db: Database) {
             usage.searches,
             usage.costCents,
             identity,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+          ],
+        );
+      });
+    },
+
+    /** Turn a reservation into a FAILED ledger row (#300, WS5.7 leftover).
+     *
+     *  Before this, the failure path deleted the placeholder, so a provider
+     *  refusal, timeout or 5xx left no trace and an operator could not see why
+     *  spend stopped. The row keeps the reservation id, records the route's own
+     *  machine error code and the upstream HTTP status (0 = timeout/transport),
+     *  sets cost 0 — nothing was billed with certainty — and marks
+     *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
+     *
+     *  `costCents` applies only when the row was NOT already reconciled. The
+     *  provider call sites deliberately record their worst-case/ceiling usage
+     *  BEFORE they throw ("a failed call was still billed"), so a row marked
+     *  failed afterwards usually already carries a real charge: that charge and
+     *  its cache counts are KEPT and only the outcome/error columns are added.
+     *  Either way the row ends up `reconciled_at`-stamped, so it counts exactly
+     *  once in the cap sums. */
+    async fail(
+      failure: {
+        id: number;
+        model: string;
+        errorCode: string;
+        httpStatus?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+        costCents?: number;
+      },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2,
+               input_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE input_tokens END,
+               output_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE output_tokens END,
+               pages = CASE WHEN reconciled_at IS NULL THEN 0 ELSE pages END,
+               searches = CASE WHEN reconciled_at IS NULL THEN 0 ELSE searches END,
+               cost_cents = CASE WHEN reconciled_at IS NULL THEN $8 ELSE cost_cents END,
+               cache_write_tokens = CASE WHEN reconciled_at IS NULL THEN $4 ELSE cache_write_tokens END,
+               cache_read_tokens = CASE WHEN reconciled_at IS NULL THEN $5 ELSE cache_read_tokens END,
+               outcome = 'failed', error_code = $3, http_status = $6,
+               reconciled_at = COALESCE(reconciled_at, CURRENT_TIMESTAMP)
+           WHERE id = $1 AND user_id = $7`,
+          [
+            failure.id,
+            failure.model,
+            failure.errorCode,
+            failure.cacheWriteTokens ?? 0,
+            failure.cacheReadTokens ?? 0,
+            failure.httpStatus ?? null,
+            identity,
+            Math.max(0, Math.round(failure.costCents ?? 0)),
           ],
         );
       });
@@ -1694,7 +1799,10 @@ export function createAiUsageRepository(db: Database) {
       const identity = requireUserId(usage.userId);
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+          `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             usage.day,
             usage.route,
@@ -1704,6 +1812,11 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+            usage.outcome ?? "ok",
+            usage.errorCode ?? null,
+            usage.httpStatus ?? null,
             identity,
           ],
         );
@@ -1818,4 +1931,5 @@ export function createN8nForwardingRepository(db: Database) {
 
 export * from "./agentMemory.js";
 export * from "./rateLimit.js";
+export * from "./mcpTokens.js";
 export * from "./partnerBudget.js";

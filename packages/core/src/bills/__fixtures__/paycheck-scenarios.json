@@ -1,0 +1,671 @@
+{
+  "currency": "EUR",
+  "scenarios": [
+    {
+      "name": "monthly-25th",
+      "asOf": "2026-11-11",
+      "cashCents": 120000,
+      "bills": [
+        {
+          "id": "salaris",
+          "name": "Salaris",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 300000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 25
+            }
+          ],
+          "anchorDate": "2026-10-25"
+        },
+        {
+          "id": "huur",
+          "name": "Huur",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 100000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 15
+            }
+          ],
+          "anchorDate": "2026-11-15"
+        },
+        {
+          "id": "energie",
+          "name": "Energie",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 15000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 28
+            }
+          ],
+          "anchorDate": "2026-11-28"
+        },
+        {
+          "id": "belastingteruggave",
+          "name": "Belastingteruggave",
+          "type": "other",
+          "direction": "in",
+          "amountCents": 50000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 16
+            }
+          ],
+          "anchorDate": "2026-11-16"
+        },
+        {
+          "id": "bonus",
+          "name": "Bonus",
+          "type": "income",
+          "direction": "in",
+          "status": "suggested",
+          "amountCents": 999999,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 20
+            }
+          ],
+          "anchorDate": "2026-11-20"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-25",
+        "periods": [
+          {
+            "startsOn": "2026-11-11",
+            "endsOn": "2026-11-24",
+            "incomeCents": 0,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": -100000,
+            "leading": true,
+            "final": false,
+            "bridge": true,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": 120000
+          },
+          {
+            "startsOn": "2026-11-25",
+            "endsOn": "2026-12-24",
+            "incomeCents": 300000,
+            "dueCents": 115000,
+            "reservedCents": 0,
+            "remainingCents": 185000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-12-25",
+            "endsOn": "2027-01-24",
+            "incomeCents": 300000,
+            "dueCents": 115000,
+            "reservedCents": 0,
+            "remainingCents": 185000,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 100000,
+          "reservedCents": 0,
+          "paidRecentlyCents": 0,
+          "shortfallCents": 0,
+          "shortfallUnknown": false
+        }
+      }
+    },
+    {
+      "name": "twice-monthly",
+      "asOf": "2026-11-11",
+      "cashCents": 50000,
+      "bills": [
+        {
+          "id": "salaris-1",
+          "name": "Salaris 1e",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 150000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 1
+            }
+          ],
+          "anchorDate": "2026-10-01"
+        },
+        {
+          "id": "salaris-2",
+          "name": "Salaris 15e",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 150000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 15
+            }
+          ],
+          "anchorDate": "2026-10-15"
+        },
+        {
+          "id": "huur",
+          "name": "Huur",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 100000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 5
+            }
+          ],
+          "anchorDate": "2026-12-05"
+        },
+        {
+          "id": "verzekering",
+          "name": "Verzekering",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 20000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 20
+            }
+          ],
+          "anchorDate": "2026-11-20"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-15",
+        "periods": [
+          {
+            "startsOn": "2026-11-11",
+            "endsOn": "2026-11-14",
+            "incomeCents": 0,
+            "dueCents": 0,
+            "reservedCents": 0,
+            "remainingCents": 0,
+            "leading": true,
+            "final": false,
+            "bridge": true,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": 50000
+          },
+          {
+            "startsOn": "2026-11-15",
+            "endsOn": "2026-11-30",
+            "incomeCents": 150000,
+            "dueCents": 20000,
+            "reservedCents": 0,
+            "remainingCents": 130000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-12-01",
+            "endsOn": "2026-12-14",
+            "incomeCents": 150000,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": 50000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-12-15",
+            "endsOn": "2026-12-31",
+            "incomeCents": 150000,
+            "dueCents": 20000,
+            "reservedCents": 0,
+            "remainingCents": 130000,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 0,
+          "reservedCents": 0,
+          "paidRecentlyCents": 0,
+          "shortfallCents": 0,
+          "shortfallUnknown": false
+        }
+      }
+    },
+    {
+      "name": "weekly-reserve-cascade",
+      "asOf": "2026-11-11",
+      "cashCents": 30000,
+      "bills": [
+        {
+          "id": "loon",
+          "name": "Loon",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 100000,
+          "rules": [
+            {
+              "frequency": "weekly",
+              "interval": 1,
+              "weekday": 1
+            }
+          ],
+          "anchorDate": "2026-11-02"
+        },
+        {
+          "id": "abonnement",
+          "name": "Abonnement",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 20000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 12
+            }
+          ],
+          "anchorDate": "2026-11-12"
+        },
+        {
+          "id": "verzekering",
+          "name": "Verzekering",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 250000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 3
+            }
+          ],
+          "anchorDate": "2026-12-03"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-16",
+        "periods": [
+          {
+            "startsOn": "2026-11-11",
+            "endsOn": "2026-11-15",
+            "incomeCents": 0,
+            "dueCents": 20000,
+            "reservedCents": 0,
+            "remainingCents": -20000,
+            "leading": true,
+            "final": false,
+            "bridge": true,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": 30000
+          },
+          {
+            "startsOn": "2026-11-16",
+            "endsOn": "2026-11-22",
+            "incomeCents": 100000,
+            "dueCents": 0,
+            "reservedCents": 50000,
+            "remainingCents": 50000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-11-23",
+            "endsOn": "2026-11-29",
+            "incomeCents": 100000,
+            "dueCents": 0,
+            "reservedCents": 100000,
+            "remainingCents": 0,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-11-30",
+            "endsOn": "2026-12-06",
+            "incomeCents": 100000,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": 0,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 20000,
+          "reservedCents": 150000,
+          "paidRecentlyCents": 0,
+          "shortfallCents": 0,
+          "shortfallUnknown": false
+        }
+      }
+    },
+    {
+      "name": "monthly-reserve-overflow",
+      "asOf": "2026-11-25",
+      "cashCents": 100000,
+      "bills": [
+        {
+          "id": "salaris",
+          "name": "Salaris",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 300000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 25
+            }
+          ],
+          "anchorDate": "2026-10-25"
+        },
+        {
+          "id": "belasting",
+          "name": "Belasting",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 700000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 3,
+              "dayOfMonth": 15
+            }
+          ],
+          "anchorDate": "2027-01-15"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-25",
+        "periods": [
+          {
+            "startsOn": "2026-11-25",
+            "endsOn": "2026-12-24",
+            "incomeCents": 300000,
+            "dueCents": 0,
+            "reservedCents": 400000,
+            "remainingCents": -100000,
+            "leading": true,
+            "final": false,
+            "bridge": false,
+            "short": true,
+            "shortfallCents": 100000,
+            "cashOnHandCents": 100000
+          },
+          {
+            "startsOn": "2026-12-25",
+            "endsOn": "2027-01-24",
+            "incomeCents": 300000,
+            "dueCents": 300000,
+            "reservedCents": 0,
+            "remainingCents": 0,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 0,
+          "reservedCents": 400000,
+          "paidRecentlyCents": 0,
+          "shortfallCents": 100000,
+          "shortfallUnknown": false
+        }
+      }
+    },
+    {
+      "name": "month-end-bridge",
+      "asOf": "2026-11-11",
+      "cashCents": 50000,
+      "bills": [
+        {
+          "id": "salaris",
+          "name": "Salaris",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 300000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": -1
+            }
+          ],
+          "anchorDate": "2026-10-31"
+        },
+        {
+          "id": "huur",
+          "name": "Huur",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 100000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 28
+            }
+          ],
+          "anchorDate": "2026-11-28"
+        },
+        {
+          "id": "energie",
+          "name": "Energie",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 15000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 2
+            }
+          ],
+          "anchorDate": "2026-12-02"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-30",
+        "periods": [
+          {
+            "startsOn": "2026-11-11",
+            "endsOn": "2026-11-29",
+            "incomeCents": 0,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": -100000,
+            "leading": true,
+            "final": false,
+            "bridge": true,
+            "short": true,
+            "shortfallCents": 50000,
+            "cashOnHandCents": 50000
+          },
+          {
+            "startsOn": "2026-11-30",
+            "endsOn": "2026-12-30",
+            "incomeCents": 300000,
+            "dueCents": 115000,
+            "reservedCents": 0,
+            "remainingCents": 185000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-12-31",
+            "endsOn": "2027-01-30",
+            "incomeCents": 300000,
+            "dueCents": 115000,
+            "reservedCents": 0,
+            "remainingCents": 185000,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 100000,
+          "reservedCents": 0,
+          "paidRecentlyCents": 0,
+          "shortfallCents": 50000,
+          "shortfallUnknown": false
+        }
+      }
+    },
+    {
+      "name": "month-end-unknown-cash",
+      "asOf": "2026-11-11",
+      "cashCents": null,
+      "bills": [
+        {
+          "id": "salaris",
+          "name": "Salaris",
+          "type": "income",
+          "direction": "in",
+          "amountCents": 300000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": -1
+            }
+          ],
+          "anchorDate": "2026-10-31"
+        },
+        {
+          "id": "huur",
+          "name": "Huur",
+          "type": "bill",
+          "direction": "out",
+          "amountCents": 100000,
+          "rules": [
+            {
+              "frequency": "monthly",
+              "interval": 1,
+              "dayOfMonth": 28
+            }
+          ],
+          "anchorDate": "2026-11-28"
+        }
+      ],
+      "expected": {
+        "paydayOn": "2026-11-30",
+        "periods": [
+          {
+            "startsOn": "2026-11-11",
+            "endsOn": "2026-11-29",
+            "incomeCents": 0,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": -100000,
+            "leading": true,
+            "final": false,
+            "bridge": true,
+            "short": false,
+            "shortfallCents": null,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-11-30",
+            "endsOn": "2026-12-30",
+            "incomeCents": 300000,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": 200000,
+            "leading": false,
+            "final": false,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          },
+          {
+            "startsOn": "2026-12-31",
+            "endsOn": "2027-01-30",
+            "incomeCents": 300000,
+            "dueCents": 100000,
+            "reservedCents": 0,
+            "remainingCents": 200000,
+            "leading": false,
+            "final": true,
+            "bridge": false,
+            "short": false,
+            "shortfallCents": 0,
+            "cashOnHandCents": null
+          }
+        ],
+        "preview": {
+          "dueBeforePaydayCents": 100000,
+          "reservedCents": 0,
+          "paidRecentlyCents": 0,
+          "shortfallCents": null,
+          "shortfallUnknown": true
+        }
+      }
+    }
+  ]
+}

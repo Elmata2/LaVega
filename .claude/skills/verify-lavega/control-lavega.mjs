@@ -187,6 +187,13 @@ async function up(args) {
     WEB_DIST: webDist,
     LAVEGA_ALLOW_UNAUTHENTICATED: "1",
     INVESTING_MOUNT: "0",
+    /* @lavega/server refuses to boot under NODE_ENV=development without the
+     * PostHog log exporter configured (apps/server/src/posthogLogs.ts throws so
+     * a deploy cannot silently drop the logs). A verification run must not send
+     * events anywhere, so the values point at a closed local port: the exporter
+     * batches into nothing and no traffic leaves the machine. */
+    POSTHOG_API_KEY: "phc_lavega_verify_no_send",
+    POSTHOG_HOST: "http://127.0.0.1:9",
   };
   if (args["with-ai"]) {
     const envFile = join(serverDir, ".env");

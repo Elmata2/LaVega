@@ -16,6 +16,12 @@ import {
   createFileInvestingLayoutStore,
   runtimeInvestingLayoutFile,
 } from "./fileInvestingLayoutStore.js";
+import {
+  createFileAccountWrapperStore,
+  runtimeAccountWrapperFile,
+} from "./fileAccountWrapperStore.js";
+import { createDevFixturePersonalNetWorthSeed } from "./devFixture.js";
+import { createInMemoryPersonalNetWorthStore } from "./personalNetWorthStore.js";
 
 const port = Number(process.env.PORT) || 8788;
 const staticRoot =
@@ -75,6 +81,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
     investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    accountWrapperStore: createFileAccountWrapperStore(runtimeAccountWrapperFile()),
+    // The dev fixture answers the Personal side of the net-worth bridge too, so
+    // a local run can show the combined figure (WS4.7 #298). Never production:
+    // this only mounts when the fixture itself is on.
+    ...(process.env.INVESTING_DEV_FIXTURE === "1"
+      ? {
+          personalNetWorthStore: createInMemoryPersonalNetWorthStore(
+            createDevFixturePersonalNetWorthSeed(),
+          ),
+        }
+      : {}),
   });
   serve(
     { fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" },

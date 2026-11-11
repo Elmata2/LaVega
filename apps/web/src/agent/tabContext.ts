@@ -22,8 +22,11 @@ import {
   computeAlerts,
   detectSubscriptions,
   forecastCashflow,
+  isRuleV2,
   ownAccounts,
   resolveAccountRate,
+  ruleCategoryValue,
+  ruleTextValue,
   sanitizeProfileSummary,
   scrubPersonalValuesDeep,
 } from "@lavega/core";
@@ -192,8 +195,15 @@ function buildTabSlice(
 
     case "regels": {
       const rules = (state.rules ?? []) as Rule[];
+      /* A Rule is a legacy row OR the v2 AST, so the chat context reads the
+       * meaning through the core accessors instead of the union's fields: a v2
+       * rule has no `match`/`category` of its own. The shape sent to the agent
+       * stays `{match, category}` so the prompt contract does not drift. */
       const context = {
-        rules: rules.slice(0, MAX_ITEMS).map((r) => ({ match: r.match, category: r.category })),
+        rules: rules.slice(0, MAX_ITEMS).map((r) => ({
+          match: ruleTextValue(r) ?? (isRuleV2(r) ? r.name : undefined) ?? "",
+          category: ruleCategoryValue(r) ?? "",
+        })),
       };
       return { tab, context };
     }

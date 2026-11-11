@@ -1,4 +1,10 @@
-import { withCurrentBalances, type Account, type ConversionMode, type Tx } from "@lavega/core";
+import {
+  personalShareAccounts,
+  withCurrentBalances,
+  type Account,
+  type ConversionMode,
+  type Tx,
+} from "@lavega/core";
 import { positionSeries, POSITION_WINDOW_DAYS } from "./totalePositie.js";
 import { getShareNetWorthEnabled, getShareNetWorthPendingDelete } from "./settings.js";
 
@@ -16,24 +22,32 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Today's Totale positie, in integer EUR cents — the SAME figure Overzicht's
- *  SaldoBlock shows (`positionSeries` in totalePositie.ts), over ALL accounts
- *  regardless of the Persoonlijk/Zakelijk scope currently in view: Investing's
- *  net worth is the owner's whole position, not whichever half the tab
- *  happens to be scrolled to. `accounts`/`txs` must therefore be the full,
- *  unscoped lists — never `scopeAccounts`/`scopedAccounts`.
+/** Today's bank-only Personal total, in integer EUR cents — the part of the
+ *  owner's position that Investing does not already report.
  *
- *  Two steps, both required to match Overzicht exactly:
+ *  `positionSeries` (totalePositie.ts) over the same accounts, rolled forward
+ *  the same way, with ONE scope rule: investment accounts are left out
+ *  (`personalShareAccounts`, WS4.7 #298). Investing's portfolio series counts
+ *  those accounts, so adding their Personal balance too would count the same
+ *  euro twice. A confirmed contribution from a bank account into an investment
+ *  account then lowers this total and raises the portfolio by the same cents:
+ *  the combined net worth is unchanged, and the same euro is never lost.
+ *
+ *  `accounts`/`txs` must still be the full, unscoped lists — never
+ *  `scopeAccounts`/`scopedAccounts` — so the figure is the owner's whole bank
+ *  position, not whichever half the tab happens to show.
+ *
+ *  Two steps for the balances that remain:
  *  1. `withCurrentBalances` rolls a stored balance forward past its
  *     `balanceDate` using later transactions, the same as App.tsx does before
  *     handing accounts to Overzicht.
  *  2. `positionSeries(...).current` sums whatever balances are actually known
- *     in EUR — a PARTIAL sum, exactly like the card on screen: an account
- *     with an unknown balance is excluded, not a reason to null everything.
+ *     in EUR — a PARTIAL sum: an account with an unknown balance is excluded,
+ *     not a reason to null everything.
  *
- *  Null only when there is nothing to share at all: no accounts, or every
- *  account's balance is unknown/unresolved. Sharing a total built from zero
- *  known balances would be a false zero, not the partial sum Overzicht shows. */
+ *  Null only when there is nothing to share at all: no accounts, only
+ *  investment accounts, or every remaining balance is unknown/unresolved.
+ *  Sharing a total built from zero known balances would be a false zero. */
 export function computeShareableTotalCents(
   accounts: Account[],
   txs: Tx[],
@@ -41,9 +55,12 @@ export function computeShareableTotalCents(
   conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
 ): number | null {
   if (accounts.length === 0) return null;
-  const current = withCurrentBalances(accounts, txs, asOf);
-  const series = positionSeries(current, txs, asOf, POSITION_WINDOW_DAYS, conversion);
-  const knownCount = accounts.length - series.excluded;
+  // Investment accounts belong to Investing's portfolio series; sharing their
+  // Personal balance as well would double count the same euro.
+  const shareable = personalShareAccounts(withCurrentBalances(accounts, txs, asOf));
+  if (shareable.length === 0) return null;
+  const series = positionSeries(shareable, txs, asOf, POSITION_WINDOW_DAYS, conversion);
+  const knownCount = shareable.length - series.excluded;
   if (knownCount <= 0) return null;
   return Math.round(series.current * 100);
 }

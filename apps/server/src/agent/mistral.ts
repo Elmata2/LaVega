@@ -1,4 +1,4 @@
-import type { LlmProvider } from "./provider.js";
+import type { LlmProvider, LlmUsage } from "./provider.js";
 import { MISTRAL_OCR } from "./models.js";
 import { captureAiGeneration, type AiObservationContext } from "./aiObservability.js";
 
@@ -28,6 +28,38 @@ export class MistralHttpError extends Error {
 
 async function errorBody(res: Response): Promise<string> {
   return (await res.text()).slice(0, 2000);
+}
+
+const numberOrUndefined = (...values: unknown[]): number | undefined =>
+  values.find((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+/**
+ * Provider usage, including prompt-cache counts when the provider reports them
+ * (#300, WS5.7 leftover). Mistral has used more than one field name for cache
+ * usage across its API versions, so every documented/observed shape is read and
+ * the first number wins; an absent field stays undefined rather than a guessed
+ * 0, so the ledger can tell "reported zero" from "not reported".
+ */
+export function parseMistralUsage(data: unknown): LlmUsage {
+  const record = isRecord(data) ? data : {};
+  const usage = isRecord(record.usage) ? record.usage : {};
+  const details = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : {};
+  const cacheWriteTokens = numberOrUndefined(
+    usage.cache_write_tokens,
+    usage.cache_creation_input_tokens,
+    details.cache_write_tokens,
+  );
+  const cacheReadTokens = numberOrUndefined(
+    usage.cached_tokens,
+    details.cached_tokens,
+    usage.cache_read_tokens,
+  );
+  return {
+    input: numberOrUndefined(usage.prompt_tokens) ?? 0,
+    output: numberOrUndefined(usage.completion_tokens) ?? 0,
+    ...(cacheWriteTokens === undefined ? {} : { cacheWriteTokens }),
+    ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
+  };
 }
 
 export async function fetchWithTimeout(
@@ -149,10 +181,7 @@ export function createMistralProvider(
         console.error(`mistral chat onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
         throw new Error("onverwachte respons");
       }
-      const usage = {
-        input: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens : 0,
-        output: typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
-      };
+      const usage = parseMistralUsage(data);
       await captureAiGeneration(observability, {
         model,
         operation: "chat",
@@ -243,11 +272,7 @@ export function createMistralProvider(
         })
         .join("");
       const sources = extractSources(outputs);
-      const usage = {
-        input: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens : 0,
-        output:
-          typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
-      };
+      const usage = parseMistralUsage(data);
 
       await captureAiGeneration(observability, {
         model,

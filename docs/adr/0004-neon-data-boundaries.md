@@ -42,7 +42,7 @@ Some rows belong to no user, and a row-level policy would hide what every tenant
 - `investing.fx_rates` (0011): published daily exchange rates.
 - `investing.sector_profiles`: a symbol's sector, which is not tenant data.
 - `personal.rate_limit_buckets` (0026): inbound counters. The limiter has to count a caller before a session exists.
-- `investing.partner_budgets` (0028, [#305](https://github.com/Elmata2/LaVega/issues/305)): when the next request to a partner may be sent. One row per partner, endpoint and scope. The scope is the literal `shared`, or the first 16 hex characters of a SHA-256 of a broker credential, so no column can hold a credential. The rows hold timing only. They must be visible to every tenant, because Yahoo and OpenFIGI count requests per source IP across all users. `lavega_runtime` has select, insert, update and delete.
+- `investing.partner_budgets` (0033, [#305](https://github.com/Elmata2/LaVega/issues/305)): when the next request to a partner may be sent. One row per partner, endpoint and scope. The scope is the literal `shared`, or the first 16 hex characters of a SHA-256 of a broker credential, so no column can hold a credential. The rows hold timing only. They must be visible to every tenant, because Yahoo and OpenFIGI count requests per source IP across all users. `lavega_runtime` has select, insert, update and delete.
 
 ## Table ownership
 
@@ -55,7 +55,7 @@ Some rows belong to no user, and a row-level policy would hide what every tenant
 | `investing.preferences`     | One per user                        | Up to three benchmark symbols and market-data consent JSON.                                                                     |
 | `investing.sync_state`      | One per user and broker/sync key    | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`.                        |
 | `investing.agent_runs`      | One latest row per user             | Latest agent run status and result JSON.                                                                                        |
-| `investing.partner_budgets` | One per partner, endpoint and scope | Next allowed request time per partner key (0028). No user; see above.                                                           |
+| `investing.partner_budgets` | One per partner, endpoint and scope | Next allowed request time per partner key (0033). No user; see above.                                                           |
 
 ## Consequences
 
