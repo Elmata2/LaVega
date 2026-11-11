@@ -16,7 +16,7 @@ Use one Neon Postgres database with two application schemas:
 - `personal` stores one encrypted vault blob per future Better Auth `user_id`.
 - `investing` stores broker vaults, normalized price bars, benchmark preferences, sync state, and the latest agent run per user.
 
-Every table requires non-blank `user_id`. Ownership uses `user_id` as the primary key where one row exists per user, or as part of the primary key where multiple broker or price records exist. Row-level security uses `current_setting('app.user_id', true)` and is forced for table owners. Missing user context returns no rows and permits no writes.
+Every table requires non-blank `user_id`, except the shared tables listed under [Tables without a user](#tables-without-a-user). Ownership uses `user_id` as the primary key where one row exists per user, or as part of the primary key where multiple broker or price records exist. Row-level security uses `current_setting('app.user_id', true)` and is forced for table owners. Missing user context returns no rows and permits no writes.
 
 Personal vault data is encrypted before storage. Its encryption key is not stored in Neon. Personal vaults stay separate from investing data, even though both schemas use the same Neon database. Investing credentials and broker snapshots also use encrypted blobs; normalized prices and operational state use dedicated investing tables.
 
@@ -35,17 +35,27 @@ Client-supplied user IDs must not set database context. Encryption must happen b
 
 The nightly investing cron must find every user with a connected broker, and `broker_vaults` is `FORCE ROW LEVEL SECURITY`. `investing.list_broker_sync_tenants()` (0022) is the single exception: `SECURITY DEFINER`, `search_path` pinned, `EXECUTE` granted to `lavega_runtime` only, returning user ids and nothing else, ordered least recently synced first. It runs as the migration owner, who must bypass RLS; 0022 refuses to apply as a role that cannot. No policy was changed.
 
+## Tables without a user
+
+Some rows belong to no user, and a row-level policy would hide what every tenant must see. These tables have no `user_id` and no row-level security, and hold no personal data:
+
+- `investing.fx_rates` (0011): published daily exchange rates.
+- `investing.sector_profiles`: a symbol's sector, which is not tenant data.
+- `personal.rate_limit_buckets` (0026): inbound counters. The limiter has to count a caller before a session exists.
+- `investing.partner_budgets` (0027, [#305](https://github.com/Elmata2/LaVega/issues/305)): when the next request to a partner may be sent. One row per partner, endpoint and scope. The scope is the literal `shared`, or the first 16 hex characters of a SHA-256 of a broker credential, so no column can hold a credential. The rows hold timing only. They must be visible to every tenant, because Yahoo and OpenFIGI count requests per source IP across all users. `lavega_runtime` has select, insert, update and delete.
+
 ## Table ownership
 
-| Table                      | Cardinality                      | Purpose                                                                                                                         |
-| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `personal.vaults`          | One per user                     | Encrypted personal finance vault.                                                                                               |
-| `investing.broker_vaults`  | One per user and broker          | Encrypted broker credentials and latest encrypted snapshot.                                                                     |
-| `investing.price_bars`     | One per user, symbol, date       | Queryable daily market data.                                                                                                    |
-| `investing.price_coverage` | One per user and symbol          | Date window the provider answered, its listing/currency (0015), and a closed position's confirmed-delisted date, if any (0021). |
-| `investing.preferences`    | One per user                     | Up to three benchmark symbols and market-data consent JSON.                                                                     |
-| `investing.sync_state`     | One per user and broker/sync key | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`.                        |
-| `investing.agent_runs`     | One latest row per user          | Latest agent run status and result JSON.                                                                                        |
+| Table                       | Cardinality                         | Purpose                                                                                                                         |
+| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `personal.vaults`           | One per user                        | Encrypted personal finance vault.                                                                                               |
+| `investing.broker_vaults`   | One per user and broker             | Encrypted broker credentials and latest encrypted snapshot.                                                                     |
+| `investing.price_bars`      | One per user, symbol, date          | Queryable daily market data.                                                                                                    |
+| `investing.price_coverage`  | One per user and symbol             | Date window the provider answered, its listing/currency (0015), and a closed position's confirmed-delisted date, if any (0021). |
+| `investing.preferences`     | One per user                        | Up to three benchmark symbols and market-data consent JSON.                                                                     |
+| `investing.sync_state`      | One per user and broker/sync key    | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`.                        |
+| `investing.agent_runs`      | One latest row per user             | Latest agent run status and result JSON.                                                                                        |
+| `investing.partner_budgets` | One per partner, endpoint and scope | Next allowed request time per partner key (0027). No user; see above.                                                           |
 
 ## Consequences
 
