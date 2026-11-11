@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
-import type { Account, TransferPair, Tx } from "@lavega/core";
+import type { Account, Merchant, TransferPair, Tx } from "@lavega/core";
 import {
   AdvisorProfile,
   type ProfileRead,
@@ -355,6 +355,77 @@ test("putTransfers replaces the whole list; get/put while locked throws", async 
   v.lock();
   await expect(v.getTransfers()).rejects.toBeTruthy();
   await expect(v.putTransfers([first])).rejects.toBeTruthy();
+});
+
+test("merchants round-trip exactly; a legacy vault without the field reads []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const legacy = await sealJSON(KEY, { accounts: [], txs: [], rules: [] });
+  const v = createEncryptedStorage("lavega-vault-test-merchants");
+  await v.open(KEY, "user:a");
+  expect(await v.getMerchants()).toEqual([]);
+  expect(await v.restore(legacy)).toBe(true);
+  expect(await v.getMerchants()).toEqual([]);
+
+  const registry: Merchant[] = [
+    { key: "ah", name: "Albert Heijn", aliases: ["AH", "ALBERT HEIJN"] },
+    { key: "simyo", name: "Simyo", aliases: ["Simyo"] },
+  ];
+  await v.putMerchants(registry);
+  expect(await v.getMerchants()).toEqual(registry);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getMerchants()).toEqual(registry);
+  await v.putMerchants([registry[0]]);
+  expect(await v.getMerchants()).toEqual([registry[0]]); // replace-all
+});
+
+test("an old vault gets the tx-state defaults in ONE save on first open", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault sealed before WS1.6: rows have no state fields.
+  const old = await sealJSON(KEY, {
+    accounts: [],
+    txs: [tx("t1", "A"), tx("t2", "A")],
+    rules: [],
+  });
+  const v = createEncryptedStorage("lavega-vault-test-tx-states");
+  await v.open(KEY, "user:a");
+  expect(await v.restore(old)).toBe(true); // restore also runs the pass
+
+  const migrated = await v.getTxs();
+  expect(migrated[0]).toMatchObject({
+    id: "t1",
+    excluded: false,
+    pending: false,
+    notes: "",
+    tags: [],
+  });
+
+  // The one save happened during the restore that adopted the old blob; the
+  // next open must not re-seal it (a re-seal always changes the ciphertext).
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration);
+  expect(await v.getTxs()).toEqual(migrated);
+});
+
+test("a reopen of a vault with old rows runs the pass and writes once", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-tx-states-open");
+  await v.open(KEY, "user:a");
+  await v.putTxs([tx("t1", "A")]); // stored without state fields
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect((await v.getTxs())[0]).toMatchObject({
+    excluded: false,
+    pending: false,
+    notes: "",
+    tags: [],
+  });
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration); // no second re-seal
 });
 
 test("deleteAccount / deleteTxs remove only their rows (parity with plaintext adapter)", async () => {

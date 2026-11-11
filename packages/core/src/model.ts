@@ -101,7 +101,60 @@ export type Tx = {
   description: string;
   category: string;
   manual: boolean;
+  /* Transaction state (WS1.6, issue #284). None of these four is part of
+   * `tx.id`: `hash.ts`'s `txBase` reads only the identity fields, so a state
+   * change never re-keys a row. Optional because a vault written before they
+   * existed decrypts unchanged; `migrateTxStates` fills the defaults in ONE
+   * pass over an old vault. */
+  /** Owner or rule says this row is not spending (e.g. it was reimbursed). */
+  excluded?: boolean;
+  /** Booked by the bank but not settled yet. */
+  pending?: boolean;
+  /** Free-text note the owner attached to this row. */
+  notes?: string;
+  /** Tags a rule or the owner attached. Kept as a plain list; a tag has no
+   *  identity of its own in this slice. */
+  tags?: string[];
 };
+
+/** The defaults an old vault row gets, in one pass (`migrateTxStates`). They
+ *  are the values ABSENCE already meant everywhere: not excluded, not pending,
+ *  no note, no tags. `notes: ""` rather than absent keeps the row shape stable
+ *  after the pass; it states "no note", not an unknown amount (ADR 0011 §8
+ *  covers magnitudes and rates, not text). */
+export const TX_STATE_DEFAULTS = {
+  excluded: false,
+  pending: false,
+  notes: "",
+  tags: [] as string[],
+} as const;
+
+/** The ONE migration pass over an existing vault (issue #284): give every row
+ *  the state fields it predates. Idempotent — a row that already has all four
+ *  keeps its object identity, so a second open migrates nothing and the caller
+ *  can skip the single re-seal. Pure: the caller writes, this only decides. */
+export function migrateTxStates(txs: readonly Tx[]): { txs: Tx[]; changed: boolean } {
+  let changed = false;
+  const next = txs.map((tx) => {
+    if (
+      tx.excluded !== undefined &&
+      tx.pending !== undefined &&
+      tx.notes !== undefined &&
+      tx.tags !== undefined
+    ) {
+      return tx;
+    }
+    changed = true;
+    return {
+      ...tx,
+      excluded: tx.excluded ?? TX_STATE_DEFAULTS.excluded,
+      pending: tx.pending ?? TX_STATE_DEFAULTS.pending,
+      notes: tx.notes ?? TX_STATE_DEFAULTS.notes,
+      tags: tx.tags ?? [],
+    };
+  });
+  return { txs: changed ? next : [...txs], changed };
+}
 /** Whether an amount in this currency can be added straight into a EUR total.
  *  Missing/empty defaults to EUR, matching every importer — `parseBankCsv` and
  *  `mapEbTransaction`/`mapEbAccount` all default an absent currency to "EUR".

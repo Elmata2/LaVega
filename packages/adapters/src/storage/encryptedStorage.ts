@@ -6,6 +6,7 @@ import {
   carryUnknownKeys,
   encodeProfileStore,
   mergeEvents,
+  migrateTxStates,
 } from "@lavega/core";
 import type {
   AdvisorProfileStore,
@@ -29,6 +30,7 @@ import type {
   N8nSettings,
   N8nAutoBooked,
   TransferPair,
+  Merchant,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
@@ -63,6 +65,11 @@ type VaultData = {
    *  and rejected pairs. Suggestions are derived on read from the ledger, never
    *  stored. Additive optional field: a legacy vault decrypts without it. */
   transfers?: TransferPair[];
+  /** The minimal merchant registry (issue #284): canonical key + display name +
+   *  the raw spellings that resolve to it. Additive optional field, like
+   *  `transfers`: a legacy vault decrypts without it and reads [] (unknown
+   *  aliases are not invented; `labels.ts` then falls back to its token key). */
+  merchants?: Merchant[];
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
@@ -123,6 +130,9 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** Stored transfer decisions; a legacy vault has none and reads []. */
   getTransfers(): Promise<TransferPair[]>;
   putTransfers(p: TransferPair[]): Promise<void>;
+  /** The owner's merchant aliases; a legacy vault has none and reads []. */
+  getMerchants(): Promise<Merchant[]>;
+  putMerchants(m: Merchant[]): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
@@ -242,6 +252,17 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     return run;
   }
 
+  /** The single tx-state migration pass (issue #284). Called on every path that
+   *  adopts an EXISTING vault, never on a fresh one. It returns the same object
+   *  when nothing is missing, which is what keeps the pass to one write: after
+   *  the first open every row has all four fields, so no later open re-seals. */
+  function withMigratedTxStates(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const migrated = migrateTxStates(vault.txs ?? []);
+    return migrated.changed
+      ? { vault: { ...vault, txs: migrated.txs }, changed: true }
+      : { vault, changed: false };
+  }
+
   return {
     async open(ownerKey, owner): Promise<VaultOpenResult> {
       if (!owner.trim()) throw new Error("vault owner is required");
@@ -254,8 +275,13 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       if (onDisk?.v === 2) {
         // Throws if another key sealed it. That is not a state to paper over:
         // the key is per account and never replaced.
-        data = await decryptJSON<VaultData>(ownerKey, onDisk);
+        const opened = await decryptJSON<VaultData>(ownerKey, onDisk);
+        const migrated = withMigratedTxStates(opened);
+        data = migrated.vault;
         blob = onDisk;
+        // Exactly one save for the whole vault, and only when this open was the
+        // one that upgraded an old row (WS1.6). A re-open writes nothing.
+        if (migrated.changed) await enqueueWrite(() => persist());
         return "opened";
       }
       if (await passwordVault()) return "password-vault";
@@ -272,7 +298,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       } catch {
         return false; // wrong passphrase, tampered blob, or sub-floor iterations
       }
-      await enqueueWrite(() => adopt(opened));
+      await enqueueWrite(() => adopt(withMigratedTxStates(opened).vault));
       // Only once the re-sealed copy is on disk is the password copy redundant.
       await deleteBlobFromDisk(dbName);
       return true;
@@ -308,7 +334,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       }
       // Through the same queue as every mutator, so a put still resolving
       // cannot land after the swap and revert disk.
-      await enqueueWrite(() => adopt(decrypted));
+      await enqueueWrite(() => adopt(withMigratedTxStates(decrypted).vault));
       return true;
     },
 
@@ -435,6 +461,19 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, transfers: [...p] };
+        await persist();
+      });
+    },
+    // merchants is the same additive optional field shape: replace-all, and a
+    // legacy vault reads [] so `labels.ts` falls back to its token key.
+    async getMerchants(): Promise<Merchant[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.merchants ?? [])];
+    },
+    putMerchants(m: Merchant[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, merchants: [...m] };
         await persist();
       });
     },
