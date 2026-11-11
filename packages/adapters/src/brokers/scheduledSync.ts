@@ -107,6 +107,11 @@ export interface BrokerSyncOperationStore {
 /** A lease this old belonged to a worker that is not coming back. */
 export const BROKER_SYNC_LEASE_TTL_MS = 15 * 60 * 1000;
 
+/** A slow broker read is still alive. Renewing the lease while the adapter
+ *  works closes the takeover gap: another instance cannot decide this run is
+ *  dead 15 minutes in while it is merely paginating a large history. */
+export const BROKER_SYNC_HEARTBEAT_MS = 10_000;
+
 /** The whole store for a single process that keeps its state in memory. */
 export function createMemoryBrokerSyncStateStore(): BrokerSyncOperationStore {
   const states = new Map<ScheduledBroker, BrokerSyncState>();
@@ -480,18 +485,37 @@ export async function syncScheduledBrokers(input: {
     }
 
     const before = problems.length;
-    const run = await work(entry, claim).catch((error): ClaimedRun => {
-      problems.push(`${entry.broker}: ${readableError(error, entry.broker)}`);
-      return {
-        outcome: {
-          broker: entry.broker,
-          status: "problem",
-          lastSyncedAt: claim.state.lastSyncedAt,
-          result: null,
-        },
-        state: null,
-      };
-    });
+    /* The claim is held across the whole read, so heartbeat it while the
+     * adapter works. A publish that loses the lease is not an error here: the
+     * commit below reports it and the result is discarded. */
+    const heartbeat = setInterval(() => {
+      void input.operations
+        .publish(entry.broker, leaseId, {
+          status: "running",
+          message: null,
+          updatedAt: new Date().toISOString(),
+          leaseId,
+        })
+        .catch(() => undefined);
+    }, BROKER_SYNC_HEARTBEAT_MS);
+    (heartbeat as { unref?: () => void }).unref?.();
+    let run: ClaimedRun;
+    try {
+      run = await work(entry, claim).catch((error): ClaimedRun => {
+        problems.push(`${entry.broker}: ${readableError(error, entry.broker)}`);
+        return {
+          outcome: {
+            broker: entry.broker,
+            status: "problem",
+            lastSyncedAt: claim.state.lastSyncedAt,
+            result: null,
+          },
+          state: null,
+        };
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
     const progress = progressFor(leaseId, nowIso, run, problems[before] ?? null);
 
     if (run.state === null) {

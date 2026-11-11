@@ -5,6 +5,7 @@ import {
   createMemoryBrokerSyncStateStore,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
+  type BrokerSyncProgressRecord,
   type BrokerSyncState,
 } from "./scheduledSync.js";
 
@@ -64,6 +65,52 @@ const empty = (overrides: {
   problems: overrides.problems ?? [],
   resume: overrides.resume,
   retryAfter: overrides.retryAfter,
+});
+
+test("a slow broker read renews the broker lease while it runs", async () => {
+  vi.useFakeTimers();
+  try {
+    const base = createMemoryBrokerSyncStateStore();
+    const published: BrokerSyncProgressRecord[] = [];
+    const operations: BrokerSyncOperationStore = {
+      get: (broker) => base.get(broker),
+      claim: (broker, input) => base.claim(broker, input),
+      progress: (broker) => base.progress(broker),
+      commit: (broker, input) => base.commit(broker, input),
+      release: (broker, leaseId, progress) => base.release(broker, leaseId, progress),
+      publish: async (broker, leaseId, progress) => {
+        published.push(progress);
+        return base.publish(broker, leaseId, progress);
+      },
+    };
+    const sync = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25_000));
+      return empty({});
+    });
+    const run = syncScheduledBrokers({
+      lanes: ["holdings", "history"] as const,
+      adapters: adapters(sync),
+      credentials,
+      operations,
+      tenantId: "local",
+      entity: "personal",
+      force: true,
+      now: new Date("2026-09-23T12:00:00.000Z"),
+    });
+    await vi.advanceTimersByTimeAsync(25_000);
+    const result = await run;
+
+    expect(result.problems).toEqual([]);
+    const renewals = published.filter((record) => record.status === "running");
+    expect(renewals.length).toBeGreaterThanOrEqual(2);
+    // The heartbeat advances, so a stale-takeover check 15 minutes in sees a
+    // live worker instead of deciding the run died.
+    expect(new Date(renewals.at(-1)!.updatedAt!).getTime()).toBeGreaterThan(
+      new Date(renewals[0]!.updatedAt!).getTime(),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("order rebuild starts at first page, then resumes saved cursor", async () => {
