@@ -91,6 +91,22 @@ export type Bill = {
   /** Optional bridge to the existing `ScheduledFlow` this series mirrors
    *  (WS2.1). Absent means the bill does not project into the flow list yet. */
   scheduledFlowId?: string;
+  /* Payment-matching hints (WS2.4/WS2.5, issue #287). All optional and
+   * additive: a series written by #286 keeps its behaviour because every
+   * reader applies Sure's own default (early 2 / late 7 days, 7.5% amount
+   * tolerance, no learned tolerance, no aliases). */
+  /** Days before the due date a payment may land (Sure `match_days_early`). */
+  matchDaysEarly?: number;
+  /** Days after the due date a payment may land (Sure `match_days_late`). */
+  matchDaysLate?: number;
+  /** The owner's amount band, in percent (`amount_tolerance_pct`, max 25). */
+  amountTolerancePct?: number;
+  /** Widened band learned from a manual match that settled the occurrence
+   *  (`learned_tolerance_pct`, capped at 25%). */
+  learnedTolerancePct?: number;
+  /** Counterparty spellings the owner confirmed for this series
+   *  (`matcher_hints` aliases). Learned on a manual match, never invented. */
+  aliases?: string[];
 };
 
 /** Sure's minimal stored occurrence status. Derived states (upcoming/due/
@@ -129,6 +145,109 @@ export type BillOccurrencePair = {
   originalDueOn: string;
   dueOn: string;
 };
+
+/* ── Stored payment decisions (WS2.4/WS2.5, issue #287) ─────────────────────
+ *
+ * Same split as transfers (WS1.1): SUGGESTIONS ARE DERIVED on read from the
+ * current ledger; only DECISIONS persist. A new import can change which rows
+ * a suggestion would join, so a stored pending row would go stale in the
+ * vault. This section is the bills equivalent of `TransferPair[]`: one
+ * additive `VaultData.billDecisions` written through the existing
+ * `putBillPlan` mutator, so a decision and the occurrence rows it closes are
+ * ONE vault save. */
+
+/** `auto` = the matcher's exact tier wrote it; `user` = the owner confirmed,
+ *  marked, or rejected. The source matters: a user close is never reopened by
+ *  a later automatic pass. */
+export type BillDecisionSource = "auto" | "user";
+
+/** One allocation: one real transaction paying (part of) one occurrence.
+ *  Multiple rows per occurrence are partial payments; multiple rows per
+ *  transaction are one payment covering several bills. */
+export type BillMatchDecision = {
+  /** Content id over occurrence + tx, so a re-import that keeps both rows
+   *  keeps the allocation. */
+  id: string;
+  occurrenceId: string;
+  billId: string;
+  txId: string;
+  /** Allocated magnitude in the occurrence's currency (ADR 0011: integer
+   *  cents, never a signed value). */
+  amountCents: number;
+  currency: string;
+  source: BillDecisionSource;
+  /** Confidence the matcher had at decision time; the owner's own
+   *  confirmation records 1. */
+  confidence: number;
+  decidedAt: string;
+};
+
+/** "Paid without a transaction" (Sure `mark_paid!`). A mark is a decision, not
+ *  an allocation: there is no tx to point at, and a later automatic pass must
+ *  not undo it. */
+export type BillMark = {
+  occurrenceId: string;
+  billId: string;
+  paidOn: string;
+  amountCents: number;
+  currency: string;
+  markedAt: string;
+};
+
+/** Rejection memory (Sure `recurring_match_rejections`): the same transaction
+ *  is never proposed for the same SERIES again, exactly like Sure's pair-keyed
+ *  rejection join. The transaction stays matchable for other series and the
+ *  series stays matchable with other transactions. */
+export type BillRejection = {
+  billId: string;
+  txId: string;
+  /** The occurrence the owner was looking at; kept for display, not identity. */
+  occurrenceId: string;
+  rejectedAt: string;
+};
+
+/** Sure `recurring_price_changes`: a settled payment changed the series price.
+ *  `effectiveOn` is the occurrence's due date, so the history reads in order;
+ *  future open occurrences inherit the new amount through the series strategy
+ *  (ADR 0011: no sweep over rows). */
+export type BillPriceChange = {
+  billId: string;
+  effectiveOn: string;
+  oldAmountCents: number;
+  newAmountCents: number;
+  currency: string;
+  detectedAt: string;
+  source: BillDecisionSource;
+};
+
+/** The persisted bills sidecar. Always all four lists: a caller can read the
+ *  shape without null checks, and a missing vault field becomes this empty
+ *  value in the storage adapter (a legacy vault decrypts unchanged). */
+export type BillDecisions = {
+  matches: BillMatchDecision[];
+  marks: BillMark[];
+  rejections: BillRejection[];
+  priceChanges: BillPriceChange[];
+};
+
+export const EMPTY_BILL_DECISIONS: BillDecisions = {
+  matches: [],
+  marks: [],
+  rejections: [],
+  priceChanges: [],
+};
+
+/** Copy the sidecar from a vault read, so no caller mutates the stored arrays
+ *  in place and an absent field reads as the empty section. */
+export function billDecisionsOf(raw: Partial<BillDecisions> | null | undefined): BillDecisions {
+  if (raw == null) return { matches: [], marks: [], rejections: [], priceChanges: [] };
+  return {
+    matches: [...(raw.matches ?? [])],
+    marks: [...(raw.marks ?? [])],
+    rejections: [...(raw.rejections ?? [])],
+    priceChanges: [...(raw.priceChanges ?? [])],
+  };
+}
 
 /** Codes, not sentences: the view owns the nl/en wording, the same split
  *  `rules/parse.ts` uses for its problems. */

@@ -906,3 +906,71 @@ test("bills + occurrences round-trip in one save; legacy vault defaults to []", 
   expect((await s.getBills())[0].id).toBe("b1");
   expect((await s.getBillOccurrences())[0].id).toBe("b1|2026-11-01");
 });
+
+test("bill decisions ride in the same putBillPlan save and survive without one", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-bill-decisions");
+  await s.open(KEY, "user:a");
+  expect(await s.getBillDecisions()).toEqual({
+    matches: [],
+    marks: [],
+    rejections: [],
+    priceChanges: [],
+  });
+
+  const decisions = {
+    matches: [
+      {
+        id: "m1",
+        occurrenceId: "b1|2026-11-01",
+        billId: "b1",
+        txId: "t1",
+        amountCents: 98_500,
+        currency: "EUR",
+        source: "auto" as const,
+        confidence: 0.95,
+        decidedAt: "2026-11-11",
+      },
+    ],
+    marks: [
+      {
+        occurrenceId: "b1|2026-12-01",
+        billId: "b1",
+        paidOn: "2026-11-11",
+        amountCents: 98_500,
+        currency: "EUR",
+        markedAt: "2026-11-11",
+      },
+    ],
+    rejections: [
+      { billId: "b1", txId: "t9", occurrenceId: "b1|2027-01-01", rejectedAt: "2026-11-11" },
+    ],
+    priceChanges: [
+      {
+        billId: "b1",
+        effectiveOn: "2026-11-01",
+        oldAmountCents: 95_000,
+        newAmountCents: 98_500,
+        currency: "EUR",
+        detectedAt: "2026-11-11",
+        source: "auto" as const,
+      },
+    ],
+  };
+  await s.putBillPlan([], [], decisions);
+  expect(await s.getBillDecisions()).toEqual(decisions);
+
+  // A later save without a decisions argument (a schedule edit, a lazy
+  // materialization) must not forget them.
+  await s.putBillPlan([], []);
+  expect(await s.getBillDecisions()).toEqual(decisions);
+
+  // Mutating the getter's copy cannot change vault state.
+  const read = await s.getBillDecisions();
+  read.matches.push({ ...decisions.matches[0], id: "m2" });
+  expect((await s.getBillDecisions()).matches).toHaveLength(1);
+
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getBillDecisions()).toEqual(decisions);
+});

@@ -9,6 +9,7 @@ import {
   encodeProfileStore,
   mergeEvents,
   migrateTxStates,
+  billDecisionsOf,
 } from "@lavega/core";
 import type {
   AdvisorProfileStore,
@@ -36,6 +37,7 @@ import type {
   BudgetPeriod,
   CategoryGroup,
   Bill,
+  BillDecisions,
   BillOccurrence,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
@@ -82,6 +84,12 @@ type VaultData = {
    *  saved together so materialization is ONE vault write. */
   bills?: Bill[];
   billOccurrences?: BillOccurrence[];
+  /** Paid-occurrence decisions (issue #287): allocations, marks, rejection
+   *  memory and price-change history. Additive like `bills`; a legacy vault
+   *  reads the empty section and the screen behaves exactly as #286. Written
+   *  by `putBillPlan` together with the rows it closes, so a decision is ONE
+   *  seal. */
+  billDecisions?: BillDecisions;
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
@@ -164,7 +172,16 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
    *  in one persist, so the vault never holds a series without its rows. */
   getBills(): Promise<Bill[]>;
   getBillOccurrences(): Promise<BillOccurrence[]>;
-  putBillPlan(bills: Bill[], occurrences: BillOccurrence[]): Promise<void>;
+  /** The bills sidecar. A legacy vault has none and reads the empty section. */
+  getBillDecisions(): Promise<BillDecisions>;
+  /** Save series, rows AND the decisions that closed some of them in one
+   *  persist. `decisions` omitted keeps what the vault already holds, so a
+   *  schedule edit or a lazy materialization never drops a payment decision. */
+  putBillPlan(
+    bills: Bill[],
+    occurrences: BillOccurrence[],
+    decisions?: BillDecisions,
+  ): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
@@ -559,10 +576,25 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       if (data == null) throw new Error(LOCKED_ERROR);
       return [...(data.billOccurrences ?? [])];
     },
-    putBillPlan(bills: Bill[], occurrences: BillOccurrence[]): Promise<void> {
+    async getBillDecisions(): Promise<BillDecisions> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(billDecisionsOf(data.billDecisions));
+    },
+    putBillPlan(
+      bills: Bill[],
+      occurrences: BillOccurrence[],
+      decisions?: BillDecisions,
+    ): Promise<void> {
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, bills: [...bills], billOccurrences: [...occurrences] };
+        data = {
+          ...data,
+          bills: [...bills],
+          billOccurrences: [...occurrences],
+          // Undefined keeps the stored decisions: a schedule edit or a
+          // materialization must not silently forget which rows were paid.
+          billDecisions: structuredClone(decisions ?? billDecisionsOf(data.billDecisions)),
+        };
         await persist();
       });
     },
