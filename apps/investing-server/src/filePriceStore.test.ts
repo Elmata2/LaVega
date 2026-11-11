@@ -1,15 +1,10 @@
 import { mkdtempSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { registerPriceStoreContract } from "@lavega/adapters/src/prices/priceStore.contract.js";
 import { registerSharedPriceStoreContract } from "@lavega/adapters/src/prices/sharedPriceStore.contract.js";
-import {
-  createFilePriceStore,
-  createFileSharedPriceStore,
-  runtimePriceStoreFile,
-} from "./filePriceStore.js";
+import { createFileSharedPriceStore } from "./filePriceStore.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
@@ -20,55 +15,26 @@ afterEach(async () => {
   );
 });
 
-registerPriceStoreContract("file", () => {
-  const directory = mkdtempSync(join(tmpdir(), "lavega-price-store-contract-"));
-  temporaryDirectories.push(directory);
-  return createFilePriceStore(join(directory, "prices.json"));
-});
-
-test("runtime price store file prefers INVESTING_PRICE_STORE_FILE", () => {
-  const previous = process.env.INVESTING_PRICE_STORE_FILE;
-  process.env.INVESTING_PRICE_STORE_FILE = "/tmp/custom-prices.json";
-  try {
-    expect(runtimePriceStoreFile()).toBe("/tmp/custom-prices.json");
-  } finally {
-    if (previous === undefined) delete process.env.INVESTING_PRICE_STORE_FILE;
-    else process.env.INVESTING_PRICE_STORE_FILE = previous;
-  }
-});
-
-test("persists price bars across store instances and purges them", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "lavega-price-store-"));
-  temporaryDirectories.push(directory);
-  const filePath = join(directory, "nested", "prices.json");
-  const first = createFilePriceStore(filePath);
-  await Promise.all([
-    first.upsert("local", [{ symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]),
-    first.upsert("local", [{ symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]),
-  ]);
-
-  const second = createFilePriceStore(filePath);
-  await expect(second.getRange("local", "AAPL", "2026-01-01", "2026-01-03")).resolves.toEqual([
-    { symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" },
-  ]);
-  await expect(second.getRange("local", "MSFT", "2026-01-01", "2026-01-03")).resolves.toEqual([
-    { symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" },
-  ]);
-  await expect(second.lastDate("local", "AAPL")).resolves.toBe("2026-01-02");
-  await second.purgeAll();
-  await expect(second.getRange("local", "AAPL")).resolves.toEqual([]);
-  await expect(readFile(filePath, "utf8")).resolves.toBe("[]");
-});
-
-test("rejects malformed cache rows instead of serving invalid prices", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "lavega-price-store-invalid-"));
+/** Clears the local shared file (issue #307 acceptance 9): the no-database
+ *  mode keeps the "clear price cache" control working. */
+test("clearing the shared file store empties every series, once", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-shared-price-clear-"));
   temporaryDirectories.push(directory);
   const filePath = join(directory, "prices.json");
-  await writeFile(filePath, JSON.stringify([{ symbol: "AAPL", close: "not-a-number" }]));
+  const store = createFileSharedPriceStore(filePath);
+  await store.upsert("sym:AAPL:USD", [{ date: "2026-01-02", close: 201, currency: "USD" }]);
+  await store.putCoverage("sym:AAPL:USD", {
+    from: "2026-01-02",
+    to: "2026-01-02",
+    listing: "AAPL.US",
+    currency: "USD",
+    provider: "yahoo",
+  });
 
-  await expect(createFilePriceStore(filePath).getRange("local", "AAPL")).rejects.toThrow(
-    "Invalid price cache file",
-  );
+  await store.clear();
+
+  await expect(store.getRange({ key: "sym:AAPL:USD" })).resolves.toEqual([]);
+  await expect(store.getCoverage({ key: "sym:AAPL:USD" })).resolves.toBeNull();
 });
 
 registerSharedPriceStoreContract("file", () => {

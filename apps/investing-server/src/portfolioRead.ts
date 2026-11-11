@@ -10,12 +10,14 @@ import {
   resolveTrading212CashHistory,
   SCHEDULED_BROKERS,
   type BrokerSyncOperationStore,
-  type PriceStore,
+  type PriceKey,
+  type SharedPriceStore,
 } from "@lavega/adapters";
 import type { FrankfurterFxProvider } from "@lavega/adapters";
 import type { DashboardSnapshotRepository } from "@lavega/database";
 import type { DashboardCache } from "./dashboardCache.js";
 import { readPriceBars } from "./priceReader.js";
+import { priceReadKeys } from "./priceOrchestrator.js";
 import { untimed, type ServerTiming } from "./serverTiming.js";
 import type { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import type { createBrokerDataCache } from "@lavega/adapters";
@@ -48,7 +50,9 @@ export class PortfolioReadError extends Schema.TaggedError<PortfolioReadError>()
  * docs/investing/STACK.md "Neon request lifecycle").
  */
 export type PortfolioReadSources = {
-  priceStore: PriceStore;
+  /** The shared, instrument-keyed price store (issue #307). A dashboard stores
+   *  the keys it read so a shared write can invalidate it. */
+  priceStore: SharedPriceStore;
   /** The runtime's lazy vault load, shared with the health check and the
    *  agent paths so one request reads the vault at most once. */
   loadBrokerData: () => Promise<void>;
@@ -64,9 +68,10 @@ export type PortfolioReadSources = {
   priceDataVersion: () => number;
 };
 
-export class PortfolioReadPriceStore extends Context.Service<PortfolioReadPriceStore, PriceStore>()(
-  "lavega/investing/PortfolioRead/PriceStore",
-) {}
+export class PortfolioReadPriceStore extends Context.Service<
+  PortfolioReadPriceStore,
+  SharedPriceStore
+>()("lavega/investing/PortfolioRead/PriceStore") {}
 
 export class PortfolioReadLoader extends Context.Service<
   PortfolioReadLoader,
@@ -184,6 +189,23 @@ export class PortfolioRead extends Context.Service<
         const accountWrappers = yield* PortfolioReadAccountWrappers;
         const priceDataVersion = yield* PortfolioReadPriceVersion;
 
+        /**
+         * Issue #307: the per-user version trigger cannot see a write to the
+         * shared store, so a stored build is only current while no series it
+         * read changed after it was stored. `latestChange` is the newest
+         * `updated_at` over exactly those keys; the repository already proved
+         * the version and the UTC day.
+         */
+        const storedPriceDataIsCurrent = async (stored: {
+          priceKeys: string[];
+          updatedAt: string | null;
+        }): Promise<boolean> => {
+          if (stored.priceKeys.length === 0) return true;
+          const latest = await priceStore.latestChange(stored.priceKeys).catch(() => null);
+          if (latest === null || stored.updatedAt === null) return true;
+          return Date.parse(latest) <= Date.parse(stored.updatedAt);
+        };
+
         const executeRead = async ({
           tenantId,
           symbol,
@@ -193,7 +215,11 @@ export class PortfolioRead extends Context.Service<
           const stored = await timing.measure("stored", () =>
             dashboardSnapshots?.get(storedKey).catch(() => null),
           );
-          if (stored?.dashboard && hasRiskBasis(stored.dashboard as InvestingDashboardData))
+          if (
+            stored?.dashboard &&
+            hasRiskBasis(stored.dashboard as InvestingDashboardData) &&
+            (await storedPriceDataIsCurrent(stored))
+          )
             return withComposition(stored.dashboard as InvestingDashboardData);
           const refreshProblems: string[] = [];
           try {
@@ -249,16 +275,42 @@ export class PortfolioRead extends Context.Service<
             return cached;
           }
           const buildDashboard = async () => {
-            const symbols = [
-              ...new Set([
+            /* One key per instrument for this read (issue #307): the shared
+             * store answers by key, and a key shared by two broker codes keeps
+             * both symbols, because the read model still works in symbols. */
+            const readKeys = priceReadKeys({
+              positions,
+              trades,
+              benchmarkSymbols: selectedBenchmarks,
+            });
+            const symbolsForKey = new Map<string, string[]>();
+            for (const entry of readKeys) {
+              const list = symbolsForKey.get(entry.key) ?? [];
+              list.push(entry.symbol);
+              symbolsForKey.set(entry.key, list);
+            }
+            const allKeys: PriceKey[] = [...symbolsForKey.keys()].map((key) => {
+              const found = readKeys.find((entry) => entry.key === key);
+              return found?.alias ? { key, alias: found.alias } : { key };
+            });
+            const positionKeys = readKeys.filter((entry) =>
+              [
                 ...positions.map((position) => position.symbol),
                 ...trades.map((trade) => trade.symbol),
-              ]),
-            ];
+              ]
+                .map((value) => value.toUpperCase())
+                .includes(entry.symbol.toUpperCase()),
+            );
+            const benchmarkKeys = readKeys.filter((entry) =>
+              selectedBenchmarks
+                .map((value) => value.toUpperCase())
+                .includes(entry.symbol.toUpperCase()),
+            );
             const [prices, benches] = await timing.measure("prices", async () => [
-              await readPriceBars(priceStore, tenantId, symbols),
-              await readPriceBars(priceStore, tenantId, selectedBenchmarks),
+              await readPriceBars(priceStore, positionKeys, (key) => symbolsForKey.get(key) ?? []),
+              await readPriceBars(priceStore, benchmarkKeys, (key) => symbolsForKey.get(key) ?? []),
             ]);
+            const keysRead = [...new Set(allKeys.map((key) => key.key))];
             const priceProblems =
               prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
             const today = new Date().toISOString().slice(0, 10);
@@ -371,7 +423,7 @@ export class PortfolioRead extends Context.Service<
             if (stored && transientProblems === 0)
               await timing.measure("store", () =>
                 dashboardSnapshots
-                  ?.put(storedKey, stored.version, dashboard)
+                  ?.put(storedKey, stored.version, dashboard, keysRead)
                   .catch(() => undefined),
               );
             return dashboard;

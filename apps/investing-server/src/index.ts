@@ -52,10 +52,11 @@ import {
   type BrokerSyncLane,
   type BrokerSyncOperationStore,
   type PartnerBudgetClient,
-  type PriceStore,
+  type SharedPriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
+import type { PriceBar } from "@lavega/core";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 import {
   createRuntimeCredentialStore,
@@ -112,6 +113,8 @@ import {
 import {
   createInMemoryPriceSyncProgressStore,
   discoverPriceSyncTargets,
+  instrumentKeys,
+  priceReadKeys,
 } from "./priceOrchestrator.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import {
@@ -234,7 +237,14 @@ export type PortfolioAgentRunner = (
   options: RunPortfolioAgentOptions,
 ) => Promise<PortfolioJudgmentRun>;
 export type RuntimeAppOptions = {
-  priceStore: PriceStore;
+  /** The shared, instrument-keyed price store (#307). */
+  priceStore: SharedPriceStore;
+  /** True when that store is the shared database one: the cache route answers
+   *  405 instead of letting one account delete data every account reads. */
+  sharedPriceStore?: boolean;
+  /** Clears a local (file) shared store; the database store has no such
+   *  operation. */
+  clearPriceCache?: () => Promise<void>;
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   investingLayoutStore?: InvestingLayoutStore;
@@ -370,7 +380,32 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
-      await priceStore.upsert(tenantId, createDevFixturePriceBars());
+      /* The fixture quotes by symbol; the shared store keys by instrument, and
+       * the read computes the key from the position (ISIN first), so the seed
+       * uses the same identity or the fixture would read unpriced. */
+      const fixtureData = brokerData.read();
+      const isinBySymbol = new Map(
+        [...fixtureData.positions, ...fixtureData.trades]
+          .filter((row) => row.isin)
+          .map((row) => [row.symbol.toUpperCase(), row.isin!.trim().toUpperCase()]),
+      );
+      const byKey = new Map<string, PriceBar[]>();
+      for (const bar of createDevFixturePriceBars()) {
+        const key = instrumentKeys({
+          symbol: bar.symbol,
+          ...(isinBySymbol.has(bar.symbol.toUpperCase())
+            ? { isin: isinBySymbol.get(bar.symbol.toUpperCase()) }
+            : {}),
+          currency: bar.currency,
+        }).key;
+        byKey.set(key, [...(byKey.get(key) ?? []), bar]);
+      }
+      for (const [key, bars] of byKey) {
+        await priceStore.upsert(
+          key,
+          bars.map(({ symbol: _symbol, ...rest }) => rest),
+        );
+      }
       onPriceDataChanged();
     }
     const brokerSnapshot = createBrokerSnapshotReader({
@@ -670,10 +705,19 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         dashboard: await dashboardReader({}),
         trades: () => brokerData.read().trades,
         price: async (symbol: string, date?: string) => {
-          const bar = (await priceStore.getRange(tenantId, symbol, undefined, date)).at(-1);
-          return bar
-            ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency }
-            : null;
+          /* A chat price question names a symbol; the shared store answers by
+           * instrument key, so the key is resolved the same way the dashboard
+           * resolves it (issue #307). Unknown symbols fall back to a `sym:` key,
+           * which is what an ISIN-less series uses anyway. */
+          const { positions, trades } = brokerData.read();
+          const match = priceReadKeys({ positions, trades }).find(
+            (entry) => entry.symbol.toUpperCase() === symbol.toUpperCase(),
+          );
+          const key = match?.key ?? instrumentKeys({ symbol, currency: "EUR" }).key;
+          const alias = match?.alias;
+          const bars = await priceStore.getRange(alias ? { key, alias } : { key }, undefined, date);
+          const bar = bars.at(-1);
+          return bar ? { symbol, date: bar.date, close: bar.close, currency: bar.currency } : null;
         },
       };
     };
@@ -809,7 +853,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       store: sectorDependencies.sectorStore,
       correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
       showInferred: consent.accepted && inferenceEnabled,
-      resolveListing: (symbol) => resolveSectorListing(priceStore, tenantId, symbol),
+      resolveListing: (position) => {
+        const keys = instrumentKeys({
+          symbol: position.symbol,
+          ...(position.isin ? { isin: position.isin } : {}),
+          currency: position.currency ?? "EUR",
+        });
+        return resolveSectorListing(priceStore, { key: keys.key });
+      },
     }).catch(() => ({ exposure: null }));
     return {
       ...data,
@@ -1057,6 +1108,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         ...sectorDependencies,
         resolveTenantId: options.resolveTenantId,
         store: priceStore,
+        sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+        ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
         fxProvider,
         benchmarkSelectionStore,
         investingLayoutStore,
@@ -1119,6 +1172,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       ...sectorDependencies,
       resolveTenantId: options.resolveTenantId,
       store: priceStore,
+      sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+      ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
       fxProvider,
       benchmarkSelectionStore,
       investingLayoutStore,

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
 import type { BrokerSyncResume } from "@lavega/adapters";
 import type { InvestingDashboardData } from "@lavega/core";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
@@ -166,7 +166,7 @@ test("price discovery refreshes committed symbols without a dashboard read", asy
   let now = Date.now();
   vi.spyOn(Date, "now").mockImplementation(() => now);
   persistence.snapshots.set("tenant", snapshot(1));
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const first = await createRuntimeApp({
     priceStore,
     resolveTenantId: () => "tenant",
@@ -195,7 +195,7 @@ test("price discovery reports a failed hosted refresh instead of completing from
   vi.spyOn(Date, "now").mockImplementation(() => now);
   persistence.snapshots.set("tenant", snapshot(1));
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => "tenant",
     marketDataConsentStore: acceptedConsent,
   });
@@ -214,7 +214,7 @@ test("warm dashboard instances reload shared broker and price data after fifteen
   let now = Date.now();
   vi.spyOn(Date, "now").mockImplementation(() => now);
   persistence.snapshots.set("tenant", snapshot(1));
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const priceReads = vi.spyOn(priceStore, "getRange");
   const first = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
   const second = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
@@ -241,7 +241,7 @@ test("warm dashboard instances reload shared broker and price data after fifteen
 test("requests that never show positions do not read the broker snapshots", async () => {
   persistence.snapshots.set("tenant", snapshot(1));
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => "tenant",
   });
 
@@ -259,7 +259,7 @@ test("dashboard refresh does not replace broker data during a local sync", async
   vi.spyOn(Date, "now").mockImplementation(() => now);
   persistence.snapshots.set("tenant", snapshot(1));
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => "tenant",
   });
   await app.request("/api/investing/dashboard");
@@ -297,7 +297,7 @@ test("a resumed sync merges the latest persisted history instead of its warm sna
   const initial = snapshot(1);
   persistence.snapshots.set("tenant", initial);
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => "tenant",
   });
   await app.request("/api/investing/dashboard");

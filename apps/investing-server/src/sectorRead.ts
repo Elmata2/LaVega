@@ -39,6 +39,13 @@ export class SectorReadError extends Schema.TaggedError<SectorReadError>()("Sect
  * summary route applies them, so an inferred profile a tenant may not see still
  * reads as Unknown.
  */
+/** Resolves a broker position's price-series listing (issue #307: the series
+ *  key carries the ISIN and currency, so the position is passed whole). */
+export type SectorReadListingResolver = (
+  tenantId: string,
+  position: { symbol: string; isin?: string; currency?: string },
+) => Promise<string | null>;
+
 export type SectorReadSources = {
   /** The tenant's current read model; the sector weights are value-weighted
    *  over the positions it carries. */
@@ -52,7 +59,7 @@ export type SectorReadSources = {
   consent: MarketDataConsentStore;
   /** The sector-store revision, raised by correction and inference-setting writes. */
   revision: (tenantId: string) => Promise<number>;
-  resolveListing: (tenantId: string, symbol: string) => Promise<string | null>;
+  resolveListing: SectorReadListingResolver;
 };
 
 export class SectorReadDashboard extends Context.Service<
@@ -90,7 +97,7 @@ export class SectorReadRevision extends Context.Service<
 
 export class SectorReadListing extends Context.Service<
   SectorReadListing,
-  (tenantId: string, symbol: string) => Promise<string | null>
+  SectorReadListingResolver
 >()("lavega/investing/SectorRead/Listing") {}
 
 type SectorReadRequirements =
@@ -141,7 +148,7 @@ export class SectorRead extends Context.Service<
           store,
           correction: async (symbol) => gates.corrections[symbol.toUpperCase()] ?? null,
           showInferred: gates.showInferred,
-          resolveListing: (symbol) => resolveListing(tenantId, symbol),
+          resolveListing: (position) => resolveListing(tenantId, position),
           ...(gates.consented ? { fetchProfile } : {}),
         });
         return result.weightsBySymbol;
@@ -212,9 +219,7 @@ export class SectorRead extends Context.Service<
 }
 
 /** Provide the module's layer for one runtime's already-built sources. */
-export function sectorReadLayer(
-  sources: SectorReadSources,
-): Layer.Layer<SectorRead, never, never> {
+export function sectorReadLayer(sources: SectorReadSources): Layer.Layer<SectorRead, never, never> {
   return SectorRead.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -240,4 +245,3 @@ export function createSectorReader(sources: SectorReadSources) {
 
 /** The read's type as an imperative boundary sees it. */
 export type SectorReader = ReturnType<typeof createSectorReader>;
-

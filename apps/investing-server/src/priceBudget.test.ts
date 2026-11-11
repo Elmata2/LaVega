@@ -1,7 +1,7 @@
 import {
   PartnerBudget,
   YahooHttpClient,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createPartnerBudgetClient,
   createYahooFundamentalsProvider,
   createYahooPriceProvider,
@@ -61,6 +61,7 @@ function fakeYahoo() {
 
 const targets = (tenant: string, count: number): PriceSyncTarget[] =>
   Array.from({ length: count }, (_, index) => ({
+    instrumentKey: `sym:${tenant}-SYM${index}:EUR`,
     kind: "current" as const,
     symbol: `${tenant}-SYM${index}`,
     ticker: `${tenant}-SYM${index}`,
@@ -76,17 +77,19 @@ function orchestratorFor(
   tenant: string,
   count: number,
   client: YahooHttpClient,
-  store = createInMemoryPriceStore(),
+  store = createInMemorySharedPriceStore(),
   pauseMarginMs = 0,
 ) {
   return createPriceOrchestrator({
     discover: () => targets(tenant, count),
     progressStore: createInMemoryPriceSyncProgressStore(),
     pauseMarginMs,
-    sync: async (target, tenantId, { deadline }) =>
+    sync: async (target, _tenantId, { deadline, leaseId }) =>
       syncPrices({
         store,
-        tenantId,
+        key: target.instrumentKey,
+        ...(target.instrumentAlias ? { alias: target.instrumentAlias } : {}),
+        owner: leaseId,
         request: target,
         priceProviders: [createYahooPriceProvider({ client: client.withDeadline(deadline) })],
       }),

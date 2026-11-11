@@ -40,7 +40,7 @@ function infer(input: {
   store?: SectorProfileStore;
   exclude?: string[];
   corrections?: Record<string, string>;
-  resolveListing?: (symbol: string) => Promise<string | null>;
+  resolveListing?: (position: { symbol: string }) => Promise<string | null>;
   classifier?: SectorClassifier;
   batchSize?: number;
 }) {
@@ -86,7 +86,7 @@ test("skips a renamed holding already cached under its price-resolved listing, a
   const result = await infer({
     priced: [priced("OAC_US_EQ", 100)],
     store,
-    resolveListing: async (symbol) => (symbol === "OAC_US_EQ" ? "HIMS" : null),
+    resolveListing: async (position) => (position.symbol === "OAC_US_EQ" ? "HIMS" : null),
     classifier,
   });
 
@@ -101,7 +101,7 @@ test("classifies a renamed holding under its price-resolved listing when nothing
   const result = await infer({
     priced: [priced("OAC_US_EQ", 100, "Hims & Hers Health")],
     store,
-    resolveListing: async (symbol) => (symbol === "OAC_US_EQ" ? "HIMS" : null),
+    resolveListing: async (position) => (position.symbol === "OAC_US_EQ" ? "HIMS" : null),
     classifier,
   });
 
@@ -120,8 +120,8 @@ test("classifies two broker symbols that resolve to the same listing only once",
       priced("HIMS_OLD", 50, "Hims & Hers Health"),
     ],
     store,
-    resolveListing: async (symbol) =>
-      symbol === "OAC_US_EQ" || symbol === "HIMS_OLD" ? "HIMS" : null,
+    resolveListing: async (position) =>
+      position.symbol === "OAC_US_EQ" || position.symbol === "HIMS_OLD" ? "HIMS" : null,
     classifier,
   });
 

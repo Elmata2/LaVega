@@ -88,6 +88,7 @@ test("concurrent tenant triggers join one orchestration", async () => {
     return result();
   });
   const target: PriceSyncTarget = {
+    instrumentKey: `sym:${"ASML"}:${"EUR"}`,
     kind: "current",
     symbol: "ASML",
     ticker: "ASML",
@@ -108,6 +109,7 @@ test("concurrent tenant triggers join one orchestration", async () => {
 test("partial failure continues later symbols and remains retryable on next run", async () => {
   const targets: PriceSyncTarget[] = [
     {
+      instrumentKey: `sym:${"FAIL"}:${"EUR"}`,
       kind: "current",
       symbol: "FAIL",
       ticker: "FAIL",
@@ -116,6 +118,7 @@ test("partial failure continues later symbols and remains retryable on next run"
       backfillFrom: "2024-01-01",
     },
     {
+      instrumentKey: `sym:${"OK"}:${"EUR"}`,
       kind: "closed",
       symbol: "OK",
       ticker: "OK",
@@ -144,7 +147,7 @@ test("hands each run's deadline to every sync, so the partner budget can stop a 
     async (
       _target: PriceSyncTarget,
       _tenantId: string,
-      _context: { deadline: number | undefined },
+      _context: { deadline: number | undefined; leaseId: string },
     ) => result(),
   );
   const orchestrator = createPriceOrchestrator({
@@ -155,7 +158,8 @@ test("hands each run's deadline to every sync, so the partner budget can stop a 
   const deadline = Date.now() + 3_600_000;
   await orchestrator.run("local", deadline);
 
-  expect(sync.mock.calls.map((call) => call[2])).toEqual([{ deadline }, { deadline }]);
+  expect(sync.mock.calls.map((call) => call[2].deadline)).toEqual([deadline, deadline]);
+  expect(sync.mock.calls.every((call) => typeof call[2].leaseId === "string")).toBe(true);
 });
 
 test("a slot past the deadline pauses the run with the symbol unreached, not failed", async () => {
@@ -250,6 +254,7 @@ test("empty discovery completes without a provider request", async () => {
 });
 
 const symbolTarget = (symbol: string): PriceSyncTarget => ({
+  instrumentKey: `sym:${symbol}:EUR`,
   kind: "current",
   symbol,
   ticker: symbol,

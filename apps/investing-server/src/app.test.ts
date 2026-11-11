@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { priceInstrumentKey } from "@lavega/core";
+import type { PriceCoverage, SharedPriceBar, SharedPriceStore } from "@lavega/adapters";
 import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
 import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
 import { DateTime } from "effect";
@@ -12,7 +14,7 @@ import {
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
@@ -74,7 +76,11 @@ test("GET /health reports investing server health through Hono app.request", asy
   const response = await app.request("/health");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+  expect(await response.json()).toEqual({
+    ok: true,
+    service: "investing-server",
+    sharedPriceStore: false,
+  });
 });
 
 test("dashboard route returns injected core-shaped read model and selected symbol", async () => {
@@ -284,6 +290,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
   // writes that store. Nothing here calls into the orchestrator that is running.
   const holdings: PriceSyncTarget[] = [
     {
+      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
       kind: "current",
       symbol: "ASML",
       ticker: "ASML",
@@ -292,6 +299,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
       backfillFrom: "2024-01-01",
     },
     {
+      instrumentKey: `sym:${"ADYEN"}:${"EUR"}`,
       kind: "current",
       symbol: "ADYEN",
       ticker: "ADYEN",
@@ -305,6 +313,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
     const { symbols } = await benchmarkSelectionStore.get(tenantId);
     return [
       ...symbols.map((symbol) => ({
+        instrumentKey: symKey(symbol, "EUR"),
         kind: "benchmark" as const,
         symbol,
         ticker: symbol,
@@ -400,6 +409,7 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -433,10 +443,11 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
 test("price sync uses Yahoo Finance after persisted consent", async () => {
   const fetchJsonWithCrumb = vi.fn();
   const investingApp = createApp({
-    store: createInMemoryPriceStore(),
+    store: createInMemorySharedPriceStore(),
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -465,6 +476,7 @@ test("router problems reach HTTP response unchanged", async () => {
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -496,6 +508,7 @@ test("a closed position Yahoo confirms delisted does not flip Price history to p
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"SKX_US_EQ"}:${"USD"}`,
         kind: "closed",
         symbol: "SKX_US_EQ",
         ticker: "SKX_US_EQ",
@@ -575,6 +588,7 @@ test("price sync resolves ISIN before asking price provider", async () => {
     identifierProvider: identifierProvider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -618,6 +632,7 @@ test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
       identifierProvider: identifierProvider as never,
       priceSyncTargets: () => [
         {
+          instrumentKey: priceInstrumentKey({ symbol: ticker, currency: "USD", isin }),
           kind: "current",
           symbol: ticker,
           ticker,
@@ -714,12 +729,17 @@ test.each([
         problems: [],
       }),
     };
-    const store = createInMemoryPriceStore();
+    const store = createInMemorySharedPriceStore();
     const investingApp = createApp({
       store,
       identifierProvider: identifierProvider as never,
       priceSyncTargets: () => [
         {
+          instrumentKey: priceInstrumentKey({
+            symbol: "TSFAd_EQ",
+            currency: "EUR",
+            ...(isin ? { isin } : {}),
+          }),
           kind: "current",
           symbol: "TSFAd_EQ",
           ticker: "TSFAd_EQ",
@@ -741,18 +761,25 @@ test.each([
     expect(requested[0]).toBe("TSFA.DE");
     if (resolved) {
       expect(requested).toContain("TSM");
-      expect(await store.getCoverage("local", "TSFAd_EQ")).toMatchObject({
-        symbol: "TSFAd_EQ",
+      expect(
+        await store.getCoverage({
+          key: `isin:${String(isin).toUpperCase()}:EUR`,
+          alias: symKey("TSFAd_EQ"),
+        }),
+      ).toMatchObject({
         listing: "TSM",
         currency: "USD",
       });
-      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([
-        { symbol: "TSFAd_EQ", date: "2026-01-01", close: 200, currency: "USD", split: 1 },
-      ]);
+      expect(
+        await store.getRange({
+          key: `isin:${String(isin).toUpperCase()}:EUR`,
+          alias: symKey("TSFAd_EQ"),
+        }),
+      ).toEqual([{ date: "2026-01-01", close: 200, currency: "USD", split: 1 }]);
     } else {
       expect(requested).toEqual(["TSFA.DE"]);
-      expect(await store.getCoverage("local", "TSFAd_EQ")).toBeNull();
-      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([]);
+      expect(await legacyPrices(store).getCoverage("local", "TSFAd_EQ")).toBeNull();
+      expect(await legacyPrices(store).getRange("local", "TSFAd_EQ")).toEqual([]);
     }
   },
 );
@@ -797,6 +824,7 @@ test("broker sync starts server-side price orchestration despite broker problems
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"CLOSED"}:${"EUR"}`,
         kind: "closed",
         symbol: "CLOSED",
         ticker: "CLOSED",
@@ -824,6 +852,7 @@ test("the holdings lane request never starts price sync", async () => {
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: symKey("CLOSED", "EUR"),
         kind: "closed",
         symbol: "CLOSED",
         ticker: "CLOSED",
@@ -856,6 +885,7 @@ test("the history lane request starts price sync and asks only for history", asy
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: symKey("CLOSED", "EUR"),
         kind: "closed",
         symbol: "CLOSED",
         ticker: "CLOSED",
@@ -978,19 +1008,33 @@ test("reporting stays disabled when SENTRY_DSN is absent", () => {
   expect(sentry.captureException).not.toHaveBeenCalled();
 });
 
-test("price cache delete purges store and returns success", async () => {
-  const store = createInMemoryPriceStore();
+test("without a database the cache route clears the local shared store", async () => {
+  const store = createInMemorySharedPriceStore();
   const onPriceDataChanged = vi.fn();
-  await store.upsert("local", [
+  const clearPriceCache = vi.fn(async () => undefined);
+  await legacyPrices(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" },
   ]);
-  const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", {
-    method: "DELETE",
-  });
+  const response = await createApp({
+    store,
+    clearPriceCache,
+    onPriceDataChanged,
+  }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
-  expect(await store.getRange("local", "ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(clearPriceCache).toHaveBeenCalledOnce();
   expect(onPriceDataChanged).toHaveBeenCalledOnce();
+});
+
+test("with a database the cache route refuses: prices are shared, not one user's", async () => {
+  const store = createInMemorySharedPriceStore();
+  const response = await createApp({ store, sharedPriceStore: true }).request("/api/prices/cache", {
+    method: "DELETE",
+  });
+  expect(response.status).toBe(405);
+  expect(await response.json()).toMatchObject({
+    problems: ["Shared price data cannot be cleared from one account"],
+  });
 });
 
 test("summary route composes metrics, cached sectors, and top positions; sector failure degrades to Unknown", async () => {
@@ -1110,13 +1154,15 @@ test("summary route reads a renamed holding's stored sector under the ticker pri
       firstBuyDate: null,
     },
   });
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
-    symbol: "OAC_US_EQ",
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:USD", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "HIMS",
     currency: "USD",
+    provider: "yahoo",
   });
   const sectorProfile = vi.fn(async (symbol: string) =>
     symbol === "HIMS"
@@ -1154,13 +1200,15 @@ test("summary route reads a renamed holding's stored sector under the ticker pri
 test("GET sectors with consent still fetches a never-attempted symbol under its listing ticker and stores the profile", async () => {
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push(pricedPosition("OAC_US_EQ", 100));
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
-    symbol: "OAC_US_EQ",
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:EUR", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "HIMS",
     currency: "USD",
+    provider: "yahoo",
   });
   const sectorStore = createInMemorySectorProfileStore();
   const sectorProfile = vi.fn(async (symbol: string) =>
@@ -1543,7 +1591,11 @@ test("health answers under /api/ too, because that is the only path a mount forw
   const response = await runtime.request("/api/investing/health");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+  expect(await response.json()).toEqual({
+    ok: true,
+    service: "investing-server",
+    sharedPriceStore: false,
+  });
 });
 
 test("detailed health fails when Trading 212 data is stale", async () => {
@@ -1724,13 +1776,15 @@ test("GET position sector finds a renamed holding's profile under the ticker pri
     industry: "Health Information Services",
     source: "provider",
   });
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
-    symbol: "OAC_US_EQ",
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:EUR", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "HIMS",
     currency: "USD",
+    provider: "yahoo",
   });
   const investingApp = createApp({ store, sectorStore });
 
@@ -2343,6 +2397,7 @@ test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb 
     priceSyncDeadline: () => deadline,
     priceSyncTargets: () => [
       {
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -2409,13 +2464,14 @@ test.each([
         await immediate.awaitSlot(key as never, deadlineMs);
       },
     };
-    const store = createInMemoryPriceStore();
+    const store = createInMemorySharedPriceStore();
     const investingApp = createPacedApp({
       partnerBudgetClient: partnerBudget,
       store,
       priceSyncDeadline: () => Date.now() + 3_600_000,
       priceSyncTargets: () => [
         {
+          instrumentKey: `isin:${"US8740391003"}:${"EUR"}`,
           kind: "closed",
           symbol: "GONEd_EQ",
           ticker: "GONEd_EQ",
@@ -2435,7 +2491,7 @@ test.each([
     } finally {
       vi.unstubAllGlobals();
     }
-    const coverage = await store.getCoverage("local", "GONEd_EQ");
+    const coverage = await legacyPrices(store).getCoverage("local", "GONEd_EQ");
     expect(coverage?.delistedSince).toBeUndefined();
     expect(coverage?.listingMissingSince).toBeUndefined();
   },
@@ -2525,6 +2581,43 @@ test("account-wrapper route persists labels, drops unknown ones and rejects a no
   });
   expect(rejected.status).toBe(400);
 });
+
+/** The test-side translation from the old per-tenant price calls to the shared
+ *  instrument keys (issue #307); production callers build the same keys. */
+const symKey = (symbol: string, currency = "EUR"): string =>
+  priceInstrumentKey({ symbol, currency });
+function legacyPrices(store: SharedPriceStore) {
+  return {
+    async upsert(
+      _tenant: string,
+      bars: readonly (SharedPriceBar & { symbol?: string })[],
+    ): Promise<void> {
+      const groups = new Map<string, SharedPriceBar[]>();
+      for (const bar of bars) {
+        const key = symKey(bar.symbol ?? "", bar.currency);
+        const { symbol: _symbol, ...rest } = bar;
+        groups.set(key, [...(groups.get(key) ?? []), rest]);
+      }
+      await Promise.all([...groups].map(([key, rows]) => store.upsert(key, rows)));
+    },
+    async getRange(tenant: string, symbol: string, from?: string, to?: string) {
+      void tenant;
+      return store.getRange({ key: symKey(symbol) }, from, to);
+    },
+    async getCoverage(tenant: string, symbol: string) {
+      void tenant;
+      const coverage = await store.getCoverage({ key: symKey(symbol) });
+      return coverage === null ? null : { ...coverage, symbol };
+    },
+    async putCoverage(_tenant: string, coverage: PriceCoverage) {
+      const { symbol, ...rest } = coverage;
+      return store.putCoverage(symKey(symbol, coverage.currency), {
+        ...rest,
+        provider: "unknown",
+      });
+    },
+  };
+}
 
 test("POST /api/sync/continue refuses the wrong caller and validates runId and hop", async () => {
   vi.stubEnv("CRON_SECRET", "cron-secret");

@@ -216,10 +216,30 @@ function StatusChip({
   );
 }
 
-function ClearPriceCache() {
+/** Clears the local price cache. Hidden when the server reports a shared
+ *  price store (issue #307): prices are public reference data then, so one
+ *  account must not delete what every account reads. `null` while the health
+ *  answer is in flight keeps the control hidden rather than flashing a button
+ *  that would answer 405. */
+export function ClearPriceCache() {
+  const [shared, setShared] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    void fetch("/api/investing/health")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { sharedPriceStore?: unknown } | null) => {
+        if (current) setShared(body?.sharedPriceStore === true);
+      })
+      .catch(() => {
+        if (current) setShared(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
   async function clear() {
     setBusy(true);
     setMessage(null);
@@ -233,6 +253,7 @@ function ClearPriceCache() {
       setBusy(false);
     }
   }
+  if (shared !== false) return null;
   if (confirming)
     return (
       <div className="flex flex-wrap items-center justify-end gap-3" role="alert">

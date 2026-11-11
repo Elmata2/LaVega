@@ -73,7 +73,7 @@ vi.mock("@lavega/investing-server/src/docker.js", () => ({
   createDockerFetch: createDockerFetchMock,
 }));
 vi.mock("@lavega/investing-server/src/filePriceStore.js", () => ({
-  createFilePriceStore: vi.fn(),
+  createFileSharedPriceStore: vi.fn(() => ({ clear: async () => undefined })),
   runtimePriceStoreFile: () => "/tmp/prices.json",
 }));
 vi.mock("@lavega/investing-server/src/fileBenchmarkSelectionStore.js", () => ({

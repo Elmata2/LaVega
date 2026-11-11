@@ -821,7 +821,9 @@ test("resolvedStockSector reports Unknown, not the inferred label, when showInfe
 
 test("a renamed holding resolves its sector under the price-resolved listing, not the stale broker code", async () => {
   const store = createInMemorySectorProfileStore();
-  const resolveListing = vi.fn(async (symbol: string) => (symbol === "OAC_US_EQ" ? "HIMS" : null));
+  const resolveListing = vi.fn(async (position: { symbol: string }) =>
+    position.symbol === "OAC_US_EQ" ? "HIMS" : null,
+  );
   const fetchProfile = vi.fn(async (symbol: string) =>
     symbol === "HIMS"
       ? {

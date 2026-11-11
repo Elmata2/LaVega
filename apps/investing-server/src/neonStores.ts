@@ -3,7 +3,6 @@ import {
   createBrokerSyncOperationRepository,
   createPersonalNetWorthRepository,
   createPreferencesRepository,
-  createPriceBarRepository,
   createPartnerBudgetRepository,
   createPriceSyncStateRepository,
   createSharedPriceRepository,
@@ -37,7 +36,6 @@ import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
   BrokerSyncOperationStore,
-  PriceStore,
   ScheduledBroker,
   SharedPriceBar,
   SharedPriceCoverage,
@@ -54,28 +52,6 @@ import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestra
  * build their repository per call — a repository is a closure over the pool, so
  * that costs nothing and keeps the interfaces unchanged.
  */
-
-export function createNeonPriceStore(
-  db: Database,
-  resolveTenantId: () => string | Promise<string>,
-): PriceStore {
-  return {
-    getRanges: (tenantId, symbols) => createPriceBarRepository(db, tenantId).getRanges(symbols),
-    getRange: (tenantId, symbol, from, to) =>
-      createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
-    lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),
-    upsert: (tenantId, bars) => createPriceBarRepository(db, tenantId).upsert(bars),
-    replaceRange: (tenantId, symbol, bars, from, to) =>
-      createPriceBarRepository(db, tenantId).replaceRange(symbol, bars, from, to),
-    getCoverage: (tenantId, symbol) => createPriceBarRepository(db, tenantId).getCoverage(symbol),
-    putCoverage: (tenantId, coverage) =>
-      createPriceBarRepository(db, tenantId).putCoverage(coverage),
-    async purgeAll() {
-      // No tenant in the signature, so the caller's own is the only safe one.
-      await createPriceBarRepository(db, await resolveTenantId()).purgeAll();
-    },
-  };
-}
 
 /**
  * The shared, instrument-keyed price store (issue #307). The SQL lives in

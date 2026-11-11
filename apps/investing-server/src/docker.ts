@@ -3,7 +3,7 @@ import { extname, join, normalize } from "node:path";
 import { serve } from "@hono/node-server";
 import { createRuntimeApp } from "./index.js";
 import { redactProblem } from "@lavega/core";
-import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
+import { createFileSharedPriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 import {
   createFileBenchmarkSelectionStore,
   runtimeBenchmarkSelectionFile,
@@ -82,8 +82,14 @@ export function createDockerFetch(applicationFetch: ApplicationFetch, root = sta
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  /* One shared, instrument-keyed price series for this installation, in a file
+   * store (issue #307). It converts an old per-tenant `prices.json` once. */
+  const priceStoreFile = runtimePriceStoreFile();
+  const priceStore = createFileSharedPriceStore(priceStoreFile);
   const runtimeApp = await createRuntimeApp({
-    priceStore: createFilePriceStore(runtimePriceStoreFile()),
+    priceStore,
+    sharedPriceStore: false,
+    clearPriceCache: () => priceStore.clear(),
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
     investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),

@@ -89,33 +89,3 @@ export interface SharedPriceStore {
   /** Deletes the claim only when `owner` holds it. */
   release(key: string, owner: string): Promise<void>;
 }
-
-/** Storage seam for daily market-data bars. Deliberately separate from CRUD storage.
- *  Tenancy is an argument on every operation, never a field on a bar, so no caller
- *  can write into a tenant it does not name.
- *
- *  DEPRECATED for prices (issue #307): the shared `SharedPriceStore` above is the
- *  replacement. The per-user methods stay until the callers are switched in the
- *  same release, so a half-wired deploy cannot happen. */
-export interface PriceStore {
-  /** Omitting a bound means no bound. There is no date that stands for "all time". */
-  getRange(tenantId: string, symbol: string, from?: string, to?: string): Promise<PriceBar[]>;
-  getRanges?(tenantId: string, symbols: readonly string[]): Promise<PriceBar[]>;
-  lastDate(tenantId: string, symbol: string): Promise<string | null>;
-  upsert(tenantId: string, bars: readonly PriceBar[]): Promise<void>;
-  /** Makes `bars` the symbol's whole history from `from` to `to`: a cached bar
-   *  in that window that `bars` lacks is deleted. Omitting a bound means no bound. */
-  replaceRange(
-    tenantId: string,
-    symbol: string,
-    bars: readonly PriceBar[],
-    from?: string,
-    to?: string,
-  ): Promise<void>;
-  /** Null for a symbol never synced, and for caches written before coverage
-   *  was recorded; the sync then reads coverage off the bars themselves. */
-  getCoverage(tenantId: string, symbol: string): Promise<PriceCoverage | null>;
-  putCoverage(tenantId: string, coverage: PriceCoverage): Promise<void>;
-  /** Also clears coverage, so an emptied cache is fetched again. */
-  purgeAll(): Promise<void>;
-}

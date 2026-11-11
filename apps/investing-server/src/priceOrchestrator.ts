@@ -1,4 +1,5 @@
 import type { Position, Trade } from "@lavega/core";
+import { priceInstrumentKey } from "@lavega/core";
 import {
   isPartnerBudgetUnavailable,
   isPartnerWait,
@@ -9,7 +10,26 @@ import {
 export type PriceSyncTarget = PriceSyncInput & {
   kind: "current" | "closed" | "benchmark";
   isin?: string;
+  /** The shared series this target reads and writes (issue #307). */
+  instrumentKey: string;
+  /** The `sym:` key an earlier release stored this series under, for the first
+   *  write of an `isin:` key. */
+  instrumentAlias?: string;
+  /** A problem line to report once for this sync (a symbol whose rows disagree
+   *  about its ISIN). Already formatted as `"<symbol>: <reason>"`. */
+  problem?: string;
 };
+
+/** The key pair for one instrument: the identity key plus the `sym:` alias an
+ *  earlier release stored it under, when this is an `isin:` key. */
+export function instrumentKeys(input: { symbol: string; isin?: string; currency: string }): {
+  key: string;
+  alias?: string;
+} {
+  const key = priceInstrumentKey(input);
+  if (!key.startsWith("isin:")) return { key };
+  return { key, alias: priceInstrumentKey({ symbol: input.symbol, currency: input.currency }) };
+}
 
 export type PriceSyncProgress = {
   /** `paused` means the host budget ran out with symbols left: the run is
@@ -131,7 +151,13 @@ function instrument(
   target: Position | Trade,
   kind: PriceSyncTarget["kind"],
   backfillFrom: string,
+  isin?: string,
 ): PriceSyncTarget {
+  const keys = instrumentKeys({
+    symbol: target.symbol,
+    ...(isin ? { isin } : {}),
+    currency: target.currency,
+  });
   return {
     kind,
     symbol: target.symbol,
@@ -139,8 +165,101 @@ function instrument(
     exchange: "UNKNOWN",
     currency: target.currency,
     backfillFrom,
-    ...(target.isin ? { isin: target.isin } : {}),
+    instrumentKey: keys.key,
+    ...(keys.alias ? { instrumentAlias: keys.alias } : {}),
+    ...(isin ? { isin } : {}),
   };
+}
+
+/** The keys a READ needs for these symbols: one per symbol, deduplicated by
+ *  instrument so a series shared by two broker codes is fetched once. The
+ *  benchmark symbols are read even when no trade exists yet, which is why this
+ *  is not `discoverPriceSyncTargets`. */
+export function priceReadKeys(input: {
+  positions: readonly Position[];
+  trades: readonly Trade[];
+  benchmarkSymbols?: readonly string[];
+}): Array<{ symbol: string; key: string; alias?: string }> {
+  const instruments = isinsBySymbol(input);
+  const out: Array<{ symbol: string; key: string; alias?: string }> = [];
+  const seenSymbol = new Set<string>();
+  const add = (symbol: string, currency: string) => {
+    const normalized = symbol.trim();
+    const upper = normalized.toUpperCase();
+    if (!normalized || seenSymbol.has(upper)) return;
+    seenSymbol.add(upper);
+    const found = instruments.get(upper);
+    const keys = instrumentKeys({
+      symbol: normalized,
+      ...(found?.isin ? { isin: found.isin } : {}),
+      currency,
+    });
+    out.push({
+      symbol: normalized,
+      key: keys.key,
+      ...(keys.alias ? { alias: keys.alias } : {}),
+    });
+  };
+  for (const position of input.positions) add(position.symbol, position.currency);
+  for (const trade of input.trades) add(trade.symbol, trade.currency);
+  for (const benchmark of input.benchmarkSymbols ?? []) add(benchmark, "EUR");
+  return out;
+}
+
+/**
+ * The ISIN a symbol's series is stored under, and whether its rows disagree.
+ * Rule from issue #307: the open position's ISIN when there is one, else the
+ * most recent trade's ISIN. Two different valid ISINs under one plain ticker
+ * mean two instruments; the run picks deterministically and reports the
+ * conflict once instead of silently merging them.
+ */
+function isinsBySymbol(input: {
+  positions: readonly Position[];
+  trades: readonly Trade[];
+}): Map<string, { isin?: string; conflict: boolean }> {
+  const valid = (value: string | undefined): value is string => {
+    const isin = value?.trim().toUpperCase();
+    return isin !== undefined && /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(isin);
+  };
+  const seen = new Map<string, Set<string>>();
+  const remember = (symbol: string, isin: string | undefined) => {
+    if (!valid(isin)) return;
+    const key = symbol.toUpperCase();
+    const set = seen.get(key) ?? new Set<string>();
+    set.add(isin.trim().toUpperCase());
+    seen.set(key, set);
+  };
+  const openPositionIsin = new Map<string, string>();
+  for (const position of input.positions) {
+    remember(position.symbol, position.isin);
+    if (
+      position.quantity !== 0 &&
+      valid(position.isin) &&
+      !openPositionIsin.has(position.symbol.toUpperCase())
+    )
+      openPositionIsin.set(position.symbol.toUpperCase(), position.isin.trim().toUpperCase());
+  }
+  // Ascending date so the last write per symbol is the most recent trade.
+  const recentTradeIsin = new Map<string, string>();
+  for (const trade of [...input.trades].sort((left, right) =>
+    left.date.localeCompare(right.date),
+  )) {
+    remember(trade.symbol, trade.isin);
+    if (valid(trade.isin))
+      recentTradeIsin.set(trade.symbol.toUpperCase(), trade.isin.trim().toUpperCase());
+  }
+  const out = new Map<string, { isin?: string; conflict: boolean }>();
+  for (const symbol of new Set([
+    ...input.positions.map((position) => position.symbol.toUpperCase()),
+    ...input.trades.map((trade) => trade.symbol.toUpperCase()),
+  ])) {
+    const isin = openPositionIsin.get(symbol) ?? recentTradeIsin.get(symbol);
+    out.set(symbol, {
+      ...(isin ? { isin } : {}),
+      conflict: (seen.get(symbol)?.size ?? 0) > 1,
+    });
+  }
+  return out;
 }
 
 /** Discover one target per symbol, with selected benchmarks first so comparison does not wait behind the full holdings backfill. */
@@ -149,6 +268,14 @@ export function discoverPriceSyncTargets(input: {
   trades: readonly Trade[];
   benchmarkSymbols?: readonly string[];
 }): PriceSyncTarget[] {
+  const instruments = isinsBySymbol(input);
+  const identity = (symbol: string) => {
+    const found = instruments.get(symbol.toUpperCase());
+    return {
+      ...(found?.isin ? { isin: found.isin } : {}),
+      ...(found?.conflict ? { problem: `${symbol}: conflicting ISINs` } : {}),
+    };
+  };
   const earliestTrade = new Map<string, Trade>();
   for (const trade of [...input.trades].sort((left, right) =>
     left.date.localeCompare(right.date),
@@ -166,12 +293,23 @@ export function discoverPriceSyncTargets(input: {
     const firstTrade = earliestTrade.get(key);
     // Without trade history there is no real backfill anchor; position.asOf is
     // only a snapshot date and would limit Yahoo to a ~1-day window.
-    targets.push(instrument(position, "current", firstTrade?.date ?? "2000-01-01"));
+    targets.push({
+      ...instrument(
+        position,
+        "current",
+        firstTrade?.date ?? "2000-01-01",
+        identity(position.symbol).isin,
+      ),
+      ...(identity(position.symbol).problem ? { problem: identity(position.symbol).problem } : {}),
+    });
   }
   for (const [key, trade] of earliestTrade) {
     if (seen.has(key)) continue;
     seen.add(key);
-    targets.push(instrument(trade, "closed", trade.date));
+    targets.push({
+      ...instrument(trade, "closed", trade.date, identity(trade.symbol).isin),
+      ...(identity(trade.symbol).problem ? { problem: identity(trade.symbol).problem } : {}),
+    });
   }
 
   const portfolioStart = [...earliestTrade.values()].map((trade) => trade.date).sort()[0];
@@ -181,6 +319,7 @@ export function discoverPriceSyncTargets(input: {
       const key = normalized.toUpperCase();
       if (!normalized || seen.has(key)) continue;
       seen.add(key);
+      const keys = instrumentKeys({ symbol: normalized, currency: "EUR" });
       targets.push({
         kind: "benchmark",
         symbol: normalized,
@@ -188,6 +327,7 @@ export function discoverPriceSyncTargets(input: {
         exchange: "UNKNOWN",
         currency: "EUR",
         backfillFrom: portfolioStart,
+        instrumentKey: keys.key,
       });
     }
   }
@@ -218,7 +358,7 @@ export function createPriceOrchestrator(input: {
   sync: (
     target: PriceSyncTarget,
     tenantId: string,
-    context: { deadline: number | undefined },
+    context: { deadline: number | undefined; leaseId: string },
   ) => Promise<PriceSyncResult>;
   progressStore?: PriceSyncProgressStore;
   /** Absolute epoch milliseconds this invocation must stop by. */
@@ -343,6 +483,12 @@ export function createPriceOrchestrator(input: {
       let total = resumed.length > 0 ? paused!.completed + queue.length : queue.length;
       const done = total - queue.length;
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
+      /* One line per conflicting symbol per sync, not per slice. Already
+       * formatted by discovery. */
+      const discoveryProblems = [
+        ...new Set(queue.flatMap((target) => (target.problem ? [target.problem] : []))),
+      ];
+      problems.push(...discoveryProblems);
 
       if (queue.length === 0)
         return update(
@@ -466,8 +612,17 @@ export function createPriceOrchestrator(input: {
         };
         const timer = setInterval(renew, heartbeatEveryMs);
         try {
-          const result = await input.sync(target, tenantId, { deadline });
-          problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
+          const result = await input.sync(target, tenantId, { deadline, leaseId });
+          /* A key another run holds the claim for is not a failure and not
+           * finished: the slice ends paused with this key still on the list,
+           * and the next slice reads the rows that run wrote. */
+          if (result.pending) {
+            paused = {
+              message: "Price synchronization paused for an instrument another run is updating",
+            };
+          } else {
+            problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
+          }
         } catch (error) {
           /* The partner budget has no slot before the deadline, or cannot be
            * reached. Nothing was sent for this symbol, so it did not fail: the
