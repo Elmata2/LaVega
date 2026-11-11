@@ -164,6 +164,16 @@ function Harness({
       spy.setPreference(patch);
       setPrefs((p) => ({ ...p, ...(typeof patch === "function" ? patch(p) : patch) }));
     },
+    setLimit: async (category, cents) => {
+      const patch = (p: PlanPreferences): Partial<PlanPreferences> => {
+        const limits = { ...p.categoryLimits };
+        if (cents === null) delete limits[category];
+        else limits[category] = { cents, at: AS_OF };
+        return { categoryLimits: limits };
+      };
+      spy.setPreference(patch);
+      setPrefs((p) => ({ ...p, ...patch(p) }));
+    },
     appendPlanEvent: async (e) => {
       setEvents((ev) => mergeEvents(ev, [e]));
     },
@@ -257,6 +267,7 @@ function cardsCtx(): { ctx: PlanCtx; result: SectionResult<CardsFigures> } {
     writeError: false,
     recompute: async () => {},
     setPreference: vi.fn(async () => {}),
+    setLimit: vi.fn(async () => {}),
     appendPlanEvent: vi.fn(async () => {}),
   };
   const ctx: PlanCtx = {

@@ -86,6 +86,7 @@ const planOf = (result: PlanResult, over: Partial<UsePlan> = {}): UsePlan => ({
   writeError: false,
   recompute: vi.fn(async () => {}),
   setPreference: vi.fn(async () => {}),
+  setLimit: vi.fn(async () => {}),
   appendPlanEvent: vi.fn(async () => {}),
   ...over,
 });
