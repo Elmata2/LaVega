@@ -962,7 +962,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setPendingNotices([]);
     setProfileRead("loading");
     setGate("loading");
-    if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
+    if (owner.kind === "account")
+      void signOut().then(
+        () => window.location.assign("/"),
+        () => setGate({ error: "unreachable" }),
+      );
     else setOpenAttempt((n) => n + 1);
   }
 

@@ -217,7 +217,7 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
         storage={createEncryptedStorage()}
         onReady={() => {}}
         onRetry={() => {}}
-        onSignOut={() => {}}
+        onSignedOut={() => {}}
       />
     );
   }

@@ -90,12 +90,17 @@ test("a failing sign out shows the error and re-enables the button", async () =>
   expect(onSignedOut).not.toHaveBeenCalled();
   expect(btn.disabled).toBe(false);
   const alerts = [...el.querySelectorAll('[role="alert"]')].map((a) => a.textContent);
-  expect(alerts).toContain(shellCopy.en.vaultGate.keyError.unreachable);
+  expect(alerts).toContain(shellCopy.en.vaultGate.keyError.signOutError);
+  expect(alerts).toContain(shellCopy.en.vaultGate.keyError.unreadable);
 });
 
 test("retry button still works and loading state has no sign-out", () => {
   const { el, onRetry } = render({ error: "unreadable" }, "en");
-  act(() => buttons(el).find((b) => b.textContent === "Try again")!.click());
+  act(() =>
+    buttons(el)
+      .find((b) => b.textContent === "Try again")!
+      .click(),
+  );
   expect(onRetry).toHaveBeenCalledTimes(1);
   act(() => root!.unmount());
   container!.remove();

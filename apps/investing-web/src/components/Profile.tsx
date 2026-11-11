@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
  * account. Reached from the profile button in the top bar (Task 3) and from
  * the redirects at /brokers/connect and "Add widget". */
 
-function AccountSection() {
+export function AccountSection() {
   const navigate = useNavigate();
   const [state, setState] = useState<SessionState | "loading">("loading");
   useEffect(() => {
@@ -27,8 +27,18 @@ function AccountSection() {
       current = false;
     };
   }, []);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   async function handleSignOut() {
-    await signOut();
+    setSigningOut(true);
+    setSignOutFailed(false);
+    try {
+      await signOut();
+    } catch {
+      setSignOutFailed(true);
+      setSigningOut(false);
+      return;
+    }
     navigate("/sign-in", { replace: true });
   }
   return (
@@ -49,7 +59,12 @@ function AccountSection() {
               <p>{state.user.email}</p>
             )}
             <div className="flex items-center gap-4">
-              <Button type="button" variant="outline" onClick={() => void handleSignOut()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={signingOut}
+                onClick={() => void handleSignOut()}
+              >
                 Sign out
               </Button>
               {PERSONAL_URL && (
@@ -61,6 +76,11 @@ function AccountSection() {
                 </a>
               )}
             </div>
+            {signOutFailed && (
+              <p role="alert" className="text-sm text-negative">
+                Signing out didn't work. Please try again later.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

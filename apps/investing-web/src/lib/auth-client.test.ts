@@ -158,9 +158,29 @@ test("signIn surfaces a fallback message when the server sends none", async () =
   expect(result).toEqual({ ok: false, message: "Sign-in failed." });
 });
 
-test("signOut posts to sign-out", async () => {
+test("signOut posts JSON to sign-out", async () => {
   const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
   vi.stubGlobal("fetch", fetchMock);
   await signOut();
-  expect(fetchMock).toHaveBeenCalledWith("/api/auth/sign-out", { method: "POST" });
+  expect(fetchMock).toHaveBeenCalledWith("/api/auth/sign-out", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+});
+
+test("signOut rejects on a 500 without leaking the body", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response("secret body", { status: 500 }))),
+  );
+  await expect(signOut()).rejects.toThrow("sign-out-failed");
+});
+
+test("signOut rejects on a network error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.reject(new TypeError("offline"))),
+  );
+  await expect(signOut()).rejects.toThrow("sign-out-failed");
 });

@@ -268,6 +268,33 @@ test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het fo
   expect(section("Account").querySelector('input[type="email"]')).not.toBeNull();
 });
 
+test("Account: een mislukte Uitloggen toont een fout en blijft ingelogd", async () => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).includes("/sign-out") && init?.method === "POST")
+      return new Response(null, { status: 500 });
+    return new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+  const uitloggen = [...section("Account").querySelectorAll("button")].find(
+    (b) => b.textContent === "Uitloggen",
+  ) as HTMLButtonElement;
+  await act(async () => uitloggen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  const account = section("Account");
+  expect(account.querySelector('[role="alert"]')?.textContent).toBe(
+    "Uitloggen lukte niet. Probeer het later opnieuw.",
+  );
+  expect(account.textContent).toContain("owner@example.com");
+  expect(account.querySelector('input[type="email"]')).toBeNull();
+  expect(
+    (
+      [...account.querySelectorAll("button")].find(
+        (b) => b.textContent === "Uitloggen",
+      ) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+});
+
 test("Koppelingen, Back-up and Import render inside the profile", async () => {
   await render();
   expect(container!.querySelector('[aria-label="Koppelingen"]')).not.toBeNull();

@@ -121,8 +121,20 @@ function AccountBlock() {
   const c = shellCopy[locale];
   const { state, refresh } = useAuthState();
 
+  const [signOutFailed, setSignOutFailed] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   async function handleSignOut() {
-    await signOut();
+    setSigningOut(true);
+    setSignOutFailed(false);
+    try {
+      await signOut();
+    } catch {
+      setSignOutFailed(true);
+      setSigningOut(false);
+      return;
+    }
+    setSigningOut(false);
     posthog.reset();
     refresh();
   }
@@ -141,7 +153,14 @@ function AccountBlock() {
       {state.kind === "signed-in" && (
         <>
           <p className="cell-sub">{state.email}</p>
-          <Button onClick={() => void handleSignOut()}>{c.profiel.account.signOut}</Button>
+          <Button disabled={signingOut} onClick={() => void handleSignOut()}>
+            {c.profiel.account.signOut}
+          </Button>
+          {signOutFailed && (
+            <p role="alert" className="text-warn">
+              {c.profiel.account.signOutError}
+            </p>
+          )}
         </>
       )}
     </Card>

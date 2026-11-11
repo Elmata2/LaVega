@@ -118,5 +118,16 @@ export async function signOut(): Promise<void> {
   // Portfolio data kept for a fast reload must not outlive the session on a shared device.
   forgetDashboards();
   forgetLayout();
-  await fetch("/api/auth/sign-out", { method: "POST" });
+  let response: Response;
+  try {
+    // The auth server answers 415 to a POST without a JSON content type.
+    response = await fetch("/api/auth/sign-out", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    throw new Error("sign-out-failed");
+  }
+  if (!response.ok) throw new Error("sign-out-failed");
 }

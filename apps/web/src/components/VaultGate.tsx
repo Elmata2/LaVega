@@ -22,7 +22,13 @@ type VaultGateProps = {
 
 // The vault opens with the account's key, so in the normal case this renders
 // only a loading line. App only mounts it while gate !== "ready".
-export default function VaultGate({ gate, storage, onReady, onRetry, onSignedOut }: VaultGateProps) {
+export default function VaultGate({
+  gate,
+  storage,
+  onReady,
+  onRetry,
+  onSignedOut,
+}: VaultGateProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].vaultGate;
   const [signingOut, setSigningOut] = useState(false);
@@ -63,7 +69,7 @@ export default function VaultGate({ gate, storage, onReady, onRetry, onSignedOut
           </Button>
           {signOutFailed && (
             <p role="alert" className="text-warn">
-              {c.keyError.unreachable}
+              {c.keyError.signOutError}
             </p>
           )}
         </Card>
