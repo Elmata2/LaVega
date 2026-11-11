@@ -44,12 +44,6 @@ function isPriceCoverage(value: unknown): value is StoredPriceCoverage {
   );
 }
 
-function withoutTenant<Row extends { tenantId: string }>(row: Row): Omit<Row, "tenantId"> {
-  const { tenantId, ...rest } = row;
-  void tenantId;
-  return rest;
-}
-
 /** Coverage sits beside the bars in its own file, so a bar file written
  *  before coverage existed still reads as it is. */
 function coverageFile(filePath: string): string {

@@ -41,8 +41,14 @@ test("two adapters that share one budget and one account never send history page
   try {
     const shared = createMemoryPartnerBudgetClient();
     await Promise.all([
-      createTrading212Adapter({ ...config, partnerBudget: shared }).sync({ entity: "BV" }),
-      createTrading212Adapter({ ...config, partnerBudget: shared }).sync({ entity: "BV" }),
+      createTrading212Adapter({ ...config, partnerBudget: shared }).sync({
+        lanes: ["holdings", "history"],
+        entity: "BV",
+      }),
+      createTrading212Adapter({ ...config, partnerBudget: shared }).sync({
+        lanes: ["holdings", "history"],
+        entity: "BV",
+      }),
     ]);
     const times = [...provider.orderTimes].sort((a, b) => a - b);
     expect(times).toHaveLength(2);
@@ -61,11 +67,11 @@ test("the same two adapters with a budget each still send together: what sharing
       createTrading212Adapter({
         ...config,
         partnerBudget: createMemoryPartnerBudgetClient(),
-      }).sync({ entity: "BV" }),
+      }).sync({ lanes: ["holdings", "history"], entity: "BV" }),
       createTrading212Adapter({
         ...config,
         partnerBudget: createMemoryPartnerBudgetClient(),
-      }).sync({ entity: "BV" }),
+      }).sync({ lanes: ["holdings", "history"], entity: "BV" }),
     ]);
     const times = [...provider.orderTimes].sort((a, b) => a - b);
     expect(times[1]! - times[0]!).toBeLessThan(ORDER_HISTORY_TABLE_MS);
@@ -80,7 +86,7 @@ test("an adapter given no budget paces itself with one of its own", async () => 
   vi.stubGlobal("fetch", provider.fetch);
   try {
     const adapter = createTrading212Adapter(config);
-    await adapter.sync({ entity: "BV" });
+    await adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(provider.rejections).toBe(0);
     expect(clock.now()).toBeGreaterThan(START_MS);
   } finally {
@@ -96,9 +102,11 @@ test("two accounts on one shared budget do not queue behind each other", async (
     const shared = createMemoryPartnerBudgetClient();
     await Promise.all([
       createTrading212Adapter({ ...config, token: "key-a", partnerBudget: shared }).sync({
+        lanes: ["holdings", "history"],
         entity: "BV",
       }),
       createTrading212Adapter({ ...config, token: "key-b", partnerBudget: shared }).sync({
+        lanes: ["holdings", "history"],
         entity: "BV",
       }),
     ]);
@@ -118,7 +126,7 @@ test("the budget key holds a hash of the API key, never the key", async () => {
       ...config,
       token: "super-secret-key",
       partnerBudget: budget,
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
     const keys = budget.calls.map((call) => call.key);
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) {
@@ -165,6 +173,7 @@ test("a 429 is reported to the budget, and the retry waits for the instant it na
     const budget = createMemoryPartnerBudgetClient();
     const rejected = vi.spyOn(budget, "reject");
     const result = await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
       entity: "BV",
     });
     expect(result.problems).toEqual([]);
@@ -193,6 +202,7 @@ test("a cooldown the host cannot wait out is recorded for the next run before th
   try {
     const budget = createImmediatePartnerBudget();
     const result = await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
       entity: "BV",
       deadlineMs: START_MS + 20_000,
     });
@@ -211,6 +221,7 @@ test("the host deadline is handed to the budget with every slot request", async 
   try {
     const budget = createImmediatePartnerBudget();
     await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
       entity: "BV",
       deadlineMs: START_MS + 600_000,
     });
@@ -232,7 +243,7 @@ test("a budget store that is down sends no request and pauses the sync", async (
     const result = await createTrading212Adapter({
       ...config,
       partnerBudget: createFailingPartnerBudget(new PartnerBudgetUnavailable({ message: "down" })),
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(provider.requests).toEqual([]);
     // Our own outage is not a broker cooldown: no retryAfter, so it cannot outrank `force`.
     expect(result.retryAfter).toBeUndefined();
@@ -264,7 +275,10 @@ test("limit and period headers become the spacing period / limit, rounded up", a
   vi.stubGlobal("fetch", respondingWith({ "x-ratelimit-limit": "3", "x-ratelimit-period": "10" }));
   try {
     const budget = createImmediatePartnerBudget();
-    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({ entity: "BV" });
+    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
+      entity: "BV",
+    });
     expect(observed(budget, "positions")).toEqual([
       expect.objectContaining({ seen: { intervalMs: 3_334 } }),
     ]);
@@ -286,7 +300,10 @@ test("remaining 0 with a reset time is observed as a block, whatever the other p
   );
   try {
     const budget = createImmediatePartnerBudget();
-    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({ entity: "BV" });
+    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
+      entity: "BV",
+    });
     const [call] = observed(budget, "positions");
     const seen = (call as { seen: PartnerSeen }).seen;
     expect(seen.remaining).toBe(0);
@@ -311,7 +328,10 @@ test("headers with a missing or invalid part are not reported at all", async () 
   );
   try {
     const budget = createImmediatePartnerBudget();
-    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({ entity: "BV" });
+    await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({
+      lanes: ["holdings", "history"],
+      entity: "BV",
+    });
     expect(budget.calls.filter((call) => call.call === "observe")).toEqual([]);
   } finally {
     clock.restore();
@@ -335,7 +355,7 @@ test("a store that goes down mid-history keeps the resume cursor, carries no ret
       },
     };
     const adapter = createTrading212Adapter({ ...config, partnerBudget: flaky });
-    const first = await adapter.sync({ entity: "BV" });
+    const first = await adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(first.resume).toBeDefined();
     expect(first.retryAfter).toBeUndefined();
     expect(first.problems).toContain(
@@ -356,6 +376,7 @@ test("a store that goes down mid-history keeps the resume cursor, carries no ret
     } as never;
     const run = (force: boolean) =>
       syncScheduledBrokers({
+        lanes: ["holdings", "history"],
         adapters: [{ broker: "trading212", adapter }],
         credentials,
         operations,
@@ -387,7 +408,7 @@ test("a store that fails to record the headers of a 2xx response does not discar
       ...config,
       diagnostics,
       partnerBudget: { ...healthy, observe: () => Promise.reject(new Error("observe down")) },
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(result.sections.positions.rows).toHaveLength(1);
     expect(diagnostics).toHaveBeenCalledWith(
       expect.objectContaining({ type: "budget-observe-failed", message: "observe down" }),
@@ -420,12 +441,12 @@ test("the budget-exhausted wait is reported only when it lasted at least 250 ms"
       };
     };
     const short = waits(249);
-    await short.adapter.sync({ entity: "BV" });
+    await short.adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(short.diagnostics).not.toHaveBeenCalledWith(
       expect.objectContaining({ reason: "budget-exhausted" }),
     );
     const long = waits(250);
-    await long.adapter.sync({ entity: "BV" });
+    await long.adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
     expect(long.diagnostics).toHaveBeenCalledWith(
       expect.objectContaining({ reason: "budget-exhausted" }),
     );

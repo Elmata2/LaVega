@@ -22,11 +22,10 @@ export type PriceSyncTarget = PriceSyncInput & {
 
 /** The key pair for one instrument: the identity key plus the `sym:` alias an
  *  earlier release stored it under, when this is an `isin:` key. */
-export function instrumentKeys(input: {
-  symbol: string;
-  isin?: string;
-  currency: string;
-}): { key: string; alias?: string } {
+export function instrumentKeys(input: { symbol: string; isin?: string; currency: string }): {
+  key: string;
+  alias?: string;
+} {
   const key = priceInstrumentKey(input);
   if (!key.startsWith("isin:")) return { key };
   return { key, alias: priceInstrumentKey({ symbol: input.symbol, currency: input.currency }) };
@@ -172,7 +171,6 @@ function instrument(
   };
 }
 
-
 /** The keys a READ needs for these symbols: one per symbol, deduplicated by
  *  instrument so a series shared by two broker codes is fetched once. The
  *  benchmark symbols are read even when no trade exists yet, which is why this
@@ -234,14 +232,21 @@ function isinsBySymbol(input: {
   const openPositionIsin = new Map<string, string>();
   for (const position of input.positions) {
     remember(position.symbol, position.isin);
-    if (position.quantity !== 0 && valid(position.isin) && !openPositionIsin.has(position.symbol.toUpperCase()))
+    if (
+      position.quantity !== 0 &&
+      valid(position.isin) &&
+      !openPositionIsin.has(position.symbol.toUpperCase())
+    )
       openPositionIsin.set(position.symbol.toUpperCase(), position.isin.trim().toUpperCase());
   }
   // Ascending date so the last write per symbol is the most recent trade.
   const recentTradeIsin = new Map<string, string>();
-  for (const trade of [...input.trades].sort((left, right) => left.date.localeCompare(right.date))) {
+  for (const trade of [...input.trades].sort((left, right) =>
+    left.date.localeCompare(right.date),
+  )) {
     remember(trade.symbol, trade.isin);
-    if (valid(trade.isin)) recentTradeIsin.set(trade.symbol.toUpperCase(), trade.isin.trim().toUpperCase());
+    if (valid(trade.isin))
+      recentTradeIsin.set(trade.symbol.toUpperCase(), trade.isin.trim().toUpperCase());
   }
   const out = new Map<string, { isin?: string; conflict: boolean }>();
   for (const symbol of new Set([
@@ -289,7 +294,12 @@ export function discoverPriceSyncTargets(input: {
     // Without trade history there is no real backfill anchor; position.asOf is
     // only a snapshot date and would limit Yahoo to a ~1-day window.
     targets.push({
-      ...instrument(position, "current", firstTrade?.date ?? "2000-01-01", identity(position.symbol).isin),
+      ...instrument(
+        position,
+        "current",
+        firstTrade?.date ?? "2000-01-01",
+        identity(position.symbol).isin,
+      ),
       ...(identity(position.symbol).problem ? { problem: identity(position.symbol).problem } : {}),
     });
   }
@@ -475,9 +485,9 @@ export function createPriceOrchestrator(input: {
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
       /* One line per conflicting symbol per sync, not per slice. Already
        * formatted by discovery. */
-      const discoveryProblems = [...new Set(
-        queue.flatMap((target) => (target.problem ? [target.problem] : [])),
-      )];
+      const discoveryProblems = [
+        ...new Set(queue.flatMap((target) => (target.problem ? [target.problem] : []))),
+      ];
       problems.push(...discoveryProblems);
 
       if (queue.length === 0)
@@ -607,7 +617,9 @@ export function createPriceOrchestrator(input: {
            * finished: the slice ends paused with this key still on the list,
            * and the next slice reads the rows that run wrote. */
           if (result.pending) {
-            paused = { message: "Price synchronization paused for an instrument another run is updating" };
+            paused = {
+              message: "Price synchronization paused for an instrument another run is updating",
+            };
           } else {
             problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
           }

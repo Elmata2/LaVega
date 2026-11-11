@@ -592,3 +592,94 @@ describe("cost-basis provenance across a sync (WS4.2)", () => {
     });
   });
 });
+
+/* --- per-stream replace vs merge (#304) ------------------------------------ */
+
+describe("two freshness lanes", () => {
+  const trade = (id: string, day: string) => ({
+    entity: "BV",
+    date: day,
+    symbol: "AAPL",
+    side: "buy" as const,
+    quantity: 1,
+    price: 10,
+    amount: 10,
+    currency: "EUR",
+    commission: 0,
+    brokerTradeId: id,
+  });
+  const snapshot = (input: {
+    trades?: ReturnType<typeof trade>[];
+    tradesStatus?: "complete" | "unavailable";
+    fullStreams?: Array<"orders" | "transactions" | "dividends">;
+    positions?: Position[];
+    positionsStatus?: "complete" | "unavailable";
+  }) => ({
+    outcomes: [
+      {
+        broker: "trading212" as const,
+        status: "synced" as const,
+        lastSyncedAt: null,
+        result: {
+          sections: {
+            positions: {
+              status: input.positionsStatus ?? "complete",
+              rows: input.positions ?? [],
+            },
+            trades: {
+              status: input.tradesStatus ?? "complete",
+              rows: input.trades ?? [],
+            },
+            dividends: { status: "complete" as const, rows: [] },
+            cashBalances: { status: "ok" as unknown as "complete", rows: [] },
+            cashFlows: { status: "complete" as const, rows: [] },
+          },
+          source: "trading212-api",
+          problems: [],
+          ...(input.fullStreams ? { fullStreams: input.fullStreams } : {}),
+        },
+      },
+    ],
+    problems: [],
+  });
+
+  test("a holdings-only read leaves the stored history collections alone", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(snapshot({ trades: [trade("1", "2026-08-01")], fullStreams: ["orders"] }));
+    expect(cache.read().trades).toHaveLength(1);
+
+    // The holdings lane reports the history sections as unavailable: that is
+    // "not read", not "empty", so nothing may be dropped.
+    cache.apply(snapshot({ tradesStatus: "unavailable", positionsStatus: "complete" }));
+    expect(cache.read().trades).toHaveLength(1);
+  });
+
+  test("a tail read merges by row id and never duplicates a stored row", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(
+      snapshot({
+        trades: [trade("1", "2026-08-01"), trade("2", "2026-08-02")],
+        fullStreams: ["orders"],
+      }),
+    );
+
+    // The tail reads the first page it already knows plus one new row.
+    cache.apply(
+      snapshot({
+        trades: [trade("3", "2026-08-03"), trade("2", "2026-08-02")],
+        fullStreams: [],
+      }),
+    );
+
+    expect(cache.read().trades).toHaveLength(3);
+    expect(
+      cache
+        .read()
+        .trades.map((row) => row.brokerTradeId)
+        .sort(),
+    ).toEqual(["1", "2", "3"]);
+    // Applying the same tail twice still adds no duplicate.
+    cache.apply(snapshot({ trades: [trade("3", "2026-08-03")], fullStreams: [] }));
+    expect(cache.read().trades).toHaveLength(3);
+  });
+});

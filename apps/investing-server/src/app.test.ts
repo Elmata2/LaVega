@@ -18,6 +18,7 @@ import {
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
+import { createMemorySyncRunStore } from "./syncRun.js";
 import {
   buildCompositionProjection,
   buildRiskProjection,
@@ -68,6 +69,7 @@ const acceptedConsentStore = () => ({
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test("GET /health reports investing server health through Hono app.request", async () => {
@@ -407,7 +409,7 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
     provider: provider as never,
     priceSyncTargets: () => [
       {
-      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -445,7 +447,7 @@ test("price sync uses Yahoo Finance after persisted consent", async () => {
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
     priceSyncTargets: () => [
       {
-      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -474,7 +476,7 @@ test("router problems reach HTTP response unchanged", async () => {
     provider: provider as never,
     priceSyncTargets: () => [
       {
-      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -506,7 +508,7 @@ test("a closed position Yahoo confirms delisted does not flip Price history to p
     provider: provider as never,
     priceSyncTargets: () => [
       {
-      instrumentKey: `sym:${"SKX_US_EQ"}:${"USD"}`,
+        instrumentKey: `sym:${"SKX_US_EQ"}:${"USD"}`,
         kind: "closed",
         symbol: "SKX_US_EQ",
         ticker: "SKX_US_EQ",
@@ -586,7 +588,7 @@ test("price sync resolves ISIN before asking price provider", async () => {
     identifierProvider: identifierProvider as never,
     priceSyncTargets: () => [
       {
-      instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -791,11 +793,11 @@ test("broker sync route forwards force and keeps problems in response", async ()
     outcomes: [{ status: "synced" }],
     problems: ["ibkr: unavailable"],
   });
-  expect(brokerSync).toHaveBeenCalledWith(true, undefined, false);
+  expect(brokerSync).toHaveBeenCalledWith(true, ["holdings", "history"], undefined, false);
   await investingApp.request("/api/brokers/sync?force=true&rebuildOrders=true", {
     method: "POST",
   });
-  expect(brokerSync).toHaveBeenLastCalledWith(true, undefined, true);
+  expect(brokerSync).toHaveBeenLastCalledWith(true, ["holdings", "history"], undefined, true);
 });
 
 test("broker sync passes host deadline to broker work", async () => {
@@ -805,7 +807,7 @@ test("broker sync passes host deadline to broker work", async () => {
   const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(brokerSync).toHaveBeenCalledWith(false, 1_234, false);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings", "history"], 1_234, false);
 });
 
 test("broker sync starts server-side price orchestration despite broker problems", async () => {
@@ -819,7 +821,7 @@ test("broker sync starts server-side price orchestration despite broker problems
     provider: provider as never,
     priceSyncTargets: () => [
       {
-      instrumentKey: `sym:${"CLOSED"}:${"EUR"}`,
+        instrumentKey: `sym:${"CLOSED"}:${"EUR"}`,
         kind: "closed",
         symbol: "CLOSED",
         ticker: "CLOSED",
@@ -833,6 +835,82 @@ test("broker sync starts server-side price orchestration despite broker problems
 
   await investingApp.request("/api/brokers/sync", { method: "POST" });
   expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("the holdings lane request never starts price sync", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: symKey("CLOSED", "EUR"),
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=holdings", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings"], undefined, false);
+  expect(provider.get).not.toHaveBeenCalled();
+});
+
+test("the history lane request starts price sync and asks only for history", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: symKey("CLOSED", "EUR"),
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  await investingApp.request("/api/brokers/sync?lane=history", { method: "POST" });
+
+  expect(brokerSync).toHaveBeenCalledWith(false, ["history"], undefined, false);
+  expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("an unknown lane is rejected without starting any work", async () => {
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({ brokerSync });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=everything", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["Unknown lane: everything"] });
+  expect(brokerSync).not.toHaveBeenCalled();
 });
 
 test("broker sync route converts unexpected failures into a useful response", async () => {
@@ -2316,7 +2394,7 @@ test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb 
     priceSyncDeadline: () => deadline,
     priceSyncTargets: () => [
       {
-      instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -2390,7 +2468,7 @@ test.each([
       priceSyncDeadline: () => Date.now() + 3_600_000,
       priceSyncTargets: () => [
         {
-      instrumentKey: `isin:${"US8740391003"}:${"EUR"}`,
+          instrumentKey: `isin:${"US8740391003"}:${"EUR"}`,
           kind: "closed",
           symbol: "GONEd_EQ",
           ticker: "GONEd_EQ",
@@ -2507,7 +2585,10 @@ const symKey = (symbol: string, currency = "EUR"): string =>
   priceInstrumentKey({ symbol, currency });
 function legacyPrices(store: SharedPriceStore) {
   return {
-    async upsert(_tenant: string, bars: readonly (SharedPriceBar & { symbol?: string })[]): Promise<void> {
+    async upsert(
+      _tenant: string,
+      bars: readonly (SharedPriceBar & { symbol?: string })[],
+    ): Promise<void> {
       const groups = new Map<string, SharedPriceBar[]>();
       for (const bar of bars) {
         const key = symKey(bar.symbol ?? "", bar.currency);
@@ -2534,3 +2615,43 @@ function legacyPrices(store: SharedPriceStore) {
     },
   };
 }
+
+test("POST /api/sync/continue refuses the wrong caller and validates runId and hop", async () => {
+  vi.stubEnv("CRON_SECRET", "cron-secret");
+  const syncRun = createApp({
+    syncRunStore: createMemorySyncRunStore(),
+    syncRunBackground: async () => undefined,
+  });
+  const body = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({ tenantId: "local", runId: "run-1", hop: 1, ...over });
+  const send = (payload: string, authorized = true) =>
+    syncRun.request("/api/sync/continue", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorized ? { authorization: "Bearer cron-secret" } : {}),
+      },
+      body: payload,
+    });
+
+  // No bearer secret: the route is machine-only.
+  expect((await send(body(), false)).status).toBe(401);
+  // Hop above MAX_HOPS is a schema-level 400, not a silent no-op.
+  expect((await send(body({ hop: 21 }))).status).toBe(400);
+  expect((await send(body({ runId: "" }))).status).toBe(400);
+  // A run id that is not the stored one is accepted and does no work.
+  const accepted = await send(body({ runId: "not-the-run" }));
+  expect(accepted.status).toBe(202);
+  expect(await accepted.json()).toEqual({ accepted: false });
+});
+
+test("POST /api/sync/refresh names the missing CRON_SECRET on a hosted host", async () => {
+  vi.stubEnv("VERCEL", "1");
+  vi.stubEnv("CRON_SECRET", "");
+  const syncRun = createApp({});
+
+  const response = await syncRun.request("/api/sync/refresh", { method: "POST" });
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("CRON_SECRET");
+});

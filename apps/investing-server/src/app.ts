@@ -21,6 +21,7 @@ import {
   type AccountWrapperStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
+import { createMemorySyncRunStore, createSyncRun, MAX_HOPS, type SyncRunStore } from "./syncRun.js";
 import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
@@ -38,6 +39,7 @@ import {
   type ScheduledBroker,
   type YahooPriceRequest,
 } from "@lavega/adapters";
+import type { BrokerSyncLane } from "@lavega/adapters";
 import {
   createInMemoryPriceSyncProgressStore,
   createPriceOrchestrator,
@@ -180,6 +182,7 @@ type PriceDependencies = {
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
   brokerSync: (
     force: boolean,
+    lanes: readonly BrokerSyncLane[],
     deadlineMs?: number,
     rebuildOrders?: boolean,
   ) => Promise<{ outcomes: unknown[]; problems: string[] }>;
@@ -193,6 +196,12 @@ type PriceDependencies = {
   priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
+  /** Durable row for the server-owned run (Neon on hosted, memory locally). */
+  syncRunStore?: SyncRunStore;
+  /** Registers the run as background work. Rejects on a host with no such port. */
+  syncRunBackground?: (work: Promise<unknown>) => Promise<void>;
+  syncRunContinue?: (hop: number, origin: string | undefined, runId: string) => Promise<void>;
+  syncRunNow?: () => number;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
   credentialStatus: () => Promise<BrokerVaultStatus>;
   brokerReadability: () => Promise<BrokerReadability | undefined>;
@@ -361,9 +370,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     (await marketDataConsentStore.get(tenantId)).accepted;
   /* The shared price series is keyed by instrument, not by the broker's
    * ticker (issue #307): the position's ISIN and currency decide the key. */
-  const resolveSectorListingFor = (
-    position: { symbol: string; isin?: string; currency?: string },
-  ) => {
+  const resolveSectorListingFor = (position: {
+    symbol: string;
+    isin?: string;
+    currency?: string;
+  }) => {
     const keys = instrumentKeys({
       symbol: position.symbol,
       ...(position.isin ? { isin: position.isin } : {}),
@@ -378,9 +389,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const resolveSectorListingSymbol = async (tenantId: string, symbol: string) => {
     try {
       const targets = (await dependencies.priceSyncTargets?.(tenantId)) ?? [];
-      const match = targets.find(
-        (target) => target.symbol.toUpperCase() === symbol.toUpperCase(),
-      );
+      const match = targets.find((target) => target.symbol.toUpperCase() === symbol.toUpperCase());
       if (match)
         return resolveSectorListing(store, {
           key: match.instrumentKey,
@@ -411,6 +420,141 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
+  const syncRunClock = dependencies.syncRunNow ?? (() => Date.now());
+  const brokerProgress = async () =>
+    dependencies.brokerSyncStatus
+      ? await dependencies.brokerSyncStatus()
+      : {
+          status: "idle" as const,
+          pages: 0,
+          ordersRead: 0,
+          positionsRead: 0,
+          waitUntil: null,
+          remaining: null,
+          updatedAt: null,
+          message: null,
+          history: null,
+        };
+  const laneStatus = (status: string): "idle" | "running" | "waiting" | "completed" | "problem" =>
+    status === "completed" || status === "problem" || status === "running" || status === "waiting"
+      ? status
+      : "idle";
+  const syncRun = createSyncRun({
+    store: dependencies.syncRunStore ?? createMemorySyncRunStore(),
+    now: syncRunClock,
+    lanes: {
+      holdings: async (deadlineMs) => {
+        const result = await brokerSync(false, ["holdings"], deadlineMs);
+        const progress = await brokerProgress();
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending: progress.status === "waiting",
+          problems: result.problems,
+        };
+      },
+      history: async (deadlineMs) => {
+        const result = await brokerSync(false, ["history"], deadlineMs);
+        const progress = await brokerProgress();
+        const pending = progress.status === "waiting" || progress.history != null;
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending,
+          problems: result.problems,
+        };
+      },
+      prices: async (deadlineMs) => {
+        const tenantId = await resolveTenantId();
+        if (!(await hasYahooConsent(tenantId))) return { status: "completed", pending: false };
+        const progress = await priceOrchestrator.run(tenantId, deadlineMs);
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending:
+            progress.status === "running" ||
+            progress.status === "waiting" ||
+            progress.status === "paused",
+          problems: progress.problems,
+        };
+      },
+      letter: async () => {
+        /* The letter is a side effect, never part of the run outcome. */
+      },
+    },
+    readLanes: async () => {
+      const [broker, price, vault] = await Promise.all([
+        brokerProgress(),
+        priceOrchestrator.status(await resolveTenantId()),
+        dependencies.credentialStatus
+          ? dependencies.credentialStatus()
+          : Promise.resolve({ status: "empty" as const }),
+      ]);
+      const brokerLane = (status: string, syncedAt: string | null) => ({
+        status: laneStatus(status),
+        syncedAt,
+        waitUntil: broker.waitUntil,
+        message: broker.message,
+      });
+      return {
+        vault:
+          (vault as { status?: string }).status === "unlocked"
+            ? "unlocked"
+            : (vault as { status?: string }).status === "locked"
+              ? "locked"
+              : "empty",
+        holdings: {
+          ...brokerLane(broker.status, broker.updatedAt),
+          positionsRead: broker.positionsRead,
+        },
+        history: {
+          ...brokerLane(broker.status, broker.updatedAt),
+          pages: broker.pages,
+          ordersRead: broker.ordersRead,
+          historyProgress: broker.history,
+        },
+        prices: {
+          status: laneStatus(price.status),
+          syncedAt: price.updatedAt,
+          waitUntil: price.waitUntil,
+          message: price.message,
+          total: price.total,
+          completed: price.completed,
+          currentSymbol: price.currentSymbol,
+          remainingSymbols: price.remainingSymbols ?? [],
+        },
+        problems: [...brokerProblems(await brokerProgress()), ...(price.problems ?? [])],
+      };
+    },
+    continueRun:
+      dependencies.syncRunContinue ??
+      (async (hop, origin, runId) => {
+        const secret = process.env.CRON_SECRET?.trim();
+        if (!origin || !secret) return;
+        await fetch(`${origin}/api/sync/continue`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+          body: JSON.stringify({ tenantId: "local", runId, hop }),
+        });
+      }),
+    background:
+      dependencies.syncRunBackground ??
+      ((work) => {
+        void work.catch((error: unknown) =>
+          problemReporter({
+            source: "broker-sync",
+            problems: [error instanceof Error ? error.message : "Background sync run failed"],
+          }),
+        );
+        return Promise.resolve();
+      }),
+    reportProblem: (message, error) =>
+      problemReporter({
+        source: "broker-sync",
+        problems: [message, ...(error instanceof Error ? [error.message] : [])],
+      }),
+  });
+  const brokerProblems = (_progress: { message?: string | null }) => [];
   const visiblePriceProgress = (progress: PriceSyncProgress): PriceSyncProgress => {
     const visible = { ...progress };
     delete visible.leaseId;
@@ -791,19 +935,108 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["Broker synchronization status is not available"] }, 503);
     return c.json(await dependencies.brokerSyncStatus());
   });
+  /* --- server-owned sync run (#306) ------------------------------------- */
+
+  const bearerIsCron = (c: { req: { header: (name: string) => string | undefined } }) => {
+    const secret = process.env.CRON_SECRET?.trim();
+    return secret !== undefined && c.req.header("authorization") === `Bearer ${secret}`;
+  };
+  const validContinueBody = (
+    body: unknown,
+  ): body is { tenantId: string; runId: string; hop: number } => {
+    if (!body || typeof body !== "object") return false;
+    const value = body as { tenantId?: unknown; runId?: unknown; hop?: unknown };
+    return (
+      typeof value.tenantId === "string" &&
+      value.tenantId.length > 0 &&
+      typeof value.runId === "string" &&
+      value.runId.length > 0 &&
+      typeof value.hop === "number" &&
+      Number.isInteger(value.hop) &&
+      value.hop >= 1 &&
+      value.hop <= MAX_HOPS
+    );
+  };
+
+  investingApp.post("/api/sync/refresh", async (c) => {
+    if (process.env.VERCEL !== undefined && !process.env.CRON_SECRET?.trim())
+      return c.json(
+        { problems: ["CRON_SECRET is not set; a server-owned run cannot continue"] },
+        500,
+      );
+    const body = (await c.req.json().catch(() => null)) as { force?: unknown } | null;
+    try {
+      const result = await syncRun.requestRefresh(body?.force === true, new URL(c.req.url).origin);
+      return c.json(result.state, 202);
+    } catch (error) {
+      // No background port (no request context): do not fake it with a
+      // detached promise that the host may freeze.
+      return c.json(
+        {
+          problems: [
+            error instanceof Error ? error.message : "Background execution is not available",
+          ],
+        },
+        500,
+      );
+    }
+  });
+
+  investingApp.get("/api/sync/state", async (c) => c.json(await syncRun.readState()));
+
+  investingApp.post("/api/sync/continue", async (c) => {
+    if (!bearerIsCron(c)) return c.json({ problems: ["Unauthorized"] }, 401);
+    const body: unknown = await c.req.json().catch(() => null);
+    if (!validContinueBody(body)) return c.json({ problems: ["Invalid continue request"] }, 400);
+    return c.json(
+      { accepted: await syncRun.acceptContinue({ runId: body.runId, hop: body.hop }) },
+      202,
+    );
+  });
+
+  /* The daily cron's worker: claim or resume the run and await it in this
+   * invocation. Bearer secret only; never reachable with a user session. */
+  investingApp.post("/api/sync/drive", async (c) => {
+    if (!bearerIsCron(c)) return c.json({ problems: ["Unauthorized"] }, 401);
+    const body = (await c.req.json().catch(() => null)) as {
+      force?: unknown;
+      deadlineMs?: unknown;
+    } | null;
+    const deadlineMs =
+      typeof body?.deadlineMs === "number" && Number.isFinite(body.deadlineMs)
+        ? body.deadlineMs
+        : undefined;
+    return c.json({ result: await syncRun.runNow(body?.force === true, deadlineMs) });
+  });
+
   investingApp.post("/api/brokers/sync", async (c) => {
+    const requestedLane = c.req.query("lane");
+    if (requestedLane !== undefined && requestedLane !== "holdings" && requestedLane !== "history")
+      return c.json({ problems: [`Unknown lane: ${requestedLane}`] }, 400);
+    // Absent lane = both, which is what a caller that predates lanes means.
+    const lanes: readonly BrokerSyncLane[] =
+      requestedLane === "holdings"
+        ? ["holdings"]
+        : requestedLane === "history"
+          ? ["history"]
+          : ["holdings", "history"];
     const deadline = priceSyncDeadline();
     try {
       const result = await brokerSync(
         c.req.query("force") === "true",
+        lanes,
         deadline,
         c.req.query("rebuildOrders") === "true",
       );
       problemReporter({ source: "broker-sync", problems: result.problems });
       /* Awaited, not detached. Work started after the response is not
        * guaranteed to run at all on a serverless host, which is how prices
-       * went months without a bar while every call looked successful. */
-      await runPriceSyncIfConsented(await resolveTenantId(), deadline);
+       * went months without a bar while every call looked successful. The
+       * holdings lane never starts it: two broker requests must answer in
+       * under the 5 s dashboard budget, and a price slice is not what the
+       * user opened the app for. */
+      if (lanes.includes("history"))
+        await runPriceSyncIfConsented(await resolveTenantId(), deadline);
       return c.json(result);
     } catch {
       const result = { outcomes: [], problems: ["Broker synchronization failed"] };
@@ -890,10 +1123,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
      * user must not delete what every user reads. A local file store serves one
      * installation, so clearing it stays available there. */
     if (sharedPriceStore)
-      return c.json(
-        { problems: ["Shared price data cannot be cleared from one account"] },
-        405,
-      );
+      return c.json({ problems: ["Shared price data cannot be cleared from one account"] }, 405);
     if (!dependencies.clearPriceCache)
       return c.json({ problems: ["Price cache cannot be cleared"] }, 405);
     await dependencies.clearPriceCache();

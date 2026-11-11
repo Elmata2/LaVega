@@ -219,9 +219,7 @@ export class SectorRead extends Context.Service<
 }
 
 /** Provide the module's layer for one runtime's already-built sources. */
-export function sectorReadLayer(
-  sources: SectorReadSources,
-): Layer.Layer<SectorRead, never, never> {
+export function sectorReadLayer(sources: SectorReadSources): Layer.Layer<SectorRead, never, never> {
   return SectorRead.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -247,4 +245,3 @@ export function createSectorReader(sources: SectorReadSources) {
 
 /** The read's type as an imperative boundary sees it. */
 export type SectorReader = ReturnType<typeof createSectorReader>;
-

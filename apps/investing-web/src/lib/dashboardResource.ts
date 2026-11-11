@@ -7,7 +7,7 @@ import {
   type InvestingDashboardData,
   type PortfolioRange,
 } from "@lavega/core";
-import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
+import { DASHBOARD_REFRESH_EVENT } from "./syncSession";
 
 export type DashboardState =
   | { status: "loading" }

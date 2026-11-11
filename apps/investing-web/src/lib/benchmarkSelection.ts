@@ -1,6 +1,5 @@
 import { MAX_BENCHMARKS, type BenchmarkInstrument } from "@lavega/core";
-import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
-import { continuePriceSync } from "./syncSession";
+import { DASHBOARD_REFRESH_EVENT, requestRefresh } from "./syncSession";
 
 /** The server's answer to a benchmark search: what matched, whether those
  *  matches are curated suggestions instead of live Yahoo results, and any
@@ -84,5 +83,5 @@ export async function saveBenchmarkSymbols(symbols: readonly string[]): Promise<
   if (typeof window !== "undefined") window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
   /* A newly chosen benchmark has no prices yet. The server only fetches them
    * while a request is in flight, so the page asks for them. */
-  await continuePriceSync();
+  await requestRefresh();
 }

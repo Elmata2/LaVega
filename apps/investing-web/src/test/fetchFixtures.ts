@@ -196,6 +196,46 @@ export function agentReplyStream(text = agentReply): Response {
  * RequireAuth's get-session check must see the same 503 apps/server sends
  * in that mode, or these tests would redirect to /sign-in instead of
  * rendering the dashboard. */
+
+/** The one state body `GET /api/sync/state` and `POST /api/sync/refresh`
+ *  answer. Inactive by default: an app-open test must not start a poll that
+ *  outlives the test. */
+export function syncStateBody(over: Record<string, unknown> = {}) {
+  return {
+    active: false,
+    vault: "unlocked",
+    holdings: {
+      status: "idle",
+      syncedAt: null,
+      waitUntil: null,
+      message: null,
+      positionsRead: 0,
+    },
+    history: {
+      status: "idle",
+      syncedAt: null,
+      waitUntil: null,
+      message: null,
+      pages: 0,
+      ordersRead: 0,
+      historyProgress: null,
+    },
+    prices: {
+      status: "idle",
+      syncedAt: null,
+      waitUntil: null,
+      message: null,
+      total: 0,
+      completed: 0,
+      currentSymbol: null,
+      remainingSymbols: [],
+    },
+    problems: [],
+    run: { id: null, hop: 0, outcome: null },
+    ...over,
+  };
+}
+
 export function withAuthUnconfigured(input: RequestInfo | URL, fallback: () => Response): Response {
   if (String(input) === "/api/auth/get-session")
     return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), {
@@ -217,8 +257,9 @@ export function responseFor(input: RequestInfo | URL, init?: RequestInit) {
     if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
       return agentReplyStream();
     if (url === "/api/letters/latest") return new Response(JSON.stringify({ letter: null }));
-    if (url === "/api/brokers/sync" && init?.method === "POST")
-      return new Response(JSON.stringify({ problems: [] }));
+    if (url === "/api/sync/state") return new Response(JSON.stringify(syncStateBody()));
+    if (url === "/api/sync/refresh" && init?.method === "POST")
+      return new Response(JSON.stringify({ ...syncStateBody(), claimed: true }), { status: 202 });
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
     if (url.startsWith("/api/investing/summary"))
       return new Response(JSON.stringify(portfolioSummary));
@@ -264,8 +305,9 @@ export function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
       return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/agents/portfolio/conversation" && init?.method === "POST")
       return agentReplyStream();
-    if (url === "/api/brokers/sync" && init?.method === "POST")
-      return new Response(JSON.stringify({ problems: [] }));
+    if (url === "/api/sync/state") return new Response(JSON.stringify(syncStateBody()));
+    if (url === "/api/sync/refresh" && init?.method === "POST")
+      return new Response(JSON.stringify({ ...syncStateBody(), claimed: true }), { status: 202 });
     if (url.startsWith("/api/investing/dashboard"))
       return new Response(JSON.stringify(emptyDashboard));
     return new Response(JSON.stringify({}));

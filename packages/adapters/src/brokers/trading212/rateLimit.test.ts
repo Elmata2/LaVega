@@ -24,7 +24,7 @@ test("full order history syncs within the published Trading 212 rate limits", as
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.sections.trades.rows).toHaveLength(TOTAL_ORDERS);
@@ -54,7 +54,7 @@ test("paces across windows instead of burning retries on rejected requests", asy
       secret: "secret",
       baseUrl: "https://live.trading212.com",
       diagnostics,
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.sections.trades.rows).toHaveLength(400);
@@ -101,7 +101,7 @@ test("large order history continues across every required provider window", asyn
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-    }).sync({ entity: "BV" });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.sections.trades.rows).toHaveLength(3_000);
@@ -122,7 +122,7 @@ test("a host deadline stops before a slot that falls after it and leaves a resum
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-    }).sync({ entity: "BV", deadlineMs: START_MS + 10_000 });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV", deadlineMs: START_MS + 10_000 });
 
     // Page 1 goes out at once and page 2 at +3 s. Page 3's slot is +13 s, after
     // the deadline minus one second (+9 s), so no request is sent for it.
@@ -156,12 +156,12 @@ test("a resumed sync continues from the stored cursor and finishes the history",
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-    }).sync({ entity: "BV", deadlineMs: START_MS + 10_000 });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV", deadlineMs: START_MS + 10_000 });
     const second = await createTrading212Adapter({
       token: "key",
       secret: "secret",
       baseUrl: "https://live.trading212.com",
-    }).sync({ entity: "BV", resume: first.resume });
+    }).sync({ lanes: ["holdings", "history"], entity: "BV", resume: first.resume });
 
     expect(second.sections.trades.rows).toHaveLength(300);
     expect(second.sections.trades.status).toBe("complete");

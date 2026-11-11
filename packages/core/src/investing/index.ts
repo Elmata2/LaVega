@@ -28,3 +28,4 @@ export * from "./mentions.js";
 /* Price-series identity (issue #307). Exported under a distinct name because the
  * security master already exports `instrumentKey` for its own (ISIN/MIC) key. */
 export { instrumentKey as priceInstrumentKey } from "./instrumentKey.js";
+export * from "./syncState.js";

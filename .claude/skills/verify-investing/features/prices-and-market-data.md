@@ -36,15 +36,15 @@ Benchmark search calls `/api/investing/benchmarks/search?q=`.
 ## Drive
 
 `Allow Yahoo Finance` PUTs `/api/market-data/consent` with `{accepted:true}`, then calls
-`startBrokerSync`, which POSTs `/api/brokers/sync` (not `?force=true`). A non-OK broker
-response throws only when the body parses as JSON. The catch then sets the visible string
-`Broker sync failed.` and does not call price sync. A non-OK response with no JSON body
-(a proxy cutting the request off) does not throw, and `startBrokerSync` still calls
-`continuePriceSync`. An empty local vault is the JSON failure: broker `status` becomes
-`problem`, `message` is `credential vault is locked`, `updatedAt` is set, `positionsRead`
-stays `0`. The price chip stays `Ready` until a later `prices sync --wait`. After that
-failure, dry-run then one `prices sync --wait`. That POST is the price continuation the
-button would have reached. The PUT alone fetches nothing.
+`requestRefresh()`, which POSTs `/api/sync/refresh` (`{force:false}`) — one intent, not the
+old two-step broker POST. The server owns the run; the page then reads `GET /api/sync/state`
+every 2 s while `active` is true and never posts a price round. A non-OK refresh response
+carries `problems[]` that the status line shows. An empty local vault is the JSON failure:
+price `status` becomes `problem`, `message` is `credential vault is locked`. The CLI still
+drives the old routes: `sync --wait` POSTs `/api/brokers/sync`, and `prices sync --wait`
+posts `/api/prices/sync` in the CLI's own loop. After a failed web start, dry-run then one
+`prices sync --wait`; that POST is the price continuation the server run would have made.
+The PUT alone fetches nothing.
 
 `?verify=1` skips the automatic sync only when consent is already accepted. The click still
 runs the broker POST. `browser open` adds `?verify=1`.
@@ -92,7 +92,8 @@ node $C prices sync --wait        # POST /api/prices/sync until completed or pro
 ```
 
 `prices sync` without `--wait` is one slice. HTTP 202 or body `status` `paused`, `running`,
-or `waiting` means symbols remain. `--wait` posts again, up to 40 rounds, and reports what
+or `waiting` means symbols remain. This CLI loop is the CLI's own (the web app has no round
+loop; it reads one state route). `--wait` posts again, up to 40 rounds, and reports what
 each slice did: every round carries `ms`, `completed`, `total`, and `symbols` (the delta
 from the previous slice, baselined on a stored `paused` row so a resumed run counts only the
 symbols it added), and the result carries `throughput` (`rounds`, `ms`, `symbols`,

@@ -4,12 +4,7 @@ import { rateLimitedYahooFixture } from "./yahoo/__fixtures__/rate-limited.js";
 import { createYahooPriceProvider } from "./yahoo/priceProvider.js";
 import { priceInstrumentKey } from "@lavega/core";
 import { createInMemorySharedPriceStore } from "../prices/sharedPriceStoreCore.js";
-import type {
-  PriceCoverage,
-  PriceKey,
-  SharedPriceBar,
-  SharedPriceStore,
-} from "../prices/PriceStore.js";
+import type { PriceCoverage, SharedPriceBar, SharedPriceStore } from "../prices/PriceStore.js";
 import { syncPrices } from "./priceSync.js";
 import { YahooHttpClient } from "./yahoo/http.js";
 import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
@@ -27,7 +22,8 @@ function lane(provider: ReturnType<typeof createYahooPriceProvider>) {
 }
 
 /** The shared series key for a symbol as a caller with no ISIN computes it. */
-const symKey = (symbol: string, currency = "EUR"): string => priceInstrumentKey({ symbol, currency });
+const symKey = (symbol: string, currency = "EUR"): string =>
+  priceInstrumentKey({ symbol, currency });
 
 const withoutSymbol = (bars: readonly (SharedPriceBar & { symbol?: string })[]): SharedPriceBar[] =>
   bars.map(({ symbol: _symbol, ...bar }) => bar);
@@ -37,7 +33,10 @@ const withoutSymbol = (bars: readonly (SharedPriceBar & { symbol?: string })[]):
  *  (issue #307), so these helpers only spell that boundary once. */
 function legacy(store: SharedPriceStore) {
   return {
-    async upsert(_tenant: string, bars: readonly (SharedPriceBar & { symbol?: string })[]): Promise<void> {
+    async upsert(
+      _tenant: string,
+      bars: readonly (SharedPriceBar & { symbol?: string })[],
+    ): Promise<void> {
       const groups = new Map<string, SharedPriceBar[]>();
       for (const bar of bars) {
         const key = symKey(bar.symbol ?? "", bar.currency);
@@ -110,7 +109,6 @@ function syncWith(
     : undefined;
   return syncPrices({ ...input, key, ...(alias ? { alias } : {}), owner: input.owner ?? RUN });
 }
-
 
 test("calls Yahoo directly without a consent gate", async () => {
   const fetchJsonWithCrumb = vi.fn(async () => ({ chart: { result: [] } }));
@@ -269,20 +267,15 @@ test("a currency change is a new series key and does not misread the old pounds"
     { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBP", split: 1 },
     { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBP", split: 1 },
   ]);
-  const priceProviders = [
-    {
-      sourceKey: "yahoo",
-      priority: 10,
-      get: vi.fn(async () => ({
-        bars: [
-          { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBX" },
-          { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBX" },
-          { symbol: "HLMAl_EQ", date: "2026-01-03", close: 3604, currency: "GBX" },
-        ],
-        problems: [],
-      })),
-    },
-  ];
+  const get = vi.fn(async (_request: { from?: string; to?: string }) => ({
+    bars: [
+      { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBX" },
+      { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBX" },
+      { symbol: "HLMAl_EQ", date: "2026-01-03", close: 3604, currency: "GBX" },
+    ],
+    problems: [],
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
   const result = await syncWith({
     store,
@@ -292,8 +285,8 @@ test("a currency change is a new series key and does not misread the old pounds"
 
   /* `GBP` and `GBX` are different series keys (issue #307), so the pence series
    * starts empty and the old pounds history is neither read nor rewritten. */
-  expect(priceProviders[0]!.get.mock.calls[0]?.[0]).toMatchObject({ to: "2026-01-03" });
-  expect(priceProviders[0]!.get.mock.calls[0]?.[0]?.from).toBeUndefined();
+  expect(get.mock.calls[0]?.[0]).toMatchObject({ to: "2026-01-03" });
+  expect(get.mock.calls[0]?.[0]?.from).toBeUndefined();
   expect(result.bars.map((bar) => bar.currency)).toEqual(["GBX", "GBX", "GBX"]);
   await expect(store.getRange({ key: symKey("HLMAl_EQ", "GBP") })).resolves.toHaveLength(2);
 });
@@ -619,7 +612,9 @@ test("an empty trading-day suffix is asked for once, not on every sync", async (
 
   expect(result.problems).toEqual([]);
   expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
-  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
+    to: "2025-01-02",
+  });
 
   get.mockClear();
   await sync("2025-01-02");
@@ -651,7 +646,9 @@ test("a held position's quiet day within the missed-days window is not a problem
 
   expect(result.problems).toEqual([]);
   expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
-  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
+    to: "2025-01-02",
+  });
 });
 
 test("a held position silent for more than 5 business days reports a problem every run", async () => {
@@ -681,7 +678,9 @@ test("a held position silent for more than 5 business days reports a problem eve
   const result = await sync();
 
   expect(result.problems).toEqual(["no prices since 2025-01-01"]);
-  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-01" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
+    to: "2025-01-01",
+  });
 
   get.mockClear();
   const second = await sync();
@@ -913,7 +912,9 @@ test("a stored listing that 404s triggers exactly one re-resolution once confirm
   expect(get.mock.calls[0]?.[0]).toMatchObject({ listing: "OLDSYM" });
   expect(get.mock.calls[1]?.[0]?.listing).toBeUndefined();
   expect(result.problems).toEqual([]);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "NEWSYM",
     listingMissingSince: undefined,
   });
@@ -959,7 +960,9 @@ test("a single 404 on a locked listing is not enough to re-resolve", async () =>
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-02T00:00:00.000Z",
   });
@@ -1005,7 +1008,9 @@ test("a second 404 one minute after the first is still unconfirmed", async () =>
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-02T00:00:00.000Z",
   });
@@ -1059,7 +1064,9 @@ test("a second 404 confirmed 25 hours after the first triggers exactly one re-re
 
   expect(get).toHaveBeenCalledTimes(2);
   expect(result.problems).toEqual([]);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "NEWSYM",
     listingMissingSince: undefined,
   });
@@ -1105,7 +1112,9 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
@@ -1150,7 +1159,9 @@ test("a resolved symbol's first sync still applies currency preference", async (
   });
 
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(4);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "SBSW",
   });
 });
@@ -1203,7 +1214,9 @@ test("a confirmed re-resolution to a different-currency listing refreshes instea
 
   expect(result.problems).toEqual([]);
   expect(result.bars.every((bar) => bar.currency === "EUR")).toBe(true);
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "NEWSYM",
     currency: "EUR",
   });
@@ -1263,7 +1276,9 @@ test("re-resolution prefers the currency already on record over the broker's sta
 
   expect(result.problems).toEqual([]);
   expect(get.mock.calls[1]?.[0]).toMatchObject({ currency: "USD" });
-  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
+  await expect(
+    coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" }),
+  ).resolves.toMatchObject({
     listing: "NEWSYM",
     currency: "USD",
   });
@@ -1317,7 +1332,9 @@ test("an unavailable assigned provider is skipped, not replaced by another one",
 
   expect(marketstack).not.toHaveBeenCalled();
   expect(result).toMatchObject({ fetched: false, problems: [expect.stringContaining("skipped")] });
-  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ provider: "yahoo" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
+    provider: "yahoo",
+  });
 });
 
 test("an assigned provider that is available is the only one asked", async () => {
@@ -1494,8 +1511,18 @@ test("criterion 2: the same plain ticker under two ISINs is two series", async (
     today: "2026-01-02",
   });
 
-  await syncWith({ store, owner: "run-a", priceProviders: [providerFor(100)], request: request("US0378331005") });
-  await syncWith({ store, owner: "run-b", priceProviders: [providerFor(200)], request: request("CA0378331005") });
+  await syncWith({
+    store,
+    owner: "run-a",
+    priceProviders: [providerFor(100)],
+    request: request("US0378331005"),
+  });
+  await syncWith({
+    store,
+    owner: "run-b",
+    priceProviders: [providerFor(200)],
+    request: request("CA0378331005"),
+  });
 
   const first = await store.getRange({ key: "isin:US0378331005:USD" });
   const second = await store.getRange({ key: "isin:CA0378331005:USD" });

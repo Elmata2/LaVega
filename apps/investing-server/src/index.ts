@@ -22,6 +22,7 @@ import {
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import { parseSyncRunRow, type SyncRunStore } from "./syncRun.js";
 import { attributeHistory, findMentions } from "./agentMentions.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
@@ -48,6 +49,7 @@ import {
   syncScheduledBrokers,
   PartnerBudget,
   YahooHttpClient,
+  type BrokerSyncLane,
   type BrokerSyncOperationStore,
   type PartnerBudgetClient,
   type SharedPriceStore,
@@ -109,6 +111,7 @@ import {
   createAgentMemoryRepository,
   createDashboardSnapshotRepository,
   createFxRateRepository,
+  createSyncRunRepository,
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
@@ -190,7 +193,12 @@ export function createRuntimeBrokerSync(
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
   partnerBudget?: PartnerBudgetClient,
-): (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => Promise<ScheduledSyncResult> {
+): (
+  force: boolean,
+  lanes: readonly BrokerSyncLane[],
+  deadlineMs?: number,
+  rebuildOrders?: boolean,
+) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
@@ -198,13 +206,14 @@ export function createRuntimeBrokerSync(
     onTrading212Diagnostic,
     partnerBudget,
   });
-  return async (force, deadlineMs, rebuildOrders) => {
+  return async (force, lanes, deadlineMs, rebuildOrders) => {
     const result = await syncScheduledBrokers({
       adapters,
       credentials,
       operations,
       tenantId,
       entity,
+      lanes,
       force,
       rebuildOrders,
       deadlineMs,
@@ -507,7 +516,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       tenantId,
       partnerBudget,
     );
-    const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+    const brokerSync = async (
+      force: boolean,
+      lanes: readonly BrokerSyncLane[],
+      deadlineMs?: number,
+      rebuildOrders?: boolean,
+    ) => {
       if (devFixtureEnabled) {
         syncProgress = {
           status: "completed",
@@ -536,7 +550,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
       }
       try {
-        const result = await scheduledBrokerSync(force, deadlineMs, rebuildOrders);
+        const result = await scheduledBrokerSync(force, lanes, deadlineMs, rebuildOrders);
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
@@ -687,11 +701,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           );
           const key = match?.key ?? instrumentKeys({ symbol, currency: "EUR" }).key;
           const alias = match?.alias;
-          const bars = await priceStore.getRange(
-            alias ? { key, alias } : { key },
-            undefined,
-            date,
-          );
+          const bars = await priceStore.getRange(alias ? { key, alias } : { key }, undefined, date);
           const bar = bars.at(-1);
           return bar ? { symbol, date: bar.date, close: bar.close, currency: bar.currency } : null;
         },
@@ -782,11 +792,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+  const brokerSync = async (
+    force: boolean,
+    lanes: readonly BrokerSyncLane[],
+    deadlineMs?: number,
+    rebuildOrders?: boolean,
+  ) => {
     const tenantId = await resolveTenantId();
     const result = await (
       await tenantRuntime(tenantId)
-    ).brokerSync(force, deadlineMs, rebuildOrders);
+    ).brokerSync(force, lanes, deadlineMs, rebuildOrders);
     dashboardCache.invalidate(tenantId);
     return result;
   };
@@ -1082,8 +1097,43 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     app: "investing-server",
   });
   if (sentryConfig && !sentry.getClient()) sentry.init(sentryConfig);
+  const syncRunStore: SyncRunStore | undefined = database
+    ? {
+        async get() {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          return parseSyncRunRow(await repository.get());
+        },
+        async claim(candidate, staleBefore) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const held = await repository.claim(candidate, "running", staleBefore);
+          return held === null ? null : parseSyncRunRow(held);
+        },
+        async put(row, leaseId) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const status =
+            row.outcome === "done" ? "done" : row.outcome === "failed" ? "failed" : "running";
+          return repository.put(row, status, leaseId);
+        },
+      }
+    : undefined;
+  const syncRunReporter = createProblemReporter({ dsn, sentry });
+  const syncRunBackground = async (work: Promise<unknown>) => {
+    if (process.env.VERCEL !== undefined) {
+      const { waitUntil } = await import("@vercel/functions");
+      waitUntil(work);
+      return;
+    }
+    void work.catch((error: unknown) => {
+      syncRunReporter({
+        source: "broker-sync",
+        problems: [error instanceof Error ? error.message : "Background sync run failed"],
+      });
+    });
+  };
   return withPortfolioAgentRoute(
     createApp({
+      syncRunStore,
+      syncRunBackground,
       brokerSync,
       partnerBudgetClient: partnerBudget,
       ...credentialDependencies,

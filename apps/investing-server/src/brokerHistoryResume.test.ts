@@ -104,7 +104,7 @@ test("resumed broker history survives final pages, file reload, and a later full
         // Pacing has its own tests; this one is about what a resumed history keeps.
         createImmediatePartnerBudget(),
       );
-      await sync(true);
+      await sync(true, ["holdings", "history"]);
       return cache.read();
     };
     const first = await syncOnce();

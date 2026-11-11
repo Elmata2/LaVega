@@ -88,7 +88,7 @@ test("concurrent tenant triggers join one orchestration", async () => {
     return result();
   });
   const target: PriceSyncTarget = {
-      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
+    instrumentKey: `sym:${"ASML"}:${"EUR"}`,
     kind: "current",
     symbol: "ASML",
     ticker: "ASML",

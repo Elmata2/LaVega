@@ -8,10 +8,7 @@ import { expect, test } from "vitest";
  * one release, and the erase list keeps deleting them; everything else goes
  * through the shared instrument-keyed tables. */
 
-const source = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "index.ts"),
-  "utf8",
-);
+const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "index.ts"), "utf8");
 
 /** SQL that names a legacy table. `instrument_price_bars` must not match. */
 const LEGACY_QUERY = /(?<!instrument_)investing\.(?:price_bars|price_coverage)\b/g;

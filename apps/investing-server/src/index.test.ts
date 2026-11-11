@@ -178,7 +178,10 @@ test("a second concurrent run waits instead of spending the same rate limit", as
   } as unknown as ReturnType<typeof createFileCredentialStore>;
   const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore());
 
-  const [first, second] = await Promise.all([sync(true), sync(true)]);
+  const [first, second] = await Promise.all([
+    sync(true, ["holdings", "history"]),
+    sync(true, ["holdings", "history"]),
+  ]);
 
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
@@ -224,7 +227,7 @@ test("runtime broker sync passes the signed-in tenant to credential-aware adapte
     "user-123",
   );
 
-  const result = await sync(true);
+  const result = await sync(true, ["holdings", "history"]);
 
   expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
   expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");
@@ -973,9 +976,9 @@ test("each tenant gets its own runtime, so no cache is shared between users", as
   expect(benchmarkSymbols.mock.calls.map(([tenant]) => tenant)).toEqual(["user-a", "user-b"]);
   // Price bars are read by instrument key, one series for every caller: the
   // benchmark a tenant selected is the only tenant-specific part (issue #307).
-  expect(
-    getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key)),
-  ).toEqual(expect.arrayContaining(["sym:BENCH-user-a:EUR", "sym:BENCH-user-b:EUR"]));
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toEqual(
+    expect.arrayContaining(["sym:BENCH-user-a:EUR", "sym:BENCH-user-b:EUR"]),
+  );
 });
 
 test("an account with no stored benchmark reads MSCI World by default", async () => {
@@ -985,9 +988,9 @@ test("an account with no stored benchmark reads MSCI World by default", async ()
 
   const dashboard = await runtimeApp.request("/api/investing/dashboard");
   expect(dashboard.status).toBe(200);
-  expect(
-    getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key)),
-  ).toContain("sym:IWDA.AS:EUR");
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toContain(
+    "sym:IWDA.AS:EUR",
+  );
 });
 
 test("a tenant's broker sync status is its own, not the last caller's", async () => {

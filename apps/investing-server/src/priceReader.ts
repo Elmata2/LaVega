@@ -4,10 +4,7 @@ import type { PriceBar } from "@lavega/core";
 /** Bars leave a shared price store without a symbol: the series is the
  *  instrument key (issue #307), and the read model maps it back to the symbol
  *  the caller asked for. */
-export function barsBySymbol(
-  bars: readonly SharedPriceBar[],
-  symbol: string,
-): PriceBar[] {
+export function barsBySymbol(bars: readonly SharedPriceBar[], symbol: string): PriceBar[] {
   return bars.map((bar) => ({ ...bar, symbol }));
 }
 

@@ -60,9 +60,7 @@ const LISTING_MISSING_CONFIRMATION_MS = 24 * 60 * 60 * 1000;
  *  a provider choice, so provider affinity must not lock onto them. */
 const NOT_A_PROVIDER = new Set(["legacy", "unknown"]);
 const knownProvider = (provider: string | undefined): string | undefined =>
-  provider !== undefined && provider !== "" && !NOT_A_PROVIDER.has(provider)
-    ? provider
-    : undefined;
+  provider !== undefined && provider !== "" && !NOT_A_PROVIDER.has(provider) ? provider : undefined;
 
 /**
  * Brings one instrument's shared series to cover `backfillFrom` through `today`.
@@ -182,7 +180,9 @@ export async function syncPrices(input: {
       return {
         ok: true,
         bars: result.value.bars,
-        provenance: last ? { listing: result.value.listing ?? null, currency: last.currency } : null,
+        provenance: last
+          ? { listing: result.value.listing ?? null, currency: last.currency }
+          : null,
         provider: result.sourceKey,
         ...(result.value.provisionalThrough
           ? { provisionalThrough: result.value.provisionalThrough }
@@ -218,7 +218,11 @@ export async function syncPrices(input: {
           : { bars: withSymbol(cachedBars), problems: answer.problems, fetched: true };
       const first = answer.bars[0];
       if (!first || !answer.provenance)
-        return { bars: withSymbol(cachedBars), problems: ["Price provider returned no bars"], fetched: true };
+        return {
+          bars: withSymbol(cachedBars),
+          problems: ["Price provider returned no bars"],
+          fetched: true,
+        };
       await adoptAliasOnce();
       await store.replaceRange(key, withoutSymbol(answer.bars), from, today);
       await store.putCoverage(key, {
@@ -402,7 +406,13 @@ function coverageOf(bars: readonly SharedPriceBar[]): SharedPriceCoverage | null
   const first = bars[0];
   const last = bars.at(-1);
   if (!first || !last) return null;
-  return { from: first.date, to: last.date, listing: null, currency: first.currency, provider: "unknown" };
+  return {
+    from: first.date,
+    to: last.date,
+    listing: null,
+    currency: first.currency,
+    provider: "unknown",
+  };
 }
 
 function currencyChanged(cached: PriceProvenance, quoted: PriceProvenance): boolean {

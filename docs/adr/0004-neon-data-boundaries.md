@@ -43,6 +43,13 @@ Some rows belong to no user, and a row-level policy would hide what every tenant
 - `investing.sector_profiles`: a symbol's sector, which is not tenant data.
 - `personal.rate_limit_buckets` (0026): inbound counters. The limiter has to count a caller before a session exists.
 - `investing.partner_budgets` (0033, [#305](https://github.com/Elmata2/LaVega/issues/305)): when the next request to a partner may be sent. One row per partner, endpoint and scope. The scope is the literal `shared`, or the first 16 hex characters of a SHA-256 of a broker credential, so no column can hold a credential. The rows hold timing only. They must be visible to every tenant, because Yahoo and OpenFIGI count requests per source IP across all users. `lavega_runtime` has select, insert, update and delete.
+- `investing.instrument_price_bars`, `investing.instrument_price_coverage` and `investing.instrument_price_claims` (0034, [#307](https://github.com/Elmata2/LaVega/issues/307)): daily price bars keyed by instrument (`isin:<ISIN>:<CUR>` or `sym:<ticker>:<CUR>`), the date window a provider answered, and the short-lived per-key fetch claim. Public reference data belongs to no user, so one fetch per instrument per day serves every tenant. `lavega_runtime` has select, insert, update and delete on all three.
+
+### Amendment 2026-11-11 — shared market data (issue #307)
+
+The per-user `investing.price_bars` and `investing.price_coverage` tables stay in place, unread and unwritten, for one release; a follow-up drops them and their `price_bars_raise_dashboard_version` trigger. All reads and writes go to the shared tables above through `SharedPriceStore`; no query in `packages/database` names the old price tables except the erase list, which keeps deleting them until they are dropped.
+
+**`dashboard_snapshots.price_keys` records the instrument keys a build read.** The per-user version trigger cannot see a shared write, so a stored dashboard counts only while its version and UTC day still hold *and* no key in `price_keys` has a coverage `updated_at` later than the row's `updated_at`. That column names, in clear, which instruments a user's dashboard read. It is the same exposure the per-user `price_bars` rows have today (which symbols a user holds), moved to the snapshot row; it does not get worse, and the bars themselves no longer reveal it one row per date.
 
 ## Table ownership
 

@@ -9,7 +9,7 @@ import {
   useDashboard,
   type DashboardState,
 } from "./dashboardResource";
-import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
+import { DASHBOARD_REFRESH_EVENT } from "./syncSession";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;

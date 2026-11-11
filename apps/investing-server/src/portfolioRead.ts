@@ -71,9 +71,7 @@ export type PortfolioReadSources = {
 export class PortfolioReadPriceStore extends Context.Service<
   PortfolioReadPriceStore,
   SharedPriceStore
->()(
-  "lavega/investing/PortfolioRead/PriceStore",
-) {}
+>()("lavega/investing/PortfolioRead/PriceStore") {}
 
 export class PortfolioReadLoader extends Context.Service<
   PortfolioReadLoader,
@@ -296,12 +294,17 @@ export class PortfolioRead extends Context.Service<
               return found?.alias ? { key, alias: found.alias } : { key };
             });
             const positionKeys = readKeys.filter((entry) =>
-              [...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)]
+              [
+                ...positions.map((position) => position.symbol),
+                ...trades.map((trade) => trade.symbol),
+              ]
                 .map((value) => value.toUpperCase())
                 .includes(entry.symbol.toUpperCase()),
             );
             const benchmarkKeys = readKeys.filter((entry) =>
-              selectedBenchmarks.map((value) => value.toUpperCase()).includes(entry.symbol.toUpperCase()),
+              selectedBenchmarks
+                .map((value) => value.toUpperCase())
+                .includes(entry.symbol.toUpperCase()),
             );
             const [prices, benches] = await timing.measure("prices", async () => [
               await readPriceBars(priceStore, positionKeys, (key) => symbolsForKey.get(key) ?? []),

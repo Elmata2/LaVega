@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { createIbkrFlexAdapter } from "./flexAdapter.js";
 import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
@@ -86,7 +86,11 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     );
   };
 
-  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
+  await expect(
+    adapter()
+      .sync({ lanes: ["holdings", "history"], entity: "personal" })
+      .then(legacy),
+  ).resolves.toEqual({
     source: "ibkr-flex",
     problems: [],
     dividends: [],
@@ -152,7 +156,11 @@ test("sync reports bounded timeout without throwing", async () => {
         : "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
     );
 
-  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
+  await expect(
+    adapter()
+      .sync({ lanes: ["holdings", "history"], entity: "personal" })
+      .then(legacy),
+  ).resolves.toEqual({
     positions: [],
     trades: [],
     dividends: [],
@@ -165,6 +173,7 @@ test("sync reports bounded timeout without throwing", async () => {
 
 test("sync returns a retryable problem when the host deadline is spent", async () => {
   const result = await adapter().sync({
+    lanes: ["holdings", "history"],
     entity: "personal",
     deadlineMs: Date.now() + 5_000,
   });
@@ -183,17 +192,19 @@ test("sync reports rejected token without throwing", async () => {
       "<FlexStatementResponse><ErrorCode>1019</ErrorCode><ErrorMessage>Invalid token</ErrorMessage></FlexStatementResponse>",
     );
 
-  await expect(adapter("expired-token").sync({ entity: "personal" }).then(legacy)).resolves.toEqual(
-    {
-      positions: [],
-      trades: [],
-      dividends: [],
-      cashBalances: [],
-      cashFlows: [],
-      source: "ibkr-flex",
-      problems: [expect.stringContaining("IBKR error 1019: Invalid token")],
-    },
-  );
+  await expect(
+    adapter("expired-token")
+      .sync({ lanes: ["holdings", "history"], entity: "personal" })
+      .then(legacy),
+  ).resolves.toEqual({
+    positions: [],
+    trades: [],
+    dividends: [],
+    cashBalances: [],
+    cashFlows: [],
+    source: "ibkr-flex",
+    problems: [expect.stringContaining("IBKR error 1019: Invalid token")],
+  });
 });
 
 test("sync reports malformed or unexpected payload without throwing", async () => {
@@ -205,7 +216,11 @@ test("sync reports malformed or unexpected payload without throwing", async () =
         : '<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol="AAPL"',
     );
 
-  await expect(adapter().sync({ entity: "personal" }).then(legacy)).resolves.toEqual({
+  await expect(
+    adapter()
+      .sync({ lanes: ["holdings", "history"], entity: "personal" })
+      .then(legacy),
+  ).resolves.toEqual({
     positions: [],
     trades: [],
     dividends: [],
@@ -229,6 +244,19 @@ test("separate syncs do not share in-flight statement state", async () => {
     respond(response, report);
   };
 
-  await Promise.all([adapter().sync({ entity: "one" }), adapter().sync({ entity: "two" })]);
+  await Promise.all([
+    adapter().sync({ lanes: ["holdings", "history"], entity: "one" }),
+    adapter().sync({ lanes: ["holdings", "history"], entity: "two" }),
+  ]);
   expect(reference).toBe(2);
+});
+
+test("a holdings-only lane spends no Flex request", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const result = await adapter().sync({ entity: "personal", lanes: ["holdings"] });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(result.problems).toEqual([]);
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.sections.trades.status).toBe("unavailable");
 });

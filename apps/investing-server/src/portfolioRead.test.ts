@@ -5,10 +5,9 @@ import {
   createInMemorySharedPriceStore,
   type BrokerDataSnapshot,
   type PriceKey,
-  type SharedPriceBar,
   type SharedPriceStore,
 } from "@lavega/adapters";
-import { emptyInvestingDashboard, type InvestingDashboardData, type PriceBar } from "@lavega/core";
+import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 import {
   PortfolioRead,
   PortfolioReadError,
@@ -179,7 +178,9 @@ test("criterion 8: a shared price write to a key the build read rebuilds it", as
     put,
   };
 
-  const result = await runRead(makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }));
+  const result = await runRead(
+    makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }),
+  );
 
   expect(result).not.toBe(stored);
   expect(loadBrokerData).toHaveBeenCalledTimes(1);
@@ -208,7 +209,9 @@ test("criterion 8: a write to a key the build never read serves the stored dashb
     put: vi.fn(async () => undefined),
   };
 
-  const result = await runRead(makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }));
+  const result = await runRead(
+    makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }),
+  );
   expect(result).toBe(stored);
   expect(loadBrokerData).not.toHaveBeenCalled();
 });

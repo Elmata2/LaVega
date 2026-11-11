@@ -36,6 +36,8 @@ const PUBLIC_API_PATHS = new Set([
   "/api/n8n/status", // { configured: bool } only
   "/api/card-terms/ingest", // machine endpoint; carries its OWN shared secret
   "/api/cron/investing-sync", // machine endpoint; carries its OWN bearer secret
+  "/api/sync/continue", // machine endpoint; carries the cron bearer secret
+  "/api/sync/drive", // machine endpoint; the cron worker for one tenant
   "/api/investing/health", // { ok, service } only, no personal data
 ]);
 

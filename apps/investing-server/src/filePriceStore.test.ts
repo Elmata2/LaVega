@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { registerSharedPriceStoreContract } from "@lavega/adapters/src/prices/sharedPriceStore.contract.js";
-import { createFileSharedPriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
+import { createFileSharedPriceStore } from "./filePriceStore.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
