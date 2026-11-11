@@ -53,6 +53,7 @@ import {
 } from "./personalNetWorthStore.js";
 import {
   createPartnerBudgetClient,
+  isPartnerBudgetStop,
   fetchYahooSectorProfile,
   PartnerBudget,
   YahooHttpClient,
@@ -794,7 +795,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/market-data/identifier", async (c) => {
     const isin = c.req.query("isin")?.trim().toUpperCase();
     if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400);
-    const result = await mapIdentifier({ isin });
+    let result;
+    try {
+      result = await mapIdentifier({ isin });
+    } catch (error) {
+      if (!isPartnerBudgetStop(error)) throw error;
+      return c.json(
+        { match: null, problems: ["The request budget has no slot for OpenFIGI now"] },
+        503,
+      );
+    }
     if (!result)
       return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503);
     return c.json({ ...result.value, source: result.sourceKey });

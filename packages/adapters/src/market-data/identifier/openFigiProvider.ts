@@ -2,6 +2,7 @@ import type { Provider } from "../providerRouter.js";
 import type { IdentifierProviderResult, IdentifierRequest } from "../lanes.js";
 import {
   createMemoryPartnerBudgetClient,
+  isPartnerBudgetStop,
   type PartnerBudgetClient,
 } from "../../partnerBudget/PartnerBudget.js";
 import { partnerKey } from "../../partnerBudget/limits.js";
@@ -114,6 +115,9 @@ export function createOpenFigiIdentifierProvider(
         cache.set(isin, result);
         return result;
       } catch (error) {
+        // No slot, or no budget: nothing was asked, so "unresolved" would be a lie
+        // that callers turn into a delisting. The caller pauses instead.
+        if (isPartnerBudgetStop(error)) throw error;
         // Failures are not cached: a rate-limited ISIN must resolve on a later run.
         return {
           match: { isin, ticker: "" },

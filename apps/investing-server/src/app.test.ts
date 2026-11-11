@@ -1,5 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
+import { DateTime } from "effect";
 import { app, createApp as createPacedApp } from "./app.js";
 
 /* These tests are about routes and reads. Pacing of partner calls has its own
@@ -2282,4 +2284,80 @@ test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb 
   expect(new Set(slots.map((call) => call.key.partner))).toEqual(new Set(["openfigi", "yahoo"]));
   expect(slots.length).toBe(urls.length);
   for (const call of slots) expect(call).toMatchObject({ deadlineMs: deadline });
+});
+
+/* A budget stop on the OpenFIGI fallback is "no slot", not "no such listing".
+ * Only a genuine Yahoo and OpenFIGI answer may mark a closed position delisted. */
+test.each([
+  ["PartnerBudgetUnavailable", () => new PartnerBudgetUnavailable({ message: "store down" })],
+  ["PartnerWait", () => new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 600_000) })],
+])(
+  "a closed position whose OpenFIGI slot fails with %s is not recorded as delisted",
+  async (_name, makeError) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "https://fc.yahoo.com/")
+          return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+        if (url.includes("getcrumb")) return new Response("crumb");
+        if (url.includes("/search")) return new Response(JSON.stringify({ quotes: [] }));
+        return new Response(JSON.stringify({ chart: { result: null, error: { code: "Not Found" } } }), {
+          status: 404,
+        });
+      }),
+    );
+    const immediate = createImmediatePartnerBudget();
+    const partnerBudget = {
+      ...immediate,
+      awaitSlot: async (key: { partner: string }, deadlineMs?: number) => {
+        if (key.partner === "openfigi") throw makeError();
+        await immediate.awaitSlot(key as never, deadlineMs);
+      },
+    };
+    const store = createInMemoryPriceStore();
+    const investingApp = createPacedApp({
+      partnerBudgetClient: partnerBudget,
+      store,
+      priceSyncDeadline: () => Date.now() + 3_600_000,
+      priceSyncTargets: () => [
+        {
+          kind: "closed",
+          symbol: "GONEd_EQ",
+          ticker: "GONEd_EQ",
+          exchange: "UNKNOWN",
+          currency: "EUR",
+          isin: "US8740391003",
+          backfillFrom: "2026-01-01",
+        },
+      ],
+      marketDataConsentStore: acceptedConsentStore(),
+    });
+    try {
+      const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+      const progress = (await response.json()) as { status: string; problems: string[] };
+      expect(progress.status).toBe("paused");
+      expect(progress.problems).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const coverage = await store.getCoverage("local", "GONEd_EQ");
+    expect(coverage?.delistedSince).toBeUndefined();
+    expect(coverage?.listingMissingSince).toBeUndefined();
+  },
+);
+
+test("the identifier route answers 503 with problems when the budget has no slot", async () => {
+  const identifierProvider = {
+    sourceKey: "openfigi",
+    priority: 10,
+    get: vi.fn(async () => {
+      throw new PartnerBudgetUnavailable({ message: "store down" });
+    }),
+  };
+  const investingApp = createApp({ identifierProvider: identifierProvider as never });
+  const response = await investingApp.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(response.status).toBe(503);
+  const body = (await response.json()) as { problems: string[] };
+  expect(body.problems.length).toBeGreaterThan(0);
 });

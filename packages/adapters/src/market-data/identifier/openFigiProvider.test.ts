@@ -150,7 +150,7 @@ test("Retry-After as an HTTP date is read as the instant it names", async () => 
   });
 });
 
-test("a budget store that is down sends no request, is not retried, and is not cached", async () => {
+test("a budget store that is down sends no request, is not retried, is not cached, and is rethrown", async () => {
   const { post, calls } = countingPost(async () => [{ data: [{ ticker: "ASML" }] }]);
   const provider = createOpenFigiIdentifierProvider({
     client: { postJson: post },
@@ -158,15 +158,17 @@ test("a budget store that is down sends no request, is not retried, and is not c
     partnerBudget: createFailingPartnerBudget(new PartnerBudgetUnavailable({ message: "down" })),
   });
 
-  const result = await provider.get({ isin: "NL0010273215" });
+  await expect(provider.get({ isin: "NL0010273215" })).rejects.toBeInstanceOf(
+    PartnerBudgetUnavailable,
+  );
   expect(calls()).toBe(0);
-  expect(result?.match.ticker).toBe("");
-  expect(result?.problems[0]).toContain("OpenFIGI identifier request failed");
-  await provider.get({ isin: "NL0010273215" });
+  await expect(provider.get({ isin: "NL0010273215" })).rejects.toBeInstanceOf(
+    PartnerBudgetUnavailable,
+  );
   expect(calls()).toBe(0); // still no request, and nothing cached as an answer
 });
 
-test("a slot past the deadline sends no request, returns unresolved, and caches nothing", async () => {
+test("a slot past the deadline sends no request, rethrows the wait, and caches nothing", async () => {
   const slots: Array<number | undefined> = [];
   const partnerBudget = createImmediatePartnerBudget();
   let granted = false;
@@ -183,11 +185,11 @@ test("a slot past the deadline sends no request, returns unresolved, and caches 
     partnerBudget,
   });
 
-  const late = await provider.get({ isin: "NL0010273215", deadlineMs: 123_456 });
+  await expect(provider.get({ isin: "NL0010273215", deadlineMs: 123_456 })).rejects.toBeInstanceOf(
+    PartnerWait,
+  );
   expect(slots).toEqual([123_456]);
   expect(calls()).toBe(0);
-  expect(late?.match.ticker).toBe("");
-  expect(late?.problems[0]).toContain("OpenFIGI identifier request failed");
 
   // Nothing was cached for the failed lookup: the next one asks again.
   granted = true;
