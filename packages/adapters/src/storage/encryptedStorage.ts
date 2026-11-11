@@ -28,6 +28,7 @@ import type {
   CredentialStore,
   N8nSettings,
   N8nAutoBooked,
+  TransferPair,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
@@ -58,6 +59,10 @@ type VaultData = {
   vatSettings?: VatSettings[];
   invoices?: Invoice[];
   rewards?: RewardsBalance[];
+  /** First-class transfer records (issue #282): the DECISIONS only — confirmed
+   *  and rejected pairs. Suggestions are derived on read from the ledger, never
+   *  stored. Additive optional field: a legacy vault decrypts without it. */
+  transfers?: TransferPair[];
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
@@ -115,6 +120,9 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putInvoices(i: Invoice[]): Promise<void>;
   getRewards(): Promise<RewardsBalance[]>;
   putRewards(r: RewardsBalance[]): Promise<void>;
+  /** Stored transfer decisions; a legacy vault has none and reads []. */
+  getTransfers(): Promise<TransferPair[]>;
+  putTransfers(p: TransferPair[]): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
@@ -412,6 +420,21 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, rewards: [...r] };
+        await persist();
+      });
+    },
+    // transfers is also an optional VaultData field — a legacy vault decrypts
+    // without it, so the getter defaults to []. Replace-all, like putRewards.
+    // Only decisions are stored; a fresh import can invalidate a suggestion,
+    // so suggestions stay derived and never become stale vault state.
+    async getTransfers(): Promise<TransferPair[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.transfers ?? [])];
+    },
+    putTransfers(p: TransferPair[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, transfers: [...p] };
         await persist();
       });
     },

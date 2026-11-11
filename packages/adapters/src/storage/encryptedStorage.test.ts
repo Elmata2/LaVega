@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
-import type { Account, Tx } from "@lavega/core";
+import type { Account, TransferPair, Tx } from "@lavega/core";
 import {
   AdvisorProfile,
   type ProfileRead,
@@ -287,6 +287,74 @@ test("rewards round-trip; legacy vault defaults to []", async () => {
   };
   await s.putRewards([reward]);
   expect(await s.getRewards()).toEqual([reward]);
+});
+
+const transferPair = (over: Partial<TransferPair> = {}): TransferPair => ({
+  id: "pair-1",
+  outflowTxId: "t-out",
+  inflowTxId: "t-in",
+  status: "confirmed",
+  kind: "funds_movement",
+  amountCents: 12500,
+  currency: "EUR",
+  createdAt: "2026-06-02",
+  ...over,
+});
+
+test("transfers round-trip exactly; a legacy vault without the field reads []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault sealed before transfer records existed: no `transfers` field.
+  const legacy = await sealJSON(KEY, { accounts: [], txs: [], rules: [] });
+  const v = createEncryptedStorage("lavega-vault-test-transfers");
+  await v.open(KEY, "user:a");
+  expect(await v.getTransfers()).toEqual([]); // created vault, same default
+  expect(await v.restore(legacy)).toBe(true); // legacy blob decrypts unchanged
+  expect(await v.getTransfers()).toEqual([]);
+
+  const confirmed = transferPair({
+    id: "pair-confirmed",
+    feeTxIds: ["fee-1"],
+    decidedAt: "2026-06-03",
+    evidence: { rank: "exact", dateDiffDays: 0, amountDeltaCents: 0, crossRate: null },
+  });
+  const rejected = transferPair({
+    id: "pair-rejected",
+    outflowTxId: "t-out-2",
+    inflowTxId: "t-in-2",
+    status: "rejected",
+    kind: "cc_payment",
+    amountCents: 5000,
+    currency: "HUF",
+    decidedAt: "2026-06-04",
+    evidence: { rank: "fx", dateDiffDays: 4, amountDeltaCents: 120, crossRate: 390.5 },
+  });
+  await v.putTransfers([confirmed, rejected]);
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+
+  // The getter hands out a fresh array: mutating it cannot alter vault state.
+  const read = await v.getTransfers();
+  read.push(transferPair({ id: "pair-extra" }));
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+
+  // Survives a lock/unlock cycle — i.e. it really went through the sealed blob.
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+});
+
+test("putTransfers replaces the whole list; get/put while locked throws", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-transfers-replace");
+  await v.open(KEY, "user:a");
+  const first = transferPair({ id: "pair-1" });
+  const second = transferPair({ id: "pair-2", outflowTxId: "t-out-2", inflowTxId: "t-in-2" });
+  await v.putTransfers([first, second]);
+  await v.putTransfers([second]);
+  expect(await v.getTransfers()).toEqual([second]); // replace-all, not upsert
+
+  v.lock();
+  await expect(v.getTransfers()).rejects.toBeTruthy();
+  await expect(v.putTransfers([first])).rejects.toBeTruthy();
 });
 
 test("deleteAccount / deleteTxs remove only their rows (parity with plaintext adapter)", async () => {
