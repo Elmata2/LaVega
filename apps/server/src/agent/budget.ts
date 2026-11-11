@@ -122,6 +122,9 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
    * type string, description, currency and sign — same order as one
    * portfolio-persona call. */
   "cash-flow-suggestion": 1,
+  /* One Jev Choice over the provider's candidate set with a small state; the
+   * identifier-selection route's own ceiling (issue #136). */
+  "identifier-selection": 2,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost —

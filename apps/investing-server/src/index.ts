@@ -102,8 +102,18 @@ import {
   type SectorInferenceSettingStore,
 } from "./sectorInferenceSetting.js";
 import { createSystemOneSectorClassifier } from "./sectorClassifier.js";
+import {
+  createSystemOneIdentifierSelector,
+  IDENTIFIER_SELECTION_WORST_CASE_CENTS,
+} from "./identifierSelector.js";
 import { createSystemOneProvider } from "./systemOne.js";
-import { useDatabaseSource } from "./systemOneUsage.js";
+import { checkSystemOneBudget, useDatabaseSource } from "./systemOneUsage.js";
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
 import {
   createDevFixtureBrokerData,
   createDevFixtureFxProvider,
@@ -259,6 +269,10 @@ export type RuntimeAppOptions = {
   sectorStore?: SectorProfileStore;
   sectorCorrectionStore?: SectorCorrectionStore;
   sectorInferenceSettingStore?: SectorInferenceSettingStore;
+  /** Identifier candidate selection (Jev-03, #136): the owner's switch and the
+   *  owner's symbol overrides. In-memory without an injected store. */
+  identifierSelectionSettingStore?: IdentifierSelectionSettingStore;
+  identifierOverrideStore?: IdentifierOverrideStore;
   /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
@@ -1111,6 +1125,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce, portfolioChatContext });
   };
   const sectorDependencies = {
+    identifierSelectionSettingStore:
+      options.identifierSelectionSettingStore ?? createInMemoryIdentifierSelectionSettingStore(),
+    identifierOverrideStore:
+      options.identifierOverrideStore ?? createInMemoryIdentifierOverrideStore(),
     sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
     sectorCorrectionStore: options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
     sectorInferenceSettingStore:
@@ -1133,6 +1151,20 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 failedRequestInputTokens: 500,
               }),
             )(instrument),
+          /* The identifier selector is per tenant because its usage row is
+           * billed to the account asking; the provider only calls it on
+           * ambiguity and only when the request carries consent + the owner's
+           * enable setting (#136). */
+          identifierSelectorForTenant: (tenantId: string) =>
+            createSystemOneIdentifierSelector(
+              createSystemOneProvider({
+                userId: tenantId,
+                route: "identifier-selection",
+                failedRequestInputTokens: 2_000,
+                checkBudget: () =>
+                  checkSystemOneBudget(tenantId, IDENTIFIER_SELECTION_WORST_CASE_CENTS),
+              }),
+            ),
         }
       : {}),
   };

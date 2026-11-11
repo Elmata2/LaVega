@@ -25,6 +25,12 @@ import {
   runtimeInvestingLayoutFile,
 } from "@lavega/investing-server/src/fileInvestingLayoutStore.js";
 import {
+  createFileIdentifierOverrideStore,
+  createFileIdentifierSelectionSettingStore,
+  runtimeIdentifierOverrideFile,
+  runtimeIdentifierSelectionSettingFile,
+} from "@lavega/investing-server/src/fileIdentifierSelectionStore.js";
+import {
   createFileAccountWrapperStore,
   runtimeAccountWrapperFile,
 } from "@lavega/investing-server/src/fileAccountWrapperStore.js";
@@ -40,6 +46,8 @@ import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js
 import {
   createNeonAccountWrapperStore,
   createNeonBenchmarkSelectionStore,
+  createNeonIdentifierOverrideStore,
+  createNeonIdentifierSelectionSettingStore,
   createNeonInvestingLayoutStore,
   createNeonCashFlowStore,
   createNeonMarketDataConsentStore,
@@ -185,6 +193,12 @@ async function getInvestingFetch(): Promise<{
     investingLayoutStore: database
       ? createNeonInvestingLayoutStore(database)
       : createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    identifierSelectionSettingStore: database
+      ? createNeonIdentifierSelectionSettingStore(database)
+      : createFileIdentifierSelectionSettingStore(runtimeIdentifierSelectionSettingFile()),
+    identifierOverrideStore: database
+      ? createNeonIdentifierOverrideStore(database)
+      : createFileIdentifierOverrideStore(runtimeIdentifierOverrideFile()),
     accountWrapperStore: database
       ? createNeonAccountWrapperStore(database)
       : createFileAccountWrapperStore(runtimeAccountWrapperFile()),

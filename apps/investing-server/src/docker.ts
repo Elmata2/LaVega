@@ -17,6 +17,12 @@ import {
   runtimeInvestingLayoutFile,
 } from "./fileInvestingLayoutStore.js";
 import {
+  createFileIdentifierOverrideStore,
+  createFileIdentifierSelectionSettingStore,
+  runtimeIdentifierOverrideFile,
+  runtimeIdentifierSelectionSettingFile,
+} from "./fileIdentifierSelectionStore.js";
+import {
   createFileAccountWrapperStore,
   runtimeAccountWrapperFile,
 } from "./fileAccountWrapperStore.js";
@@ -87,6 +93,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
     investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),
+    identifierSelectionSettingStore: createFileIdentifierSelectionSettingStore(
+      runtimeIdentifierSelectionSettingFile(),
+    ),
+    identifierOverrideStore: createFileIdentifierOverrideStore(runtimeIdentifierOverrideFile()),
     accountWrapperStore: createFileAccountWrapperStore(runtimeAccountWrapperFile()),
     // The dev fixture answers the Personal side of the net-worth bridge too, so
     // a local run can show the combined figure (WS4.7 #298). Never production:
