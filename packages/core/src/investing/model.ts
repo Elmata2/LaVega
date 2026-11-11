@@ -2,6 +2,17 @@ export type BrokerCost =
   | { status: "known"; amount: number; currency: string }
   | { status: "unknown"; reason: "not-reported" | "legacy-denomination" };
 
+/** A user assertion about what this holding cost, persisted with the broker
+ *  snapshot. Source priority is manual > calculated > provider (plan §3 WS4.2,
+ *  Sure `Holding#COST_BASIS_SOURCE_PRIORITY`). `locked` keeps the value through
+ *  provider syncs and recalculation; unlocking lets a calculated basis replace
+ *  it. Integer cents at this persisted boundary (ADR 0011). */
+export type ManualCostBasis = {
+  amountCents: number;
+  currency: string;
+  locked: boolean;
+};
+
 /** A broker-reported holding at statement time. `averagePrice`, market values,
  * and quantities use instrument units. `brokerCost` carries its own currency. */
 export type Position = {
@@ -16,6 +27,9 @@ export type Position = {
   description?: string;
   quantity: number;
   brokerCost?: BrokerCost;
+  /** A user-entered basis; carried forward by a sync and never replaced while
+   *  locked. See `ManualCostBasis`. */
+  manualCostBasis?: ManualCostBasis;
   averagePrice: number | null;
   marketPrice: number | null;
   marketValue: number | null;
