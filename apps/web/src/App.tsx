@@ -1664,7 +1664,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           setGate("ready");
         }}
         onRetry={() => setOpenAttempt((n) => n + 1)}
-        onSignOut={() => void signOut().finally(() => window.location.assign("/"))}
+        onSignedOut={() => window.location.assign("/")}
       />
     );
   }

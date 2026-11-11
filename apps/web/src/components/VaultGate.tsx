@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
 import { useAppLocale } from "../appLocale.js";
+import { signOut } from "../authClient.js";
 import { shellCopy } from "../copy/shell.js";
 import Button from "./ui/Button.js";
 import Card from "./ui/Card.js";
@@ -15,14 +16,31 @@ type VaultGateProps = {
   /** `fresh` is true when the owner chose to start with an empty vault. */
   onReady: (fresh: boolean) => void;
   onRetry: () => void;
-  onSignOut: () => void;
+  /** Runs after the sign-out request succeeded; App sends the user to the landing page. */
+  onSignedOut: () => void;
 };
 
 // The vault opens with the account's key, so in the normal case this renders
 // only a loading line. App only mounts it while gate !== "ready".
-export default function VaultGate({ gate, storage, onReady, onRetry, onSignOut }: VaultGateProps) {
+export default function VaultGate({ gate, storage, onReady, onRetry, onSignedOut }: VaultGateProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].vaultGate;
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutFailed(false);
+    try {
+      await signOut();
+    } catch {
+      setSignOutFailed(true);
+      setSigningOut(false);
+      return;
+    }
+    onSignedOut();
+  }
+
   if (gate === "loading") {
     return (
       <div className="vault-gate">
@@ -40,7 +58,14 @@ export default function VaultGate({ gate, storage, onReady, onRetry, onSignOut }
           <Button variant="primary" onClick={onRetry}>
             {c.keyError.retry}
           </Button>
-          <Button onClick={onSignOut}>{c.keyError.signOut}</Button>
+          <Button type="button" disabled={signingOut} onClick={() => void handleSignOut()}>
+            {c.keyError.signOut}
+          </Button>
+          {signOutFailed && (
+            <p role="alert" className="text-warn">
+              {c.keyError.unreachable}
+            </p>
+          )}
         </Card>
       </div>
     );
