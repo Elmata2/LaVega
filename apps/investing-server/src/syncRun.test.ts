@@ -9,7 +9,13 @@ import {
 
 const laneReads = (): SyncRunLaneReads => ({
   vault: "unlocked",
-  holdings: { status: "completed", syncedAt: null, waitUntil: null, message: null },
+  holdings: {
+    status: "completed",
+    syncedAt: null,
+    waitUntil: null,
+    message: null,
+    positionsRead: 0,
+  },
   history: {
     status: "idle",
     syncedAt: null,
@@ -27,6 +33,7 @@ const laneReads = (): SyncRunLaneReads => ({
     total: 0,
     completed: 0,
     currentSymbol: null,
+    remainingSymbols: [],
   },
   problems: [],
 });

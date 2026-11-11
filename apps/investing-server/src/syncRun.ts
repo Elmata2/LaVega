@@ -1,9 +1,4 @@
-import {
-  decodeSyncRunState,
-  type LaneState,
-  type SyncRefreshState,
-  type SyncRunStateView,
-} from "@lavega/core";
+import { decodeSyncRunState, type SyncRefreshState, type SyncRunStateView } from "@lavega/core";
 
 /** A run row in `investing.sync_state` under `broker = 'run'`. */
 export type SyncRunOutcome = "done" | "stopped-at-hop-limit" | "failed";
@@ -51,7 +46,7 @@ export type SyncRunLanes = {
 
 export type SyncRunLaneReads = {
   vault: SyncRunStateView["vault"];
-  holdings: Omit<LaneState, "status"> & { status: LaneState["status"] };
+  holdings: SyncRunStateView["holdings"];
   history: SyncRunStateView["history"];
   prices: SyncRunStateView["prices"];
   problems: readonly string[];
@@ -155,16 +150,12 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
   /** One atomic claim per run. Joining a live run changes nothing and runs no work. */
   const claimRun = async (
     force = false,
-  ): Promise<
-    | { claimed: true; row: SyncRunRow }
-    | { claimed: false; state: SyncRefreshState }
-  > => {
+  ): Promise<{ claimed: true; row: SyncRunRow } | { claimed: false; state: SyncRefreshState }> => {
     const nowMs = now();
     const staleBefore = new Date(nowMs - RUN_LEASE_STALE_MS).toISOString();
     const current = await store.get();
     const live =
-      current?.lease != null &&
-      nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS;
+      current?.lease != null && nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS;
     if (live && current?.outcome === null) {
       const reads = await dependencies.readLanes();
       return {
@@ -208,8 +199,13 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     };
   };
 
-  /** Cron/local use: claim and run the work in this invocation, awaited. */
-  const runNow = async (force = false): Promise<"done" | "continue" | "failed" | "running"> => {
+  /** Cron/local use: claim and run the work in this invocation, awaited.
+   *  `deadlineMs` is the caller's own budget end (the cron pass), so one tenant
+   *  can never consume the next tenant's time. */
+  const runNow = async (
+    force = false,
+    deadlineMs?: number,
+  ): Promise<"done" | "continue" | "failed" | "running"> => {
     const claimed = await claimRun(force);
     if (!claimed.claimed) {
       const row = await store.get();
@@ -219,12 +215,18 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
       // The race loser can claim a released row on the next step.
       const retry = await claimRun(force);
       if (!retry.claimed) return "running";
-      return drive({ runId: retry.row.runId!, leaseId: retry.row.lease!.id, hop: retry.row.hop });
+      return drive({
+        runId: retry.row.runId!,
+        leaseId: retry.row.lease!.id,
+        hop: retry.row.hop,
+        deadlineMs,
+      });
     }
     return drive({
       runId: claimed.row.runId!,
       leaseId: claimed.row.lease!.id,
       hop: claimed.row.hop,
+      deadlineMs,
     });
   };
 
@@ -254,10 +256,18 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     leaseId: string;
     hop: number;
     origin?: string;
+    /** The caller's deadline (a cron pass); the run's own budget can only tighten it. */
+    deadlineMs?: number;
   }): Promise<"done" | "continue" | "failed"> => {
     const startedAt = now();
     const budget = budgetMs();
-    const deadlineMs = budget === undefined ? undefined : startedAt + budget;
+    const ownDeadline = budget === undefined ? undefined : startedAt + budget;
+    const deadlineMs =
+      ownDeadline === undefined
+        ? input.deadlineMs
+        : input.deadlineMs === undefined
+          ? ownDeadline
+          : Math.min(ownDeadline, input.deadlineMs);
     const laneMargin = () => (deadlineMs ?? Number.POSITIVE_INFINITY) - LANE_MARGIN_MS;
     const loaded = await store.get();
     if (loaded === null || loaded.runId !== input.runId || loaded.lease?.id !== input.leaseId)
@@ -277,9 +287,7 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const report = (message: string) => {
       if (message && !problems.includes(message)) problems.push(message);
     };
-    const laneOnce = async (
-      lane: () => Promise<LaneOutcome>,
-    ): Promise<LaneOutcome> => {
+    const laneOnce = async (lane: () => Promise<LaneOutcome>): Promise<LaneOutcome> => {
       try {
         return await lane();
       } catch (error) {
@@ -319,7 +327,9 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
             const canSleep = await waitOrContinue(outcome.waitUntilMs);
             if (!canSleep) {
               const resumeAt = Date.parse(row.resumeAt ?? "");
-              const waitMs = Number.isFinite(resumeAt) ? resumeAt - now() : Number.POSITIVE_INFINITY;
+              const waitMs = Number.isFinite(resumeAt)
+                ? resumeAt - now()
+                : Number.POSITIVE_INFINITY;
               if (waitMs > 0 && waitMs <= MAX_CONTINUE_WAIT_MS && chainEnabled()) {
                 if (input.hop >= MAX_HOPS) {
                   await finish(row, input.leaseId, "stopped-at-hop-limit");
@@ -354,15 +364,15 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
   };
 
   /** Accepts one continuation request; it does no work when the run is gone. */
-  const acceptContinue = async (input: {
-    runId: string;
-    hop: number;
-  }): Promise<boolean> => {
+  const acceptContinue = async (input: { runId: string; hop: number }): Promise<boolean> => {
     const nowMs = now();
     const staleBefore = new Date(nowMs - RUN_LEASE_STALE_MS).toISOString();
     const current = await store.get();
     if (current?.runId !== input.runId || current.outcome !== null) return false;
-    if (current.lease !== null && nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS)
+    if (
+      current.lease !== null &&
+      nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS
+    )
       return false;
     const candidate: SyncRunRow = {
       ...current,

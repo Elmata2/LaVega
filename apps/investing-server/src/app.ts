@@ -21,12 +21,7 @@ import {
   type AccountWrapperStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
-import {
-  createMemorySyncRunStore,
-  createSyncRun,
-  MAX_HOPS,
-  type SyncRunStore,
-} from "./syncRun.js";
+import { createMemorySyncRunStore, createSyncRun, MAX_HOPS, type SyncRunStore } from "./syncRun.js";
 import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
@@ -461,7 +456,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
             : (vault as { status?: string }).status === "locked"
               ? "locked"
               : "empty",
-        holdings: brokerLane(broker.status, broker.updatedAt),
+        holdings: {
+          ...brokerLane(broker.status, broker.updatedAt),
+          positionsRead: broker.positionsRead,
+        },
         history: {
           ...brokerLane(broker.status, broker.updatedAt),
           pages: broker.pages,
@@ -476,6 +474,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
           total: price.total,
           completed: price.completed,
           currentSymbol: price.currentSymbol,
+          remainingSymbols: price.remainingSymbols ?? [],
         },
         problems: [...brokerProblems(await brokerProgress()), ...(price.problems ?? [])],
       };
@@ -952,8 +951,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * invocation. Bearer secret only; never reachable with a user session. */
   investingApp.post("/api/sync/drive", async (c) => {
     if (!bearerIsCron(c)) return c.json({ problems: ["Unauthorized"] }, 401);
-    const body = (await c.req.json().catch(() => null)) as { force?: unknown } | null;
-    return c.json({ result: await syncRun.runNow(body?.force === true) });
+    const body = (await c.req.json().catch(() => null)) as {
+      force?: unknown;
+      deadlineMs?: unknown;
+    } | null;
+    const deadlineMs =
+      typeof body?.deadlineMs === "number" && Number.isFinite(body.deadlineMs)
+        ? body.deadlineMs
+        : undefined;
+    return c.json({ result: await syncRun.runNow(body?.force === true, deadlineMs) });
   });
 
   investingApp.post("/api/brokers/sync", async (c) => {

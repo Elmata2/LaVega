@@ -516,14 +516,14 @@ this existed.
 
 Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
 
-One module, `apps/investing-web/src/lib/syncSession.ts`, owns sync polling for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls `startBrokerSync` or `continuePriceSync` there, and every status reader subscribes to the same snapshot. The module keeps these rules:
+One module, `apps/investing-web/src/lib/syncSession.ts`, owns the sync session for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls the ONE intent, `requestRefresh(force)`, which posts `POST /api/sync/refresh`; every status reader subscribes to the same snapshot. The server owns the run, so the module keeps these rules:
 
-- At most one status read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
-- While a broker or price run is known to be active, the module reads status every second. Active means a broker or price row that is `running` or `waiting`, or a start this page still owns. A `paused` price row counts only while this page is posting the next round; a paused row on its own (a cron slice, or a run that hit the round limit) is at rest and does not poll. A failed read during an active run retries with backoff (2, 4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the one-second rhythm without a reload.
-- Idle, completed, and problem states stop polling. A failed read with no active run also stops and shows **Connection: Offline** until the next wake (a new subscriber or a sync start).
-- The dashboard is invalidated once per price round this page posts, because each round stores new bars, and once when a channel this page saw unfinished reaches completed or problem. A final price round that is also that transition invalidates once, not twice. A failed status read or a recovery from one does not invalidate.
+- At most one state read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
+- While a run is active (`active: true` in the state body), the module reads `GET /api/sync/state` every 2 seconds. That is one request per 2 s and none to the old broker/price status routes. A failed read while a run was active retries with backoff (4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the two-second rhythm without a reload.
+- An inactive state stops polling; the module never polls a paused or completed row on its own. A failed read with no run stops and shows **Connection: Offline** until the next wake (a new subscriber or a refresh intent).
+- The dashboard is invalidated once when each lane finishes a read, proven by a changed `holdings.syncedAt`, `history.syncedAt` or `prices.syncedAt`, and nowhere else. A failed read or a recovery does not invalidate.
 - One subscriber that unmounts removes only its listener. Polling stops when the last subscriber leaves.
-- Price continuation that reaches its round limit returns an explicit `incomplete` outcome. The status rail shows **Price history: Incomplete** with a message to start sync again.
+- The browser no longer posts price rounds and has no round limit. If the server cannot continue the run, `GET /api/sync/state` keeps reporting the stored lane state and the next refresh intent or daily cron resumes it from the durable cursors.
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.
