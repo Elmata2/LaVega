@@ -1298,6 +1298,64 @@ tenantId)` runs in `tools/call` before dispatch; an over-cap call returns safe
   scope drifts from the registry. The write-token rules, preview/apply semantics
   and spend gate are documented there.
 
+**As built (WS5.5/WS5.7/WS5.9, [#300](https://github.com/Elmata2/LaVega/issues/300), 2026-11-11).**
+Structured provenance, the AI-ops ledger leftovers and the offline eval harness.
+Acceptance evidence is in `packages/core/src/provenance.test.ts`,
+`apps/investing-server/src/tools/writeTools.test.ts`,
+`apps/server/src/mcp/investingWrite.test.ts`, `apps/server/src/net-worth-routes.test.ts`,
+`apps/investing-web/src/components/NetWorthPage.test.tsx`,
+`packages/database/src/aiUsageOps.test.ts`, `apps/server/src/agent/pricing.test.ts`,
+`apps/server/src/agent/mistral.test.ts`, `apps/server/src/agent-routes.failed-usage.test.ts`
+and `apps/investing-server/src/evals/harness.test.ts`, plus the live run recorded on
+the issue. Deliberate divergences and carried items:
+
+- **Structured, not prose — and grade required.** `packages/core/src/provenance.ts`
+  takes `{source, grade: A|B|C, date, documentId?, estimated?}` as typed fields,
+  refuses unknown keys (a free-text `note` is how Sure's citation leaks back into
+  prose) and rejects `(grade: D)`, an impossible date, a blank source and a
+  capital-`E` `Estimated:`. Sure's prose grammar is parsed only at the import seam
+  (`parseProvenanceCitationText`) and rendered only for display. Sure makes the
+  grade optional unless `estimated:`; this requires it always.
+- **The valuation write is the shared net-worth total.** LaVega has no
+  account-level owner-entered valuation model yet, so the Sure `record_valuation`
+  analogue writes the one persisted valuation the server has: the opted-in
+  Personal total (`personal.net_worth_totals`), as EUR integer cents (ADR 0011).
+  It is an MCP write tool (`record_valuation`, write scope, no preview pair
+  because it is an upsert by date) and refuses a missing/malformed citation, a
+  future date, a non-integer amount or a non-EUR currency BEFORE writing. The
+  browser share route accepts the same optional provenance (malformed refused,
+  never stored as prose); migration 0031 adds the nullable `provenance` JSONB,
+  because pre-existing browser rows cite nothing.
+- **Display.** The investing net worth page shows a source line built from the
+  structured fields ("Personal total source: … · grade A · date · documentId")
+  when the newest shared total carries a citation; no citation, no line. There is
+  no separate provenance UI for invoices: invoices are client-side vault data and
+  no server write path touches them.
+- **AI ops ledger.** Migration 0031 adds `cache_write_tokens`, `cache_read_tokens`,
+  `outcome`, `error_code` and `http_status` to `personal.ai_usage`. Provider
+  usage parses the cache fields Mistral has reported; a failed provider call now
+  becomes a FAILED row with the route's machine code and upstream status instead
+  of deleting its reservation. The provider call sites still charge a failed call
+  at its ceiling (an unrecorded spend would let a cap read "under" forever), so a
+  row that was already charged KEEPS its charge and gains only the failure
+  reason; an uncharged failure is stored at cost 0. Rows the browser's own
+  routes never reached stay absent (bad input is not a model call).
+- **Cache pricing is deliberately pessimistic and unpublished.** Mistral does not
+  publish cache multipliers, so cache-read tokens are billed at the full input
+  rate on top of the input tokens and cache-write tokens at +25%: overstate,
+  never understate. Correct downward against a real invoice. Sure's Anthropic
+  0.1x/1.25x is not copied, because the provider differs.
+- **Eval harness, offline.** `apps/investing-server/src/evals/` holds three
+  fixture conversations that drive the real registry with a scripted model and
+  fixed data, validate the arguments against the published schema, assert the
+  returned values and build the answer from them; `pnpm agent:evals` runs them
+  and the contract check. `contract.json` pins every tool's name, scope,
+  description and schema digest, so a tool/prompt change fails the run until it
+  is reviewed and `--update-contract` regenerated; `--mutate` is the self-check
+  that a deliberate tool rename fails loudly. A live-model run (real provider
+  responses instead of the scripted model) is carried: CI has no key, and the
+  regression this must catch is the tool contract, not the model's wording.
+
 ### WS6 — Interop, attribution, hardening
 
 **Goal.** Leave the product portable, attributable and measurable.
