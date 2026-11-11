@@ -22,17 +22,24 @@ const HISTORY_DAYS = 270;
 
 type FixtureSymbol = {
   symbol: string;
+  /** A real ISIN, so the dashboard shows the canonical identity the security
+   *  master keys on (WS4.5, #297). */
+  isin: string;
   currency: string;
   quantity: number;
   averagePrice: number;
   marketPrice: number;
   startClose: number;
   volatility: number;
+  /** A legacy row whose broker reported no legal entity: the allocation ladder
+   *  places it in its labelled Unclassified bucket (WS4.6, #297). */
+  unclassified?: boolean;
 };
 
 const SYMBOLS: FixtureSymbol[] = [
   {
     symbol: "AAPL",
+    isin: "US0378331005",
     currency: "USD",
     quantity: 20,
     averagePrice: 178.4,
@@ -42,6 +49,7 @@ const SYMBOLS: FixtureSymbol[] = [
   },
   {
     symbol: "MSFT",
+    isin: "US5949181045",
     currency: "USD",
     quantity: 10,
     averagePrice: 352.1,
@@ -51,6 +59,7 @@ const SYMBOLS: FixtureSymbol[] = [
   },
   {
     symbol: "ASML",
+    isin: "NL0010273215",
     currency: "EUR",
     quantity: 4,
     averagePrice: 612,
@@ -62,12 +71,26 @@ const SYMBOLS: FixtureSymbol[] = [
     // Demonstrates WS4.2: 5 of these 8 units arrived by transfer, so the cost
     // basis is unknown as a whole and the dashboard shows the typed reason.
     symbol: TRANSFER_IN_SYMBOL,
+    isin: "US88160R1014",
     currency: "USD",
     quantity: 8,
     averagePrice: 210,
     marketPrice: 250,
     startClose: 180,
     volatility: 8,
+  },
+  {
+    // Demonstrates WS4.6: a legacy snapshot row with no entity, so the entity
+    // ladder has a real, labelled Unclassified bucket.
+    symbol: "VWRL",
+    isin: "IE00B3RBWM25",
+    currency: "EUR",
+    quantity: 2,
+    averagePrice: 100,
+    marketPrice: 110,
+    startClose: 95,
+    volatility: 3,
+    unclassified: true,
   },
 ];
 
@@ -83,6 +106,10 @@ function daysAgo(now: Date, days: number): Date {
 
 function currencyOf(symbol: string): string {
   return SYMBOLS.find((entry) => entry.symbol === symbol)?.currency ?? "EUR";
+}
+
+function isinOf(symbol: string): string | undefined {
+  return SYMBOLS.find((entry) => entry.symbol === symbol)?.isin;
 }
 
 function trade(
@@ -101,6 +128,7 @@ function trade(
     account: FIXTURE_ACCOUNT,
     date: isoDate(daysAgo(now, daysAgoCount)),
     symbol,
+    ...(isinOf(symbol) ? { isin: isinOf(symbol) } : {}),
     side,
     quantity,
     price,
@@ -136,7 +164,9 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     entity: ENTITY,
     broker: FIXTURE_BROKER,
     account: FIXTURE_ACCOUNT,
+    ...(entry.unclassified ? { entity: "" } : {}),
     symbol: entry.symbol,
+    isin: entry.isin,
     quantity: entry.quantity,
     brokerCost:
       entry.symbol === TRANSFER_IN_SYMBOL
@@ -228,7 +258,25 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     dividend("fixture-div-1", now, 90, "AAPL", 6.25),
     dividend("fixture-div-2", now, 75, "MSFT", 7.5),
   ];
-  return { [FIXTURE_BROKER]: { positions, trades, dividends, cashBalances: [], cashFlows: [] } };
+  return {
+    [FIXTURE_BROKER]: {
+      positions,
+      trades,
+      dividends,
+      /* One settled cash anchor, so the allocation ladder's Cash bucket is a
+       * real figure (WS4.6, #297). */
+      cashBalances: [
+        {
+          entity: ENTITY,
+          broker: FIXTURE_BROKER,
+          currency: "EUR",
+          amount: 1500,
+          asOf,
+        },
+      ],
+      cashFlows: [],
+    },
+  };
 }
 
 function series(

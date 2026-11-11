@@ -29,6 +29,7 @@ import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
+  resolveSecurityIdentities,
   sentryOptions,
   type AccountWrapperStore,
   type FundamentalsProvider,
@@ -768,6 +769,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     attachMemoryRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
       memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      /* The thesis migration's identity source (WS4.5, #297): the current
+       * broker snapshot's holdings and trades, grouped by ISIN first. */
+      instrumentKeys: async () => {
+        const tenantId = await resolveTenantId();
+        const data = await (await tenantRuntime(tenantId)).portfolioChatData();
+        const rows = [
+          ...data.dashboard.positions.map((position) => ({
+            symbol: position.symbol,
+            ...(position.isin ? { isin: position.isin } : {}),
+          })),
+          ...data.trades().map((trade) => ({
+            symbol: trade.symbol,
+            ...(trade.isin ? { isin: trade.isin } : {}),
+            ...(trade.broker ? { broker: trade.broker } : {}),
+          })),
+        ];
+        return resolveSecurityIdentities(rows).bySymbol;
+      },
     });
     attachLetterRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),

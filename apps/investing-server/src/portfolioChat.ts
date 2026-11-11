@@ -161,6 +161,16 @@ export async function createPortfolioChatAgent(input: {
   const named = namedSymbols(input.message, context.dashboard)
     .map((symbol) => symbol.toUpperCase())
     .filter((symbol) => held.has(symbol));
+  /* The canonical keys of the same holdings (WS4.5, #297), so a thesis stored
+   * under another broker's spelling of the same ISIN is still found. */
+  const keysOf = (symbols: ReadonlySet<string>): string[] => {
+    const keys = new Set<string>();
+    for (const position of context.dashboard.positions) {
+      if (!symbols.has(position.symbol.toUpperCase())) continue;
+      if (position.instrumentKey) keys.add(position.instrumentKey);
+    }
+    return [...keys];
+  };
   const [sections, summary] = await Promise.all([
     Promise.all(symbols.map((symbol) => fundamentalsSection(context.fundamentals, symbol))),
     /* A portfolio that read as empty is more likely a sync that has not
@@ -168,6 +178,8 @@ export async function createPortfolioChatAgent(input: {
     memory?.repository.summary({
       held: [...held],
       named,
+      heldKeys: keysOf(held),
+      namedKeys: keysOf(new Set(named)),
       closeUnheld: held.size > 0,
     }),
   ]);
