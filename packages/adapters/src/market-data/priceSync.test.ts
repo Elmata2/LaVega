@@ -349,12 +349,14 @@ test("a listing quoted in another currency than the broker's is not refetched", 
     ["2025-01-01", "2025-01-08"],
     ["2025-01-09", "2025-01-10"],
   ]);
-  await expect(store.getCoverage("local", "ASML")).resolves.toEqual({
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
     symbol: "ASML",
     from: "2025-01-01",
     to: "2025-01-10",
     listing: "ASML.AS",
     currency: "EUR",
+    provider: "stub",
+    listingStart: "2025-01-01",
   });
 });
 
@@ -438,9 +440,10 @@ test("a failed prefix keeps the cache and still stores the new suffix", async ()
   expect(result.bars.map((bar) => bar.date)).toEqual(
     weekdays("2025-01-06", "2025-01-14").map((bar) => bar.date),
   );
-  await expect(store.getCoverage("local", "ASML")).resolves.toEqual({
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
     ...coverage,
     to: "2025-01-14",
+    provider: "stub",
   });
 });
 
@@ -1212,4 +1215,151 @@ test("a cache written before splits were recorded refreshes once, then settles",
   await expect(sync()).resolves.toMatchObject({ fetched: false });
 
   expect(windows(get)).toEqual([["2025-01-06", "2025-01-10"]]);
+});
+
+/* WS4.5 (#297): provider affinity, listing-start clamp, provisional refetch. */
+
+test("an unavailable assigned provider is skipped, not replaced by another one", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-07",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const marketstack = vi.fn(async () => ({
+    bars: [{ symbol: "ASML", date: "2025-01-08", close: 100, currency: "EUR" }],
+    problems: [],
+    listing: "ASML.AS",
+  }));
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "marketstack", priority: 20, get: marketstack }],
+    request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-08" },
+  });
+
+  expect(marketstack).not.toHaveBeenCalled();
+  expect(result).toMatchObject({ fetched: false, problems: [expect.stringContaining("skipped")] });
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ provider: "yahoo" });
+});
+
+test("an assigned provider that is available is the only one asked", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-07",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const preferred = vi.fn(async ({ from, to }: { from?: string; to?: string }) => ({
+    bars: asBars(weekdays(from ?? "2025-01-08", to ?? "2025-01-08")),
+    problems: [],
+    listing: "ASML.AS",
+  }));
+  const other = vi.fn(async () => ({ bars: [], problems: ["must not be asked"] }));
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [
+      { sourceKey: "yahoo", priority: 10, get: preferred },
+      { sourceKey: "marketstack", priority: 20, get: other },
+    ],
+    request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-08" },
+  });
+
+  expect(other).not.toHaveBeenCalled();
+  expect(preferred).toHaveBeenCalled();
+});
+
+test("a backfill is clamped to the persisted listing start", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-07",
+    listing: "ASML.AS",
+    currency: "EUR",
+    listingStart: "2025-01-06",
+  });
+  const get = vi.fn(async () => ({ bars: [], problems: [] }));
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "stub", priority: 10, get }],
+    request: { ...request, backfillFrom: "2020-01-01", today: "2025-01-07" },
+  });
+
+  expect(get).not.toHaveBeenCalled();
+  expect(result.fetched).toBe(false);
+});
+
+test("a provisional close is refetched inside its window and finalised after it", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-09",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provisionalThrough: "2025-01-09",
+  });
+  const get = vi.fn(async () => ({
+    bars: [
+      { symbol: "ASML", date: "2025-01-09", close: 101, currency: "EUR", split: 1 },
+      { symbol: "ASML", date: "2025-01-10", close: 102, currency: "EUR", split: 1 },
+    ],
+    problems: [],
+    listing: "ASML.AS",
+    provisionalThrough: "2025-01-10",
+  }));
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "stub", priority: 10, get }],
+    request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-10" },
+  });
+
+  expect(get).toHaveBeenCalledWith(
+    expect.objectContaining({ from: "2025-01-09", to: "2025-01-10" }),
+  );
+  expect(result.bars.at(-1)).toMatchObject({ date: "2025-01-10", close: 102 });
+  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+    provisionalThrough: "2025-01-10",
+  });
+});
+
+test("a provisional close older than its window is accepted as final", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
+  await store.putCoverage("local", {
+    symbol: "ASML",
+    from: "2025-01-06",
+    to: "2025-01-09",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provisionalThrough: "2025-01-09",
+  });
+  const get = vi.fn(async () => ({ bars: [], problems: [] }));
+
+  await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders: [{ sourceKey: "stub", priority: 10, get }],
+    request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-20" },
+  });
+
+  expect(get).not.toHaveBeenCalledWith(expect.objectContaining({ from: "2025-01-09" }));
 });

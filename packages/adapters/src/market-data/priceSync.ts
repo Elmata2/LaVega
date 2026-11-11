@@ -1,4 +1,10 @@
-import { isPriceFresh, type PriceBar } from "@lavega/core";
+import {
+  clampToListingStart,
+  isPriceFresh,
+  provisionalRefetchFrom,
+  providerAffinity,
+  type PriceBar,
+} from "@lavega/core";
 import type { PriceCoverage, PriceProvenance, PriceStore } from "../prices/PriceStore.js";
 import type { Provider } from "./providerRouter.js";
 import { firstProviderResult, hasProblems } from "./providerRouter.js";
@@ -22,7 +28,14 @@ type Window = { from: string | undefined; to: string };
 /** One provider answer. Only an answer with bars proves a provenance.
  *  `notFound` carries through `PriceProviderResult.notFound`. */
 type Answer =
-  | { ok: true; bars: PriceBar[]; provenance: PriceProvenance | null }
+  | {
+      ok: true;
+      bars: PriceBar[];
+      provenance: PriceProvenance | null;
+      /** The provider that answered, so coverage remembers its affinity. */
+      provider: string;
+      provisionalThrough?: string;
+    }
   | { ok: false; problems: string[]; notFound?: boolean };
 
 /** How long a locked listing must have been unconfirmed before a fresh
@@ -50,21 +63,41 @@ export async function syncPrices(input: {
   const { store, tenantId, request } = input;
   const nowMs = (input.now ?? (() => new Date()))().getTime();
   const today = request.today ?? new Date(nowMs).toISOString().slice(0, 10);
-  const wanted: Window = { from: request.backfillFrom, to: today };
-  const [cachedBars, storedCoverage] = await Promise.all([
-    store.getRange(tenantId, request.symbol, wanted.from, today),
+  const [storedBars, storedCoverage] = await Promise.all([
+    store.getRange(tenantId, request.symbol, request.backfillFrom, today),
     store.getCoverage(tenantId, request.symbol),
   ]);
-  const coverage = storedCoverage ?? coverageOf(request.symbol, cachedBars);
+  const coverage = storedCoverage ?? coverageOf(request.symbol, storedBars);
+  /* A backfill never asks for history the listing did not have (WS4.5). */
+  const wanted: Window = {
+    from: clampToListingStart(request.backfillFrom, coverage?.listingStart),
+    to: today,
+  };
+  const cachedBars =
+    wanted.from === request.backfillFrom
+      ? storedBars
+      : await store.getRange(tenantId, request.symbol, wanted.from, today);
   const lastBarDate = cachedBars.at(-1)?.date;
 
   /* Already confirmed dead: nothing future can change that answer. */
   if (coverage?.delistedSince && request.kind === "closed")
     return { bars: cachedBars, problems: [], fetched: false };
 
+  /* Provider affinity (WS4.5): the security's assigned provider is the only one
+   * allowed to answer. When it is unavailable the symbol is skipped with a
+   * reason instead of being handed to a different provider. */
+  const affinity = providerAffinity(
+    coverage?.provider,
+    input.priceProviders.map((provider) => provider.sourceKey),
+  );
+  if (affinity.skip) return { bars: cachedBars, problems: [affinity.reason], fetched: false };
+  const priceProviders = coverage?.provider
+    ? input.priceProviders.filter((provider) => provider.sourceKey === coverage.provider)
+    : input.priceProviders;
+
   const ask = async (window: Window, listing?: string, currency?: string): Promise<Answer> => {
     const result = await firstProviderResult(
-      input.priceProviders,
+      priceProviders,
       { ...request, ...window, listing, ...(currency !== undefined ? { currency } : {}) },
       undefined,
       hasProblems,
@@ -77,6 +110,10 @@ export async function syncPrices(input: {
       ok: true,
       bars: result.value.bars,
       provenance: last ? { listing: result.value.listing ?? null, currency: last.currency } : null,
+      provider: result.sourceKey,
+      ...(result.value.provisionalThrough
+        ? { provisionalThrough: result.value.provisionalThrough }
+        : {}),
     };
   };
   const read = () => store.getRange(tenantId, request.symbol, wanted.from, today);
@@ -91,6 +128,9 @@ export async function syncPrices(input: {
       currency: coverage?.currency ?? request.currency,
       delistedSince: today,
       listingMissingSince: undefined,
+      ...(coverage?.provider ? { provider: coverage.provider } : {}),
+      ...(coverage?.listingStart ? { listingStart: coverage.listingStart } : {}),
+      provisionalThrough: undefined,
     });
     return { bars: cachedBars, problems: [], fetched: true };
   };
@@ -112,9 +152,38 @@ export async function syncPrices(input: {
       from: from ?? first.date,
       to: answer.bars.at(-1)!.date,
       ...answer.provenance,
+      provider: answer.provider,
+      listingStart: from ?? first.date,
+      ...(answer.provisionalThrough ? { provisionalThrough: answer.provisionalThrough } : {}),
     });
     return { bars: await read(), problems: [], fetched: true };
   };
+
+  /* A provisional close is re-fetched until its window closes (WS4.5). The
+   * window is re-read and replaced, so a close the provider has finalised stops
+   * being provisional instead of being served as if it never changed. */
+  const provisionalFrom = provisionalRefetchFrom(coverage?.provisionalThrough, today);
+  if (coverage && provisionalFrom) {
+    const answer = await ask(
+      { from: provisionalFrom, to: today },
+      coverage.listing ?? undefined,
+      coverage.currency,
+    );
+    if (answer.ok && answer.provenance) {
+      await store.replaceRange(tenantId, request.symbol, answer.bars, provisionalFrom, today);
+      const last = answer.bars.at(-1);
+      await store.putCoverage(tenantId, {
+        ...coverage,
+        listing: answer.provenance.listing ?? coverage.listing,
+        to: last && last.date > coverage.to ? last.date : coverage.to,
+        provider: answer.provider,
+        provisionalThrough: answer.provisionalThrough,
+      });
+      return { bars: await read(), problems: [], fetched: true };
+    }
+    // A failed provisional refetch falls through to the normal sync, which
+    // reports the provider's own problem.
+  }
 
   if (!coverage) return refresh(wanted.from);
   const refreshFrom = earlier(wanted.from, coverage.from);
@@ -223,6 +292,13 @@ export async function syncPrices(input: {
   }
   const bars = answered.flatMap((answer) => answer.bars);
   if (bars.length) await store.upsert(tenantId, bars);
+  const answeredProviders = answered
+    .map((answer) => (answer?.ok ? answer.provider : undefined))
+    .filter((provider): provider is string => provider !== undefined);
+  const answeredProvisional = answered
+    .map((answer) => (answer?.ok ? answer.provisionalThrough : undefined))
+    .filter((value): value is string => value !== undefined)
+    .at(-1);
   await store.putCoverage(tenantId, {
     ...coverage,
     listing: provenances.at(-1)?.listing ?? coverage.listing,
@@ -231,6 +307,9 @@ export async function syncPrices(input: {
       after?.ok && !afterIsStaleQuiet
         ? (after.bars.at(-1)?.date ?? suffix?.to ?? coverage.to)
         : coverage.to,
+    provider: answeredProviders.at(-1) ?? coverage.provider,
+    listingStart: coverage.listingStart ?? (prefix && before?.ok ? prefix.from : undefined),
+    ...(answeredProvisional !== undefined ? { provisionalThrough: answeredProvisional } : {}),
     delistedSince: bars.length > 0 ? undefined : coverage.delistedSince,
     listingMissingSince: nextListingMissingSince,
   });

@@ -22,6 +22,16 @@ export type PriceCoverage = PriceProvenance & {
   to: string;
   delistedSince?: string;
   listingMissingSince?: string;
+  /** The provider sourceKey that earned this coverage (WS4.5, #297). Once set,
+   *  only that provider may answer: an unavailable provider is skipped, never
+   *  replaced by a different one that happens to quote the symbol. */
+  provider?: string;
+  /** The first date the provider priced this listing. A backfill is clamped to
+   *  it, so an IPO-era trade does not refetch years of nothing every sync. */
+  listingStart?: string;
+  /** The newest close that is still provisional and must be re-fetched until
+   *  its window closes. Absent when every stored close is final. */
+  provisionalThrough?: string;
 };
 
 /** Storage seam for daily market-data bars. Deliberately separate from CRUD storage.

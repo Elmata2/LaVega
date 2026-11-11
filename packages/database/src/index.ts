@@ -392,6 +392,11 @@ export type PriceCoverageRow = {
   currency: string;
   delistedSince?: string;
   listingMissingSince?: string;
+  /** Security-master hardening (WS4.5, #297): provider affinity, the listing
+   *  start a backfill is clamped to, and the newest provisional close. */
+  provider?: string;
+  listingStart?: string;
+  provisionalThrough?: string;
 };
 
 /** The repository is built for one tenant, so a row never names its own. */
@@ -502,13 +507,16 @@ export function createPriceBarRepository(
     async getCoverage(symbol) {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince" FROM investing.price_coverage WHERE symbol = $1`,
+          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince", provider, to_char(listing_start, 'YYYY-MM-DD') AS "listingStart", to_char(provisional_through, 'YYYY-MM-DD') AS "provisionalThrough" FROM investing.price_coverage WHERE symbol = $1`,
           [symbol],
         );
         const row = result.rows[0] as
           | (PriceCoverageRow & {
               delistedSince: string | null;
               listingMissingSince: string | null;
+              provider: string | null;
+              listingStart: string | null;
+              provisionalThrough: string | null;
             })
           | undefined;
         return row
@@ -516,6 +524,9 @@ export function createPriceBarRepository(
               ...row,
               delistedSince: row.delistedSince ?? undefined,
               listingMissingSince: row.listingMissingSince ?? undefined,
+              provider: row.provider ?? undefined,
+              listingStart: row.listingStart ?? undefined,
+              provisionalThrough: row.provisionalThrough ?? undefined,
             }
           : null;
       });
@@ -523,7 +534,7 @@ export function createPriceBarRepository(
     async putCoverage(coverage) {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, updated_at = CURRENT_TIMESTAMP",
+          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since, provider, listing_start, provisional_through) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, provider = EXCLUDED.provider, listing_start = EXCLUDED.listing_start, provisional_through = EXCLUDED.provisional_through, updated_at = CURRENT_TIMESTAMP",
           [
             coverage.symbol,
             coverage.from,
@@ -532,6 +543,9 @@ export function createPriceBarRepository(
             coverage.currency,
             coverage.delistedSince ?? null,
             coverage.listingMissingSince ?? null,
+            coverage.provider ?? null,
+            coverage.listingStart ?? null,
+            coverage.provisionalThrough ?? null,
           ],
         );
       });
