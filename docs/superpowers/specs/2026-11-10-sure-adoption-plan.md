@@ -1516,6 +1516,53 @@ the issue. Deliberate divergences and carried items:
   responses instead of the scripted model) is carried: CI has no key, and the
   regression this must catch is the tool contract, not the model's wording.
 
+**As built (WS5.8 thin slice, [#301](https://github.com/Elmata2/LaVega/issues/301), 2026-11-11).**
+The first executable piece of the personal assistant: three client-side tools
+over the decrypted vault, an approval event for the one write, and an additive
+vault section so a decision survives a reload. Design note:
+`docs/superpowers/specs/2026-11-11-assistant-thin-slice.md` (committed before the
+code). Divergences from the plan text and the 2026-10-27 design, each deliberate:
+
+- **No model call in this slice.** The router is a literal NL/EN intent match in
+  `packages/core/src/assistant.ts`; the panel is `apps/web/src/assistant/*`. The
+  design's server-proxied Mistral chat, `memory-propose` call, advice guard and
+  explainer links are carried to the next slice. The consequence, stated plainly
+  rather than implied: **zero bytes leave the browser for an assistant turn.**
+  There is no assistant server route and no `fetch` in the assistant module.
+- **Three tools, two read and one write.** `spending_summary` sums the month's
+  settled, non-excluded negative amounts by the owner's category keys;
+  `account_balances` reads the vault's balances (null stays unknown);
+  `remember_preference` is the one write and only proposes. They are pure
+  functions over a decrypted snapshot (`apps/web/src/assistant/tools.ts`), so the
+  tool path is testable without React and provably has no transport.
+- **An approval is an event, not a status.** `{id, tool, payload, decision,
+decidedAt, createdAt}` with `approved | rejected | dismissed`; the latest event
+  per id wins, so undo is another decision, and the id is the idempotency key.
+  The panel shows an open card until a decision exists, then the decided row.
+- **One additive vault section, one save per decision.** `assistant?: {
+approvals, memories }` in `VaultData` via `getAssistant`/`putAssistant`
+  (replace-all, like `facts`; a legacy vault reads the empty state). Approving a
+  valid `remember_preference` writes the memory in the SAME save as the decision.
+- **The memory vocabulary is the design's closed table** (`lengte`, `toon`,
+  `detail`, `taal`, `voorbeelden`), so no free text, name, amount or account
+  number can be stored. An approved length preference is read back by the next
+  spending answer (short answers drop the category breakdown), which is the thin
+  slice's "a saved memory changes the next answer" proof.
+- **Mounting stays out of the concurrent document-vault files.** The panel is one
+  card at the top of Overzicht; `Overzicht` gained one optional `storage` prop and
+  `App.tsx` one additive `storage={storage}` line. Nothing else in App or the
+  storage/crypto files moved beyond the additive vault accessors.
+- **Copy is typed-complete NL/EN** (`apps/web/src/copy/assistant.ts`) and
+  registered in `copy/parity.test.ts`, including the Dutch-leak scan.
+- **Coverage.** `assistant.test.ts` proves routing, vocabulary validation,
+  idempotent append, latest-decision-wins and approved-only writes;
+  `encryptedStorage.test.ts` proves the vault section round-trips across
+  lock/unlock and a legacy vault reads empty; `tools.test.ts` proves the month
+  and pending/excluded rules; `AssistantPanel.test.tsx` drives the real flow with
+  a fake vault and a throwing `fetch`: a read answer, an open card that persists
+  nothing, approve/reject, the memory, and a remount that still shows the
+  decision (the reload proof).
+
 ### WS6 — Interop, attribution, hardening
 
 **Goal.** Leave the product portable, attributable and measurable.
