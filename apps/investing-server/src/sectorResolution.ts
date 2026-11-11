@@ -138,19 +138,39 @@ const SECTOR_RESOLUTION_CONCURRENCY = 8;
  *  be classified two ways — they differ only in whether a missing or stale
  *  profile may be fetched. */
 export async function resolvePortfolioSectors(
-  positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
+  positions: readonly {
+    symbol: string;
+    marketValue: number | null;
+    description?: string;
+    /** Carried through to the listing lookup: the shared series key holds the
+     *  ISIN and currency (issue #307). */
+    isin?: string;
+    currency?: string;
+  }[],
   options: SectorResolutionOptions,
 ): Promise<PortfolioSectors> {
   const sectorBySymbol = new Map<string, string>();
   const weightsBySymbol = new Map<string, SectorWeight[]>();
   const seen = new Set<string>();
-  const pending: { key: string; symbol: string; description?: string }[] = [];
+  const pending: {
+    key: string;
+    symbol: string;
+    description?: string;
+    isin?: string;
+    currency?: string;
+  }[] = [];
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
     const key = position.symbol.toUpperCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    pending.push({ key, symbol: position.symbol, description: position.description });
+    pending.push({
+      key,
+      symbol: position.symbol,
+      description: position.description,
+      ...(position.isin ? { isin: position.isin } : {}),
+      ...(position.currency ? { currency: position.currency } : {}),
+    });
   }
   let next = 0;
   const deadline = Date.now() + SECTOR_FETCH_BUDGET_MS;

@@ -2,9 +2,11 @@ import { expect, test, vi } from "vitest";
 import { ManagedRuntime } from "effect";
 import {
   createBrokerDataCache,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   type BrokerDataSnapshot,
-  type PriceStore,
+  type PriceKey,
+  type SharedPriceBar,
+  type SharedPriceStore,
 } from "@lavega/adapters";
 import { emptyInvestingDashboard, type InvestingDashboardData, type PriceBar } from "@lavega/core";
 import {
@@ -43,8 +45,18 @@ function snapshot(quantity = 1): BrokerDataSnapshot {
 }
 
 type Snapshots = {
-  get(key: string): Promise<{ version: number; dashboard: unknown }>;
-  put(key: string, version: number, dashboard: unknown): Promise<void>;
+  get(key: string): Promise<{
+    version: number;
+    dashboard: unknown;
+    priceKeys: string[];
+    updatedAt: string | null;
+  }>;
+  put(
+    key: string,
+    version: number,
+    dashboard: unknown,
+    priceKeys?: readonly string[],
+  ): Promise<void>;
 };
 
 type SyncStateReader = Pick<
@@ -74,7 +86,7 @@ function makeSources(
     snapshots?: Snapshots | null;
     dashboardCache?: DashboardCache;
     sync?: SyncStateReader;
-    priceStore?: PriceStore;
+    priceStore?: SharedPriceStore;
     priceDataVersion?: () => number;
     benchmarks?: readonly string[];
     accountWrappers?: readonly import("@lavega/core").AccountWrapperEntry[];
@@ -89,7 +101,7 @@ function makeSources(
     ttlMs: DASHBOARD_CACHE_TTL_MS,
   });
   return {
-    priceStore: input.priceStore ?? createInMemoryPriceStore(),
+    priceStore: input.priceStore ?? createInMemorySharedPriceStore(),
     loadBrokerData: input.loadBrokerData ?? (async () => undefined),
     brokerData,
     brokerSnapshot,
@@ -129,10 +141,10 @@ test("a current stored dashboard is served without reading the vault", async () 
   const stored = { ...emptyInvestingDashboard(), dataVersion: 7, problems: ["from the store"] };
   const loadBrokerData = vi.fn(async () => undefined);
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: stored }),
+    get: async () => ({ version: 1, dashboard: stored, priceKeys: [], updatedAt: null }),
     put: vi.fn(async () => undefined),
   };
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const priceRead = vi.spyOn(priceStore, "getRange");
 
   const result = await runRead(
@@ -156,7 +168,7 @@ test("a dashboard stored before risk carried its basis is rebuilt and stored aga
   const loadBrokerData = vi.fn(async () => undefined);
   const put = vi.fn(async () => undefined);
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: stale }),
+    get: async () => ({ version: 1, dashboard: stale, priceKeys: [], updatedAt: null }),
     put,
   };
 
@@ -165,15 +177,15 @@ test("a dashboard stored before risk carried its basis is rebuilt and stored aga
   expect(result).not.toBe(stale);
   expect(result.positions[0]?.symbol).toBe("AAPL");
   expect(loadBrokerData).toHaveBeenCalledTimes(1);
-  expect(put).toHaveBeenCalledWith("", 1, result);
+  expect(put).toHaveBeenCalledWith("", 1, result, expect.arrayContaining(["sym:AAPL:EUR"]));
 });
 
 test("a failed price read returns a dashboard plus a problem and stores nothing", async () => {
   const snapshots: Snapshots = {
-    get: async () => ({ version: 5, dashboard: null }),
+    get: async () => ({ version: 5, dashboard: null, priceKeys: [], updatedAt: null }),
     put: vi.fn(async () => undefined),
   };
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   vi.spyOn(priceStore, "getRange").mockRejectedValue(new Error("timeout exceeded"));
 
   const result = await runRead(makeSources({ data: snapshot(), snapshots, priceStore }));
@@ -184,7 +196,7 @@ test("a failed price read returns a dashboard plus a problem and stores nothing"
 });
 
 test("a dashboard a sync replaced mid-build is stored under the version it was built against and never served", async () => {
-  const store = new Map<string, { version: number; dashboard: unknown }>();
+  const store = new Map<string, { version: number; dashboard: unknown; priceKeys: string[] }>();
   let sourceVersion = 1;
   const snapshots: Snapshots = {
     get: async (key) => {
@@ -192,18 +204,20 @@ test("a dashboard a sync replaced mid-build is stored under the version it was b
       return {
         version: sourceVersion,
         dashboard: held?.version === sourceVersion ? held.dashboard : null,
+        priceKeys: [],
+        updatedAt: null,
       };
     },
-    put: async (key, version, dashboard) => {
-      store.set(key, { version, dashboard });
+    put: async (key, version, dashboard, priceKeys) => {
+      store.set(key, { version, dashboard, priceKeys: [...(priceKeys ?? [])] });
     },
   };
   const loadBrokerData = vi.fn(async () => undefined);
-  const priceStore = createInMemoryPriceStore();
-  vi.spyOn(priceStore, "getRange").mockImplementation(async () => {
+  const priceStore = createInMemorySharedPriceStore();
+  vi.spyOn(priceStore, "getRanges").mockImplementation(async () => {
     // The price read moves the source version while the dashboard is building.
     sourceVersion += 1;
-    return [];
+    return new Map();
   });
   const sources = makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore });
 
@@ -304,7 +318,7 @@ test("a durable sync problem reaches the dashboard even though this read did not
 test("Server-Timing names a built dashboard's phases and a stored one's, and nothing else", async () => {
   const built = phaseRecorder();
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: null }),
+    get: async () => ({ version: 1, dashboard: null, priceKeys: [], updatedAt: null }),
     put: async () => undefined,
   };
   await runRead(makeSources({ data: snapshot(), snapshots }), { timing: built.timing });
@@ -316,7 +330,12 @@ test("Server-Timing names a built dashboard's phases and a stored one's, and not
     makeSources({
       data: snapshot(),
       snapshots: {
-        get: async () => ({ version: 1, dashboard: storedDashboard }),
+        get: async () => ({
+          version: 1,
+          dashboard: storedDashboard,
+          priceKeys: [],
+          updatedAt: null,
+        }),
         put: async () => undefined,
       },
     }),
@@ -326,25 +345,16 @@ test("Server-Timing names a built dashboard's phases and a stored one's, and not
 });
 
 test("the read never hands Postgres a year-zero date", async () => {
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const getRange = vi
-    .spyOn(priceStore, "getRange")
-    .mockImplementation(async (_tenantId, _symbol, from, to) => {
-      for (const date of [from, to])
-        if (date?.startsWith("0000-"))
-          throw new Error(`date/time field value out of range: "${date}"`);
-      return [] as PriceBar[];
-    });
+    .spyOn(priceStore, "getRanges")
+    .mockImplementation(async (_keys: readonly PriceKey[]) => new Map());
 
   const result = await runRead(
     makeSources({ data: snapshot(), priceStore, benchmarks: ["^GSPC"] }),
   );
 
   expect(getRange).toHaveBeenCalled();
-  for (const [, , from, to] of getRange.mock.calls) {
-    expect(String(from ?? "")).not.toMatch(/^0000-/);
-    expect(String(to ?? "")).not.toMatch(/^0000-/);
-  }
   expect(result.problems.join("\n")).not.toContain("date/time field value out of range");
 });
 

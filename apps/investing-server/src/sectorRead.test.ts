@@ -69,7 +69,7 @@ function harness(options?: {
     inferenceSetting,
     consent,
     revision: (tenantId) => revision.get(tenantId),
-    resolveListing: async (_tenantId, symbol) => symbol,
+    resolveListing: async (_tenantId, position) => position.symbol,
   });
   return {
     reader,

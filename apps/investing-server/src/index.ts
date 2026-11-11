@@ -54,6 +54,7 @@ import {
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
+import type { PriceBar } from "@lavega/core";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 import {
   createRuntimeCredentialStore,
@@ -356,11 +357,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
-      /* The fixture quotes by symbol; the shared store keys by instrument.
-       * No fixture bar carries an ISIN, so every one is a `sym:` series. */
+      /* The fixture quotes by symbol; the shared store keys by instrument, and
+       * the read computes the key from the position (ISIN first), so the seed
+       * uses the same identity or the fixture would read unpriced. */
+      const fixtureData = brokerData.read();
+      const isinBySymbol = new Map(
+        [...fixtureData.positions, ...fixtureData.trades]
+          .filter((row) => row.isin)
+          .map((row) => [row.symbol.toUpperCase(), row.isin!.trim().toUpperCase()]),
+      );
       const byKey = new Map<string, PriceBar[]>();
       for (const bar of createDevFixturePriceBars()) {
-        const key = instrumentKeys({ symbol: bar.symbol, currency: bar.currency }).key;
+        const key = instrumentKeys({
+          symbol: bar.symbol,
+          ...(isinBySymbol.has(bar.symbol.toUpperCase())
+            ? { isin: isinBySymbol.get(bar.symbol.toUpperCase()) }
+            : {}),
+          currency: bar.currency,
+        }).key;
         byKey.set(key, [...(byKey.get(key) ?? []), bar]);
       }
       for (const [key, bars] of byKey) {

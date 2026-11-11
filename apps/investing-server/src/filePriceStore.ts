@@ -3,7 +3,6 @@ import {
   emptySharedPrices,
   type PriceCoverage,
   type PriceKey,
-  type PriceStore,
   type SerializedSharedPrices,
   type SharedPriceCoverage,
   type SharedPriceStore,
@@ -55,116 +54,6 @@ function withoutTenant<Row extends { tenantId: string }>(row: Row): Omit<Row, "t
  *  before coverage existed still reads as it is. */
 function coverageFile(filePath: string): string {
   return `${filePath.replace(/\.json$/, "")}.coverage.json`;
-}
-
-/** Persistent local PriceStore for the Docker runtime. The browser tier uses IndexedDB. */
-export function createFilePriceStore(filePath: string): PriceStore {
-  const coverageStore = createJsonFileStore<StoredPriceCoverage[]>(coverageFile(filePath), {
-    empty: [],
-    validate: (contents) => {
-      const parsed: unknown = JSON.parse(contents);
-      if (!Array.isArray(parsed) || !parsed.every(isPriceCoverage))
-        throw new Error(`Invalid price coverage file: ${coverageFile(filePath)}`);
-      return parsed;
-    },
-  });
-  const store = createJsonFileStore<StoredPriceBar[]>(filePath, {
-    empty: [],
-    validate: (contents) => {
-      const parsed: unknown = JSON.parse(contents);
-      if (!Array.isArray(parsed) || !parsed.every(isPriceBar))
-        throw new Error(`Invalid price cache file: ${filePath}`);
-      return parsed;
-    },
-  });
-  const key = (bar: Pick<StoredPriceBar, "tenantId" | "symbol" | "date">) =>
-    `${bar.tenantId}${bar.symbol}${bar.date}`;
-
-  // ponytail: tenant+symbol index over the parse-cached array; rebuilds on update.
-  let index: Map<string, StoredPriceBar[]> | null = null;
-  const symbolIndex = async (): Promise<Map<string, StoredPriceBar[]>> => {
-    if (index) return index;
-    const map = new Map<string, StoredPriceBar[]>();
-    for (const bar of await store.read()) {
-      const listKey = `${bar.tenantId}${bar.symbol}`;
-      const list = map.get(listKey);
-      if (list) list.push(bar);
-      else map.set(listKey, [bar]);
-    }
-    for (const list of map.values())
-      list.sort((left, right) => left.date.localeCompare(right.date));
-    index = map;
-    return map;
-  };
-
-  const withBars = (
-    rows: readonly StoredPriceBar[],
-    tenantId: string,
-    bars: readonly PriceBar[],
-  ): StoredPriceBar[] => {
-    const byKey = new Map(rows.map((bar) => [key(bar), bar]));
-    for (const bar of bars) {
-      const row = { ...bar, tenantId };
-      byKey.set(key(row), row);
-    }
-    index = null;
-    return [...byKey.values()].sort((left, right) =>
-      `${left.symbol}${left.date}`.localeCompare(`${right.symbol}${right.date}`),
-    );
-  };
-
-  return {
-    async getRange(tenantId, symbol, from, to) {
-      return (
-        (await symbolIndex())
-          .get(`${tenantId}${symbol}`)
-          ?.filter(
-            (bar) =>
-              (from === undefined || bar.date >= from) && (to === undefined || bar.date <= to),
-          )
-          .map(withoutTenant) ?? []
-      );
-    },
-    async lastDate(tenantId, symbol) {
-      return (await symbolIndex()).get(`${tenantId}${symbol}`)?.at(-1)?.date ?? null;
-    },
-    async upsert(tenantId, bars) {
-      if (bars.length === 0) return;
-      await store.update((rows) => withBars(rows, tenantId, bars));
-    },
-    async replaceRange(tenantId, symbol, bars, from, to) {
-      await store.update((rows) =>
-        withBars(
-          rows.filter(
-            (bar) =>
-              bar.tenantId !== tenantId ||
-              bar.symbol !== symbol ||
-              (from !== undefined && bar.date < from) ||
-              (to !== undefined && bar.date > to),
-          ),
-          tenantId,
-          bars,
-        ),
-      );
-    },
-    async getCoverage(tenantId, symbol) {
-      const row = (await coverageStore.read()).find(
-        (coverage) => coverage.tenantId === tenantId && coverage.symbol === symbol,
-      );
-      return row ? withoutTenant(row) : null;
-    },
-    async putCoverage(tenantId, coverage) {
-      await coverageStore.update((rows) => [
-        ...rows.filter((row) => row.tenantId !== tenantId || row.symbol !== coverage.symbol),
-        { ...coverage, tenantId },
-      ]);
-    },
-    async purgeAll() {
-      index = null;
-      await store.update(() => []);
-      await coverageStore.update(() => []);
-    },
-  };
 }
 
 /* ---------- the shared, instrument-keyed store (issue #307) ---------- */
@@ -222,31 +111,6 @@ function convertLegacyPriceFiles(
 }
 
 /**
- * Clears the shared file store (the local, single-installation case). The
- * database store has no such operation: its rows are read by every user, so
- * one account must not delete them (issue #307 acceptance 9).
- */
-export async function clearFileSharedPriceStore(filePath: string): Promise<void> {
-  const shared = createJsonFileStore<SerializedSharedPrices>(sharedPriceFile(filePath), {
-    empty: emptySharedPrices(),
-    validate: (contents) => {
-      const parsed: unknown = JSON.parse(contents);
-      if (!parsed || typeof parsed !== "object") throw new Error("Invalid shared prices");
-      const state = parsed as Partial<SerializedSharedPrices>;
-      if (
-        state.version !== 2 ||
-        !Array.isArray(state.bars) ||
-        !state.bars.every(isSharedBarRow) ||
-        !Array.isArray(state.coverage)
-      )
-        throw new Error(`Invalid shared price file: ${sharedPriceFile(filePath)}`);
-      return state as SerializedSharedPrices;
-    },
-  });
-  await shared.update(() => emptySharedPrices());
-}
-
-/**
  * Shared PriceStore for the Docker runtime: one series per instrument, keyed by
  * `sym:`/`isin:`, in `prices.shared.json`. On first use the old per-tenant file
  * is converted once with the derivable-key rule above.
@@ -254,7 +118,9 @@ export async function clearFileSharedPriceStore(filePath: string): Promise<void>
  * Claims are process-local: this store serves one installation with one
  * process, so a claim never has to coordinate two machines.
  */
-export function createFileSharedPriceStore(filePath: string): SharedPriceStore {
+export function createFileSharedPriceStore(
+  filePath: string,
+): SharedPriceStore & { clear: () => Promise<void> } {
   const backend = createMemorySharedBackend();
   const shared = createJsonFileStore<SerializedSharedPrices>(sharedPriceFile(filePath), {
     empty: emptySharedPrices(),
@@ -317,6 +183,13 @@ export function createFileSharedPriceStore(filePath: string): SharedPriceStore {
   };
 
   return {
+    /** Clears every series (the local, single-installation "clear price cache"):
+     *  the database store has no such operation, because its rows serve every
+     *  user (issue #307 acceptance 9). */
+    clear: () =>
+      write(async () => {
+        backend.hydrate(emptySharedPrices());
+      }),
     async getRange(key: PriceKey, from?: string, to?: string) {
       await load();
       return backend.store.getRange(key, from, to);

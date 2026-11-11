@@ -83,7 +83,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const runtimeApp = await createRuntimeApp({
     priceStore,
     sharedPriceStore: false,
-    clearPriceCache: () => clearFileSharedPriceStore(priceStoreFile),
+    clearPriceCache: () => priceStore.clear(),
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
     investingLayoutStore: createFileInvestingLayoutStore(runtimeInvestingLayoutFile()),

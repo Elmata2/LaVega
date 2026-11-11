@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
 import { createAgentMemoryRepository, type Database } from "@lavega/database";
 import { migratedTestDatabase } from "@lavega/database/testing";
 import { createRuntimeApp } from "./index.js";
@@ -40,7 +40,7 @@ beforeEach(async () => {
 
 const runtime = (tenant: string, generate = vi.fn(async () => draft), withDatabase = true) =>
   createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => tenant,
     letterGenerator: generate,
     ...(withDatabase ? { agentMemory: (id: string) => createAgentMemoryRepository(db, id) } : {}),
