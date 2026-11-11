@@ -1,6 +1,6 @@
 /*
- * The read-only investing tool seed for the external MCP surface (plan §3
- * WS5.1/WS5.2, fast track).
+ * The investing tool registry: ONE definition set, two surfaces (plan §3 WS5.1
+ * and WS5.3, #285/#299).
  *
  * Sure source: `app/models/assistant/function/*` and `function_tool_caller.rb`
  * at pinned commit 562fe09. Two Sure patterns are copied and one is refused:
@@ -12,21 +12,38 @@
  *   - COPY: errors are result data with a hint, not a thrown exception that
  *     leaks SQL or a stack across the trust boundary.
  *   - REFUSE: Sure's single coarse `read_write` scope. These tools are all
- *     `scope: "read"`; a write token is a separate decision (ADR 0012, WS5.4).
+ *     `scope: "read"`; write tools live behind a separate write token (WS5.4).
  *
- * Every handler reads the investing app's own read routes through the injected
- * `read` function. The caller (`apps/server`) binds that function to the tenant
- * resolved from the bearer token, so no handler ever names a tenant and no tool
- * argument or header can choose one.
+ * The definitions are the single source for both surfaces: the in-app chat and
+ * `/mcp` differ only in the `InvestingToolSource` they bind (in-process context
+ * vs the investing app's own HTTP read routes). A tool added here is callable by
+ * both, and there is no second inline definition to drift from it (WS5.3).
  */
 
 import { Schema } from "effect";
 import type { AgentToolDefinition, AgentToolJsonSchema } from "@lavega/core";
 
-/** One tenant-bound HTTP read of the investing app's own API. */
-export type InvestingToolRead = (
-  path: string,
-) => Promise<{ status: number; body: unknown }>;
+/** One tenant-bound HTTP read of the investing app's own API (the MCP source). */
+export type InvestingToolRead = (path: string) => Promise<{ status: number; body: unknown }>;
+
+/**
+ * What a tool needs from the surface it runs on. Every method is already bound
+ * to the caller's tenant by the surface: a handler can never name one, and no
+ * tool argument or header can choose one.
+ *
+ * A method returns the read model's payload; it THROWS when the read failed, so
+ * the shared safe-error boundary answers with `{error, hint}` instead of a
+ * tool-specific shape.
+ */
+export type InvestingToolSource = {
+  dashboard(): Promise<Record<string, unknown>>;
+  trades(query: { symbol?: string; limit?: number }): Promise<unknown>;
+  /** `found: false` payloads are data, not failures; a failed read throws. */
+  price(symbol: string, date?: string): Promise<unknown>;
+  fundamentals(symbol: string): Promise<unknown>;
+  sectorExposure(): Promise<unknown>;
+  agentMemory(): Promise<unknown>;
+};
 
 const SYMBOL = /^[A-Z0-9][A-Z0-9.\-^=]{0,19}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -71,17 +88,11 @@ const decodeFundamentals = Schema.decodeUnknownSync(FundamentalsInput);
 const decodeRisk = Schema.decodeUnknownSync(RiskInput);
 
 /** A read the caller should have answered 200; anything else is a safe refusal. */
-class ReadRefused extends Error {
+export class InvestingReadRefused extends Error {
   constructor(readonly problem: string) {
     super(problem);
   }
 }
-
-const requireOk = async (read: InvestingToolRead, path: string): Promise<Record<string, unknown>> => {
-  const { status, body } = await read(path);
-  if (status !== 200) throw new ReadRefused("The investing data could not be read right now");
-  return objectBody(body);
-};
 
 const normalizeSymbol = (raw: string): string | null => {
   const value = raw.trim().toUpperCase();
@@ -109,205 +120,246 @@ const projectPosition = (position: Record<string, unknown>) => {
   };
 };
 
+/** One tool's name, description, schema and handler. `createInvestingTools`
+ *  binds the handler to a source; the definition itself is shared. */
+type InvestingToolSpec = Omit<AgentToolDefinition, "handler"> & {
+  handler: (source: InvestingToolSource, input: Record<string, unknown>) => Promise<unknown>;
+};
+
 /**
- * Build the registry. `read` is bound to the caller's tenant by the server;
- * these definitions cannot widen that scope, so the same array can be reused
- * for the in-app chat later (WS5.3) without a second definition.
+ * The single definition set. Descriptions are the contract `tools/list`
+ * publishes and docs/investing/MCP.md is generated from, so they live here and
+ * nowhere else.
  */
-export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefinition[] {
-  return [
-    {
-      name: "get_positions",
-      description:
-        "Every open investing holding: symbol, name, quantity, market value, portfolio weight, cost basis, returns and first buy date. Money is a decimal amount in the portfolio's presentation currency (1234.56 means 1234.56, not cents); weights and percentages are fractions (0.12 means 12%). A field the read model does not know is null, never zero. One row per current holding; there is no pagination. Empty array means the broker has no holdings, which can be a sync that has not landed yet.",
-      schema: noArguments,
-      scope: "read",
-      handler: async () => {
-        const dashboard = await requireOk(read, "/api/investing/dashboard");
-        const positions = arrayBody(dashboard, "positions").map((position) =>
+export const INVESTING_TOOL_SPECS: readonly InvestingToolSpec[] = [
+  {
+    name: "get_positions",
+    description:
+      "Every open investing holding: symbol, name, quantity, market value, portfolio weight, cost basis, returns and first buy date. Money is a decimal amount in the portfolio's presentation currency (1234.56 means 1234.56, not cents); weights and percentages are fractions (0.12 means 12%). A field the read model does not know is null, never zero. One row per current holding; there is no pagination. Empty array means the broker has no holdings, which can be a sync that has not landed yet.",
+    schema: noArguments,
+    scope: "read",
+    handler: async (source) => {
+      const dashboard = await source.dashboard();
+      return {
+        presentationCurrency: dashboard.presentationCurrency ?? null,
+        dataVersion: dashboard.dataVersion ?? null,
+        positions: arrayBody(dashboard, "positions").map((position) =>
           projectPosition(objectBody(position)),
-        );
-        return {
-          presentationCurrency: dashboard.presentationCurrency ?? null,
-          dataVersion: dashboard.dataVersion ?? null,
-          positions,
-        };
-      },
+        ),
+      };
     },
-    {
-      name: "get_portfolio_value",
-      description:
-        "The latest total investing portfolio value: the last point of the 'All' value series, with its date. Money is a decimal amount in the presentation currency (ADR 0011: an unknown value is null, never 0). No series (a brand-new portfolio) returns value null and problems instead of a fabricated zero.",
-      schema: noArguments,
-      scope: "read",
-      handler: async () => {
-        const dashboard = await requireOk(read, "/api/investing/dashboard");
-        const portfolio = objectBody(dashboard.portfolio);
-        const all = Array.isArray(portfolio.All) ? portfolio.All : [];
-        const latest = objectBody(all.at(-1));
-        if (!latest.date)
-          return {
-            value: null,
-            currency: dashboard.presentationCurrency ?? null,
-            problems: ["No portfolio valuation yet"],
-          };
+  },
+  {
+    name: "get_portfolio_value",
+    description:
+      "The latest total investing portfolio value: the last point of the 'All' value series, with its date. Money is a decimal amount in the presentation currency (ADR 0011: an unknown value is null, never 0). No series (a brand-new portfolio) returns value null and problems instead of a fabricated zero.",
+    schema: noArguments,
+    scope: "read",
+    handler: async (source) => {
+      const dashboard = await source.dashboard();
+      const portfolio = objectBody(dashboard.portfolio);
+      const all = Array.isArray(portfolio.All) ? portfolio.All : [];
+      const latest = objectBody(all.at(-1));
+      if (!latest.date)
         return {
-          date: latest.date,
-          value: latest.value ?? null,
+          value: null,
           currency: dashboard.presentationCurrency ?? null,
+          problems: ["No portfolio valuation yet"],
         };
-      },
+      return {
+        date: latest.date,
+        value: latest.value ?? null,
+        currency: dashboard.presentationCurrency ?? null,
+      };
     },
-    {
-      name: "get_trades",
-      description:
-        "The owner's executed trades, newest first, at most 60 rows per call (the read route caps it and says so in `truncated`). Optional symbol filters to one ticker. `side` is buy or sell; `quantity` and `price` are per-unit decimals in the trade's own currency. `executionAt` may be absent on older broker rows.",
-      schema: {
-        type: "object",
-        properties: {
-          symbol: symbolArgument("Optional ticker; omit for every symbol."),
-          limit: {
-            type: "number",
-            description: "1-60, newest first; default 60.",
-            minimum: 1,
-            maximum: 60,
-          },
+  },
+  {
+    name: "get_trades",
+    description:
+      "The owner's executed trades, newest first, at most 60 rows per call (the read route caps it and says so in `truncated`). Optional symbol filters to one ticker. `side` is buy or sell; `quantity` and `price` are per-unit decimals in the trade's own currency. `executionAt` may be absent on older broker rows.",
+    schema: {
+      type: "object",
+      properties: {
+        symbol: symbolArgument("Optional ticker; omit for every symbol."),
+        limit: {
+          type: "number",
+          description: "1-60, newest first; default 60.",
+          minimum: 1,
+          maximum: 60,
         },
-        additionalProperties: false,
       },
-      scope: "read",
-      handler: async (input) => {
-        const { symbol, limit } = decodeTrades(input);
-        const query = new URLSearchParams();
-        if (symbol !== undefined) {
-          const normalized = normalizeSymbol(symbol);
-          if (!normalized) return { problems: [`${symbol} is not a ticker`], trades: [] };
-          query.set("symbol", normalized);
-        }
-        if (limit !== undefined) query.set("limit", String(Math.min(60, Math.max(1, limit))));
-        return requireOk(read, `/api/investing/trades${query.size > 0 ? `?${query}` : ""}`);
-      },
+      additionalProperties: false,
     },
-    {
-      name: "get_price",
-      description:
-        "One closing price for a ticker: the latest close, or the last close on or before `date` (YYYY-MM-DD). `close` is a decimal amount in `currency`. A symbol with no stored bar returns found:false and a problem, never a guessed or forward-zero price.",
-      schema: {
-        type: "object",
-        properties: {
-          symbol: symbolArgument("Ticker, for example AAPL."),
-          date: { type: "string", description: "YYYY-MM-DD; omit for the latest close." },
+    scope: "read",
+    handler: async (source, input) => {
+      const { symbol, limit } = decodeTrades(input);
+      let normalized: string | undefined;
+      if (symbol !== undefined) {
+        const value = normalizeSymbol(symbol);
+        if (!value) return { problems: [`${symbol} is not a ticker`], trades: [] };
+        normalized = value;
+      }
+      return source.trades({
+        ...(normalized !== undefined ? { symbol: normalized } : {}),
+        ...(limit !== undefined ? { limit: Math.min(60, Math.max(1, limit)) } : {}),
+      });
+    },
+  },
+  {
+    name: "get_price",
+    description:
+      "One closing price for a ticker: the latest close, or the last close on or before `date` (YYYY-MM-DD). `close` is a decimal amount in `currency`. A symbol with no stored bar returns found:false and a problem, never a guessed or forward-zero price.",
+    schema: {
+      type: "object",
+      properties: {
+        symbol: symbolArgument("Ticker, for example AAPL."),
+        date: { type: "string", description: "YYYY-MM-DD; omit for the latest close." },
+      },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+    scope: "read",
+    handler: async (source, input) => {
+      const { symbol, date } = decodePrice(input);
+      const normalized = normalizeSymbol(symbol);
+      if (!normalized) return { problems: [`${symbol} is not a ticker`] };
+      if (date !== undefined && !DATE.test(date)) return { problems: ["date must be YYYY-MM-DD"] };
+      return source.price(normalized, date);
+    },
+  },
+  {
+    name: "get_fundamentals",
+    description:
+      "Company fundamentals for one ticker as a compact brief: valuation, margins, returns, balance sheet, statement history, quarters and analyst estimates. Consent-gated: when the owner has not accepted Yahoo Finance market-data use, the result carries consentRequired:true and a problem instead of data. A fund or an unknown symbol returns brief:null with a problem.",
+    schema: {
+      type: "object",
+      properties: {
+        symbol: symbolArgument("Ticker, for example AAPL."),
+      },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+    scope: "read",
+    handler: async (source, input) => {
+      const { symbol } = decodeFundamentals(input);
+      const normalized = normalizeSymbol(symbol);
+      if (!normalized) return { problems: [`${symbol} is not a ticker`] };
+      return source.fundamentals(normalized);
+    },
+  },
+  {
+    name: "get_sector_exposure",
+    description:
+      "Portfolio weight by sector, with funds looked through to their holdings. `coverage` says how much of the portfolio the sectors explain; a symbol the taxonomy does not know is counted as Unknown rather than dropped. Weights are fractions (0.12 means 12%).",
+    schema: noArguments,
+    scope: "read",
+    handler: async (source) => source.sectorExposure(),
+  },
+  {
+    name: "get_risk",
+    description:
+      "Historical risk of the portfolio against its default benchmark over one range: volatility, beta, alpha, max drawdown, observation days and coverage. `range` is 6M, 1Y (default) or All. A nullable metric is null when the coverage does not support it (ADR 0011), never 0.",
+    schema: {
+      type: "object",
+      properties: {
+        range: {
+          type: "string",
+          enum: ["6M", "1Y", "All"],
+          description: "Observation window; default 1Y.",
         },
-        required: ["symbol"],
-        additionalProperties: false,
       },
-      scope: "read",
-      handler: async (input) => {
-        const { symbol, date } = decodePrice(input);
-        const normalized = normalizeSymbol(symbol);
-        if (!normalized) return { problems: [`${symbol} is not a ticker`] };
-        if (date !== undefined && !DATE.test(date))
-          return { problems: ["date must be YYYY-MM-DD"] };
-        const query = date === undefined ? "" : `?date=${encodeURIComponent(date)}`;
-        const { status, body } = await read(`/api/investing/prices/${normalized}${query}`);
-        if (status === 404)
-          return {
-            symbol: normalized,
-            found: false,
-            problems: [`No stored price for ${normalized}`],
-          };
-        if (status !== 200)
-          return { symbol: normalized, found: false, problems: ["Prices could not be read right now"] };
-        return { found: true, ...objectBody(body) };
-      },
+      additionalProperties: false,
     },
-    {
-      name: "get_fundamentals",
-      description:
-        "Company fundamentals for one ticker as a compact brief: valuation, margins, returns, balance sheet, statement history, quarters and analyst estimates. Consent-gated: when the owner has not accepted Yahoo Finance market-data use, the result carries consentRequired:true and a problem instead of data. A fund or an unknown symbol returns brief:null with a problem.",
-      schema: {
-        type: "object",
-        properties: {
-          symbol: symbolArgument("Ticker, for example AAPL."),
-        },
-        required: ["symbol"],
-        additionalProperties: false,
-      },
-      scope: "read",
-      handler: async (input) => {
-        const { symbol } = decodeFundamentals(input);
-        const normalized = normalizeSymbol(symbol);
-        if (!normalized) return { problems: [`${symbol} is not a ticker`] };
-        const { status, body } = await read(`/api/investing/fundamentals/${normalized}`);
-        const payload = objectBody(body);
-        if (status === 200) return payload;
-        if (status === 428)
-          return {
-            consentRequired: true,
-            problems: ["Yahoo Finance consent required"],
-          };
-        return { ...payload, problems: payload.problems ?? ["Fundamentals are unavailable right now"] };
-      },
-    },
-    {
-      name: "get_sector_exposure",
-      description:
-        "Portfolio weight by sector, with funds looked through to their holdings. `coverage` says how much of the portfolio the sectors explain; a symbol the taxonomy does not know is counted as Unknown rather than dropped. Weights are fractions (0.12 means 12%).",
-      schema: noArguments,
-      scope: "read",
-      handler: async () => requireOk(read, "/api/investing/sectors"),
-    },
-    {
-      name: "get_risk",
-      description:
-        "Historical risk of the portfolio against its default benchmark over one range: volatility, beta, alpha, max drawdown, observation days and coverage. `range` is 6M, 1Y (default) or All. A nullable metric is null when the coverage does not support it (ADR 0011), never 0.",
-      schema: {
-        type: "object",
-        properties: {
-          range: {
-            type: "string",
-            enum: ["6M", "1Y", "All"],
-            description: "Observation window; default 1Y.",
-          },
-        },
-        additionalProperties: false,
-      },
-      scope: "read",
-      handler: async (input) => {
-        const { range } = decodeRisk(input);
-        const dashboard = await requireOk(read, "/api/investing/dashboard");
-        const risk = objectBody(dashboard.risk);
-        const byBenchmark = objectBody(risk.byBenchmark);
-        const benchmark = typeof risk.defaultBenchmark === "string" ? risk.defaultBenchmark : "";
-        const report = objectBody(objectBody(byBenchmark[benchmark])[range ?? "1Y"]);
-        const riskReport = report.risk;
-        if (!riskReport)
-          return {
-            range: range ?? "1Y",
-            benchmark: benchmark || null,
-            risk: null,
-            problems: ["Risk is unavailable for this benchmark and range"],
-          };
-        return { range: range ?? "1Y", benchmark, risk: riskReport };
-      },
-    },
-    {
-      name: "get_agent_memory",
-      description:
-        "The owner's stored investing agent memory: risk tolerance, per-symbol theses (why they own it, what would make them wrong) and goals. Read-only; there are no write tools in this seed. Without a database the result carries available:false and a problem rather than an empty memory.",
-      schema: noArguments,
-      scope: "read",
-      handler: async () => {
-        const { status, body } = await read("/api/memory");
-        if (status === 200) return { available: true, ...objectBody(body) };
+    scope: "read",
+    handler: async (source, input) => {
+      const { range } = decodeRisk(input);
+      const dashboard = await source.dashboard();
+      const risk = objectBody(dashboard.risk);
+      const byBenchmark = objectBody(risk.byBenchmark);
+      const benchmark = typeof risk.defaultBenchmark === "string" ? risk.defaultBenchmark : "";
+      const report = objectBody(objectBody(byBenchmark[benchmark])[range ?? "1Y"]);
+      const riskReport = report.risk;
+      if (!riskReport)
         return {
-          available: false,
-          riskTolerance: null,
-          theses: [],
-          goals: [],
-          problems: ["Agent memory needs a database"],
+          range: range ?? "1Y",
+          benchmark: benchmark || null,
+          risk: null,
+          problems: ["Risk is unavailable for this benchmark and range"],
         };
-      },
+      return { range: range ?? "1Y", benchmark, risk: riskReport };
     },
-  ];
+  },
+  {
+    name: "get_agent_memory",
+    description:
+      "The owner's stored investing agent memory: risk tolerance, per-symbol theses (why they own it, what would make them wrong) and goals. Read-only; there are no write tools in this seed. Without a database the result carries available:false and a problem rather than an empty memory.",
+    schema: noArguments,
+    scope: "read",
+    handler: async (source) => source.agentMemory(),
+  },
+];
+
+/** Bind the shared definitions to one surface's data source. This is the ONLY
+ *  difference between the in-app chat and `/mcp`: the definitions do not fork. */
+export function createInvestingTools(source: InvestingToolSource): AgentToolDefinition[] {
+  return INVESTING_TOOL_SPECS.map((spec) => ({
+    name: spec.name,
+    description: spec.description,
+    schema: spec.schema,
+    scope: spec.scope,
+    ...(spec.preview !== undefined ? { preview: spec.preview } : {}),
+    handler: (input) => spec.handler(source, input),
+  }));
+}
+
+/** A source over the investing app's own HTTP read routes (the MCP surface). */
+export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefinition[] {
+  const requireOk = async (path: string): Promise<Record<string, unknown>> => {
+    const { status, body } = await read(path);
+    if (status !== 200)
+      throw new InvestingReadRefused("The investing data could not be read right now");
+    return objectBody(body);
+  };
+  const source: InvestingToolSource = {
+    dashboard: () => requireOk("/api/investing/dashboard"),
+    trades: async ({ symbol, limit }) => {
+      const query = new URLSearchParams();
+      if (symbol !== undefined) query.set("symbol", symbol);
+      if (limit !== undefined) query.set("limit", String(limit));
+      return requireOk(`/api/investing/trades${query.size > 0 ? `?${query}` : ""}`);
+    },
+    price: async (symbol, date) => {
+      const query = date === undefined ? "" : `?date=${encodeURIComponent(date)}`;
+      const { status, body } = await read(`/api/investing/prices/${symbol}${query}`);
+      if (status === 404)
+        return { symbol, found: false, problems: [`No stored price for ${symbol}`] };
+      if (status !== 200)
+        return { symbol, found: false, problems: ["Prices could not be read right now"] };
+      return { found: true, ...objectBody(body) };
+    },
+    fundamentals: async (symbol) => {
+      const { status, body } = await read(`/api/investing/fundamentals/${symbol}`);
+      const payload = objectBody(body);
+      if (status === 200) return payload;
+      if (status === 428)
+        return { consentRequired: true, problems: ["Yahoo Finance consent required"] };
+      return {
+        ...payload,
+        problems: payload.problems ?? ["Fundamentals are unavailable right now"],
+      };
+    },
+    sectorExposure: () => requireOk("/api/investing/sectors"),
+    agentMemory: async () => {
+      const { status, body } = await read("/api/memory");
+      if (status === 200) return { available: true, ...objectBody(body) };
+      return {
+        available: false,
+        riskTolerance: null,
+        theses: [],
+        goals: [],
+        problems: ["Agent memory needs a database"],
+      };
+    },
+  };
+  return createInvestingTools(source);
 }

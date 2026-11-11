@@ -105,6 +105,7 @@ import {
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { trimToolHistory, type ToolLoopTurnStatus } from "./toolLoop.js";
 import { attachMcpReadRoutes } from "./tools/readRoutes.js";
 import { attachLetterRoutes } from "./letterRoutes.js";
 import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
@@ -835,8 +836,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         .catch(() => ({}));
       if (!isPortfolioAgentId(body.agentId))
         return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      /* Pair-safe trim: never hand the model a tool result whose assistant
+       * call was cut off (WS5.6). */
       const messages = Array.isArray(body.messages)
-        ? (body.messages as UIMessage[]).slice(-12)
+        ? trimToolHistory(body.messages as UIMessage[], 12)
         : [];
       const last = messages.at(-1);
       const message =
@@ -856,6 +859,29 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return c.json({ problems: ["Conversation thread id is required"] }, 400);
       const title = message.trim().replace(/\s+/g, " ").slice(0, THREAD_TITLE_LENGTH);
       try {
+        /* The hardened turn status (WS5.6): a turn that ran out of rounds
+         * without text, errored or was aborted is persisted as FAILED, never as
+         * a completed answer. */
+        let turnStatus: ToolLoopTurnStatus | null = null;
+        let streamError = false;
+        const persistFailedTurn = async (reason: string) => {
+          if (!repository || !threadId) return;
+          await repository
+            .appendMessages(threadId, host, title, [
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                parts: [
+                  {
+                    type: "text",
+                    text: "The agent could not finish this answer. Try again.",
+                  },
+                ],
+                metadata: { failed: true, reason },
+              },
+            ])
+            .catch((error: unknown) => console.error("[memory] failed turn not saved", error));
+        };
         const [agent] = await Promise.all([
           portfolioChatContext().then((context) =>
             createPortfolioChatAgent({
@@ -867,6 +893,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 ? { memory: { repository, agentId: host, threadId } }
                 : {}),
               ...(options.chatModel ? { model: options.chatModel } : {}),
+              onTurnStatus: (status) => {
+                turnStatus = status;
+              },
             }),
           ),
           repository && threadId
@@ -878,12 +907,35 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           uiMessages: attributeHistory(messages, responder, host),
           messageMetadata: () => ({ agentId: responder }),
           abortSignal: c.req.raw.signal,
-          onError: () => "The agent could not answer. Try again.",
+          onError: () => {
+            /* Remembered, not persisted here: a provider can error after
+             * producing usable text, and onEnd decides what the turn was. */
+            streamError = true;
+            return "The agent could not answer. Try again.";
+          },
           generateMessageId: () => crypto.randomUUID(),
           onEnd: async ({ responseMessage }) => {
-            if (!repository || !threadId || responseMessage.parts.length === 0) return;
+            if (!repository || !threadId) return;
+            const status = turnStatus as ToolLoopTurnStatus | null;
+            const failedTurn = status?.status === "failed" || streamError;
+            const hasText = responseMessage.parts.some((part) => part.type === "text");
+            /* A turn with no usable text is persisted as FAILED, never as an
+             * empty completed answer (WS5.6). A turn that produced text but
+             * ended on an error keeps the text and is marked failed. */
+            if (failedTurn && !hasText) {
+              await persistFailedTurn(status?.status === "failed" ? status.reason : "error");
+              return;
+            }
+            if (responseMessage.parts.length === 0) return;
             await repository
-              .appendMessages(threadId, host, title, [responseMessage])
+              .appendMessages(threadId, host, title, [
+                failedTurn
+                  ? {
+                      ...responseMessage,
+                      metadata: { ...responseMessage.metadata, failed: true },
+                    }
+                  : responseMessage,
+              ])
               .catch((error: unknown) => console.error("[memory] reply not saved", error));
           },
         });

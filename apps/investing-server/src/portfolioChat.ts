@@ -1,25 +1,28 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import {
-  isStepCount,
-  jsonSchema,
-  tool,
-  ToolLoopAgent,
-  type Agent,
-  type LanguageModel,
-  type ToolSet,
-} from "ai";
+import { isStepCount, ToolLoopAgent, type Agent, type LanguageModel, type ToolSet } from "ai";
 import {
   renderFundamentalsBrief,
   renderPortfolioBrief,
   type FundamentalsProvider,
   type InvestingDashboardData,
-  type RiskRange,
   type SectorExposure,
   type Trade,
 } from "@lavega/core";
 import { getPortfolioAgent, type PortfolioAgentId } from "./portfolioAgent.js";
 import { PORTFOLIO_CHAT_PROFILES } from "./personaProfiles.js";
-import { memoryTools, renderMemoryBrief, type ThreadMemory } from "./chatMemory.js";
+import { renderMemoryBrief, type ThreadMemory } from "./chatMemory.js";
+import { createInvestingTools } from "./tools/investingTools.js";
+import {
+  createChatInvestingSource,
+  createMemoryToolDefinitions,
+  toAiSdkTools,
+} from "./tools/chatTools.js";
+import {
+  toolLoopStepPolicy,
+  toolLoopTurnStatus,
+  TOOL_LOOP_MAX_ROUNDS,
+  type ToolLoopTurnStatus,
+} from "./toolLoop.js";
 
 export const DEFAULT_PORTFOLIO_CHAT_MODEL = "mistralai/mistral-small-2603";
 const FALLBACK_PORTFOLIO_CHAT_MODELS = ["qwen/qwen3.8-flash"];
@@ -27,8 +30,6 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1";
 const PREFETCH_HOLDINGS = 5;
 const PREFETCH_NAMED = 3;
 const PREFETCH_TIMEOUT_MS = 5_000;
-const MAX_STEPS = 5;
-const MAX_TRADES = 60;
 /* All-caps words a user types that are not tickers. */
 const NOT_TICKERS = new Set([
   "AI",
@@ -152,6 +153,8 @@ export async function createPortfolioChatAgent(input: {
   model?: LanguageModel;
   /** Owner of the thread when `agentId` was tagged into it. */
   host?: PortfolioAgentId;
+  /** Called once when the turn ends, with the hardened status (WS5.6). */
+  onTurnStatus?: (status: ToolLoopTurnStatus) => void;
 }): Promise<Agent<never, ToolSet>> {
   const { context, memory } = input;
   const symbols = prefetchSymbols(input.message, context.dashboard);
@@ -183,11 +186,18 @@ export async function createPortfolioChatAgent(input: {
       closeUnheld: held.size > 0,
     }),
   ]);
-  const noArguments = jsonSchema<Record<string, never>>({
-    type: "object",
-    properties: {},
-    additionalProperties: false,
-  });
+
+  /* ONE registry, projected twice: the chat binds the in-process source and the
+   * MCP surface binds the HTTP one (WS5.3). Memory tools are chat-only. */
+  const tools: ToolSet = toAiSdkTools([
+    ...createInvestingTools(createChatInvestingSource(context, memory)),
+    ...(memory ? createMemoryToolDefinitions(memory, held) : []),
+  ]);
+
+  /* Loop accounting for the turn status (WS5.6): rounds run, and whether the
+   * provider failed. `onEnd` may not fire when the provider throws. */
+  let rounds = 0;
+  let failed = false;
   return new ToolLoopAgent<never, ToolSet>({
     model: input.model ?? resolvePortfolioChatModel(),
     instructions: [
@@ -196,116 +206,30 @@ export async function createPortfolioChatAgent(input: {
       `Portfolio brief:\n${renderPortfolioBrief(context.dashboard, context.sectors)}`,
       sections.length > 0 ? `Company fundamentals:\n\n${sections.join("\n\n")}` : "",
       summary ? renderMemoryBrief(summary, named) : "",
+      `You have at most ${TOOL_LOOP_MAX_ROUNDS} rounds in this turn. The last round must answer the owner in text without calling a tool.`,
     ]
       .filter(Boolean)
       .join("\n\n"),
-    stopWhen: isStepCount(MAX_STEPS),
-    tools: {
-      ...(memory ? memoryTools(memory, held) : {}),
-      get_positions: tool({
-        description:
-          "Every holding with weight, market value, cost basis, returns and first buy date. Weights and returns are fractions.",
-        inputSchema: noArguments,
-        execute: async () =>
-          context.dashboard.positions.map((position) => ({
-            symbol: position.symbol,
-            name: position.description ?? null,
-            quantity: position.quantity,
-            currency: position.currency,
-            marketValue: position.marketValue,
-            weight: position.portfolioWeight,
-            priceStatus: position.priceStatus,
-            costBasis: position.returns.remainingCostBasis,
-            unrealizedGain: position.returns.unrealizedGain,
-            realizedGain: position.returns.realizedGain,
-            dividendsReceived: position.returns.dividendsReceived,
-            totalReturn: position.returns.totalReturn,
-            totalReturnPercentage: position.returns.totalReturnPercentage,
-            firstBuyDate: position.returns.firstBuyDate,
-          })),
-      }),
-      get_price: tool({
-        description: "Closing price for a symbol, the latest or the last one on or before a date.",
-        inputSchema: jsonSchema<{ symbol: string; date?: string }>({
-          type: "object",
-          properties: {
-            symbol: { type: "string" },
-            date: { type: "string", description: "YYYY-MM-DD" },
-          },
-          required: ["symbol"],
-          additionalProperties: false,
+    stopWhen: isStepCount(TOOL_LOOP_MAX_ROUNDS),
+    /* Round 8 is forced text: an empty tool set AND toolChoice none, so a
+     * provider that cached a tool cannot still emit a call (WS5.6). */
+    prepareStep: ({ stepNumber }) => {
+      const policy = toolLoopStepPolicy(stepNumber);
+      if (policy.activeTools === null) return {};
+      return { toolChoice: policy.toolChoice, activeTools: policy.activeTools as never };
+    },
+    tools,
+    onStepEnd: () => {
+      rounds += 1;
+    },
+    onEnd: (event) => {
+      input.onTurnStatus?.(
+        toolLoopTurnStatus({
+          rounds,
+          hasText: typeof event.text === "string" && event.text.trim().length > 0,
+          ...(failed ? { error: true } : {}),
         }),
-        execute: async ({ symbol, date }) => context.price(symbol.trim().toUpperCase(), date),
-      }),
-      compute_portfolio_value: tool({
-        description: `Latest total portfolio value in ${context.dashboard.presentationCurrency} with its date.`,
-        inputSchema: noArguments,
-        execute: async () => {
-          const latest = context.dashboard.portfolio.All.at(-1);
-          return latest
-            ? {
-                date: latest.date,
-                value: latest.value,
-                currency: context.dashboard.presentationCurrency,
-              }
-            : null;
-        },
-      }),
-      get_fundamentals: tool({
-        description:
-          "Company financials for any symbol: valuation, margins, returns, balance sheet, up to 5 years of statements, recent quarters and analyst estimates.",
-        inputSchema: jsonSchema<{ symbol: string }>({
-          type: "object",
-          properties: { symbol: { type: "string" } },
-          required: ["symbol"],
-          additionalProperties: false,
-        }),
-        execute: async ({ symbol }) => fundamentalsSection(context.fundamentals, symbol.trim()),
-      }),
-      get_sector_exposure: tool({
-        description: "Portfolio weight by sector, with funds looked through to their holdings.",
-        inputSchema: noArguments,
-        execute: async () => context.sectors ?? "Sector exposure is unavailable.",
-      }),
-      get_risk: tool({
-        description:
-          "Historical risk of the portfolio against its benchmark: volatility, drawdown, beta and coverage.",
-        inputSchema: jsonSchema<{ range?: RiskRange }>({
-          type: "object",
-          properties: { range: { type: "string", enum: ["6M", "1Y", "All"] } },
-          additionalProperties: false,
-        }),
-        execute: async ({ range }) => {
-          /* Risk is a projection of the dashboard read (#216), read here for
-           * the default benchmark — the same report the summary endpoint uses. */
-          const defaultBenchmark = context.dashboard.risk.defaultBenchmark ?? "";
-          return context.dashboard.risk.byBenchmark[defaultBenchmark]?.[range ?? "1Y"]?.risk;
-        },
-      }),
-      get_trades: tool({
-        description: `The owner's trades, newest first, at most ${MAX_TRADES}, optionally for one symbol.`,
-        inputSchema: jsonSchema<{ symbol?: string }>({
-          type: "object",
-          properties: { symbol: { type: "string" } },
-          additionalProperties: false,
-        }),
-        execute: async ({ symbol }) =>
-          context
-            .trades()
-            .filter(
-              (trade) => !symbol || trade.symbol.toUpperCase() === symbol.trim().toUpperCase(),
-            )
-            .sort((left, right) => right.date.localeCompare(left.date))
-            .slice(0, MAX_TRADES)
-            .map(({ date, symbol, side, quantity, price, currency }) => ({
-              date,
-              symbol,
-              side,
-              quantity,
-              price,
-              currency,
-            })),
-      }),
+      );
     },
   });
 }

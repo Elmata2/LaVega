@@ -185,3 +185,32 @@ export function capAgentToolResult(
     rowBudget = Math.max(1, Math.floor(rowBudget / 2));
   }
 }
+
+/** A safe tool error: result data the model can act on, never an exception,
+ *  SQL, path or stack across the boundary (plan §3 WS5.6, #299). */
+export type SafeAgentToolError = { readonly error: string; readonly hint: string };
+
+/**
+ * Map any thrown tool error to the safe `{error, hint}` pair both surfaces use.
+ *
+ * `SchemaError` means the arguments did not match `tools/list`; everything else
+ * is a tool failure the caller may retry once. The hint names the retry rule so
+ * an external agent does not loop on the same call (WS5.6).
+ */
+export function safeAgentToolError(error: unknown): SafeAgentToolError {
+  const schemaError =
+    !!error &&
+    typeof error === "object" &&
+    ((error as { _tag?: unknown })._tag === "SchemaError" ||
+      (error as { name?: unknown }).name === "SchemaError" ||
+      (error as { name?: unknown }).name === "ParseError");
+  return schemaError
+    ? {
+        error: "invalid_arguments",
+        hint: "Check the argument names and types against tools/list, then retry once.",
+      }
+    : {
+        error: "tool_failed",
+        hint: "The tool could not answer. Retry once; do not keep retrying the same call.",
+      };
+}
