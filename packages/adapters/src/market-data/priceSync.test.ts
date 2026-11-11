@@ -2,7 +2,14 @@ import { expect, test, vi } from "vitest";
 import { blockedYahooFixture } from "./yahoo/__fixtures__/blocked.js";
 import { rateLimitedYahooFixture } from "./yahoo/__fixtures__/rate-limited.js";
 import { createYahooPriceProvider } from "./yahoo/priceProvider.js";
-import { createInMemoryPriceStore } from "../prices/inMemoryPriceStore.js";
+import { priceInstrumentKey } from "@lavega/core";
+import { createInMemorySharedPriceStore } from "../prices/sharedPriceStoreCore.js";
+import type {
+  PriceCoverage,
+  PriceKey,
+  SharedPriceBar,
+  SharedPriceStore,
+} from "../prices/PriceStore.js";
 import { syncPrices } from "./priceSync.js";
 import { YahooHttpClient } from "./yahoo/http.js";
 import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
@@ -19,6 +26,90 @@ function lane(provider: ReturnType<typeof createYahooPriceProvider>) {
   return [provider];
 }
 
+/** The shared series key for a symbol as a caller with no ISIN computes it. */
+const symKey = (symbol: string, currency = "EUR"): string => priceInstrumentKey({ symbol, currency });
+
+const withoutSymbol = (bars: readonly (SharedPriceBar & { symbol?: string })[]): SharedPriceBar[] =>
+  bars.map(({ symbol: _symbol, ...bar }) => bar);
+
+/** Test-side translation from the old per-tenant calls to the shared keys:
+ *  production callers build the same `sym:`/`isin:` key from the instrument
+ *  (issue #307), so these helpers only spell that boundary once. */
+function legacy(store: SharedPriceStore) {
+  return {
+    async upsert(_tenant: string, bars: readonly (SharedPriceBar & { symbol?: string })[]): Promise<void> {
+      const groups = new Map<string, SharedPriceBar[]>();
+      for (const bar of bars) {
+        const key = symKey(bar.symbol ?? "", bar.currency);
+        groups.set(key, [...(groups.get(key) ?? []), ...withoutSymbol([bar])]);
+      }
+      await Promise.all([...groups].map(([key, rows]) => store.upsert(key, rows)));
+    },
+    getRange(tenant: string, symbol: string, from?: string, to?: string) {
+      void tenant;
+      return store.getRange({ key: symKey(symbol) }, from, to);
+    },
+    lastDate(tenant: string, symbol: string) {
+      void tenant;
+      return store.lastDate({ key: symKey(symbol) });
+    },
+    async getCoverage(tenant: string, symbol: string, currency = "EUR") {
+      void tenant;
+      const coverage = await store.getCoverage({ key: symKey(symbol, currency) });
+      return coverage === null ? null : { ...coverage, symbol };
+    },
+    putCoverage(_tenant: string, coverage: PriceCoverage) {
+      const { symbol, ...rest } = coverage;
+      return store.putCoverage(symKey(symbol, coverage.currency), {
+        ...rest,
+        provider: coverage.provider ?? "unknown",
+      });
+    },
+    replaceRange(
+      tenant: string,
+      symbol: string,
+      bars: readonly (SharedPriceBar & { symbol?: string })[],
+      from?: string,
+      to?: string,
+    ) {
+      void tenant;
+      return store.replaceRange(symKey(symbol), withoutSymbol(bars), from, to);
+    },
+  };
+}
+
+/**
+ * The run id the per-key claim is held under; one per sync call is what a slice
+ * does.
+ */
+/** Coverage after a sync whose request carried an ISIN lives under the ISIN key:
+ *  that is the series identity (issue #307). */
+const coverageFor = (
+  store: SharedPriceStore,
+  input: { symbol: string; isin?: string; currency: string },
+) =>
+  store.getCoverage({
+    key: priceInstrumentKey(input),
+    alias: priceInstrumentKey({ symbol: input.symbol, currency: input.currency }),
+  });
+
+const RUN = "test-run";
+
+/** `syncPrices` with the key computed the one way production computes it. */
+function syncWith(
+  input: Omit<Parameters<typeof syncPrices>[0], "key" | "owner" | "alias"> & {
+    /** Leftover from the per-tenant contract; ignored by the shared store. */
+    tenantId?: string;
+  },
+) {
+  const key = priceInstrumentKey(input.request);
+  const alias = key.startsWith("isin:")
+    ? priceInstrumentKey({ symbol: input.request.symbol, currency: input.request.currency })
+    : undefined;
+  return syncPrices({ ...input, key, ...(alias ? { alias } : {}), owner: RUN });
+}
+
+
 test("calls Yahoo directly without a consent gate", async () => {
   const fetchJsonWithCrumb = vi.fn(async () => ({ chart: { result: [] } }));
   const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
@@ -29,14 +120,13 @@ test("calls Yahoo directly without a consent gate", async () => {
 test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked price request"])(
   "preserves provider problem %s through sync",
   async (problem) => {
-    const store = createInMemoryPriceStore();
+    const store = createInMemorySharedPriceStore();
     const priceProviders = [
       { sourceKey: "yahoo", priority: 10, get: async () => ({ bars: [], problems: [problem] }) },
     ];
     await expect(
-      syncPrices({
+      syncWith({
         store,
-        tenantId: "local",
         priceProviders,
         request: {
           symbol: "ASML",
@@ -75,8 +165,8 @@ test("a cache hit costs one store read, not two", async () => {
   /* Every warm symbol pays this round trip. In production the store is Neon,
    * where a re-read of the range just read costs about as much as the symbol
    * it serves, which is what caps warm-cache sync throughput. */
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", [
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-03", close: 10, currency: "EUR", split: 1 },
   ]);
   const getRange = vi.fn(store.getRange);
@@ -90,9 +180,8 @@ test("a cache hit costs one store read, not two", async () => {
     },
   ];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store: { ...store, getRange },
-    tenantId: "local",
     priceProviders,
     request: { ...request, today: "2026-01-03" },
   });
@@ -113,21 +202,19 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
       };
     }),
   } as never;
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const provider = createYahooPriceProvider({ client });
   const r = lane(provider);
   await expect(
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: r,
       request: { ...request, today: "2026-01-01" },
     }),
   ).resolves.toMatchObject({ problems: [], fetched: true });
   await expect(
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: r,
       request: { ...request, today: "2026-01-02" },
     }),
@@ -136,22 +223,25 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
   expect(urls[1]).toContain("period1=1767312000");
 });
 
-test("writes bars under the tenant the sync was asked for, not one a provider names", async () => {
+test("writes one shared series under the instrument key, not one per caller", async () => {
   const client = {
     fetchJsonWithCrumb: vi.fn(async () => ({
       chart: { result: [{ timestamp: [1767225600], indicators: { quote: [{ close: [100] }] } }] },
     })),
   } as never;
-  const store = createInMemoryPriceStore();
-  await syncPrices({
+  const store = createInMemorySharedPriceStore();
+  const priceProviders = lane(createYahooPriceProvider({ client }));
+  await syncWith({ store, priceProviders, request: { ...request, today: "2026-01-01" } });
+  // A second caller of the same instrument gets the stored series for free.
+  const second = await syncWith({
     store,
-    tenantId: "user-b",
     priceProviders: lane(createYahooPriceProvider({ client })),
-    request: { ...request, today: "2026-01-02" },
+    request: { ...request, today: "2026-01-01" },
   });
 
-  await expect(store.getRange("user-b", "ASML")).resolves.toHaveLength(1);
-  await expect(store.getRange("local", "ASML")).resolves.toEqual([]);
+  expect(second).toMatchObject({ fetched: false, problems: [] });
+  await expect(store.getRange({ key: symKey("ASML") })).resolves.toHaveLength(1);
+  await expect(store.getRange({ key: symKey("MSFT") })).resolves.toEqual([]);
 });
 
 test("labels a London pence quote GBX so it cannot be read as pounds", async () => {
@@ -171,9 +261,9 @@ test("labels a London pence quote GBX so it cannot be read as pounds", async () 
   expect(result?.bars.map((bar) => bar.currency)).toEqual(["GBX"]);
 });
 
-test("a provider now quoting pence refreshes history cached in pounds", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", [
+test("a currency change is a new series key and does not misread the old pounds", async () => {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", [
     { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBP", split: 1 },
     { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBP", split: 1 },
   ]);
@@ -192,29 +282,29 @@ test("a provider now quoting pence refreshes history cached in pounds", async ()
     },
   ];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     request: { ...request, symbol: "HLMAl_EQ", currency: "GBX", today: "2026-01-03" },
   });
 
-  expect(priceProviders[0]!.get).toHaveBeenCalledWith(
-    expect.objectContaining({ from: "2026-01-01", to: "2026-01-03" }),
-  );
+  /* `GBP` and `GBX` are different series keys (issue #307), so the pence series
+   * starts empty and the old pounds history is neither read nor rewritten. */
+  expect(priceProviders[0]!.get.mock.calls[0]?.[0]).toMatchObject({ to: "2026-01-03" });
+  expect(priceProviders[0]!.get.mock.calls[0]?.[0]?.from).toBeUndefined();
   expect(result.bars.map((bar) => bar.currency)).toEqual(["GBX", "GBX", "GBX"]);
+  await expect(store.getRange({ key: symKey("HLMAl_EQ", "GBP") })).resolves.toHaveLength(2);
 });
 
 test("fills history before the first cached bar once older trades arrive", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", [
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-20", close: 100, currency: "EUR", split: 1 },
   ]);
   const get = vi.fn(async () => ({ bars: [], problems: [] }));
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
     request: { ...request, backfillFrom: "2026-01-01", today: "2026-01-20" },
   });
@@ -223,16 +313,15 @@ test("fills history before the first cached bar once older trades arrive", async
 });
 
 test("refetches bars stored before splits were recorded", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", [
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" },
     { symbol: "ASML", date: "2026-01-02", close: 101, currency: "EUR", split: 1 },
   ]);
   const get = vi.fn(async () => ({ bars: [], problems: [] }));
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
     request,
   });
@@ -241,8 +330,8 @@ test("refetches bars stored before splits were recorded", async () => {
 });
 
 test("a new split refetches the older bars so every close is in today's units", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", [
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-01", close: 400, currency: "EUR", split: 1 },
     { symbol: "ASML", date: "2026-01-02", close: 404, currency: "EUR", split: 1 },
   ]);
@@ -255,9 +344,8 @@ test("a new split refetches the older bars so every close is in today's units", 
     problems: [],
   }));
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "yahoo", priority: 10, get }],
     request,
   });
@@ -300,14 +388,13 @@ const asBars = (sessions: readonly Quote[]) =>
   sessions.map((bar) => ({ symbol: "ASML", currency: "EUR", split: 1, ...bar }));
 
 test("seeded January to September, a June backfill asks only for the missing prefix", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const history = weekdays("2024-06-03", "2025-09-30");
-  await store.upsert("local", asBars(history.filter((bar) => bar.date >= "2025-01-02")));
+  await legacy(store).upsert("local", asBars(history.filter((bar) => bar.date >= "2025-01-02")));
   const { get, providers } = market(history);
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: providers,
     request: { ...request, backfillFrom: "2024-06-03", today: "2025-09-30" },
   });
@@ -318,12 +405,11 @@ test("seeded January to September, a June backfill asks only for the missing pre
 });
 
 test("the same request twice over complete coverage fetches history once", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const { get, providers } = market(weekdays("2025-06-02", "2025-09-30"));
   const sync = () =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: providers,
       request: { ...request, backfillFrom: "2025-06-01", today: "2025-09-30" },
     });
@@ -337,12 +423,11 @@ test("the same request twice over complete coverage fetches history once", async
 });
 
 test("a listing quoted in another currency than the broker's is not refetched", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const { get, providers } = market(weekdays("2025-01-01", "2025-01-10"));
   const sync = (today: string) =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: providers,
       request: { ...request, currency: "USD", backfillFrom: "2025-01-01", today },
     });
@@ -354,7 +439,7 @@ test("a listing quoted in another currency than the broker's is not refetched", 
     ["2025-01-01", "2025-01-08"],
     ["2025-01-09", "2025-01-10"],
   ]);
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "ASML", "USD")).resolves.toMatchObject({
     symbol: "ASML",
     from: "2025-01-01",
     to: "2025-01-10",
@@ -366,7 +451,7 @@ test("a listing quoted in another currency than the broker's is not refetched", 
 });
 
 test("a provider that now quotes another listing refreshes the whole history", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const sessions = weekdays("2025-01-01", "2025-01-10");
   const amsterdam = market(sessions);
   const nasdaq = market(
@@ -374,9 +459,8 @@ test("a provider that now quotes another listing refreshes the whole history", a
     { listing: "ASML", currency: "USD" },
   );
   const sync = (priceProviders: typeof amsterdam.providers, today: string) =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders,
       request: { ...request, backfillFrom: "2025-01-01", today },
     });
@@ -391,7 +475,7 @@ test("a provider that now quotes another listing refreshes the whole history", a
   expect(new Set(result.bars.map((bar) => `${bar.currency} ${bar.close}`))).toEqual(
     new Set(["USD 110"]),
   );
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
     from: "2025-01-01",
     to: "2025-01-10",
     listing: "ASML",
@@ -400,13 +484,12 @@ test("a provider that now quotes another listing refreshes the whole history", a
 });
 
 test("an empty holiday prefix is asked for once, not on every sync", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars([{ date: "2025-01-02", close: 100 }]));
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars([{ date: "2025-01-02", close: 100 }]));
   const { get, providers } = market([{ date: "2025-01-02", close: 100 }]);
   const sync = () =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: providers,
       request: { ...request, backfillFrom: "2025-01-01", today: "2025-01-02" },
     });
@@ -418,7 +501,7 @@ test("an empty holiday prefix is asked for once, not on every sync", async () =>
 });
 
 test("a failed prefix keeps the cache and still stores the new suffix", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const coverage = {
     symbol: "ASML",
     from: "2025-01-06",
@@ -426,17 +509,16 @@ test("a failed prefix keeps the cache and still stores the new suffix", async ()
     listing: "ASML.AS",
     currency: "EUR",
   };
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-10")));
-  await store.putCoverage("local", coverage);
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-10")));
+  await legacy(store).putCoverage("local", coverage);
   const get = vi.fn(async ({ from, to }: { from?: string; to?: string }) =>
     from === "2025-01-01"
       ? { bars: [], problems: ["Yahoo Finance rate-limited price request"] }
       : { bars: asBars(weekdays(from!, to!)), problems: [], listing: "ASML.AS" },
   );
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "stub", priority: 10, get }],
     request: { ...request, backfillFrom: "2025-01-01", today: "2025-01-14" },
   });
@@ -445,7 +527,7 @@ test("a failed prefix keeps the cache and still stores the new suffix", async ()
   expect(result.bars.map((bar) => bar.date)).toEqual(
     weekdays("2025-01-06", "2025-01-14").map((bar) => bar.date),
   );
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
     ...coverage,
     to: "2025-01-14",
     provider: "stub",
@@ -453,7 +535,7 @@ test("a failed prefix keeps the cache and still stores the new suffix", async ()
 });
 
 test("a failed refresh leaves the cached history and its coverage as they were", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const coverage = {
     symbol: "ASML",
     from: "2025-01-06",
@@ -462,8 +544,8 @@ test("a failed refresh leaves the cached history and its coverage as they were",
     currency: "EUR",
   };
   const cached = asBars(weekdays("2025-01-06", "2025-01-07"));
-  await store.upsert("local", cached);
-  await store.putCoverage("local", coverage);
+  await legacy(store).upsert("local", cached);
+  await legacy(store).putCoverage("local", coverage);
   const get = vi.fn(async ({ from }: { from?: string }) =>
     from === "2025-01-08"
       ? {
@@ -474,19 +556,21 @@ test("a failed refresh leaves the cached history and its coverage as they were",
       : { bars: [], problems: ["Yahoo Finance blocked price request"] },
   );
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "stub", priority: 10, get }],
     request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-08" },
   });
 
   expect(result).toMatchObject({ bars: cached, problems: ["Yahoo Finance blocked price request"] });
-  await expect(store.getCoverage("local", "ASML")).resolves.toEqual(coverage);
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toEqual({
+    ...coverage,
+    provider: "unknown",
+  });
 });
 
 test("a refresh to another listing drops cached sessions that listing did not trade", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const sessions = weekdays("2025-01-15", "2025-01-24");
   const amsterdam = market(sessions);
   const nasdaq = market(
@@ -494,9 +578,8 @@ test("a refresh to another listing drops cached sessions that listing did not tr
     { listing: "ASML", currency: "USD" },
   );
   const sync = (priceProviders: typeof amsterdam.providers, today: string) =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders,
       request: { ...request, backfillFrom: "2025-01-15", today },
     });
@@ -513,20 +596,19 @@ test("a refresh to another listing drops cached sessions that listing did not tr
 });
 
 test("an empty trading-day suffix is asked for once, not on every sync", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "ASML.AS",
     currency: "EUR",
   });
-  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  await legacy(store).upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
   const { get, providers } = market([{ date: "2025-01-01", close: 100 }]);
   const sync = (today: string) =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: providers,
       request: { ...request, backfillFrom: "2025-01-01", today },
     });
@@ -535,7 +617,7 @@ test("an empty trading-day suffix is asked for once, not on every sync", async (
 
   expect(result.problems).toEqual([]);
   expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
 
   get.mockClear();
   await sync("2025-01-02");
@@ -543,20 +625,19 @@ test("an empty trading-day suffix is asked for once, not on every sync", async (
 });
 
 test("a held position's quiet day within the missed-days window is not a problem", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "ASML.AS",
     currency: "EUR",
   });
-  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  await legacy(store).upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
   const { get, providers } = market([{ date: "2025-01-01", close: 100 }]);
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: providers,
     request: {
       ...request,
@@ -568,25 +649,24 @@ test("a held position's quiet day within the missed-days window is not a problem
 
   expect(result.problems).toEqual([]);
   expect(windows(get)).toEqual([["2025-01-02", "2025-01-02"]]);
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-02" });
 });
 
 test("a held position silent for more than 5 business days reports a problem every run", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "ASML.AS",
     currency: "EUR",
   });
-  await store.upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
+  await legacy(store).upsert("local", asBars([{ date: "2025-01-01", close: 100 }]));
   const get = vi.fn(async () => ({ bars: [], problems: [], listing: "ASML.AS" }));
   const priceProviders = [{ sourceKey: "stub", priority: 10, get }];
   const sync = () =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders,
       request: {
         ...request,
@@ -599,7 +679,7 @@ test("a held position silent for more than 5 business days reports a problem eve
   const result = await sync();
 
   expect(result.problems).toEqual(["no prices since 2025-01-01"]);
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-01" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ to: "2025-01-01" });
 
   get.mockClear();
   const second = await sync();
@@ -609,7 +689,7 @@ test("a held position silent for more than 5 business days reports a problem eve
 });
 
 test("a closed position Yahoo confirms gone is marked delisted, not a problem", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const get = vi.fn(async () => ({
     bars: [],
     problems: ["No listing found on Yahoo Finance for SKX (tried 1 symbol)"],
@@ -617,9 +697,8 @@ test("a closed position Yahoo confirms gone is marked delisted, not a problem", 
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
   const sync = (today: string) =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders,
       request: {
         ...request,
@@ -633,7 +712,7 @@ test("a closed position Yahoo confirms gone is marked delisted, not a problem", 
   const result = await sync("2026-01-01");
 
   expect(result.problems).toEqual([]);
-  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
     delistedSince: "2026-01-01",
   });
 
@@ -643,7 +722,7 @@ test("a closed position Yahoo confirms gone is marked delisted, not a problem", 
 });
 
 test("a held position Yahoo confirms gone still reports a problem", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const get = vi.fn(async () => ({
     bars: [],
     problems: ["No listing found on Yahoo Finance for SBGL (tried 1 symbol)"],
@@ -651,9 +730,8 @@ test("a held position Yahoo confirms gone still reports a problem", async () => 
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     request: {
       ...request,
@@ -665,12 +743,12 @@ test("a held position Yahoo confirms gone still reports a problem", async () => 
   });
 
   expect(result.problems).toEqual(["No listing found on Yahoo Finance for SBGL (tried 1 symbol)"]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toBeNull();
+  await expect(legacy(store).getCoverage("local", "SBGL_US_EQ", "USD")).resolves.toBeNull();
 });
 
 test("a re-bought position clears its stale delistedSince once bars arrive again", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SKX_US_EQ",
     from: "2020-01-01",
     to: "2025-12-31",
@@ -678,7 +756,7 @@ test("a re-bought position clears its stale delistedSince once bars arrive again
     currency: "USD",
     delistedSince: "2026-01-01",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SKX_US_EQ", date: "2025-12-31", close: 60, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async () => ({
@@ -688,9 +766,8 @@ test("a re-bought position clears its stale delistedSince once bars arrive again
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     request: {
       ...request,
@@ -703,21 +780,21 @@ test("a re-bought position clears its stale delistedSince once bars arrive again
     },
   });
 
-  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "SKX_US_EQ", "USD")).resolves.toMatchObject({
     delistedSince: undefined,
   });
 });
 
 test("a closed position that stops resolving mid-sync is marked delisted from the suffix path", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SKX_US_EQ",
     from: "2020-01-01",
     to: "2025-12-31",
     listing: "SKX",
     currency: "USD",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SKX_US_EQ", date: "2025-12-31", close: 60, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async () => ({
@@ -727,9 +804,8 @@ test("a closed position that stops resolving mid-sync is marked delisted from th
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     request: {
       ...request,
@@ -743,21 +819,21 @@ test("a closed position that stops resolving mid-sync is marked delisted from th
   });
 
   expect(result.problems).toEqual([]);
-  await expect(store.getCoverage("local", "SKX_US_EQ")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "SKX_US_EQ", "USD")).resolves.toMatchObject({
     delistedSince: "2026-01-01",
   });
 });
 
 test("a resolved listing is fetched directly on the next sync, not re-derived", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "SBSW",
     currency: "USD",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async (_request: { listing?: string }) => ({
@@ -767,9 +843,8 @@ test("a resolved listing is fetched directly on the next sync, not re-derived", 
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     request: {
       ...request,
@@ -787,8 +862,8 @@ test("a resolved listing is fetched directly on the next sync, not re-derived", 
 });
 
 test("a stored listing that 404s triggers exactly one re-resolution once confirmed", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
@@ -796,7 +871,7 @@ test("a stored listing that 404s triggers exactly one re-resolution once confirm
     currency: "USD",
     listingMissingSince: "2025-01-01",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async ({ listing }: { listing?: string }) =>
@@ -816,9 +891,8 @@ test("a stored listing that 404s triggers exactly one re-resolution once confirm
   );
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
@@ -837,22 +911,22 @@ test("a stored listing that 404s triggers exactly one re-resolution once confirm
   expect(get.mock.calls[0]?.[0]).toMatchObject({ listing: "OLDSYM" });
   expect(get.mock.calls[1]?.[0]?.listing).toBeUndefined();
   expect(result.problems).toEqual([]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "NEWSYM",
     listingMissingSince: undefined,
   });
 });
 
 test("a single 404 on a locked listing is not enough to re-resolve", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "OLDSYM",
     currency: "USD",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async (_request: { listing?: string }) => ({
@@ -862,9 +936,8 @@ test("a single 404 on a locked listing is not enough to re-resolve", async () =>
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T00:00:00.000Z"),
     request: {
@@ -884,15 +957,15 @@ test("a single 404 on a locked listing is not enough to re-resolve", async () =>
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-02T00:00:00.000Z",
   });
 });
 
 test("a second 404 one minute after the first is still unconfirmed", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
@@ -900,7 +973,7 @@ test("a second 404 one minute after the first is still unconfirmed", async () =>
     currency: "USD",
     listingMissingSince: "2025-01-02T00:00:00.000Z",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async (_request: { listing?: string }) => ({
@@ -910,9 +983,8 @@ test("a second 404 one minute after the first is still unconfirmed", async () =>
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T00:01:00.000Z"),
     request: {
@@ -931,15 +1003,15 @@ test("a second 404 one minute after the first is still unconfirmed", async () =>
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-02T00:00:00.000Z",
   });
 });
 
 test("a second 404 confirmed 25 hours after the first triggers exactly one re-resolution", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
@@ -947,7 +1019,7 @@ test("a second 404 confirmed 25 hours after the first triggers exactly one re-re
     currency: "USD",
     listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async ({ listing }: { listing?: string }) =>
@@ -967,9 +1039,8 @@ test("a second 404 confirmed 25 hours after the first triggers exactly one re-re
   );
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T01:00:00.000Z"),
     request: {
@@ -986,15 +1057,15 @@ test("a second 404 confirmed 25 hours after the first triggers exactly one re-re
 
   expect(get).toHaveBeenCalledTimes(2);
   expect(result.problems).toEqual([]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "NEWSYM",
     listingMissingSince: undefined,
   });
 });
 
 test("a resolved listing confirmed dead twice reports the problem without a second re-resolution", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
@@ -1002,7 +1073,7 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
     currency: "USD",
     listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async () => ({
@@ -1012,9 +1083,8 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
   }));
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
@@ -1033,14 +1103,14 @@ test("a resolved listing confirmed dead twice reports the problem without a seco
   expect(result.problems).toEqual([
     "No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)",
   ]);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "OLDSYM",
     listingMissingSince: "2025-01-01T00:00:00.000Z",
   });
 });
 
 test("a resolved symbol's first sync still applies currency preference", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const fetchJsonWithCrumb = vi
     .fn()
     .mockResolvedValueOnce({
@@ -1064,9 +1134,8 @@ test("a resolved symbol's first sync still applies currency preference", async (
     });
   const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [provider],
     request: {
       ticker: "SBGL_US_EQ",
@@ -1079,14 +1148,14 @@ test("a resolved symbol's first sync still applies currency preference", async (
   });
 
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(4);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "SBSW",
   });
 });
 
 test("a confirmed re-resolution to a different-currency listing refreshes instead of merging", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
@@ -1094,7 +1163,7 @@ test("a confirmed re-resolution to a different-currency listing refreshes instea
     currency: "USD",
     listingMissingSince: "2025-01-01",
   });
-  await store.upsert("local", [
+  await legacy(store).upsert("local", [
     { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async ({ listing }: { listing?: string }) =>
@@ -1114,9 +1183,8 @@ test("a confirmed re-resolution to a different-currency listing refreshes instea
   );
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
@@ -1133,24 +1201,24 @@ test("a confirmed re-resolution to a different-currency listing refreshes instea
 
   expect(result.problems).toEqual([]);
   expect(result.bars.every((bar) => bar.currency === "EUR")).toBe(true);
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "NEWSYM",
     currency: "EUR",
   });
 });
 
 test("re-resolution prefers the currency already on record over the broker's stated one", async () => {
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).putCoverage("local", {
     symbol: "SBGL_US_EQ",
     from: "2025-01-01",
     to: "2025-01-01",
     listing: "OLDSYM",
-    currency: "GBP",
+    currency: "USD",
     listingMissingSince: "2025-01-01",
   });
-  await store.upsert("local", [
-    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "GBP", split: 1 },
+  await legacy(store).upsert("local", [
+    { symbol: "SBGL_US_EQ", date: "2025-01-01", close: 10, currency: "USD", split: 1 },
   ]);
   const get = vi.fn(async ({ listing, currency }: { listing?: string; currency?: string }) => {
     if (listing === "OLDSYM")
@@ -1159,10 +1227,10 @@ test("re-resolution prefers the currency already on record over the broker's sta
         problems: ["No listing found on Yahoo Finance for OLDSYM (tried 1 symbol)"],
         notFound: true,
       };
-    return currency === "GBP"
+    return currency === "USD"
       ? {
           bars: [
-            { symbol: "SBGL_US_EQ", date: "2025-01-02", close: 11, currency: "GBP", split: 1 },
+            { symbol: "SBGL_US_EQ", date: "2025-01-02", close: 11, currency: "USD", split: 1 },
           ],
           problems: [],
           listing: "NEWSYM",
@@ -1175,9 +1243,8 @@ test("re-resolution prefers the currency already on record over the broker's sta
   });
   const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders,
     now: () => new Date("2025-01-02T12:00:00.000Z"),
     request: {
@@ -1193,25 +1260,24 @@ test("re-resolution prefers the currency already on record over the broker's sta
   });
 
   expect(result.problems).toEqual([]);
-  expect(get.mock.calls[1]?.[0]).toMatchObject({ currency: "GBP" });
-  await expect(store.getCoverage("local", "SBGL_US_EQ")).resolves.toMatchObject({
+  expect(get.mock.calls[1]?.[0]).toMatchObject({ currency: "USD" });
+  await expect(coverageFor(store, { symbol: "SBGL_US_EQ", isin: "US82575P1075", currency: "USD" })).resolves.toMatchObject({
     listing: "NEWSYM",
-    currency: "GBP",
+    currency: "USD",
   });
 });
 
 test("a cache written before splits were recorded refreshes once, then settles", async () => {
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const sessions = weekdays("2025-01-06", "2025-01-10");
-  await store.upsert(
+  await legacy(store).upsert(
     "local",
     sessions.map((bar) => ({ symbol: "ASML", currency: "EUR", ...bar })),
   );
   const { get, providers } = market(sessions);
   const sync = () =>
-    syncPrices({
+    syncWith({
       store,
-      tenantId: "local",
       priceProviders: providers,
       request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-10" },
     });
@@ -1225,9 +1291,9 @@ test("a cache written before splits were recorded refreshes once, then settles",
 /* WS4.5 (#297): provider affinity, listing-start clamp, provisional refetch. */
 
 test("an unavailable assigned provider is skipped, not replaced by another one", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-06",
     to: "2025-01-07",
@@ -1241,22 +1307,21 @@ test("an unavailable assigned provider is skipped, not replaced by another one",
     listing: "ASML.AS",
   }));
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "marketstack", priority: 20, get: marketstack }],
     request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-08" },
   });
 
   expect(marketstack).not.toHaveBeenCalled();
   expect(result).toMatchObject({ fetched: false, problems: [expect.stringContaining("skipped")] });
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({ provider: "yahoo" });
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({ provider: "yahoo" });
 });
 
 test("an assigned provider that is available is the only one asked", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-06",
     to: "2025-01-07",
@@ -1271,9 +1336,8 @@ test("an assigned provider that is available is the only one asked", async () =>
   }));
   const other = vi.fn(async () => ({ bars: [], problems: ["must not be asked"] }));
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [
       { sourceKey: "yahoo", priority: 10, get: preferred },
       { sourceKey: "marketstack", priority: 20, get: other },
@@ -1286,9 +1350,9 @@ test("an assigned provider that is available is the only one asked", async () =>
 });
 
 test("a backfill is clamped to the persisted listing start", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-07")));
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-06",
     to: "2025-01-07",
@@ -1298,9 +1362,8 @@ test("a backfill is clamped to the persisted listing start", async () => {
   });
   const get = vi.fn(async () => ({ bars: [], problems: [] }));
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "stub", priority: 10, get }],
     request: { ...request, backfillFrom: "2020-01-01", today: "2025-01-07" },
   });
@@ -1310,9 +1373,9 @@ test("a backfill is clamped to the persisted listing start", async () => {
 });
 
 test("a provisional close is refetched inside its window and finalised after it", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-06",
     to: "2025-01-09",
@@ -1330,9 +1393,8 @@ test("a provisional close is refetched inside its window and finalised after it"
     provisionalThrough: "2025-01-10",
   }));
 
-  const result = await syncPrices({
+  const result = await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "stub", priority: 10, get }],
     request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-10" },
   });
@@ -1341,15 +1403,15 @@ test("a provisional close is refetched inside its window and finalised after it"
     expect.objectContaining({ from: "2025-01-09", to: "2025-01-10" }),
   );
   expect(result.bars.at(-1)).toMatchObject({ date: "2025-01-10", close: 102 });
-  await expect(store.getCoverage("local", "ASML")).resolves.toMatchObject({
+  await expect(legacy(store).getCoverage("local", "ASML")).resolves.toMatchObject({
     provisionalThrough: "2025-01-10",
   });
 });
 
 test("a provisional close older than its window is accepted as final", async () => {
-  const store = createInMemoryPriceStore();
-  await store.upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
-  await store.putCoverage("local", {
+  const store = createInMemorySharedPriceStore();
+  await legacy(store).upsert("local", asBars(weekdays("2025-01-06", "2025-01-09")));
+  await legacy(store).putCoverage("local", {
     symbol: "ASML",
     from: "2025-01-06",
     to: "2025-01-09",
@@ -1359,9 +1421,8 @@ test("a provisional close older than its window is accepted as final", async () 
   });
   const get = vi.fn(async () => ({ bars: [], problems: [] }));
 
-  await syncPrices({
+  await syncWith({
     store,
-    tenantId: "local",
     priceProviders: [{ sourceKey: "stub", priority: 10, get }],
     request: { ...request, backfillFrom: "2025-01-06", today: "2025-01-20" },
   });

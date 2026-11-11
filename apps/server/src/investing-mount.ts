@@ -29,7 +29,8 @@ import {
   runtimeAccountWrapperFile,
 } from "@lavega/investing-server/src/fileAccountWrapperStore.js";
 import {
-  createFilePriceStore,
+  clearFileSharedPriceStore,
+  createFileSharedPriceStore,
   runtimePriceStoreFile,
 } from "@lavega/investing-server/src/filePriceStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
@@ -155,11 +156,17 @@ async function getInvestingFetch(): Promise<{
    * Without one they are files, which is what local and self-hosted runs want
    * and what Vercel's /tmp cannot actually keep. */
   const database = runtimeDatabase();
+  /* Prices are public reference data, stored once per instrument for every
+   * user (issue #307): the database store is shared, and the file fallback
+   * converts an old per-tenant file once. */
+  const priceStoreFile = runtimePriceStoreFile();
   const runtimeApp = await createRuntimeApp({
     resolveTenantId: currentInvestingTenant,
     priceStore: database
-      ? createNeonPriceStore(database, currentInvestingTenant)
-      : createFilePriceStore(runtimePriceStoreFile()),
+      ? createNeonSharedPriceStore(database)
+      : createFileSharedPriceStore(priceStoreFile),
+    sharedPriceStore: Boolean(database),
+    clearPriceCache: database ? undefined : () => clearFileSharedPriceStore(priceStoreFile),
     benchmarkSelectionStore: database
       ? createNeonBenchmarkSelectionStore(database)
       : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),

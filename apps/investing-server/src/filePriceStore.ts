@@ -222,6 +222,31 @@ function convertLegacyPriceFiles(
 }
 
 /**
+ * Clears the shared file store (the local, single-installation case). The
+ * database store has no such operation: its rows are read by every user, so
+ * one account must not delete them (issue #307 acceptance 9).
+ */
+export async function clearFileSharedPriceStore(filePath: string): Promise<void> {
+  const shared = createJsonFileStore<SerializedSharedPrices>(sharedPriceFile(filePath), {
+    empty: emptySharedPrices(),
+    validate: (contents) => {
+      const parsed: unknown = JSON.parse(contents);
+      if (!parsed || typeof parsed !== "object") throw new Error("Invalid shared prices");
+      const state = parsed as Partial<SerializedSharedPrices>;
+      if (
+        state.version !== 2 ||
+        !Array.isArray(state.bars) ||
+        !state.bars.every(isSharedBarRow) ||
+        !Array.isArray(state.coverage)
+      )
+        throw new Error(`Invalid shared price file: ${sharedPriceFile(filePath)}`);
+      return state as SerializedSharedPrices;
+    },
+  });
+  await shared.update(() => emptySharedPrices());
+}
+
+/**
  * Shared PriceStore for the Docker runtime: one series per instrument, keyed by
  * `sym:`/`isin:`, in `prices.shared.json`. On first use the old per-tenant file
  * is converted once with the derivable-key rule above.

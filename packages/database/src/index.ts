@@ -253,9 +253,21 @@ export async function listBrokerSyncTenants(db: Database): Promise<string[]> {
 
 export type DashboardSnapshotRepository = {
   /** The stored dashboard for a query while it is still current, and the
-   *  source version a dashboard built now has to be stored under. */
-  get(cacheKey: string): Promise<{ version: number; dashboard: unknown | null }>;
-  put(cacheKey: string, version: number, dashboard: unknown): Promise<void>;
+   *  source version a dashboard built now has to be stored under. `priceKeys`
+   *  are the instrument keys the stored build read (issue #307), so a shared
+   *  price write can invalidate it; `updatedAt` is its build time. */
+  get(cacheKey: string): Promise<{
+    version: number;
+    dashboard: unknown | null;
+    priceKeys: string[];
+    updatedAt: string | null;
+  }>;
+  put(
+    cacheKey: string,
+    version: number,
+    dashboard: unknown,
+    priceKeys?: readonly string[],
+  ): Promise<void>;
 };
 
 /**
@@ -271,7 +283,8 @@ export function createDashboardSnapshotRepository(
     async get(cacheKey) {
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT current.version, stored.blob
+          `SELECT current.version, stored.blob, stored.price_keys,
+                  to_char(stored.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
            FROM (
              SELECT COALESCE(
                (SELECT version FROM investing.dashboard_sources
@@ -291,20 +304,25 @@ export function createDashboardSnapshotRepository(
         return {
           version: Number(row?.version ?? 0),
           dashboard: stored?.readable ? stored.value : null,
+          priceKeys: Array.isArray(row?.price_keys)
+            ? (row.price_keys as string[])
+            : [],
+          updatedAt: (row?.updated_at as string | null) ?? null,
         };
       });
     },
-    async put(cacheKey, version, dashboard) {
+    async put(cacheKey, version, dashboard, priceKeys = []) {
       const blob = encryptBlob(dashboard);
       await withTenantStatement(db, userId, async (client) => {
         await client.query(
-          `INSERT INTO investing.dashboard_snapshots (user_id, cache_key, version, as_of, blob)
-           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3)
+          `INSERT INTO investing.dashboard_snapshots
+             (user_id, cache_key, version, as_of, blob, price_keys)
+           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3, $4::text[])
            ON CONFLICT (user_id, cache_key) DO UPDATE
              SET version = EXCLUDED.version, as_of = EXCLUDED.as_of, blob = EXCLUDED.blob,
-                 updated_at = CURRENT_TIMESTAMP
+                 price_keys = EXCLUDED.price_keys, updated_at = CURRENT_TIMESTAMP
              WHERE investing.dashboard_snapshots.version <= EXCLUDED.version`,
-          [cacheKey, version, blob],
+          [cacheKey, version, blob, [...priceKeys]],
         );
       });
     },
@@ -360,205 +378,6 @@ export type { PoolClient, QueryResult };
 
 const isoDate = (value: unknown): string | null =>
   value == null ? null : value instanceof Date ? value.toISOString() : String(value);
-
-export type PriceBarRepository = {
-  /** Omitting a bound means no bound. There is no date that stands for "all time". */
-  getRange(symbol: string, from?: string, to?: string): Promise<PriceBarRow[]>;
-  getRanges(symbols: readonly string[]): Promise<PriceBarRow[]>;
-  lastDate(symbol: string): Promise<string | null>;
-  upsert(bars: readonly PriceBarRow[]): Promise<void>;
-  /** Makes `bars` the symbol's whole history from `from` to `to`: a stored bar
-   *  in that window that `bars` lacks is deleted. Omitting a bound means no bound. */
-  replaceRange(
-    symbol: string,
-    bars: readonly PriceBarRow[],
-    from?: string,
-    to?: string,
-  ): Promise<void>;
-  getCoverage(symbol: string): Promise<PriceCoverageRow | null>;
-  putCoverage(coverage: PriceCoverageRow): Promise<void>;
-  /** Clears coverage with the bars, so an emptied cache is fetched again. */
-  purgeAll(): Promise<void>;
-};
-
-/** The dates the provider answered for one symbol, and what it quoted them
- *  as. `delistedSince` and `listingMissingSince` mirror the `PriceCoverage`
- *  fields of the same name (adapters). */
-export type PriceCoverageRow = {
-  symbol: string;
-  from: string;
-  to: string;
-  listing: string | null;
-  currency: string;
-  delistedSince?: string;
-  listingMissingSince?: string;
-  /** Security-master hardening (WS4.5, #297): provider affinity, the listing
-   *  start a backfill is clamped to, and the newest provisional close. */
-  provider?: string;
-  listingStart?: string;
-  provisionalThrough?: string;
-};
-
-/** The repository is built for one tenant, so a row never names its own. */
-export type PriceBarRow = {
-  symbol: string;
-  date: string;
-  close: number;
-  currency: string;
-  split?: number;
-};
-
-const PRICE_BAR_COLUMNS = "symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency, split";
-
-// NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-function priceBarRow(row: QueryResultRow): PriceBarRow {
-  return {
-    symbol: row.symbol as string,
-    date: row.date as string,
-    close: Number(row.close),
-    currency: row.currency as string,
-    ...(row.split == null ? {} : { split: Number(row.split) }),
-  };
-}
-
-const UPSERT_PRICE_BARS =
-  "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider, split) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[], $6::numeric[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP";
-
-function priceBarParams(bars: readonly PriceBarRow[], provider: string): unknown[] {
-  return [
-    bars.map((bar) => bar.symbol),
-    bars.map((bar) => bar.date),
-    bars.map((bar) => bar.close),
-    /* Stored verbatim. `GBp` and `GBP` differ by case and by a factor
-     * of 100, so uppercasing here repriced pence as pounds; providers
-     * canonicalise on the way in instead. */
-    bars.map((bar) => bar.currency),
-    bars.map(() => provider),
-    bars.map((bar) => bar.split ?? null),
-  ];
-}
-
-/**
- * Daily bars for one user. `provider` records where a bar came from; the bar
- * itself does not carry that, so the caller names its provider once.
- */
-export function createPriceBarRepository(
-  db: Database,
-  userId: string | undefined | null,
-  provider = "yahoo",
-): PriceBarRepository {
-  const tenantId = requireUserId(userId);
-  return {
-    async getRanges(symbols) {
-      if (symbols.length === 0) return [];
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol`,
-          [[...new Set(symbols)]],
-        );
-        return result.rows.map(priceBarRow);
-      });
-    },
-    async getRange(symbol, from, to) {
-      /* Built from the bounds actually given. A caller wanting the whole history
-       * passes none: spelling it as a wide date range is how '0000-01-01' — a
-       * year Postgres does not have — got into this query. */
-      const values: unknown[] = [symbol];
-      const conditions = ["symbol = $1"];
-      if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
-      if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
-          values,
-        );
-        return result.rows.map(priceBarRow);
-      });
-    },
-    async lastDate(symbol) {
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          "SELECT to_char(max(date), 'YYYY-MM-DD') AS date FROM investing.price_bars WHERE symbol = $1",
-          [symbol],
-        );
-        return (result.rows[0]?.date as string | null) ?? null;
-      });
-    },
-    async upsert(bars) {
-      if (bars.length === 0) return;
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(UPSERT_PRICE_BARS, priceBarParams(bars, provider));
-      });
-    },
-    async replaceRange(symbol, bars, from, to) {
-      /* One statement: the delete spares the dates the insert writes, so the
-       * two never touch the same row. */
-      const values = priceBarParams(bars, provider);
-      const conditions = [`symbol = $${values.push(symbol)}`, "date <> ALL($2::date[])"];
-      if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
-      if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          `WITH stale AS (DELETE FROM investing.price_bars WHERE ${conditions.join(" AND ")}) ${UPSERT_PRICE_BARS}`,
-          values,
-        );
-      });
-    },
-    async getCoverage(symbol) {
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince", provider, to_char(listing_start, 'YYYY-MM-DD') AS "listingStart", to_char(provisional_through, 'YYYY-MM-DD') AS "provisionalThrough" FROM investing.price_coverage WHERE symbol = $1`,
-          [symbol],
-        );
-        const row = result.rows[0] as
-          | (PriceCoverageRow & {
-              delistedSince: string | null;
-              listingMissingSince: string | null;
-              provider: string | null;
-              listingStart: string | null;
-              provisionalThrough: string | null;
-            })
-          | undefined;
-        return row
-          ? {
-              ...row,
-              delistedSince: row.delistedSince ?? undefined,
-              listingMissingSince: row.listingMissingSince ?? undefined,
-              provider: row.provider ?? undefined,
-              listingStart: row.listingStart ?? undefined,
-              provisionalThrough: row.provisionalThrough ?? undefined,
-            }
-          : null;
-      });
-    },
-    async putCoverage(coverage) {
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since, provider, listing_start, provisional_through) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, provider = EXCLUDED.provider, listing_start = EXCLUDED.listing_start, provisional_through = EXCLUDED.provisional_through, updated_at = CURRENT_TIMESTAMP",
-          [
-            coverage.symbol,
-            coverage.from,
-            coverage.to,
-            coverage.listing,
-            coverage.currency,
-            coverage.delistedSince ?? null,
-            coverage.listingMissingSince ?? null,
-            coverage.provider ?? null,
-            coverage.listingStart ?? null,
-            coverage.provisionalThrough ?? null,
-          ],
-        );
-      });
-    },
-    async purgeAll() {
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          "WITH coverage AS (DELETE FROM investing.price_coverage) DELETE FROM investing.price_bars",
-        );
-      });
-    },
-  };
-}
 
 /* ---------- shared market data (issue #307) ---------- */
 

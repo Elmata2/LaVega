@@ -9,7 +9,6 @@ import {
   createN8nForwardingRepository,
   createOpaqueVaultRepository,
   createPreferencesRepository,
-  createPriceBarRepository,
   createPriceSyncStateRepository,
   createSyncStateRepository,
   decryptBlob,
@@ -104,92 +103,6 @@ const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
       !["BEGIN", "COMMIT", "ROLLBACK"].includes(call.sql) &&
       !call.sql.startsWith("SELECT set_config"),
   );
-
-test("bulk price reads use one tenant transaction and deduplicate symbols", async () => {
-  const { db, calls } = fakeDatabase([
-    { symbol: "AAPL", date: "2026-01-02", close: "120.5", currency: "USD" },
-  ]);
-  const bars = await createPriceBarRepository(db, "user-a").getRanges(["AAPL", "MSFT", "AAPL"]);
-  expect(bars).toEqual([{ symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
-  expect(calls.filter((call) => call.sql === "BEGIN")).toHaveLength(1);
-  expect(calls.find((call) => call.sql.startsWith("SELECT set_config"))?.values).toEqual([
-    "user-a",
-  ]);
-  expect(executed(calls)).toEqual([
-    {
-      sql: "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency, split FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
-      values: [["AAPL", "MSFT"]],
-    },
-  ]);
-});
-
-test("empty bulk price reads do not open a database connection", async () => {
-  const { db, calls } = fakeDatabase();
-  expect(await createPriceBarRepository(db, "user-a").getRanges([])).toEqual([]);
-  expect(calls).toEqual([]);
-});
-
-test("an unbounded price bar read asks for no date range at all", async () => {
-  /* The whole history used to be spelled '0000-01-01'..'9999-12-31'. Postgres has
-   * no year zero, so that read threw and every dashboard behind it came back
-   * empty. Omitting a bound has to mean "no bound", not a sentinel date. */
-  const { db, calls } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await repository.getRange("AAPL");
-
-  const query = executed(calls)[0];
-  expect(query?.values).toEqual(["AAPL"]);
-  expect(query?.sql).not.toMatch(/BETWEEN|\$2/);
-});
-
-test("a half-open price bar read keeps only the bound it was given", async () => {
-  const { db, calls } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await repository.getRange("AAPL", "2026-01-01");
-
-  const query = executed(calls)[0];
-  expect(query?.values).toEqual(["AAPL", "2026-01-01"]);
-  expect(query?.sql).toContain("date >= $2");
-  expect(query?.sql).not.toContain("date <= ");
-});
-
-test("price bars are read, written and purged inside the tenant transaction", async () => {
-  const { db, calls } = fakeDatabase([
-    { symbol: "AAPL", date: "2026-01-02", close: "120.50", currency: "USD" },
-  ]);
-  const repository = createPriceBarRepository(db, "user-123");
-
-  const bars = await repository.getRange("AAPL", "2026-01-01", "2026-01-31");
-
-  expect(bars).toEqual([{ symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
-  expect(calls[1]).toEqual({
-    sql: "SELECT set_config('app.user_id', $1, true)",
-    values: ["user-123"],
-  });
-  expect(executed(calls)[0]?.values).toEqual(["AAPL", "2026-01-01", "2026-01-31"]);
-});
-
-test("a price bar currency is stored exactly as the provider spelled it", async () => {
-  /* `GBp` is pence and `GBP` is pounds. Uppercasing on write turned one into the
-   * other and repriced London holdings by a factor of 100. */
-  const { db, calls } = fakeDatabase();
-
-  await createPriceBarRepository(db, "user-123").upsert([
-    { symbol: "HLMA.L", date: "2026-09-02", close: 3568, currency: "GBp" },
-  ]);
-
-  expect(executed(calls)[0]?.values?.[3]).toEqual(["GBp"]);
-});
-
-test("an empty price bar write touches the database not at all", async () => {
-  const { db, calls } = fakeDatabase();
-
-  await createPriceBarRepository(db, "user-123").upsert([]);
-
-  expect(calls).toEqual([]);
-});
 
 test("preferences keep benchmarks and consent in one row without overwriting each other", async () => {
   const { db, calls } = fakeDatabase([

@@ -25,7 +25,7 @@ import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createYahooPriceProvider,
   createFrankfurterFxProvider,
   createOpenFigiIdentifierProvider,
@@ -34,13 +34,14 @@ import {
   hasProblems,
   searchYahooBenchmarks,
   syncPrices,
-  type PriceStore,
+  type SharedPriceStore,
   type ScheduledBroker,
   type YahooPriceRequest,
 } from "@lavega/adapters";
 import {
   createInMemoryPriceSyncProgressStore,
   createPriceOrchestrator,
+  instrumentKeys,
   priceSyncDeadlineMs,
   type PriceSyncProgress,
   type PriceSyncProgressStore,
@@ -159,7 +160,15 @@ export type InvestingHealth = {
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
 type PriceDependencies = {
-  store: PriceStore;
+  /** The shared, instrument-keyed price store (issue #307). One series per
+   *  instrument for the whole installation. */
+  store: SharedPriceStore;
+  /** True when the store is the shared database one: one user must not be able
+   *  to delete prices every user reads, so the cache route answers 405. */
+  sharedPriceStore?: boolean;
+  /** Clears a local (file) shared store. Absent on the database store, where
+   *  the route answers 405 instead. */
+  clearPriceCache?: () => Promise<void>;
   provider: ReturnType<typeof createYahooPriceProvider>;
   fxProvider: ReturnType<typeof createFrankfurterFxProvider>;
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
@@ -219,7 +228,8 @@ type PriceDependencies = {
 const REQUEST_PARTNER_BUDGET_MS = 10_000;
 
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
-  const store = dependencies.store ?? createInMemoryPriceStore();
+  const store = dependencies.store ?? createInMemorySharedPriceStore();
+  const sharedPriceStore = dependencies.sharedPriceStore ?? false;
   const accountWrapperStore =
     dependencies.accountWrapperStore ?? createInMemoryAccountWrapperStore();
   /* One budget for every partner call this app makes. Hosted, it is Neon's, so
@@ -306,7 +316,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     discover: dependencies.priceSyncTargets ?? (() => []),
     benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
-    sync: async (target, tenantId, { deadline }) => {
+    sync: async (target, tenantId, { deadline, leaseId }) => {
       const priceProviders = [priceProviderFor(deadline)];
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
         today?: string;
@@ -332,7 +342,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
           identifierProblems = identifier?.value.problems ?? ["Could not resolve ISIN"];
         }
       }
-      const result = await syncPrices({ store, tenantId, priceProviders, request });
+      const result = await syncPrices({
+        store,
+        key: target.instrumentKey,
+        ...(target.instrumentAlias ? { alias: target.instrumentAlias } : {}),
+        owner: leaseId,
+        priceProviders,
+        request,
+      });
       if (result.fetched) dependencies.onPriceDataChanged?.();
       return result.problems.length === 0
         ? result
@@ -342,8 +359,38 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingApp = new Hono();
   const hasYahooConsent = async (tenantId: string) =>
     (await marketDataConsentStore.get(tenantId)).accepted;
-  const resolveSectorListingSymbol = (tenantId: string, symbol: string) =>
-    resolveSectorListing(store, tenantId, symbol);
+  /* The shared price series is keyed by instrument, not by the broker's
+   * ticker (issue #307): the position's ISIN and currency decide the key. */
+  const resolveSectorListingFor = (
+    position: { symbol: string; isin?: string; currency?: string },
+  ) => {
+    const keys = instrumentKeys({
+      symbol: position.symbol,
+      ...(position.isin ? { isin: position.isin } : {}),
+      currency: position.currency ?? "EUR",
+    });
+    return resolveSectorListing(store, { key: keys.key });
+  };
+  /* A per-symbol route has no position in hand; the sync targets are the one
+   * place that already knows this tenant's symbol-to-series mapping. A symbol
+   * with no target falls back to the `sym:` key, exactly what an ISIN-less
+   * series uses. */
+  const resolveSectorListingSymbol = async (tenantId: string, symbol: string) => {
+    try {
+      const targets = (await dependencies.priceSyncTargets?.(tenantId)) ?? [];
+      const match = targets.find(
+        (target) => target.symbol.toUpperCase() === symbol.toUpperCase(),
+      );
+      if (match)
+        return resolveSectorListing(store, {
+          key: match.instrumentKey,
+          ...(match.instrumentAlias ? { alias: match.instrumentAlias } : {}),
+        });
+    } catch {
+      // Discovery is a convenience here, never a reason for the route to fail.
+    }
+    return resolveSectorListing(store, { key: instrumentKeys({ symbol, currency: "EUR" }).key });
+  };
   const sectorRevisionStore =
     dependencies.sectorRevisionStore ?? createInMemorySectorRevisionStore();
   /* The sector read is a sibling of the dashboard read (portfolioRead.ts):
@@ -359,7 +406,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       inferenceSetting: sectorInferenceSettingStore,
       consent: marketDataConsentStore,
       revision: (tenantId) => sectorRevisionStore.get(tenantId),
-      resolveListing: resolveSectorListingSymbol,
+      resolveListing: (_tenantId, position) => resolveSectorListingFor(position),
     });
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
@@ -379,7 +426,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * path the mount forwards, because everything outside /api/ belongs to the
    * SPA there and never reaches this app. */
   const health = (c: { json: (body: unknown) => Response }) =>
-    c.json({ ok: true, service: "investing-server" });
+    c.json({ ok: true, service: "investing-server", sharedPriceStore });
   investingApp.get("/health", health);
   investingApp.get("/api/investing/health", health);
   investingApp.get("/api/investing/health/detail", async (c) => {
@@ -435,7 +482,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         store: sectorStore,
         correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
         showInferred: consented && inferenceEnabled,
-        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
+        resolveListing: (position) => resolveSectorListingFor(position),
       });
       return c.json({
         ...data.risk.byBenchmark[riskKey]?.[range],
@@ -565,7 +612,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         priced,
         exclude: excluded,
         corrections,
-        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
+        resolveListing: (position) => resolveSectorListingFor(position),
         store: sectorStore,
         classifier: dependencies.sectorClassifier,
         batchSize: SECTOR_INFERENCE_BATCH_SIZE,
@@ -839,7 +886,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.delete("/api/prices/cache", async (c) => {
-    await store.purgeAll();
+    /* Prices are public reference data now (issue #307): with a database one
+     * user must not delete what every user reads. A local file store serves one
+     * installation, so clearing it stays available there. */
+    if (sharedPriceStore)
+      return c.json(
+        { problems: ["Shared price data cannot be cleared from one account"] },
+        405,
+      );
+    if (!dependencies.clearPriceCache)
+      return c.json({ problems: ["Price cache cannot be cleared"] }, 405);
+    await dependencies.clearPriceCache();
     dependencies.onPriceDataChanged?.();
     return c.json({ deleted: true });
   });

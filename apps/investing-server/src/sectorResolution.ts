@@ -11,8 +11,9 @@ import {
 import { isPartnerBudgetStop } from "@lavega/adapters";
 import type {
   FundSectorProfile,
-  PriceStore,
+  PriceKey,
   SectorProfile,
+  SharedPriceStore,
   StockSectorProfile,
 } from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
@@ -89,7 +90,14 @@ export type SectorResolutionOptions = {
    *  pass on a read-only path too. Returns null when prices have never
    *  resolved a listing for this symbol, in which case every lookup stays
    *  keyed by the broker symbol, unchanged from before this option existed. */
-  resolveListing?: (symbol: string) => Promise<string | null>;
+  /** Resolves the listing a symbol's shared price series was stored under. It
+   *  gets the whole position because the series key includes its ISIN and
+   *  currency (issue #307), not just the broker's ticker. */
+  resolveListing?: (position: {
+    symbol: string;
+    isin?: string;
+    currency?: string;
+  }) => Promise<string | null>;
 };
 
 export type PortfolioSectors = {
@@ -113,11 +121,10 @@ export type PortfolioSectors = {
  *  never a provider call. Null when prices have never resolved a listing for
  *  this symbol. */
 export async function resolveSectorListing(
-  priceStore: PriceStore,
-  tenantId: string,
-  symbol: string,
+  priceStore: SharedPriceStore,
+  key: PriceKey,
 ): Promise<string | null> {
-  return (await priceStore.getCoverage(tenantId, symbol))?.listing ?? null;
+  return (await priceStore.getCoverage(key))?.listing ?? null;
 }
 
 /** Bounded fan-out to the sector-profile provider (a single upstream host,
@@ -223,7 +230,7 @@ function stampFetchedAt(profile: SectorProfile): SectorProfile {
 }
 
 async function resolveWeights(
-  position: { symbol: string; description?: string },
+  position: { symbol: string; description?: string; isin?: string; currency?: string },
   {
     store,
     fetchProfile,
@@ -240,7 +247,7 @@ async function resolveWeights(
    * or SPAC-era code) is looked up and cached under that listing instead of
    * itself, so it shares a cache entry with every other holding of the same
    * instrument. Unresolved, it falls back to the broker symbol as before. */
-  const lookupSymbol = (resolveListing ? await resolveListing(symbol) : null) ?? symbol;
+  const lookupSymbol = (resolveListing ? await resolveListing(position) : null) ?? symbol;
   /* Read the cache, and ask for the correction, before deciding anything —
    * store.get is a local/DB read, not a provider call, so this costs nothing
    * a read-only path couldn't already afford. The correction stays keyed by
