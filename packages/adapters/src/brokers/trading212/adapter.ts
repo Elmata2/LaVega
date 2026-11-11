@@ -106,9 +106,10 @@ const TRADE_CASH_STREAM = "trade-settlement" as const;
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
-  readonly retryAfterMs: number;
+  /** Null when the pause is not a cooldown the provider imposed. */
+  readonly retryAfterMs: number | null;
 
-  constructor(message: string, retryAfterMs: number) {
+  constructor(message: string, retryAfterMs: number | null) {
     super(message);
     this.retryAfterMs = retryAfterMs;
   }
@@ -174,10 +175,12 @@ function rateLimitWaitMs(response: Response, retry: number): number {
  *  whose they are. The scope id is a hash of the API key, never the key. */
 type Trading212Budget = { client: PartnerBudgetClient; scopeId: AccountScopeId };
 
+/** The budget store is down: no request goes out, and the next run tries again.
+ *  This is our own outage, not a broker cooldown, so the pause carries no
+ *  `retryAfter` (the scheduler would report it as a broker rate limit and let it
+ *  outrank `force`). The resume cursor is kept. */
 const BUDGET_UNAVAILABLE_MESSAGE =
-  "Trading 212 sync paused: the shared request budget is unavailable; the sync resumes on the next run";
-/** The budget store is down: no request goes out, and the next run tries again. */
-const BUDGET_UNAVAILABLE_RETRY_MS = 30_000;
+  "Trading 212 sync paused: the request budget store is unavailable";
 
 function budgetKey(budget: Trading212Budget, limit: AccountLimitName): PartnerKey {
   return partnerKey(limit, budget.scopeId);
@@ -191,7 +194,7 @@ function pauseOnBudgetError(error: unknown): never {
       Math.max(0, DateTime.toEpochMillis(error.until) - Date.now()),
     );
   if (isPartnerBudgetUnavailable(error))
-    throw new Trading212SyncPausedError(BUDGET_UNAVAILABLE_MESSAGE, BUDGET_UNAVAILABLE_RETRY_MS);
+    throw new Trading212SyncPausedError(BUDGET_UNAVAILABLE_MESSAGE, null);
   throw error;
 }
 
@@ -921,7 +924,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
         if (error instanceof Trading212CredentialsRejectedError) throw error;
-        if (error instanceof Trading212SyncPausedError)
+        if (error instanceof Trading212SyncPausedError && error.retryAfterMs !== null)
           retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
       };
       const firstHistoryUrl = () => {

@@ -9,6 +9,7 @@ import {
   createMemoryPartnerBudgetClient,
   type PartnerSeen,
 } from "../../partnerBudget/PartnerBudget.js";
+import { createMemoryBrokerSyncStateStore, syncScheduledBrokers } from "../scheduledSync.js";
 import { createTrading212Adapter } from "./adapter.js";
 import {
   ORDER_HISTORY_TABLE_MS,
@@ -233,8 +234,11 @@ test("a budget store that is down sends no request and pauses the sync", async (
       partnerBudget: createFailingPartnerBudget(new PartnerBudgetUnavailable({ message: "down" })),
     }).sync({ entity: "BV" });
     expect(provider.requests).toEqual([]);
-    expect(result.retryAfter).toBeDefined();
-    expect(result.problems.join(" ")).toContain("request budget is unavailable");
+    // Our own outage is not a broker cooldown: no retryAfter, so it cannot outrank `force`.
+    expect(result.retryAfter).toBeUndefined();
+    expect(result.problems).toContain(
+      "Trading 212 sync paused: the request budget store is unavailable",
+    );
     expect(result.sections.positions.status).not.toBe("complete");
   } finally {
     clock.restore();
@@ -309,6 +313,65 @@ test("headers with a missing or invalid part are not reported at all", async () 
     const budget = createImmediatePartnerBudget();
     await createTrading212Adapter({ ...config, partnerBudget: budget }).sync({ entity: "BV" });
     expect(budget.calls.filter((call) => call.call === "observe")).toEqual([]);
+  } finally {
+    clock.restore();
+  }
+});
+
+test("a store that goes down mid-history keeps the resume cursor, carries no retryAfter, and a forced sync is not skipped", async () => {
+  const clock = withVirtualClock();
+  const provider = fakeTrading212(150);
+  vi.stubGlobal("fetch", provider.fetch);
+  try {
+    const healthy = createMemoryPartnerBudgetClient();
+    let historyCalls = 0;
+    let down = true;
+    const flaky: typeof healthy = {
+      ...healthy,
+      awaitSlot: async (key, deadlineMs) => {
+        if (down && key.endpoint === "history-orders" && (historyCalls += 1) > 1)
+          throw new PartnerBudgetUnavailable({ message: "down" });
+        await healthy.awaitSlot(key, deadlineMs);
+      },
+    };
+    const adapter = createTrading212Adapter({ ...config, partnerBudget: flaky });
+    const first = await adapter.sync({ entity: "BV" });
+    expect(first.resume).toBeDefined();
+    expect(first.retryAfter).toBeUndefined();
+    expect(first.problems).toContain(
+      "Trading 212 sync paused: the request budget store is unavailable",
+    );
+    expect(first.sections.trades.rows.length).toBeGreaterThan(0);
+
+    // The scheduler stores no cooldown, so `force` is not blocked by one.
+    const operations = createMemoryBrokerSyncStateStore();
+    const credentials = {
+      getCredentials: async () => ({
+        broker: "trading212",
+        tenantId: "t",
+        token: "key",
+        secret: "secret",
+      }),
+      putCredentials: async () => undefined,
+    } as never;
+    const run = (force: boolean) =>
+      syncScheduledBrokers({
+        adapters: [{ broker: "trading212", adapter }],
+        credentials,
+        operations,
+        tenantId: "t",
+        entity: "BV",
+        force,
+        now: new Date(clock.now()),
+      });
+    historyCalls = 0;
+    const outage = await run(false);
+    expect(outage.outcomes[0]?.status).toBe("problem");
+    expect(outage.problems.join(" ")).not.toContain("rate-limited by the broker");
+    down = false;
+    const forced = await run(true);
+    expect(forced.outcomes[0]?.status).not.toBe("skipped");
+    expect(forced.problems.join(" ")).not.toContain("rate-limited by the broker");
   } finally {
     clock.restore();
   }
