@@ -31,7 +31,6 @@ export type InvestingToolRead = (
 const SYMBOL = /^[A-Z0-9][A-Z0-9.\-^=]{0,19}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const EmptyInput = Schema.Struct({});
 const TradesInput = Schema.Struct({
   symbol: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.Number),
@@ -66,8 +65,10 @@ const arrayBody = (body: unknown, key: string): unknown[] => {
 };
 
 /** Effect Schema is the decoder for untrusted tool input; excess properties are stripped. */
-const decode = <T>(schema: Schema.Schema<T>, input: Record<string, unknown>): T =>
-  Schema.decodeUnknownSync(schema)(input);
+const decodeTrades = Schema.decodeUnknownSync(TradesInput);
+const decodePrice = Schema.decodeUnknownSync(PriceInput);
+const decodeFundamentals = Schema.decodeUnknownSync(FundamentalsInput);
+const decodeRisk = Schema.decodeUnknownSync(RiskInput);
 
 /** A read the caller should have answered 200; anything else is a safe refusal. */
 class ReadRefused extends Error {
@@ -176,7 +177,7 @@ export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefi
       },
       scope: "read",
       handler: async (input) => {
-        const { symbol, limit } = decode(TradesInput, input);
+        const { symbol, limit } = decodeTrades(input);
         const query = new URLSearchParams();
         if (symbol !== undefined) {
           const normalized = normalizeSymbol(symbol);
@@ -202,7 +203,7 @@ export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefi
       },
       scope: "read",
       handler: async (input) => {
-        const { symbol, date } = decode(PriceInput, input);
+        const { symbol, date } = decodePrice(input);
         const normalized = normalizeSymbol(symbol);
         if (!normalized) return { problems: [`${symbol} is not a ticker`] };
         if (date !== undefined && !DATE.test(date))
@@ -234,7 +235,7 @@ export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefi
       },
       scope: "read",
       handler: async (input) => {
-        const { symbol } = decode(FundamentalsInput, input);
+        const { symbol } = decodeFundamentals(input);
         const normalized = normalizeSymbol(symbol);
         if (!normalized) return { problems: [`${symbol} is not a ticker`] };
         const { status, body } = await read(`/api/investing/fundamentals/${normalized}`);
@@ -273,7 +274,7 @@ export function createInvestingReadTools(read: InvestingToolRead): AgentToolDefi
       },
       scope: "read",
       handler: async (input) => {
-        const { range } = decode(RiskInput, input);
+        const { range } = decodeRisk(input);
         const dashboard = await requireOk(read, "/api/investing/dashboard");
         const risk = objectBody(dashboard.risk);
         const byBenchmark = objectBody(risk.byBenchmark);

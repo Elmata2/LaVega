@@ -31,6 +31,7 @@ import { authTrustedOrigins, getAuth, verifiedSession } from "./auth.js";
 import { authEmailConfig } from "./authEmail.js";
 import { createPublicAuthLimiter } from "./authLimits.js";
 import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
+import { mcpRouteDependencies, registerMcpRoutes } from "./mcp/routes.js";
 import { sameOriginGuard } from "./sameOrigin.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
@@ -266,6 +267,15 @@ for (const path of API_SURFACES) app.use(path, crossSite);
  * nothing at all, and how the investing alias came to be unguarded. */
 const sessionGuard = apiGuard();
 for (const path of API_SURFACES) app.use(path, sessionGuard);
+
+/* The external agent endpoint (#285, ADR 0012). It speaks JSON-RPC to machine
+ * clients, so it is not on `/api/*`, but it registers the SAME guard: that guard
+ * has a bearer branch for `/mcp` and does not honour the `pnpm dev` escape hatch
+ * there, because "no token" must always be 401 (ADR 0012 §2). Registered before
+ * the static catch-all so the route wins. */
+app.use("/mcp", limitBody);
+app.use("/mcp", sessionGuard);
+registerMcpRoutes(app, mcpRouteDependencies());
 
 app.get("/health", (c) => c.json({ ok: true }));
 
