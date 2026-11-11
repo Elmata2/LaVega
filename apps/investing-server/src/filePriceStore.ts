@@ -83,7 +83,7 @@ function convertLegacyPriceFiles(
   const converted = emptySharedPrices();
   for (const row of coverage) {
     if (!derivableKeySymbol(row.symbol)) continue;
-    const { tenantId: _tenantId, ...rest } = row;
+    const { tenantId: _tenantId, symbol: _symbol, ...rest } = row;
     converted.coverage.push({
       ...rest,
       instrumentKey: `sym:${row.symbol}:${row.currency}`,
