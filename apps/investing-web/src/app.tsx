@@ -1192,6 +1192,9 @@ function Overview() {
                   <AllocationDonut
                     instrument={state.data.allocation.instrument}
                     entity={state.data.allocation.entity}
+                    {...(state.data.allocation.ladder
+                      ? { ladder: state.data.allocation.ladder }
+                      : {})}
                     currency={state.data.presentationCurrency}
                   />
                 </div>

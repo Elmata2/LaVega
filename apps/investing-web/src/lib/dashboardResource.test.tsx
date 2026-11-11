@@ -443,3 +443,45 @@ test("one refresh event reloads a shared identity once and updates every subscri
     root.unmount();
   });
 });
+
+test("the cash-aware allocation ladder survives the dashboard decode", async () => {
+  const data = dashboardWithVersion(1);
+  const ladderRow = (key: string, label: string, kind: "holding" | "cash" | "unclassified") => ({
+    key,
+    label,
+    kind,
+    value: 300,
+    weight: 0.5,
+    unpriced: false,
+  });
+  data.allocation = {
+    ...data.allocation,
+    ladder: {
+      instrument: {
+        rows: [ladderRow("AAPL", "Apple", "holding"), ladderRow("cash", "Cash", "cash")],
+        cash: 300,
+        holdings: 300,
+        total: 600,
+        denominator: 600,
+        denominatorRule: "max(cash + holdings, holdings)",
+        weightsSum: 1,
+        unpriced: [],
+      },
+      entity: {
+        rows: [ladderRow("personal", "personal", "holding")],
+        cash: 300,
+        holdings: 300,
+        total: 600,
+        denominator: 600,
+        denominatorRule: "max(cash + holdings, holdings)",
+        weightsSum: 1,
+        unpriced: [],
+      },
+    },
+  };
+
+  const states = await showOnce(undefined, data);
+  const ready = states.at(-1)!;
+  expect(ready.status).toBe("ready");
+  expect(ready.status === "ready" ? ready.data.allocation.ladder?.instrument.cash : null).toBe(300);
+});

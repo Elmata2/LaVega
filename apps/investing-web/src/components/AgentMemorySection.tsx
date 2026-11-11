@@ -54,6 +54,14 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
               From previous holding
             </span>
           )}
+          {thesis.reviewRequired && (
+            <span
+              className="ml-2 rounded-chip bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning"
+              title="Another broker spelling of this instrument has a different confirmed thesis. Resolve them by editing one."
+            >
+              Needs review
+            </span>
+          )}
         </p>
         {!editing && (
           <button
