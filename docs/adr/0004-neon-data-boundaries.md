@@ -71,4 +71,4 @@ The shared store then served one release, so `0037` dropped both tables and, wit
 - Browser changes no longer need to delete personal data once a future authenticated adapter writes the encrypted vault to Neon.
 - Personal and investing access paths remain explicit and independently migratable.
 - RLS protects tenant boundaries only after trusted authentication middleware supplies verified context; this scaffold alone does not make unauthenticated routes safe.
-- The migration is rerunnable where PostgreSQL supports `IF NOT EXISTS`. It creates no destructive drops. Existing tables are not altered automatically; later shape changes need new migrations.
+- The 0001 scaffold is rerunnable where PostgreSQL supports `IF NOT EXISTS` and creates no destructive drops. A destructive change gets its own migration and statement, as `0037` did for the per-user price tables. Existing tables are not altered automatically; later shape changes need new migrations.
