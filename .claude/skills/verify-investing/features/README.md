@@ -15,7 +15,7 @@ routes are `/sign-in`, `/sign-up`, `/check-email`, `/email-confirmed`, `/forgot-
 `/reset-password`. The interface is in English.
 
 Every other route (`/`, `/positions`, `/positions/:symbol`, `/net-worth`, `/agents`,
-`/agents/:agentId`, `/profile`) sits behind `RequireAuth`. `/brokers/connect` redirects to
+`/agents/:agentId`, `/reports`, `/profile`) sits behind `RequireAuth`. `/brokers/connect` redirects to
 `/profile#brokers`. The top bar's tabs are exactly the modules the tenant's stored layout
 enables, plus the always-on Overview tab. A `Personal` link beside that nav leaves this
 app for LaVega Personal. It is not an investing route.
@@ -28,6 +28,7 @@ app for LaVega Personal. It is not an investing route.
 | Stock research                               | `/agents/research`                                                                                | [stock-research.md](stock-research.md)                 |
 | Profile (brokers, modules, widgets, data, account) | `/profile`, `/brokers/connect` (redirect)                                                    | [broker-connect-sync.md](broker-connect-sync.md)       |
 | Positions and position detail                | `/positions`, `/positions/:symbol`                                                                | [positions.md](positions.md)                           |
+| Realised gains and income report             | `/reports` (always on, not a layout module)                                                       | [realised-report.md](realised-report.md)               |
 | Net worth                                    | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
 | Prices, benchmarks and market-data consent   | `/` (Yahoo consent); chips on `/profile#status`                                                   | [prices-and-market-data.md](prices-and-market-data.md) |
 

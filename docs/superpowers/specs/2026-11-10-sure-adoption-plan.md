@@ -697,6 +697,80 @@ deliberate:
   edit surface yet, so nothing in the SPA sets one. That edit route is the remaining WS4.2
   work when the holdings/trade CRUD lands; the read side is ready for it.
 
+**As built (WS4.3/WS4.4, [#296](https://github.com/Elmata2/LaVega/issues/296), 2026-11-11).**
+Realised gains, income and the tax-treatment taxonomy landed in one slice. The
+security master (#297), contribution classification (#298) and the allocation
+ladder (WS4.6) stay out. Divergences from the plan text, each deliberate:
+
+- **The report is `packages/core/src/investing/realized.ts`, and it reuses the
+  lot book without forking it.** The disposal replay calls `costBasis.ts`'s
+  exported primitives (`createLotBook`, `addPricedUnits`, `addUnknownUnits`,
+  `applySell`, `averageCost`) and owns only the loop that records what each sale
+  relieved. A buy whose exact-date FX rate is missing becomes unknown-cost units,
+  exactly like a transfer-in, so a later disposal falls back to the broker
+  snapshot instead of inventing a basis. An `other` outflow relieves like a sale
+  but is not a disposal: an internal move has no realised gain (Sure
+  `trade.rb:209-215`).
+- **Disposal basis priority is calculated replay > broker snapshot.** When the
+  trade history answers, the running average is the basis. When it cannot (a
+  partial history, a transfer-in, a sale larger than the known pool), the latest
+  snapshot row for the same `(entity, broker, account, symbol)` dated at or
+  before the disposal supplies the unit cost: manual > broker cost > broker
+  average price, converted at the disposal's own date. A user's manual basis is a
+  current-holding assertion, so it is not applied to a historical disposal; that
+  is why the disposal path does not use the full `selectCostBasis` priority.
+- **Reconciliation compares the disposal's net proceeds to broker-reported cash
+  where the broker reports it.** `Trade.settlement` is that cash. A difference
+  beyond half a percent of proceeds is surfaced as a problem, the same tolerance
+  the Trading 212 cash proof already uses for the broker's own FX. IBKR Flex
+  carries no per-trade cash in LaVega's snapshot, so an IBKR disposal reads
+  `broker-not-reported`; that is an absence of evidence, not a failed check. A
+  missing rate reads `missing-fx` and the amount stays null, never 1:1.
+- **Income is dividends plus interest cash-flow rows.** Both buckets convert at
+  the entry's own date and group by kind + symbol + calendar month. The tie-out
+  re-aggregates the interest rows straight from the `CashFlow` array and must
+  equal the income section's interest total; there is no `COALESCE(rate, 1)`
+  fallback (Sure's `InvestmentStatement::Totals` has one; this report does not).
+  Both LaVega brokers book dividends outside the cash-flow array, so a dividend
+  row ties to its dividend record and the cash history's own proof, not to a
+  duplicate cash-flow row.
+- **The taxonomy is metadata only.** `model.ts` defines the four treatments plus
+  `unknown`, the EU/UK/US wrapper labels (ISA, LISA, SIPP, PEA, assurance-vie,
+  Pillar 3a/3b, private pension, IRA, Roth IRA, 401(k), brokerage), the
+  `(broker, account)` map and its validation. `wrapperTaxTreatment` maps a label
+  to a bucket; nothing computes a tax amount. An unlabelled account resolves to
+  `unknown`, never to `taxable`. Every report carries a fixed notice ("does not
+  file taxes and this is not tax advice") and the copy makes no tax-filing claim.
+- **The wrapper map lives in `investing.preferences`, not the broker snapshot.**
+  Migration `0028_account_wrappers.sql` adds an `account_wrappers` JSONB array
+  column to the existing per-tenant preferences row, which already has RLS keyed
+  on `app.user_id`. The plan allowed "broker snapshot or a Neon table"; the
+  snapshot is the encrypted vault, and writing a user preference there would
+  couple a label edit to an unlocked vault. A file store backs the local and
+  self-hosted run. An unknown label is dropped on read, like the layout's
+  unknown ids.
+- **The report rides the dashboard read model.** `buildInvestingDashboard`
+  builds it from the same broker snapshot, FX rates and price bars the dashboard
+  already reads, and `GET /api/investing/reports/realized` serves the section
+  rather than loading the vault a second time. The field is optional in the
+  schema so a dashboard stored before the report existed still decodes; the
+  route answers such a snapshot with an empty report and a problem line. The
+  trade-off: the dashboard payload grows with the disposal and income row count.
+- **The UI is a fixed Reports tab, not a toggleable module.** Adding a module id
+  would change every stored layout and the layout tests; reports are always
+  available, like Profile. The report page groups by treatment, lists accounts
+  with an account-type control (the only write), shows every disposal with its
+  broker-cash check and every unknown-FX row as unknown with the reason, and
+  lists income groups and the tie-out. Position detail links to it and shows the
+  selected security's disposal count and realised gain.
+- **Coverage.** `realized.test.ts` proves the reconciled disposal, the visible
+  difference, the no-cash case, digit-for-digit agreement with
+  `calculatePositionReturn`'s realised gain, the snapshot fallback for a partial
+  history, missing FX as unknown (and not the 1:1 figure), income grouping and
+  tie-out, unknown income FX, the taxonomy mapping, the unknown default and the
+  dashboard/wire integration. Server tests prove the route, the wrapper store and
+  the read wiring; the migration test proves the column.
+
 ### WS5 — Agent platform (both sides)
 
 **Goal.** One tool contract, two surfaces; read-first external access; provenance the model
