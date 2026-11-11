@@ -11,6 +11,7 @@ import type {
   TransferPair,
   Tx,
   Valuation,
+  VaultDocument,
 } from "@lavega/core";
 import {
   AdvisorProfile,
@@ -871,6 +872,159 @@ test("budget periods and category groups round-trip; fields are optional", async
   expect(await v.open(KEY, "user:a")).toBe("opened");
   expect(await v.getBudgetPeriods()).toEqual(periods);
   expect(await v.getCategoryGroups()).toEqual(groups);
+});
+
+const document = (sha256: string, overrides: Partial<VaultDocument> = {}): VaultDocument => ({
+  id: sha256,
+  sha256,
+  filename: `${sha256}.pdf`,
+  mime: "application/pdf",
+  byteSize: 8,
+  kind: "statement",
+  source: "manual-upload",
+  uploadedAt: "2026-11-11",
+  periodFrom: "2026-10-01",
+  periodTo: "2026-10-31",
+  currency: "EUR",
+  accountKey: null,
+  suggestedAccountKey: null,
+  matchConfidence: null,
+  accountLast4: null,
+  institutionHint: null,
+  accountNameHint: null,
+  openingBalanceCents: null,
+  closingBalanceCents: null,
+  reviewStatus: "unmatched",
+  metadataSources: [],
+  ...overrides,
+});
+
+const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
+const textOf = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
+
+test("document bytes live in their own store: one record per SHA-256, no vault rewrite", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-documents");
+  await s.open(KEY, "user:a");
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+
+  await s.putDocuments([document("aaa")]);
+  await s.putDocumentBytes("aaa", bytesOf("PDF-a"));
+  // The same bytes twice is ONE record.
+  await s.putDocumentBytes("aaa", bytesOf("PDF-a"));
+  expect(await s.listDocumentBytes()).toEqual(["aaa"]);
+  expect(await s.hasDocumentBytes("aaa")).toBe(true);
+  expect(textOf((await s.getDocumentBytes("aaa"))!)).toBe("PDF-a");
+
+  // The vault ciphertext is untouched by a document write: the blob before and
+  // after a document upload is the same record object (no persist ran).
+  const before = s.export();
+  await s.putDocumentBytes("bbb", bytesOf("PDF-b"));
+  expect(s.export()).toBe(before);
+
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getDocuments()).toEqual([document("aaa")]);
+  expect(await s.listDocumentBytes()).toEqual(["aaa", "bbb"]);
+  expect(textOf((await s.getDocumentBytes("bbb"))!)).toBe("PDF-b");
+
+  await s.deleteDocumentBytes("bbb");
+  expect(await s.listDocumentBytes()).toEqual(["aaa"]);
+  expect(await s.getDocumentBytes("bbb")).toBeNull();
+});
+
+test("a full bundle carries the vault AND the documents, and restores both into a fresh store", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const source = createEncryptedStorage("lavega-vault-test-bundle-source");
+  await source.open(KEY, "user:a");
+  await source.putAccounts([acc("A", 1200)]);
+  await source.putDocuments([document("sha-1"), document("sha-2")]);
+  await source.putDocumentBytes("sha-1", bytesOf("bytes-one"));
+  await source.putDocumentBytes("sha-2", bytesOf("bytes-two"));
+  const bundle = await source.exportBundle();
+  expect(bundle?.v).toBe(3);
+  expect(source.export()).toMatchObject({ v: 2 }); // the vault-only blob is unchanged
+  source.lock();
+
+  // A FRESH browser profile: a new IndexedDB factory and a different owner DB.
+  globalThis.indexedDB = new IDBFactory();
+  const fresh = createEncryptedStorage("lavega-vault-test-bundle-fresh");
+  expect(await fresh.open(KEY, "user:a")).toBe("created");
+  expect(await fresh.getDocuments()).toEqual([]);
+  expect(await fresh.restore(bundle!)).toBe(true);
+  expect((await fresh.getAccounts())[0]?.balance).toBe(1200);
+  expect((await fresh.getDocuments()).map((d) => d.id)).toEqual(["sha-1", "sha-2"]);
+  expect(textOf((await fresh.getDocumentBytes("sha-1"))!)).toBe("bytes-one");
+  expect(textOf((await fresh.getDocumentBytes("sha-2"))!)).toBe("bytes-two");
+
+  // And a wrong key still refuses the bundle, leaving the fresh vault as it was.
+  globalThis.indexedDB = new IDBFactory();
+  const other = createEncryptedStorage("lavega-vault-test-bundle-other");
+  await other.open(OTHER_KEY, "user:b");
+  expect(await other.restore(bundle!)).toBe(false);
+  expect(await other.getDocuments()).toEqual([]);
+});
+
+test("erase removes metadata AND bytes; startFresh clears both stores", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-erase");
+  await s.open(KEY, "user:a");
+  await s.putDocuments([document("sha-1"), document("sha-2")]);
+  await s.putDocumentBytes("sha-1", bytesOf("one"));
+  await s.putDocumentBytes("sha-2", bytesOf("two"));
+
+  expect(await s.eraseDocuments()).toBe(2);
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+  // The erase survives a reopen: neither store kept a row.
+  s.lock();
+  await s.open(KEY, "user:a");
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+
+  await s.putDocuments([document("sha-3")]);
+  await s.putDocumentBytes("sha-3", bytesOf("three"));
+  await s.startFresh();
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+});
+
+test("a vault-only (v2) restore clears the document store instead of orphaning bytes", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const source = createEncryptedStorage("lavega-vault-test-v2-source");
+  await source.open(KEY, "user:a");
+  await source.putAccounts([acc("A", 500)]);
+  const vaultOnly = source.export()!; // v2: no documents in this format
+  source.lock();
+
+  globalThis.indexedDB = new IDBFactory();
+  const target = createEncryptedStorage("lavega-vault-test-v2-target");
+  await target.open(KEY, "user:a");
+  await target.putDocuments([document("oud")]);
+  await target.putDocumentBytes("oud", bytesOf("old"));
+  expect(await target.restore(vaultOnly)).toBe(true);
+  expect((await target.getAccounts())[0]?.balance).toBe(500);
+  // The replaced vault's documents are gone, not pointing at nothing.
+  expect(await target.getDocuments()).toEqual([]);
+  expect(await target.listDocumentBytes()).toEqual([]);
+});
+
+test("a version-1 database upgrades in place and gains the document store", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const dbName = "lavega-vault-test-upgrade";
+  // A vault sealed with a password, written by the pre-account-key build.
+  await writePasswordVault(dbName, "geheim", { accounts: [acc("A", 10)], txs: [], rules: [] });
+  const s = createEncryptedStorage(dbName);
+  expect(await s.open(KEY, "user:a")).toBe("password-vault");
+  expect(await s.adoptPasswordVault("geheim")).toBe(true);
+  expect((await s.getAccounts())[0]?.balance).toBe(10);
+  // The upgrade created the document store beside the vault blob.
+  await s.putDocumentBytes("nieuw", bytesOf("bytes"));
+  expect(await s.hasDocumentBytes("nieuw")).toBe(true);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.hasDocumentBytes("nieuw")).toBe(true);
 });
 
 test("valuations round-trip; a legacy vault defaults to [] and a rewrite is replace-all", async () => {

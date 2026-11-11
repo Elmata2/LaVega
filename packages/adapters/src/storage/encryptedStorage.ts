@@ -42,15 +42,25 @@ import type {
   BillDecisions,
   BillOccurrence,
   Valuation,
+  VaultDocument,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
-import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
-import type { AccountCipherBlob, CipherBlob, PassphraseCipherBlob } from "../crypto/vaultCrypto.js";
+import { decryptJSON, deriveKey, openBytes, sealBytes, sealJSON } from "../crypto/vaultCrypto.js";
+import type {
+  AccountCipherBlob,
+  BundleBlob,
+  CipherBlob,
+  PassphraseCipherBlob,
+} from "../crypto/vaultCrypto.js";
 
 const DEFAULT_DB_NAME = "lavega-vault";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "vault";
 const RECORD_KEY = "blob";
+/** The document BYTES live here, sealed, never in the vault blob: a document
+ *  upload must not rewrite the whole vault ciphertext (issue #293). One record
+ *  per document, keyed by its SHA-256. */
+const DOCUMENT_STORE = "documents";
 
 /**
  * What `open` found.
@@ -134,6 +144,10 @@ type VaultData = {
    *  day, a hard reset the balance series replays from. Additive optional
    *  field; a legacy vault decrypts without it and reads []. */
   valuations?: Valuation[];
+  /** Statement metadata (WS3.5, issue #293). The BYTES are not here: they are
+   *  sealed in the separate `documents` object store under the same SHA-256.
+   *  Additive optional field; a legacy vault decrypts without it and reads []. */
+  documents?: VaultDocument[];
   learning?: LearningSection;
   events?: VaultEvent[];
 };
@@ -176,6 +190,25 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** Replace-all: a merge or delete rewrites the whole list in one save, so a
    *  valuation can never point at an account the vault no longer holds. */
   putValuations(valuations: Valuation[]): Promise<void>;
+  /** Statement metadata, one row per document (identity = SHA-256). A legacy
+   *  vault reads []. The bytes are NOT in the vault blob. */
+  getDocuments(): Promise<VaultDocument[]>;
+  putDocuments(documents: VaultDocument[]): Promise<void>;
+  /** Seal and store one document's bytes under its SHA-256. Storing the same
+   *  hash twice is one record, never two. */
+  putDocumentBytes(sha256: string, bytes: Uint8Array): Promise<void>;
+  getDocumentBytes(sha256: string): Promise<Uint8Array | null>;
+  hasDocumentBytes(sha256: string): Promise<boolean>;
+  deleteDocumentBytes(sha256: string): Promise<void>;
+  listDocumentBytes(): Promise<string[]>;
+  /** Erase every sealed byte without touching the vault. */
+  deleteAllDocumentBytes(): Promise<void>;
+  /** The full back-up bundle (v3): vault data AND sealed document bytes sealed
+   *  together under the vault key. Null before open. */
+  exportBundle(): Promise<BundleBlob | null>;
+  /** Erase all document metadata and all sealed bytes in one pass (issue #293
+   *  acceptance: erase removes BOTH). Returns how many documents were erased. */
+  eraseDocuments(): Promise<number>;
   /** The owner's merchant aliases; a legacy vault has none and reads []. */
   getMerchants(): Promise<Merchant[]>;
   putMerchants(m: Merchant[]): Promise<void>;
@@ -258,8 +291,46 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
         }
+        // Version 1 databases upgrade in place: the vault blob stays where it
+        // is and the document store is added beside it.
+        if (!db.objectStoreNames.contains(DOCUMENT_STORE)) {
+          db.createObjectStore(DOCUMENT_STORE);
+        }
       },
     });
+  }
+
+  /** One short-lived connection per document operation, the same pattern the
+   *  blob read/write helpers use. A document write never touches the vault
+   *  ciphertext, which is the whole reason the store exists. */
+  async function withDocumentStore<T>(
+    mode: "readonly" | "readwrite",
+    run: (store: {
+      put(value: unknown, key: string): Promise<unknown>;
+      get(key: string): Promise<unknown>;
+      delete(key: string): Promise<unknown>;
+      getAllKeys(): Promise<unknown[]>;
+      clear(): Promise<unknown>;
+    }) => Promise<T> | T,
+  ): Promise<T> {
+    if (ownerDb == null) throw new Error(LOCKED_ERROR);
+    const db = await openVaultDb(ownerDb);
+    try {
+      const tx = db.transaction(DOCUMENT_STORE, mode);
+      const result = await run(
+        tx.store as unknown as {
+          put(value: unknown, key: string): Promise<unknown>;
+          get(key: string): Promise<unknown>;
+          delete(key: string): Promise<unknown>;
+          getAllKeys(): Promise<unknown[]>;
+          clear(): Promise<unknown>;
+        },
+      );
+      await tx.done;
+      return result;
+    } finally {
+      db.close();
+    }
   }
 
   async function readBlobFromDisk(name: string): Promise<CipherBlob | null> {
@@ -406,7 +477,12 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     },
 
     async startFresh(): Promise<void> {
-      await enqueueWrite(() => adopt({ accounts: [], txs: [], rules: [] }));
+      await enqueueWrite(async () => {
+        // A fresh vault must not leave the previous vault's sealed documents
+        // behind: bytes nothing points at are still the owner's data.
+        await withDocumentStore("readwrite", (store) => store.clear());
+        await adopt({ accounts: [], txs: [], rules: [] });
+      });
     },
 
     lock(): void {
@@ -421,22 +497,114 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
     async restore(imported: CipherBlob, passphrase?: string): Promise<boolean> {
       if (key == null) return false;
-      let decrypted: VaultData;
+      // Verify OUTSIDE the write queue — this only reads the imported blob.
+      let vault: VaultData;
+      let documents: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
+      let carriesDocuments = false;
       try {
-        // Verify OUTSIDE the write queue — this only reads the imported blob.
-        decrypted =
-          imported.v === 2
-            ? await decryptJSON<VaultData>(key, imported)
-            : await openPasswordBlob<VaultData>(imported, passphrase ?? "");
+        if (imported.v === 3) {
+          const bundle = await decryptJSON<{
+            vault: VaultData;
+            documents: Array<{ sha256: string; blob: AccountCipherBlob }>;
+          }>(key, imported);
+          vault = bundle.vault;
+          documents = Array.isArray(bundle.documents) ? bundle.documents : [];
+          carriesDocuments = true;
+        } else if (imported.v === 2) {
+          vault = await decryptJSON<VaultData>(key, imported);
+        } else {
+          vault = await openPasswordBlob<VaultData>(imported, passphrase ?? "");
+        }
       } catch {
-        // Wrong passphrase, another account's file, malformed blob, or
+        // Wrong passphrase, another account's file, malformed bundle, or
         // sub-floor iterations: leave the current vault untouched.
         return false;
       }
       // Through the same queue as every mutator, so a put still resolving
-      // cannot land after the swap and revert disk.
-      await enqueueWrite(() => adopt(withMigrations(decrypted).vault));
+      // cannot land after the swap and revert disk. A v1/v2 file cannot carry
+      // documents, so restoring one CLEARS the document store: metadata from
+      // the replaced vault would otherwise point at bytes nothing can vouch
+      // for.
+      await enqueueWrite(async () => {
+        await withDocumentStore("readwrite", (store) => store.clear());
+        if (carriesDocuments) {
+          // The bundle carries the already-sealed bytes; restoring them writes
+          // the same ciphertext, never a re-encryption with a fresh IV.
+          await withDocumentStore("readwrite", async (store) => {
+            for (const doc of documents) await store.put(doc.blob, doc.sha256);
+          });
+        }
+        await adopt(withMigrations(vault).vault);
+      });
       return true;
+    },
+
+    async exportBundle(): Promise<BundleBlob | null> {
+      if (key == null || data == null) return null;
+      const documents = await withDocumentStore("readonly", async (store) => {
+        const keys = (await store.getAllKeys()) as string[];
+        const out: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
+        for (const sha256 of keys) {
+          const blob = (await store.get(sha256)) as AccountCipherBlob | undefined;
+          if (blob != null) out.push({ sha256, blob });
+        }
+        return out;
+      });
+      const sealed = await sealJSON(key, { vault: data, documents });
+      return { v: 3, kdf: "account-key", iv: sealed.iv, ct: sealed.ct };
+    },
+
+    async getDocuments(): Promise<VaultDocument[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.documents ?? [])];
+    },
+    putDocuments(documents: VaultDocument[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, documents: [...documents] };
+        await persist();
+      });
+    },
+    async putDocumentBytes(sha256: string, bytes: Uint8Array): Promise<void> {
+      // Sealed with the same vault key as everything else (ADR 0009): the store
+      // never holds plaintext bytes.
+      if (key == null) throw new Error(LOCKED_ERROR);
+      const blob = await sealBytes(key, bytes);
+      await withDocumentStore("readwrite", (store) => store.put(blob, sha256));
+    },
+    async getDocumentBytes(sha256: string): Promise<Uint8Array | null> {
+      if (key == null) throw new Error(LOCKED_ERROR);
+      const blob = (await withDocumentStore("readonly", (store) => store.get(sha256))) as
+        | AccountCipherBlob
+        | null
+        | undefined;
+      if (blob == null) return null;
+      return openBytes(key, blob);
+    },
+    async hasDocumentBytes(sha256: string): Promise<boolean> {
+      return (await withDocumentStore("readonly", (store) => store.get(sha256))) != null;
+    },
+    async deleteDocumentBytes(sha256: string): Promise<void> {
+      await withDocumentStore("readwrite", (store) => store.delete(sha256));
+    },
+    listDocumentBytes(): Promise<string[]> {
+      return withDocumentStore("readonly", async (store) => {
+        const keys = (await store.getAllKeys()) as string[];
+        return keys.sort();
+      });
+    },
+    async deleteAllDocumentBytes(): Promise<void> {
+      await withDocumentStore("readwrite", (store) => store.clear());
+    },
+    async eraseDocuments(): Promise<number> {
+      const documents = await this.getDocuments();
+      await withDocumentStore("readwrite", (store) => store.clear());
+      await enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, documents: [] };
+        await persist();
+      });
+      return documents.length;
     },
 
     async getAccounts(): Promise<Account[]> {
