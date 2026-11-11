@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Bill, BillOccurrence } from "@lavega/core";
-import { billOccurrenceId, billsOutlook, generateBillOccurrences } from "@lavega/core";
+import { billOccurrenceId, generateBillOccurrences, paycheckOverview } from "@lavega/core";
 import { billsCopy } from "./copy/bills.js";
 import {
   cadenceText,
@@ -245,8 +245,17 @@ describe("series and history", () => {
 
   test("the outlook numbers the screen shows come from core, not the view", () => {
     const generated = generateBillOccurrences([bill()], [], AS_OF).occurrences;
-    const outlook = billsOutlook([bill()], generated, AS_OF, 50_000);
-    expect(outlook.overdueCents).toBe(100_000);
-    expect(outlook.shortfallCents).toBeNull(); // no income series
+    const overview = paycheckOverview({
+      bills: [bill()],
+      occurrences: generated,
+      asOf: AS_OF,
+      cashCents: 50_000,
+    });
+    // EUR 1.000 rent on 1 Nov is already overdue and three more rows are due
+    // inside the 90-day horizon; no declared income means no invented payday
+    // and no shortfall number (ADR 0011 §8).
+    expect(overview.preview.dueBeforePaydayCents).toBe(400_000);
+    expect(overview.preview.shortfallCents).toBeNull();
+    expect(overview.preview.hasIncome).toBe(false);
   });
 });

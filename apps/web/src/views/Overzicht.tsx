@@ -2,6 +2,9 @@ import { useMemo } from "react";
 import type {
   Account,
   AdvisorProfileStore,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
   Invoice,
   OwnAccounts,
   RoomResult,
@@ -10,7 +13,7 @@ import type {
   ScheduledFlow,
   VatSettings,
 } from "@lavega/core";
-import { forecastCashflow, computeAlerts } from "@lavega/core";
+import { cashOnHandCents, forecastCashflow, computeAlerts, paycheckOverview } from "@lavega/core";
 import type { View } from "../App";
 import type { ConversionMode } from "../settings.js";
 import { useAppLocale } from "../appLocale.js";
@@ -75,6 +78,11 @@ type OverzichtProps = {
   asOf: string;
   bufferCents: number;
   scheduledFlows: ScheduledFlow[];
+  /** The bills lane (#286/#287/#288), threaded so the Betaalagenda can show the
+   *  paycheck preview. Absent on an older caller; the agenda then stays as-is. */
+  bills?: Bill[];
+  billOccurrences?: BillOccurrence[];
+  billDecisions?: BillDecisions;
   /** De ondernemingen die dit scherm toont — DEZELFDE lijst die Belasting
    *  krijgt, zodat de btw-kaart hier en het scherm daar over dezelfde
    *  ondernemingen gaan. */
@@ -118,6 +126,9 @@ export default function Overzicht({
   asOf,
   bufferCents,
   scheduledFlows,
+  bills,
+  billOccurrences,
+  billDecisions,
   entities,
   vatSettings,
   invoices,
@@ -146,6 +157,19 @@ export default function Overzicht({
     () => computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows }),
     [accounts, forecast, asOf, bufferCents, scheduledFlows],
   );
+
+  // The declared-income paycheck preview for the Betaalagenda (#288). Accounts
+  // here are already rolled forward to `asOf`, so no tx walk is needed.
+  const paycheck = useMemo(() => {
+    if (bills == null || billOccurrences == null) return undefined;
+    return paycheckOverview({
+      bills,
+      occurrences: billOccurrences,
+      decisions: billDecisions,
+      asOf,
+      cashCents: cashOnHandCents(accounts),
+    }).preview;
+  }, [bills, billOccurrences, billDecisions, asOf, accounts]);
 
   const positieOn = useWidgetEnabled("positie");
 
@@ -229,7 +253,12 @@ export default function Overzicht({
         onNavigate={onNavigate}
         onSelectCategory={onSelectCategory}
       />
-      <BetaalschemaBlock scheduledFlows={scheduledFlows} txs={txs} asOf={asOf} />
+      <BetaalschemaBlock
+        scheduledFlows={scheduledFlows}
+        txs={txs}
+        asOf={asOf}
+        {...(paycheck ? { paycheck } : {})}
+      />
 
       <BtwWidget
         span={facturenOn ? 2 : 3}

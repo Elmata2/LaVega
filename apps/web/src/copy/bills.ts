@@ -52,14 +52,40 @@ export type BillsCopy = {
   summary: {
     toCover: string;
     toCoverHint: string;
+    /** The window closes on a declared payday: name it. */
+    toCoverHintPayday: (payday: string) => string;
     paid: string;
     paidHint: string;
     shortfall: string;
     shortfallAmount: (amount: string, payday: string) => string;
+    /** Short inside the sliced plan without a bridge: name the window end. */
+    shortfallInPeriod: (amount: string, until: string) => string;
     enough: (amount: string, payday: string) => string;
+    periodCovered: (amount: string) => string;
     unknownCash: string;
     unknownPayday: string;
     due: string;
+  };
+  /** The paycheck slice: one row per window between declared paydays. */
+  paycheck: {
+    title: string;
+    intro: string;
+    empty: string;
+    bridge: string;
+    noIncome: string;
+    incomeFrom: (sources: string) => string;
+    period: (from: string, to: string) => string;
+    final: string;
+    income: string;
+    due: string;
+    reserved: string;
+    remaining: string;
+    cash: (amount: string) => string;
+    unknownCash: string;
+    short: (amount: string) => string;
+    covered: string;
+    dueItem: (name: string, date: string) => string;
+    reservedItem: (name: string, date: string) => string;
   };
   upcoming: {
     title: string;
@@ -172,15 +198,41 @@ const nl: BillsCopy = {
   },
   summary: {
     toCover: "Nog af te dekken",
-    toCoverHint: "Openstaand en niet-betaald tot je volgende inkomst.",
+    toCoverHint: "Openstaand en niet-betaald in de periode in beeld.",
+    toCoverHintPayday: (payday) => `Openstaand en niet-betaald tot ${payday}.`,
     paid: "Betaald deze maand",
     paidHint: "Afgesloten termijnen in de laatste 31 dagen.",
     shortfall: "Voor je volgende inkomst",
     shortfallAmount: (amount, payday) => `Je komt ${amount} tekort voor ${payday}.`,
+    shortfallInPeriod: (amount, until) =>
+      `Je salaris dekt ${amount} van deze periode tot ${until} niet.`,
     enough: (amount, payday) => `Je saldo dekt het tot ${payday}; ${amount} over.`,
+    periodCovered: (amount) => `Deze periode is gedekt; ${amount} over.`,
     unknownCash: "Geen saldo bekend, dus geen tekort te berekenen.",
     unknownPayday: "Geen inkomensreeks: voeg je salaris toe voor een tekort.",
     due: "Openstaand",
+  },
+  paycheck: {
+    title: "Salarisperiodes",
+    intro:
+      "Elke periode tussen twee inkomsten: wat erin valt, wat je nu al opzij zet voor een latere rekening, en wat overblijft.",
+    empty:
+      "Geen inkomensreeks: voeg je salaris toe als verplichting met verwacht inkomen, dan knipt dit scherm je maand in periodes.",
+    bridge: "Brugperiode tot je salaris — betaal uit je saldo",
+    noIncome: "Geen inkomen in deze periode",
+    incomeFrom: (sources) => `Inkomen van ${sources}`,
+    period: (from, to) => `${from} t/m ${to}`,
+    final: "laatste periode",
+    income: "Inkomen",
+    due: "Verschuldigd",
+    reserved: "Gereserveerd",
+    remaining: "Over",
+    cash: (amount) => `Saldo: ${amount}`,
+    unknownCash: "Saldo onbekend, dus geen tekort te berekenen.",
+    short: (amount) => `${amount} tekort`,
+    covered: "gedekt",
+    dueItem: (name, date) => `${name} op ${date}`,
+    reservedItem: (name, date) => `${name} op ${date}, later`,
   },
   upcoming: {
     title: "Wat is er verschuldigd",
@@ -314,15 +366,41 @@ const en: BillsCopy = {
   },
   summary: {
     toCover: "Still to cover",
-    toCoverHint: "Open and unpaid up to your next income.",
+    toCoverHint: "Open and unpaid inside the period shown.",
+    toCoverHintPayday: (payday) => `Open and unpaid up to ${payday}.`,
     paid: "Paid this month",
     paidHint: "Closed payments in the last 31 days.",
     shortfall: "Before your next income",
     shortfallAmount: (amount, payday) => `You are ${amount} short before ${payday}.`,
+    shortfallInPeriod: (amount, until) =>
+      `Your salary does not cover ${amount} of this period through ${until}.`,
     enough: (amount, payday) => `Your balance covers it until ${payday}; ${amount} left.`,
+    periodCovered: (amount) => `This period is covered; ${amount} left.`,
     unknownCash: "No known balance, so no shortfall can be computed.",
     unknownPayday: "No income series: add your salary for a shortfall.",
     due: "Open",
+  },
+  paycheck: {
+    title: "Paycheck periods",
+    intro:
+      "Every window between two paydays: what falls inside it, what you hold now for a later bill, and what is left.",
+    empty:
+      "No income series yet: add your salary as a bill with expected income, and this screen slices the month for you.",
+    bridge: "Bridge window until your payday — pay from your balance",
+    noIncome: "No income in this window",
+    incomeFrom: (sources) => `Income from ${sources}`,
+    period: (from, to) => `${from} – ${to}`,
+    final: "last window",
+    income: "Income",
+    due: "Due",
+    reserved: "Reserved",
+    remaining: "Left",
+    cash: (amount) => `Balance: ${amount}`,
+    unknownCash: "Balance unknown, so no shortfall can be computed.",
+    short: (amount) => `${amount} short`,
+    covered: "covered",
+    dueItem: (name, date) => `${name} on ${date}`,
+    reservedItem: (name, date) => `${name} on ${date}, later`,
   },
   upcoming: {
     title: "What is due",

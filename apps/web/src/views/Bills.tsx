@@ -15,10 +15,14 @@ import {
   applyBillAction,
   billProblems,
   billSettlements,
-  billsOutlook,
+  cashOnHandCents,
+  paycheckItemsDue,
+  paycheckItemsReserved,
+  paycheckOverview,
   resolveBillAmountCents,
   suggestBillMatches,
   toCents,
+  withCurrentBalances,
 } from "@lavega/core";
 import { formatDate, formatEuroIn, monthLabel, weekdayLabel } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
@@ -226,18 +230,29 @@ export default function Bills({
   const [problems, setProblems] = useState<BillProblem[]>([]);
   const [month, setMonth] = useState(asOf.slice(0, 7));
 
-  const cashCents = useMemo(() => {
-    const known = accounts.filter(
-      (a) => a.balance != null && (a.currency === "EUR" || a.currency === ""),
-    );
-    if (known.length === 0) return null;
-    return known.reduce((sum, a) => sum + toCents(a.balance ?? 0), 0);
-  }, [accounts]);
-
-  const outlook = useMemo(
-    () => billsOutlook(bills, occurrences, asOf, cashCents),
-    [bills, occurrences, asOf, cashCents],
+  // Cash on hand, not "every balance": current and savings accounts in EUR,
+  // rolled forward to `asOf`, and unknown when any of them has no balance
+  // (ADR 0011 §8: an unknown balance is not zero).
+  const cashCents = useMemo(
+    () => cashOnHandCents(withCurrentBalances(accounts, txs ?? [], asOf)),
+    [accounts, txs, asOf],
   );
+
+  // The paycheck planner (#288) supersedes the #286 outlook: it slices the month
+  // by the DECLARED income schedule and answers due/paid/short from that slice.
+  const overview = useMemo(
+    () =>
+      paycheckOverview({
+        bills,
+        occurrences,
+        decisions: decisions ?? EMPTY_BILL_DECISIONS,
+        asOf,
+        cashCents,
+      }),
+    [bills, occurrences, decisions, asOf, cashCents],
+  );
+  const preview = overview.preview;
+  const periods = overview.plan?.periods ?? [];
   const rows = useMemo(() => upcomingRows(bills, occurrences, asOf), [bills, occurrences, asOf]);
   const series = useMemo(() => seriesRows(bills, occurrences, asOf), [bills, occurrences, asOf]);
   const history = useMemo(() => historyRows(bills, occurrences), [bills, occurrences]);
@@ -321,11 +336,29 @@ export default function Bills({
 
   const money = (cents: number) => formatEuroIn(locale, cents / 100);
   const shortfallTone =
-    outlook.shortfallCents == null
+    preview.shortfallCents == null
       ? "text-muted"
-      : outlook.shortfallCents > 0
+      : preview.shortfallCents > 0
         ? "text-neg"
         : "text-pos";
+  const leading = periods[0];
+  const payday = preview.paydayOn == null ? null : formatDate(locale, preview.paydayOn);
+  // One sentence per state, never a number invented on an unknown. The copy
+  // owns the wording; this only picks which sentence is true.
+  const shortfallNote = !preview.hasIncome
+    ? c.summary.unknownPayday
+    : preview.shortfallUnknown
+      ? c.summary.unknownCash
+      : preview.shortfallCents != null && preview.shortfallCents > 0
+        ? leading?.bridge === true && payday != null
+          ? c.summary.shortfallAmount(money(preview.shortfallCents), payday)
+          : c.summary.shortfallInPeriod(
+              money(preview.shortfallCents),
+              formatDate(locale, preview.coversUntil),
+            )
+        : leading?.bridge === true && payday != null
+          ? c.summary.enough(money((preview.cashCents ?? 0) - preview.dueBeforePaydayCents), payday)
+          : c.summary.periodCovered(money(Math.max(0, leading?.remainingCents ?? 0)));
 
   return (
     <section aria-label={c.title}>
@@ -519,47 +552,121 @@ export default function Bills({
         <div className="grid grid-cols-3 gap-[var(--sp-4)] max-[800px]:grid-cols-1">
           <div>
             <p className="m-0 text-muted">{c.summary.toCover}</p>
-            <p className="m-0 text-2xl">{money(outlook.toCoverCents)}</p>
-            <p className="m-0 text-muted">{c.summary.toCoverHint}</p>
-            {outlook.overdueCents > 0 && (
-              <Badge className="border-neg text-neg">
-                {c.rowStatus.overdue}: {money(outlook.overdueCents)}
-              </Badge>
-            )}
+            <p className="m-0 text-2xl" data-testid="bills-due">
+              {money(preview.dueBeforePaydayCents)}
+            </p>
+            <p className="m-0 text-muted">
+              {preview.hasIncome && payday != null
+                ? c.summary.toCoverHintPayday(payday)
+                : c.summary.toCoverHint}
+            </p>
           </div>
           <div>
             <p className="m-0 text-muted">{c.summary.paid}</p>
-            <p className="m-0 text-2xl">{money(outlook.paidLastMonthCents)}</p>
+            <p className="m-0 text-2xl" data-testid="bills-paid">
+              {money(preview.paidRecentlyCents)}
+            </p>
             <p className="m-0 text-muted">{c.summary.paidHint}</p>
           </div>
           <div data-testid="bills-shortfall">
             <p className="m-0 text-muted">{c.summary.shortfall}</p>
-            <p className={`m-0 text-2xl ${shortfallTone}`}>
-              {outlook.shortfallCents != null ? money(outlook.shortfallCents) : "—"}
+            <p className={`m-0 text-2xl ${shortfallTone}`} data-testid="bills-shortfall-value">
+              {preview.shortfallCents != null ? money(preview.shortfallCents) : "—"}
             </p>
-            <p className="m-0 text-muted">
-              {outlook.nextIncomeOn == null
-                ? c.summary.unknownPayday
-                : outlook.cashCents == null
-                  ? c.summary.unknownCash
-                  : outlook.shortfallCents != null && outlook.shortfallCents > 0
-                    ? c.summary.shortfallAmount(
-                        money(outlook.shortfallCents),
-                        formatDate(locale, outlook.nextIncomeOn),
-                      )
-                    : c.summary.enough(
-                        money(Math.max(0, (outlook.cashCents ?? 0) - outlook.toCoverCents)),
-                        formatDate(locale, outlook.nextIncomeOn),
-                      )}
-            </p>
+            <p className="m-0 text-muted">{shortfallNote}</p>
           </div>
         </div>
+      </Card>
+
+      <Card as="section" aria-label={c.paycheck.title}>
+        <h2>{c.paycheck.title}</h2>
+        <p className="m-0 text-muted">{c.paycheck.intro}</p>
+        {periods.length === 0 ? (
+          <p className="m-0 mt-[var(--sp-3)]" data-testid="bills-paycheck-empty">
+            {c.paycheck.empty}
+          </p>
+        ) : (
+          <ul className="m-0 list-none p-0" data-testid="bills-paycheck">
+            {periods.map((period) => {
+              const due = paycheckItemsDue(period);
+              const reserved = paycheckItemsReserved(period);
+              return (
+                <li
+                  key={period.startsOn}
+                  className="border-b border-line py-3 last:border-b-0"
+                  data-testid={`bills-period-${period.startsOn}`}
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="flex min-w-[14rem] flex-col">
+                      <span className="font-medium">
+                        {c.paycheck.period(
+                          formatDate(locale, period.startsOn),
+                          formatDate(locale, period.endsOn),
+                        )}
+                      </span>
+                      <span className="text-muted">
+                        {period.bridge
+                          ? c.paycheck.bridge
+                          : period.incomeSources.length > 0
+                            ? c.paycheck.incomeFrom(period.incomeSources.join(", "))
+                            : c.paycheck.noIncome}
+                        {period.final && ` · ${c.paycheck.final}`}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap gap-3 text-muted">
+                      <span>
+                        {c.paycheck.income}: {money(period.incomeCents)}
+                      </span>
+                      <span>
+                        {c.paycheck.due}: {money(period.dueCents)}
+                      </span>
+                      <span>
+                        {c.paycheck.reserved}: {money(period.reservedCents)}
+                      </span>
+                      <span className={period.short ? "text-neg" : "text-pos"}>
+                        {c.paycheck.remaining}: {money(period.remainingCents)}
+                      </span>
+                    </span>
+                  </div>
+                  {period.bridge && (
+                    <p className="m-0 mt-1 text-muted">
+                      {period.cashOnHandCents == null
+                        ? c.paycheck.unknownCash
+                        : c.paycheck.cash(money(period.cashOnHandCents))}
+                      {period.shortfallCents != null && period.shortfallCents > 0
+                        ? ` · ${c.paycheck.short(money(period.shortfallCents))}`
+                        : period.shortfallCents === 0
+                          ? ` · ${c.paycheck.covered}`
+                          : ""}
+                    </p>
+                  )}
+                  {(due.length > 0 || reserved.length > 0) && (
+                    <ul className="m-0 mt-1 list-none p-0 text-muted">
+                      {due.map((item) => (
+                        <li key={`${item.occurrenceId}-due`}>
+                          {c.paycheck.dueItem(item.billName, formatDate(locale, item.dueOn))}:{" "}
+                          {money(item.shareCents)}
+                        </li>
+                      ))}
+                      {reserved.map((item) => (
+                        <li key={`${item.occurrenceId}-reserved`}>
+                          {c.paycheck.reservedItem(item.billName, formatDate(locale, item.dueOn))}:{" "}
+                          {money(item.shareCents)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Card>
 
       <Card as="section" aria-label={c.upcoming.title}>
         <h2>{c.upcoming.title}</h2>
         <p className="m-0 text-muted">
-          {c.upcoming.horizon(formatDate(locale, outlook.periodEndsOn))}
+          {c.upcoming.horizon(formatDate(locale, preview.coversUntil))}
         </p>
         {rows.length === 0 ? (
           <p className="m-0 mt-[var(--sp-3)]">

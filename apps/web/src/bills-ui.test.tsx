@@ -336,6 +336,70 @@ test("marking an occurrence paid closes it without a transaction", () => {
   expect(container!.textContent).toContain("Door jou als betaald gemarkeerd");
 });
 
+test("mark-paid survives the paycheck restructure: no transaction, and the due figure drops", () => {
+  const bill = rent();
+  const salary: Bill = {
+    ...rent(),
+    id: "salaris",
+    name: "Salaris",
+    type: "income",
+    direction: "in",
+    amountCents: 300_000,
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+    anchorDate: "2026-10-25",
+  };
+  const bills = [bill, salary];
+  const occurrences = generateBillOccurrences(bills, [], AS_OF).occurrences;
+  render(bills, occurrences, [account(700)]);
+  // EUR 985,50 due before the 25th, EUR 700 cash: EUR 285,50 short.
+  expect(byTestId("bills-due").textContent).toContain("985,50");
+  expect(byTestId("bills-shortfall").textContent).toContain("285,50");
+
+  click(byTestId("bills-mark-paid-huur|2026-11-20"));
+
+  expect(saved).toHaveLength(1);
+  // No transaction was needed: the mark itself is the payment decision.
+  expect(saved[0].decisions.marks).toHaveLength(1);
+  expect(saved[0].decisions.matches).toHaveLength(0);
+  expect(byTestId("bills-due").textContent).toContain("0,00");
+  expect(byTestId("bills-shortfall").textContent).not.toContain("285,50");
+});
+
+test("the paycheck slice shows due, reserved and the bridge window", () => {
+  const salary: Bill = {
+    ...rent(),
+    id: "salaris",
+    name: "Salaris",
+    type: "income",
+    direction: "in",
+    amountCents: 300_000,
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+    anchorDate: "2026-10-25",
+  };
+  const tax: Bill = {
+    ...rent(),
+    id: "belasting",
+    name: "Belasting",
+    amountCents: 400_000,
+    rules: [{ frequency: "monthly", interval: 3, dayOfMonth: 15 }],
+    anchorDate: "2027-01-15",
+  };
+  const bills = [salary, tax];
+  const occurrences = generateBillOccurrences(bills, [], AS_OF).occurrences;
+  render(bills, occurrences, [account(1_200)]);
+
+  const slice = byTestId("bills-paycheck").textContent ?? "";
+  expect(slice).toContain("Salaris");
+  expect(slice).toContain("Inkomen");
+  expect(slice).toContain("Gereserveerd");
+  // The leading window holds no income: it is the bridge paid from cash.
+  expect(byTestId("bills-period-2026-11-11").textContent).toContain("Brugperiode");
+  expect(byTestId("bills-period-2026-11-11").textContent).toContain("Saldo");
+  // The tax bill outgrows its own paycheck, so an earlier paycheck reserves it.
+  expect(byTestId("bills-period-2026-11-25").textContent).toContain("1.000,00");
+  expect(byTestId("bills-period-2026-11-25").textContent).toContain("later");
+});
+
 test("a partial payment shows what is still open", () => {
   const bill = rent();
   const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences.map((o) =>

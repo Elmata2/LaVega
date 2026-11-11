@@ -1955,6 +1955,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               asOf={asOf}
               bufferCents={bufferCents}
               scheduledFlows={scopedScheduledFlows}
+              bills={bills}
+              billOccurrences={billOccurrences}
+              billDecisions={billDecisions}
               /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
                  en dat is de bedoeling: de btw-kaart op het overzicht en het
                  scherm Belasting moeten over dezelfde ondernemingen gaan. Wie

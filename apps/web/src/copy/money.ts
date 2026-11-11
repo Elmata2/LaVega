@@ -558,6 +558,16 @@ type BetaalschemaCopy = {
   flowLabel: (f: { label: string; labelParts?: FlowLabel }) => string;
   nietsIngepland: string;
   voorspeldTag: string;
+  /** The paycheck preview above the agenda (#288): the declared-income slice. */
+  paycheck: {
+    until: (date: string) => string;
+    due: (amount: string) => string;
+    reserved: (amount: string) => string;
+    short: (amount: string) => string;
+    covered: string;
+    unknown: string;
+    noIncome: string;
+  };
 };
 
 type RecenteTransactiesCopy = {
@@ -1254,6 +1264,15 @@ const nl: MoneyCopy = {
     nietsIngepland:
       "Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.",
     voorspeldTag: "voorspeld",
+    paycheck: {
+      until: (date) => `Tot ${date}`,
+      due: (amount) => `${amount} te betalen`,
+      reserved: (amount) => `${amount} gereserveerd`,
+      short: (amount) => `${amount} tekort`,
+      covered: "gedekt",
+      unknown: "saldo onbekend",
+      noIncome: "Nog geen inkomensreeks",
+    },
   },
   recenteTransacties: {
     title: "Recente transacties",
@@ -1909,6 +1928,15 @@ const en: MoneyCopy = {
     nietsIngepland:
       "Nothing scheduled yet — your VAT (BTW) set-asides, outstanding invoices and recognised fixed costs will show up here.",
     voorspeldTag: "predicted",
+    paycheck: {
+      until: (date) => `Through ${date}`,
+      due: (amount) => `${amount} to pay`,
+      reserved: (amount) => `${amount} reserved`,
+      short: (amount) => `${amount} short`,
+      covered: "covered",
+      unknown: "balance unknown",
+      noIncome: "No income series yet",
+    },
   },
   recenteTransacties: {
     title: "Recent transactions",
