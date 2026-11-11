@@ -1,4 +1,4 @@
-import { isPartnerWait } from "../partnerBudget/PartnerBudget.js";
+import { isPartnerBudgetStop } from "../partnerBudget/PartnerBudget.js";
 
 /** A source for one market-data capability. Higher priority wins. */
 export type Provider<Request, Result> = {
@@ -37,8 +37,9 @@ export async function firstProviderResult<Request, Result>(
         return problems.length > 0 ? withProviderProblems(result, problems) : result;
       }
     } catch (error) {
-      // A slot after the host deadline is the caller's to handle, not a failed provider.
-      if (isPartnerWait(error)) throw error;
+      // A slot after the host deadline, or an unreachable budget, is the caller's
+      // to handle: no request went out, so no provider failed.
+      if (isPartnerBudgetStop(error)) throw error;
       log(provider.sourceKey, error);
       problems.push(
         `${provider.sourceKey}: ${error instanceof Error ? error.message : String(error)}`,

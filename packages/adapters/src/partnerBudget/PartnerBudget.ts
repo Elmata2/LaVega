@@ -227,6 +227,12 @@ export type PartnerBudgetClient = {
 /** The adapter-side error type check, so callers need no Effect imports. */
 export const isPartnerWait = Schema.is(PartnerWait);
 export const isPartnerBudgetUnavailable = Schema.is(PartnerBudgetUnavailable);
+/** The budget said wait or could not be reached: no request went out, so this is
+ *  never a failure of the partner and callers pause instead of reporting one. */
+export const isPartnerBudgetStop = (
+  error: unknown,
+): error is PartnerWait | PartnerBudgetUnavailable =>
+  isPartnerWait(error) || isPartnerBudgetUnavailable(error);
 
 /**
  * Bridges a `PartnerBudget` layer to a `PartnerBudgetClient` through one

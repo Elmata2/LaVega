@@ -1,6 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { SectorProfile } from "@lavega/adapters";
-import { app, createApp } from "./app.js";
+import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
+import { app, createApp as createPacedApp } from "./app.js";
+
+/* These tests are about routes and reads. Pacing of partner calls has its own
+ * tests, so every slot is granted at once instead of sleeping real time. */
+const createApp = (dependencies: Parameters<typeof createPacedApp>[0] = {}) =>
+  createPacedApp({ partnerBudgetClient: createImmediatePartnerBudget(), ...dependencies });
 import {
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
@@ -163,7 +169,6 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
   const investingApp = createApp({
     benchmarkSelectionStore,
     priceSyncTargets: () => [],
-    priceSyncPaceMs: 0,
   });
   const saved = await investingApp.request("/api/investing/benchmarks", {
     method: "PUT",
@@ -188,7 +193,6 @@ test("benchmark API starts an unselected account on MSCI World", async () => {
   const investingApp = createApp({
     benchmarkSelectionStore,
     priceSyncTargets: () => [],
-    priceSyncPaceMs: 0,
   });
 
   /* An account that never chose is measured against MSCI World instead of
@@ -322,7 +326,6 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
     provider: provider as never,
     benchmarkSelectionStore,
     priceSyncTargets,
-    priceSyncPaceMs: 0,
     // The default 5 s throttle on the mid-sync re-check (see priceOrchestrator's
     // benchmarkRecheckEveryMs) would outlast this test's real-time window.
     priceSyncBenchmarkRecheckEveryMs: 0,
@@ -400,7 +403,6 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
   });
 
   expect((await investingApp.request("/api/investing/benchmarks/search?q=AEX")).status).toBe(428);
@@ -438,7 +440,6 @@ test("price sync uses Yahoo Finance after persisted consent", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   const response = await investingApp.request("/api/prices/sync", { method: "POST" });
@@ -467,7 +468,6 @@ test("router problems reach HTTP response unchanged", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   await investingApp.request("/api/prices/sync", { method: "POST" });
@@ -499,7 +499,6 @@ test("a closed position Yahoo confirms delisted does not flip Price history to p
         backfillFrom: "2024-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
@@ -580,7 +579,6 @@ test("price sync resolves ISIN before asking price provider", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   await investingApp.request("/api/prices/sync", { method: "POST" });
@@ -622,7 +620,6 @@ test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
           backfillFrom: "2026-01-01",
         },
       ],
-      priceSyncPaceMs: 0,
       marketDataConsentStore: acceptedConsentStore(),
     });
 
@@ -726,7 +723,6 @@ test.each([
           today: "2026-01-02",
         },
       ],
-      priceSyncPaceMs: 0,
       marketDataConsentStore: acceptedConsentStore(),
     });
 
@@ -801,7 +797,6 @@ test("broker sync starts server-side price orchestration despite broker problems
         backfillFrom: "2024-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
 

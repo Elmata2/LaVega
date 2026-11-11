@@ -2,7 +2,10 @@ import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { YahooHttpClient } from "./http.js";
-import { isPartnerWait, type PartnerBudgetClient } from "../../partnerBudget/PartnerBudget.js";
+import {
+  isPartnerBudgetStop,
+  type PartnerBudgetClient,
+} from "../../partnerBudget/PartnerBudget.js";
 
 export type YahooPriceRequest = {
   ticker: string;
@@ -102,9 +105,10 @@ export function createYahooPriceProvider(
         }
         return { bars, problems: [], listing: history.symbol };
       } catch (error) {
-        // The budget has no slot before the host deadline. This is not a price
-        // problem for the symbol: the run pauses and the symbol is tried again.
-        if (isPartnerWait(error)) throw error;
+        // The budget has no slot before the host deadline, or cannot be reached.
+        // Nothing was sent, so this is not a price problem for the symbol: the
+        // run pauses and the symbol is tried again.
+        if (isPartnerBudgetStop(error)) throw error;
         return {
           bars: [],
           problems: [readableYahooProblem(error)],
