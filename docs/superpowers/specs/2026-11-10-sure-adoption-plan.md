@@ -990,6 +990,51 @@ deliberate:
   erase clearing both stores, a v2 restore clearing documents, and a version-1 database
   upgrading in place. The web suite pins the v3 file parse and the card's rendering.
 
+**As built (WS3.6, [#294](https://github.com/Elmata2/LaVega/issues/294), 2026-11-11).**
+The generic import session landed as `packages/core/src/csvImport.ts` plus a wizard card in the
+Profiel import area, one additive `VaultData.importSessions`, a minimal XLSX reader in the web
+layer, and the retained source document in the #293 store. Divergences from the plan text,
+each deliberate:
+
+- **The session is a plan, not a pipeline.** `planGenericImport` is the dry run: it maps the
+  rows, rejects every unusable row with a LINE and a reason (date/amount), and counts what is
+  read, new, duplicate and rejected. Nothing is written until the owner confirms, and the
+  confirm calls `applyGenericImport`, which merges through the ONE identity scheme
+  (`ingest`/`txBase`/`txId` from `hash.ts`) — no second dedupe scheme, and a foreign id is
+  never hashed into identity.
+- **Identity is content, so "the same file twice" is detected by the ledger itself.** A
+  re-import of the same file (or its overlap) matches every row's coordinates and imports
+  nothing; a genuine repeat on the same day is a second occurrence and still lands. The
+  retained source document's SHA-256 is the file-level evidence, not the dedupe key.
+- **Dedupe is same-format ONLY, and the second format is refused by default.** Sessions
+  record the format per account (`generic-csv`, `generic-xlsx`, `bank-csv`, `mt940`,
+  `camt053`, `other`). A plan for an account that already imported a DIFFERENT format is
+  blocked with the formats named, and `applyGenericImport` throws rather than writing; the
+  owner can override explicitly after reading the warning, and the override still skips the
+  rows identity genuinely already holds. CSV and XLSX are two formats, exactly as CONTEXT
+  requires: a second format double-counts.
+- **Revert is exact.** A session stores the ids of the rows the import created. `revertImport`
+  removes exactly those ids that are still present and drops the session; a row that was
+  merged away since is not invented back, and another import's rows are never touched. The
+  retained source document stays (it is the evidence) but its import link is cleared.
+- **Excel is read with the platform, not a dependency.** An .xlsx is a ZIP of XML; the web
+  layer walks the ZIP central directory and inflates the worksheet with the browser's own
+  `DecompressionStream`. Core stays a pure library: it receives rows. The reader places cells
+  by their A1 reference, so a skipped cell stays a hole instead of shifting a column.
+- **Mapping is a guess the owner can override, with the sources shown.** Header keywords
+  (Dutch and English) first, a positional value-based fallback second, date order from the
+  values themselves, and a debit/credit pair as an alternative to a signed amount column.
+  The confidence and the sources are part of the returned guess, not hidden.
+- **No Sure/Maybe export importer, no migration CLI, no real-export fixture** (out of scope
+  per the issue) and no cross-format canonicalisation: IBAN/BBAN key normalisation stays a
+  later normalisation pass, so the session warns instead of pretending.
+- **Acceptance evidence is a hand-worked file.** `csvImport.test.ts` (13 tests) covers
+  detection, the dry run counts and rejected lines, debit/credit, an inverted sign, a
+  month-first date order, the import readback, the same-file re-import (0 new rows), the
+  in-file repeat (2 rows), the cross-format block and override, another account's rows, and
+  revert exactness incl. a row that changed. `xlsx.test.ts` builds a REAL deflated ZIP and
+  reads it; `GenericImportCard.test.tsx` drives the wizard (map, preview, refusal, revert).
+
 ### WS4 — Investing depth (investing)
 
 **Goal.** Make the existing investment dashboard defensible for tax and income: basis
