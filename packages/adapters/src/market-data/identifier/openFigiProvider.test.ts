@@ -1,9 +1,10 @@
+import { DateTime } from "effect";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   createFailingPartnerBudget,
   createImmediatePartnerBudget,
 } from "../../partnerBudget/fakes.js";
-import { PartnerBudgetUnavailable } from "../../partnerBudget/PartnerBudget.js";
+import { PartnerBudgetUnavailable, PartnerWait } from "../../partnerBudget/PartnerBudget.js";
 import { createOpenFigiIdentifierProvider } from "./openFigiProvider.js";
 
 type Post = (url: string, body: unknown) => Promise<unknown>;
@@ -163,4 +164,34 @@ test("a budget store that is down sends no request, is not retried, and is not c
   expect(result?.problems[0]).toContain("OpenFIGI identifier request failed");
   await provider.get({ isin: "NL0010273215" });
   expect(calls()).toBe(0); // still no request, and nothing cached as an answer
+});
+
+test("a slot past the deadline sends no request, returns unresolved, and caches nothing", async () => {
+  const slots: Array<number | undefined> = [];
+  const partnerBudget = createImmediatePartnerBudget();
+  let granted = false;
+  partnerBudget.awaitSlot = async (_key, deadlineMs) => {
+    slots.push(deadlineMs);
+    if (!granted) throw new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) });
+  };
+  const { post, calls } = countingPost(async () => [
+    { data: [{ ticker: "ASML", exchCode: "AMS" }] },
+  ]);
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    now: () => 0,
+    partnerBudget,
+  });
+
+  const late = await provider.get({ isin: "NL0010273215", deadlineMs: 123_456 });
+  expect(slots).toEqual([123_456]);
+  expect(calls()).toBe(0);
+  expect(late?.match.ticker).toBe("");
+  expect(late?.problems[0]).toContain("OpenFIGI identifier request failed");
+
+  // Nothing was cached for the failed lookup: the next one asks again.
+  granted = true;
+  const retry = await provider.get({ isin: "NL0010273215" });
+  expect(calls()).toBe(1);
+  expect(retry?.match.ticker).toBe("ASML");
 });

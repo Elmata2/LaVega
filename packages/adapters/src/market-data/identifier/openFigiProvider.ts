@@ -57,11 +57,12 @@ export function createOpenFigiIdentifierProvider(
   const now = input.now ?? Date.now;
   const budget = input.partnerBudget ?? createMemoryPartnerBudgetClient();
 
-  const requestWithBudget = async (body: unknown): Promise<unknown> => {
+  const requestWithBudget = async (body: unknown, deadlineMs?: number): Promise<unknown> => {
     let lastError: unknown;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-      // A failure of the budget itself is not retried: no request goes out.
-      await budget.awaitSlot(OPENFIGI_KEY);
+      // A slot after the deadline, or a failure of the budget itself, is not
+      // retried: no request goes out and the lookup ends unresolved and uncached.
+      await budget.awaitSlot(OPENFIGI_KEY, deadlineMs);
       try {
         return await postJson("https://api.openfigi.com/v3/mapping", body);
       } catch (error) {
@@ -90,7 +91,10 @@ export function createOpenFigiIdentifierProvider(
       const known = cache.get(isin);
       if (known) return known;
       try {
-        const raw = await requestWithBudget([{ idType: "ID_ISIN", idValue: isin }]);
+        const raw = await requestWithBudget(
+          [{ idType: "ID_ISIN", idValue: isin }],
+          request.deadlineMs,
+        );
         const first = Array.isArray(raw) ? raw[0] : null;
         const data = first && typeof first === "object" ? (first as { data?: unknown }).data : null;
         const item =

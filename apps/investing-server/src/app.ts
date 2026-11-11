@@ -56,6 +56,7 @@ import {
   fetchYahooSectorProfile,
   PartnerBudget,
   YahooHttpClient,
+  type IdentifierRequest,
   type PartnerBudgetClient,
   type SectorProfile,
 } from "@lavega/adapters";
@@ -213,10 +214,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * price run takes a view of it with the run's own deadline, so a slot after the
    * deadline ends the slice instead of sleeping past it. */
   const yahooClient = new YahooHttpClient(undefined, undefined, undefined, { partnerBudget });
-  const resolveMissingListing = async (request: { isin?: string; ticker: string }) => {
+  const resolveMissingListing = async (
+    request: { isin?: string; ticker: string },
+    deadline: number | undefined,
+  ) => {
     if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
     const isin = request.isin.trim().toUpperCase();
-    const identifier = await identifierProvider.get({ isin });
+    const identifier = await identifierProvider.get({ isin, deadlineMs: deadline });
     if (
       !identifier ||
       identifier.problems.length ||
@@ -230,7 +234,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.provider ??
     createYahooPriceProvider({
       client: yahooClient.withDeadline(deadline),
-      resolveMissingListing,
+      resolveMissingListing: (request) => resolveMissingListing(request, deadline),
     });
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
@@ -267,7 +271,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const passphraseMode = dependencies.passphraseMode ?? (() => "required" as const);
   const fxProviders = [fxProvider];
   const identifierProviders = [identifierProvider];
-  const mapIdentifier = (request: { isin: string }) =>
+  const mapIdentifier = (request: IdentifierRequest) =>
     firstProviderResult(identifierProviders, request, undefined, hasProblems);
   /* One invocation's worth of time. Anchored where the request starts, so a
    * route that already spent the host budget on a broker sync hands the price
@@ -289,7 +293,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
-        const identifier = await mapIdentifier({ isin: target.isin });
+        const identifier = await mapIdentifier({ isin: target.isin, deadlineMs: deadline });
         if (
           identifier &&
           identifier.value.problems.length === 0 &&

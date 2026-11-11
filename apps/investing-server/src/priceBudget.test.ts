@@ -97,21 +97,24 @@ const gaps = (times: number[]) => {
 test("two tenants on one budget make 20 Yahoo requests at no more than one per 300 ms", async () => {
   const yahoo = fakeYahoo();
   const budget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
-  const client = new YahooHttpClient(yahoo.fetchFn, 20_000, 1, { partnerBudget: budget });
+  // Hosted, each request builds its own app and so its own client: they share the budget, nothing else.
+  const clients = [1, 2].map(
+    () => new YahooHttpClient(yahoo.fetchFn, 20_000, 1, { partnerBudget: budget }),
+  );
 
   const runs = [
-    orchestratorFor("alice", 10, client).run("alice"),
-    orchestratorFor("bob", 10, client).run("bob"),
+    orchestratorFor("alice", 10, clients[0]!).run("alice"),
+    orchestratorFor("bob", 10, clients[1]!).run("bob"),
   ];
   await vi.advanceTimersByTimeAsync(120_000);
   const results = await Promise.all(runs);
 
   expect(results.map((progress) => progress.status)).toEqual(["completed", "completed"]);
   expect(yahoo.charts).toHaveLength(20);
-  // The crumb negotiation is one more cookie and one more crumb request, on the same key.
-  expect(yahoo.times).toHaveLength(22);
+  // Each client negotiates its own crumb: two cookie and two crumb requests, on the same key.
+  expect(yahoo.times).toHaveLength(24);
   const spacing = gaps(yahoo.times);
-  expect(spacing).toHaveLength(21);
+  expect(spacing).toHaveLength(23);
   expect(Math.min(...spacing)).toBeGreaterThanOrEqual(300);
 });
 

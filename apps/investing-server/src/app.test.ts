@@ -2183,3 +2183,61 @@ test("a correction write raises the sector revision so the very next sector read
   expect(after.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
   expect(after.revision).toBe(1);
 });
+
+test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb and the chart", async () => {
+  const urls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("openfigi"))
+        return new Response(JSON.stringify([{ data: [{ ticker: "ASML", exchCode: "NA" }] }]));
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb");
+      return new Response(
+        JSON.stringify({
+          chart: {
+            result: [
+              {
+                meta: { currency: "EUR" },
+                timestamp: [1_700_000_000],
+                indicators: { quote: [{ close: [100] }] },
+              },
+            ],
+          },
+        }),
+      );
+    }),
+  );
+  const partnerBudget = createImmediatePartnerBudget();
+  const deadline = Date.now() + 3_600_000;
+  const investingApp = createPacedApp({
+    partnerBudgetClient: partnerBudget,
+    priceSyncDeadline: () => deadline,
+    priceSyncTargets: () => [
+      {
+        kind: "current",
+        symbol: "ASML",
+        ticker: "ASML",
+        exchange: "AMS",
+        currency: "EUR",
+        isin: "NL0010273215",
+        backfillFrom: "2026-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+  try {
+    const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+    expect(response.status).toBe(200);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  const slots = partnerBudget.calls.filter((call) => call.call === "awaitSlot");
+  expect(new Set(slots.map((call) => call.key.partner))).toEqual(new Set(["openfigi", "yahoo"]));
+  expect(slots.length).toBe(urls.length);
+  for (const call of slots) expect(call).toMatchObject({ deadlineMs: deadline });
+});
