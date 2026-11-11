@@ -1,4 +1,10 @@
-import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import type {
+  BrokerCredentials,
+  CashFlowRule,
+  CredentialBroker,
+  CredentialStore,
+} from "@lavega/core";
+import { applyCashFlowKindRules } from "@lavega/core";
 import {
   createBrokerDataCache,
   type BrokerAccountSnapshot,
@@ -267,6 +273,9 @@ export async function syncScheduledBrokers(input: {
   now?: Date;
   deadlineMs?: BrokerSyncRequest["deadlineMs"];
   leaseId?: () => string;
+  /** Owner-confirmed cash-flow vocabulary for this tenant (issue #137). Empty
+   *  leaves adapter output exactly as it is. */
+  cashFlowKindRules?: readonly CashFlowRule[];
 }): Promise<ScheduledSyncResult> {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
@@ -390,6 +399,27 @@ export async function syncScheduledBrokers(input: {
       });
     } catch (error) {
       return failed(readableError(error, broker));
+    }
+
+    /* The confirmed-rule seam: applied at the same point the broker's own
+     * switch was, before anything is committed, so the stored snapshot and
+     * every derived figure see ONE notion of a cash-flow kind. With no rules
+     * this is a no-op and the adapter output is untouched. */
+    if (input.cashFlowKindRules && input.cashFlowKindRules.length > 0) {
+      const applied = applyCashFlowKindRules({
+        broker,
+        flows: result.sections.cashFlows.rows,
+        problems: result.problems,
+        rules: input.cashFlowKindRules,
+      });
+      result = {
+        ...result,
+        problems: applied.problems,
+        sections: {
+          ...result.sections,
+          cashFlows: { ...result.sections.cashFlows, rows: applied.flows },
+        },
+      };
     }
 
     const holdingsDelivered =

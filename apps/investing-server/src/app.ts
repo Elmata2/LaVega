@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { Schema, type Layer } from "effect";
 import {
+  confirmCashFlowSuggestion,
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
   InvestingDashboardDataSchema,
@@ -11,6 +12,8 @@ import {
   validateBenchmarkSymbols,
   validateInvestingLayout,
   RealizedIncomeReportSchema,
+  suggestionSignChange,
+  type CashFlowSuggestion,
   emptyRealizedReport,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
@@ -21,6 +24,11 @@ import {
   type AccountWrapperStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
+import {
+  createMemoryCashFlowStore,
+  isRuleKind,
+  type CashFlowStore,
+} from "./cashFlowSuggestions.js";
 import { createMemorySyncRunStore, createSyncRun, MAX_HOPS, type SyncRunStore } from "./syncRun.js";
 import {
   LocalKeySource,
@@ -196,6 +204,8 @@ type PriceDependencies = {
   priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
+  /** Owner-confirmed cash-flow rules and pending suggestions (issue #137). */
+  cashFlowStore?: CashFlowStore;
   /** Durable row for the server-owned run (Neon on hosted, memory locally). */
   syncRunStore?: SyncRunStore;
   /** Registers the run as background work. Rejects on a host with no such port. */
@@ -420,6 +430,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
+  const cashFlowStore = dependencies.cashFlowStore ?? createMemoryCashFlowStore();
   const syncRunClock = dependencies.syncRunNow ?? (() => Date.now());
   const brokerProgress = async () =>
     dependencies.brokerSyncStatus
@@ -851,6 +862,151 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.onAccountWrappersChanged?.();
     return c.json(selection);
   });
+  /* Jev-04 (#137): cash-flow vocabulary suggestions and owner-confirmed rules.
+   *
+   * A suggestion has no effect on any figure until the owner confirms it; the
+   * confirmation creates a broker+type rule the sync applies at the same point
+   * as the adapter's switch. Sign is never suggested — a kind that would flip
+   * the observed sign must be acknowledged with the before/after first. */
+  const cashFlowKey = (broker: string, typeKey: string) =>
+    `${broker.trim().toLowerCase()}|${typeKey.trim().toUpperCase()}`;
+  const publicSuggestion = (suggestion: CashFlowSuggestion) => ({
+    broker: suggestion.broker,
+    typeKey: suggestion.typeKey,
+    rawType: suggestion.rawType,
+    kind: suggestion.kind,
+    confidence: suggestion.confidence,
+    amount: suggestion.amount,
+    sign: suggestion.sign,
+    currency: suggestion.currency,
+    description: suggestion.description,
+    createdAt: suggestion.createdAt,
+    signChange: suggestionSignChange(suggestion),
+  });
+
+  investingApp.get("/api/investing/cash-flow-suggestions", async (c) => {
+    const [enabled, suggestions] = await Promise.all([
+      cashFlowStore.suggestionsEnabled(),
+      cashFlowStore.listSuggestions(),
+    ]);
+    const pending = suggestions
+      .filter((suggestion) => suggestion.state === "pending")
+      .map(publicSuggestion);
+    return c.json({ enabled, count: pending.length, pending });
+  });
+
+  investingApp.post("/api/investing/cash-flow-suggestions/confirm", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+      kind?: unknown;
+      acknowledgeSignChange?: unknown;
+    } | null;
+    if (
+      !body ||
+      typeof body.broker !== "string" ||
+      typeof body.typeKey !== "string" ||
+      !isRuleKind(body.kind)
+    )
+      return c.json({ problems: ["Invalid confirmation"] }, 400);
+    const suggestions = await cashFlowStore.listSuggestions();
+    const decision = confirmCashFlowSuggestion({
+      suggestions,
+      broker: body.broker,
+      typeKey: body.typeKey,
+      kind: body.kind,
+      acknowledgeSignChange: body.acknowledgeSignChange === true,
+      confirmedAt: new Date().toISOString(),
+    });
+    if (!decision.ok) {
+      if (decision.reason === "not-found")
+        return c.json({ problems: ["No suggestion for that type"] }, 404);
+      return c.json(
+        { reason: "sign-change-unacknowledged", before: decision.before, after: decision.after },
+        409,
+      );
+    }
+    const key = cashFlowKey(decision.rule.broker, decision.rule.typeKey);
+    const rules = await cashFlowStore.listRules();
+    const nextRules = [
+      ...rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key),
+      decision.rule,
+    ];
+    await cashFlowStore.saveRules(nextRules);
+    await cashFlowStore.saveSuggestions(
+      suggestions.map((suggestion) =>
+        cashFlowKey(suggestion.broker, suggestion.typeKey) === key
+          ? { ...suggestion, state: "confirmed" as const, kind: decision.rule.kind }
+          : suggestion,
+      ),
+    );
+    return c.json({ rule: decision.rule, rules: nextRules });
+  });
+
+  investingApp.post("/api/investing/cash-flow-suggestions/reject", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+    } | null;
+    if (!body || typeof body.broker !== "string" || typeof body.typeKey !== "string")
+      return c.json({ problems: ["Invalid rejection"] }, 400);
+    const key = cashFlowKey(body.broker, body.typeKey);
+    const suggestions = await cashFlowStore.listSuggestions();
+    if (
+      !suggestions.some((suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) === key)
+    )
+      return c.json({ problems: ["No suggestion for that type"] }, 404);
+    await cashFlowStore.saveSuggestions(
+      suggestions.map((suggestion) =>
+        cashFlowKey(suggestion.broker, suggestion.typeKey) === key
+          ? { ...suggestion, state: "rejected" as const }
+          : suggestion,
+      ),
+    );
+    return c.json({ ok: true });
+  });
+
+  /* Rules are owner data: this GET is the exportable shape. */
+  investingApp.get("/api/investing/cash-flow-rules", async (c) => {
+    const [enabled, rules] = await Promise.all([
+      cashFlowStore.suggestionsEnabled(),
+      cashFlowStore.listRules(),
+    ]);
+    return c.json({ enabled, rules });
+  });
+
+  investingApp.post("/api/investing/cash-flow-rules/remove", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+    } | null;
+    if (!body || typeof body.broker !== "string" || typeof body.typeKey !== "string")
+      return c.json({ problems: ["Invalid removal"] }, 400);
+    const key = cashFlowKey(body.broker, body.typeKey);
+    const rules = await cashFlowStore.listRules();
+    const nextRules = rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key);
+    await cashFlowStore.saveRules(nextRules);
+    /* Removing a rule re-opens its vocabulary word for a future suggestion. */
+    await cashFlowStore.saveSuggestions(
+      (await cashFlowStore.listSuggestions()).filter(
+        (suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) !== key,
+      ),
+    );
+    return c.json({ rules: nextRules });
+  });
+
+  investingApp.get("/api/investing/cash-flow-suggestions/settings", async (c) =>
+    c.json({ enabled: await cashFlowStore.suggestionsEnabled() }),
+  );
+
+  investingApp.put("/api/investing/cash-flow-suggestions/settings", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { enabled?: unknown } | null;
+    if (!body || typeof body.enabled !== "boolean")
+      return c.json({ problems: ["enabled must be a boolean"] }, 400);
+    await cashFlowStore.setSuggestionsEnabled(body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+
   investingApp.get("/api/investing/benchmarks", async (c) => {
     const tenantId = await resolveTenantId();
     return c.json({

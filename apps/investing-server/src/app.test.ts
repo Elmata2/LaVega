@@ -19,6 +19,7 @@ import {
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { createMemorySyncRunStore } from "./syncRun.js";
+import { createMemoryCashFlowStore } from "./cashFlowSuggestions.js";
 import {
   buildCompositionProjection,
   buildRiskProjection,
@@ -2654,4 +2655,195 @@ test("POST /api/sync/refresh names the missing CRON_SECRET on a hosted host", as
 
   expect(response.status).toBe(500);
   expect(JSON.stringify(await response.json())).toContain("CRON_SECRET");
+});
+
+const cashFlowSuggestion = (over: Record<string, unknown> = {}) => ({
+  broker: "trading212",
+  typeKey: "NEW_KIND",
+  rawType: "NEW_KIND",
+  kind: "withdrawal" as const,
+  confidence: 0.82,
+  state: "pending" as const,
+  amount: 100,
+  sign: 1 as const,
+  currency: "EUR",
+  description: "Trading 212 NEW_KIND",
+  createdAt: "2026-11-11T10:00:00.000Z",
+  ...over,
+});
+
+test("cash-flow suggestions are listed with their sign-change flag and have no effect on rules", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion() as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const list = (await (await syncRun.request("/api/investing/cash-flow-suggestions")).json()) as {
+    enabled: boolean;
+    count: number;
+    pending: Array<Record<string, unknown>>;
+  };
+  expect(list).toMatchObject({ enabled: false, count: 1 });
+  expect(list.pending[0]).toMatchObject({
+    rawType: "NEW_KIND",
+    kind: "withdrawal",
+    confidence: 0.82,
+    amount: 100,
+    sign: 1,
+    signChange: true,
+  });
+  // An unconfirmed suggestion is not a rule.
+  const rules = (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+    rules: unknown[];
+  };
+  expect(rules.rules).toEqual([]);
+});
+
+test("a sign-changing confirmation needs the acknowledged before/after, then creates the rule", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion() as never]);
+  const syncRun = createApp({ cashFlowStore });
+  const confirm = (body: Record<string, unknown>) =>
+    syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        broker: "trading212",
+        typeKey: "NEW_KIND",
+        kind: "withdrawal",
+        ...body,
+      }),
+    });
+
+  const refused = await confirm({});
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toEqual({
+    reason: "sign-change-unacknowledged",
+    before: 100,
+    after: -100,
+  });
+  expect(await cashFlowStore.listRules()).toEqual([]);
+
+  const accepted = await confirm({ acknowledgeSignChange: true });
+  expect(accepted.status).toBe(200);
+  const body = (await accepted.json()) as { rule: Record<string, unknown> };
+  expect(body.rule).toMatchObject({
+    broker: "trading212",
+    typeKey: "NEW_KIND",
+    kind: "withdrawal",
+  });
+  expect(await cashFlowStore.listRules()).toHaveLength(1);
+  // The suggestion is resolved, so it leaves the pending list.
+  const list = (await (await syncRun.request("/api/investing/cash-flow-suggestions")).json()) as {
+    count: number;
+  };
+  expect(list.count).toBe(0);
+});
+
+test("a non-sign-changing confirmation creates the rule without acknowledgement", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const response = await syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND", kind: "deposit" }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await cashFlowStore.listRules()).toEqual([
+    expect.objectContaining({ kind: "deposit", broker: "trading212", typeKey: "NEW_KIND" }),
+  ]);
+});
+
+test("a rejection is remembered and creates no rule", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const response = await syncRun.request("/api/investing/cash-flow-suggestions/reject", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND" }),
+  });
+
+  expect(response.status).toBe(200);
+  expect((await cashFlowStore.listSuggestions())[0]!.state).toBe("rejected");
+  expect(await cashFlowStore.listRules()).toEqual([]);
+});
+
+test("invalid confirmations are 400 and an unknown type is 404", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+  const confirm = (body: Record<string, unknown>) =>
+    syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  expect((await confirm({ broker: "trading212", typeKey: "NEW_KIND", kind: "other" })).status).toBe(
+    400,
+  );
+  expect(
+    (await confirm({ broker: "trading212", typeKey: "NEW_KIND", kind: "nonsense" })).status,
+  ).toBe(400);
+  expect(
+    (await confirm({ broker: "trading212", typeKey: "UNKNOWN_KIND", kind: "deposit" })).status,
+  ).toBe(404);
+});
+
+test("the suggestion step is gated on an explicit owner setting, default off", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  const syncRun = createApp({ cashFlowStore });
+
+  expect(
+    await (await syncRun.request("/api/investing/cash-flow-suggestions/settings")).json(),
+  ).toEqual({ enabled: false });
+  const put = await syncRun.request("/api/investing/cash-flow-suggestions/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  });
+  expect(put.status).toBe(200);
+  expect(await cashFlowStore.suggestionsEnabled()).toBe(true);
+  expect(
+    (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+      enabled: boolean;
+    },
+  ).toMatchObject({ enabled: true });
+});
+
+test("rules are exportable owner data and removable", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveRules([
+    {
+      broker: "trading212",
+      typeKey: "NEW_KIND",
+      kind: "deposit",
+      confirmedAt: "2026-11-11T10:00:00.000Z",
+    },
+  ]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const exported = (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+    rules: unknown[];
+  };
+  expect(exported.rules).toEqual([
+    {
+      broker: "trading212",
+      typeKey: "NEW_KIND",
+      kind: "deposit",
+      confirmedAt: "2026-11-11T10:00:00.000Z",
+    },
+  ]);
+
+  const removed = await syncRun.request("/api/investing/cash-flow-rules/remove", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND" }),
+  });
+  expect(removed.status).toBe(200);
+  expect(await cashFlowStore.listRules()).toEqual([]);
 });

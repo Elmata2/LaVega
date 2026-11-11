@@ -743,3 +743,103 @@ test("IBKR reads its one Flex statement only on the history lane", async () => {
   expect(ibkr).toHaveBeenCalledTimes(1);
   expect(ibkr).toHaveBeenCalledWith(expect.objectContaining({ lanes: ["history"] }));
 });
+
+test("a confirmed cash-flow rule classifies the unknown type before it is committed", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const unknown =
+    "Trading 212 transaction r1 has unknown type NEW_KIND; provider sign was preserved";
+  const sync = vi.fn(async () => {
+    const result = empty({});
+    return {
+      ...result,
+      sections: {
+        ...result.sections,
+        cashFlows: {
+          ...result.sections.cashFlows,
+          rows: [
+            {
+              id: "cash-r1",
+              entity: "personal",
+              broker: "trading212" as const,
+              date: "2026-11-01",
+              currency: "EUR",
+              amount: 100,
+              kind: "other" as const,
+              description: "Trading 212 NEW_KIND",
+              brokerFlowId: "r1",
+            },
+          ],
+        },
+      },
+      problems: [unknown],
+    };
+  });
+  const result = await syncScheduledBrokers({
+    lanes: ["holdings", "history"] as const,
+    adapters: adapters(sync),
+    credentials,
+    operations,
+    tenantId: "local",
+    entity: "personal",
+    force: true,
+    now: new Date("2026-09-23T12:00:00.000Z"),
+    cashFlowKindRules: [
+      {
+        broker: "trading212",
+        typeKey: "NEW_KIND",
+        kind: "fee",
+        confirmedAt: "2026-11-11T10:00:00.000Z",
+      },
+    ],
+  });
+
+  const committed = result.committed.trading212;
+  expect(committed?.cashFlows?.[0]).toMatchObject({ kind: "fee", amount: -100 });
+  // The owner's confirmation resolved the unknown-type problem.
+  expect(result.problems).toEqual([]);
+});
+
+test("with no rules the adapter's cash-flow output is unchanged", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const unknown =
+    "Trading 212 transaction r1 has unknown type NEW_KIND; provider sign was preserved";
+  const sync = vi.fn(async () => {
+    const result = empty({});
+    return {
+      ...result,
+      sections: {
+        ...result.sections,
+        cashFlows: {
+          ...result.sections.cashFlows,
+          rows: [
+            {
+              id: "cash-r1",
+              entity: "personal",
+              broker: "trading212" as const,
+              date: "2026-11-01",
+              currency: "EUR",
+              amount: 100,
+              kind: "other" as const,
+              description: "Trading 212 NEW_KIND",
+              brokerFlowId: "r1",
+            },
+          ],
+        },
+      },
+      problems: [unknown],
+    };
+  });
+  const result = await syncScheduledBrokers({
+    lanes: ["holdings", "history"] as const,
+    adapters: adapters(sync),
+    credentials,
+    operations,
+    tenantId: "local",
+    entity: "personal",
+    force: true,
+    now: new Date("2026-09-23T12:00:00.000Z"),
+  });
+
+  expect(result.committed.trading212?.cashFlows?.[0]).toMatchObject({ kind: "other", amount: 100 });
+  expect(result.problems).toEqual([`trading212: ${unknown}`]);
+});

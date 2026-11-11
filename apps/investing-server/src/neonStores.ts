@@ -12,6 +12,8 @@ import {
 import type { Layer } from "effect";
 import { PartnerBudget } from "@lavega/adapters";
 import type { PersonalNetWorthStore, PersonalNetWorthTotal } from "./personalNetWorthStore.js";
+import type { CashFlowRule, CashFlowSuggestion } from "@lavega/core";
+import type { CashFlowStore } from "./cashFlowSuggestions.js";
 import {
   validateAccountWrapperMap,
   validateBenchmarkSymbols,
@@ -271,4 +273,32 @@ export function createNeonAgentRunStore(db: Database, tenantId: string): AgentRu
  *  Built per request from the request-scoped pool, like the stores above. */
 export function createNeonPartnerBudget(db: Database): Layer.Layer<PartnerBudget> {
   return PartnerBudget.storeLayer(createPartnerBudgetRepository(db));
+}
+
+/** Cash-flow rules and suggestions live in the tenant's preferences row
+ *  (issue #137). Rules are owner data and export as the array itself;
+ *  suggestions never affect a computed figure. */
+export function createNeonCashFlowStore(db: Database, tenantId: string): CashFlowStore {
+  const repo = () => createPreferencesRepository(db, tenantId);
+  const asArray = <T>(raw: unknown): T[] => (Array.isArray(raw) ? (raw as T[]) : []);
+  return {
+    async listSuggestions() {
+      return asArray<CashFlowSuggestion>(await repo().getCashFlowSuggestions());
+    },
+    async saveSuggestions(suggestions) {
+      await repo().setCashFlowSuggestions([...suggestions]);
+    },
+    async listRules() {
+      return asArray<CashFlowRule>(await repo().getCashFlowRules());
+    },
+    async saveRules(rules) {
+      await repo().setCashFlowRules([...rules]);
+    },
+    async suggestionsEnabled() {
+      return repo().getCashFlowSuggestionsEnabled();
+    },
+    async setSuggestionsEnabled(enabled) {
+      await repo().setCashFlowSuggestionsEnabled(enabled);
+    },
+  };
 }

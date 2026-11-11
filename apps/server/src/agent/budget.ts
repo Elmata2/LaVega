@@ -118,6 +118,10 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   travel: 20,
   "portfolio-persona": 1,
   "sector-inference": 1,
+  /* Jev-04: one batched Choice over at most 24 unknown types, each with a short
+   * type string, description, currency and sign — same order as one
+   * portfolio-persona call. */
+  "cash-flow-suggestion": 1,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost —

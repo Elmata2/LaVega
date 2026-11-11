@@ -32,11 +32,16 @@ import {
   createFileSharedPriceStore,
   runtimePriceStoreFile,
 } from "@lavega/investing-server/src/filePriceStore.js";
+import {
+  createFileCashFlowStore,
+  runtimeCashFlowStoreFile,
+} from "@lavega/investing-server/src/fileCashFlowStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import {
   createNeonAccountWrapperStore,
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
+  createNeonCashFlowStore,
   createNeonMarketDataConsentStore,
   createNeonPartnerBudget,
   createNeonPersonalNetWorthStore,
@@ -193,6 +198,9 @@ async function getInvestingFetch(): Promise<{
       ? createNeonSectorInferenceSettingStore(database)
       : createFileSectorInferenceSettingStore(runtimeSectorInferenceSettingFile()),
     dashboardCache,
+    cashFlowStore: database
+      ? createNeonCashFlowStore(database, currentInvestingTenant())
+      : createFileCashFlowStore(runtimeCashFlowStoreFile()),
     ...(database
       ? { partnerBudget: createNeonPartnerBudget(database) }
       : { partnerBudgetClient: localPartnerBudget }),

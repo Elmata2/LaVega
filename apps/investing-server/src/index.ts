@@ -22,6 +22,12 @@ import {
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import {
+  CASH_FLOW_SUGGESTION_ROUTE,
+  createCashFlowSuggestionService,
+  createMemoryCashFlowStore,
+  type CashFlowStore,
+} from "./cashFlowSuggestions.js";
 import { parseSyncRunRow, type SyncRunStore } from "./syncRun.js";
 import { attributeHistory, findMentions } from "./agentMentions.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
@@ -30,7 +36,10 @@ import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
+  cashFlowSuggestionContexts,
+  suggestionSample,
   resolveSecurityIdentities,
+  type CashFlowRule,
   sentryOptions,
   type AccountWrapperStore,
   type FundamentalsProvider,
@@ -193,6 +202,7 @@ export function createRuntimeBrokerSync(
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
   partnerBudget?: PartnerBudgetClient,
+  loadCashFlowRules?: () => Promise<readonly CashFlowRule[]>,
 ): (
   force: boolean,
   lanes: readonly BrokerSyncLane[],
@@ -207,6 +217,7 @@ export function createRuntimeBrokerSync(
     partnerBudget,
   });
   return async (force, lanes, deadlineMs, rebuildOrders) => {
+    const cashFlowKindRules = loadCashFlowRules ? await loadCashFlowRules() : [];
     const result = await syncScheduledBrokers({
       adapters,
       credentials,
@@ -217,6 +228,7 @@ export function createRuntimeBrokerSync(
       force,
       rebuildOrders,
       deadlineMs,
+      cashFlowKindRules,
     });
     await onCompleted?.(result);
     return result;
@@ -263,6 +275,9 @@ export type RuntimeAppOptions = {
   partnerBudget?: Layer.Layer<PartnerBudget>;
   /** A budget the caller already bridged, for a runtime that outlives the app. */
   partnerBudgetClient?: PartnerBudgetClient;
+  /** Owner-confirmed cash-flow rules + suggestions (issue #137). Defaults to an
+   *  in-memory store; the mounted app passes Neon or the file store. */
+  cashFlowStore?: CashFlowStore;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
@@ -282,6 +297,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     options.partnerBudgetClient ??
     createPartnerBudgetClient(options.partnerBudget ?? PartnerBudget.memoryLayer);
   const priceStore = options.priceStore;
+  const cashFlowStore = options.cashFlowStore ?? createMemoryCashFlowStore();
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
@@ -515,7 +531,58 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       updateProgress,
       tenantId,
       partnerBudget,
+      () => cashFlowStore.listRules(),
     );
+    /* Jev-04: suggestions run OFF the sync path. A model that is down, slow or
+     * disabled leaves today's state exactly as it is. */
+    const suggestCashFlows = async (result: ScheduledSyncResult) => {
+      try {
+        if (!(await cashFlowStore.suggestionsEnabled())) return;
+        if (!process.env.TYPESAFE_API_KEY?.trim()) return;
+        const [rules, suggestions] = await Promise.all([
+          cashFlowStore.listRules(),
+          cashFlowStore.listSuggestions(),
+        ]);
+        const candidates = [];
+        for (const [broker, snapshot] of Object.entries(result.committed)) {
+          const flows = snapshot.cashFlows ?? [];
+          for (const context of cashFlowSuggestionContexts({
+            broker,
+            flows,
+            problems: result.problems,
+            rules,
+            suggestions,
+          })) {
+            candidates.push({
+              context,
+              sample: suggestionSample(broker, context.typeKey, flows, result.problems),
+            });
+          }
+        }
+        if (candidates.length === 0) return;
+        const provider = createSystemOneProvider({
+          userId: tenantId,
+          route: CASH_FLOW_SUGGESTION_ROUTE as never,
+        });
+        await createCashFlowSuggestionService({
+          store: cashFlowStore,
+          provider: () => provider,
+          reportProblem: (message, error) =>
+            syncRunReporter({
+              source: "broker-sync",
+              problems: [message, ...(error instanceof Error ? [error.message] : [])],
+            }),
+        }).request(candidates);
+      } catch (error) {
+        syncRunReporter({
+          source: "broker-sync",
+          problems: [
+            "Cash-flow suggestions failed",
+            ...(error instanceof Error ? [error.message] : []),
+          ],
+        });
+      }
+    };
     const brokerSync = async (
       force: boolean,
       lanes: readonly BrokerSyncLane[],
@@ -561,6 +628,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           updatedAt: new Date().toISOString(),
           message: trading212Problem ?? "Trading 212 synchronization completed",
         };
+        /* Fire and forget: never awaited by the sync, never able to fail it. */
+        void suggestCashFlows(result);
         return result;
       } catch (error) {
         syncProgress = {
@@ -1135,6 +1204,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       syncRunStore,
       syncRunBackground,
       brokerSync,
+      cashFlowStore,
       partnerBudgetClient: partnerBudget,
       ...credentialDependencies,
       ...sectorDependencies,

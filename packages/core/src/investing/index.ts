@@ -29,3 +29,4 @@ export * from "./mentions.js";
  * security master already exports `instrumentKey` for its own (ISIN/MIC) key. */
 export { instrumentKey as priceInstrumentKey } from "./instrumentKey.js";
 export * from "./syncState.js";
+export * from "./cashFlowRules.js";

@@ -718,6 +718,15 @@ export type PreferencesRepository = {
    *  an instrument's name and description to an external model. */
   getSectorInferenceEnabled(): Promise<boolean>;
   setSectorInferenceEnabled(enabled: boolean): Promise<void>;
+  /** Owner-confirmed cash-flow vocabulary rules (issue #137). */
+  getCashFlowRules(): Promise<unknown>;
+  setCashFlowRules(rules: unknown): Promise<void>;
+  /** Stored suggestions, separate from rules; no effect until confirmed. */
+  getCashFlowSuggestions(): Promise<unknown>;
+  setCashFlowSuggestions(suggestions: unknown): Promise<void>;
+  /** Explicit owner switch for the suggestion step, default off. */
+  getCashFlowSuggestionsEnabled(): Promise<boolean>;
+  setCashFlowSuggestionsEnabled(enabled: boolean): Promise<void>;
 };
 
 /** Benchmarks, market-data consent, layout, sector corrections and the sector-inference switch
@@ -774,6 +783,13 @@ export function createPreferencesRepository(
     },
     getSectorInferenceEnabled: () => read<boolean>("sector_inference_enabled", false),
     setSectorInferenceEnabled: (enabled) => writeBoolean("sector_inference_enabled", enabled),
+    getCashFlowRules: () => read<unknown>("cash_flow_rules", []),
+    setCashFlowRules: (rules) => write("cash_flow_rules", rules),
+    getCashFlowSuggestions: () => read<unknown>("cash_flow_suggestions", []),
+    setCashFlowSuggestions: (suggestions) => write("cash_flow_suggestions", suggestions),
+    getCashFlowSuggestionsEnabled: () => read<boolean>("cash_flow_suggestions_enabled", false),
+    setCashFlowSuggestionsEnabled: (enabled) =>
+      writeBoolean("cash_flow_suggestions_enabled", enabled),
   };
 }
 
@@ -1792,7 +1808,8 @@ export type AiUsage = {
     | "chat"
     | "travel"
     | "portfolio-persona"
-    | "sector-inference";
+    | "sector-inference"
+    | "cash-flow-suggestion";
   model: string;
   inputTokens: number;
   outputTokens: number;
