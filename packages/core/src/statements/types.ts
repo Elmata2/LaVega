@@ -69,6 +69,8 @@ export type VaultDocument = {
   /** Ledger rows this document was linked to, when a later slice records them.
    *  Carried in the shape now so the metadata contract is stable. */
   txIds?: string[];
+  /** The generic import session this document is the source of (WS3.6). */
+  importId?: string;
   /** Absolute statement balances in integer cents, when the file/metadata has
    *  them (ADR 0011). Null = unknown, never zero. */
   openingBalanceCents: number | null;

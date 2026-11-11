@@ -10,6 +10,7 @@ export * from "./budget.js";
 export * from "./transfers.js";
 export * from "./labels.js";
 export * from "./ingest.js";
+export * from "./csvImport.js";
 export * from "./views.js";
 /* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
  * it); its barrel exports only the engine, the types and the dry run. */
