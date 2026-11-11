@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
-import { backupFilename, serializeBackup, parseBackup } from "../backup.js";
+import { backupFilename, buildPortableExport, serializeBackup, parseBackup } from "../backup.js";
 import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
 import { adminCopy } from "../copy/admin.js";
 import { useAppLocale } from "../appLocale.js";
@@ -21,6 +21,69 @@ type BackupProps = {
   // the (now swapped) vault state — restore() itself never touches React state.
   onRestored: () => void;
 };
+
+/**
+ * Draagbare export (WS6.1, #302): a readable, versioned ZIP of the open vault,
+ * read back through the core reader before the screen reports success. The
+ * encrypted `.lavega` download above stays what it is: a restore artifact, not
+ * a portable one.
+ */
+function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string }) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup.portable;
+  const [state, setState] = useState<"idle" | "building" | "verified" | "failed">("idle");
+  const [message, setMessage] = useState("");
+
+  async function handleExport() {
+    setState("building");
+    setMessage("");
+    try {
+      const built = await buildPortableExport(storage, asOf);
+      const url = URL.createObjectURL(
+        new Blob([built.bytes.slice().buffer as ArrayBuffer], { type: "application/zip" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = built.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      if (built.readback.ok) {
+        const rows = Object.values(built.manifest.recordCounts).reduce(
+          (sum, count) => sum + count,
+          0,
+        );
+        setState("verified");
+        setMessage(c.verified(rows, built.manifest.sections.length));
+      } else {
+        setState("failed");
+        setMessage(c.verificationFailed(built.readback.problems.length));
+      }
+    } catch {
+      setState("failed");
+      setMessage(c.error);
+    }
+  }
+
+  return (
+    <>
+      <h3>{c.title}</h3>
+      <p>{c.description}</p>
+      <Button
+        variant="primary"
+        data-testid="portable-export"
+        disabled={state === "building"}
+        onClick={handleExport}
+      >
+        {state === "building" ? c.building : c.button}
+      </Button>
+      {message !== "" && (
+        <p role={state === "failed" ? "alert" : undefined} data-testid="portable-export-result">
+          {message}
+        </p>
+      )}
+    </>
+  );
+}
 
 const formatDateTime = (locale: Locale, iso: string) =>
   new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
@@ -287,6 +350,8 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
       <Button variant="primary" onClick={handleDownload}>
         {c.download.button}
       </Button>
+
+      <PortableExport storage={storage} asOf={asOf} />
 
       <ServerBackup storage={storage} documentCount={documentCount} />
 

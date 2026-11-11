@@ -85,4 +85,5 @@ export * from "./advisor/riskScale.js";
 export * from "./advisor/knowledge.js";
 export * from "./advisor/resolve.js";
 export * from "./bills/index.js";
+export * from "./interop/index.js";
 export * from "./assistant.js";
