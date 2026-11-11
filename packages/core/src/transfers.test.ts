@@ -12,9 +12,12 @@ import {
   confirmTransfer,
   confirmedTransferTxIds,
   deriveTransferKind,
+  isInvestmentAccount,
+  isInvestmentContribution,
   reconcileTransfers,
   rejectTransfer,
   suggestTransfers,
+  summarizeConfirmedTransfers,
   transferPairId,
   type TransferMatchInput,
   type TransferPair,
@@ -610,4 +613,95 @@ test("confirmed transfer legs leave spend, while the BV↔private crossing is st
   expect(report.crossings[0].legs.map((l) => l.txId).sort()).toEqual(["bv-uit", "prive-in"]);
   expect(report.totalCents).toBe(500_000); // crossings, never legs
   expect(report.matchedCents).toBe(500_000);
+});
+
+// --- investment contribution classification (WS4.7, #298) -------------------
+
+test("a personal -> investment pair is an investment contribution and leaves spending", () => {
+  const checking = acc("checking", { type: "Betaalrekening", entity: "Privé" });
+  const broker = acc("broker", { type: "Beleggingsrekening", entity: "Privé" });
+  const txs = [
+    tx("checking", "2026-03-10", -1000, { id: "contribution-out" }),
+    tx("broker", "2026-03-10", 1000, { id: "contribution-in" }),
+  ];
+
+  const added = autoConfirmTransfers({ txs, accounts: [checking, broker], asOf: ASOF }).added;
+  expect(added).toHaveLength(1);
+  const contribution = added[0]!;
+  expect(contribution.kind).toBe("investment_contribution");
+  expect(isInvestmentContribution(contribution)).toBe(true);
+
+  // The same two legs the kind derivation saw are the ones the spend surface
+  // excludes, so contribution and spending cannot disagree.
+  const projected = applyTransferDecisions(txs, [contribution]);
+  expect(projected.map((row) => row.category)).toEqual([TRANSFER_CATEGORY, TRANSFER_CATEGORY]);
+  expect(categoryComparison(projected, []).rows).toHaveLength(0);
+  expect(summarizeConfirmedTransfers([contribution]).contributionCents).toBe(100_000);
+});
+
+test("an investment -> investment move is funds movement: no contribution and no spending", () => {
+  const first = acc("first", { type: "Beleggingsrekening" });
+  const second = acc("second", { type: "Beleggingsrekening" });
+  const txs = [
+    tx("first", "2026-03-10", -500, { id: "move-out" }),
+    tx("second", "2026-03-10", 500, { id: "move-in" }),
+  ];
+
+  const added = autoConfirmTransfers({ txs, accounts: [first, second], asOf: ASOF }).added;
+  expect(added).toHaveLength(1);
+  expect(added[0]!.kind).toBe("funds_movement");
+  expect(isInvestmentContribution(added[0]!)).toBe(false);
+  expect(summarizeConfirmedTransfers(added)).toMatchObject({ contributionCents: 0 });
+  expect(
+    applyTransferDecisions(txs, added).every((row) => row.category === TRANSFER_CATEGORY),
+  ).toBe(true);
+});
+
+test("only confirmed pairs move the contribution total, and a non-EUR leg is never converted 1:1", () => {
+  const suggested = pair("s-out", "s-in", {
+    kind: "investment_contribution",
+    amountCents: 700_00,
+  });
+  expect(isInvestmentContribution(suggested)).toBe(false);
+  expect(summarizeConfirmedTransfers([suggested])).toEqual({
+    contributionCents: 0,
+    fundsMovementCents: 0,
+    ccPaymentCents: 0,
+    loanPaymentCents: 0,
+    unconvertedPairIds: [],
+  });
+
+  const eur = confirmTransfer(
+    pair("o1", "i1", { kind: "investment_contribution", amountCents: 500_00 }),
+    ASOF,
+  );
+  const usd = confirmTransfer(
+    pair("o2", "i2", { kind: "investment_contribution", amountCents: 400_00, currency: "USD" }),
+    ASOF,
+  );
+  const summary = summarizeConfirmedTransfers([eur, usd]);
+  expect(summary.contributionCents).toBe(500_00);
+  expect(summary.unconvertedPairIds).toEqual([usd.id]);
+});
+
+test("an account whose explicit type names crypto is in the investment scope", () => {
+  const checking = acc("checking", { type: "Betaalrekening" });
+  const wallet = acc("wallet", { type: "Crypto" });
+  expect(isInvestmentAccount(wallet)).toBe(true);
+  expect(isInvestmentAccount(checking)).toBe(false);
+
+  expect(
+    deriveTransferKind(tx("checking", "2026-03-10", -250), tx("wallet", "2026-03-10", 250), [
+      checking,
+      wallet,
+    ]),
+  ).toBe("investment_contribution");
+  // Two wallets are still moving money inside the investment scope.
+  const exchange = acc("exchange", { type: "Crypto exchange" });
+  expect(
+    deriveTransferKind(tx("wallet", "2026-03-10", -250), tx("exchange", "2026-03-10", 250), [
+      wallet,
+      exchange,
+    ]),
+  ).toBe("funds_movement");
 });

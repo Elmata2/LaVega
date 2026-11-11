@@ -243,6 +243,16 @@ function matchEvidence(
   };
 }
 
+/** True when an account sits in the investment scope. LaVega's five canonical
+ *  account types have no crypto entry (`ACCOUNT_TYPES` in `balance.ts`), so the
+ *  owner's explicit type spelling crypto counts as investment scope too: the
+ *  plan's WS4.7 distinction is "money in an investment or crypto account", not
+ *  the asset class. The NAME is never consulted — a "Crypto" card is a card. */
+export function isInvestmentAccount(account: Account): boolean {
+  if (accountTypeKind(account) === "investment") return true;
+  return /^(crypto|cripto)/i.test(account.type?.trim() ?? "");
+}
+
 /** Sure's `Transfer.kind_for_account` (`transfer.rb:31-47`): the outflow leg's
  *  kind follows the DESTINATION account, and investment → investment stays a
  *  funds movement rather than a contribution. */
@@ -253,14 +263,12 @@ export function deriveTransferKind(
 ): TransferKind {
   const destination = accounts.find((a) => a.key === inflow.accountKey);
   if (!destination) return "funds_movement"; // not one of his known accounts: no claim about kind
+  if (isInvestmentAccount(destination)) {
+    const source = accounts.find((a) => a.key === outflow.accountKey);
+    return source && isInvestmentAccount(source) ? "funds_movement" : "investment_contribution";
+  }
   const kind = accountTypeKind(destination);
   if (kind === "credit") return "cc_payment";
-  if (kind === "investment") {
-    const source = accounts.find((a) => a.key === outflow.accountKey);
-    return source && accountTypeKind(source) === "investment"
-      ? "funds_movement"
-      : "investment_contribution";
-  }
   // No liability account kind exists yet (WS3.1), so a loan is recognised only
   // from a destination the owner typed as "Overig" AND that names itself a
   // loan. A name alone is not enough: "Kredietbank" is a bank, "lening" on a
@@ -498,4 +506,64 @@ export function confirmedTransferTxIds(pairs: readonly TransferPair[]): Set<stri
     ids.add(pair.inflowTxId);
   }
   return ids;
+}
+
+/** A CONFIRMED pair that moved money from a non-investment account into an
+ *  investment (or crypto) one. Only a decision counts: a suggestion is a guess
+ *  and must never move a total; and an investment → investment move is funds
+ *  movement, not a contribution, because nothing entered the investment scope. */
+export function isInvestmentContribution(pair: TransferPair): boolean {
+  return pair.status === "confirmed" && pair.kind === "investment_contribution";
+}
+
+/** Confirmed pairs summed per kind, in integer cents (ADR 0011).
+ *
+ *  Only EUR pairs are summed. A pair stores `createdAt`/`decidedAt`, the day
+ *  the owner decided — not the day the money moved — so there is no honest rate
+ *  date for another currency. Those pairs are named in `unconvertedPairIds`
+ *  (counted, visible) and never converted 1:1.
+ *
+ *  This is the one place a contribution total comes from, so the spend surface
+ *  (`applyTransferDecisions`) and any net-worth bridge read the same
+ *  classification instead of re-deriving it. */
+export type ConfirmedTransferTotals = {
+  contributionCents: number;
+  fundsMovementCents: number;
+  ccPaymentCents: number;
+  loanPaymentCents: number;
+  unconvertedPairIds: string[];
+};
+
+export function summarizeConfirmedTransfers(
+  pairs: readonly TransferPair[],
+): ConfirmedTransferTotals {
+  const totals: ConfirmedTransferTotals = {
+    contributionCents: 0,
+    fundsMovementCents: 0,
+    ccPaymentCents: 0,
+    loanPaymentCents: 0,
+    unconvertedPairIds: [],
+  };
+  for (const pair of pairs) {
+    if (pair.status !== "confirmed") continue;
+    if (!isEurCurrency(pair.currency)) {
+      totals.unconvertedPairIds.push(pair.id);
+      continue;
+    }
+    switch (pair.kind) {
+      case "investment_contribution":
+        totals.contributionCents += pair.amountCents;
+        break;
+      case "cc_payment":
+        totals.ccPaymentCents += pair.amountCents;
+        break;
+      case "loan_payment":
+        totals.loanPaymentCents += pair.amountCents;
+        break;
+      case "funds_movement":
+        totals.fundsMovementCents += pair.amountCents;
+        break;
+    }
+  }
+  return totals;
 }
