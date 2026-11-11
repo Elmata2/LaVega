@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { mergeInPersonalNetWorth } from "./personalNetWorth.js";
+import type { Account } from "../model.js";
+import { mergeInPersonalNetWorth, personalShareAccounts } from "./personalNetWorth.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 
 function pt(date: string, value: number | null): PortfolioValuePoint {
@@ -93,8 +94,54 @@ test("input order does not matter — totals and points are sorted internally", 
 
 test("portfolio-only fields (positionsValue, cashValue, value) are passed through untouched", () => {
   const source = pt("2026-01-01", 1000);
-  const { points } = mergeInPersonalNetWorth([source], [{ date: "2026-01-01", totalCents: 500_00 }]);
+  const { points } = mergeInPersonalNetWorth(
+    [source],
+    [{ date: "2026-01-01", totalCents: 500_00 }],
+  );
   expect(points[0]!.positionsValue).toBe(source.positionsValue);
   expect(points[0]!.cashValue).toBe(source.cashValue);
   expect(points[0]!.value).toBe(source.value);
+});
+
+/* WS4.7 (#298): the Personal share and the portfolio series split the owner's
+ * money by scope, so a contribution moves the same euro from one side to the
+ * other and the combined net worth never counts it twice or drops it. */
+
+const account = (over: Partial<Account>): Account => ({
+  key: "bank",
+  iban: "",
+  name: "Betaalrekening",
+  bank: "ING",
+  entity: "Privé",
+  currency: "EUR",
+  balance: 0,
+  ...over,
+});
+
+test("the Personal share leaves investment accounts to Investing", () => {
+  const accounts = [
+    account({ key: "bank", type: "Betaalrekening", balance: 9000 }),
+    account({ key: "broker", type: "Beleggingsrekening", balance: 1000 }),
+    // LaVega has no crypto account type; an explicit crypto spelling is still
+    // investment-scope money, so it stays on Investing's side too.
+    account({ key: "wallet", type: "Crypto", balance: 250 }),
+  ];
+  expect(personalShareAccounts(accounts).map((row) => row.key)).toEqual(["bank"]);
+});
+
+test("a contribution moves the same euro between the two sides without changing net worth", () => {
+  // Before: the bank holds all 10.000, the broker reports nothing.
+  const before = mergeInPersonalNetWorth(
+    [pt("2026-03-10", 0)],
+    [{ date: "2026-03-10", totalCents: 1_000_000 }],
+  );
+  expect(before.points[0]).toMatchObject({ personalValue: 10_000, netWorth: 10_000 });
+
+  // After a 1.000 contribution: the bank share drops to 9.000 and the portfolio
+  // reports the 1.000, so the combined figure is unchanged, counted once.
+  const after = mergeInPersonalNetWorth(
+    [pt("2026-03-10", 1000)],
+    [{ date: "2026-03-10", totalCents: 900_000 }],
+  );
+  expect(after.points[0]).toMatchObject({ personalValue: 9_000, netWorth: 10_000 });
 });

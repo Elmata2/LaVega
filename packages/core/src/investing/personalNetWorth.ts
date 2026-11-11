@@ -1,4 +1,6 @@
 import { Schema } from "effect";
+import type { Account } from "../model.js";
+import { isInvestmentAccount } from "../transfers.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
 
@@ -32,6 +34,19 @@ export type NetWorthPoint = PortfolioValuePoint & {
   netWorth: number | null;
 };
 
+/** The accounts whose balances the Personal share may add to the net-worth
+ *  bridge. Investment accounts are Investing's own figure: the portfolio series
+ *  counts them, so adding their Personal balance too would count the same euro
+ *  twice. A confirmed contribution moves money between the two sets, so this
+ *  filter is also what keeps a contribution from reading as money lost.
+ *
+ *  The rule is the same `isInvestmentAccount` the transfer classification uses
+ *  (WS4.7, #298), so the two sides cannot drift: what Personal excludes from
+ *  the bridge is exactly what a transfer into it counts as a contribution. */
+export function personalShareAccounts<T extends Account>(accounts: readonly T[]): T[] {
+  return accounts.filter((account) => !isInvestmentAccount(account));
+}
+
 /**
  * Folds the owner's opted-in Personal totals into a portfolio value series,
  * for LaVega Investing's net worth chart only (packages/investing-web's
@@ -42,6 +57,12 @@ export type NetWorthPoint = PortfolioValuePoint & {
  * additive read, not a rebuild of the portfolio series, so a caller that
  * still wants portfolio-only figures (returns, risk, allocation) keeps
  * reading `value`/`positionsValue`/`cashValue` off the same objects.
+ *
+ * The contract with the Personal sender (WS4.7): the total is bank money only
+ * — `personalShareAccounts` excluded the investment accounts, because Investing
+ * reports those. A contribution therefore lowers `personalValue` and raises the
+ * portfolio `value` by the same cents, and `netWorth` is unchanged: the same
+ * euro counted once, never lost.
  */
 export function mergeInPersonalNetWorth(
   points: readonly PortfolioValuePoint[],
