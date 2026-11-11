@@ -7,6 +7,7 @@ import { PERSONAL_URL } from "../lib/personal.js";
 import { useSyncSession, type BrokerProgress, type PriceSyncProgress } from "../lib/syncSession.js";
 import { AgentMemorySection } from "./AgentMemorySection.js";
 import { BrokerSettings } from "./BrokerSettings.js";
+import { CashFlowSuggestionsSection } from "./CashFlowSuggestionsSection.js";
 import { LayoutPicker, Switch } from "./LayoutPicker.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -483,6 +484,8 @@ export function Profile() {
       <StatusSection />
 
       <DataSection />
+
+      <CashFlowSuggestionsSection />
 
       <AgentMemorySection />
 
