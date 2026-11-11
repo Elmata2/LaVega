@@ -245,9 +245,12 @@ async function resolveWeights(
 
   if (fetchProfile) {
     try {
-      const lastAttempt = await store.lastProviderAttempt(lookupSymbol);
       const remaining = deadline - Date.now();
-      if (remaining > 0 && needsProviderFetch(profile, lastAttempt, Date.now())) {
+      /* A fresh provider profile needs no fetch whatever the attempt time is,
+       * so the attempt is read only for a symbol that could need one. */
+      const candidate = remaining > 0 && needsProviderFetch(profile, null, Date.now());
+      const lastAttempt = candidate ? await store.lastProviderAttempt(lookupSymbol) : null;
+      if (candidate && needsProviderFetch(profile, lastAttempt, Date.now())) {
         let fetched: SectorProfile | null | "timeout" | "threw";
         try {
           fetched = await raceBudget(fetchProfile(lookupSymbol), remaining);
