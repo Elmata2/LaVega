@@ -395,6 +395,9 @@ test("the paycheck slice shows due, reserved and the bridge window", () => {
   // The leading window holds no income: it is the bridge paid from cash.
   expect(byTestId("bills-period-2026-11-11").textContent).toContain("Brugperiode");
   expect(byTestId("bills-period-2026-11-11").textContent).toContain("Saldo");
+  // A bridge spends income it does not have, so its negative remainder is
+  // arithmetic, not a gap: muted, never the green "you have money left" tone.
+  expect(byTestId("bills-period-2026-11-11").querySelector(".text-pos")).toBeNull();
   // The tax bill outgrows its own paycheck, so an earlier paycheck reserves it.
   expect(byTestId("bills-period-2026-11-25").textContent).toContain("1.000,00");
   expect(byTestId("bills-period-2026-11-25").textContent).toContain("later");

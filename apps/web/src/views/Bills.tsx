@@ -623,7 +623,15 @@ export default function Bills({
                       <span>
                         {c.paycheck.reserved}: {money(period.reservedCents)}
                       </span>
-                      <span className={period.short ? "text-neg" : "text-pos"}>
+                      <span
+                        className={
+                          period.short ? "text-neg" : period.bridge ? "text-muted" : "text-pos"
+                        }
+                      >
+                        {/* A bridge window spends income it does not have; a
+                            negative remainder there is arithmetic, not a gap.
+                            Only a short window is alarming (measured against
+                            cash on hand). */}
                         {c.paycheck.remaining}: {money(period.remainingCents)}
                       </span>
                     </span>
