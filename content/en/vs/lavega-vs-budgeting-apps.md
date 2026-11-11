@@ -3,7 +3,7 @@ id: vs-budget-apps
 family: vs
 title: "LaVega vs bunq's budgeting features"
 description: "What bunq's budgeting features do, what LaVega does and where they differ. Facts from the companies' own websites, with dates. Other apps are left out."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

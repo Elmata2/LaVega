@@ -3,7 +3,7 @@ id: ai-finance-assistant
 family: vragen
 title: "What does an AI personal finance assistant do?"
 description: "What an AI personal finance assistant does with your money data, where its limits are and which privacy questions to ask of any tool."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

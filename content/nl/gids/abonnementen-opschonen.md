@@ -3,7 +3,7 @@ id: subscriptions
 family: gids
 title: "Abonnementen opschonen in vier stappen"
 description: "Zo vind je alle terugkerende afschrijvingen, zet je ze op een rij en zeg je op wat je niet meer gebruikt. Vier stappen, met de regels voor opzeggen."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

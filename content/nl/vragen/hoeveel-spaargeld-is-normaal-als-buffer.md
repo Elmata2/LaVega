@@ -3,7 +3,7 @@ id: emergency-buffer
 family: vragen
 title: "Hoeveel spaargeld is normaal als buffer?"
 description: "Wat het Nibud zegt over de grootte van een financiële buffer: het verschilt per huishouden, de richtlijn van tien procent en waar een buffer voor dient."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

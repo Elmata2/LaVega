@@ -3,7 +3,7 @@ id: vs-excel
 family: vs
 title: "LaVega vs a spreadsheet"
 description: "A fair comparison of tracking your money in a spreadsheet and in LaVega: flexibility and cost on one side, import, forecast and categorisation on the other."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

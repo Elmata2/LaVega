@@ -3,7 +3,7 @@ id: subscriptions
 family: gids
 title: "How to clean up your subscriptions"
 description: "Find every recurring debit, list them, decide item by item and cancel what you no longer use. Four steps, plus the Dutch rules on notice periods."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

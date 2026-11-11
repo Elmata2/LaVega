@@ -3,7 +3,7 @@ id: saving-for-a-child
 family: vragen
 title: "Saving for your child in the Netherlands: the options"
 description: "An overview of ways to set money aside for a child in the Netherlands: savings account, investment account and gifting, with the 2026 gift exemption."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

@@ -3,7 +3,7 @@ id: box-3
 family: vragen
 title: "Hoe werkt box 3?"
 description: "Hoe box 3 in 2026 werkt: het forfaitaire rendement, het heffingsvrij vermogen, het tarief en de geplande overstap naar belasting op werkelijk rendement."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

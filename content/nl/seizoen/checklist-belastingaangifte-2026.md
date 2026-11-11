@@ -3,7 +3,7 @@ id: tax-return
 family: seizoen
 title: "Checklist aangifte inkomstenbelasting over 2026 (indienen in 2027)"
 description: "Welke gegevens je verzamelt voor de belastingaangifte van 2027 (inkomstenbelasting over 2026), volgens de laatste checklist van de Belastingdienst."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

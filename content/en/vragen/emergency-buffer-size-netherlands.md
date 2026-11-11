@@ -3,7 +3,7 @@ id: emergency-buffer
 family: vragen
 title: "How big is an emergency fund in the Netherlands?"
 description: "What Nibud, the Dutch budget institute, publishes about the size of an emergency fund (buffer): it differs per household, plus a ten percent guideline."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

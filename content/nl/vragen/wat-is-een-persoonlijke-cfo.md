@@ -3,7 +3,7 @@ id: personal-cfo
 family: vragen
 title: "Wat is een persoonlijke CFO?"
 description: "Een persoonlijke CFO doet voor een huishouden wat een CFO voor een bedrijf doet: overzicht, cashflow, buffer en doelen. Wat software wel en niet kan."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

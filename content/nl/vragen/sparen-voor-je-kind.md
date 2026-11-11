@@ -3,7 +3,7 @@ id: saving-for-a-child
 family: vragen
 title: "Sparen voor je kind: welke mogelijkheden zijn er?"
 description: "Overzicht van manieren om geld opzij te zetten voor een kind: spaarrekening, beleggingsrekening en schenken, met de schenkvrijstelling voor 2026."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

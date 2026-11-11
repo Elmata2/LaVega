@@ -3,7 +3,7 @@ id: vs-excel
 family: vs
 title: "LaVega vs Excel"
 description: "Een eerlijke vergelijking tussen een eigen spreadsheet en LaVega voor je geldzaken: flexibiliteit en kosten tegenover import, forecast en categorisering."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:

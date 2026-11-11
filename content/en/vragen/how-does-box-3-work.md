@@ -3,7 +3,7 @@ id: box-3
 family: vragen
 title: "How does box 3 work in the Netherlands?"
 description: "How Dutch box 3 works in 2026 for expats: the deemed return, the tax-free allowance, the rate and the planned move to tax on actual returns."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
