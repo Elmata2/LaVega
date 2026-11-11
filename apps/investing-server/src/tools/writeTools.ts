@@ -16,13 +16,25 @@
  *   - the one write surface is the account tax-treatment rule map from WS4.4,
  *     which is already the owner's own metadata and already persisted per
  *     tenant. No new write surface is opened by this slice.
+ *
+ * WS5.5 (#300) adds ONE direct write with no preview: `record_valuation`, the
+ * analogue of Sure's `record_valuation.rb` tool. It is append/upsert by date, and
+ * it is REFUSED unless the caller supplies a structured provenance citation —
+ * a value with no provenance is worse than a missing value. Sure's tool is
+ * cited here; its write trust is not copied (a write-scoped token and a
+ * validated citation are both required).
  */
 
 import { randomUUID } from "node:crypto";
+import { Schema } from "effect";
 import {
+  decodeProvenanceCitation,
+  isValidProvenanceDate,
+  provenanceCitationProblem,
   validateAccountWrapperMap,
   type AccountWrapperEntry,
   type AgentToolDefinition,
+  type ProvenanceCitation,
 } from "@lavega/core";
 
 /** How long an issued preview may be applied. Plan WS5.4: 30 minutes. */
@@ -46,9 +58,23 @@ export type RulePreview = {
 
 /** What the write tools need from the surface they run on. Bound to the
  *  caller's tenant by the surface; a tool argument can never name one. */
+export type ValuationWriteInput = {
+  date: string;
+  totalCents: number;
+  citation: ProvenanceCitation;
+};
+
 export type InvestingWriteSource = {
   /** The account labels currently stored, for the dry-run diff. */
   currentEntries(): Promise<readonly AccountWrapperEntry[]>;
+  /** Record the owner's valuation for `date`, with its citation. Resolves once
+   *  the row is stored; throws when the surface has no database. */
+  recordValuation(input: ValuationWriteInput): Promise<{
+    applied: true;
+    date: string;
+    totalCents: number;
+    citation: ProvenanceCitation;
+  }>;
   /** Holds one validated preview for `ttlMs` and returns its single-use token. */
   storePreview(input: {
     entries: readonly AccountWrapperEntry[];
@@ -104,6 +130,112 @@ type InvestingWriteToolSpec = Omit<AgentToolDefinition, "handler"> & {
  * opted into preview tools cannot run it.
  */
 export const INVESTING_WRITE_TOOL_SPECS: readonly InvestingWriteToolSpec[] = [
+  {
+    name: "record_valuation",
+    description:
+      "Record the owner's total portfolio/personal valuation for one date, with the provenance that backs it. Money is INTEGER CENTS in EUR (ADR 0011: 123456 means EUR 1,234.56), and date is the day the valuation refers to (YYYY-MM-DD, not in the future). `citation` is REQUIRED and structured, never prose: {source, grade: A|B|C, date, documentId?, estimated?}, where grade A = an official document for that exact date, B = derived with a document, C = a proxy or assumption. A valuation without a citation, or with a malformed one (grade D, impossible date, free-text note), is refused and nothing is written; the refusal is {error, hint} data. Re-recording the same date replaces that day's value and its citation.",
+    schema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description: "The day the valuation refers to, YYYY-MM-DD.",
+        },
+        totalCents: {
+          type: "integer",
+          description: "The total in integer EUR cents; 123456 means EUR 1,234.56.",
+          minimum: -1_000_000_000_000,
+          maximum: 1_000_000_000_000,
+        },
+        currency: {
+          type: "string",
+          enum: ["EUR"],
+          description: "Always EUR; the stored total is EUR cents.",
+        },
+        citation: {
+          type: "object",
+          description:
+            "Structured provenance. Never prose. A value with no citation is worse than a missing value.",
+          properties: {
+            source: { type: "string", description: "Document or provider the number came from." },
+            grade: {
+              type: "string",
+              enum: ["A", "B", "C"],
+              description: "A = official document for that date; B = derived with a document; C = proxy/assumption.",
+            },
+            date: { type: "string", description: "The date the cited source refers to, YYYY-MM-DD." },
+            documentId: { type: "string", description: "Optional stable id or URL of the document." },
+            estimated: {
+              type: "boolean",
+              description: "True when the figure is an estimate (Sure's `estimated:` marker).",
+            },
+          },
+          required: ["source", "grade", "date"],
+          additionalProperties: false,
+        },
+      },
+      required: ["date", "totalCents", "citation"],
+      additionalProperties: false,
+    },
+    scope: "write",
+    handler: async (source, input) => {
+      /* The citation is checked FIRST: a valuation without provenance must be
+       * refused before any other complaint can mask it (WS5.5 acceptance). */
+      const problem = provenanceCitationProblem(input.citation);
+      if (problem)
+        return {
+          applied: false,
+          error: problem.error,
+          hint: problem.hint,
+          problems: [problem.hint],
+        };
+      const date = typeof input.date === "string" ? input.date.trim() : "";
+      if (!isValidProvenanceDate(date))
+        return {
+          applied: false,
+          error: "invalid_date",
+          hint: "date must be a real calendar date, YYYY-MM-DD.",
+          problems: ["date must be a real calendar date, YYYY-MM-DD"],
+        };
+      const today = new Date().toISOString().slice(0, 10);
+      if (date > today)
+        return {
+          applied: false,
+          error: "future_date",
+          hint: "Record a valuation for a day that has already happened.",
+          problems: ["A valuation cannot be recorded for a future date"],
+        };
+      if (date < "2000-01-01")
+        return {
+          applied: false,
+          error: "invalid_date",
+          hint: "date is older than this feature supports.",
+          problems: ["date is too far in the past"],
+        };
+      const totalCents = input.totalCents;
+      if (
+        typeof totalCents !== "number" ||
+        !Number.isInteger(totalCents) ||
+        Math.abs(totalCents) > 1_000_000_000_000
+      )
+        return {
+          applied: false,
+          error: "invalid_amount",
+          hint: "totalCents must be an integer number of EUR cents.",
+          problems: ["totalCents must be an integer number of EUR cents"],
+        };
+      const currency = input.currency ?? "EUR";
+      if (currency !== "EUR")
+        return {
+          applied: false,
+          error: "invalid_currency",
+          hint: "The stored valuation is EUR cents; currency must be EUR.",
+          problems: ["currency must be EUR"],
+        };
+      const citation = decodeProvenanceCitation(input.citation);
+      return source.recordValuation({ date, totalCents, citation });
+    },
+  },
   {
     name: "preview_rule",
     description:

@@ -25,6 +25,12 @@ const documentedBlock = (markdown: string): string => {
 const registryTools = () => [
   ...createInvestingReadTools(async () => ({ status: 200, body: {} })),
   ...createInvestingWriteTools({
+    recordValuation: async ({ date, totalCents, citation }) => ({
+      applied: true as const,
+      date,
+      totalCents,
+      citation,
+    }),
     currentEntries: async () => [],
     storePreview: async () => ({ previewToken: "t", expiresAt: "2026-11-11T00:30:00.000Z" }),
     applyPreview: async () => ({ applied: true as const, entries: [] }),
@@ -35,7 +41,7 @@ test("the documented tool list equals the registry", () => {
   const markdown = readFileSync(docsPath, "utf8");
   const documented = [
     ...new Set(
-      [...documentedBlock(markdown).matchAll(/`(get_[a-z_]+|preview_rule|apply_rule)`/g)].map(
+      [...documentedBlock(markdown).matchAll(/`(get_[a-z_]+|record_valuation|preview_rule|apply_rule)`/g)].map(
         (match) => match[1],
       ),
     ),

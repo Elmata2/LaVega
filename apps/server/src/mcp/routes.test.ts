@@ -329,6 +329,12 @@ test("a write token previews a rule, changes nothing, then applies it once", asy
   const previewTokens = createRulePreviewStore();
   const applyPreview = vi.fn(async () => undefined);
   const writeTools = createInvestingWriteTools({
+    recordValuation: async ({ date, totalCents, citation }) => ({
+      applied: true as const,
+      date,
+      totalCents,
+      citation,
+    }),
     currentEntries: async () => [{ broker: "trading212", account: "ISA", wrapper: "unknown" }],
     storePreview: async ({ entries, changes, ttlMs }) => {
       const issued = previewTokens.issue({

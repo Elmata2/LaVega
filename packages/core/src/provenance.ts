@@ -198,6 +198,16 @@ export function formatProvenanceCitation(citation: ProvenanceCitation): string {
 }
 
 /**
+ * One line for a UI, from the structured fields — never from stored prose.
+ * `estimated:` is kept because it changes what the number means.
+ */
+export function describeProvenanceCitation(citation: ProvenanceCitation): string {
+  const estimate = citation.estimated ? "estimated " : "";
+  const document = citation.documentId ? ` · ${citation.documentId}` : "";
+  return `${estimate}${citation.source} · grade ${citation.grade} · ${citation.date}${document}`;
+}
+
+/**
  * Parse the Sure prose grammar into structured fields. `date` and `documentId`
  * travel separately exactly as in Sure's `record_valuation(account, date,
  * amount, source)`, where the source string never carried the date.

@@ -1,7 +1,8 @@
 # Investing MCP endpoint (read + preview/apply write)
 
 `POST /mcp` lets an external agent query the owner's investing data, and — only
-with a separate write token — apply a validated account tax-treatment rule.
+with a separate write token — apply a validated account tax-treatment rule, or record a
+valuation with a structured provenance citation.
 Reads are the default and the whole surface for a read token. Writes are a
 two-step preview/apply pair behind a distinct credential, scoped to the account
 its bearer token names, and mounted in `apps/server` — the process that already
@@ -103,6 +104,7 @@ source — there is no second inline tool definition (WS5.3).
 | `get_sector_exposure` | read  | Portfolio weight by sector, funds looked through                                              |
 | `get_risk`            | read  | Historical risk against the default benchmark (6M/1Y/All)                                     |
 | `get_agent_memory`    | read  | Risk tolerance, theses and goals stored for the owner                                         |
+| `record_valuation`    | write | Record one dated valuation with its mandatory structured citation                              |
 | `preview_rule`        | write | Validate an account tax-treatment rule and return a single-use preview token; changes nothing |
 | `apply_rule`          | write | Apply a preview token from `preview_rule` (single-use, 30-minute TTL)                         |
 
@@ -127,9 +129,46 @@ Why a read token cannot reach a write path — two independent gates:
    bridge re-serialises the validated entries rather than forwarding the caller's
    body.
 
+## Provenance citation (WS5.5, #300)
+
+A valuation is only recorded with the provenance that backs it. The citation is
+**structured fields, never prose** — Sure appends its citation to free-text notes
+(`record_valuation.rb` @ `562fe09`), which can be neither filtered nor enforced:
+
+```json
+{
+  "source": "Trading 212 account statement",
+  "grade": "A",
+  "date": "2026-09-30",
+  "documentId": "statement-09",
+  "estimated": false
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `source` | Non-blank, plain text, ≤ 300 chars |
+| `grade` | `A` = official document for that exact date; `B` = derived with a document; `C` = proxy or assumption. Exactly one of `A`/`B`/`C` — required (stricter than Sure, whose grade is optional unless `estimated:`) |
+| `date` | A real calendar date, `YYYY-MM-DD` |
+| `documentId` | Optional stable id or URL |
+| `estimated` | Optional boolean: Sure's `estimated:` marker |
+
+Unknown fields are refused, not ignored: a free-text `note` is exactly how a
+citation leaks back into prose. A refusal is safe data:
+
+```json
+{ "isError": false, "structuredContent": { "applied": false, "error": "citation_required", "hint": "…" } }
+```
+
+`error` is `citation_required` or `invalid_citation`; the hint names the field
+without echoing the value. The citation is stored with the valuation and shown
+in the investing UI (net worth page: "Personal total source: …"), built from the
+structured fields. The Sure prose form is accepted only at the import seam
+(`parseProvenanceCitationText`) and rendered only for display.
+
 ## Write tools: preview, then apply
 
-A write token lists two extra tools. Neither is listed for a read token.
+A write token lists three extra tools. None is listed for a read token.
 
 1. `preview_rule` takes `{entries: [{broker, account, wrapper}]}` (the account
    tax-treatment rule map from WS4.4). It validates the entries with the same
@@ -140,7 +179,16 @@ A write token lists two extra tools. Neither is listed for a read token.
    (`RULE_PREVIEW_TTL_MS`). An unknown, used or expired token is refused and
    nothing changes; the owner previews again.
 
-The applied write is the owner's own account-label metadata (the same PUT
+3. `record_valuation` takes `{date, totalCents, currency?, citation}` and writes
+   one dated valuation (EUR integer cents, ADR 0011) with its citation. It has no
+   preview pair because it is an upsert by date — the analogue of Sure's
+   `record_valuation` — and it is gated by the citation instead: no citation, a
+   malformed one, a future date, a non-integer amount or a non-EUR currency is
+   refused and nothing is written. Stored in `personal.net_worth_totals` under
+   the token's tenant, so the browser share route and the agent path write the
+   same rows. Needs a database; without one the call fails as tool error data.
+
+The applied rule write is the owner's own account-label metadata (the same PUT
 `/api/investing/account-wrappers` the dashboard uses), never a trade, a transfer
 or a credential.
 

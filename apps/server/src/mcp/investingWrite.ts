@@ -10,7 +10,14 @@
  * method, path or extra field can turn the write into something else.
  */
 
-import { validateAccountWrapperMap, type AccountWrapperEntry } from "@lavega/core";
+import {
+  decodeProvenanceCitation,
+  validateAccountWrapperMap,
+  type AccountWrapperEntry,
+  type ProvenanceCitation,
+} from "@lavega/core";
+import { createPersonalNetWorthRepository } from "@lavega/database";
+import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { forwardInvesting } from "../investing-mount.js";
 
 /** Every structural write an MCP write tool may perform. Exactly one path. */
@@ -41,5 +48,44 @@ export function createMcpInvestingWrite(
       tenantId,
     );
     if (!response.ok) throw new Error(`The investing app refused the write (${response.status})`);
+  };
+}
+
+/**
+ * Record one dated valuation with its citation (#300, WS5.5).
+ *
+ * Unlike the rule map, this write has no preview pair: it is an upsert by date
+ * — the analogue of Sure's `record_valuation`, which also writes directly and
+ * is gated by its citation grammar instead of by a preview token. The citation
+ * is decoded again here, so a caller that bypassed the tool layer still cannot
+ * store prose.
+ *
+ * The repository is the ONLY path: it runs under the token's tenant, so the row
+ * carries that account's `user_id` and RLS applies exactly as it does to the
+ * browser's own share route. `repository` is injectable so a test can prove the
+ * write without a database.
+ */
+export type ValuationWriteRepository = {
+  put(date: string, totalCents: number, provenance?: Record<string, unknown>): Promise<void>;
+};
+
+export function createMcpValuationWrite(
+  tenantId: string,
+  repository?: ValuationWriteRepository,
+): (input: {
+  date: string;
+  totalCents: number;
+  citation: ProvenanceCitation;
+}) => Promise<{ applied: true; date: string; totalCents: number; citation: ProvenanceCitation }> {
+  return async (input) => {
+    const citation = decodeProvenanceCitation(input.citation);
+    let target = repository;
+    if (!target) {
+      const database = runtimeDatabase();
+      if (!database) throw new Error("A valuation write needs a database");
+      target = createPersonalNetWorthRepository(database, tenantId);
+    }
+    await target.put(input.date, input.totalCents, citation);
+    return { applied: true, date: input.date, totalCents: input.totalCents, citation };
   };
 }

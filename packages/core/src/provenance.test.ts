@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   decodeProvenanceCitation,
+  describeProvenanceCitation,
   formatProvenanceCitation,
   isProvenanceGrade,
   isValidProvenanceDate,
@@ -191,4 +192,17 @@ test("parse round-trips through format for every grade, document id included", (
     const text = formatProvenanceCitation(citation);
     expect(parseProvenanceCitationText(text, { date: citation.date })).toEqual(citation);
   }
+});
+
+test("describeProvenanceCitation is a UI line built from structured fields only", () => {
+  expect(describeProvenanceCitation(valid)).toBe(
+    "Trading 212 account statement · grade A · 2026-10-31",
+  );
+  expect(
+    describeProvenanceCitation({
+      ...valid,
+      estimated: true,
+      documentId: "statement-2026-10",
+    }),
+  ).toBe("estimated Trading 212 account statement · grade A · 2026-10-31 · statement-2026-10");
 });

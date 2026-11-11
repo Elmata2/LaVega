@@ -34,7 +34,7 @@ import type { McpAuditEntry } from "@lavega/database";
 import { MCP_PATH, mcpIdentity } from "../apiGuard.js";
 import { recordMcpAudit, type McpAuditSink } from "./audit.js";
 import { createMcpInvestingRead } from "./investingRead.js";
-import { createMcpInvestingWrite } from "./investingWrite.js";
+import { createMcpInvestingWrite, createMcpValuationWrite } from "./investingWrite.js";
 import { createRulePreviewStore, type RulePreviewStore } from "./previewTokens.js";
 import { checkBudget } from "../agent/budget.js";
 import {
@@ -57,7 +57,7 @@ import type { McpTokenIdentity } from "./tokens.js";
 export const MCP_SERVER_INFO = { name: "lavega-investing", version: "1.0.0" } as const;
 
 const MCP_INSTRUCTIONS =
-  "Read-only LaVega investing data for the token's own account. Money is a decimal amount in the portfolio's presentation currency; a null value means unknown, not zero. Never ask for a tenant id: the token names it.";
+  "LaVega investing data for the token's own account. Read tools return money as a decimal amount in the portfolio's presentation currency; a null value means unknown, not zero. A write token may also record a valuation, which REQUIRES a structured provenance citation {source, grade: A|B|C, date, documentId?} — never prose. Never ask for a tenant id: the token names it.";
 
 /** The spend gate answer for one call. The gate is a peek: MCP tool calls do not
  *  buy model tokens, but the account's AI budget still bounds the endpoint. */
@@ -88,6 +88,7 @@ function createMcpTools(
   if (!identity.scopes.includes("write")) return tools;
   const now = deps.now ?? (() => Date.now());
   const source: InvestingWriteSource = {
+    recordValuation: createMcpValuationWrite(identity.tenantId),
     currentEntries: async () => {
       const read = createMcpInvestingRead(identity.tenantId, origin);
       const { status, body } = await read("/api/investing/account-wrappers");

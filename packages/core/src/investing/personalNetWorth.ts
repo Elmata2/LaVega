@@ -25,6 +25,16 @@ export const PersonalNetWorthTotalsSchema = Schema.Struct({
   totals: Schema.Array(PersonalNetWorthTotalSchema),
 });
 
+/** The most recent stored total, which is the one whose citation the net worth
+ *  page can show. Ties keep the later entry (the store lists oldest first). */
+export function latestPersonalNetWorthTotal(
+  totals: readonly PersonalNetWorthTotal[],
+): PersonalNetWorthTotal | null {
+  let latest: PersonalNetWorthTotal | null = null;
+  for (const total of totals) if (!latest || total.date >= latest.date) latest = total;
+  return latest;
+}
+
 export type NetWorthPoint = PortfolioValuePoint & {
   /** Personal's total in EUR, carried forward from the latest total on or
    *  before this date. Null on every date before the owner's first shared

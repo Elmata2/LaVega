@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import type { Account } from "../model.js";
-import { mergeInPersonalNetWorth, personalShareAccounts } from "./personalNetWorth.js";
+import {
+  latestPersonalNetWorthTotal,
+  mergeInPersonalNetWorth,
+  personalShareAccounts,
+} from "./personalNetWorth.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 
 function pt(date: string, value: number | null): PortfolioValuePoint {
@@ -144,4 +148,16 @@ test("a contribution moves the same euro between the two sides without changing 
     [{ date: "2026-03-10", totalCents: 900_000 }],
   );
   expect(after.points[0]).toMatchObject({ personalValue: 9_000, netWorth: 10_000 });
+});
+
+test("latestPersonalNetWorthTotal picks the newest row and carries its citation (#300 WS5.5)", () => {
+  const provenance = { source: "Annual report", grade: "B" as const, date: "2026-09-30" };
+  expect(latestPersonalNetWorthTotal([])).toBeNull();
+  expect(
+    latestPersonalNetWorthTotal([
+      { date: "2026-08-31", totalCents: 100 },
+      { date: "2026-09-30", totalCents: 200, provenance },
+      { date: "2026-07-31", totalCents: 50 },
+    ]),
+  ).toEqual({ date: "2026-09-30", totalCents: 200, provenance });
 });
