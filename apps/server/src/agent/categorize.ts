@@ -67,11 +67,7 @@ export async function categorizeTransactions(
   }) => void | Promise<void>,
   userId?: string,
 ): Promise<{ id: string; category: string }[]> {
-  const provider = createMistralProvider(
-    apiKey,
-    MISTRAL_SMALL,
-    createAiObservationContext(userId),
-  );
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL, createAiObservationContext(userId));
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
   /* A billed 200 with an unexpected body, or a timeout after the tokens were
    * counted, still costs. Recorded at the boundary cap rather than silently. */

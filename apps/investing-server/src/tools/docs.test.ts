@@ -41,9 +41,11 @@ test("the documented tool list equals the registry", () => {
   const markdown = readFileSync(docsPath, "utf8");
   const documented = [
     ...new Set(
-      [...documentedBlock(markdown).matchAll(/`(get_[a-z_]+|record_valuation|preview_rule|apply_rule)`/g)].map(
-        (match) => match[1],
-      ),
+      [
+        ...documentedBlock(markdown).matchAll(
+          /`(get_[a-z_]+|record_valuation|preview_rule|apply_rule)`/g,
+        ),
+      ].map((match) => match[1]),
     ),
   ];
   expect(documented.sort()).toEqual(

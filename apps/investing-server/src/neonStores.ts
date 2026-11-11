@@ -8,10 +8,7 @@ import {
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
-import type {
-  PersonalNetWorthStore,
-  PersonalNetWorthTotal,
-} from "./personalNetWorthStore.js";
+import type { PersonalNetWorthStore, PersonalNetWorthTotal } from "./personalNetWorthStore.js";
 import {
   validateAccountWrapperMap,
   validateBenchmarkSymbols,

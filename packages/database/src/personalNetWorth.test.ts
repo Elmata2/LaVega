@@ -75,12 +75,16 @@ test("a provenance citation is stored with the valuation and replaced on a rewri
     documentId: "statement-2026-09",
   };
   await totals.put("2026-09-01", 123_456, citation);
-  expect(await totals.list()).toEqual([{ date: "2026-09-01", totalCents: 123_456, provenance: citation }]);
+  expect(await totals.list()).toEqual([
+    { date: "2026-09-01", totalCents: 123_456, provenance: citation },
+  ]);
 
   // The agent re-records the same day from a better document: the citation follows the value.
   const updated = { source: "Annual report", grade: "B", date: "2026-09-01", estimated: true };
   await totals.put("2026-09-01", 130_000, updated);
-  expect(await totals.list()).toEqual([{ date: "2026-09-01", totalCents: 130_000, provenance: updated }]);
+  expect(await totals.list()).toEqual([
+    { date: "2026-09-01", totalCents: 130_000, provenance: updated },
+  ]);
 
   // A browser-written row (no citation) leaves the column null, not an empty object.
   await totals.put("2026-09-02", 500);

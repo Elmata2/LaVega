@@ -54,7 +54,9 @@ const tradesSource: InvestingToolSource = {
   trades: async ({ symbol, limit }) => ({
     trades: [
       { date: "2026-11-09", symbol: "AAPL", side: "buy", quantity: 2, price: 188, currency: "USD" },
-    ].filter((trade) => !symbol || trade.symbol === symbol).slice(0, limit ?? 60),
+    ]
+      .filter((trade) => !symbol || trade.symbol === symbol)
+      .slice(0, limit ?? 60),
     total: 1,
     truncated: false,
   }),

@@ -308,9 +308,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           route: "extract-invoice",
           model: MISTRAL_SMALL,
           errorCode: aiFailureCode(e),
-          ...(upstreamHttpStatus(e) === undefined
-            ? {}
-            : { httpStatus: upstreamHttpStatus(e) }),
+          ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
         },
         budget.reservation,
       );
@@ -409,9 +407,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
             route: "chat",
             model: MISTRAL_MEDIUM,
             errorCode: aiFailureCode(e),
-            ...(upstreamHttpStatus(e) === undefined
-              ? {}
-              : { httpStatus: upstreamHttpStatus(e) }),
+            ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
           },
           budget.reservation,
         );
@@ -488,9 +484,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           route: "categorize",
           model: MISTRAL_SMALL,
           errorCode: aiFailureCode(e),
-          ...(upstreamHttpStatus(e) === undefined
-            ? {}
-            : { httpStatus: upstreamHttpStatus(e) }),
+          ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
         },
         budget.reservation,
       );

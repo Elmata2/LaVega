@@ -447,7 +447,6 @@ test("fetchWithTimeout() rethrows a non-abort fetch error unchanged", async () =
   await expect(fetchWithTimeout("https://example.test", {}, 1000, "chat")).rejects.toBe(boom);
 });
 
-
 test("parseMistralUsage reads prompt cache tokens from the shapes the API has used", () => {
   expect(
     parseMistralUsage({
@@ -483,7 +482,11 @@ test("complete() returns the provider's cache counts alongside its token counts"
   fetchMock.mockResolvedValue(
     jsonResponse({
       choices: [{ message: { content: "hoi" } }],
-      usage: { prompt_tokens: 10, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 4 } },
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        prompt_tokens_details: { cached_tokens: 4 },
+      },
     }),
   );
   const provider = createMistralProvider("sk-test", "mistral-small-latest");

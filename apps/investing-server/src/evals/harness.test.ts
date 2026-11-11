@@ -122,9 +122,7 @@ test("schemaProblem covers the subset of JSON Schema the registry publishes", ()
     ),
   ).toContain("not a known argument");
   expect(schemaProblem({ type: "integer" }, 1.5)).toContain("integer");
-  expect(
-    schemaProblem({ type: "string", enum: ["6M", "1Y"] }, "3Y"),
-  ).toContain("must be one of");
+  expect(schemaProblem({ type: "string", enum: ["6M", "1Y"] }, "3Y")).toContain("must be one of");
   expect(schemaProblem({ type: "object", properties: {} }, {})).toBeNull();
 });
 

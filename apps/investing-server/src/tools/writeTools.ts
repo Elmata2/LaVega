@@ -26,7 +26,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Schema } from "effect";
 import {
   decodeProvenanceCitation,
   isValidProvenanceDate,
@@ -161,10 +160,17 @@ export const INVESTING_WRITE_TOOL_SPECS: readonly InvestingWriteToolSpec[] = [
             grade: {
               type: "string",
               enum: ["A", "B", "C"],
-              description: "A = official document for that date; B = derived with a document; C = proxy/assumption.",
+              description:
+                "A = official document for that date; B = derived with a document; C = proxy/assumption.",
             },
-            date: { type: "string", description: "The date the cited source refers to, YYYY-MM-DD." },
-            documentId: { type: "string", description: "Optional stable id or URL of the document." },
+            date: {
+              type: "string",
+              description: "The date the cited source refers to, YYYY-MM-DD.",
+            },
+            documentId: {
+              type: "string",
+              description: "Optional stable id or URL of the document.",
+            },
             estimated: {
               type: "boolean",
               description: "True when the figure is an estimate (Sure's `estimated:` marker).",

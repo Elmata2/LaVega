@@ -128,9 +128,7 @@ test("grades and dates have their own predicates", () => {
 });
 
 test("format renders the Sure grammar with the estimated marker and document id", () => {
-  expect(formatProvenanceCitation(valid)).toBe(
-    "Trading 212 account statement (grade: A)",
-  );
+  expect(formatProvenanceCitation(valid)).toBe("Trading 212 account statement (grade: A)");
   expect(
     formatProvenanceCitation({
       ...valid,

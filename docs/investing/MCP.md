@@ -104,7 +104,7 @@ source — there is no second inline tool definition (WS5.3).
 | `get_sector_exposure` | read  | Portfolio weight by sector, funds looked through                                              |
 | `get_risk`            | read  | Historical risk against the default benchmark (6M/1Y/All)                                     |
 | `get_agent_memory`    | read  | Risk tolerance, theses and goals stored for the owner                                         |
-| `record_valuation`    | write | Record one dated valuation with its mandatory structured citation                              |
+| `record_valuation`    | write | Record one dated valuation with its mandatory structured citation                             |
 | `preview_rule`        | write | Validate an account tax-treatment rule and return a single-use preview token; changes nothing |
 | `apply_rule`          | write | Apply a preview token from `preview_rule` (single-use, 30-minute TTL)                         |
 
@@ -145,19 +145,22 @@ A valuation is only recorded with the provenance that backs it. The citation is
 }
 ```
 
-| Field | Rule |
-| --- | --- |
-| `source` | Non-blank, plain text, ≤ 300 chars |
-| `grade` | `A` = official document for that exact date; `B` = derived with a document; `C` = proxy or assumption. Exactly one of `A`/`B`/`C` — required (stricter than Sure, whose grade is optional unless `estimated:`) |
-| `date` | A real calendar date, `YYYY-MM-DD` |
-| `documentId` | Optional stable id or URL |
-| `estimated` | Optional boolean: Sure's `estimated:` marker |
+| Field        | Rule                                                                                                                                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`     | Non-blank, plain text, ≤ 300 chars                                                                                                                                                                             |
+| `grade`      | `A` = official document for that exact date; `B` = derived with a document; `C` = proxy or assumption. Exactly one of `A`/`B`/`C` — required (stricter than Sure, whose grade is optional unless `estimated:`) |
+| `date`       | A real calendar date, `YYYY-MM-DD`                                                                                                                                                                             |
+| `documentId` | Optional stable id or URL                                                                                                                                                                                      |
+| `estimated`  | Optional boolean: Sure's `estimated:` marker                                                                                                                                                                   |
 
 Unknown fields are refused, not ignored: a free-text `note` is exactly how a
 citation leaks back into prose. A refusal is safe data:
 
 ```json
-{ "isError": false, "structuredContent": { "applied": false, "error": "citation_required", "hint": "…" } }
+{
+  "isError": false,
+  "structuredContent": { "applied": false, "error": "citation_required", "hint": "…" }
+}
 ```
 
 `error` is `citation_required` or `invalid_citation`; the hint names the field

@@ -3,7 +3,7 @@ import type { Account } from "../model.js";
 import { isInvestmentAccount } from "../transfers.js";
 import type { PortfolioValuePoint } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
-import { ProvenanceCitationSchema, type ProvenanceCitation } from "../provenance.js";
+import { ProvenanceCitationSchema } from "../provenance.js";
 
 /** One day's opted-in Personal total, as apps/server's
  *  personal.net_worth_totals row reports it. */

@@ -38,7 +38,7 @@ test("the bridge decodes the citation again, so a bypassed tool layer still cann
 
 test("without a database the write fails loudly instead of silently doing nothing", async () => {
   const write = createMcpValuationWrite("user-1");
-  await expect(
-    write({ date: "2026-01-01", totalCents: 1, citation }),
-  ).rejects.toThrow("needs a database");
+  await expect(write({ date: "2026-01-01", totalCents: 1, citation })).rejects.toThrow(
+    "needs a database",
+  );
 });

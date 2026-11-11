@@ -57,11 +57,7 @@ function parseTotalCents(raw: unknown): number | null {
 export type NetWorthRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;
   repository: (tenantId: string) => {
-    put(
-      date: string,
-      totalCents: number,
-      provenance?: Record<string, unknown>,
-    ): Promise<void>;
+    put(date: string, totalCents: number, provenance?: Record<string, unknown>): Promise<void>;
     deleteAll(): Promise<void>;
   };
   /** Injectable so a test can fix "today" instead of racing the clock. */
@@ -114,11 +110,9 @@ export function registerNetWorthRoutes(app: Hono, dependencies: NetWorthRouteDep
       provenance = decodeProvenanceCitation(body.provenance);
     }
 
-    await dependencies.repository(tenantId).put(
-      date,
-      totalCents,
-      provenance === undefined ? undefined : { ...provenance },
-    );
+    await dependencies
+      .repository(tenantId)
+      .put(date, totalCents, provenance === undefined ? undefined : { ...provenance });
     return c.json({ stored: true });
   });
 

@@ -72,7 +72,16 @@ export class ProvenanceError extends Schema.TaggedError<ProvenanceError>()("Prov
 }) {}
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/** Control characters have no place in a source/document id, and a regex for
+ *  them trips no-control-regex. A code-point scan says the same thing. */
+function hasControlChars(value: string): boolean {
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
 
 /** Is this one of the three grades? Lowercase and "D" are not. */
 export function isProvenanceGrade(value: unknown): value is ProvenanceGrade {
@@ -89,9 +98,7 @@ export function isValidProvenanceDate(value: unknown): value is string {
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }
 
@@ -99,16 +106,12 @@ function fail(field: string, message: string): never {
   throw new ProvenanceError({ message, field });
 }
 
-const cleanText = (
-  value: unknown,
-  field: "source" | "documentId",
-  maxLength: number,
-): string => {
+const cleanText = (value: unknown, field: "source" | "documentId", maxLength: number): string => {
   if (typeof value !== "string") fail(field, `${field} must be a string`);
   const trimmed = value.trim();
   if (trimmed.length === 0) fail(field, `${field} must not be blank`);
   if (trimmed.length > maxLength) fail(field, `${field} is too long`);
-  if (CONTROL_CHARS.test(trimmed)) fail(field, `${field} must be plain text`);
+  if (hasControlChars(trimmed)) fail(field, `${field} must be plain text`);
   return trimmed;
 };
 
@@ -133,8 +136,7 @@ export function decodeProvenanceCitation(input: unknown): ProvenanceCitation {
   if (!isProvenanceGrade(grade))
     fail("grade", "grade must be A, B or C (A = official document, B = derived, C = proxy)");
   const date = record.date;
-  if (!isValidProvenanceDate(date))
-    fail("date", "date must be a real calendar date, YYYY-MM-DD");
+  if (!isValidProvenanceDate(date)) fail("date", "date must be a real calendar date, YYYY-MM-DD");
   const citation: ProvenanceCitation = { source, grade, date };
 
   if (record.documentId !== undefined)
@@ -173,7 +175,8 @@ export function provenanceCitationProblem(
       return { error: "invalid_citation", hint: "The citation is not valid." };
     const hints: Record<string, string> = {
       source: "source must be a short, non-blank description of the document or provider.",
-      grade: "grade must be A (official document for that date), B (derived with a document) or C (proxy or assumption).",
+      grade:
+        "grade must be A (official document for that date), B (derived with a document) or C (proxy or assumption).",
       date: "date must be a real calendar date in YYYY-MM-DD form.",
       documentId: "documentId, when present, must be a short non-blank id or URL.",
       estimated: "estimated, when present, must be true or false.",
@@ -226,7 +229,7 @@ export function parseProvenanceCitationText(
 
   /* Capital-E `Estimated:` is rejected rather than normalized: Sure's parser is
    * case-sensitive and the harness's examples say so. */
-  if (/^Estimated:/.test(text))
+  if (text.startsWith("Estimated:"))
     fail("source", "the estimated marker is lowercase `estimated: `");
 
   let estimated = false;

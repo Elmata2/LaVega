@@ -23,10 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
-import {
-  createInvestingTools,
-  type InvestingToolSource,
-} from "../tools/investingTools.js";
+import { createInvestingTools, type InvestingToolSource } from "../tools/investingTools.js";
 import type { AgentToolDefinition } from "@lavega/core";
 
 /** The fixture breaks the tool contract. Distinct from a bad answer: this is
@@ -83,19 +80,14 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
  * same subset the registry's schemas use — so a schema change that a fixture no
  * longer satisfies fails HERE, not as a confusing handler error.
  */
-export function schemaProblem(
-  schema: unknown,
-  value: unknown,
-  path = "arguments",
-): string | null {
+export function schemaProblem(schema: unknown, value: unknown, path = "arguments"): string | null {
   if (!isPlainObject(schema)) return null;
   const expected = schema.type;
   if (expected === "object") {
     if (!isPlainObject(value)) return `${path} must be an object`;
     const properties = isPlainObject(schema.properties) ? schema.properties : {};
     const required = Array.isArray(schema.required) ? schema.required : [];
-    for (const key of required)
-      if (!(key in value)) return `${path}.${key} is required`;
+    for (const key of required) if (!(key in value)) return `${path}.${key} is required`;
     if (schema.additionalProperties === false)
       for (const key of Object.keys(value))
         if (!(key in properties)) return `${path}.${key} is not a known argument`;
@@ -248,7 +240,8 @@ export function contractDrift(
       drift.push(`preview flag changed: ${pinned.name} ${pinned.preview} -> ${current.preview}`);
     if (current.descriptionHash !== pinned.descriptionHash)
       drift.push(`description changed: ${pinned.name}`);
-    if (current.schemaHash !== pinned.schemaHash) drift.push(`input schema changed: ${pinned.name}`);
+    if (current.schemaHash !== pinned.schemaHash)
+      drift.push(`input schema changed: ${pinned.name}`);
     byName.delete(pinned.name);
   }
   for (const added of byName.keys()) drift.push(`tool added: ${added}`);

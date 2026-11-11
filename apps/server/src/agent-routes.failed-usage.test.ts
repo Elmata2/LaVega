@@ -110,6 +110,7 @@ test("a failed chat turn is recorded as a failure, and still answers with an SSE
   const app = new Hono();
   registerAgentRoutes(app, {
     chat: async function* () {
+      yield "";
       throw new MistralHttpError(500, "conversation", "upstream fault");
     },
   });

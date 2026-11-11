@@ -69,11 +69,7 @@ export async function extractInvoiceFields(
   }) => void | Promise<void>,
   userId?: string,
 ): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
-  const provider = createMistralProvider(
-    apiKey,
-    MISTRAL_SMALL,
-    createAiObservationContext(userId),
-  );
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL, createAiObservationContext(userId));
 
   let markdown: string | undefined;
   let pages = 0;
