@@ -157,6 +157,15 @@ function dividend(
   };
 }
 
+/** The Personal side of the net-worth bridge for the local run: a bank-only
+ *  total (WS4.7 #298, investment accounts are Investing's own figure), so the
+ *  NetWorthPage can be checked end to end without a real Personal vault. */
+export function createDevFixturePersonalNetWorthSeed(
+  now = new Date(),
+): Record<string, Array<{ date: string; totalCents: number }>> {
+  return { [TENANT_ID]: [{ date: isoDate(now), totalCents: 25_000_00 }] };
+}
+
 export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataSnapshot {
   const asOf = isoDate(now);
   const positions: Position[] = SYMBOLS.map((entry) => ({
