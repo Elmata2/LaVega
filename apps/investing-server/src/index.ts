@@ -38,12 +38,16 @@ import {
   createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
+  createPartnerBudgetClient,
   createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
+  PartnerBudget,
+  YahooHttpClient,
   type BrokerSyncOperationStore,
+  type PartnerBudgetClient,
   type PriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
@@ -109,7 +113,7 @@ import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
-import { ManagedRuntime } from "effect";
+import { ManagedRuntime, type Layer } from "effect";
 import { createAgentRunController } from "./agentRun.js";
 
 export { app };
@@ -177,12 +181,14 @@ export function createRuntimeBrokerSync(
   operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
+  partnerBudget?: PartnerBudgetClient,
 ): (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
     tenantId,
     onTrading212Diagnostic,
+    partnerBudget,
   });
   return async (force, deadlineMs, rebuildOrders) => {
     const result = await syncScheduledBrokers({
@@ -225,6 +231,11 @@ export type RuntimeAppOptions = {
   dashboardCache?: DashboardCache;
   /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
   agentMemory?: (tenantId: string) => AgentMemoryRepository;
+  /** Where partner request slots come from. Built into one runtime per app.
+   *  Defaults to a memory budget. */
+  partnerBudget?: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged, for a runtime that outlives the app. */
+  partnerBudgetClient?: PartnerBudgetClient;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
@@ -238,6 +249,11 @@ export { createBrokerDataCache as createRuntimeBrokerDataCache };
 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
+  /* One budget for every partner call of this runtime: the broker adapters, the
+   * price and sector reads and the fundamentals. Hosted, it is Neon's. */
+  const partnerBudget =
+    options.partnerBudgetClient ??
+    createPartnerBudgetClient(options.partnerBudget ?? PartnerBudget.memoryLayer);
   const priceStore = options.priceStore;
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
@@ -440,6 +456,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       syncStateStore,
       updateProgress,
       tenantId,
+      partnerBudget,
     );
     const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
       if (devFixtureEnabled) {
@@ -714,7 +731,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
-  const freshFundamentals = options.fundamentalsProvider ?? createYahooFundamentalsProvider();
+  const freshFundamentals =
+    options.fundamentalsProvider ??
+    createYahooFundamentalsProvider(
+      new YahooHttpClient(undefined, undefined, undefined, { partnerBudget }),
+    );
   const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
   const unavailableFundamentals: FundamentalsProvider = {
     fetch: async () => {
@@ -886,6 +907,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return withPortfolioAgentRoute(
       createApp({
         brokerSync,
+        partnerBudgetClient: partnerBudget,
         ...credentialDependencies,
         ...sectorDependencies,
         resolveTenantId: options.resolveTenantId,
@@ -910,6 +932,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   return withPortfolioAgentRoute(
     createApp({
       brokerSync,
+      partnerBudgetClient: partnerBudget,
       ...credentialDependencies,
       ...sectorDependencies,
       resolveTenantId: options.resolveTenantId,

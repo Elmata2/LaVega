@@ -1,4 +1,6 @@
+import { DateTime } from "effect";
 import { expect, test, vi } from "vitest";
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
 import type { Position, Trade } from "@lavega/core";
 import { priceSyncLeaseContract } from "../../../packages/database/src/priceSyncLease.contract.js";
 import {
@@ -93,7 +95,7 @@ test("concurrent tenant triggers join one orchestration", async () => {
     currency: "EUR",
     backfillFrom: "2024-01-01",
   };
-  const orchestrator = createPriceOrchestrator({ discover: () => [target], sync, paceMs: 0 });
+  const orchestrator = createPriceOrchestrator({ discover: () => [target], sync });
 
   const first = orchestrator.run("local");
   const second = orchestrator.run("local");
@@ -125,7 +127,7 @@ test("partial failure continues later symbols and remains retryable on next run"
   const sync = vi.fn(async (target: PriceSyncTarget) =>
     result(target.symbol === "FAIL" ? ["rate limited"] : []),
   );
-  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 0 });
+  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync });
 
   await expect(orchestrator.run("local")).resolves.toMatchObject({
     status: "problem",
@@ -137,50 +139,107 @@ test("partial failure continues later symbols and remains retryable on next run"
   expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["FAIL", "OK", "FAIL", "OK"]);
 });
 
-test("reports waiting state and remaining symbols during 300 ms pacing", async () => {
-  let release!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const wait = vi.fn(() => pending);
-  const targets: PriceSyncTarget[] = [
-    {
-      kind: "current",
-      symbol: "NOW",
-      ticker: "NOW",
-      exchange: "UNKNOWN",
-      currency: "EUR",
-      backfillFrom: "2024-01-01",
-    },
-    {
-      kind: "closed",
-      symbol: "NEXT",
-      ticker: "NEXT",
-      exchange: "UNKNOWN",
-      currency: "EUR",
-      backfillFrom: "2024-02-01",
-    },
-  ];
+test("hands each run's deadline to every sync, so the partner budget can stop a slice on it", async () => {
+  const sync = vi.fn(
+    async (
+      _target: PriceSyncTarget,
+      _tenantId: string,
+      _context: { deadline: number | undefined },
+    ) => result(),
+  );
   const orchestrator = createPriceOrchestrator({
-    discover: () => targets,
-    sync: async () => result(),
-    wait,
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
   });
 
-  const run = orchestrator.run("local");
-  await waitForAssertion(() => expect(wait).toHaveBeenCalledWith(300));
-  await expect(orchestrator.status("local")).resolves.toMatchObject({
-    status: "waiting",
-    completed: 1,
-    remainingSymbols: ["NEXT"],
+  const deadline = Date.now() + 3_600_000;
+  await orchestrator.run("local", deadline);
+
+  expect(sync.mock.calls.map((call) => call[2])).toEqual([{ deadline }, { deadline }]);
+});
+
+test("a slot past the deadline pauses the run with the symbol unreached, not failed", async () => {
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "TWO")
+      throw new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) });
+    return result();
   });
-  release();
-  await expect(run).resolves.toMatchObject({ status: "completed", completed: 2 });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO", "THREE"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "paused",
+    completed: 1,
+    remainingSymbols: ["TWO", "THREE"],
+    problems: [],
+    message: "Price synchronization paused for the host time budget",
+  });
+  expect(sync).toHaveBeenCalledTimes(2);
+});
+
+test("a paused run is resumed from the symbol that had no slot", async () => {
+  let blocked = true;
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "TWO" && blocked)
+      throw new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) });
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO", "THREE"].map(symbolTarget),
+    sync,
+  });
+
+  await orchestrator.run("local");
+  blocked = false;
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 3,
+    problems: [],
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "TWO", "TWO", "THREE"]);
+});
+
+test("a budget store that is down pauses the run and says why, instead of failing every symbol", async () => {
+  const sync = vi.fn(async () => {
+    throw new PartnerBudgetUnavailable({ message: "down" });
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "paused",
+    completed: 0,
+    remainingSymbols: ["ONE", "TWO"],
+    problems: [],
+    message: "Price synchronization paused: the shared request budget is unavailable",
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+});
+
+test("any other failure still marks only that symbol and the run goes on", async () => {
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "ONE") throw new Error("boom");
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "problem",
+    completed: 2,
+    problems: ["ONE: boom"],
+  });
 });
 
 test("empty discovery completes without a provider request", async () => {
   const sync = vi.fn();
-  const orchestrator = createPriceOrchestrator({ discover: () => [], sync, paceMs: 0 });
+  const orchestrator = createPriceOrchestrator({ discover: () => [], sync });
 
   await expect(orchestrator.run("local")).resolves.toMatchObject({
     status: "completed",
@@ -199,29 +258,6 @@ const symbolTarget = (symbol: string): PriceSyncTarget => ({
   backfillFrom: "2024-01-01",
 });
 
-test("does not pace between cache-hit syncs", async () => {
-  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
-  const sync = vi.fn(async () => result([], false));
-  const wait = vi.fn(async () => {});
-  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 10, wait });
-
-  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
-
-  expect(wait).not.toHaveBeenCalled();
-});
-
-test("paces only after syncs that actually fetched", async () => {
-  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
-  const sync = vi.fn(async (target: PriceSyncTarget) => result([], target.symbol !== "TWO"));
-  const wait = vi.fn(async () => {});
-  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 10, wait });
-
-  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
-
-  // ONE fetched (paces before TWO), TWO cache hit (no pace before THREE).
-  expect(wait).toHaveBeenCalledTimes(1);
-});
-
 test("throttles progress writes by symbol count so store latency cannot gate cache-hit throughput", async () => {
   const targets = Array.from({ length: 7 }, (_, index) => symbolTarget(`SYM${index}`));
   const sync = vi.fn(async () => result([], false));
@@ -230,7 +266,6 @@ test("throttles progress writes by symbol count so store latency cannot gate cac
   const orchestrator = createPriceOrchestrator({
     discover: () => targets,
     sync,
-    paceMs: 0,
     progressStore,
   });
 
@@ -257,7 +292,6 @@ test("elapsed time forces progress renewal before symbol count threshold", async
     },
     progressStore: { ...backing, put },
     now: () => new Date(clock),
-    paceMs: 0,
   });
   await expect(orchestrator.run("tenant")).resolves.toMatchObject({ status: "completed" });
   expect(put.mock.calls.length).toBeGreaterThan(2);
@@ -273,7 +307,6 @@ test("run stops on the host budget and names what is left instead of continuing 
   const orchestrator = createPriceOrchestrator({
     discover: () => targets,
     sync,
-    paceMs: 0,
     pauseMarginMs: 3_000,
     now: () => new Date(clock),
   });
@@ -298,7 +331,6 @@ test("a paused run resumes at the symbol it stopped on and finishes", async () =
   const orchestrator = createPriceOrchestrator({
     discover: () => targets,
     sync,
-    paceMs: 0,
     pauseMarginMs: 3_000,
     progressStore,
     now: () => new Date(clock),
@@ -327,7 +359,6 @@ test("a resumed run uses fresh benchmark priority for its remaining symbols", as
   const orchestrator = createPriceOrchestrator({
     discover: () => discovered,
     sync,
-    paceMs: 0,
     pauseMarginMs: 3_000,
     progressStore,
     now: () => new Date(clock),
@@ -356,7 +387,6 @@ test("a benchmark selected during a paused run joins its next slice", async () =
   const orchestrator = createPriceOrchestrator({
     discover: () => discovered,
     sync,
-    paceMs: 0,
     pauseMarginMs: 3_000,
     progressStore,
     now: () => new Date(clock),
@@ -403,7 +433,6 @@ test("a benchmark selected mid-run through the shared selection store is fetched
   const instanceRunningTheSync = createPriceOrchestrator({
     discover,
     sync,
-    paceMs: 0,
     progressStore,
     now: () => new Date(clock),
   });
@@ -412,14 +441,17 @@ test("a benchmark selected mid-run through the shared selection store is fetched
   const anotherInstance = createPriceOrchestrator({
     discover,
     sync: async () => result(),
-    paceMs: 0,
     progressStore,
     now: () => new Date(clock),
   });
 
   const run = instanceRunningTheSync.run("local");
   await waitForAssertion(() =>
-    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ONE" }), "local"),
+    expect(sync).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: "ONE" }),
+      "local",
+      expect.anything(),
+    ),
   );
 
   // The PUT handler only writes the selection store; it never calls into the
@@ -449,7 +481,6 @@ test("re-checking for a new benchmark is throttled by the clock, not called once
   const orchestrator = createPriceOrchestrator({
     discover,
     sync,
-    paceMs: 0,
     now: () => new Date(0),
   });
 
@@ -466,7 +497,6 @@ test("progress survives the process that produced it", async () => {
   const shared = {
     discover: () => [symbolTarget("ONE")],
     sync: async () => result(),
-    paceMs: 0,
     progressStore,
   };
   await createPriceOrchestrator(shared).run("local");
@@ -502,7 +532,6 @@ test("a fresh run by another instance is left alone rather than doubled", async 
   const orchestrator = createPriceOrchestrator({
     discover: () => [symbolTarget("TWO")],
     sync,
-    paceMs: 0,
     progressStore,
   });
 
@@ -535,7 +564,6 @@ test("a stale run is taken over so a dead instance cannot strand the work", asyn
   const orchestrator = createPriceOrchestrator({
     discover: () => [symbolTarget("TWO")],
     sync,
-    paceMs: 0,
     progressStore,
   });
 
@@ -565,7 +593,6 @@ test("a worker that loses its durable lease stops before another provider reques
   const orchestrator = createPriceOrchestrator({
     discover: () => [symbolTarget("TWO")],
     sync,
-    paceMs: 0,
     progressStore,
   });
 
@@ -596,7 +623,6 @@ test.each(["start", "final"])(
       discover: () => [symbolTarget("ONE")],
       sync,
       progressStore,
-      paceMs: 0,
     });
     await expect(orchestrator.run("local")).rejects.toThrow("storage unavailable");
     await expect(backing.get("local")).resolves.not.toMatchObject({ status: "completed" });
@@ -671,7 +697,6 @@ test("slow provider cannot publish stale progress after another worker claims ex
     progressStore: store,
     now: () => new Date(clock),
     takeoverAfterMs: 30_000,
-    paceMs: 0,
   });
   const running = first.run("tenant");
   await waitForAssertion(() => expect(sync).toHaveBeenCalledTimes(1));
@@ -709,7 +734,6 @@ test("heartbeat keeps slow provider lease fresh past takeover threshold", async 
       now: clock,
       takeoverAfterMs: 30_000,
       heartbeatEveryMs: 5_000,
-      paceMs: 0,
     });
     const running = first.run("tenant");
     await vi.waitFor(() => expect(sync).toHaveBeenCalledOnce());

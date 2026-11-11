@@ -18,6 +18,21 @@ import {
   type BrokerResult,
   type BrokerSyncResume,
 } from "../BrokerAccessAdapter.js";
+import { DateTime } from "effect";
+import {
+  createMemoryPartnerBudgetClient,
+  isPartnerBudgetUnavailable,
+  isPartnerWait,
+  type PartnerBudgetClient,
+  type PartnerSeen,
+} from "../../partnerBudget/PartnerBudget.js";
+import {
+  accountScopeId,
+  partnerKey,
+  type AccountLimitName,
+  type AccountScopeId,
+  type PartnerKey,
+} from "../../partnerBudget/limits.js";
 
 export type Trading212Config = {
   token: string;
@@ -25,6 +40,9 @@ export type Trading212Config = {
   baseUrl: string;
   diagnostics?: (event: Trading212DiagnosticEvent) => void;
   resume?: BrokerSyncResume;
+  /** Where request slots come from. Defaults to a budget of this adapter's own,
+   *  so a caller that shares none still paces its requests. */
+  partnerBudget?: PartnerBudgetClient;
 };
 
 type Trading212RequestConfig = Trading212Config & { deadlineMs?: number };
@@ -152,47 +170,50 @@ function rateLimitWaitMs(response: Response, retry: number): number {
   return Math.min(1_000 * 2 ** retry, MAX_RATE_LIMIT_WAIT_MS);
 }
 
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+/** Trading 212's request budget for one account: where slots come from and
+ *  whose they are. The scope id is a hash of the API key, never the key. */
+type Trading212Budget = { client: PartnerBudgetClient; scopeId: AccountScopeId };
+
+const BUDGET_UNAVAILABLE_MESSAGE =
+  "Trading 212 sync paused: the shared request budget is unavailable; the sync resumes on the next run";
+/** The budget store is down: no request goes out, and the next run tries again. */
+const BUDGET_UNAVAILABLE_RETRY_MS = 30_000;
+
+function budgetKey(budget: Trading212Budget, limit: AccountLimitName): PartnerKey {
+  return partnerKey(limit, budget.scopeId);
 }
 
-type RateLimiter = ReturnType<typeof createRateLimiter>;
+/** A budget failure is a pause, never a reason to send the request anyway. */
+function pauseOnBudgetError(error: unknown): never {
+  if (isPartnerWait(error))
+    throw new Trading212SyncPausedError(
+      HOST_DEADLINE_MESSAGE,
+      Math.max(0, DateTime.toEpochMillis(error.until) - Date.now()),
+    );
+  if (isPartnerBudgetUnavailable(error))
+    throw new Trading212SyncPausedError(BUDGET_UNAVAILABLE_MESSAGE, BUDGET_UNAVAILABLE_RETRY_MS);
+  throw error;
+}
 
 /**
- * Paces requests against the per-endpoint budget Trading 212 reports on every
- * response, so a sync waits out a spent window instead of spending a request to
- * discover it is spent.
+ * What the response headers say about the budget, as two independent pairs.
+ * `x-ratelimit-limit` is a count and `-period` is seconds: both valid and
+ * positive give the spacing `period / limit`. `-remaining` with `-reset` (Unix
+ * seconds) can block the key. A pair with a missing or invalid part is ignored.
  */
-function createRateLimiter(
-  diagnostics: (event: Trading212DiagnosticEvent) => void,
-  deadlineMs?: number,
-) {
-  const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
-
-  const sleep = async (milliseconds: number): Promise<void> => {
-    if (milliseconds <= 0) return;
-    await wait(milliseconds);
-  };
-
-  return {
-    async reserve(path: string): Promise<void> {
-      const budget = budgets.get(path);
-      if (!budget || budget.remaining > 0) return;
-      budgets.delete(path);
-      const waitMs = Math.max(0, budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
-      throwIfHostDeadline(deadlineMs, waitMs);
-      diagnostics({ type: "wait", endpoint: path, reason: "budget-exhausted", waitMs });
-      await sleep(waitMs);
-    },
-    observe(path: string, response: Response): void {
-      if (response.status === 429) return;
-      const remaining = headerNumber(response, "x-ratelimit-remaining");
-      const reset = resetAtMs(response);
-      if (remaining === null || reset === null) return;
-      budgets.set(path, { remaining, resetAtMs: reset });
-    },
-    sleep,
-  };
+function seenFromHeaders(response: Response): PartnerSeen | null {
+  const limit = headerNumber(response, "x-ratelimit-limit");
+  const period = headerNumber(response, "x-ratelimit-period");
+  const remaining = headerNumber(response, "x-ratelimit-remaining");
+  const reset = resetAtMs(response);
+  const seen: PartnerSeen = {};
+  if (limit !== null && period !== null && limit > 0 && period > 0)
+    seen.intervalMs = Math.ceil((period * 1_000) / limit);
+  if (remaining !== null && reset !== null && remaining >= 0 && reset > 0) {
+    seen.remaining = remaining;
+    seen.resetAt = DateTime.makeUnsafe(reset);
+  }
+  return Object.keys(seen).length === 0 ? null : seen;
 }
 
 function value(order: Trading212Order, ...keys: string[]): unknown {
@@ -699,9 +720,9 @@ function result(
 async function accountSummary(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Order> {
-  const response = await request(url, config, limiter);
+  const response = await request(url, config, budget, "trading212:account-summary");
   if (!response.ok) throw responseError("account-summary", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -718,9 +739,14 @@ async function historyPage(
   url: string,
   label: "transaction" | "dividend",
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Page> {
-  const response = await request(url, config, limiter);
+  const response = await request(
+    url,
+    config,
+    budget,
+    label === "transaction" ? "trading212:history-transactions" : "trading212:history-dividends",
+  );
   if (!response.ok) throw responseError(`${label}-history`, response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -758,11 +784,11 @@ async function historyPage(
 async function page(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Page> {
-  // Order history allows 6 requests per minute. `limiter` waits out a spent
-  // window between cursors, so sync stays one sequential request per cursor.
-  const response = await request(url, config, limiter);
+  // Order history allows 20 requests per minute. The budget spaces the cursors
+  // out, so sync stays one sequential request per cursor.
+  const response = await request(url, config, budget, "trading212:history-orders");
   if (!response.ok) throw responseError("order-history", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -793,11 +819,23 @@ async function page(
 async function request(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
+  limit: AccountLimitName,
 ): Promise<Response> {
   const path = new URL(url).pathname;
+  // The key names the stream, not the path: a cursor URL is opaque to us.
+  const key = budgetKey(budget, limit);
   for (let retry = 0; ; retry += 1) {
-    await limiter.reserve(path);
+    const waitingSince = Date.now();
+    await budget.client.awaitSlot(key, config.deadlineMs).catch(pauseOnBudgetError);
+    const waitedMs = Date.now() - waitingSince;
+    if (waitedMs > 0)
+      config.diagnostics?.({
+        type: "wait",
+        endpoint: path,
+        reason: "budget-exhausted",
+        waitMs: waitedMs,
+      });
     throwIfHostDeadline(config.deadlineMs);
     const response = await fetch(url, {
       headers: { Authorization: basicAuth(config.token, config.secret) },
@@ -812,23 +850,27 @@ async function request(
       remaining: headerNumber(response, "x-ratelimit-remaining"),
       resetAt: reset === null ? null : new Date(reset).toISOString(),
     });
-    limiter.observe(path, response);
-    if (response.status !== 429) return response;
-    if (retry >= MAX_RATE_LIMIT_RETRIES)
-      throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
+    if (response.status !== 429) {
+      const seen = seenFromHeaders(response);
+      if (seen) await budget.client.observe(key, seen).catch(pauseOnBudgetError);
+      return response;
+    }
     const waitMs = rateLimitWaitMs(response, retry);
+    // The block is recorded before giving up, so the next sync, on any
+    // instance, starts after the cooldown instead of meeting the 429 again.
+    await budget.client.reject(key, Date.now() + waitMs).catch(pauseOnBudgetError);
+    if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(waitMs);
     throwIfHostDeadline(config.deadlineMs, waitMs);
     config.diagnostics?.({ type: "wait", endpoint: path, reason: "http-429", waitMs });
-    await limiter.sleep(waitMs);
   }
 }
 
 async function positions(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Positions> {
-  const response = await request(url, config, limiter);
+  const response = await request(url, config, budget, "trading212:positions");
   if (!response.ok) throw responseError("holdings", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -861,6 +903,7 @@ async function positions(
 export function createTrading212Adapter(config: Trading212Config): BrokerAccessAdapter {
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
+  const partnerBudget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
   return {
     async sync({ entity, resume: inputResume, deadlineMs }) {
       const requestConfig: Trading212RequestConfig = { ...config, deadlineMs };
@@ -871,7 +914,10 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const cashBalances: CashBalance[] = [];
       const cashFlows: CashFlow[] = [];
       const problems: string[] = [];
-      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), deadlineMs);
+      const budget: Trading212Budget = {
+        client: partnerBudget,
+        scopeId: await accountScopeId(config.token),
+      };
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
         if (error instanceof Trading212CredentialsRejectedError) throw error;
@@ -914,7 +960,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         // history so a host time limit still leaves the dashboard something
         // current to show.
         const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
-        const holdings = await positions(holdingsUrl, requestConfig, limiter);
+        const holdings = await positions(holdingsUrl, requestConfig, budget);
         holdingsComplete = true;
         config.diagnostics?.({ type: "positions", count: holdings.length });
         // `asOf` is when the broker reported the holding, not when it was
@@ -944,7 +990,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         const summary = await accountSummary(
           new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
           requestConfig,
-          limiter,
+          budget,
         );
         summaryComplete = true;
         accountCurrency = string(summary.currency, "account summary currency");
@@ -971,7 +1017,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             if (seenOrderPaths.has(nextUrl))
               throw new Error("Trading 212 orders pagination repeated nextPagePath");
             seenOrderPaths.add(nextUrl);
-            const current = await page(nextUrl, requestConfig, limiter);
+            const current = await page(nextUrl, requestConfig, budget);
             historyPages += 1;
             ordersRead += current.items.length;
             let skipped = 0;
@@ -1037,7 +1083,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               nextUrl,
               history === "transactions" ? "transaction" : "dividend",
               requestConfig,
-              limiter,
+              budget,
             );
             pageNumber += 1;
             config.diagnostics?.({
@@ -1082,7 +1128,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       };
 
       // Cash history waits until order history is done so a resumed run does
-      // not spend the 6/min budget on a second stream while trades are incomplete.
+      // not spend the request budget on a second stream while trades are incomplete.
       if (ordersComplete) {
         for (const history of ["transactions", "dividends"] as const) {
           const alreadyDone = history === "transactions" ? transactionsComplete : dividendsComplete;

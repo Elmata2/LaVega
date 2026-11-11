@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Schema } from "effect";
+import { Schema, type Layer } from "effect";
 import {
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
@@ -51,7 +51,15 @@ import {
   createInMemoryPersonalNetWorthStore,
   type PersonalNetWorthStore,
 } from "./personalNetWorthStore.js";
-import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
+import {
+  createPartnerBudgetClient,
+  fetchYahooSectorProfile,
+  PartnerBudget,
+  YahooHttpClient,
+  type IdentifierRequest,
+  type PartnerBudgetClient,
+  type SectorProfile,
+} from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
@@ -161,7 +169,11 @@ type PriceDependencies = {
   ) => Promise<{ outcomes: unknown[]; problems: string[] }>;
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
-  priceSyncPaceMs: number;
+  /** Where partner request slots come from; one runtime is built from it. Defaults to memory. */
+  partnerBudget: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged. Wins over `partnerBudget`, so a caller can
+   *  share one budget between the app and the broker adapters it builds. */
+  partnerBudgetClient: PartnerBudgetClient;
   priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
@@ -191,23 +203,38 @@ type PriceDependencies = {
 };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
-  const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
-  const provider =
+  /* One budget for every partner call this app makes. Hosted, it is Neon's, so
+   * the limit holds across invocations and users; elsewhere it is this process's. */
+  const partnerBudget =
+    dependencies.partnerBudgetClient ??
+    createPartnerBudgetClient(dependencies.partnerBudget ?? PartnerBudget.memoryLayer);
+  const identifierProvider =
+    dependencies.identifierProvider ?? createOpenFigiIdentifierProvider({ partnerBudget });
+  /* One client per app: its crumb and cookie are negotiated once and reused. A
+   * price run takes a view of it with the run's own deadline, so a slot after the
+   * deadline ends the slice instead of sleeping past it. */
+  const yahooClient = new YahooHttpClient(undefined, undefined, undefined, { partnerBudget });
+  const resolveMissingListing = async (
+    request: { isin?: string; ticker: string },
+    deadline: number | undefined,
+  ) => {
+    if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
+    const isin = request.isin.trim().toUpperCase();
+    const identifier = await identifierProvider.get({ isin, deadlineMs: deadline });
+    if (
+      !identifier ||
+      identifier.problems.length ||
+      identifier.match.isin.trim().toUpperCase() !== isin ||
+      !identifier.match.exchange
+    )
+      return null;
+    return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
+  };
+  const priceProviderFor = (deadline: number | undefined) =>
     dependencies.provider ??
     createYahooPriceProvider({
-      resolveMissingListing: async (request) => {
-        if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
-        const isin = request.isin.trim().toUpperCase();
-        const identifier = await identifierProvider.get({ isin });
-        if (
-          !identifier ||
-          identifier.problems.length ||
-          identifier.match.isin.trim().toUpperCase() !== isin ||
-          !identifier.match.exchange
-        )
-          return null;
-        return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
-      },
+      client: yahooClient.withDeadline(deadline),
+      resolveMissingListing: (request) => resolveMissingListing(request, deadline),
     });
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
@@ -219,18 +246,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingLayoutStore =
     dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const benchmarkSearch =
-    dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
+    dependencies.benchmarkSearch ??
+    ((query: string) => searchYahooBenchmarks(query, { client: yahooClient }));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const personalNetWorthStore =
     dependencies.personalNetWorthStore ?? createInMemoryPersonalNetWorthStore();
-  /* One client per running server process, not per symbol: its crumb and
-   * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
-   * instead of every cache-miss symbol paying its own crumb negotiation. */
-  const sectorHttpClient = new YahooHttpClient();
+  /* Sector reads share the one client, and so its crumb (see
+   * YahooHttpClient.ensureCrumb) and its budget key: the pool of 8 concurrent
+   * reads queues on the same slots as a price run. */
   const sectorProfile =
     dependencies.sectorProfile ??
-    ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
+    ((symbol: string) => fetchYahooSectorProfile(symbol, yahooClient));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   const sectorCorrectionStore =
     dependencies.sectorCorrectionStore ?? createInMemorySectorCorrectionStore();
@@ -242,10 +269,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   /* The file vault derives its key from a passphrase, so it needs one. A vault
    * the server holds the key to has nothing to ask for. */
   const passphraseMode = dependencies.passphraseMode ?? (() => "required" as const);
-  const priceProviders = [provider];
   const fxProviders = [fxProvider];
   const identifierProviders = [identifierProvider];
-  const mapIdentifier = (request: { isin: string }) =>
+  const mapIdentifier = (request: IdentifierRequest) =>
     firstProviderResult(identifierProviders, request, undefined, hasProblems);
   /* One invocation's worth of time. Anchored where the request starts, so a
    * route that already spent the host budget on a broker sync hands the price
@@ -255,10 +281,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     (() => priceSyncDeadlineMs((name) => process.env[name]?.trim() || undefined));
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
-    paceMs: dependencies.priceSyncPaceMs,
     benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
-    sync: async (target, tenantId) => {
+    sync: async (target, tenantId, { deadline }) => {
+      const priceProviders = [priceProviderFor(deadline)];
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
         today?: string;
         backfillFrom?: string;
@@ -267,7 +293,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
-        const identifier = await mapIdentifier({ isin: target.isin });
+        const identifier = await mapIdentifier({ isin: target.isin, deadlineMs: deadline });
         if (
           identifier &&
           identifier.value.problems.length === 0 &&

@@ -8,6 +8,8 @@
     ".": "./src/index.ts",
     "./src/prices/priceStore.contract.js": "./src/prices/priceStore.contract.ts",
     "./src/brokers/brokerSyncLease.contract.js": "./src/brokers/brokerSyncLease.contract.ts",
+    "./src/partnerBudget/partnerBudget.contract.js": "./src/partnerBudget/partnerBudget.contract.ts",
+    "./src/partnerBudget/fakes.js": "./src/partnerBudget/fakes.ts",
     "./credentials/localKeySource": "./src/credentials/localKeySource.ts"
   },
   "scripts": {

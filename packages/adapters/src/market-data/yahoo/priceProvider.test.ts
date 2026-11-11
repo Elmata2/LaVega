@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { YahooHttpClient } from "./http.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
 import { getYahooSymbolForKnownExchange } from "./symbols.js";
 import { notFoundYahooFixture } from "./__fixtures__/not-found.js";
@@ -45,7 +46,11 @@ test.each([
       }
       return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
     }) as typeof fetch;
-    const provider = createYahooPriceProvider({ client: new YahooHttpClient(fetchFn, 20_000, 1) });
+    const provider = createYahooPriceProvider({
+      client: new YahooHttpClient(fetchFn, 20_000, 1, {
+        partnerBudget: createImmediatePartnerBudget(),
+      }),
+    });
 
     const result = await provider.get({ ...request, ticker, symbol: ticker });
 
@@ -226,7 +231,7 @@ test("reuses one default Yahoo session across broker symbols", async () => {
       });
     }),
   );
-  const provider = createYahooPriceProvider();
+  const provider = createYahooPriceProvider({ partnerBudget: createImmediatePartnerBudget() });
   for (const ticker of ["CPRX_US_EQ", "AAPL_US_EQ"]) {
     const result = await provider.get({ ...request, ticker, symbol: ticker });
     expect(result?.problems).toEqual([]);

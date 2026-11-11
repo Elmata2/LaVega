@@ -164,6 +164,34 @@ test("personal.rate_limit_buckets deliberately has neither RLS nor FORCE — the
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });
 
+test("investing.partner_budgets holds timing only: no user, no credential, no RLS", async () => {
+  const rows = await db.query<{ enabled: boolean; forced: boolean }>(
+    `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'investing' AND c.relname = 'partner_budgets'`,
+  );
+  expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
+  const columns = await db.query<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'investing' AND table_name = 'partner_budgets'
+     ORDER BY column_name`,
+  );
+  expect(columns.rows.map((column) => column.column_name)).toEqual([
+    "blocked_until",
+    "endpoint",
+    "interval_ms",
+    "next_at",
+    "partner",
+    "scope_id",
+    "updated_at",
+  ]);
+});
+
+test("0028 is rerunnable on a database that already has the table", async () => {
+  const file = migrationFiles.find((name) => name.startsWith("0028_partner_budgets"))!;
+  await db.exec(readFileSync(join(migrationsDir, file), "utf8"));
+});
+
 test("personal.net_worth_totals has the shape opting into Investing's net worth relies on", async () => {
   const columns = await db.query<{
     column_name: string;

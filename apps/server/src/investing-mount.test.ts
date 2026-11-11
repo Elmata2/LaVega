@@ -123,6 +123,26 @@ test("forwardInvesting builds an investing runtime per request", async () => {
   );
 });
 
+test("the runtime gets the Neon partner budget with a database, and one process-wide memory budget without", async () => {
+  const lastOptions = () =>
+    (createRuntimeAppMock.mock.calls.at(-1) as unknown as [Record<string, unknown>])[0];
+
+  runtimeDatabaseMock.mockReturnValue({});
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "user-1");
+  expect(lastOptions().partnerBudget).toBeDefined();
+  expect(lastOptions()).not.toHaveProperty("partnerBudgetClient");
+
+  runtimeDatabaseMock.mockReturnValue(null);
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "local");
+  const first = lastOptions().partnerBudgetClient;
+  expect(first).toBeDefined();
+  expect(lastOptions()).not.toHaveProperty("partnerBudget");
+
+  // The per-request runtime is rebuilt, the memory budget it is given is not.
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "local");
+  expect(lastOptions().partnerBudgetClient).toBe(first);
+});
+
 test("shouldMountInvesting is false when dist is missing", () => {
   const prev = process.env.INVESTING_MOUNT;
   process.env.INVESTING_MOUNT = "0";

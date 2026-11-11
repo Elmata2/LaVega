@@ -1,5 +1,10 @@
 import type { Position, Trade } from "@lavega/core";
-import type { PriceSyncInput, PriceSyncResult } from "@lavega/adapters";
+import {
+  isPartnerBudgetUnavailable,
+  isPartnerWait,
+  type PriceSyncInput,
+  type PriceSyncResult,
+} from "@lavega/adapters";
 
 export type PriceSyncTarget = PriceSyncInput & {
   kind: "current" | "closed" | "benchmark";
@@ -208,11 +213,16 @@ export function discoverPriceSyncTargets(input: {
  */
 export function createPriceOrchestrator(input: {
   discover: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
-  sync: (target: PriceSyncTarget, tenantId: string) => Promise<PriceSyncResult>;
+  /** `deadline` is this run's absolute stop time, so the caller can hand it to
+   *  the partner budget: a request slot after it ends the slice, not the symbol. */
+  sync: (
+    target: PriceSyncTarget,
+    tenantId: string,
+    context: { deadline: number | undefined },
+  ) => Promise<PriceSyncResult>;
   progressStore?: PriceSyncProgressStore;
   /** Absolute epoch milliseconds this invocation must stop by. */
   deadline?: () => number | undefined;
-  paceMs?: number;
   /** Time held back for the symbol in hand, so a run stops between symbols
    *  rather than being killed inside a provider request. */
   pauseMarginMs?: number;
@@ -227,21 +237,16 @@ export function createPriceOrchestrator(input: {
    *  long sync does not multiply it by its symbol count. */
   benchmarkRecheckEveryMs?: number;
   now?: () => Date;
-  wait?: (milliseconds: number) => Promise<void>;
 }) {
   const store = input.progressStore ?? createInMemoryPriceSyncProgressStore();
   const local = new Map<string, PriceSyncProgress>();
   const inFlight = new Map<string, Promise<PriceSyncProgress>>();
-  const paceMs = input.paceMs ?? 300;
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
   const heartbeatEveryMs = Math.min(input.heartbeatEveryMs ?? 10_000, takeoverAfterMs / 3);
   const benchmarkRecheckEveryMs = input.benchmarkRecheckEveryMs ?? 5_000;
   const persistEverySymbols = 5;
   const now = input.now ?? (() => new Date());
-  const wait =
-    input.wait ??
-    ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const terminal = (status: PriceSyncProgress["status"]) =>
     status !== "running" && status !== "waiting";
 
@@ -355,7 +360,10 @@ export function createPriceOrchestrator(input: {
           leaseId,
         );
       const remainingFrom = (index: number) => queue.slice(index).map((target) => target.symbol);
-      const pause = (index: number) =>
+      const pause = (
+        index: number,
+        message = "Price synchronization paused for the host time budget",
+      ) =>
         update(
           tenantId,
           {
@@ -365,7 +373,7 @@ export function createPriceOrchestrator(input: {
             remainingSymbols: remainingFrom(index),
             currentSymbol: null,
             waitUntil: null,
-            message: "Price synchronization paused for the host time budget",
+            message,
             problems: [...problems],
           },
           leaseId,
@@ -438,7 +446,7 @@ export function createPriceOrchestrator(input: {
           },
           leaseId,
         );
-        let fetched = true;
+        let paused: { message?: string } | undefined;
         let heartbeatError: unknown;
         let heartbeat = Promise.resolve();
         const renew = () => {
@@ -458,47 +466,33 @@ export function createPriceOrchestrator(input: {
         };
         const timer = setInterval(renew, heartbeatEveryMs);
         try {
-          const result = await input.sync(target, tenantId);
-          fetched = result.fetched;
+          const result = await input.sync(target, tenantId, { deadline });
           problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
         } catch (error) {
-          problems.push(
-            `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
-          );
+          /* The partner budget has no slot before the deadline, or cannot be
+           * reached. Nothing was sent for this symbol, so it did not fail: the
+           * slice ends and the symbol is tried again on the next one. */
+          if (isPartnerWait(error)) paused = {};
+          else if (isPartnerBudgetUnavailable(error))
+            paused = {
+              message: "Price synchronization paused: the shared request budget is unavailable",
+            };
+          else
+            problems.push(
+              `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+            );
         } finally {
           clearInterval(timer);
           await heartbeat;
         }
         if (heartbeatError) throw heartbeatError;
+        // Paused only after the heartbeat has settled, so it cannot overwrite the pause.
+        if (paused) return pause(index, paused.message);
         if (now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs) {
           const current = local.get(tenantId)!;
           if (!(await store.put(tenantId, { ...current, updatedAt: now().toISOString() }, leaseId)))
             throw new PriceSyncLeaseLost();
           lastPersistAt.set(tenantId, now().getTime());
-        }
-        /* Cache hit made no provider request, so there is nothing to pace
-         * for. An error stays paced: we can't tell whether it reached the
-         * provider, so pacing is the safe default when one errored. */
-        if (fetched && index < queue.length - 1) {
-          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
-            return pause(index + 1);
-          const waitUntil = new Date(now().getTime() + paceMs).toISOString();
-          await update(
-            tenantId,
-            {
-              status: "waiting",
-              total,
-              completed: done + index + 1,
-              remainingSymbols: remainingFrom(index + 1),
-              currentSymbol: null,
-              waitUntil,
-              message: "Waiting before next price request",
-              problems: [...problems],
-              leaseId,
-            },
-            leaseId,
-          );
-          await wait(paceMs);
         }
       }
       return update(

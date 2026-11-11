@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 import { createIbkrFlexAdapter } from "./flexAdapter.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
 const report = `<FlexStatements><FlexStatement><OpenPositions>
   <OpenPosition accountId="U1" symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
@@ -51,6 +52,7 @@ function adapter(token = "valid-token") {
     initialWaitMs: 0,
     pollDelayMs: 1,
     maxDownloadAttempts: 3,
+    partnerBudget: createImmediatePartnerBudget(),
   });
 }
 

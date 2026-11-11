@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { cookieHeaderFromSetCookie } from "./setCookie.js";
 import { YahooHttpClient } from "./http.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
 test("gets cookie and crumb, then appends crumb to protected requests", async () => {
   const urls: string[] = [];
@@ -14,9 +15,9 @@ test("gets cookie and crumb, then appends crumb to protected requests", async ()
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
-  await new YahooHttpClient(fetchFn).fetchJsonWithCrumb<{ ok: boolean }>(
-    "https://query1.finance.yahoo.com/test",
-  );
+  await new YahooHttpClient(fetchFn, 20_000, 1, {
+    partnerBudget: createImmediatePartnerBudget(),
+  }).fetchJsonWithCrumb<{ ok: boolean }>("https://query1.finance.yahoo.com/test");
   expect(urls.at(-1)).toContain("crumb=crumb-value");
 });
 
@@ -41,9 +42,9 @@ test("keeps Yahoo cookies whose Expires date contains a comma", async () => {
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
-  await new YahooHttpClient(fetchFn).fetchJsonWithCrumb<{ ok: boolean }>(
-    "https://query1.finance.yahoo.com/test",
-  );
+  await new YahooHttpClient(fetchFn, 20_000, 1, {
+    partnerBudget: createImmediatePartnerBudget(),
+  }).fetchJsonWithCrumb<{ ok: boolean }>("https://query1.finance.yahoo.com/test");
   expect(crumbCookie).toBe("A3=d=AQ; A1=foo");
 });
 

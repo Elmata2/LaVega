@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { createMemoryBrokerSyncStateStore } from "@lavega/adapters";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
 import { createRuntimeBrokerDataCache, createRuntimeBrokerSync } from "./index.js";
 
 test("resumed broker history survives final pages, file reload, and a later full replacement", async () => {
@@ -98,6 +99,10 @@ test("resumed broker history survives final pages, file reload, and a later full
         },
         restored,
         rejectCommit ? rejecting : state,
+        undefined,
+        undefined,
+        // Pacing has its own tests; this one is about what a resumed history keeps.
+        createImmediatePartnerBudget(),
       );
       await sync(true);
       return cache.read();

@@ -4,6 +4,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { loadFlexStatement, requestFlexStatement } from "./flexStatementClient.js";
 import { setHttpFetchTransport } from "../../../vendor/gloomberb/http-transport.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -26,6 +27,7 @@ test("uses the configured HTTP transport for statement requests", async () => {
   await expect(
     requestFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       endpoint:
         "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
@@ -50,6 +52,7 @@ test("adds request context to vague IBKR Flex errors without exposing the token"
   try {
     await requestFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       endpoint:
         "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
@@ -76,6 +79,7 @@ test("deadline stops before the initial statement request", async () => {
   await expect(
     requestFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       deadlineMs: 1_005_000,
     }),
@@ -96,6 +100,7 @@ test("deadline stops before the initial Flex wait", async () => {
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       deadlineMs: 1_006_000,
       initialWaitMs: 1_000,
@@ -120,6 +125,7 @@ test("deadline stops before a Flex poll request", async () => {
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       deadlineMs: 1_005_001,
       initialWaitMs: 0,
@@ -147,6 +153,7 @@ test("deadline stops before a Flex poll sleep", async () => {
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       deadlineMs: 1_005_001,
       initialWaitMs: 0,
@@ -172,6 +179,7 @@ test("fails fast when GetStatement returns a non-XML statement", async () => {
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       initialWaitMs: 0,
       pollDelayMs: 0,
@@ -201,6 +209,7 @@ test.each([
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       initialWaitMs: 0,
       pollDelayMs: 0,
@@ -222,6 +231,7 @@ test("does not blame the query format for an unexpected markup response", async 
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       initialWaitMs: 0,
       pollDelayMs: 0,
@@ -248,6 +258,7 @@ test("surfaces an IBKR error carried by a 5xx response instead of retrying", asy
   await expect(
     loadFlexStatement({
       token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
       queryId: "12345",
       initialWaitMs: 0,
       pollDelayMs: 0,
