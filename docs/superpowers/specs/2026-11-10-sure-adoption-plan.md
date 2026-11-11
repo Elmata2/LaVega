@@ -524,6 +524,50 @@ byte-identical before/after WS4.1 for trade-only fixtures. Snapshot-only brokers
 WS4.8; treat it as a decision gate, not a default. Tax treatment is metadata only; no tax
 filing claims.
 
+**As built (WS4.1/WS4.2, [#295](https://github.com/Elmata2/LaVega/issues/295), 2026-11-11).**
+The lot book and basis provenance landed in one slice; realised gains/income (#296),
+security master (#297), contribution classification (#298), the tax-treatment taxonomy
+(WS4.4) and the allocation ladder (WS4.6) stay out. Divergences from the plan text, each
+deliberate:
+
+- **The lot book is `packages/core/src/investing/costBasis.ts`, decimal, clock-free.**
+  `replayCostBasis` ports Sure's `Holding::LotBook`: buys average, the acquisition fee is
+  folded into the effective price (`price + fee / qty`), a sale relieves at the running
+  average so the per-share figure does not move, a full liquidation resets the pool so a
+  repurchase starts clean, and an oversell is capped. A transfer-in (`side: "other"` with a
+  positive quantity) is a lot with an unknown cost and marks the **whole** position unknown;
+  the mark releases only on a genuine downward crossing through zero. Splits restate
+  quantities and per-share cost exactly while total cost stays. Missing FX is `null` with a
+  typed reason, never a 1:1 conversion.
+- **The builder's trades are already in current share units, so it does not pass splits
+  again.** `splits.ts` restates trade units and chain-level quantities at the dashboard
+  boundary before the basis is replayed; replaying them a second time would double the
+  ratio. The split restatement of the book itself is ported, exercised by hand-calculated
+  fixtures, and consumed by callers that replay raw trades (#296 will).
+- **Returns math is untouched.** Provenance is additive metadata: the current trade replay
+  in `calculatePositionReturn` remains the only source of returns, because "byte-identical
+  dashboard returns for trade-only brokers" is the acceptance gate. A test asserts the lot
+  book's total basis equals `remainingCostBasis` digit for digit on trade-only fixtures,
+  and a golden captured from base commit `a27240c23` compares the whole returns and
+  portfolio payload as a string.
+- **Provenance is `Position.manualCostBasis` (integer cents + lock) plus a
+  `CurrentPosition.basis` summary.** Source priority is manual > calculated > provider
+  (Sure `Holding#COST_BASIS_SOURCE_PRIORITY`). A locked manual value always wins; an
+  unlocked one is the user opting into recalculation, so calculated replaces it.
+  `reconcileCostBasis` ports the reconciler rule including "provider zero means unknown"
+  and "a transfer-in clears a stale calculated figure". `carryForwardCostBasis` runs inside
+  the broker snapshot merge: a manual basis and its lock survive a provider replace, and a
+  provider basis carries forward only when the row's quantity and currency did not move —
+  an old total on a changed row would be a stale number, not a carry-forward.
+- **Unknown is a typed reason, surfaced in the UI.** `no-history`, `transfer-in`,
+  `missing-fx`, `missing-price`, `missing-fee`, `quantity-mismatch` and
+  `provider-incomplete` travel to `investing-web`, which renders the cause instead of a bare
+  "return unavailable". The amount stays `null` in every unknown case.
+- **Still missing on purpose: the write path for a manual basis.** This slice persists,
+  carries, reconciles and honours a manual value and its lock, but Lavega has no holdings
+  edit surface yet, so nothing in the SPA sets one. That edit route is the remaining WS4.2
+  work when the holdings/trade CRUD lands; the read side is ready for it.
+
 ### WS5 — Agent platform (both sides)
 
 **Goal.** One tool contract, two surfaces; read-first external access; provenance the model
