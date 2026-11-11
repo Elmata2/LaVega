@@ -11,10 +11,24 @@ const revolut = BUSINESS_SAVINGS_OFFERS[0] as BusinessSavingsOffer;
 
 describe("business savings offers", () => {
   test("Revolut Business Savings carries the verified figures", () => {
+    // Re-read on 2026-11-11 from the savings page and the deposit information
+    // sheet. The offer page still states the same promo window and the sheet the
+    // same plan rates; only the check date moved.
     expect(revolut.bank).toBe("Revolut");
-    expect(revolut.checkedOn).toBe("2026-10-15");
+    expect(revolut.checkedOn).toBe("2026-11-11");
     expect(revolut.planRates.map((p) => p.ratePct)).toEqual([1.25, 1.55, 2.0, 2.5]);
-    expect(revolut.promo).toMatchObject({ ratePct: 5.25, durationMonths: 3, capAmount: 100_000 });
+    expect(revolut.promo).toEqual({
+      ratePct: 5.25,
+      newCustomersOnly: true,
+      signupFrom: "2026-09-15",
+      signupUntil: "2026-11-15",
+      durationMonths: 3,
+      capAmount: 100_000,
+    });
+    expect(revolut.sourceUrls).toEqual([
+      "https://www.revolut.com/en-NL/business/savings/",
+      "https://www.revolut.com/en-NL/legal/business-deposit-information-sheet/",
+    ]);
   });
 
   test("promo is active up to and including its sign-up deadline, hidden after", () => {
