@@ -38,6 +38,7 @@ import {
   type RewardsBalance,
   type Rule,
   type Tx,
+  type Valuation,
   type VaultEvent,
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
@@ -70,6 +71,8 @@ export type UsePlanInput = {
   fxHistory: Record<string, Record<string, number>>;
   /** The saved tax setups; the filing frequency of the person's own entity is read from them. */
   vatSettings?: readonly VatSettings[];
+  /** Dated absolute valuations (WS3.1); the reports read them. */
+  valuations?: readonly Valuation[];
   /** ISO day, fixed at app mount. */
   asOf: string;
   /** False while the app is still loading the data the plan reads; nothing is
@@ -334,6 +337,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       fxHistory: i.fxHistory,
       movedCategories: MOVED,
       vatFrequency,
+      valuations: i.valuations,
       asOf: day,
     }),
     [
@@ -353,6 +357,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       i.mode,
       i.fxHistory,
       vatFrequency,
+      i.valuations,
     ],
   );
   const result = useMemo(() => computePlan(inputAt(asOf)), [inputAt, asOf]);

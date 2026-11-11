@@ -14,6 +14,7 @@ import {
   goalsCopy,
   monthCopy,
   planShellCopy,
+  reportsCopy,
   spendingCopy,
   subscriptionsCopy,
 } from "./plan/index.js";
@@ -103,6 +104,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["plan/cards", cardsCopy],
   ["plan/goals", goalsCopy],
   ["plan/assumptions", assumptionsCopy],
+  ["plan/reports", reportsCopy],
 ];
 
 test.each(MODULES)("%s has the same keys in both languages", (_name, copy) => {

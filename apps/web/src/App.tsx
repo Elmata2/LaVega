@@ -2328,6 +2328,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               mode={fxConversionMode}
               fxHistory={fxHistory}
               vatSettings={vatSettings}
+              valuations={valuations}
               asOf={asOf}
               onSaveProfile={saveProfile}
               onNavigate={setView}
