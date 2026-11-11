@@ -727,7 +727,7 @@ test("sweepSessions reports zero rather than pretending it did not run", async (
   expect(removed).toBe(0);
 });
 
-test("AiUsage.record inserts all 9 columns in order, as the account, in one tenant transaction", async () => {
+test("AiUsage.record inserts every ledger column in order (cache, outcome and error defaults included), as the account, in one tenant transaction", async () => {
   const { db, calls } = fakeDatabase();
   await createAiUsageRepository(db).record({
     day: "2026-09-08",
@@ -748,8 +748,26 @@ test("AiUsage.record inserts all 9 columns in order, as the account, in one tena
   });
   expect(executed(calls)).toEqual([
     {
-      sql: "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-      values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2, "user-a"],
+      sql: `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      values: [
+        "2026-09-08",
+        "categorize",
+        "mistral-small-latest",
+        120,
+        40,
+        0,
+        0,
+        2,
+        0,
+        0,
+        "ok",
+        null,
+        null,
+        "user-a",
+      ],
     },
   ]);
   expect(calls.at(-1)?.sql).toBe("COMMIT");
