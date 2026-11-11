@@ -22,6 +22,7 @@ import {
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import { parseSyncRunRow, type SyncRunStore } from "./syncRun.js";
 import { attributeHistory, findMentions } from "./agentMentions.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
@@ -107,6 +108,7 @@ import {
   createAgentMemoryRepository,
   createDashboardSnapshotRepository,
   createFxRateRepository,
+  createSyncRunRepository,
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
@@ -1042,8 +1044,43 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     app: "investing-server",
   });
   if (sentryConfig && !sentry.getClient()) sentry.init(sentryConfig);
+  const syncRunStore: SyncRunStore | undefined = database
+    ? {
+        async get() {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          return parseSyncRunRow(await repository.get());
+        },
+        async claim(candidate, staleBefore) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const held = await repository.claim(candidate, "running", staleBefore);
+          return held === null ? null : parseSyncRunRow(held);
+        },
+        async put(row, leaseId) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const status =
+            row.outcome === "done" ? "done" : row.outcome === "failed" ? "failed" : "running";
+          return repository.put(row, status, leaseId);
+        },
+      }
+    : undefined;
+  const syncRunReporter = createProblemReporter({ dsn, sentry });
+  const syncRunBackground = async (work: Promise<unknown>) => {
+    if (process.env.VERCEL !== undefined) {
+      const { waitUntil } = await import("@vercel/functions");
+      waitUntil(work);
+      return;
+    }
+    void work.catch((error: unknown) => {
+      syncRunReporter({
+        source: "broker-sync",
+        problems: [error instanceof Error ? error.message : "Background sync run failed"],
+      });
+    });
+  };
   return withPortfolioAgentRoute(
     createApp({
+      syncRunStore,
+      syncRunBackground,
       brokerSync,
       partnerBudgetClient: partnerBudget,
       ...credentialDependencies,

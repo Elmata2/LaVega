@@ -1307,6 +1307,92 @@ export function createPriceSyncStateRepository(
   };
 }
 
+export type SyncRunRepository = {
+  get(): Promise<unknown | null>;
+  /** Writes the run state only while `leaseId` still owns it. */
+  put(state: unknown, status: string, leaseId: string): Promise<boolean>;
+  /** Atomic claim. Returns null when claimed, the live state when another run holds it. */
+  claim(state: unknown, status: string, staleBefore: string): Promise<unknown | null>;
+};
+
+/* The server-owned run is a sync like any other: one row, keyed by what it
+ * drives. `state.lease.heartbeatAt` is what makes a run live; a lease older
+ * than the caller's staleBefore may be taken over. */
+const SYNC_RUN_KEY = "run";
+const SYNC_RUN_STATUS_COLUMN: Record<string, string> = {
+  running: "running",
+  waiting: "running",
+  done: "succeeded",
+  failed: "failed",
+};
+
+export function createSyncRunRepository(
+  db: Database,
+  userId: string | undefined | null,
+): SyncRunRepository {
+  const tenantId = requireUserId(userId);
+  return {
+    async get() {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [SYNC_RUN_KEY],
+        );
+        const state = result.rows[0]?.state as Record<string, unknown> | undefined;
+        return state && Object.keys(state).length > 0 ? state : null;
+      });
+    },
+    async put(state, status, leaseId) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->'lease'->>'id' = $4 RETURNING state",
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            leaseId,
+            (state as { outcome?: unknown }).outcome === "failed" ? "run failed" : null,
+          ],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async claim(state, status, staleBefore) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = EXCLUDED.status,
+                   state = EXCLUDED.state,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE investing.sync_state.state->'lease'->>'heartbeatAt' IS NULL
+                OR (investing.sync_state.state->'lease'->>'heartbeatAt')::timestamptz < $4::timestamptz
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            staleBefore,
+          ],
+        );
+        const row = result.rows[0];
+        return row?.claimed ? null : (row?.state ?? null);
+      });
+    },
+  };
+}
+
 export type AgentRunRow = {
   id: string;
   agentId?: string;
