@@ -925,6 +925,71 @@ slice. Divergences from the plan text, each deliberate:
   gap and the stale label: 15 tests. `ReportsCard.test.tsx` pins the rendered statement,
   the partial badge, the gap sentence and the how-calculated lines: 5 tests.
 
+**As built (WS3.4/WS3.5, [#293](https://github.com/Elmata2/LaVega/issues/293), 2026-11-11).**
+The encrypted document vault, the statement metadata pipeline and the document-bearing back-up
+landed in one slice: an additive `VaultData.documents` metadata list, a sealed-bytes object
+store in `packages/adapters`, the bundle format version 3, `packages/core/src/statements/*`,
+and a documents card in the Profiel import area. Divergences from the plan text, each
+deliberate:
+
+- **Metadata in the vault, bytes OUTSIDE it.** `VaultData.documents` holds the metadata
+  (identity = SHA-256, so the same bytes uploaded twice is ONE document); the sealed bytes
+  live in a second IndexedDB object store `documents` inside the same per-owner database
+  (schema version 2: a version-1 database upgrades in place and keeps its vault blob). A
+  document upload never rewrites the vault ciphertext — the test asserts the vault blob
+  object is UNCHANGED by a document write.
+- **The bytes are sealed with the same audited path.** `vaultCrypto.sealBytes`/`openBytes`
+  reuse AES-GCM and the vault key; the document store never holds plaintext. Restoring a
+  bundle writes the SAME ciphertext (no re-encryption with a fresh IV), which is what makes a
+  restored document byte-identical to the uploaded one.
+- **The back-up bundle is a NEW format version (v3) and carries both stores.** The download
+  is `{vault, documents: [{sha256, sealed blob}]}` sealed under the vault key; `restore`
+  accepts v3, v2 and v1. A v1/v2 file cannot carry documents, so restoring one CLEARS the
+  document store instead of leaving metadata pointing at bytes nothing can vouch for. The
+  server backup stays vault-only: its route lives in `apps/server`, which a concurrent lane
+  owns, and its shape check rejects a v3 file. Rather than silently drop the files, the
+  server upload REFUSES in words ("download the full .lavega backup") whenever documents
+  exist — a silent drop is the one outcome the plan forbids.
+- **Erase removes BOTH halves.** `eraseDocuments()` clears the document store and the
+  metadata in one call; `startFresh()` (and every restore) clears the document store too, so a
+  replaced vault can never leave orphaned bytes behind.
+- **The upload gate is explicit.** A 25 MB cap, a pdf/csv/xlsx allowlist and a non-empty check
+  return a reason CODE (`too-large`/`type`/`empty`/`name`); the card turns it into a sentence.
+  The adapter does not enforce the cap itself — it seals what the gate let through, and the
+  gate is the single place both the UI and a test read.
+- **The pipeline is Sure's, with the same refusal rules.** Period detection reads dates, a
+  month-year, English AND Dutch month names (a deliberate addition: the statements are Dutch),
+  a last-four from an "ending 1234"-style hint or an IBAN, and an institution/name hint with
+  Sure's generic-filename stop list; an extracted text (or a CSV, which is text) is the content
+  tier and wins over the filename. Account matching keeps Sure's weights (0.45/0.25/0.25/0.05),
+  the 0.35 floor, and refuses on a tie. Reconciliation is report-only with the one-cent
+  tolerance, and `verified` is true ONLY when at least one check exists and every check
+  matched: no account, no period, no balances or no ledger value is `unavailable`, never a
+  pass.
+- **Coverage statuses fold the reconciliation outcome in.** A month with two linked statements
+  is `duplicate`; one with a mismatched statement is `mismatched`; a month covered only by an
+  unmatched statement stays `ambiguous`; months before the account's history are
+  `not_expected`. A statement with no period stays in the review queue and never silently
+  becomes "matched".
+- **No PDF text extraction and no balance parsing in this slice.** The content tier works for
+  CSV/text uploads; a PDF is detected from its filename only, and opening/closing balances are
+  left null unless a caller supplies them. Consequence, kept honest: an uploaded PDF usually
+  reconciles as "cannot be checked (no balances in the file)", which is exactly the
+  no-verified-claim rule rather than a fabricated pass. Carried with the statement-parsing
+  slice.
+- **The UI is one card in the Profiel import area.** Upload, the review queue with the reason
+  per document (suggestion, tie, no period, rejected), linking/rejecting/removing, the
+  reconciliation line per document, and an erase-all with an inline confirm. No new route and
+  no separate inbox screen.
+- **Acceptance evidence is a hand-worked set in this file's tests.**
+  `statements.test.ts` (20 tests) covers the cap/type/empty refusals, SHA-256 identity, period
+  and hint detection, the 0.35 floor and tie refusal, the tolerance (1 cent matches, 2
+  mismatches), the four `unavailable` reasons, coverage (covered/duplicate/ambiguous/
+  mismatched/not_expected) and the no-period queue row. The adapter suite adds five tests:
+  one store record per SHA-256, a full bundle restoring into a FRESH IndexedDB factory,
+  erase clearing both stores, a v2 restore clearing documents, and a version-1 database
+  upgrading in place. The web suite pins the v3 file parse and the card's rendering.
+
 ### WS4 — Investing depth (investing)
 
 **Goal.** Make the existing investment dashboard defensible for tax and income: basis
