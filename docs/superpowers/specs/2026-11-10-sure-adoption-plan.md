@@ -746,6 +746,78 @@ encryption correctness (reuse `vaultCrypto`); import identity vs `tx.id` (never 
 ids into identity); merge re-key orphaning document/statement links; report scope creep
 (two statements + reused comparisons, no more).
 
+**As built (WS3.1/WS3.2, [#291](https://github.com/Elmata2/LaVega/issues/291), 2026-11-11).**
+Account kinds, dated absolute valuations and the daily balance series landed in one slice:
+`packages/core/src/balance.ts` (kinds, classification, `Valuation`, anchors, migration),
+`packages/core/src/balanceSeries.ts` (both Sure calculators, net worth), one additive
+`VaultData.valuations` field, and the Rekeningen/KaartenBlock surfaces. There is no
+amortization engine and no report: WS3.3 owns the balance sheet and net-worth view.
+Divergences from the plan text, each deliberate:
+
+- **Kinds are additive, the five stored strings are untouched.** `ACCOUNT_TYPES` gains
+  `Lening`, `Woning`, `Voertuig`, `Overig bezit` and `Overige schuld` after the existing five,
+  so a vault written before this slice reads exactly as before. `AccountTypeKind` gains
+  `loan`, `property`, `vehicle`, `otherAsset` and `otherLiability` beside the existing five
+  (depository stays split into `current`/`savings`, because the plan machinery and the
+  savings/cash rules already key on that split). `accountClassification` is Sure's
+  asset/liability rule: credit, loan and other liability are liabilities; everything else is
+  an asset — including a bare `Overig`, because a liability needs the owner to say so.
+  Stored-type migration maps known spellings (`Savings`, `credit card`, `Hypotheek`, …) to
+  the canonical Dutch string ONCE, at vault open; an unrecognised value is left alone (it
+  already reads as `other`), so the migration never renames data it does not understand.
+- **A valuation is a dated absolute, never an interpolation.** `Valuation` rows live in the
+  additive `VaultData.valuations` with identity `accountKey|date`, integer cents (signed like
+  the account balance; a liability is negative) and kind `opening`/`reconciliation`.
+  `Account.openingBalanceCents` + `openingDate` is the optional opening anchor; both halves
+  are required, so half an anchor is unknown, not zero. Storage exposes replace-all
+  `getValuations`/`putValuations`, like the other sidecars: a merge or delete rewrites the
+  list in one save.
+- **The replay direction is chosen by the anchors, not by a stored flag.** An account with an
+  opening anchor replays FORWARD from it (manual account); one with only current/reconciliation
+  anchors replays BACKWARD from the newest (linked/imported account); one with no anchor is
+  UNKNOWN for the whole range. The reverse replay stops at the oldest ledger evidence or the
+  earliest anchor — before that a gap is the honest answer, because nothing recorded a balance
+  there. Days AFTER the newest anchor are extended forward from it and labelled as carried, so
+  a stale valuation stays a labelled value instead of a gap. `valuationStatus` reports
+  `fresh`/`stale`/`unknown` from the newest anchor's age (45 days), which the screen turns into
+  a sentence.
+- **Unknown is a GAP, never a zero.** A day no anchor reaches is `balanceCents: null`; the net
+  worth day reports `totalCents: null` with `unknownAccounts` naming the accounts, beside a
+  `knownTotalCents` partial figure that is never presented as net worth. An account with no
+  anchor makes every day unknown rather than contributing zero to the total.
+- **Cash and non-cash follow the kind.** A depository account is all cash; a credit, loan,
+  property, vehicle or other kind is all non-cash (which is what makes a loan a debt rather
+  than spendable money); an investment account's split is UNKNOWN, because holdings are not
+  valued in this slice — claiming 0 cash would be a lie in the other direction. Flows are
+  signed by `flowsFactor` (asset 1, liability -1) over LaVega's signed euro amounts, so a loan
+  repayment raises the liability value and a purchase lowers an asset.
+- **Only EUR accounts enter net worth.** A non-EUR account is excluded and counted in
+  `excludedForeignCount`; no FX rate is invented for a balance series.
+- **Merge and delete keep valuations consistent.** `mergeValuations` re-keys the duplicate's
+  rows to the survivor; a same-date clash keeps the survivor's row and drops the duplicate's
+  (counted, not silently doubled). `dropAccountValuations` is the delete path. Both are wired
+  into the existing #282 merge/delete handlers in `App.tsx`, and
+  `valuationsHaveNoOrphans` lets a test assert the invariant instead of trusting a comment.
+- **The UI reads a liability as the amount owed, for every liability kind.** Rekeningen's saldo
+  field and label use `accountIsLiability` instead of `isCardAccount`, so a loan typed as a
+  positive is stored negative like a credit card. Every exhaustive `AccountTypeKind` switch
+  (Rekeningen, KaartenBlock) gained the new cases, and both copy packs gained the new type
+  labels plus the valuation editor copy.
+- **The valuation editor is the Rekeningen panel, not a new screen.** The opening balance and
+  date fields sit beside a dated valuation list with add/remove, and a status line that says
+  "unknown until you add one" or labels a stale carried amount. The preview fixture seeds a
+  house with one stale valuation, a mortgage with an opening anchor and a car with NO
+  valuation, so the gap is visible in the app walk.
+- **Acceptance evidence is a hand-worked household.**
+  `packages/core/src/__fixtures__/net-worth-291.json` holds a checking and savings account
+  with opening anchors, a mortgage (forward), a house with a single dated valuation (reverse,
+  unknown before it) and its flows. `balanceSeries.test.ts` asserts the daily replay, the
+  hard reset, the anchor-date reconciliation, the unknown gap (`totalCents: null`, named
+  account, non-zero known sum), the stale/carried labels and the merge/delete invariants: 21
+  tests, beside the extended storage and Rekeningen/KaartenBlock tests. The 45-day staleness
+  window is a constant, not a clock read.
+- **Tests are plain vitest**, like the rest of the core package.
+
 ### WS4 — Investing depth (investing)
 
 **Goal.** Make the existing investment dashboard defensible for tax and income: basis
@@ -1461,24 +1533,25 @@ record and the review checklist. The `NOTICE` entry lands in Phase 0, before the
 ships. Every header carries the upstream commit, the AGPL-3.0 notice, the words "independently
 reimplemented for LaVega", and the change date.
 
-| LaVega module                               | Sure source (path)                                                                                                          | Commit  | Licence  | Change summary                                                                                                        | Phase |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------- | ----- |
-| `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb`                                | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10                                  | 1     |
-| `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                                                             | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10                              | 1     |
-| `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                                                             | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                                                | 1     |
-| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`, `recurring_transaction/paycheck_planner.rb` | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine, matcher/allocation and paycheck plan (#286/#287/#288); 2026-11-11 | 2     |
-| `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`                                             | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                                                      | 2     |
-| `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`                                                                              | 562fe09 | AGPL-3.0 | re-expressed over vault arrays                                                                                        | 3     |
-| `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                                                          | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                                                           | 3     |
-| `packages/core/src/statements/*`            | `account_statement*`, `account_statement/*`                                                                                 | 562fe09 | AGPL-3.0 | client-side encrypted store, no Active Storage                                                                        | 3     |
-| `packages/core/src/csvImport.ts`            | `import.rb`, `import/row.rb`, `import/mapping.rb`                                                                           | 562fe09 | AGPL-3.0 | column mapping/preflight subset                                                                                       | 3     |
-| `packages/core/src/investing/costBasis.ts`  | `holding/lot_book.rb`, `holding/forward_calculator.rb`                                                                      | 562fe09 | AGPL-3.0 | moving-average lot book                                                                                               | 4     |
-| `packages/core/src/investing/realized.ts`   | `trade.rb:159-267`, `investment_statement/totals.rb`                                                                        | 562fe09 | AGPL-3.0 | realised + income report                                                                                              | 4     |
-| `packages/core/src/investing/securities.ts` | `security.rb`, `security/price/importer.rb`                                                                                 | 562fe09 | AGPL-3.0 | ISIN-first canonical identity                                                                                         | 4     |
-| `packages/core/src/agentTools.ts`           | `assistant/function/*`, `assistant.rb`                                                                                      | 562fe09 | AGPL-3.0 | typed registry, read-first scopes                                                                                     | 5     |
-| `apps/server/src/mcp.ts`                    | `mcp_controller.rb`                                                                                                         | 562fe09 | AGPL-3.0 | JSON-RPC transport, stricter auth                                                                                     | 5     |
-| `packages/core/src/provenance.ts`           | `assistant/function/record_valuation.rb`                                                                                    | 562fe09 | AGPL-3.0 | structured citation grammar                                                                                           | 5     |
-| `packages/core/src/interop/export.ts`       | `family/data_exporter.rb`                                                                                                   | 562fe09 | AGPL-3.0 | LaVega export, Sure vocabulary; changed 2026-11-10                                                                    | 6     |
+| LaVega module                               | Sure source (path)                                                                                                          | Commit  | Licence  | Change summary                                                                                                         | Phase |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------- | ----- |
+| `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb`                                | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10                                   | 1     |
+| `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                                                             | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10                               | 1     |
+| `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                                                             | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                                                 | 1     |
+| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`, `recurring_transaction/paycheck_planner.rb` | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine, matcher/allocation and paycheck plan (#286/#287/#288); 2026-11-11  | 2     |
+| `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`                                             | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                                                       | 2     |
+| `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`, `balance/materializer.rb`                                                   | 562fe09 | AGPL-3.0 | independently reimplemented over vault arrays: forward/reverse replay, hard resets, gaps, net worth (#291); 2026-11-11 | 3     |
+| `packages/core/src/balance.ts`              | `app/models/account.rb`, `account/**` (classification, balance types, valuation anchors)                                    | 562fe09 | AGPL-3.0 | asset/liability kinds, classification, dated absolute valuations; no amortization/sync; 2026-11-11                     | 3     |
+| `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                                                          | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                                                            | 3     |
+| `packages/core/src/statements/*`            | `account_statement*`, `account_statement/*`                                                                                 | 562fe09 | AGPL-3.0 | client-side encrypted store, no Active Storage                                                                         | 3     |
+| `packages/core/src/csvImport.ts`            | `import.rb`, `import/row.rb`, `import/mapping.rb`                                                                           | 562fe09 | AGPL-3.0 | column mapping/preflight subset                                                                                        | 3     |
+| `packages/core/src/investing/costBasis.ts`  | `holding/lot_book.rb`, `holding/forward_calculator.rb`                                                                      | 562fe09 | AGPL-3.0 | moving-average lot book                                                                                                | 4     |
+| `packages/core/src/investing/realized.ts`   | `trade.rb:159-267`, `investment_statement/totals.rb`                                                                        | 562fe09 | AGPL-3.0 | realised + income report                                                                                               | 4     |
+| `packages/core/src/investing/securities.ts` | `security.rb`, `security/price/importer.rb`                                                                                 | 562fe09 | AGPL-3.0 | ISIN-first canonical identity                                                                                          | 4     |
+| `packages/core/src/agentTools.ts`           | `assistant/function/*`, `assistant.rb`                                                                                      | 562fe09 | AGPL-3.0 | typed registry, read-first scopes                                                                                      | 5     |
+| `apps/server/src/mcp.ts`                    | `mcp_controller.rb`                                                                                                         | 562fe09 | AGPL-3.0 | JSON-RPC transport, stricter auth                                                                                      | 5     |
+| `packages/core/src/provenance.ts`           | `assistant/function/record_valuation.rb`                                                                                    | 562fe09 | AGPL-3.0 | structured citation grammar                                                                                            | 5     |
+| `packages/core/src/interop/export.ts`       | `family/data_exporter.rb`                                                                                                   | 562fe09 | AGPL-3.0 | LaVega export, Sure vocabulary; changed 2026-11-10                                                                     | 6     |
 
 If text from the MIT-licensed `docs/llm-guides/wealth-blueprint.md` is adapted, add a separate
 row and notice: "Blueprint text © 2026 diegomarino, MIT" (do not fold MIT text into the AGPL
