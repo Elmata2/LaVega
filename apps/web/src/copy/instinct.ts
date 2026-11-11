@@ -87,7 +87,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
   nl: {
     title: "Dagelijkse melding",
     consent:
-      "LaVega leest elke nacht je transacties om je meldingen te sturen, en bewaart ze niet.",
+      "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen.",
     consentCheckbox: "Ik snap dit en geef toestemming",
     switchLabel: "Stuur me een dagelijkse melding",
     channelsLabel: "Waar wil je de melding?",
@@ -127,7 +127,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     whatsappLinked: (phone) => `Gekoppeld aan ${phone}`,
     whatsappLink: "Koppel WhatsApp",
     whatsappAiConsent:
-      "Vragen die je via WhatsApp stelt gaan naar Mistral (EU) om te bepalen welke berekening past. Je losse transacties en namen van tegenpartijen gaan niet mee; een berekende uitkomst (zoals een totaal per dag of categorie) kan wel meegaan.",
+      "Vragen die je via WhatsApp stelt gaan naar Mistral (EU) om te bepalen welke berekening past. Je losse transacties, namen van tegenpartijen, rekeningnummers en saldi gaan niet mee. Wel gaan de uitgerekende zinnen (totalen, data en categorienamen) mee; Mistral kiest welke je ziet en kiest een openingszin en een slotzin uit een vaste lijst. Mistral schrijft zelf niets dat naar jou wordt gestuurd. Antwoorden met namen van tegenpartijen gaan niet naar Mistral.",
     whatsappUnlink: "Ontkoppel WhatsApp",
     whatsappSend: (number) =>
       number
@@ -173,7 +173,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
   en: {
     title: "Daily message",
     consent:
-      "Every night LaVega reads your transactions to send you alerts, and does not store them.",
+      "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner.",
     consentCheckbox: "I understand and give consent",
     switchLabel: "Send me a daily message",
     channelsLabel: "Where do you want the message?",
@@ -213,7 +213,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     whatsappLinked: (phone) => `Linked to ${phone}`,
     whatsappLink: "Link WhatsApp",
     whatsappAiConsent:
-      "Questions you ask over WhatsApp go to Mistral (EU) to decide which calculation fits. Your individual transactions and counterparty names are not sent; a calculated result (such as a total per day or category) may be.",
+      "Questions you ask over WhatsApp go to Mistral (EU) to decide which calculation fits. Your individual transactions, counterparty names, account numbers and balances are not sent. The calculated sentences (totals, dates and category names) are sent; Mistral chooses which ones you see and picks an opening and a closing sentence from a fixed list. Mistral writes nothing that is sent to you. Answers that contain counterparty names are not sent to Mistral.",
     whatsappUnlink: "Unlink WhatsApp",
     whatsappSend: (number) =>
       number

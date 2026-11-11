@@ -4,7 +4,8 @@ import { createRateLimiter } from "../agent/rateLimit.js";
 import { composePrompt } from "../agent/prompts.js";
 import type { FetchOutcome } from "../agent/unattendedFetch.js";
 import { createWhatsAppClient, WindowClosedError } from "./client.js";
-import { WHATSAPP_COPY } from "./copy.js";
+import { CONSENT_VERSION } from "../instinctConsent.js";
+import { FRAMING_PHRASES, WHATSAPP_COPY } from "./copy.js";
 import { answerInbound, DEADLINE_MS, type ReplyDeps } from "./reply.js";
 
 const SENTINEL = "SENTINEL-ZORGVERZEKERAAR";
@@ -50,6 +51,10 @@ const toolMulti = JSON.stringify({
 const M0 = "Van 14 aug tot en met 10 nov gaf je € 84,50 uit.";
 const M1 = "LaVega heeft alleen gegevens van 14 aug tot en met 11 nov.";
 const use = (...i: number[]) => JSON.stringify({ use: i });
+const framedUse = (intro: unknown, i: number[], outro: unknown) =>
+  JSON.stringify({ intro, use: i, outro });
+const NL = FRAMING_PHRASES.nl;
+const EN = FRAMING_PHRASES.en;
 
 type Calls = { system: string; user: string }[];
 let deps: ReplyDeps;
@@ -61,6 +66,7 @@ let budgetOk: boolean;
 let fetchAllowed: boolean;
 let locale: "nl" | "en";
 let aiConsentAt: string | null;
+let consentVersion: string;
 
 beforeEach(() => {
   prompts = [];
@@ -71,9 +77,10 @@ beforeEach(() => {
   fetchAllowed = true;
   locale = "nl";
   aiConsentAt = new Date(NOW - 5000).toISOString();
+  consentVersion = CONSENT_VERSION;
   deps = {
     repo: {
-      getSettings: vi.fn(async () => ({ locale, enabled: true }) as never),
+      getSettings: vi.fn(async () => ({ locale, enabled: true, consentVersion }) as never),
       getLink: vi.fn(async () => ({
         phone: PHONE,
         linkedAt: "x",
@@ -192,15 +199,132 @@ test("step 2 failing sends all the facts", async () => {
   expect(sent()).toEqual([`${M0}\n${M1}`]);
 });
 
-test("a single fact needs no second model call", async () => {
-  answers = [toolJson];
+test("a single fact also calls step 2, for the phrases, and is sent byte for byte", async () => {
+  answers = [toolJson, framedUse(0, [0], null)];
   expect(await answerInbound(deps, USER, "q")).toBe("answered");
-  expect(prompts).toHaveLength(1);
-  expect(sent()).toEqual([FACT_NL]);
+  expect(prompts).toHaveLength(2);
+  expect(sent()).toEqual([`${NL.intros[0]}\n${FACT_NL}`]);
   expect(deps.recordUsage).toHaveBeenCalledWith(
-    expect.objectContaining({ inputTokens: 10, outputTokens: 5 }),
+    expect.objectContaining({ inputTokens: 20, outputTokens: 10 }),
     undefined,
   );
+});
+
+test("a single fact whose step 2 fails is still sent, as a fallback", async () => {
+  answers = [toolJson, new Error("down")];
+  expect(await answerInbound(deps, USER, "q")).toBe("fallback");
+  expect(sent()).toEqual([FACT_NL]);
+});
+
+test("chosen phrases are sent around the chosen facts, unchanged", async () => {
+  answers = [toolMulti, framedUse(1, [1, 0], 4)];
+  expect(await answerInbound(deps, USER, "q")).toBe("answered");
+  expect(sent()).toEqual([`${NL.intros[1]}\n${M1}\n${M0}\n${NL.outros[4]}`]);
+});
+
+test("free text for intro or outro never reaches the user, the facts still do", async () => {
+  for (const bad of [
+    "Dit is exclusief je creditcard.",
+    "Dit zijn schattingen.",
+    "Je zit boven je budget.",
+    "Dat was voor Spotify.",
+    "Klik hier.",
+    "Nee.",
+    "Dat klopt.",
+    "Goed nieuws!",
+    "Goeie vraag!",
+    "Good question!",
+  ]) {
+    answers = [toolMulti, framedUse(bad, [0, 1], bad)];
+    expect(await answerInbound(deps, USER, "q"), bad).toBe("answered");
+    expect(sent().at(-1), bad).toBe(`${M0}\n${M1}`);
+  }
+});
+
+test("a bad phrase index drops only that side", async () => {
+  for (const bad of [8, -1, 1.5, "2", NaN, null]) {
+    answers = [toolMulti, framedUse(bad, [0], 2)];
+    await answerInbound(deps, USER, "q");
+    expect(sent().at(-1), String(bad)).toBe(`${M0}\n${NL.outros[2]}`);
+    answers = [toolMulti, framedUse(3, [0], bad)];
+    await answerInbound(deps, USER, "q");
+    expect(sent().at(-1), String(bad)).toBe(`${NL.intros[3]}\n${M0}`);
+  }
+});
+
+test("an English user gets English phrases, a Dutch user Dutch ones", async () => {
+  locale = "en";
+  answers = [toolMulti, framedUse(0, [0], 0)];
+  await answerInbound(deps, USER, "q");
+  expect(sent().at(-1)!.startsWith(EN.intros[0]!)).toBe(true);
+  expect(sent().at(-1)!.endsWith(EN.outros[0]!)).toBe(true);
+  expect(sent().at(-1)).not.toContain(NL.intros[0]!);
+  locale = "nl";
+  answers = [toolMulti, framedUse(0, [0], 0)];
+  await answerInbound(deps, USER, "q");
+  expect(sent().at(-1)!.startsWith(NL.intros[0]!)).toBe(true);
+});
+
+test("the phrase lists are as long in both languages", () => {
+  expect(EN.intros).toHaveLength(NL.intros.length);
+  expect(EN.outros).toHaveLength(NL.outros.length);
+  expect(NL.intros).toHaveLength(6);
+  expect(NL.outros).toHaveLength(5);
+});
+
+test("the step 2 prompt lists the phrases of the user's language, numbered", async () => {
+  answers = [toolMulti, use(0)];
+  await answerInbound(deps, USER, "q");
+  const step2 = prompts[1]!.user;
+  NL.intros.forEach((p, n) => expect(step2).toContain(`${n}: ${p}`));
+  NL.outros.forEach((p, n) => expect(step2).toContain(`${n}: ${p}`));
+  expect(step2).not.toContain(EN.intros[0]!);
+});
+
+test("an empty result gets no phrase, whatever the model returns", async () => {
+  // A range wholly outside the 90-day window: the tool reports no coverage.
+  answers = [
+    JSON.stringify({ tool: "spending_in_range", from: "2025-01-01", to: "2025-02-01" }),
+    framedUse(0, [0], 0),
+  ];
+  expect(await answerInbound(deps, USER, "q")).toBe("answered");
+  expect(sent().at(-1)).not.toContain(NL.intros[0]!);
+  expect(sent().at(-1)).not.toContain(NL.outros[0]!);
+  expect(sent().at(-1)!.split("\n")).toHaveLength(1);
+});
+
+test("the step 2 prompt tells the model to pick null when nothing was found", () => {
+  expect(composePrompt("_instinct.md")).toMatch(/nothing was found[\s\S]*not covered[\s\S]*null/i);
+});
+
+test("an invalid selection sends no phrase at all", async () => {
+  answers = [toolMulti, framedUse(1, [9], 2)];
+  expect(await answerInbound(deps, USER, "q")).toBe("fallback");
+  expect(sent()).toEqual([`${M0}\n${M1}`]);
+});
+
+test("a user on an older consent version gets one fixed reply and no model, bank or budget call", async () => {
+  for (const [loc, text] of [
+    ["nl", WHATSAPP_COPY.nl.consentOutdated],
+    ["en", WHATSAPP_COPY.en.consentOutdated],
+  ] as const) {
+    consentVersion = "2026-11-v1";
+    locale = loc;
+    expect(await answerInbound(deps, USER, "Wat gaf ik uit?")).toBe("fallback");
+    expect(sent().at(-1)).toBe(text);
+  }
+  expect(deps.llm.complete).not.toHaveBeenCalled();
+  expect(deps.budget).not.toHaveBeenCalled();
+  expect(deps.fetchSessions).not.toHaveBeenCalled();
+  expect(deps.repo.takeFetchBudget).not.toHaveBeenCalled();
+  expect(deps.fetchOutcome).not.toHaveBeenCalled();
+  expect(WHATSAPP_COPY.nl.consentOutdated).toBe(
+    "Open LaVega en bevestig de nieuwe toestemming bij Meldingen. Daarna kan ik je vraag beantwoorden.",
+  );
+});
+
+test("the answer deadline is 30 seconds", () => {
+  expect(DEADLINE_MS).toBe(30_000);
 });
 
 test("step 1 failing or returning junk sends the help text and never touches the bank", async () => {
@@ -260,14 +384,14 @@ test("a refused LLM budget sends the fixed reply and calls no model", async () =
 
 test("the 21st message in an hour is rate limited and does nothing", async () => {
   for (let n = 0; n < 20; n++) {
-    answers = [toolJson, `Hoi! ${FACT_NL}`];
+    answers = [toolJson, use(0)];
     await answerInbound(deps, USER, "q");
   }
   const before = sent().length;
   expect(await answerInbound(deps, USER, "q")).toBe("rate-limited");
   expect(sent()).toHaveLength(before);
   // Another user is not affected.
-  answers = [toolJson, `Hoi! ${FACT_NL}`];
+  answers = [toolJson, use(0)];
   expect(await answerInbound(deps, "other-user", "q")).toBe("answered");
 });
 
@@ -365,6 +489,7 @@ test("an overall deadline sends the fixed reply, stores an error event and relea
 });
 
 test("a recurring bank counterparty reaches no model prompt and step 2 is skipped (F1)", async () => {
+  // containsBankText: no step-2 call and no framing, even if a model answer were queued.
   const RECURRING = "SENTINELNAME-NETFLIXCO";
   const rec = (id: string, date: string) => tx(id, date, -12.99, RECURRING);
   deps.fetchOutcome = vi.fn(async () => ({
@@ -376,7 +501,7 @@ test("a recurring bank counterparty reaches no model prompt and step 2 is skippe
       rec("r2", "2026-10-13"),
     ],
   }));
-  answers = [JSON.stringify({ tool: "upcoming_charges", days: 7 }), use(0)];
+  answers = [JSON.stringify({ tool: "upcoming_charges", days: 7 }), framedUse(0, [0], 0)];
   expect(await answerInbound(deps, USER, "Welke afschrijvingen komen eraan?")).toBe("answered");
   expect(prompts).toHaveLength(1);
   for (const p of prompts) expect(`${p.system}\n${p.user}`).not.toContain("SENTINELNAME");

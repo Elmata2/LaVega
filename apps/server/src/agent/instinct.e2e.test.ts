@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { registerAccountRoutes } from "../account-routes.js";
 import { CONSENT_VERSION, registerInstinctRoutes } from "../instinct-routes.js";
+import { FRAMING_PHRASES } from "../whatsapp/copy.js";
 import { createWhatsAppClient } from "../whatsapp/client.js";
 import { sendWhatsAppDaily } from "../whatsapp/channel.js";
 import { handleUnlinked } from "../whatsapp/linking.js";
@@ -90,6 +91,24 @@ const TOOL_JSON = JSON.stringify({
   from: "2026-01-01",
   to: "2026-11-10",
 });
+const INTRO = FRAMING_PHRASES.nl.intros[0];
+const OUTRO = FRAMING_PHRASES.nl.outros[4];
+const STEP_2 = JSON.stringify({ intro: 0, use: [0], outro: 4 });
+/* Income of 2000 in each of three months (the oldest 89 days back), nothing else but the
+ * sentinel spending (not yesterday, which would outrank a tip), and a balance whose 60-day floor is exactly 1000 on a current account:
+ * the idle-balance tip applies and no higher-ranked candidate does (no due date below). */
+const IDLE_BANK: FetchOutcome = {
+  ...BANK,
+  txs: [
+    tx("p1", "2026-08-14", 2000, "Werkgever BV"),
+    tx("p2", "2026-09-14", 2000, "Werkgever BV"),
+    tx("p3", "2026-10-14", 2000, "Werkgever BV"),
+    tx("1", "2026-11-05", -84, SENTINEL),
+  ],
+  // 100000 floor + 2 x 2000 salaries after the floor day - 84 spent after it.
+  balances: [{ accountKey: "acc", cents: 100_000 + 400_000 - 8_400 }],
+};
+let bank: FetchOutcome;
 const FACT_0 = "Van 14 aug tot en met 10 nov gaf je € 123,47 uit.";
 
 let pglite: Awaited<ReturnType<typeof migratedTestDatabase>>["pglite"];
@@ -149,7 +168,8 @@ beforeEach(async () => {
   prompts = [];
   bankFetches = 0;
   wamidCounter = 0;
-  modelSteps = [TOOL_JSON, JSON.stringify({ use: [0] })];
+  modelSteps = [TOOL_JSON, STEP_2];
+  bank = BANK;
   for (const m of ["log", "warn", "error", "info", "debug"] as const)
     vi.spyOn(console, m).mockImplementation(
       (...a: unknown[]) => void consoleLines.push(a.join(" ")),
@@ -204,7 +224,7 @@ function instinctDeps(): InstinctDeps {
     rates: [],
     fetchOutcome: async () => {
       bankFetches += 1;
-      return BANK;
+      return bank;
     },
     send: {
       feed: async () => "sent",
@@ -255,7 +275,7 @@ function replyDeps(userId: string): ReplyDeps {
     ],
     fetchOutcome: async () => {
       bankFetches += 1;
-      return BANK;
+      return bank;
     },
     llm: {
       complete: async (input: { system: string; user: string }) => {
@@ -502,11 +522,12 @@ test("enable, link, cron twice, signed question, erase: the whole flow", async (
   );
   expect(await snapshot(B)).toEqual(beforeB);
 
-  // A signed question is answered with the computed fact, byte for byte.
+  // A signed question is answered with the chosen intro phrase, the computed fact byte for
+  // byte, and the chosen outro phrase: nothing else.
   const textsBefore = texts().length;
   expect((await inbound(hono, "Wat gaf ik uit dit jaar?")).status).toBe(200);
   const answers = texts().slice(textsBefore);
-  expect(answers.map((a) => a.text!.body)).toEqual([FACT_0]);
+  expect(answers.map((a) => a.text!.body)).toEqual([`${INTRO}\n${FACT_0}\n${OUTRO}`]);
   expect(bankFetches).toBe(2);
   expect(modelSteps).toEqual([]);
 
@@ -514,13 +535,15 @@ test("enable, link, cron twice, signed question, erase: the whole flow", async (
   // model is called once (the tool choice) and never sees the name; the user does.
   modelSteps = [
     JSON.stringify({ tool: "upcoming_charges", days: 14 }),
-    JSON.stringify({ use: [0] }),
+    JSON.stringify({ intro: 1, use: [0], outro: 2 }),
   ];
   const beforeUpcoming = texts().length;
   expect((await inbound(hono, "Welke afschrijvingen komen eraan?")).status).toBe(200);
   const upcoming = texts().slice(beforeUpcoming);
   expect(upcoming).toHaveLength(1);
   expect(upcoming[0]!.text!.body).toContain(RECURRING);
+  // Bank text in the answer: no model step, so no phrase either.
+  expect(upcoming[0]!.text!.body).not.toContain(FRAMING_PHRASES.nl.intros[1]);
   expect(modelSteps).toHaveLength(1);
   expect(prompts.length).toBe(3);
   expect(prompts.join("\n").toLowerCase()).not.toContain("sentinelname");
@@ -551,6 +574,30 @@ test("enable, link, cron twice, signed question, erase: the whole flow", async (
   expect(agentReported).toEqual(AGENT_TABLES.map((t) => `personal.${t}`).sort());
   expect(Object.values(await counts(A)).every((n) => n === 0)).toBe(true);
   expect(await snapshot(B)).toEqual(beforeB);
+});
+
+test("the idle-balance tip is the daily message, sent once, and nothing leaks", async () => {
+  const { A, hono, repoA } = await setup();
+  // No due date, so the deadline candidate does not outrank the tip.
+  const cleared = await hono.request(
+    "/api/agent/mirror",
+    asUser(A, "PUT", { rules: [], dueDates: [], cardOffer: null }),
+  );
+  expect(cleared.status).toBe(204);
+  bank = IDLE_BANK;
+  const first = await (await cron()).json();
+  const second = await (await cron()).json();
+  expect(first).toMatchObject({ due: 1, results: { sent: 1 }, failed: 0 });
+  expect(second).toMatchObject({ due: 0, failed: 0 });
+  expect(bankFetches).toBe(1);
+  const feed = await repoA.listEvents({ channel: "feed", limit: 10 });
+  expect(feed).toHaveLength(1);
+  expect(feed[0]!.body.text).toContain("Een deel van het geld op je betaalrekening");
+  expect(feed[0]!.body.text).toContain("spaarrekening");
+  expect(pushCalls).toHaveLength(1);
+  expect(mails()).toHaveLength(1);
+  expect(templates()).toHaveLength(1);
+  expect(leaks(await sinks(A))).toEqual([]);
 });
 
 test("turning the agent off deletes all server-side agent state for A and leaves B alone", async () => {

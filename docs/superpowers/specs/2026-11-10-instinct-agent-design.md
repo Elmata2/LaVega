@@ -27,7 +27,14 @@ On a normal day, at most one message, only when something is worth saying:
    AI invention of facts). As built: tips key on the transaction data only;
    the intake answers are not mirrored, so `answers` is always `{}`. Each tip
    has a `reviewedAt` date in `packages/core/src/instinct/tips.ts`; a tip with
-   `reviewedAt: null` is never sent, and all five tips are unreviewed today.
+   `reviewedAt: null` is never sent. The owner reviewed all five tips on
+   2026-11-11; a NEW tip starts unreviewed and is never sent. The idle-balance
+   tip is relative: the lowest balance over the last 60 days on EUR current
+   accounts (summed) must be at least EUR 250 and at least 0.45 of monthly
+   income (spending when there is no income), with at least 30 days of history
+   (`idleBalance.ts`: `IDLE_LOOKBACK_DAYS` 60, `IDLE_SHARE_OF_INCOME` 0.45,
+   `IDLE_MIN_CENTS` 25000, `IDLE_MIN_HISTORY_DAYS` 30). It never fires without
+   bank data.
 4. **A better card or interest rate** when the existing card comparison or
    live savings rates show at least €50 a year more (owner may tune).
 
@@ -49,11 +56,10 @@ read-only; cancelling a subscription is phase 3 and is not built.
   Same on an incoming WhatsApp question that needs fresh data: fetch, answer,
   discard. Both paths share one fetch counter per user per day: WhatsApp takes
   a read while the count is below 3, the cron while it is below 4. Clear consent
-  text, NL: "LaVega leest elke nacht je transacties om je meldingen te sturen,
-  en bewaart ze niet." This changes today's privacy promise (vault closed to
-  the server) for opted-in users only; the vault itself stays as it is. Open
-  decision: the sentence says "elke nacht" but the read happens at the user's
-  send time (see ADR 0010).
+  text, NL (v2, `CONSENT_VERSION` "2026-11-v2"): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
+  EN: "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner." This changes today's privacy promise (vault closed to
+  the server) for opted-in users only; the vault itself stays as it is. The first
+  sentence said "elke nacht"; v2 replaced it (see ADR 0010).
 - **Two-way WhatsApp, like Instinct**, via the official WhatsApp Business
   (Cloud) API with a LaVega number.
 - **Cancelling is real, by email (phase 3, not built).** On the user's "Ja" for that subscription,
@@ -105,10 +111,18 @@ listable and deletable by the user, and "erase everything" covers it.
   names, and picks one read-only tool → bank read under the shared fetch cap →
   a pure function runs the tool and computes fact sentences → step 2: the
   model sees the question and the fact sentences and returns only
-  `{"use":[indices]}` (step 2 is skipped when the tool returns one fact, or
-  when the facts embed bank text; then all facts are sent) → the server composes the message from the chosen
-  sentences (at most 1000 characters, then a "... and N more lines" line) →
-  send. No model text is ever sent. `guardAnswer`
+  `{"intro": int|null, "use": [indices], "outro": int|null}` (step 2 is skipped only when the facts embed bank
+  text; then all facts are sent; a single-fact result still calls step 2) → the
+  server composes intro, the chosen sentences unchanged and outro (at most 1000
+  characters, then a "... and N more lines" line) → send. Figures, dates and
+  names come only from computed sentences. Step 2 may also
+  return an intro and an outro as indices (or null) into the fixed NL and EN
+  phrase lists `FRAMING_PHRASES` in `apps/server/src/whatsapp/copy.ts`; the
+  server adds those phrases around the facts. The model writes nothing that
+  is sent. Bank-text results get no phrase, and neither do results that found nothing or
+  whose period is not covered (`ToolResult.empty`). The lists have 6 intros and
+  5 outros per language. One deadline of 30 seconds covers
+  the answer. `guardAnswer`
   (`apps/server/src/agent/numberGuard.ts`) checks that every line is a fact or
   the "more" line; it holds by construction and is an invariant check, not a
   filter. The model never sees a transaction, an IBAN, a balance, the phone
@@ -134,9 +148,10 @@ listable and deletable by the user, and "erase everything" covers it.
 ## Constraints
 
 - The AI never invents facts or amounts: every figure in a message comes from
-  computed data. As built the model writes no user-facing text: daily messages
-  are rendered from templates, and WhatsApp answers are composed by the server
-  from computed fact sentences that the model only selects.
+  computed data. As built, daily messages are rendered from templates. WhatsApp
+  answers are composed by the server from computed fact sentences that the model
+  only selects, together with a fixed greeting and closing phrase picked by
+  index. The model writes nothing that is sent.
 - Investing stays out (no product advice); card and rate suggestions stay
   factual, as in the plan.
 - Cancellation emails only after an explicit per-subscription "Ja"; never in
@@ -331,8 +346,8 @@ the event name, error name and status only.
   and the day claim stays. A message from this path does not reset the
   "paused" notice flag.
   The owner may want to change this.
-- WhatsApp answers have no conversational tone by design: the server sends
-  computed sentences, not model text.
+- Tone in WhatsApp answers comes from a fixed set of phrases that the owner can
+  edit; the phrasing is not unique per answer.
 
 ## Open at spec time (status 11 Nov 2026)
 
@@ -342,7 +357,6 @@ Still open:
 - Legal: review of the privacy statement for choice A (section "Dagelijkse
   melding" in `apps/server/src/legal.ts`), and the cancellation authorisation
   wording (phase 3).
-- The consent sentence says "elke nacht" (ADR 0010: owner decides).
 
 Answered by the build, not yet proven against a live bank: the agent sends no
 PSU headers so the read counts as unattended, and caps reads at 4 per day per

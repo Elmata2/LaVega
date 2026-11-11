@@ -736,7 +736,7 @@ const nl: MoneyCopy = {
     consentBefore: "Alleen de ",
     consentStrong: "tegenpartij + omschrijving",
     consentAfter:
-      " en de richting (in/uit) van je onbekende transacties gaan via onze server naar Mistral — nooit je bedragen, saldi, rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen en datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk voorstel voordat er iets verandert.",
+      " en de richting (in/uit) van je onbekende transacties gaan via onze server naar Mistral. Je bedragen, saldi, rekeningnummers en datums gaan nooit als apart veld mee. Uit de tekst halen we vooraf IBANs, e-mailadressen, datums met een jaar (zoals 01-08-2026), bedragen met € of EUR ervoor, bedragen met twee decimalen en getallen van vier of meer cijfers; hele bedragen zonder decimalen (zoals 45), datums in woorden en datums zonder jaar blijven staan. Je bekijkt en bevestigt elk voorstel voordat er iets verandert.",
     aanzettenEnCategoriseren: "Aanzetten en categoriseren",
     annuleer: "Annuleer",
     bezigMetCategoriseren: "Bezig met categoriseren…",
@@ -1379,7 +1379,7 @@ const en: MoneyCopy = {
     consentBefore: "Only the ",
     consentStrong: "counterparty + description",
     consentAfter:
-      " and the direction (in/out) of your uncategorised transactions go to Mistral through our server — never your amounts, balances, account numbers or dates as a separate field, and we also strip recognisable IBANs, amounts and dates from that text before sending it. You review and confirm every suggestion before anything changes.",
+      " and the direction (in/out) of your uncategorised transactions go to Mistral through our server. Your amounts, balances, account numbers and dates are never sent as a separate field. Beforehand we strip IBANs, e-mail addresses, dates with a year (such as 01-08-2026), amounts with € or EUR in front, amounts with two decimals and numbers of four or more digits from the text; whole amounts without decimals (such as 45), dates written in words and dates without a year stay in. You review and confirm every suggestion before anything changes.",
     aanzettenEnCategoriseren: "Turn on and categorise",
     annuleer: "Cancel",
     bezigMetCategoriseren: "Categorising…",

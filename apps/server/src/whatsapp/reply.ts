@@ -16,6 +16,7 @@ import {
   type Database,
 } from "@lavega/database";
 import { SESSION_TTL_MS } from "../eb-routes.js";
+import { CONSENT_VERSION } from "../instinctConsent.js";
 import {
   checkBudget,
   recordUsage,
@@ -25,13 +26,19 @@ import {
 import { WHATSAPP_FETCH_CAP, type EbSessionRow } from "../agent/instinct.js";
 import { createMistralProvider } from "../agent/mistral.js";
 import { MISTRAL_SMALL } from "../agent/models.js";
-import { composeAnswer, guardAnswer, parseSelection } from "../agent/numberGuard.js";
+import {
+  composeAnswer,
+  guardAnswer,
+  parseSelection,
+  type Framing,
+  type Selection,
+} from "../agent/numberGuard.js";
 import { composePrompt } from "../agent/prompts.js";
 import type { LlmProvider } from "../agent/provider.js";
 import { createRateLimiter, type RateLimiter } from "../agent/rateLimit.js";
 import { fetchForAgent } from "../agent/unattendedFetch.js";
 import { WindowClosedError, whatsappClientFromEnv, type WhatsAppClient } from "./client.js";
-import { moreFacts, WHATSAPP_COPY } from "./copy.js";
+import { FRAMING_PHRASES, moreFacts, WHATSAPP_COPY } from "./copy.js";
 import type { Inbound } from "./webhook.js";
 
 /* The two-way answer path. The privacy line runs through here:
@@ -41,14 +48,15 @@ import type { Inbound } from "./webhook.js";
  *    the category names and the computed facts, never a transaction, a counterparty,
  *    an IBAN, a balance, the number, the user id or the email; a result whose facts
  *    embed bank text (`containsBankText`) skips the second call entirely;
- *  - the model never writes the answer: it selects computed fact sentences by
- *    index and the server sends them verbatim (all of them if the selection is bad).
+ *  - the model writes no text: it selects computed fact sentences by index and the
+ *    server sends them verbatim (all of them if the selection is bad). It may also pick
+ *    an intro and an outro from fixed phrase lists, by index.
  * Nothing here logs a question, an answer, a prompt, a figure or a fact, and
  * `answerInbound` never throws: the webhook's dedupe key would make a retry useless. */
 
 const MAX_QUESTION_CHARS = 500;
 /** One deadline over the whole answer: two model calls and a bank read. */
-export const DEADLINE_MS = 20_000;
+export const DEADLINE_MS = 30_000;
 const STEP_1_MAX_TOKENS = 200;
 const STEP_2_MAX_TOKENS = 300;
 const MESSAGES_PER_HOUR = 20;
@@ -119,6 +127,8 @@ type Ctx = {
   to: string;
   windowOpenAt: number | null;
   aiConsent: boolean;
+  /** The daily-message consent is the current text; an older one does not cover bank reads. */
+  consentCurrent: boolean;
   locale: "nl" | "en";
   usage: { calls: number; input: number; output: number };
   reservation?: ReservationHandle;
@@ -146,6 +156,7 @@ export async function answerInbound(
       to: link.phone.replace(/\D/g, ""),
       windowOpenAt: Number.isFinite(opened) ? opened : null,
       aiConsent: link.aiConsentAt != null,
+      consentCurrent: settings.consentVersion === CONSENT_VERSION,
       locale: settings?.locale ?? "nl",
       usage: { calls: 0, input: 0, output: 0 },
     };
@@ -231,6 +242,11 @@ async function complete(ctx: Ctx, input: Parameters<LlmProvider["complete"]>[0])
 
 async function converse(ctx: Ctx, text: string): Promise<Outcome> {
   const { deps, userId, locale } = ctx;
+  // An older consent text did not mention WhatsApp reads: no model, bank or budget call.
+  if (!ctx.consentCurrent) {
+    await sendFixed(ctx, "consentOutdated");
+    return "fallback";
+  }
   // The question goes to the AI provider only for a user who agreed to that when linking.
   if (!ctx.aiConsent) {
     await sendFixed(ctx, "aiConsentNeeded");
@@ -304,33 +320,44 @@ async function converse(ctx: Ctx, text: string): Promise<Outcome> {
     return "fallback";
   }
 
-  /* Step 2: selection. The model picks which fact sentences answer the question; the
-   * server composes the message from them. No model text is ever sent. */
+  /* Step 2: selection plus optional fixed phrases. The model picks which fact sentences
+   * answer the question and which intro and outro phrase (by index) fit; the server
+   * composes the message. The model writes no text. */
   const more = (n: number) => moreFacts(locale, n);
-  let selection: number[] | null = null;
+  const phrases = FRAMING_PHRASES[locale];
+  let selection: Selection | null = null;
   // Facts that embed bank text (a counterparty) never reach the model: skip step 2 and
-  // send them all. No selection means all facts; the outcome is still "answered".
-  let fromBankText = false;
-  if (result.containsBankText) fromBankText = true;
-  else if (result.facts.length > 1) {
+  // send them all, with no phrase. No selection means all facts; the outcome is still "answered".
+  let fromBankText = result.containsBankText;
+  if (!fromBankText) {
+    const list = (items: readonly string[]) => items.map((p, n) => `${n}: ${p}`).join("\n");
     try {
       selection = parseSelection(
         await complete(ctx, {
           system,
-          user: `MODE: answer\nLANGUAGE: ${locale}\nQUESTION: ${question}\nFACTS:\n${result.facts.map((f, n) => `${n}: ${f}`).join("\n")}`,
+          user: `MODE: answer\nLANGUAGE: ${locale}\nQUESTION: ${question}\nFACTS:\n${list(result.facts)}\nINTROS:\n${list(phrases.intros)}\nOUTROS:\n${list(phrases.outros)}`,
           json: true,
           maxTokens: STEP_2_MAX_TOKENS,
         }),
         result.facts.length,
+        phrases.intros.length,
+        phrases.outros.length,
       );
     } catch {
       selection = null;
     }
-  } else selection = [0];
-  let message = composeAnswer(result.facts, selection, more);
+  }
+  // An empty result (nothing found, period not covered) gets no phrase, whatever the model chose.
+  const phrased = result.empty ? null : selection;
+  let framing: Framing = {
+    intro: phrased?.intro != null ? phrases.intros[phrased.intro]! : "",
+    outro: phrased?.outro != null ? phrases.outros[phrased.outro]! : "",
+  };
+  let message = composeAnswer(result.facts, selection?.use ?? null, more, framing);
   // Invariant: true by construction. A later edit that adds free text fails here.
-  if (!guardAnswer(message, [result], more).ok) {
-    message = composeAnswer(result.facts, null, more);
+  if (!guardAnswer(message, [result], more, [...phrases.intros, ...phrases.outros]).ok) {
+    framing = { intro: "", outro: "" };
+    message = composeAnswer(result.facts, null, more, framing);
     selection = null;
     fromBankText = false;
   }

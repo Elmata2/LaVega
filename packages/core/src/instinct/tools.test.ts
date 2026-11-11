@@ -238,7 +238,38 @@ describe("unknown and exhaustiveness", () => {
       figures: {},
       facts: [],
       containsBankText: false,
+      empty: true,
     });
+  });
+});
+
+describe("empty: nothing was found or the period is not covered", () => {
+  it("is true outside the window, with no upcoming charges, with no categories, for unknown", () => {
+    const i = input({ txs: [tx("2026-01-01", -50)] });
+    expect(runTool({ tool: "spending_on_day", date: "2026-01-01" }, i, "nl").empty).toBe(true);
+    expect(
+      runTool({ tool: "spending_in_range", from: "2025-01-01", to: "2025-02-01" }, i, "nl").empty,
+    ).toBe(true);
+    expect(runTool({ tool: "compare_weekday", date: "2026-01-01" }, i, "nl").empty).toBe(true);
+    expect(runTool({ tool: "upcoming_charges", days: 7 }, input(), "nl").empty).toBe(true);
+    expect(
+      runTool({ tool: "top_categories", from: "2026-11-01", to: "2026-11-10" }, input(), "nl")
+        .empty,
+    ).toBe(true);
+    expect(
+      runTool({ tool: "top_categories", from: "2025-01-01", to: "2025-02-01" }, i, "nl").empty,
+    ).toBe(true);
+  });
+
+  it("is false when there is something to report", () => {
+    const i = input({ txs: [tx("2026-11-10", -50, "Albert Heijn", { category: "Boodschappen" })] });
+    expect(runTool({ tool: "spending_on_day", date: "2026-11-10" }, i, "nl").empty).toBe(false);
+    expect(
+      runTool({ tool: "spending_in_range", from: "2026-11-01", to: "2026-11-10" }, i, "nl").empty,
+    ).toBe(false);
+    expect(
+      runTool({ tool: "top_categories", from: "2026-11-01", to: "2026-11-10" }, i, "nl").empty,
+    ).toBe(false);
   });
 });
 

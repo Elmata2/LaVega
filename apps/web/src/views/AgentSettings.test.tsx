@@ -10,9 +10,9 @@ import AgentSettings from "./AgentSettings";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const V = "2026-11-v1";
+const V = "2026-11-v2";
 const NL_CONSENT =
-  "LaVega leest elke nacht je transacties om je meldingen te sturen, en bewaart ze niet.";
+  "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen.";
 const c = instinctCopy.nl;
 
 let root: Root | null = null;

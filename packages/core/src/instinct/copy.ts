@@ -98,9 +98,10 @@ export const INSTINCT_COPY: Record<MessageLocale, InstinctCopy> = {
         long: "Je hebt veel lopende abonnementen. Open Abonnementen in LaVega, loop ze langs en houd wat je echt gebruikt.",
       },
       "idle-balance": {
-        title: "Veel geld op je betaalrekening",
-        short: "Er staat veel op je betaalrekening. Vergelijk wat een spaarrekening oplevert.",
-        long: "Er staat veel op je betaalrekening. Vergelijk bij Optimalisatie in LaVega wat een spaarrekening met gratis opname oplevert.",
+        title: "Geld dat stilstaat",
+        short:
+          "Een deel van het geld op je betaalrekening gebruik je al twee maanden niet. Vergelijk wat een spaarrekening oplevert.",
+        long: "Een deel van het geld op je betaalrekening gebruik je al twee maanden niet. Vergelijk bij Optimalisatie in LaVega wat een spaarrekening met gratis opname oplevert.",
       },
       "fee-heavy-account": {
         title: "Bankkosten",
@@ -183,9 +184,10 @@ export const INSTINCT_COPY: Record<MessageLocale, InstinctCopy> = {
         long: "You have many running subscriptions. Open Subscriptions in LaVega, go through them and keep what you really use.",
       },
       "idle-balance": {
-        title: "A lot on your current account",
-        short: "There is a lot on your current account. Compare what a savings account pays.",
-        long: "There is a lot on your current account. Compare under Optimise in LaVega what a savings account with free withdrawals pays.",
+        title: "Money standing still",
+        short:
+          "Part of the money on your current account has not been used for two months. Compare what a savings account pays.",
+        long: "Part of the money on your current account has not been used for two months. Compare under Optimise in LaVega what a savings account with free withdrawals pays.",
       },
       "fee-heavy-account": {
         title: "Bank fees",

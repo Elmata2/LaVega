@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
+import { CONSENT_TEXT_EN, CONSENT_TEXT_NL } from "./instinctConsent.js";
 import { privacyHtml, termsHtml } from "./legal.js";
+
+const WEB_COPY = new URL("../../web/src/copy/instinct.ts", import.meta.url).pathname;
 
 /* legal.ts says of itself: "Content reflects how LaVega actually works. Keep
  * this truthful." It stopped being true on 2026-08-03, when the AI features,
@@ -80,14 +83,10 @@ test("the policy names Resend for account mail and no longer names the retired w
 });
 
 test("the policy carries the daily message consent sentence verbatim, and says what is read and kept", () => {
-  expect(privacyHtml).toContain(
-    "LaVega leest elke nacht je transacties om je meldingen te sturen, en bewaart ze niet.",
-  );
-  expect(privacyHtml).toContain(
-    "Every night LaVega reads your transactions to send you alerts, and does not store them.",
-  );
+  expect(privacyHtml).toContain(CONSENT_TEXT_NL);
+  expect(privacyHtml).toContain(CONSENT_TEXT_EN);
   expect(privacyHtml).toMatch(
-    /haalt de server elke nacht[^<]*transacties en saldi van de laatste 90 dagen/,
+    /leest de server één keer per dag, rond het tijdstip dat jij koos[^<]*transacties en saldi van de laatste 90 dagen/,
   );
   expect(privacyHtml).toMatch(/Meldingen bewaren we 90 dagen/);
   expect(privacyHtml).toContain("Dagelijkse melding");
@@ -111,11 +110,56 @@ test("the policy covers the WhatsApp link: Meta, the sealed number, 90 days, 15 
   expect(text).toMatch(/WhatsApp[^.]*in English|In English[\s\S]*WhatsApp/);
 });
 
-test("the WhatsApp paragraph uses the same terms as the consent label", () => {
+test("the policy states when the server reads: daily around the chosen hour, retries, WhatsApp questions, memory only", () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  expect(text).not.toMatch(/elke nacht|each night|every night/i);
+  expect(text).toContain("standaard 08:00");
+  expect(text).toContain("tot 2 uur na dat tijdstip opnieuw");
+  expect(text).toContain("hoogstens 3 keer per dag");
+  expect(text).toContain("alleen in het werkgeheugen tijdens die ene run of dat ene antwoord");
+  expect(text).toContain("at most 3 times a day");
+  expect(text).toContain("up to 2 hours after that time");
+});
+
+test("the WhatsApp paragraph uses the same terms as the consent label, word for word", async () => {
+  const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const { instinctCopy } = (await import(/* @vite-ignore */ WEB_COPY)) as {
+    instinctCopy: Record<"nl" | "en", { whatsappAiConsent: string }>;
+  };
+  expect(text).toContain(instinctCopy.nl.whatsappAiConsent);
+  expect(text).toContain(instinctCopy.en.whatsappAiConsent);
+});
+
+test("Mistral chooses and writes nothing that is sent; every figure is computed", () => {
+  const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  expect(text).toContain("kiest een openingszin en een slotzin uit een vaste lijst");
+  expect(text).toContain("Mistral schrijft zelf niets dat naar jou wordt gestuurd");
+  expect(text).toContain("komt uit onze eigen berekening");
+  expect(text).not.toContain("laat de server alleen door");
+  expect(text).toContain("picks an opening and a closing sentence from a fixed list");
+  expect(text).toContain("Mistral writes nothing that is sent to you");
+});
+
+test("the policy says the messages themselves are stored and can name a payee, amount and date", () => {
+  const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  expect(text).toContain("De meldingen en antwoorden zelf bewaren we wel");
   expect(text).toContain(
-    "Je losse transacties en namen van tegenpartijen gaan niet mee; een berekende uitkomst (zoals een totaal per dag of categorie) kan wel meegaan.",
+    "een naam van een tegenpartij, een bedrag en een datum uit je eigen gegevens",
   );
+  expect(text).toContain("versleuteld met onze serversleutel (90 dagen;");
+  expect(text).toContain("per melding of per gesprek wissen");
+  expect(text).toContain("can name a payee, an amount and a date taken from your own data");
+  expect(text).not.toContain("Een melding noemt alleen jouw eigen cijfers");
+  expect(text).toContain("blijven staan in die apps; die vallen buiten het bereik van LaVega");
+  expect(text).toContain("are outside LaVega's control");
+  expect(text).toContain("De dagelijkse run gebeurt zonder dat jij erbij bent");
+  expect(text).toContain(
+    "The daily read happens without you being there, within the consent you gave your bank.",
+  );
+  expect(text).not.toContain("kiest een begroeting");
+  expect(text).toContain("openingszin en een slotzin");
+  // The Mistral facts are stated once in the WhatsApp bullet.
+  expect(text.split("gaan naar Mistral (EU) om te bepalen welke berekening past")).toHaveLength(2);
 });
 
 test("the AI opt-in promise stays true: WhatsApp questions need their own consent, not a hidden default", () => {
@@ -134,7 +178,7 @@ test("the owner-review marker sits in the source, once", async () => {
 test("the WhatsApp paragraph lists exactly what the question filter removes (W2)", async () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   expect(text).toContain(
-    "naar Mistral (EU), met een filter dat rekeningnummers (IBAN, van elk land), e-mailadressen, Nederlandse telefoonnummers (06…, 010… en +31), burgerservicenummers en bedragen met € of EUR ervoor (zoals € 45) eruit haalt; een bedrag met het valutateken erachter, zoals 45 EUR of 45€, blijft staan",
+    "Eerst gaat er een filter overheen dat rekeningnummers (IBAN, van elk land), e-mailadressen, Nederlandse telefoonnummers (06…, 010… en +31), burgerservicenummers en bedragen met € of EUR ervoor (zoals € 45) eruit haalt; een bedrag met het valutateken erachter, zoals 45 EUR of 45€, blijft staan",
   );
   expect(text).not.toMatch(/telefoonnummers en bedragen eruit haalt/);
   expect(text).not.toMatch(/bedragen die met € of EUR zijn geschreven/);

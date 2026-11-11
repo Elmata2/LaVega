@@ -380,14 +380,25 @@ locally, create your own Neon branch and put its connection string, a
 Nothing below is done by code. Do the steps in this order. Phases 1 and 2 are
 staged on branch `docs/instinct-agent-design` and not deployed.
 
-1. **Apply the migrations** `0027_instinct_agent.sql`, `0028_agent_due_users.sql`
-   and `0029_whatsapp_links.sql` on the production Neon database AND the
-   preview branch. Connect as the schema owner, using a role with `BYPASSRLS`
-   (or superuser): 0028 and 0029 refuse to apply otherwise, because their
-   lookup functions run as the owner and must see past forced row-level
-   security. If the SQL editor says "Failed transaction", run `ROLLBACK;` first.
-   Then `pnpm db:migrate:check`.
-2. **Set the keys** on Vercel (Production and Preview):
+Done (11 Nov 2026): the five tips are reviewed (`packages/core/src/instinct/tips.ts`;
+a NEW tip starts with `reviewedAt: null` and is never sent until reviewed), and
+the consent wording is decided (`CONSENT_VERSION` "2026-11-v2", sentences in
+`apps/server/src/instinctConsent.ts`; users on v1 must consent again, and the
+cron and WhatsApp answers skip them until they do).
+
+Still open for the owner, in this order:
+
+1. **Preview database.** Migrations 0027 to 0029 were applied on 11 Nov 2026 to
+   a throwaway Neon branch `instinct-preview` (created from `preview`) for
+   local preview. Delete that branch after the preview.
+2. **Apply the migrations** `0027_instinct_agent.sql`, `0028_agent_due_users.sql`
+   and `0029_whatsapp_links.sql` on `preview` AND `main` (neither is migrated
+   yet). Connect as the schema owner, using a role with `BYPASSRLS` (or
+   superuser): 0028 and 0029 refuse to apply otherwise, because their lookup
+   functions run as the owner and must see past forced row-level security. If
+   the SQL editor says "Failed transaction", run `ROLLBACK;` first. Then
+   `pnpm db:migrate:check`.
+3. **Set the env vars** on Vercel (Production and Preview):
    - `AGENT_DEDUPE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
    - `AGENT_PHONE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
    - `LAVEGA_ENCRYPTION_KEY` — already set; the same value in both environments.
@@ -402,33 +413,29 @@ staged on branch `docs/instinct-agent-design` and not deployed.
      `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TEMPLATE_DAILY`,
      `WHATSAPP_NUMBER_DISPLAY` (see the variable list above and
      `apps/server/.env.example`).
-3. **Set up Meta** (WhatsApp Cloud API): a verified business, a WhatsApp
+4. **Set up Meta** (WhatsApp Cloud API): a verified business, a WhatsApp
    Business account, a phone number, a permanent system-user token
    (`WHATSAPP_ACCESS_TOKEN`) and the app secret (`WHATSAPP_APP_SECRET`). Create
-   ONE utility template with exactly one body variable (the short figures line), in BOTH `nl` and `en`,
-   under the same name (`WHATSAPP_TEMPLATE_DAILY`), and wait for approval. Set
-   the webhook URL to `https://<host>/api/whatsapp/webhook`, enter your
-   `WHATSAPP_VERIFY_TOKEN` as the verify token, and subscribe to `messages`.
-   Check Meta's rate card for NL before launch.
-4. **Review the five tips** in `packages/core/src/instinct/tips.ts`. Each has
-   `reviewedAt: null`, and a tip with `reviewedAt: null` is never sent. Until
-   you review them and set the date, the agent sends no tip.
-5. **Get the privacy text reviewed by a lawyer.** `apps/server/src/legal.ts`
-   carries one marker, `DRAFT: owner legal review pending`, at the draft text
-   (section "Dagelijkse melding"). Review the privacy paragraph and the consent
-   checkbox in the WhatsApp link panel together: the checkbox is the separate
-   consent for sending WhatsApp questions to Mistral. Remove the marker when
-   the review is done. The draft text covers what the question filter
-   removes, that link codes expire after 15 minutes, and that unlinking keeps
-   conversations until the user deletes them or 90 days pass, and what the
-   two scrubbing functions (the question filter and the categorise filter)
-   remove and leave. Also review the AI-toggle consent copy in the web app
-   (`apps/web/src/copy/money.ts`, the sentence that says IBANs, bedragen and
-   datums are filtered out): it may overclaim in the same way, so review it
-   with the privacy text.
-6. **Decide the consent wording.** The sentence says "elke nacht" but the read
-   happens at the user's send time (docs/adr/0010). If you change it, edit
-   `apps/server/src/instinctConsent.ts` and bump `CONSENT_VERSION`.
+   ONE utility template with exactly one body variable (the short figures
+   line), in BOTH `nl` and `en`, under the same name
+   (`WHATSAPP_TEMPLATE_DAILY`), and wait for approval. Set the webhook URL to
+   `https://<host>/api/whatsapp/webhook`, enter your `WHATSAPP_VERIFY_TOKEN` as
+   the verify token, and subscribe to `messages`. Check Meta's rate card for NL
+   before launch.
+5. **Legal review.** `apps/server/src/legal.ts` carries one marker, `DRAFT:
+owner legal review pending`, at the draft text (section "Dagelijkse
+   melding"). Review together: the privacy paragraph, the consent sentence
+   (`apps/server/src/instinctConsent.ts`), and the labels in the web app (the
+   WhatsApp link-panel checkbox, which is the separate consent for sending
+   WhatsApp questions to Mistral, and the AI-toggle consent copy in
+   `apps/web/src/copy/money.ts`). The draft text covers what both scrubbing
+   filters remove and leave, that link codes expire after 15 minutes, that
+   unlinking keeps conversations until the user deletes them or 90 days pass,
+   and that copies already delivered by e-mail, push or WhatsApp are outside
+   LaVega's control. Remove the marker when the review is done.
+6. **Review the phrase lists** in `apps/server/src/whatsapp/copy.ts`
+   (`FRAMING_PHRASES`, NL and EN): the fixed greetings and closings that
+   WhatsApp answers can use.
 7. **Confirm the Vercel plan allows an hourly cron** (`0 * * * *` on
    `/api/cron/instinct`), then deploy so the cron config updates.
 8. **Verify on the preview deployment**: turn the agent on for a test account

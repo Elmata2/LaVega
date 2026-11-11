@@ -103,7 +103,12 @@ describe("dailyMessage", () => {
   const feeTxs = [tx("2026-10-20", -30, "ING", { category: "Bankkosten" })];
 
   it("an unreviewed tip is never chosen", () => {
-    expect(dailyMessage(input({ txs: feeTxs }))).toBeNull();
+    const unreviewed: readonly Tip[] = TIPS.map((t) => ({
+      ...t,
+      reviewedAt: null,
+      reviewedBy: null,
+    }));
+    expect(dailyMessage(input({ txs: feeTxs }), unreviewed)).toBeNull();
   });
 
   it("a tip appears when nothing else does and it is reviewed", () => {
@@ -141,10 +146,25 @@ describe("tip conditions", () => {
     const c = dailyMessage(i, reviewed);
     return c?.kind === "tip" ? c.figures.tipId : null;
   };
-  it("idle balance needs a current account of EUR 5000 or more", () => {
+  it("idle balance is relative to the user's own monthly income", () => {
+    const flow = (monthly: number) =>
+      // distinct counterparties per month so no recurring-payment detection fires
+      [
+        [85, "Alpha", "Bakker"],
+        [55, "Gamma", "Slager"],
+        [25, "Delta", "Notaris"],
+      ].flatMap(([d, from, to]) => [
+        tx(addDays("2026-11-11", -Number(d)), monthly, String(from)),
+        tx(addDays("2026-11-11", -Number(d)), -monthly, String(to)),
+      ]);
     const b = (cents: number) => [{ accountKey: "NL01INGB0000000001", cents }];
-    expect(tipId(input({ balances: b(500_000) }))).toBe("idle-balance");
-    expect(tipId(input({ balances: b(499_999) }))).toBeNull();
+    const only = reviewed.filter((t) => t.id === "idle-balance");
+    const pick = (i: DailyInput) => {
+      const c = dailyMessage(i, only);
+      return c?.kind === "tip" ? c.figures.tipId : null;
+    };
+    expect(pick(input({ txs: flow(2000), balances: b(110_000) }))).toBe("idle-balance");
+    expect(pick(input({ txs: flow(6000), balances: b(100_000) }))).toBeNull();
   });
   it("a price rise on a running subscription gives the price tip", () => {
     const last = "2026-11-05";

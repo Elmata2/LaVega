@@ -1,11 +1,11 @@
 import { isEurCurrency } from "../model.js";
-import { accountTypeKind } from "../balance.js";
 import {
   detectSubscriptions,
   subscriptionOverlaps,
   subscriptionPriceIncreases,
 } from "../subscriptions.js";
 import { addDays } from "./candidates.js";
+import { hasIdleMoney } from "./idleBalance.js";
 import type { DailyInput, TipAnswers } from "./types.js";
 
 export type Tip = {
@@ -23,9 +23,9 @@ export const REPEAT_WINDOW_DAYS = 30;
  * ./copy.ts, keyed exhaustively by these ids. A tip is a general, factual
  * pointer to something the user can check in LaVega. None gives investment
  * product advice or urges credit. Each `when` reads DailyInput only.
- * Unreviewed tips (reviewedAt null) are never sent; the owner reviews them. */
+ * All five tips were reviewed by the owner on 2026-11-11. A NEW tip starts with
+ * reviewedAt null and is never sent until the owner reviews it. */
 
-const IDLE_BALANCE_CENTS = 500_000;
 const FEE_WINDOW_DAYS = 90;
 const FEE_MIN_CENTS = 2500;
 const MANY_SUBSCRIPTIONS = 5;
@@ -40,37 +40,29 @@ export const TIPS = [
   {
     id: "subscription-overlap",
     when: (_a, i) => subscriptionOverlaps(subsOf(i)).length > 0,
-    reviewedAt: null,
-    reviewedBy: null,
+    reviewedAt: "2026-11-11",
+    reviewedBy: "alexander",
     source: "Abonnementen tab: subscriptionOverlaps",
   },
   {
     id: "price-increase",
     when: (_a, i) => subscriptionPriceIncreases(subsOf(i)).length > 0,
-    reviewedAt: null,
-    reviewedBy: null,
+    reviewedAt: "2026-11-11",
+    reviewedBy: "alexander",
     source: "Abonnementen tab: subscriptionPriceIncreases",
   },
   {
     id: "many-subscriptions",
     when: (_a, i) => subsOf(i).length >= MANY_SUBSCRIPTIONS,
-    reviewedAt: null,
-    reviewedBy: null,
+    reviewedAt: "2026-11-11",
+    reviewedBy: "alexander",
     source: "Abonnementen tab: detectSubscriptions",
   },
   {
     id: "idle-balance",
-    when: (_a, i) => {
-      const cents = new Map(i.balances.map((b) => [b.accountKey, b.cents]));
-      return i.accounts.some(
-        (a) =>
-          accountTypeKind(a) === "current" &&
-          isEurCurrency(a.currency) &&
-          (cents.get(a.key) ?? 0) >= IDLE_BALANCE_CENTS,
-      );
-    },
-    reviewedAt: null,
-    reviewedBy: null,
+    when: (_a, i) => hasIdleMoney(i),
+    reviewedAt: "2026-11-11",
+    reviewedBy: "alexander",
     source: "Optimalisatie tab: rentes via geld.nl",
   },
   {
@@ -85,8 +77,8 @@ export const TIPS = [
       }
       return cents >= FEE_MIN_CENTS;
     },
-    reviewedAt: null,
-    reviewedBy: null,
+    reviewedAt: "2026-11-11",
+    reviewedBy: "alexander",
     source: "Rekeningen tab: Bankkosten category",
   },
 ] as const satisfies readonly Tip[];

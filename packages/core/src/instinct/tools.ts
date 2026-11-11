@@ -28,11 +28,14 @@ export type ToolCall =
 /** `containsBankText` is true when any fact embeds a string that came from bank data
  *  (a counterparty, merchant or remittance-derived name). Such a result must never
  *  reach a model. Rule names and category names are NOT bank text: the user typed
- *  them, or they come from the fixed built-in category list. */
+ *  them, or they come from the fixed built-in category list.
+ *  `empty` is true when nothing was found or the period is not covered (no coverage,
+ *  no upcoming charges, no categories, no answer): a friendly phrase does not belong there. */
 export type ToolResult = {
   figures: Record<string, number | string>;
   facts: string[];
   containsBankText: boolean;
+  empty: boolean;
 };
 
 /** The fetch window: the last 90 days up to and including `today`. */
@@ -143,6 +146,7 @@ function outside(w: Window, requested: Record<string, string>, k: Copy): ToolRes
     figures: { ...requested, covered: 0, coveredFrom: w.from, coveredTo: w.to },
     facts: [k.outsideWindow({ from: w.from, to: w.to })],
     containsBankText: false,
+    empty: true,
   };
 }
 
@@ -162,6 +166,7 @@ export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): T
         figures: { date: call.date, totalCents },
         facts: [k.spendingOnDay({ date: day(call.date), amount: money(totalCents) })],
         containsBankText: false,
+        empty: false,
       };
     }
 
@@ -196,6 +201,7 @@ export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): T
           ...(clamped ? [k.coverage({ from: day(w.from), to: day(w.to) })] : []),
         ],
         containsBankText: false,
+        empty: false,
       };
     }
 
@@ -220,6 +226,7 @@ export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): T
           }),
         ],
         containsBankText: false,
+        empty: false,
       };
     }
 
@@ -259,7 +266,7 @@ export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): T
               k.upcomingTotal({ amount: money(totalCents), days: call.days }),
             ];
       // r.name is the counterparty of a recurring charge: raw bank text.
-      return { figures, facts, containsBankText: items.length > 0 };
+      return { figures, facts, containsBankText: items.length > 0, empty: items.length === 0 };
     }
 
     case "top_categories": {
@@ -297,11 +304,12 @@ export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): T
         ],
         // Category names: fixed built-in list or a rule the user typed, never bank text.
         containsBankText: false,
+        empty: top.length === 0,
       };
     }
 
     case "unknown":
-      return { figures: {}, facts: [], containsBankText: false };
+      return { figures: {}, facts: [], containsBankText: false, empty: true };
 
     default: {
       const never: never = call;

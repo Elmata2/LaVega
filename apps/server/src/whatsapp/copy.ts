@@ -11,6 +11,8 @@ export const WHATSAPP_COPY = {
     cancelUnavailable: "Annuleren is nog niet beschikbaar.",
     aiConsentNeeded:
       "Je hebt geen toestemming gegeven om vragen via WhatsApp naar Mistral (EU) te sturen. Koppel WhatsApp opnieuw in de app en geef die toestemming.",
+    consentOutdated:
+      "Open LaVega en bevestig de nieuwe toestemming bij Meldingen. Daarna kan ik je vraag beantwoorden.",
     linkExpired:
       "Je WhatsApp-koppeling is verlopen omdat je 90 dagen niets stuurde. Koppel opnieuw in Meldingen.",
   },
@@ -24,6 +26,8 @@ export const WHATSAPP_COPY = {
     cancelUnavailable: "Cancelling is not available yet.",
     aiConsentNeeded:
       "You have not agreed to send questions asked over WhatsApp to Mistral (EU). Link WhatsApp again in the app and give that consent.",
+    consentOutdated:
+      "Open LaVega and confirm the updated consent under Alerts. After that I can answer your question.",
     linkExpired:
       "Your WhatsApp link expired because you sent nothing for 90 days. Link again in Alerts.",
   },
@@ -34,3 +38,43 @@ export const moreFacts = (locale: "nl" | "en", more: number): string =>
   locale === "nl"
     ? `... en nog ${more} regels. Open de app voor alles.`
     : `... and ${more} more lines. Open the app for everything.`;
+
+/* Fixed phrases the model may pick (by index) to put before and after the computed
+ * facts. The model writes no text; these lines are the only words around the facts.
+ * NL and EN lists have the same length and order. The owner edits them here. */
+export const FRAMING_PHRASES = {
+  nl: {
+    intros: [
+      "Even gekeken voor je.",
+      "Dit vond ik.",
+      "Zo ziet het eruit.",
+      "Komt-ie.",
+      "Ik heb het opgezocht.",
+      "Kijk maar.",
+    ],
+    outros: [
+      "Nog iets weten? Vraag maar.",
+      "In de app vind je meer.",
+      "Ik zit hier als je nog een vraag hebt.",
+      "Tot de volgende keer.",
+      "Stel gerust nog een vraag.",
+    ],
+  },
+  en: {
+    intros: [
+      "I had a look for you.",
+      "This is what I found.",
+      "This is how it looks.",
+      "Here you go.",
+      "I looked it up.",
+      "Have a look.",
+    ],
+    outros: [
+      "Anything else? Just ask.",
+      "You can find more in the app.",
+      "I am here if you have another question.",
+      "Until next time.",
+      "Feel free to ask another question.",
+    ],
+  },
+} as const;
