@@ -522,6 +522,39 @@ blocker, not a detail: without the token→tenant lookup the endpoint either 401
 drift from code — generate the tool list from the registry. Personal data must not reach the
 server; a personal MCP needs a recorded ADR and probably a local daemon, not a server route.
 
+**As built (WS5.1/WS5.2, #285, 2026-11-11).** Shipped the registry seed and the
+read-only `/mcp` mount in `apps/server`; docs in `docs/investing/MCP.md`.
+Acceptance evidence is in `apps/server/src/mcp/*.test.ts`,
+`apps/investing-server/src/tools/*.test.ts` and `packages/core/src/agentTools.test.ts`
+(tools/list equals the filtered registry; a hidden write tool is refused by name
+at dispatch; missing/wrong/tenantless token is 401; caps truncate and are marked;
+tool errors are safe `{error, hint}` result data), plus the live curl run recorded
+on the issue. Deliberate divergences and carried items:
+
+- The registry is `packages/core/src/agentTools.ts`; the eight read tools live in
+  `apps/investing-server/src/tools/investingTools.ts`. Three tenant-scoped read
+  routes are new (`/api/investing/trades`, `/prices/:symbol`,
+  `/fundamentals/:symbol`) because no existing route exposed the trade ledger, a
+  single close or the consent-gated fundamentals brief. All other tools reuse the
+  existing dashboard, sectors and memory routes, projected from the same context
+  the in-app chat uses — no read-model copy in `apps/server`.
+- A read-path allowlist in `apps/server/src/mcp/investingRead.ts` is a second
+  write gate beyond the plan: even a bug that named a write path cannot forward
+  it, because only GETs on the six read paths are admitted.
+- Caps are fixed at 200 rows / 256 KiB for every tool (one shared row budget),
+  not per-tool configurable yet. Per-token limit is in-process (60/min,
+  `MCP_RATE_LIMIT_PER_MINUTE`), so a multi-instance deployment multiplies it;
+  a shared Neon limiter is carried. Sessions are in memory (cold start = one
+  re-initialize).
+- Env fallback is `MCP_API_TOKEN` + `MCP_TENANT_ID` (`MCP_USER_EMAIL` accepted as
+  the ADR's alias) and is disabled whenever `DATABASE_URL` is set, so it cannot
+  bypass table revocation. Token creation is an operator CLI
+  (`scripts/mcp-token.ts`), not an HTTP route: a settings UI is not in this issue.
+- No OAuth discovery/registration endpoints (Sure has them); ADR 0012 chose an
+  operator-issued hashed token instead. No write tools and no `write` scope exist
+  yet — WS5.4 stays gated. WS5.3 (chat tools routed through the registry) is still
+  open; the registry and the docs drift test are the seam for it.
+
 ### WS6 — Interop, attribution, hardening
 
 **Goal.** Leave the product portable, attributable and measurable.
