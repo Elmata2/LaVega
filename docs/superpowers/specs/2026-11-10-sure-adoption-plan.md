@@ -618,6 +618,86 @@ migration. Divergences from the plan text, each deliberate:
   preview in BetaalschemaBlock and the mark-paid regression.
 - **Tests are plain vitest**, like the rest of the package.
 
+**As built (WS2.10, [#290](https://github.com/Elmata2/LaVega/issues/290), 2026-11-11).**
+Bills occurrences became forecast drivers, and the change is measured against a
+baseline captured before it. The adapter is `packages/core/src/bills/forecast.ts`
+(`billForecastProjection`), the forecast gained two additive options, the
+Forecast screen and Overzicht thread the bills lane, and the measurement lives
+beside the code. Divergences from the plan text, each deliberate:
+
+- **The baseline exists as data, not as a claim.** `plan/__fixtures__/
+forecast-error-baseline-290.json` was measured and committed BEFORE the
+  integration commit (`test(core): capture the forecast-error baseline ...`),
+  and `plan/forecastError.test.ts` pins it. `plan/forecastError.ts` is the
+  ruler: it lets the forecast see only transactions dated on or before `asOf`,
+  then compares the forecast's own weekly closing points with the actual ledger
+  at the 30/60/90-day checkpoints (the weekly closes on day 28/56/84; the
+  forecast's public contract is weekly points, and inventing a daily point would
+  measure a different model than the owner sees).
+- **Measured result, same fixture and split before and after:** absolute error
+  **30d EUR 92,45 -> EUR 1,50; 60d EUR 212,85 -> EUR 1,00; 90d EUR 327,36 ->
+  EUR 5,39; total EUR 632,66 -> EUR 7,89**. Every checkpoint improves. The
+  fixture is a real-shaped labelled household (`forecast-commitments-vault.json`,
+  12 months visible + 3 months actuals), not the owner's vault: that vault is
+  local-first and never enters the repo (ADR 0009), so the issue records this as
+  a real-shaped measurement, not a live-ledger one.
+- **The gain is occurrence dates and amounts, not tuning.** The three detected
+  errors were structural: (1) a gym paused before the origin whose detected
+  stream still projects for up to three cycles — the paused series has no future
+  occurrence dates, so its stream is claimed and suppressed; (2) a newly
+  declared health-insurance bill whose first payment is after the origin — no
+  history, so no detector can see it, but its occurrence dates put it in the
+  line; (3) an energy price change at the origin — the detector's amount is the
+  history's median, while the occurrence carries the series' current amount.
+  Calendar due dates (a phone bill on the 30th) replace 30-day stepping from the
+  last actual payment. No threshold, tolerance or window was changed.
+- **`ScheduledFlow` stays a closed contract; commitments are the additive path.**
+  The plan's target column said "forecast.ts adapter, plan/cashflow.ts", not
+  "invent a bill ScheduledFlow". Synthesizing flows would either add a member to
+  `ScheduledFlow.source` (a union every consumer switches on) or label real
+  bills as `manual` (a lie in the flow list). Instead `ForecastOptions` gained
+  optional `commitments` and `claimedStreams`, `EntityForecast` gained optional
+  `commitments`, `Driver` gained optional `dates`/`commitmentConfidence`/
+  `source`, and `ForecastBasis` gained optional `commitmentsProjected`/
+  `claimedStreams`. Every field is optional: a caller that passes neither gets
+  byte-identical pre-#290 output, and the baseline test asserts exactly that.
+  Existing consumers (`Forecast.tsx`, `Overzicht.tsx`, the agent tab context)
+  keep their shape.
+- **One detector, not a fork.** The adapter calls the same
+  `detectRecurringStreams` the forecast calls, then claims the streams a bill
+  explains by sign, party (the matcher's own `billMatchesPartyText`, shared so
+  the matcher and the forecast agree on which series a row is), cadence and
+  amount. Claim conflicts resolve deterministically (best score, then bill id);
+  one stream feeds one series. A paused/ended series still claims its stream:
+  that is how "no future occurrence" reaches the forecast. Streams no bill
+  explains stay unclaimed and keep projecting exactly as before, so WS2.6
+  (detection adapter) is what retires them later, not this slice.
+- **Commitments carry the remaining amount, not the expected amount.** Each
+  occurrence projects `expected - allocated` from the #287 decisions, so a
+  partially paid bill is never asked for twice. A closed occurrence is not
+  committed at all. Non-EUR series are excluded and counted (the forecast is a
+  EUR projection; bills have no FX path), mirroring the paycheck planner.
+- **Commitment confidence is a rule over the ledger, not a weight.** Zero
+  observed matching payments before `asOf` = `low` (declared, never seen), one
+  or two = `medium`, three or more = `high`. The driver shows the confidence
+  word and the committed dates; the confidence grade for the whole forecast
+  only counts commitments as evidence, it does not raise the grade by itself.
+- **The screen says which numbers have a date behind them.** Forecast drivers
+  now render the committed occurrence dates and the confidence word for bills
+  drivers (NL and EN copy), and Overzicht uses the same projection for its
+  position card so the two screens cannot disagree. The chart, banner, band and
+  shortfall logic are untouched; a commitment adds a known amount on a known
+  date and therefore no measured band variance (its uncertainty is the
+  confidence word, not a fabricated spread).
+- **Agent tab context is not wired.** `apps/web/src/agent/tabContext.ts` builds
+  its forecast from a fields list that has no bills lane; adding one is a
+  separate redaction-boundary decision, not a forecast change.
+- **Tests are plain vitest**, like the rest of the package: 11 adapter tests
+  (commitment dates/amounts/sign, partial remainder, closed rows, confidence,
+  non-EUR exclusion, stream claiming/suppression, unclaimed streams), the
+  baseline artifact test and the integrated measurement that compares the two
+  artifacts and asserts every checkpoint improved.
+
 ### WS3 — Wealth view and evidence (personal)
 
 **Goal.** One statement of assets and liabilities with a defensible audit trail, and a path
