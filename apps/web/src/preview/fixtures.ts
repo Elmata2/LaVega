@@ -4,6 +4,7 @@
 import {
   AdvisorProfile,
   RISK_SCALE,
+  categorize,
   emptyProfileStore,
   makeRewardsBalance,
   makeScheduledFlow,
@@ -12,8 +13,11 @@ import {
   type Goal,
   type RewardsBalance,
   type ScheduledFlow,
+  type BudgetPeriod,
+  type CategoryGroup,
   type Tx,
   assignTxIds,
+  ownAccounts,
 } from "@lavega/core";
 import { createFileImport } from "@lavega/adapters";
 import {
@@ -238,6 +242,57 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
     }),
   ];
   return { accounts, txs: assignTxIds(result.txs), rewards, flows };
+}
+
+/** Two stored budget envelopes for the fixture vault (issue #289): the last
+ *  full month and the month in progress, with one line per real category and a
+ *  deliberate 200 EUR surplus per line so the carry is visible. Categories come
+ *  from the same categorizer the app uses, so a line always matches a row. */
+export function budgetSeed(
+  accounts: readonly Account[],
+  txs: readonly Tx[],
+  today: Date,
+): { periods: BudgetPeriod[]; groups: CategoryGroup[] } {
+  const own = ownAccounts([...accounts]);
+  const current = iso(today).slice(0, 7);
+  const previous = iso(
+    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)),
+  ).slice(0, 7);
+  const spent = new Map<string, Map<string, number>>();
+  for (const t of txs) {
+    if (t.amount >= 0) continue;
+    const month = t.date.slice(0, 7);
+    if (month !== current && month !== previous) continue;
+    const category = categorize(t, [], own);
+    if (category === "") continue;
+    const per = spent.get(category) ?? new Map<string, number>();
+    per.set(month, (per.get(month) ?? 0) + Math.round(-t.amount * 100));
+    spent.set(category, per);
+  }
+  const lines = [...spent]
+    .filter(([, per]) => (per.get(previous) ?? 0) > 0)
+    .sort((a, b) => (b[1].get(previous) ?? 0) - (a[1].get(previous) ?? 0))
+    .slice(0, 4)
+    .map(([category, per]) => ({
+      category,
+      allocationCents: (per.get(previous) ?? 0) + 20_000,
+      rollover: true,
+    }));
+  if (lines.length === 0) return { periods: [], groups: [] };
+  const budgetedSpendingCents = lines.reduce((sum, l) => sum + l.allocationCents, 0);
+  const period = (month: string): BudgetPeriod => ({
+    month,
+    currency: "EUR",
+    budgetedSpendingCents,
+    rollover: true,
+    lines,
+    billsReservedCents: null,
+  });
+  const groups: CategoryGroup[] =
+    lines.length >= 2
+      ? [{ name: "Huishouden", categories: lines.slice(0, 2).map((l) => l.category) }]
+      : [];
+  return { periods: [period(previous), period(current)], groups };
 }
 
 const GOALS = (today: Date): Goal[] =>

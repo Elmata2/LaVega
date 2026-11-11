@@ -6,7 +6,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createEncryptedStorage, vaultKeyFromBase64 } from "@lavega/adapters";
 import { PREVIEW_KEY_B64, refusedRequests } from "./network";
-import { buildVaultSeed, completeProfile, profileResumingAt, type WizardStop } from "./fixtures";
+import {
+  budgetSeed,
+  buildVaultSeed,
+  completeProfile,
+  profileResumingAt,
+  type WizardStop,
+} from "./fixtures";
 import { readAppLocale, setAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { markOnboardingSeen } from "../onboarding.js";
@@ -97,6 +103,9 @@ async function seedVault(
     await storage.putRewards(seed.rewards);
     await storage.putScheduledFlows(seed.flows);
     await storage.putProfile(completeProfile(today));
+    const budget = budgetSeed(seed.accounts, seed.txs, today);
+    await storage.putBudgetPeriods(budget.periods);
+    await storage.putCategoryGroups(budget.groups);
   }
   storage.lock();
 }

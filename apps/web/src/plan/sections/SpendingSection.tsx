@@ -32,6 +32,12 @@ export default function SpendingSection({ result, ctx }: SectionProps<SpendingFi
       ? []
       : [...budget.groups.flatMap((g) => g.lines), ...budget.topLevel].map((l) => [l.category, l]),
   );
+  /** What the limit input shows: the legacy record when it exists, else the
+   *  envelope line the same category already has. Empty when neither exists. */
+  const storedLimit = (category: string): string => {
+    const cents = limits[category]?.cents ?? budgetLines.get(category)?.allocationCents;
+    return cents === undefined ? "" : centsText(cents);
+  };
   const rows = f.rows
     .map((r) => ({ r, name: categoryLabel(locale, r.category) }))
     .sort((x, y) => x.name.localeCompare(y.name, locale));
@@ -68,6 +74,19 @@ export default function SpendingSection({ result, ctx }: SectionProps<SpendingFi
                       <Th scope="col" numeric>
                         {a.spending.columns.limit}
                       </Th>
+                      {budget !== null && (
+                        <>
+                          <Th scope="col" numeric>
+                            {copy.labels.budget}
+                          </Th>
+                          <Th scope="col" numeric>
+                            {copy.labels.carriedIn}
+                          </Th>
+                          <Th scope="col" numeric>
+                            {copy.labels.remaining}
+                          </Th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -141,9 +160,7 @@ export default function SpendingSection({ result, ctx }: SectionProps<SpendingFi
                   name={`limit-${r.category}`}
                   label={a.spending.limitLabel(name)}
                   hint={a.spending.limitHint}
-                  stored={
-                    limits[r.category] === undefined ? "" : centsText(limits[r.category]!.cents)
-                  }
+                  stored={storedLimit(r.category)}
                   parse={(t) => parseEuros(t)}
                   onSave={(cents) => ctx.plan.setLimit(r.category, cents)}
                   onClear={() => ctx.plan.setLimit(r.category, null)}
