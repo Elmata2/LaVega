@@ -44,6 +44,8 @@ function fakeVault(): VaultStorage {
       priceChanges: [],
     }),
     putBillPlan: async () => {},
+    getValuations: async () => [],
+    putValuations: async () => {},
     putPendingNotices: async (list: unknown[]) => {
       state.pendingNotices = [...list];
     },

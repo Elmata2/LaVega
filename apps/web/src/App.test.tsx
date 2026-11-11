@@ -40,6 +40,8 @@ function fakeStorage(): VaultStorage {
       priceChanges: [],
     }),
     putBillPlan: async () => {},
+    getValuations: async () => [],
+    putValuations: async () => {},
   } as unknown as VaultStorage;
 }
 

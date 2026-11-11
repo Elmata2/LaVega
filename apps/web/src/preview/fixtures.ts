@@ -18,10 +18,12 @@ import {
   type Tx,
   type Bill,
   type BillOccurrence,
+  type Valuation,
   assignTxIds,
   ownAccounts,
   generateBillOccurrences,
   resolveBillAmountCents,
+  valuationId,
 } from "@lavega/core";
 import { createFileImport } from "@lavega/adapters";
 import {
@@ -184,6 +186,7 @@ export type VaultSeed = {
   flows: ScheduledFlow[];
   bills: Bill[];
   billOccurrences: BillOccurrence[];
+  valuations: Valuation[];
 };
 
 /** A bills screen that has something to say: rent, energy, two subscriptions,
@@ -367,10 +370,63 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
       type: "Creditcard",
     },
   };
-  const accounts = result.accounts.map((a) => {
-    const p = patch[a.iban] ?? patch[a.key];
-    return p ? { ...a, ...p, balanceDate: asOf } : a;
-  });
+  // WS3.1 asset/liability accounts that no statement imports: a house with one
+  // dated valuation (so the series has a hard reset and a stale label), a
+  // mortgage with an opening anchor (forward replay), and a car with NO
+  // valuation at all, which is the visible unknown/gap case.
+  const manualAccounts: Account[] = [
+    {
+      key: "preview-woning",
+      iban: "",
+      name: "Woning",
+      bank: "",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Woning",
+    },
+    {
+      key: "preview-lening",
+      iban: "",
+      name: "Hypotheek",
+      bank: "ING",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Lening",
+      openingBalanceCents: -18_000_000,
+      openingDate: iso(addDays(today, -120)),
+    },
+    {
+      key: "preview-auto",
+      iban: "",
+      name: "Auto",
+      bank: "",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Voertuig",
+    },
+  ];
+  const valuations: Valuation[] = [
+    {
+      id: valuationId("preview-woning", iso(addDays(today, -60))),
+      accountKey: "preview-woning",
+      date: iso(addDays(today, -60)),
+      amountCents: 42_000_000,
+      currency: "EUR",
+      kind: "reconciliation",
+      source: "manual",
+      createdAt: asOf,
+    },
+  ];
+  const accounts = [
+    ...result.accounts.map((a) => {
+      const p = patch[a.iban] ?? patch[a.key];
+      return p ? { ...a, ...p, balanceDate: asOf } : a;
+    }),
+    ...manualAccounts,
+  ];
   const flows = [
     makeScheduledFlow({
       entity,
@@ -408,6 +464,7 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
     flows,
     bills: bills.bills,
     billOccurrences: bills.billOccurrences,
+    valuations,
   };
 }
 

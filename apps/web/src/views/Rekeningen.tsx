@@ -1,12 +1,14 @@
 import { useState } from "react";
-import type { Account, AccountSummary, Tx, DuplicateGroup } from "@lavega/core";
+import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@lavega/core";
 import {
   accountSummaries,
-  isCardAccount,
+  accountIsLiability,
   accountType,
   accountTypeKind,
   accountTypeKindOf,
   ACCOUNT_TYPES,
+  valuationStatus,
+  valuationsForAccount,
   type AccountTypeKind,
 } from "@lavega/core";
 import { formatEuroIn } from "../format";
@@ -17,6 +19,7 @@ import type { Locale } from "../locale";
 import Badge from "../components/ui/Badge.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
+import Button from "../components/ui/Button.js";
 import Pill from "../components/ui/Pill.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
@@ -46,6 +49,19 @@ type RekeningenProps = {
    *  one of their legs no longer exists. A count, not a sentence: the wording
    *  lives in the copy module with the rest of this screen's copy. */
   transferLinksDropped?: number;
+  /** Dated absolute valuations (WS3.1), already scoped to the visible accounts. */
+  valuations?: Valuation[];
+  /** The position date; a typed saldo and a new valuation are stamped with it. */
+  asOf: string;
+  /** Persist one half of the opening anchor. A blank value clears it. */
+  onOpeningCommit: (
+    key: string,
+    field: "openingBalanceCents" | "openingDate",
+    value: string,
+  ) => void;
+  /** Add or replace the valuation on one date (identity is account + date). */
+  onValuationCommit: (accountKey: string, date: string, amountCents: number) => void;
+  onValuationRemove: (id: string) => void;
 };
 
 /* ---------------------------------------------------------------------------
@@ -350,9 +366,10 @@ function SaldoCell({
   locale: Locale;
 }) {
   const c = moneyCopy[locale].rekeningen;
-  // A credit card stores a NEGATIVE balance (debt) but the user types/reads the
-  // amount OWED as a positive — show the absolute value in the field for cards.
-  const card = isCardAccount(account);
+  // A liability (credit card, loan, other debt) stores a NEGATIVE balance but
+  // the user types/reads the amount OWED as a positive — show the absolute
+  // value in the field. Same rule for every liability kind, not cards only.
+  const card = accountIsLiability(account);
   const shown = (b: number) => (card ? Math.abs(b) : b);
   const [draft, setDraft] = useState(
     account.balance === null ? "" : String(shown(account.balance)),
@@ -386,6 +403,163 @@ function SaldoCell({
   );
 }
 
+/** Parse a typed euro amount into integer cents; null when unreadable. */
+function parseEurosCents(input: string): number | null {
+  const trimmed = input.trim().replace(",", ".");
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+/** WS3.1: the opening anchor and the dated absolute valuations of one account.
+ *
+ *  A valuation is a HARD RESET, never an interpolation, so this editor only asks
+ *  for a date and an absolute amount. Before the first anchor the account's
+ *  value is unknown and the text says so; a carried anchor older than the stale
+ *  window is labelled rather than presented as today's value. */
+function ValuationsEditor({
+  account,
+  valuations,
+  asOf,
+  busy,
+  onOpeningCommit,
+  onValuationCommit,
+  onValuationRemove,
+  locale,
+}: {
+  account: Account;
+  valuations: Valuation[];
+  asOf: string;
+  busy: boolean;
+  onOpeningCommit: (
+    key: string,
+    field: "openingBalanceCents" | "openingDate",
+    value: string,
+  ) => void;
+  onValuationCommit: (accountKey: string, date: string, amountCents: number) => void;
+  onValuationRemove: (id: string) => void;
+  locale: Locale;
+}) {
+  const c = moneyCopy[locale].rekeningen;
+  const mine = valuationsForAccount(valuations, account.key);
+  const status = valuationStatus(account, valuations, asOf);
+  const liability = accountIsLiability(account);
+  const shown = (cents: number) => (liability ? Math.abs(cents) : cents);
+  const [date, setDate] = useState(asOf);
+  const [amount, setAmount] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const openingShown =
+    account.openingBalanceCents == null
+      ? ""
+      : String(
+          (liability ? Math.abs(account.openingBalanceCents) : account.openingBalanceCents) / 100,
+        );
+
+  function add() {
+    const cents = parseEurosCents(amount);
+    if (cents == null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    onValuationCommit(account.key, date, liability ? -Math.abs(cents) : cents);
+    setAmount("");
+  }
+
+  return (
+    <div className="mt-4 pt-3 border-t border-t-line" data-testid="account-valuations">
+      <span className="eyebrow">{c.waarderingen}</span>
+      <p className="cell-sub mt-1">{c.waarderingenUitleg}</p>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3 mt-2">
+        <label className="flex flex-col gap-1 min-w-0">
+          <span className="text-muted">{c.begintotaal}</span>
+          <input
+            inputMode="decimal"
+            defaultValue={openingShown}
+            aria-label={c.begintotaalVanLabel(account.name || account.key)}
+            placeholder={c.saldoOnbekendPlaceholder}
+            disabled={busy}
+            onBlur={(e) => onOpeningCommit(account.key, "openingBalanceCents", e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 min-w-0">
+          <span className="text-muted">{c.begindatum}</span>
+          <input
+            type="date"
+            defaultValue={account.openingDate ?? ""}
+            aria-label={c.begindatumVanLabel(account.name || account.key)}
+            disabled={busy}
+            onBlur={(e) => onOpeningCommit(account.key, "openingDate", e.target.value)}
+          />
+        </label>
+      </div>
+      <p className="m-0 mt-2 cell-sub" data-testid="valuation-status">
+        {status.kind === "unknown"
+          ? c.waarderingGap
+          : status.kind === "stale" && status.lastAnchorDate != null && status.ageDays != null
+            ? c.waarderingVerouderd(dayFullIn(locale, status.lastAnchorDate), status.ageDays)
+            : status.lastAnchorDate != null
+              ? c.waarderingActueel(dayFullIn(locale, status.lastAnchorDate))
+              : ""}
+      </p>
+      {mine.length === 0 ? (
+        <p className="m-0 mt-1 cell-sub">{c.waarderingGeen}</p>
+      ) : (
+        <ul className="m-0 mt-1 list-none p-0" data-testid="valuation-list">
+          {mine.map((v) => (
+            <li
+              key={v.id}
+              className="flex items-center justify-between gap-2 border-b border-line py-1 last:border-b-0"
+            >
+              <span>
+                {dayFullIn(locale, v.date)} · {formatEuroIn(locale, shown(v.amountCents) / 100)}
+              </span>
+              <CardLink
+                variant="danger"
+                aria-label={c.waarderingVerwijderen(dayFullIn(locale, v.date))}
+                disabled={busy}
+                onClick={() => onValuationRemove(v.id)}
+              >
+                {c.verwijder}
+              </CardLink>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-end gap-2 mt-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-muted">{c.waarderingDatum}</span>
+          <input
+            type="date"
+            value={date}
+            aria-label={c.waarderingDatumVanLabel(account.name || account.key)}
+            onChange={(e) => setDate(e.target.value)}
+            disabled={busy}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted">{c.waarderingBedrag}</span>
+          <input
+            inputMode="decimal"
+            value={amount}
+            aria-label={c.waarderingBedragVanLabel(account.name || account.key)}
+            onChange={(e) => setAmount(e.target.value)}
+            disabled={busy}
+          />
+        </label>
+        <Button data-testid="valuation-add" disabled={busy} onClick={add}>
+          {c.waarderingToevoegen}
+        </Button>
+      </div>
+      {invalid && (
+        <p className="m-0 mt-1 text-neg" role="alert">
+          {c.waarderingOngeldig}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Exhaustive by switch, so a new AccountTypeKind fails the build here instead
  *  of rendering nothing. */
 function typeOptionLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string {
@@ -398,6 +572,16 @@ function typeOptionLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): s
       return c.credit;
     case "investment":
       return c.investment;
+    case "loan":
+      return c.loan;
+    case "property":
+      return c.property;
+    case "vehicle":
+      return c.vehicle;
+    case "otherAsset":
+      return c.otherAsset;
+    case "otherLiability":
+      return c.otherLiability;
     case "other":
       return c.other;
   }
@@ -457,6 +641,11 @@ function AccountPanel({
   onSelectAccount,
   onDeleteAccount,
   onRenameOpen,
+  valuations,
+  asOf,
+  onOpeningCommit,
+  onValuationCommit,
+  onValuationRemove,
   locale,
 }: {
   row: AccountSummary;
@@ -475,6 +664,11 @@ function AccountPanel({
   | "onTypeCommit"
   | "onSelectAccount"
   | "onDeleteAccount"
+  | "valuations"
+  | "asOf"
+  | "onOpeningCommit"
+  | "onValuationCommit"
+  | "onValuationRemove"
 >) {
   const c = moneyCopy[locale].rekeningen;
   const { account, txCount } = row;
@@ -533,7 +727,7 @@ function AccountPanel({
           className="flex flex-col gap-1 min-w-0 [&_input]:max-w-full [&_select]:max-w-full"
           data-testid="bank-field"
         >
-          <span className="eyebrow">{isCardAccount(account) ? c.openstaand : c.saldo}</span>
+          <span className="eyebrow">{accountIsLiability(account) ? c.openstaand : c.saldo}</span>
           <div>
             <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} locale={locale} />
           </div>
@@ -558,6 +752,17 @@ function AccountPanel({
       {account.iban ? (
         <p className="mt-3 mb-0 font-mono text-[0.8rem] text-muted">{account.iban}</p>
       ) : null}
+
+      <ValuationsEditor
+        account={account}
+        valuations={valuations ?? []}
+        asOf={asOf}
+        busy={busy}
+        onOpeningCommit={onOpeningCommit}
+        onValuationCommit={onValuationCommit}
+        onValuationRemove={onValuationRemove}
+        locale={locale}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-t-line">
         {txCount === 0 ? (
@@ -904,6 +1109,11 @@ export default function Rekeningen({
   duplicateGroups,
   onMergeDuplicates,
   transferLinksDropped,
+  valuations,
+  asOf,
+  onOpeningCommit,
+  onValuationCommit,
+  onValuationRemove,
 }: RekeningenProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].rekeningen;
@@ -1104,6 +1314,11 @@ export default function Rekeningen({
                       onRenameOpen={(account, editing) =>
                         setRename(editing ? { key: account.key, bank: account.bank } : null)
                       }
+                      valuations={valuations}
+                      asOf={asOf}
+                      onOpeningCommit={onOpeningCommit}
+                      onValuationCommit={onValuationCommit}
+                      onValuationRemove={onValuationRemove}
                       locale={locale}
                     />
                   </div>

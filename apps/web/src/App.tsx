@@ -16,12 +16,18 @@ import type {
   Bill,
   BillDecisions,
   BillOccurrence,
+  Valuation,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
   reassignEntity,
+  accountIsLiability,
+  dropAccountValuations,
+  mergeValuations,
+  normalizeValuation,
+  valuationId,
   withCurrentBalances,
   isCardAccount,
   mergeImportedAccounts,
@@ -264,6 +270,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // history). Suggestions are derived from the ledger on read, exactly like
   // transfer suggestions; only what the owner or the exact tier decided is kept.
   const [billDecisions, setBillDecisions] = useState<BillDecisions>(EMPTY_BILL_DECISIONS);
+  // Dated absolute valuations (WS3.1, issue #291). Account-keyed absolute
+  // amounts; derived from them, never stored separately, is the daily series.
+  const [valuations, setValuations] = useState<Valuation[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -647,6 +656,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedBills,
         loadedOccurrences,
         loadedDecisions,
+        loadedValuations,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -664,6 +674,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getBills(),
         storage.getBillOccurrences(),
         storage.getBillDecisions(),
+        storage.getValuations(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -695,6 +706,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setBills(matched.bills);
       setBillOccurrences(matched.occurrences);
       setBillDecisions(matched.decisions);
+      setValuations(loadedValuations);
       if (generated.added > 0 || matched.changed) {
         await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
       }
@@ -1037,6 +1049,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setBills([]);
     setBillOccurrences([]);
     setBillDecisions(EMPTY_BILL_DECISIONS);
+    setValuations([]);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -1384,6 +1397,13 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Overzicht/Forecast always display/sum the current position. Rekeningen
   // still gets the RAW scopedAccounts below — it edits stored values, not
   // this derived view.
+  // Valuations follow the same entity scope as the accounts they belong to: a
+  // valuation for an account outside the scope is not shown (and not offered).
+  const scopedValuations = useMemo(() => {
+    const keys = new Set(scopedAccounts.map((a) => a.key));
+    return valuations.filter((v) => keys.has(v.accountKey));
+  }, [valuations, scopedAccounts]);
+
   const currentScopedAccounts = useMemo(
     () => withCurrentBalances(scopedAccounts, scopedTxs, asOf),
     [scopedAccounts, scopedTxs, asOf],
@@ -1600,6 +1620,62 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // WS3.1: one half of the opening anchor. A liability owner types the amount
+  // OWED as a positive; it is stored as a negative like a credit-card balance.
+  async function handleOpeningCommit(
+    key: string,
+    field: "openingBalanceCents" | "openingDate",
+    value: string,
+  ) {
+    const account = accounts.find((a) => a.key === key);
+    if (account == null) return;
+    const patch: Partial<Account> = {};
+    if (field === "openingBalanceCents") {
+      const trimmed = value.trim().replace(",", ".");
+      const raw = trimmed === "" ? null : Number(trimmed);
+      if (raw !== null && !Number.isFinite(raw)) return;
+      patch.openingBalanceCents =
+        raw === null
+          ? undefined
+          : Math.round((accountIsLiability(account) ? -Math.abs(raw) : raw) * 100);
+    } else {
+      patch.openingDate = value.trim() === "" ? undefined : value;
+    }
+    const next = accounts.map((a) => (a.key === key ? { ...a, ...patch } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
+  // WS3.1: add or replace the absolute valuation on one date. Identity is
+  // account + date, so typing the same day twice updates instead of doubling.
+  async function handleValuationCommit(accountKey: string, date: string, amountCents: number) {
+    const account = accounts.find((a) => a.key === accountKey);
+    if (account == null) return;
+    const id = valuationId(accountKey, date);
+    const entry = normalizeValuation({
+      id,
+      accountKey,
+      date,
+      amountCents,
+      currency: account.currency || "EUR",
+      kind: "reconciliation",
+      source: "manual",
+      createdAt: asOf,
+    });
+    const next = [...valuations.filter((v) => v.id !== id), entry].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
+  async function handleValuationRemove(id: string) {
+    const next = valuations.filter((v) => v.id !== id);
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
   // Manually set/override an account's annual interest rate (%) for the
   // Optimisatie tab. Accepts a Dutch comma or dot (and a stray "%"); blank
   // clears the override back to auto (detected/assumed). Same persist pattern.
@@ -1636,6 +1712,13 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
         await saveTransfers(reconciled.pairs);
       setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // A valuation for a deleted account would be an orphan: drop it in the
+      // same pass, and only write when something actually went.
+      const droppedValuations = dropAccountValuations(valuations, key);
+      if (droppedValuations.dropped > 0) {
+        setValuations(droppedValuations.valuations);
+        await storage.putValuations(droppedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -1665,6 +1748,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
         await saveTransfers(reconciled.pairs);
       setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // Re-key the duplicate's valuations to the survivor; a same-day clash
+      // keeps the survivor's row and drops the duplicate's, so no orphan or
+      // double absolute amount survives the merge.
+      const mergedValuations = mergeValuations(valuations, survivorKey, duplicateKey);
+      if (mergedValuations.remapped > 0 || mergedValuations.dropped > 0) {
+        setValuations(mergedValuations.valuations);
+        await storage.putValuations(mergedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -2080,6 +2171,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onDeleteAccount={handleDeleteAccount}
               duplicateGroups={duplicateGroups}
               onMergeDuplicates={handleMergeDuplicates}
+              valuations={scopedValuations}
+              asOf={asOf}
+              onOpeningCommit={handleOpeningCommit}
+              onValuationCommit={handleValuationCommit}
+              onValuationRemove={handleValuationRemove}
               onSelectAccount={(key) => {
                 // Show just this account's transactions — clear the other
                 // filters so the list isn't silently narrowed by a stale one.

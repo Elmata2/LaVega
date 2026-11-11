@@ -116,6 +116,8 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
         priceChanges: [],
       }),
       putBillPlan: async () => {},
+      getValuations: async () => [],
+      putValuations: async () => {},
       putPendingNotices: async () => {},
     }),
     createRatesProvider: () => ({

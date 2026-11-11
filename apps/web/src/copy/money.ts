@@ -163,6 +163,24 @@ type RekeningenCopy = {
    *  legs no longer both exist. The count is the honest part — an orphan link
    *  would otherwise disappear without a word. */
   transferLinksDropped: (n: number) => string;
+  /* WS3.1 valuations: the opening anchor and dated absolute valuations. */
+  waarderingen: string;
+  waarderingenUitleg: string;
+  begintotaal: string;
+  begindatum: string;
+  begintotaalVanLabel: (naam: string) => string;
+  begindatumVanLabel: (naam: string) => string;
+  waarderingDatum: string;
+  waarderingBedrag: string;
+  waarderingToevoegen: string;
+  waarderingVerwijderen: (datum: string) => string;
+  waarderingDatumVanLabel: (naam: string) => string;
+  waarderingBedragVanLabel: (naam: string) => string;
+  waarderingGeen: string;
+  waarderingGap: string;
+  waarderingActueel: (datum: string) => string;
+  waarderingVerouderd: (datum: string, dagen: number) => string;
+  waarderingOngeldig: string;
 };
 
 type TransactiesReasonCopy = { label: string; what: string };
@@ -609,6 +627,11 @@ type AccountTypesCopy = {
   savings: string;
   credit: string;
   investment: string;
+  loan: string;
+  property: string;
+  vehicle: string;
+  otherAsset: string;
+  otherLiability: string;
   other: string;
 };
 
@@ -731,12 +754,37 @@ const nl: MoneyCopy = {
     transferLinksDropped: (n) =>
       `${n} overboekingskoppeling${n === 1 ? "" : "en"} losgelaten: een van de twee transacties` +
       ` bestaat niet meer na het samenvoegen of verwijderen.`,
+    waarderingen: "Waarderingen",
+    waarderingenUitleg:
+      "Een waardering is een absoluut bedrag op een datum. Tot het eerste bedrag is het vermogen onbekend; daarna loopt de reeks met je transacties mee.",
+    begintotaal: "Beginsaldo",
+    begindatum: "Begindatum",
+    begintotaalVanLabel: (naam) => `Beginsaldo van ${naam}`,
+    begindatumVanLabel: (naam) => `Begindatum van ${naam}`,
+    waarderingDatum: "Datum",
+    waarderingBedrag: "Bedrag",
+    waarderingToevoegen: "Waardering toevoegen",
+    waarderingVerwijderen: (datum) => `Waardering van ${datum} verwijderen`,
+    waarderingDatumVanLabel: (naam) => `Waarderingsdatum van ${naam}`,
+    waarderingBedragVanLabel: (naam) => `Waarderingsbedrag van ${naam}`,
+    waarderingGeen: "Nog geen waardering.",
+    waarderingGap:
+      "Geen waardering: het vermogen van deze rekening is onbekend tot je er een invult. Onbekend telt niet als nul.",
+    waarderingActueel: (datum) => `Laatste waardering: ${datum}.`,
+    waarderingVerouderd: (datum, dagen) =>
+      `Laatste waardering: ${datum} (${dagen} dagen oud). Het bedrag is meegenomen, niet opnieuw vastgesteld.`,
+    waarderingOngeldig: "Vul een geldige datum en een bedrag in.",
   },
   accountTypes: {
     current: "Betaalrekening",
     savings: "Spaarrekening",
     credit: "Creditcard",
     investment: "Beleggingsrekening",
+    loan: "Lening",
+    property: "Woning",
+    vehicle: "Voertuig",
+    otherAsset: "Overig bezit",
+    otherLiability: "Overige schuld",
     other: "Overig",
   },
   transacties: {
@@ -1409,12 +1457,37 @@ const en: MoneyCopy = {
     transferLinksDropped: (n) =>
       `${n} transfer link${n === 1 ? "" : "s"} dropped: one of the two transactions no longer` +
       ` exists after the merge or delete.`,
+    waarderingen: "Valuations",
+    waarderingenUitleg:
+      "A valuation is an absolute amount on a date. Before the first one the account's value is unknown; after it the series follows your transactions.",
+    begintotaal: "Opening balance",
+    begindatum: "Opening date",
+    begintotaalVanLabel: (naam) => `Opening balance of ${naam}`,
+    begindatumVanLabel: (naam) => `Opening date of ${naam}`,
+    waarderingDatum: "Date",
+    waarderingBedrag: "Amount",
+    waarderingToevoegen: "Add valuation",
+    waarderingVerwijderen: (datum) => `Remove the ${datum} valuation`,
+    waarderingDatumVanLabel: (naam) => `Valuation date of ${naam}`,
+    waarderingBedragVanLabel: (naam) => `Valuation amount of ${naam}`,
+    waarderingGeen: "No valuation yet.",
+    waarderingGap:
+      "No valuation: this account's value is unknown until you add one. Unknown does not count as zero.",
+    waarderingActueel: (datum) => `Last valuation: ${datum}.`,
+    waarderingVerouderd: (datum, dagen) =>
+      `Last valuation: ${datum} (${dagen} days old). The amount is carried, not re-established.`,
+    waarderingOngeldig: "Enter a valid date and amount.",
   },
   accountTypes: {
     current: "Current account",
     savings: "Savings account",
     credit: "Credit card",
     investment: "Investment account",
+    loan: "Loan",
+    property: "Property",
+    vehicle: "Vehicle",
+    otherAsset: "Other asset",
+    otherLiability: "Other liability",
     other: "Other",
   },
   transacties: {

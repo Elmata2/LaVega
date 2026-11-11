@@ -35,6 +35,8 @@ function fakeStorage(): VaultStorage {
       priceChanges: [],
     }),
     putBillPlan: async () => {},
+    getValuations: async () => [],
+    putValuations: async () => {},
     getProfile: async () => ({ kind: "absent" }),
   } as unknown as VaultStorage;
 }
