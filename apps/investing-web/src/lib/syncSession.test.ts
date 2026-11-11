@@ -1,46 +1,90 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { syncStateBody } from "../test/fetchFixtures";
 
 type Session = typeof import("./syncSession");
 
-const BROKER = "/api/brokers/sync/status";
-const PRICE = "/api/prices/sync/status";
-const VAULT = "/api/brokers/credentials/status";
+/** The test's copy of the state body: widened so helper cases may set any
+ *  lane status or timestamp without re-typing the schema's literals. */
+type Lane = {
+  status: string;
+  syncedAt: string | null;
+  waitUntil: string | null;
+  message: string | null;
+};
+type State = {
+  active: boolean;
+  vault: string;
+  holdings: Lane & { positionsRead: number };
+  history: Lane & { pages: number; ordersRead: number; historyProgress: unknown };
+  prices: Lane & {
+    total: number;
+    completed: number;
+    currentSymbol: string | null;
+    remainingSymbols: string[];
+  };
+  problems: string[];
+  run: { id: string | null; hop: number; outcome: string | null };
+};
 
-const broker = (status: string) => ({
+const lane = (status: string, syncedAt: string | null = null) => ({
   status,
-  pages: 1,
-  ordersRead: 10,
-  positionsRead: 2,
+  syncedAt,
   waitUntil: null,
-  remaining: null,
-  updatedAt: `2026-09-17T10:00:0${status.length % 10}Z`,
   message: null,
-  history: null,
 });
-const price = (status: string) => ({
-  status,
-  total: 2,
-  completed: status === "completed" ? 2 : 1,
-  remainingSymbols: [],
-  currentSymbol: null,
-  waitUntil: null,
-  updatedAt: "2026-09-17T10:00:00Z",
-  message: null,
-  problems: [],
+
+const state = (over: Partial<State> = {}): State => ({
+  ...(syncStateBody() as unknown as State),
+  ...over,
 });
+
+const running = (over: Partial<State> = {}) =>
+  state({
+    active: true,
+    holdings: { ...lane("running"), positionsRead: 2 },
+    history: { ...lane("running"), pages: 1, ordersRead: 10, historyProgress: null },
+    run: { id: "run-1", hop: 0, outcome: null },
+    ...over,
+  });
+
+const done = (over: Partial<State> = {}) =>
+  state({
+    active: false,
+    holdings: { ...lane("completed", "2026-09-17T10:00:01Z"), positionsRead: 2 },
+    history: {
+      ...lane("completed", "2026-09-17T10:00:02Z"),
+      pages: 3,
+      ordersRead: 30,
+      historyProgress: null,
+    },
+    prices: {
+      status: "completed",
+      syncedAt: "2026-09-17T10:00:03Z",
+      waitUntil: null,
+      message: null,
+      total: 2,
+      completed: 2,
+      currentSymbol: null,
+      remainingSymbols: [],
+    },
+    run: { id: "run-1", hop: 0, outcome: "done" },
+    ...over,
+  });
 
 type Reply = unknown | { httpStatus: number } | Promise<Response>;
 
-/** Answers each status URL from its own queue; the last entry repeats. */
-function statusServer(queues: Record<string, Reply[]>) {
+/** Answers `GET /api/sync/state` (and the refresh POST) from queues; the last
+ *  entry repeats. Any other URL is recorded and fails loudly. */
+function stateServer(queues: { state?: Reply[]; refresh?: Reply[] } = {}) {
   const calls: string[] = [];
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
-    const queue = queues[url];
-    if (!queue) throw new Error(`Unexpected request: ${url}`);
-    const reply = queue.length > 1 ? queue.shift() : queue[0];
+    const queue =
+      url === "/api/sync/refresh" && init?.method === "POST" ? queues.refresh : queues.state;
+    if (!queue || queue.length === 0) throw new Error(`Unexpected request: ${url}`);
+    const reply = queue.length > 1 ? queue.shift()! : queue[0];
     if (reply instanceof Promise) return reply;
     if (reply && typeof reply === "object" && "httpStatus" in reply)
       return new Response("", { status: (reply as { httpStatus: number }).httpStatus });
@@ -63,36 +107,161 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("running, HTTP 503, running, completed recovers without a reload", async () => {
-  const server = statusServer({
-    [BROKER]: [broker("running"), { httpStatus: 503 }, broker("running"), broker("completed")],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
+test("an active run reads exactly one state per two seconds and stops when it ends", async () => {
+  const server = stateServer({
+    state: [running(), running(), running(), done()],
   });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(session.readSyncSnapshot().broker?.status).toBe("running");
+
+  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(server.count("/api/sync/state")).toBe(4);
+  expect(session.readSyncSnapshot().broker?.status).toBe("completed");
+
+  // The run is done: no further read, and no timer left behind.
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(server.count("/api/sync/state")).toBe(4);
+  expect(vi.getTimerCount()).toBe(0);
+  // Never a per-second poll, never the old three status routes.
+  expect(server.calls.every((url) => url === "/api/sync/state")).toBe(true);
+  unsubscribe();
+});
+
+test("an inactive state on the first read stops immediately", async () => {
+  const server = stateServer({ state: [state()] });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(server.count("/api/sync/state")).toBe(1);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(session.readSyncSnapshot()).toMatchObject({
+    broker: { status: "idle", positionsRead: 0 },
+    price: { status: "idle" },
+    vault: "unlocked",
+    connection: "online",
+  });
+  unsubscribe();
+});
+
+test("each lane completion fires the dashboard refresh once", async () => {
+  const first = running();
+  const holdingsDone = running({
+    holdings: { ...lane("completed", "2026-09-17T10:00:01Z"), positionsRead: 2 },
+  });
+  const historyDone = running({
+    holdings: holdingsDone.holdings,
+    history: {
+      ...lane("completed", "2026-09-17T10:00:02Z"),
+      pages: 3,
+      ordersRead: 30,
+      historyProgress: null,
+    },
+  });
+  const pricesDone = done({ holdings: holdingsDone.holdings, history: historyDone.history });
+  stateServer({ state: [first, holdingsDone, historyDone, pricesDone] });
   const refreshes = vi.fn();
   window.addEventListener("lavega:dashboard-refresh", refreshes);
   const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(2_000);
+
+  expect(refreshes).toHaveBeenCalledTimes(3);
+  window.removeEventListener("lavega:dashboard-refresh", refreshes);
+  unsubscribe();
+});
+
+test("one refresh intent: overlapping callers share one POST and start the poll", async () => {
+  const server = stateServer({
+    refresh: [{ ...running(), claimed: true }],
+    state: [running(), running(), done()],
+  });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  const [first, second] = await Promise.all([
+    session.requestRefresh(true),
+    session.requestRefresh(true),
+  ]);
+  expect(server.count("/api/sync/refresh")).toBe(1);
+  expect(first).toEqual({ problems: [] });
+  expect(second).toEqual({ problems: [] });
+  const posted = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+    ([url]) => String(url) === "/api/sync/refresh",
+  );
+  expect(posted?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ force: true }) });
+  expect(session.readSyncSnapshot().broker?.status).toBe("running");
 
   await vi.advanceTimersByTimeAsync(0);
-  expect(session.readSyncSnapshot().broker?.status).toBe("running");
-  await vi.advanceTimersByTimeAsync(1_000);
-  expect(session.readSyncSnapshot().connection).toBe("retrying");
-  expect(session.readSyncSnapshot().broker?.status).toBe("running");
-  await vi.advanceTimersByTimeAsync(2_000);
-  expect(session.readSyncSnapshot().connection).toBe("online");
-  await vi.advanceTimersByTimeAsync(1_000);
-
-  expect(session.readSyncSnapshot()).toMatchObject({
-    broker: { status: "completed" },
-    connection: "online",
-    vault: "unlocked",
-  });
-  expect(refreshes).toHaveBeenCalledOnce();
-  expect(server.count(BROKER)).toBe(4);
+  for (
+    let step = 0;
+    step < 10 && session.readSyncSnapshot().broker?.status !== "completed";
+    step += 1
+  ) {
+    await vi.advanceTimersByTimeAsync(2_000);
+  }
+  expect(session.readSyncSnapshot().broker?.status).toBe("completed");
   await vi.advanceTimersByTimeAsync(60_000);
-  expect(server.count(BROKER)).toBe(4);
   expect(vi.getTimerCount()).toBe(0);
-  window.removeEventListener("lavega:dashboard-refresh", refreshes);
+  expect(server.count("/api/sync/refresh")).toBe(1);
+  expect(server.count("/api/sync/state")).toBeGreaterThan(0);
+  expect(server.calls.some((url) => url.includes("/api/brokers/sync"))).toBe(false);
+  expect(server.calls.some((url) => url.includes("/api/prices/sync"))).toBe(false);
+  unsubscribe();
+});
+
+test("a refresh that the server refuses returns its problems and starts nothing", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ problems: ["CRON_SECRET is not set"] }), { status: 500 }),
+    ),
+  );
+  const result = await session.requestRefresh(false);
+  expect(result).toEqual({ problems: ["CRON_SECRET is not set"] });
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("a failed read while a run was active backs off and caps the delay", async () => {
+  stateServer({ state: [running(), { httpStatus: 503 }] });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+
+  const readTimes: number[] = [];
+  for (let second = 1; second <= 200; second += 1) {
+    const before = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1_000);
+    if ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length > before) {
+      readTimes.push(second);
+    }
+  }
+  const gaps = readTimes.slice(1).map((time, index) => time - readTimes[index]);
+  expect(gaps.slice(0, 5)).toEqual([4, 8, 16, 30, 30]);
+  expect(Math.max(...gaps)).toBe(30);
+  expect(session.readSyncSnapshot().connection).toBe("retrying");
+  unsubscribe();
+});
+
+test("a failed read with no run stops and reads as offline", async () => {
+  const server = stateServer({ state: [{ httpStatus: 503 }] });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(server.count("/api/sync/state")).toBe(1);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(session.readSyncSnapshot().connection).toBe("offline");
+  unsubscribe();
+});
+
+test("a state body the schema rejects is a failed read, not a broken render", async () => {
+  const server = stateServer({ state: [{ active: "yes" }] });
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(session.readSyncSnapshot().connection).toBe("offline");
+  expect(server.count("/api/sync/state")).toBe(1);
   unsubscribe();
 });
 
@@ -101,243 +270,91 @@ test("repeated wake during a pending read creates no parallel reads or timers", 
   const pending = new Promise<Response>((resolve) => {
     answer = resolve;
   });
-  const server = statusServer({
-    [BROKER]: [pending, broker("running")],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
-  });
+  const server = stateServer({ state: [pending, running(), done()] });
   const unsubscribe = session.subscribeSyncSession(() => {});
   await vi.advanceTimersByTimeAsync(0);
 
   for (let wake = 0; wake < 5; wake += 1) session.wakeSyncSession();
   await vi.advanceTimersByTimeAsync(5_000);
-  expect(server.count(BROKER)).toBe(1);
+  expect(server.count("/api/sync/state")).toBe(1);
   expect(vi.getTimerCount()).toBe(0);
 
-  answer(new Response(JSON.stringify(broker("running"))));
+  answer(new Response(JSON.stringify(running())));
   await vi.advanceTimersByTimeAsync(0);
-  expect(server.count(BROKER)).toBe(2);
-  expect(vi.getTimerCount()).toBe(1);
-  await vi.advanceTimersByTimeAsync(1_000);
-  expect(server.count(BROKER)).toBe(3);
-  expect(vi.getTimerCount()).toBe(1);
+  expect(server.count("/api/sync/state")).toBe(2);
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(server.count("/api/sync/state")).toBe(3);
   unsubscribe();
   expect(vi.getTimerCount()).toBe(0);
-});
-
-test.each(["idle", "completed", "problem"])("%s status stops polling", async (status) => {
-  const server = statusServer({
-    [BROKER]: [broker(status)],
-    [PRICE]: [price(status)],
-    [VAULT]: [{ status: "unlocked" }],
-  });
-  const unsubscribe = session.subscribeSyncSession(() => {});
-  await vi.advanceTimersByTimeAsync(0);
-  await vi.advanceTimersByTimeAsync(60_000);
-
-  expect(server.count(BROKER)).toBe(1);
-  expect(vi.getTimerCount()).toBe(0);
-  unsubscribe();
-});
-
-test("a failed read with no active run stops instead of looping", async () => {
-  const server = statusServer({
-    [BROKER]: [{ httpStatus: 503 }],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "locked" }],
-  });
-  const unsubscribe = session.subscribeSyncSession(() => {});
-  await vi.advanceTimersByTimeAsync(0);
-  await vi.advanceTimersByTimeAsync(60_000);
-
-  expect(server.count(BROKER)).toBe(1);
-  expect(vi.getTimerCount()).toBe(0);
-  expect(session.readSyncSnapshot()).toMatchObject({
-    connection: "offline",
-    price: { status: "idle" },
-    vault: "locked",
-  });
-  unsubscribe();
-});
-
-test("failures during an active run back off and cap the delay", async () => {
-  const server = statusServer({
-    [BROKER]: [broker("running"), { httpStatus: 503 }],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
-  });
-  const unsubscribe = session.subscribeSyncSession(() => {});
-  await vi.advanceTimersByTimeAsync(0);
-
-  const readTimes: number[] = [];
-  for (let second = 1; second <= 200; second += 1) {
-    const before = server.count(BROKER);
-    await vi.advanceTimersByTimeAsync(1_000);
-    if (server.count(BROKER) > before) readTimes.push(second);
-  }
-  const gaps = readTimes.slice(1).map((time, index) => time - readTimes[index]);
-  expect(gaps.slice(0, 5)).toEqual([2, 4, 8, 16, 30]);
-  expect(Math.max(...gaps)).toBe(30);
-  expect(session.readSyncSnapshot().connection).toBe("retrying");
-  unsubscribe();
 });
 
 test("one subscriber leaving keeps polling for the others", async () => {
-  const server = statusServer({
-    [BROKER]: [broker("running")],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
-  });
+  const server = stateServer({ state: [running()] });
   const first = session.subscribeSyncSession(() => {});
   const second = vi.fn();
   const unsubscribeSecond = session.subscribeSyncSession(second);
   await vi.advanceTimersByTimeAsync(0);
 
   first();
-  const before = server.count(BROKER);
-  await vi.advanceTimersByTimeAsync(3_000);
-  expect(server.count(BROKER)).toBe(before + 3);
+  const before = server.count("/api/sync/state");
+  await vi.advanceTimersByTimeAsync(6_000);
+  expect(server.count("/api/sync/state")).toBe(before + 3);
   expect(second).toHaveBeenCalled();
 
   unsubscribeSecond();
   await vi.advanceTimersByTimeAsync(10_000);
-  expect(server.count(BROKER)).toBe(before + 3);
+  expect(server.count("/api/sync/state")).toBe(before + 3);
   expect(vi.getTimerCount()).toBe(0);
 });
 
-test("a broker start reads holdings, then history, then resumes price sync once even when callers overlap", async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url === "/api/brokers/sync?force=true&lane=holdings")
-      return new Response(JSON.stringify({ problems: [] }));
-    if (url === "/api/brokers/sync?force=true&lane=history")
-      return new Response(JSON.stringify({ problems: [] }));
-    if (url === "/api/prices/sync") return new Response(JSON.stringify(price("completed")));
-    throw new Error(`Unexpected request: ${url}`);
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  await Promise.all([session.startBrokerSync(true), session.startBrokerSync(true)]);
-  await vi.advanceTimersByTimeAsync(0);
-
-  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-    "/api/brokers/sync?force=true&lane=holdings",
-    "/api/brokers/sync?force=true&lane=history",
-    "/api/prices/sync",
-  ]);
-  expect(fetchMock).toHaveBeenCalledWith("/api/brokers/sync?force=true&lane=holdings", {
-    method: "POST",
-  });
-  expect(fetchMock).toHaveBeenCalledWith("/api/brokers/sync?force=true&lane=history", {
-    method: "POST",
-  });
-  expect(fetchMock).toHaveBeenCalledWith("/api/prices/sync", { method: "POST" });
-  expect(session.readSyncSnapshot().price?.status).toBe("completed");
-});
-
-test("a failed holdings lane does not stop the history lane", async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url === "/api/brokers/sync?lane=holdings")
-      return new Response(JSON.stringify({ problems: ["holdings failed"] }), { status: 503 });
-    if (url === "/api/brokers/sync?lane=history")
-      return new Response(JSON.stringify({ problems: [] }));
-    if (url === "/api/prices/sync") return new Response(JSON.stringify(price("completed")));
-    throw new Error(`Unexpected request: ${url}`);
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  await session.startBrokerSync(false);
-  await vi.advanceTimersByTimeAsync(0);
-
-  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-    "/api/brokers/sync?lane=holdings",
-    "/api/brokers/sync?lane=history",
-    "/api/prices/sync",
-  ]);
-});
-
-test("price rounds that run out leave a visible incomplete result", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(price("paused")), { status: 202 })),
-  );
-
-  const outcome = await session.continuePriceSync();
-
-  expect(outcome.kind).toBe("incomplete");
-  expect(session.readSyncSnapshot().priceProblem).toBe(
-    "Price history is still loading after 40 rounds. Start sync again to continue.",
-  );
-});
-
-test("a stale paused price row with a subscriber stops polling", async () => {
-  const server = statusServer({
-    [BROKER]: [broker("idle")],
-    [PRICE]: [price("paused")],
-    [VAULT]: [{ status: "unlocked" }],
+test("the snapshot keeps the old shape from the one state body", async () => {
+  stateServer({
+    state: [
+      running({
+        vault: "locked",
+        problems: ["prices: Yahoo Finance is not connected"],
+        prices: {
+          status: "problem",
+          syncedAt: null,
+          waitUntil: null,
+          message: "Price history could not be updated.",
+          total: 5,
+          completed: 2,
+          currentSymbol: "ASML",
+          remainingSymbols: ["AAPL", "MSFT", "IWDA.AS"],
+        },
+      }),
+    ],
   });
   const unsubscribe = session.subscribeSyncSession(() => {});
   await vi.advanceTimersByTimeAsync(0);
-  await vi.advanceTimersByTimeAsync(60_000);
-
-  expect(session.readSyncSnapshot().price?.status).toBe("paused");
-  expect(server.count(PRICE)).toBe(1);
-  expect(vi.getTimerCount()).toBe(0);
+  expect(session.readSyncSnapshot()).toMatchObject({
+    broker: {
+      status: "running",
+      pages: 1,
+      ordersRead: 10,
+      positionsRead: 2,
+      history: null,
+    },
+    price: {
+      status: "problem",
+      total: 5,
+      completed: 2,
+      currentSymbol: "ASML",
+      remainingSymbols: ["AAPL", "MSFT", "IWDA.AS"],
+    },
+    priceProblem: "Price history could not be updated.",
+    vault: "locked",
+    connection: "online",
+  });
   unsubscribe();
 });
 
-test("an exhausted price run with a subscriber stops polling afterwards", async () => {
-  const server = statusServer({
-    [BROKER]: [broker("idle")],
-    [PRICE]: [price("paused")],
-    [VAULT]: [{ status: "unlocked" }],
-    "/api/prices/sync": [price("paused")],
-  });
-  const unsubscribe = session.subscribeSyncSession(() => {});
-  await vi.advanceTimersByTimeAsync(0);
-
-  const outcome = await session.continuePriceSync();
-  expect(outcome.kind).toBe("incomplete");
-  await vi.advanceTimersByTimeAsync(0);
-  const afterRun = server.count(PRICE);
-  await vi.advanceTimersByTimeAsync(60_000);
-
-  expect(server.count(PRICE)).toBe(afterRun);
-  expect(vi.getTimerCount()).toBe(0);
-  unsubscribe();
-});
-
-test("price sync invalidates the dashboard once, when it finishes", async () => {
-  statusServer({
-    [BROKER]: [broker("idle")],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
-    "/api/prices/sync": [price("paused"), price("paused"), price("completed")],
-  });
-  const refreshes = vi.fn();
-  window.addEventListener("lavega:dashboard-refresh", refreshes);
-
-  const outcome = await session.continuePriceSync();
-
-  expect(outcome.kind).toBe("finished");
-  expect(refreshes).toHaveBeenCalledTimes(1);
-  window.removeEventListener("lavega:dashboard-refresh", refreshes);
-});
-
-test("a price sync that never finishes invalidates nothing", async () => {
-  statusServer({
-    [BROKER]: [broker("idle")],
-    [PRICE]: [price("idle")],
-    [VAULT]: [{ status: "unlocked" }],
-    "/api/prices/sync": [price("paused")],
-  });
-  const refreshes = vi.fn();
-  window.addEventListener("lavega:dashboard-refresh", refreshes);
-
-  const outcome = await session.continuePriceSync();
-
-  expect(outcome.kind).toBe("incomplete");
-  expect(refreshes).toHaveBeenCalledTimes(0);
-  window.removeEventListener("lavega:dashboard-refresh", refreshes);
+test("filterVisibleSyncProblems hides an unconfigured broker only", () => {
+  expect(
+    session.filterVisibleSyncProblems([
+      "trading212: credentials are not configured",
+      "prices: rate limited",
+    ]),
+  ).toEqual(["prices: rate limited"]);
 });

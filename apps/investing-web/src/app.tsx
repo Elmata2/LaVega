@@ -66,13 +66,7 @@ import {
   startNewThread,
   useAgentCatalog,
 } from "./lib/portfolioAgents";
-import { priceOutcomeProblems } from "./lib/priceSync";
-import {
-  continuePriceSync,
-  filterVisibleSyncProblems,
-  startBrokerSync,
-  useSyncSession,
-} from "./lib/syncSession";
+import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "./lib/syncSession";
 import { PERSONAL_URL } from "./lib/personal";
 import { brokerLabel, historyGate } from "./lib/historyGate";
 
@@ -706,11 +700,10 @@ function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void 
   }, [consent, problems, onProblems]);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
-      const brokerResult = await startBrokerSync();
-      if (current()) setProblems(filterVisibleSyncProblems(brokerResult?.problems ?? []));
-      const priceProblems = priceOutcomeProblems(await continuePriceSync());
-      if (current() && priceProblems.length > 0)
-        setProblems((existing) => [...existing, ...priceProblems]);
+      /* ONE intent. The server owns the run from here; the state poll shows
+       * its progress, and the tab may close. */
+      const result = await requestRefresh();
+      if (current()) setProblems(filterVisibleSyncProblems(result?.problems ?? []));
     } catch {
       if (current()) setProblems(["Broker sync failed."]);
     }

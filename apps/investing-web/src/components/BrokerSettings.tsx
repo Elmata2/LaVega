@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button.js";
-import { filterVisibleSyncProblems, startBrokerSync, useSyncSession } from "../lib/syncSession.js";
+import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "../lib/syncSession.js";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
@@ -65,7 +65,7 @@ function BrokerSyncAction() {
     setStatus("loading");
     setProblems([]);
     try {
-      const result = await startBrokerSync(true);
+      const result = await requestRefresh(true);
       const nextProblems = filterVisibleSyncProblems(result?.problems ?? []);
       setProblems(nextProblems);
       setStatus(nextProblems.length > 0 ? "error" : "success");
@@ -228,7 +228,7 @@ function BrokerVaultUnlock() {
       if (!unlockResponse.ok)
         throw new Error(unlockResult.problems?.[0] ?? "Failed to unlock vault.");
       setPassphrase("");
-      const syncResult = await startBrokerSync(true);
+      const syncResult = await requestRefresh(true);
       if (!syncResult) {
         setVaultStatus("unlocked");
         setMessage(`Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}`);
@@ -337,7 +337,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
       if (!saveResponse.ok)
         throw new Error(saveResult.problems?.[0] ?? "Failed to save credentials.");
       onSaved?.(broker);
-      const syncResult = await startBrokerSync(true);
+      const syncResult = await requestRefresh(true);
       if (!syncResult) {
         setStatus("success");
         setMessage(`Credentials saved. ${SYNC_BACKGROUND_MESSAGE}`);

@@ -7,6 +7,7 @@ import {
   type PortfolioSummaryView,
   type SummaryState,
 } from "./PortfolioSummaryCard";
+import { syncStateBody } from "../test/fetchFixtures";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -354,18 +355,6 @@ const benchmarkResult = {
   currency: "EUR",
 };
 
-const priceSyncCompleted = {
-  status: "completed",
-  total: 0,
-  completed: 0,
-  remainingSymbols: [],
-  currentSymbol: null,
-  waitUntil: null,
-  updatedAt: "2026-09-17T10:00:00Z",
-  message: null,
-  problems: [],
-};
-
 function changeInput(input: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -404,8 +393,10 @@ test("choosing a benchmark saves it, refreshes the dashboard and starts price sy
         return new Response(
           JSON.stringify({ tenantId: "local", symbols: [benchmarkResult.symbol] }),
         );
-      if (url === "/api/prices/sync")
-        return new Response(JSON.stringify(priceSyncCompleted), { status: 202 });
+      if (url === "/api/sync/refresh")
+        return new Response(JSON.stringify({ ...syncStateBody(), claimed: true }), {
+          status: 202,
+        });
       throw new Error(`Unexpected request: ${url}`);
     }),
   );
@@ -435,7 +426,7 @@ test("choosing a benchmark saves it, refreshes the dashboard and starts price sy
     expect(saved?.init?.body).toBe(JSON.stringify({ symbols: [benchmarkResult.symbol] }));
     expect(refreshes).toHaveBeenCalled();
     expect(
-      requests.some(({ url, init }) => url === "/api/prices/sync" && init?.method === "POST"),
+      requests.some(({ url, init }) => url === "/api/sync/refresh" && init?.method === "POST"),
     ).toBe(true);
   } finally {
     window.removeEventListener("lavega:dashboard-refresh", refreshes);
