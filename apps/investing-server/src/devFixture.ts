@@ -14,6 +14,7 @@ import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
  * via INVESTING_DEV_FIXTURE=1 (see docker.ts / index.ts). Never used in production. */
 
 const TENANT_ID = "local";
+const TRANSFER_IN_SYMBOL = "TSLA";
 const ENTITY = "personal";
 const FIXTURE_BROKER = "trading212";
 const HISTORY_DAYS = 270;
@@ -55,6 +56,17 @@ const SYMBOLS: FixtureSymbol[] = [
     marketPrice: 706.5,
     startClose: 560,
     volatility: 15,
+  },
+  {
+    // Demonstrates WS4.2: 5 of these 8 units arrived by transfer, so the cost
+    // basis is unknown as a whole and the dashboard shows the typed reason.
+    symbol: TRANSFER_IN_SYMBOL,
+    currency: "USD",
+    quantity: 8,
+    averagePrice: 210,
+    marketPrice: 250,
+    startClose: 180,
+    volatility: 8,
   },
 ];
 
@@ -120,11 +132,14 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     entity: ENTITY,
     symbol: entry.symbol,
     quantity: entry.quantity,
-    brokerCost: {
-      status: "known",
-      amount: entry.averagePrice * entry.quantity,
-      currency: entry.currency,
-    },
+    brokerCost:
+      entry.symbol === TRANSFER_IN_SYMBOL
+        ? { status: "unknown", reason: "not-reported" }
+        : {
+            status: "known",
+            amount: entry.averagePrice * entry.quantity,
+            currency: entry.currency,
+          },
     averagePrice: entry.averagePrice,
     marketPrice: entry.marketPrice,
     marketValue: Math.round(entry.quantity * entry.marketPrice * 100) / 100,
@@ -137,6 +152,22 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     trade("fixture-3", now, 150, "MSFT", "buy", 10, 352.1),
     trade("fixture-4", now, 120, "ASML", "buy", 2, 585),
     trade("fixture-5", now, 45, "ASML", "buy", 2, 639),
+    trade("fixture-6", now, 100, TRANSFER_IN_SYMBOL, "buy", 3, 210),
+    // An inbound internal transfer: no price and no commission exist, and the
+    // positive quantity carries the direction (see `normalizeTradeQuantity`).
+    {
+      id: "fixture-7",
+      entity: ENTITY,
+      broker: FIXTURE_BROKER,
+      date: isoDate(daysAgo(now, 30)),
+      symbol: TRANSFER_IN_SYMBOL,
+      side: "other",
+      quantity: 5,
+      price: null,
+      amount: null,
+      currency: currencyOf(TRANSFER_IN_SYMBOL),
+      commission: null,
+    },
   ];
   const dividends: Dividend[] = [
     dividend("fixture-div-1", now, 90, "AAPL", 6.25),

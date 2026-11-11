@@ -171,6 +171,31 @@ function numericCompare(
   return (left - right) * (direction === "asc" ? 1 : -1);
 }
 
+/** WS4.2: say why a basis is unknown instead of only "return unavailable".
+ *  The code is typed in core (`CostBasisUnknownReason`); copy lives here. */
+function basisUnknownCopy(
+  basis: InvestingDashboardData["positions"][number]["basis"],
+): string | null {
+  switch (basis?.reason) {
+    case "transfer-in":
+      return "Basis unknown: units arrived by transfer, so the purchase price is not known.";
+    case "missing-fx":
+      return "Basis unknown: an FX rate is missing.";
+    case "missing-price":
+      return "Basis unknown: a trade has no price.";
+    case "missing-fee":
+      return "Basis unknown: a trade fee is missing.";
+    case "quantity-mismatch":
+      return "Basis unknown: the trade history does not match the broker quantity.";
+    case "provider-incomplete":
+      return "Basis unknown: the broker reports only part of the position.";
+    case "no-history":
+      return "Basis unknown: there is no trade history for this position.";
+    default:
+      return null;
+  }
+}
+
 function PositionList({
   positions,
   currency,
@@ -352,8 +377,8 @@ function PositionList({
                     </span>
                     {position.returns.status === "missing-cost" && (
                       <span className="block text-xs leading-5 text-muted-foreground">
-                        Import earlier transactions or connect your other brokers to calculate
-                        return.
+                        {basisUnknownCopy(position.basis) ??
+                          "Import earlier transactions or connect your other brokers to calculate return."}
                       </span>
                     )}
                   </>
@@ -1323,7 +1348,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         >
           {position.returnStatus === "missing-fx"
             ? "FX rate missing. Return cannot be calculated."
-            : "Import earlier transactions or connect your other brokers to calculate return."}
+            : (basisUnknownCopy(position.basis) ??
+              "Import earlier transactions or connect your other brokers to calculate return.")}
         </p>
       )}
       {brokerUnrealized && (
@@ -1354,7 +1380,17 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         {position.status === "open" && (
           <>
             <div>
-              <dt className="text-muted-foreground">Average cost</dt>
+              <dt className="text-muted-foreground">
+                Average cost
+                {position.basis?.source === "manual" && position.basis.locked && (
+                  <span
+                    className="ml-2 text-xs font-medium text-muted-foreground"
+                    title="A locked manual cost basis survives broker syncs"
+                  >
+                    · locked
+                  </span>
+                )}
+              </dt>
               <dd className="mt-1 font-semibold tabular-nums">
                 {money(position.averageCost).replace(/^\+/, "")}
               </dd>

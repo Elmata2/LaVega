@@ -20,6 +20,7 @@ import type {
   Trade,
 } from "./model.js";
 import type { BenchmarkInstrument } from "./benchmarks.js";
+import { replayCostBasis, selectCostBasis } from "./costBasis.js";
 import {
   brokerCostCoverage,
   buildCurrentPositions,
@@ -61,6 +62,9 @@ export type InvestingPositionDetail = {
   averageCost: number | null;
   returns: PositionReturn;
   returnStatus: PositionReturnStatus;
+  /** Why the cost basis is known or unknown (WS4.2); absent on rows built
+   *  before the provenance slice. */
+  basis?: CurrentPosition["basis"];
   firstBuyDate: string | null;
   quantityHistory: PositionQuantityChange[];
   activity: PositionActivity[];
@@ -169,6 +173,31 @@ const PositionReturnSchema = Schema.Struct({
   firstBuyDate: NullableString,
   problem: Schema.optional(Schema.String),
 });
+const CostBasisSummarySchema = Schema.Struct({
+  status: Schema.Union([Schema.Literal("known"), Schema.Literal("unknown")]),
+  source: Schema.NullOr(
+    Schema.Union([
+      Schema.Literal("manual"),
+      Schema.Literal("calculated"),
+      Schema.Literal("provider"),
+    ]),
+  ),
+  amountCents: NullableNumber,
+  currency: Schema.String,
+  locked: Schema.Boolean,
+  reason: Schema.NullOr(
+    Schema.Union([
+      Schema.Literal("no-history"),
+      Schema.Literal("transfer-in"),
+      Schema.Literal("missing-fx"),
+      Schema.Literal("missing-price"),
+      Schema.Literal("missing-fee"),
+      Schema.Literal("quantity-mismatch"),
+      Schema.Literal("provider-incomplete"),
+    ]),
+  ),
+  firstBuyDate: NullableString,
+});
 const CurrentPositionSchema = Schema.Struct({
   symbol: Schema.String,
   entity: Schema.String,
@@ -181,6 +210,7 @@ const CurrentPositionSchema = Schema.Struct({
   portfolioWeight: NullableNumber,
   priceStatus: PositionPriceStatusSchema,
   returns: PositionReturnSchema,
+  basis: Schema.optional(CostBasisSummarySchema),
 });
 const PositionMarkerSchema = Schema.Struct({
   kind: Schema.Union([Schema.Literal("buy"), Schema.Literal("sell"), Schema.Literal("dividend")]),
@@ -236,6 +266,7 @@ const PositionDetailSchema = Schema.Struct({
   averageCost: NullableNumber,
   returns: PositionReturnSchema,
   returnStatus: PositionReturnStatusSchema,
+  basis: Schema.optional(CostBasisSummarySchema),
   firstBuyDate: NullableString,
   quantityHistory: Schema.Array(PositionQuantityChangeSchema),
   activity: Schema.Array(PositionActivitySchema),
@@ -633,6 +664,34 @@ function buildPositionDetail(input: {
     input.fxRates,
     { valuationDate, brokerCost: brokerCostCoverage(latestOwnershipAnchors(input.positions)) },
   );
+  const detailProvider = brokerCostCoverage(latestOwnershipAnchors(input.positions));
+  const basis = selectCostBasis({
+    presentationCurrency: input.presentationCurrency,
+    fxRates: input.fxRates,
+    manual:
+      input.positions.length > 0 && input.positions.every((position) => position.manualCostBasis)
+        ? {
+            legs: input.positions.map((position) => ({
+              amountCents: position.manualCostBasis!.amountCents,
+              currency: position.manualCostBasis!.currency,
+              date: position.asOf,
+              locked: position.manualCostBasis!.locked,
+            })),
+          }
+        : null,
+    calculated: replayCostBasis({
+      trades: input.trades,
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+      expectedQuantity: quantity,
+    }),
+    provider:
+      detailProvider.status === "complete"
+        ? { status: "complete", legs: detailProvider.legs }
+        : detailProvider.coveredQuantity > 0
+          ? { status: "incomplete" }
+          : null,
+  });
   const averageCost =
     returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9
       ? null
@@ -684,6 +743,7 @@ function buildPositionDetail(input: {
     averageCost,
     returns,
     returnStatus: returns.status,
+    basis,
     firstBuyDate: returns.firstBuyDate,
     quantityHistory,
     activity,
