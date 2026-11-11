@@ -1577,6 +1577,59 @@ approvals, memories }` in `VaultData` via `getAssistant`/`putAssistant`
 
 **Effort.** ≈ **1 week**.
 
+**As built (WS6, [#302](https://github.com/Elmata2/LaVega/issues/302), 2026-11-11).**
+The program ends portable, attributable and measured. The export, the attribution gate and
+the metric review landed in one slice; the reference script was verified, not redone.
+
+- **WS6.1 portable export.** `packages/core/src/interop/{export,zip}.ts` builds a versioned
+  (`lavega-export` v1) STORE-only ZIP containing `manifest.json`, one NDJSON file per record
+  section and two CSV companions (`accounts`, `transactions`). Money crosses the boundary as
+  integer cents (ADR 0011); the vault's decimal euros are untouched. The manifest states the
+  row counts, the adapted Sure record vocabulary, and what is deliberately absent (sealed
+  document bytes, credentials, the encrypted vault, the adviser profile, plan preferences,
+  learned facts/events, the n8n queue) — absence is stated, never silent. Readback is the
+  acceptance: `readLavegaExport` parses the very bytes the writer produced, CRC-checks every
+  entry and re-checks the manifest counts and CSV companions, so a file that merely downloads
+  is not proof. The Backup screen gains "Draagbare export": it builds the archive from the
+  open vault, reads it back, downloads it and only then says the rows were verified. There is
+  no importer and no cross-format dedupe promise; the manifest says so in words.
+- **Divergence: store-only, not deflate.** A third-party ZIP dependency for a portability
+  archive is not worth the supply-chain surface; the writer/reader is ~200 audited lines, and
+  deterministic fixed ZIP timestamps make the same records produce identical bytes.
+- **WS6.2 attribution pass.** `scripts/check-attribution.mjs` (`pnpm run check:attribution`)
+  is the gate: every runtime source file whose header says "Ported from Sure" must carry the
+  upstream project, the pinned commit `562fe09`, AGPL-3.0, "independently reimplemented for
+  LaVega" and a change date; every such file must have an Appendix A row; every row must
+  point at an existing, genuinely ported file (no dead rows); `NOTICE` and
+  `docs/research/sure/README.md` must carry the same pin/licence/non-affiliation/source
+  offer. Reality at close: **42 ported files, 23 ledger rows, gate green.** The pass fixed one
+  real gap (the alert-centre module had no Sure header) and restored the three withheld rows
+  now that the files exist: `statements/{types,detect,review}.ts`, `csvImport.ts` and
+  `interop/export.ts`. The occupation-specific headers/fixtures the Phase 0 audit added were
+  verified, not duplicated.
+- **WS6.3 reference script.** Unchanged: `scripts/fetch-sure-reference.sh` still pins
+  `562fe096d149cb4d1fb1e6d3446527572c1ec7f6` with a shallow fetch outside the tracked tree.
+  The gate above checks the pin in `NOTICE` and the research README, so a drifting pin fails
+  a check instead of ageing silently.
+- **WS6.4 metric review.** `docs/metrics/2026-11-11-sure-program-metrics.md` +
+  `sure-program-metrics-2026-11-11.json`, pinned by `packages/core/src/metrics.test.ts`.
+  Measured on synthetic fixtures: forecast absolute error **0.62% → 0.01% (30d), 1.42% →
+  0.01% (60d), 2.18% → 0.04% (90d)** of the opening position (#290 artifacts);
+  internal-transfer match rate **100%** (12/12 labelled pairs); uncategorized share **0%** of
+  160 fixture rows (the fixture uses common merchants; the owner's share is the number that
+  matters). Everything that needs the live vault is named owner-pending with its plan
+  definition — forecast-on-owner-history, owner transfer/uncategorized shares, statement
+  coverage, realised-gain reconciliation, MCP usage, AI spend, time-to-close. #303 is
+  owner-blocked and no number is invented in its place.
+- **Cleanup.** The unreferenced root-level terminal transcript from 2026-09-18 was removed.
+  `.scratch/` stays: `docs/agents/issue-tracker.md` documents it as the batch-run log
+  location, so it is a live convention, not a dead experiment.
+- **WS6.5 optional decisions.** ADR 0013 records the program's carried boundaries: the
+  personal MCP/API boundary stays with ADR 0009/0012 (no server read of the personal
+  plaintext), family sharing waits for a key-ownership ADR, the budget shape stays the
+  envelope+carry decided in §9, and Sure stays a port source with no local reference
+  deployment.
+
 ## 4. Sequencing and phases
 
 ```
@@ -1906,11 +1959,15 @@ reimplemented for LaVega", and the change date.
 | `apps/server/src/mcp/{routes,protocol,sessions,tokens}.ts`                                       | `app/controllers/mcp_controller.rb`                                                                                         | 562fe09 | AGPL-3.0 | JSON-RPC transport, sessions, bearer token → tenant, stricter auth; changed 2026-11-11                                         | 5     |
 | `packages/database/src/mcpTokens.ts`                                                             | `app/controllers/mcp_controller.rb`, `app/models/llm_usage.rb`                                                              | 562fe09 | AGPL-3.0 | hashed token table + audit row; failed-call and cache columns; changed 2026-11-11                                              | 5     |
 
-Rows are added when a module lands, not when it is planned. Three earlier rows
-were removed because their modules have not landed and the ledger must not read as
-attribution of shipped code: `packages/core/src/statements/*` (#293, in flight),
-`packages/core/src/csvImport.ts` (#294) and `packages/core/src/interop/export.ts`
-(WS6.1). Add them back when the file exists; verify existence before citing a row.
+| `packages/core/src/statements/{types,detect,review}.ts` | `app/models/account_statement/**`, `document.rb` | 562fe09 | AGPL-3.0 | statement metadata detector + review queue; no PDF text extractor, filename tier first; changed 2026-11-11 | 3 |
+| `packages/core/src/csvImport.ts` | `app/models/import.rb`, `import/*_mapping.rb` | 562fe09 | AGPL-3.0 | generic import session (upload → mapping → pre-flight → confirm) over the existing hash identity; changed 2026-11-11 | 3 |
+| `packages/core/src/interop/export.ts` | export/interop vocabulary (`docs/research/sure/02-platform-ai.md` §4) | 562fe09 | AGPL-3.0 | versioned ZIP/NDJSON + CSV export with manifest and readback; adapted record vocabulary; changed 2026-11-11 | 6 |
+Rows are added when a module lands, not when it is planned. The three rows that were
+withheld in Phase 0 because their modules had not landed are now back, because the files
+exist: `packages/core/src/statements/{types,detect,review}.ts` (#293),
+`packages/core/src/csvImport.ts` (#294) and `packages/core/src/interop/export.ts` (WS6.1).
+`scripts/check-attribution.mjs` keeps this table honest in both directions: a ported file
+without a row fails, and a row without a ported file fails.
 
 If text from the MIT-licensed `docs/llm-guides/wealth-blueprint.md` is adapted, add a separate
 row and notice: "Blueprint text © 2026 diegomarino, MIT" (do not fold MIT text into the AGPL

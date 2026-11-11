@@ -716,6 +716,17 @@ type BackupCopy = {
     /** The full .lavega bundle carries the sealed documents too. */
     includesDocuments: (count: number) => string;
   };
+  /** WS6.1 (#302): the plain, versioned portability archive. */
+  portable: {
+    title: string;
+    description: string;
+    button: string;
+    building: string;
+    /** Rows across sections, sections in the archive — and that it read back. */
+    verified: (rows: number, sections: number) => string;
+    verificationFailed: (problems: number) => string;
+    error: string;
+  };
   server: {
     title: string;
     signedOut: string;
@@ -1545,6 +1556,18 @@ const nlBackup: BackupCopy = {
     includesDocuments: (count) =>
       `${count} document${count === 1 ? "" : "en"} zit${count === 1 ? "" : "ten"} in deze back-up: de bestanden worden mee versleuteld.`,
   },
+  portable: {
+    title: "Draagbare export",
+    description:
+      "Een leesbaar archief (ZIP met NDJSON en CSV) van je gegevens, met een manifest dat zegt wat erin zit. LaVega leest het bestand na het maken terug; pas dan zegt het scherm dat het klopt.",
+    button: "Exporteer gegevens",
+    building: "Bezig met exporteren…",
+    verified: (rows, sections) =>
+      `Geëxporteerd en teruggelezen: ${rows} rijen over ${sections} onderdelen.`,
+    verificationFailed: (problems) =>
+      `Het bestand is gemaakt, maar het teruglezen vond ${problems} probleem${problems === 1 ? "" : "en"}.`,
+    error: "Exporteren mislukt.",
+  },
   server: {
     title: "Back-up op de server",
     signedOut:
@@ -2345,6 +2368,18 @@ const enBackup: BackupCopy = {
     button: "Download backup",
     includesDocuments: (count) =>
       `${count} document${count === 1 ? "" : "s"} ${count === 1 ? "is" : "are"} in this backup: the files are sealed with it.`,
+  },
+  portable: {
+    title: "Portable export",
+    description:
+      "A readable archive (ZIP with NDJSON and CSV) of your data, with a manifest that says what it contains. LaVega reads the file back after building it; only then does the screen say it is complete.",
+    button: "Export data",
+    building: "Exporting…",
+    verified: (rows, sections) =>
+      `Exported and read back: ${rows} rows across ${sections} sections.`,
+    verificationFailed: (problems) =>
+      `The file was written, but reading it back found ${problems} problem${problems === 1 ? "" : "s"}.`,
+    error: "Export failed.",
   },
   server: {
     title: "Backup on the server",

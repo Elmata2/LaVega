@@ -69,6 +69,7 @@ export const MODES: Mode[] = [
   },
   { id: "forecast", group: "App", label: "Forecast", kind: "app", path: "/app/forecast" },
   { id: "bills", group: "App", label: "Bills", kind: "app", path: "/app/bills" },
+  { id: "backup", group: "App", label: "Backup", kind: "app", path: "/app/backup" },
   { id: "optimise", group: "App", label: "Optimise", kind: "app", path: "/app/optimalisatie" },
   { id: "points", group: "App", label: "Points", kind: "app", path: "/app/punten" },
   { id: "profile", group: "App", label: "Profile", kind: "app", path: "/app/profiel" },
