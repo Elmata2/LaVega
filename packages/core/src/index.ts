@@ -54,6 +54,7 @@ export * from "./spendPercentile.js";
 export * from "./plan/index.js";
 export * from "./localeRedirect.js";
 export * from "./redact.js";
+export * from "./agentTools.js";
 export * from "./sentryScrub.js";
 export * from "./advisor/evidence.js";
 export * from "./advisor/profile.js";
