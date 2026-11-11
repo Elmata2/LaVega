@@ -34,7 +34,8 @@ function bill(overrides: Partial<Bill> & { rules?: BillRule[] } = {}): Bill {
   };
 }
 
-const between = (b: Bill, start: string, end: string): string[] => occurrencesBetween(b, start, end);
+const between = (b: Bill, start: string, end: string): string[] =>
+  occurrencesBetween(b, start, end);
 
 describe("date helpers", () => {
   test("month length, leap years and day distance", () => {
@@ -73,7 +74,10 @@ describe("cadence matrix", () => {
   });
 
   test("monthly day 31 clamps into short months", () => {
-    const b = bill({ anchorDate: "2026-01-31", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 31 }] });
+    const b = bill({
+      anchorDate: "2026-01-31",
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 31 }],
+    });
     expect(between(b, "2026-01-01", "2026-04-30")).toEqual([
       "2026-01-31",
       "2026-02-28",
@@ -83,18 +87,27 @@ describe("cadence matrix", () => {
   });
 
   test("monthly day 30 clamps February only", () => {
-    const b = bill({ anchorDate: "2026-01-30", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 30 }] });
+    const b = bill({
+      anchorDate: "2026-01-30",
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 30 }],
+    });
     expect(between(b, "2026-02-01", "2026-03-31")).toEqual(["2026-02-28", "2026-03-30"]);
   });
 
   test("monthly day 29 clamps in a non-leap year and holds in a leap year", () => {
-    const b = bill({ anchorDate: "2024-01-29", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 29 }] });
+    const b = bill({
+      anchorDate: "2024-01-29",
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 29 }],
+    });
     expect(between(b, "2024-02-01", "2024-02-29")).toEqual(["2024-02-29"]);
     expect(between(b, "2025-02-01", "2025-02-28")).toEqual(["2025-02-28"]);
   });
 
   test("last calendar day of every month", () => {
-    const b = bill({ anchorDate: "2026-01-31", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: LAST_DAY }] });
+    const b = bill({
+      anchorDate: "2026-01-31",
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: LAST_DAY }],
+    });
     expect(between(b, "2026-01-01", "2026-04-30")).toEqual([
       "2026-01-31",
       "2026-02-28",
@@ -104,7 +117,10 @@ describe("cadence matrix", () => {
   });
 
   test("quarterly is monthly interval 3", () => {
-    const b = bill({ anchorDate: "2026-01-15", rules: [{ frequency: "monthly", interval: 3, dayOfMonth: 15 }] });
+    const b = bill({
+      anchorDate: "2026-01-15",
+      rules: [{ frequency: "monthly", interval: 3, dayOfMonth: 15 }],
+    });
     expect(between(b, "2026-01-01", "2026-12-31")).toEqual([
       "2026-01-15",
       "2026-04-15",
@@ -155,7 +171,11 @@ describe("cadence matrix", () => {
 describe("end conditions", () => {
   test("end on date truncates the schedule", () => {
     const b = bill({ endMode: "on_date", endOn: "2026-03-15" });
-    expect(between(b, "2026-01-01", "2026-12-31")).toEqual(["2026-01-01", "2026-02-01", "2026-03-01"]);
+    expect(between(b, "2026-01-01", "2026-12-31")).toEqual([
+      "2026-01-01",
+      "2026-02-01",
+      "2026-03-01",
+    ]);
     expect(firstOccurrenceAfter(b, "2026-03-01")).toBeNull();
   });
 
@@ -225,21 +245,29 @@ describe("cycle, frequency and search", () => {
       occurrencesPerYear(bill({ rules: [{ frequency: "monthly", interval: 3, dayOfMonth: 1 }] })),
     ).toBe(4);
     expect(
-      occurrencesPerYear(bill({ rules: [{ frequency: "yearly", interval: 1, monthOfYear: 3, dayOfMonth: 1 }] })),
+      occurrencesPerYear(
+        bill({ rules: [{ frequency: "yearly", interval: 1, monthOfYear: 3, dayOfMonth: 1 }] }),
+      ),
     ).toBe(1);
   });
 
   test("cycle start is the last occurrence on or before the date", () => {
-    const b = bill({ anchorDate: "2026-01-15", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 15 }] });
+    const b = bill({
+      anchorDate: "2026-01-15",
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 15 }],
+    });
     expect(cycleStartOn(b, "2026-11-11")).toBe("2026-10-15");
     expect(cycleStartOn(b, "2026-11-15")).toBe("2026-11-15");
-        // Lookback extends before the anchor (Sure generates history backward too);
+    // Lookback extends before the anchor (Sure generates history backward too);
     // the generator clamps the window to the anchor itself.
     expect(cycleStartOn(b, "2026-01-01")).toBe("2025-12-15");
   });
 
   test("first occurrence after a date, skipping the year search window", () => {
-    const b = bill({ anchorDate: "2026-03-15", rules: [{ frequency: "yearly", interval: 1, monthOfYear: 3, dayOfMonth: 15 }] });
+    const b = bill({
+      anchorDate: "2026-03-15",
+      rules: [{ frequency: "yearly", interval: 1, monthOfYear: 3, dayOfMonth: 15 }],
+    });
     expect(firstOccurrenceAfter(b, "2026-01-01")).toBe("2026-03-15");
     expect(firstOccurrenceAfter(b, "2026-03-15")).toBe("2027-03-15");
   });

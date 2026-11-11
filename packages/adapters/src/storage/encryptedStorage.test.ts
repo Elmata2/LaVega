@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
-import type { Account, Merchant, TransferPair, Tx } from "@lavega/core";
+import type { Account, Bill, BillOccurrence, Merchant, TransferPair, Tx } from "@lavega/core";
 import {
   AdvisorProfile,
   type ProfileRead,
@@ -863,4 +863,46 @@ test("budget periods and category groups round-trip; fields are optional", async
   expect(await v.open(KEY, "user:a")).toBe("opened");
   expect(await v.getBudgetPeriods()).toEqual(periods);
   expect(await v.getCategoryGroups()).toEqual(groups);
+});
+
+test("bills + occurrences round-trip in one save; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-bills");
+  await s.open(KEY, "user:a");
+  expect(await s.getBills()).toEqual([]); // default
+  expect(await s.getBillOccurrences()).toEqual([]);
+
+  const bill: Bill = {
+    id: "b1",
+    name: "Huur",
+    type: "bill",
+    status: "active",
+    direction: "out",
+    amountCents: 98_500,
+    amountStrategy: "fixed",
+    currency: "EUR",
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 1 }],
+    anchorDate: "2026-11-01",
+    weekendAdjust: "none",
+    endMode: "never",
+    tags: [],
+  };
+  const occurrence: BillOccurrence = {
+    id: "b1|2026-11-01",
+    billId: "b1",
+    originalDueOn: "2026-11-01",
+    dueOn: "2026-11-01",
+    currency: "EUR",
+    expectedAmountCents: null,
+    status: "scheduled",
+  };
+  await s.putBillPlan([bill], [occurrence]);
+  expect(await s.getBills()).toEqual([bill]);
+  expect(await s.getBillOccurrences()).toEqual([occurrence]);
+
+  // Re-open: both survive the seal/unseal cycle in the same section pair.
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getBills())[0].id).toBe("b1");
+  expect((await s.getBillOccurrences())[0].id).toBe("b1|2026-11-01");
 });

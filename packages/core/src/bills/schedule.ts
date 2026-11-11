@@ -37,7 +37,9 @@ export function addDays(iso: string, days: number): string {
 
 /** Whole days from `from` to `to`; negative when `to` is earlier. */
 export function billDaysBetween(from: string, to: string): number {
-  return Math.round((DateTime.toEpochMillis(parse(to)) - DateTime.toEpochMillis(parse(from))) / DAY_MS);
+  return Math.round(
+    (DateTime.toEpochMillis(parse(to)) - DateTime.toEpochMillis(parse(from))) / DAY_MS,
+  );
 }
 
 /** 0 = Sunday … 6 = Saturday, the numbering Sure and its schemas use. */
@@ -60,7 +62,8 @@ export function yearOf(iso: string): number {
 /** Last calendar day of the month that `iso` falls in. */
 export function billLastDayOfMonth(iso: string): string {
   const { year, month } = DateTime.toParts(parse(iso));
-  const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const nextMonth =
+    month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
   return addDays(nextMonth, -1);
 }
 
@@ -128,13 +131,22 @@ function dateInMonth(rule: BillRule, year: number, month: number): string | null
   return candidate.slice(0, 7) === monthStart.slice(0, 7) ? candidate : null;
 }
 
-function weeklyOccurrences(rule: BillRule, anchorDate: string, start: string, end: string): string[] {
+function weeklyOccurrences(
+  rule: BillRule,
+  anchorDate: string,
+  start: string,
+  end: string,
+): string[] {
   const weekday = rule.weekday ?? dayOfWeek(anchorDate);
   const step = 7 * rule.interval;
   const base = addDays(anchorDate, mod(weekday - dayOfWeek(anchorDate), 7));
   const firstStep = Math.ceil(billDaysBetween(base, start) / step);
   const out: string[] = [];
-  for (let cursor = addDays(base, firstStep * step); cursor <= end; cursor = addDays(cursor, step)) {
+  for (
+    let cursor = addDays(base, firstStep * step);
+    cursor <= end;
+    cursor = addDays(cursor, step)
+  ) {
     out.push(cursor);
   }
   return out;
@@ -142,7 +154,12 @@ function weeklyOccurrences(rule: BillRule, anchorDate: string, start: string, en
 
 const monthIndex = (year: number, month: number): number => year * 12 + month;
 
-function monthlyOccurrences(rule: BillRule, anchorDate: string, start: string, end: string): string[] {
+function monthlyOccurrences(
+  rule: BillRule,
+  anchorDate: string,
+  start: string,
+  end: string,
+): string[] {
   const reference = monthIndex(yearOf(anchorDate), monthOfYear(anchorDate));
   const out: string[] = [];
   let { year, month } = DateTime.toParts(parse(start));
@@ -160,7 +177,12 @@ function monthlyOccurrences(rule: BillRule, anchorDate: string, start: string, e
   return out;
 }
 
-function yearlyOccurrences(rule: BillRule, anchorDate: string, start: string, end: string): string[] {
+function yearlyOccurrences(
+  rule: BillRule,
+  anchorDate: string,
+  start: string,
+  end: string,
+): string[] {
   const referenceYear = yearOf(anchorDate);
   const month = rule.monthOfYear ?? monthOfYear(anchorDate);
   const out: string[] = [];
@@ -184,10 +206,7 @@ function rawOccurrences(rule: BillRule, anchorDate: string, start: string, end: 
 }
 
 /** Sure's `adjust_for_weekend`: null means "skip this occurrence entirely". */
-function adjustForWeekend(
-  iso: string,
-  adjust: Bill["weekendAdjust"],
-): string | null {
+function adjustForWeekend(iso: string, adjust: Bill["weekendAdjust"]): string | null {
   const weekday = dayOfWeek(iso);
   if (weekday !== 0 && weekday !== 6) return iso;
   switch (adjust) {
@@ -209,7 +228,11 @@ function pastEndOn(bill: Bill, dueOn: string): boolean {
 /** Every occurrence of the current rules with a due date in [start, end],
  *  weekend-adjusted, end-truncated, sorted and deduplicated. The raw scheduled
  *  date travels beside the due date: it is the occurrence's identity. */
-export function occurrencePairsBetween(bill: Bill, start: string, end: string): BillOccurrencePair[] {
+export function occurrencePairsBetween(
+  bill: Bill,
+  start: string,
+  end: string,
+): BillOccurrencePair[] {
   if (start > end) return [];
   if (bill.endMode === "after_count") {
     return lifetimePairs(bill, end).filter((p) => p.dueOn >= start && p.dueOn <= end);
@@ -224,7 +247,12 @@ export function occurrencesBetween(bill: Bill, start: string, end: string): stri
 
 function adjustedPairs(bill: Bill, start: string, end: string): BillOccurrencePair[] {
   const raw = billRules(bill).flatMap((rule) =>
-    rawOccurrences(rule, bill.anchorDate, addDays(start, -WEEKEND_MARGIN), addDays(end, WEEKEND_MARGIN)),
+    rawOccurrences(
+      rule,
+      bill.anchorDate,
+      addDays(start, -WEEKEND_MARGIN),
+      addDays(end, WEEKEND_MARGIN),
+    ),
   );
   const out: BillOccurrencePair[] = [];
   for (const original of [...new Set(raw)].sort()) {
@@ -242,10 +270,12 @@ function adjustedPairs(bill: Bill, start: string, end: string): BillOccurrencePa
  *  moved earlier by weekend "before" still counts as the first one. */
 function lifetimePairs(bill: Bill, through: string): BillOccurrencePair[] {
   const anchor = bill.anchorDate;
-  const pairs = adjustedPairs(bill, addDays(anchor, -WEEKEND_MARGIN), through > anchor ? through : anchor);
-  return pairs
-    .filter((p) => p.originalDueOn >= anchor)
-    .slice(0, bill.endAfterCount ?? 0);
+  const pairs = adjustedPairs(
+    bill,
+    addDays(anchor, -WEEKEND_MARGIN),
+    through > anchor ? through : anchor,
+  );
+  return pairs.filter((p) => p.originalDueOn >= anchor).slice(0, bill.endAfterCount ?? 0);
 }
 
 /** True once the series can produce no occurrence on or after `date`. */
@@ -261,7 +291,7 @@ function endedBefore(bill: Bill, date: string): boolean {
  *  The loop steps by the longest period so a yearly rule does not scan days. */
 export function firstOccurrenceAfter(bill: Bill, date: string): string | null {
   const window = longestPeriodDays(bill);
-  for (let cursor = addDays(date, 1); cursor <= addDays(date, SEARCH_CAP_DAYS); ) {
+  for (let cursor = addDays(date, 1); cursor <= addDays(date, SEARCH_CAP_DAYS);) {
     const found = occurrencesBetween(bill, cursor, addDays(cursor, window))[0];
     if (found != null) return found;
     if (endedBefore(bill, addDays(cursor, window))) return null;

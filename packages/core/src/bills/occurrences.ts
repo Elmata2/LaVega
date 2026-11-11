@@ -1,11 +1,11 @@
 import { DateTime } from "effect";
-import type {
-  Bill,
-  BillOccurrence,
-  BillOccurrencePair,
-  BillOccurrenceStatus,
+import type { Bill, BillOccurrence, BillOccurrencePair, BillOccurrenceStatus } from "./model.js";
+import {
+  billOccurrenceId,
+  isBillActive,
+  resolveBillAmountCents,
+  sameScheduleShape,
 } from "./model.js";
-import { billOccurrenceId, isBillActive, resolveBillAmountCents, sameScheduleShape } from "./model.js";
 import {
   addDays,
   cycleStartOn,
@@ -60,10 +60,9 @@ export type GenerateResult = {
 };
 
 function addMonths(iso: string, months: number): string {
-  return DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(iso) as DateTime.Utc, { months })).slice(
-    0,
-    10,
-  );
+  return DateTime.formatIso(
+    DateTime.add(DateTime.makeUnsafe(iso) as DateTime.Utc, { months }),
+  ).slice(0, 10);
 }
 
 /** Just under half a cycle, the reach within which a kept row "stands in" for
@@ -222,7 +221,13 @@ export function regenerateBillOccurrences(
 ): { occurrences: BillOccurrence[]; added: number; removed: number } {
   if (!isIsoDay(asOf)) throw new Error(`asOf must be an ISO date, got ${asOf}`);
   const kept = existing.filter(
-    (o) => !(o.billId === billId && o.status === "scheduled" && o.dueOn >= asOf && o.paidAmountCents == null),
+    (o) =>
+      !(
+        o.billId === billId &&
+        o.status === "scheduled" &&
+        o.dueOn >= asOf &&
+        o.paidAmountCents == null
+      ),
   );
   const bill = bills.find((b) => b.id === billId);
   if (bill == null) return { occurrences: kept, added: 0, removed: existing.length - kept.length };
@@ -353,9 +358,7 @@ export function billsOutlook(
 
   const toCoverCents = overdueCents + dueCents;
   const shortfallCents =
-    cashCents != null && nextIncome != null
-      ? Math.max(0, toCoverCents - cashCents)
-      : null;
+    cashCents != null && nextIncome != null ? Math.max(0, toCoverCents - cashCents) : null;
   return {
     asOf,
     periodEndsOn,

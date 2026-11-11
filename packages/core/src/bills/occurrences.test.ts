@@ -53,11 +53,15 @@ describe("generation", () => {
   });
 
   test("six-month history backfill is opt-in and still bounded by the anchor", () => {
-    const { occurrences, added } = generateBillOccurrences([bill()], [], AS_OF, { historyMonths: 6 });
+    const { occurrences, added } = generateBillOccurrences([bill()], [], AS_OF, {
+      historyMonths: 6,
+    });
     expect(added).toBe(9);
     expect(occurrences[0].dueOn).toBe("2026-06-01");
     const recent = bill({ anchorDate: "2026-09-01" });
-    const recentRows = generateBillOccurrences([recent], [], AS_OF, { historyMonths: 6 }).occurrences;
+    const recentRows = generateBillOccurrences([recent], [], AS_OF, {
+      historyMonths: 6,
+    }).occurrences;
     expect(recentRows[0].dueOn).toBe("2026-09-01");
   });
 
@@ -148,7 +152,9 @@ describe("regeneration after a schedule edit", () => {
   test("paid history is never rewritten and the future is rebuilt", () => {
     const { edited, occurrences } = seed();
     const paid = occurrences.find((o) => o.status === "paid");
-    const result = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, { historyMonths: 6 });
+    const result = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, {
+      historyMonths: 6,
+    });
 
     const stillPaid = result.occurrences.find((o) => o.id === paid?.id);
     expect(stillPaid).toEqual(paid);
@@ -164,7 +170,9 @@ describe("regeneration after a schedule edit", () => {
 
   test("a kept past row stands in for one new occurrence: no duplicate cycle", () => {
     const { edited, occurrences } = seed();
-    const result = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, { historyMonths: 6 });
+    const result = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, {
+      historyMonths: 6,
+    });
     const inJune = result.occurrences.filter((o) => o.dueOn.startsWith("2026-06"));
     expect(inJune).toHaveLength(1);
     const inJuly = result.occurrences.filter((o) => o.dueOn.startsWith("2026-07"));
@@ -173,8 +181,12 @@ describe("regeneration after a schedule edit", () => {
 
   test("regeneration converges: a second pass changes nothing", () => {
     const { edited, occurrences } = seed();
-    const once = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, { historyMonths: 6 });
-    const twice = regenerateBillOccurrences([edited], once.occurrences, edited.id, AS_OF, { historyMonths: 6 });
+    const once = regenerateBillOccurrences([edited], occurrences, edited.id, AS_OF, {
+      historyMonths: 6,
+    });
+    const twice = regenerateBillOccurrences([edited], once.occurrences, edited.id, AS_OF, {
+      historyMonths: 6,
+    });
     expect(twice.occurrences).toEqual(once.occurrences);
   });
 
@@ -224,13 +236,15 @@ describe("amounts", () => {
   ];
 
   test("fixed/average/last strategies resolve through the series", () => {
-    const base = { amountCents: 9_000, amountStrategy: "fixed" as const, averageAmountCents: 8_700 };
+    const base = {
+      amountCents: 9_000,
+      amountStrategy: "fixed" as const,
+      averageAmountCents: 8_700,
+    };
     expect(resolveBillAmountCents(base, null, 9_100)).toBe(9_000);
     expect(resolveBillAmountCents({ ...base, amountStrategy: "average" }, null, 9_100)).toBe(8_700);
     expect(resolveBillAmountCents({ ...base, amountStrategy: "last" }, null, 9_100)).toBe(9_100);
-    expect(
-      resolveBillAmountCents(base, { expectedAmountCents: 12_345 }, 9_100),
-    ).toBe(12_345);
+    expect(resolveBillAmountCents(base, { expectedAmountCents: 12_345 }, 9_100)).toBe(12_345);
   });
 
   test("the last strategy reads the previous paid row, not the closed estimate", () => {
@@ -245,9 +259,19 @@ describe("amounts", () => {
 });
 
 describe("one-screen outlook", () => {
-  const rent = bill({ id: "huur", amountCents: 10_000, rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 20 }], anchorDate: "2026-11-20" });
+  const rent = bill({
+    id: "huur",
+    amountCents: 10_000,
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 20 }],
+    anchorDate: "2026-11-20",
+  });
   const card = bill({ id: "kaart", amountCents: 2_000, anchorDate: "2026-11-01" });
-  const care = bill({ id: "zorg", amountCents: 5_000, anchorDate: "2026-10-10", rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 10 }] });
+  const care = bill({
+    id: "zorg",
+    amountCents: 5_000,
+    anchorDate: "2026-10-10",
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 10 }],
+  });
   const salary = bill({
     id: "salaris",
     type: "income",

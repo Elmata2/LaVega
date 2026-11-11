@@ -18,13 +18,7 @@ export const LAST_DAY = -1;
 
 /** Sure's `bill_type` enum. `income` and `transfer` are commitments too, so
  *  they live in the same list rather than a second table. */
-export type BillType =
-  | "bill"
-  | "subscription"
-  | "installment"
-  | "income"
-  | "transfer"
-  | "other";
+export type BillType = "bill" | "subscription" | "installment" | "income" | "transfer" | "other";
 
 /** Sure's `amount_strategy`. `average`/`last` resolve through
  *  `resolveBillAmountCents`; the occurrence row stores NULL unless the owner
@@ -167,7 +161,6 @@ const WEEKEND_ADJUSTS: readonly BillWeekendAdjust[] = ["none", "skip", "before",
 const END_MODES: readonly BillEndMode[] = ["never", "on_date", "after_count"];
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ISO_DATE_OR_INSTANT = /^\d{4}-\d{2}-\d{2}(?:[T ]|$)/;
 
 const isInt = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v);
 
@@ -217,7 +210,10 @@ export function billProblems(bill: Bill): BillProblem[] {
   const problems: BillProblem[] = [];
   if (bill.name.trim() === "") problems.push("name");
   if (!isInt(bill.amountCents) || bill.amountCents < 0) problems.push("amount");
-  if (bill.averageAmountCents != null && (!isInt(bill.averageAmountCents) || bill.averageAmountCents < 0)) {
+  if (
+    bill.averageAmountCents != null &&
+    (!isInt(bill.averageAmountCents) || bill.averageAmountCents < 0)
+  ) {
     problems.push("amount");
   }
   if (bill.currency.trim() === "") problems.push("currency");
@@ -234,7 +230,9 @@ export function billProblems(bill: Bill): BillProblem[] {
     if (!isInt(rule.interval) || rule.interval < 1) problems.push("interval");
     if (rule.dayOfMonth != null && rule.weekday != null) problems.push("dayOfMonth");
     if (rule.dayOfMonth != null) {
-      const ok = rule.dayOfMonth === LAST_DAY || (isInt(rule.dayOfMonth) && rule.dayOfMonth >= 1 && rule.dayOfMonth <= 31);
+      const ok =
+        rule.dayOfMonth === LAST_DAY ||
+        (isInt(rule.dayOfMonth) && rule.dayOfMonth >= 1 && rule.dayOfMonth <= 31);
       if (!ok) problems.push("dayOfMonth");
     }
     if (rule.weekday != null && (!isInt(rule.weekday) || rule.weekday < 0 || rule.weekday > 6)) {
@@ -248,7 +246,12 @@ export function billProblems(bill: Bill): BillProblem[] {
       if (!ok) problems.push("weekdayOrdinal");
     }
     if (rule.frequency === "yearly") {
-      if (rule.monthOfYear == null || !isInt(rule.monthOfYear) || rule.monthOfYear < 1 || rule.monthOfYear > 12) {
+      if (
+        rule.monthOfYear == null ||
+        !isInt(rule.monthOfYear) ||
+        rule.monthOfYear < 1 ||
+        rule.monthOfYear > 12
+      ) {
         problems.push("monthOfYear");
       }
     } else if (rule.monthOfYear != null) {
@@ -276,8 +279,30 @@ export function billProblems(bill: Bill): BillProblem[] {
  *  complete shape. Identity fields are never invented: a bill without an id or
  *  anchor is a programming error, not a default. */
 export function normalizeBill(
-  bill: Omit<Bill, "status" | "type" | "amountStrategy" | "rules" | "weekendAdjust" | "endMode" | "tags" | "direction"> &
-    Partial<Pick<Bill, "status" | "type" | "amountStrategy" | "rules" | "weekendAdjust" | "endMode" | "tags" | "direction">>,
+  bill: Omit<
+    Bill,
+    | "status"
+    | "type"
+    | "amountStrategy"
+    | "rules"
+    | "weekendAdjust"
+    | "endMode"
+    | "tags"
+    | "direction"
+  > &
+    Partial<
+      Pick<
+        Bill,
+        | "status"
+        | "type"
+        | "amountStrategy"
+        | "rules"
+        | "weekendAdjust"
+        | "endMode"
+        | "tags"
+        | "direction"
+      >
+    >,
 ): Bill {
   return {
     ...bill,

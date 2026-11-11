@@ -107,6 +107,9 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       getPendingInvoices: async () => [],
       putPendingInvoices: async () => {},
       getPendingNotices: async () => [],
+      getBills: async () => [],
+      getBillOccurrences: async () => [],
+      putBillPlan: async () => {},
       putPendingNotices: async () => {},
     }),
     createRatesProvider: () => ({

@@ -13,6 +13,8 @@ import type {
   AdvisorProfileStore,
   ProfileRead,
   TransferPair,
+  Bill,
+  BillOccurrence,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
@@ -28,6 +30,9 @@ import {
   assignTxIds,
   scheduledFlowsForScope,
   scheduledInvoiceFlows,
+  generateBillOccurrences,
+  regenerateBillOccurrences,
+  scheduleChanged,
   reconcileInvoices,
   applyCategorizations,
   findDuplicateAccounts,
@@ -151,6 +156,7 @@ import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
+import Bills from "./views/Bills";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
@@ -246,6 +252,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // silently orphaning a pair is the failure this exists to prevent.
   const [transferLinksDropped, setTransferLinksDropped] = useState<number | null>(null);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  // Bills + their materialized occurrences (#286). Occurrences are derived from
+  // the series and stored, because matching/second-half work keys on their
+  // identity; materialization runs lazily on unlock and writes ONE vault save.
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [billOccurrences, setBillOccurrences] = useState<BillOccurrence[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -626,6 +637,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedFxHistory,
         loadedPendingInvoices,
         loadedPendingNotices,
+        loadedBills,
+        loadedOccurrences,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -640,6 +653,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getFxHistory(),
         storage.getPendingInvoices(),
         storage.getPendingNotices(),
+        storage.getBills(),
+        storage.getBillOccurrences(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -655,6 +670,15 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setRules(storedRules.rules);
       setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
+      setBills(loadedBills);
+      // Lazy materialization, one vault write: the first unlock after a bill
+      // was added (or a schedule edited) fills the 90-day horizon. A second
+      // unlock adds nothing and writes nothing.
+      const generated = generateBillOccurrences(loadedBills, loadedOccurrences, asOf);
+      setBillOccurrences(generated.occurrences);
+      if (generated.added > 0) {
+        await storage.putBillPlan(loadedBills, generated.occurrences);
+      }
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
       setRewards(loadedRewards);
@@ -680,7 +704,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         .then(setFxHistoryState)
         .catch(() => {});
     })();
-  }, [gate]);
+    // `asOf` is mount-stable (useMemo above), so it cannot retrigger the load;
+    // it is listed because the lazy bill materialization needs the same day the
+    // rest of the screen renders.
+  }, [gate, asOf]);
 
   /* Which foreign currencies the ledger holds, and how far back each one
    * reaches. Connecting a bank mid-session adds pockets AFTER the unlock
@@ -988,6 +1015,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setTransfers([]);
     setTransferLinksDropped(null);
     setScheduledFlows([]);
+    setBills([]);
+    setBillOccurrences([]);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -1114,6 +1143,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshInvoices,
       freshRewards,
       freshProfiles,
+      freshBills,
+      freshOccurrences,
     ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
@@ -1124,6 +1155,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       storage.getInvoices(),
       storage.getRewards(),
       storage.getEntityProfiles(),
+      storage.getBills(),
+      storage.getBillOccurrences(),
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
@@ -1134,6 +1167,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setRules(storedRules.rules);
     setTransfers(freshTransfers);
     setScheduledFlows(freshFlows);
+    setBills(freshBills);
+    setBillOccurrences(freshOccurrences);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
     setRewards(freshRewards);
@@ -1369,6 +1404,24 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     const merged = mergeScheduledFlows(scheduledFlows, scopedScheduledFlows, next, invoiceFlows);
     setScheduledFlows(merged);
     await storage.putScheduledFlows(merged);
+  }
+
+  // Bills: the view hands back the whole series list. A schedule edit rebuilds
+  // only that series' future rows (paid and closed rows are history and are
+  // never touched); adding a series or resuming one materializes what it is
+  // missing. The pair is saved in ONE vault write.
+  async function saveBillPlan(nextBills: Bill[], nextOccurrences: BillOccurrence[]) {
+    let occurrences = nextOccurrences;
+    for (const next of nextBills) {
+      const previous = bills.find((b) => b.id === next.id);
+      if (previous != null && scheduleChanged(previous, next)) {
+        occurrences = regenerateBillOccurrences(nextBills, occurrences, next.id, asOf).occurrences;
+      }
+    }
+    occurrences = generateBillOccurrences(nextBills, occurrences, asOf).occurrences;
+    setBills(nextBills);
+    setBillOccurrences(occurrences);
+    await storage.putBillPlan(nextBills, occurrences);
   }
 
   // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
@@ -2029,6 +2082,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {/* Scoped like every other view: standing in Zakelijk and being offered a
               conversion out of a personal account is a leak across the very line
               the switch exists to draw. */}
+          {view === "bills" && !isArchivedView("bills") && (
+            <Bills
+              bills={bills}
+              occurrences={billOccurrences}
+              accounts={scopedAccounts}
+              asOf={asOf}
+              busy={busy}
+              onSavePlan={saveBillPlan}
+            />
+          )}
+
           {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
 
           {view === "belasting" && !isArchivedView("belasting") && (

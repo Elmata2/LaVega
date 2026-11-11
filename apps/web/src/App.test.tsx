@@ -31,6 +31,9 @@ function fakeStorage(): VaultStorage {
     getFxHistory: async () => ({}),
     getPendingInvoices: async () => [],
     getPendingNotices: async () => [],
+    getBills: async () => [],
+    getBillOccurrences: async () => [],
+    putBillPlan: async () => {},
   } as unknown as VaultStorage;
 }
 

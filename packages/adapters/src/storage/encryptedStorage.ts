@@ -35,6 +35,8 @@ import type {
   Merchant,
   BudgetPeriod,
   CategoryGroup,
+  Bill,
+  BillOccurrence,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
@@ -74,6 +76,12 @@ type VaultData = {
    *  `transfers`: a legacy vault decrypts without it and reads [] (unknown
    *  aliases are not invented; `labels.ts` then falls back to its token key). */
   merchants?: Merchant[];
+  /** Bill series + their materialized occurrences (issue #286, WS2.1/WS2.3).
+   *  Two additive optional fields; a legacy vault decrypts without them and
+   *  reads []. Occurrences are generated lazily on unlock, and the pair is
+   *  saved together so materialization is ONE vault write. */
+  bills?: Bill[];
+  billOccurrences?: BillOccurrence[];
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
@@ -151,6 +159,12 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** The owner's merchant aliases; a legacy vault has none and reads []. */
   getMerchants(): Promise<Merchant[]>;
   putMerchants(m: Merchant[]): Promise<void>;
+  /** Bill series and their occurrences; a legacy vault has neither and reads [].
+   *  Saved together: materialization and a schedule edit each rewrite the pair
+   *  in one persist, so the vault never holds a series without its rows. */
+  getBills(): Promise<Bill[]>;
+  getBillOccurrences(): Promise<BillOccurrence[]>;
+  putBillPlan(bills: Bill[], occurrences: BillOccurrence[]): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
@@ -530,6 +544,25 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, categoryGroups: structuredClone(groups) };
+        await persist();
+      });
+    },
+    // Bills and occurrences are the same additive optional field shape:
+    // replace-all, read [] on a legacy vault. They are written by ONE mutator
+    // because the generator's output (rows) only makes sense with its series,
+    // and the unlock pass must not pay two seals for one materialization.
+    async getBills(): Promise<Bill[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.bills ?? [])];
+    },
+    async getBillOccurrences(): Promise<BillOccurrence[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.billOccurrences ?? [])];
+    },
+    putBillPlan(bills: Bill[], occurrences: BillOccurrence[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, bills: [...bills], billOccurrences: [...occurrences] };
         await persist();
       });
     },
