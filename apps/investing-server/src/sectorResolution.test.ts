@@ -1,3 +1,5 @@
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
+import { DateTime } from "effect";
 import { expect, test, vi } from "vitest";
 import type { SectorProfile } from "@lavega/adapters";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
@@ -1144,3 +1146,26 @@ test("a read stops fetching after the time budget and records no attempt for a c
     vi.useRealTimers();
   }
 });
+
+test.each([
+  ["PartnerWait", () => new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) })],
+  ["PartnerBudgetUnavailable", () => new PartnerBudgetUnavailable({ message: "store down" })],
+])(
+  "a profile fetch that fails with %s records no attempt, stores nothing, and the next read fetches again",
+  async (_name, makeError) => {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(async () => {
+      throw makeError();
+    });
+    const read = () =>
+      resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], { store, fetchProfile });
+
+    const first = await read();
+    expect(first.sectorBySymbol.get("X")).toBe(UNKNOWN_SECTOR);
+    expect(await store.lastProviderAttempt("X")).toBeNull();
+    expect(await store.get("X")).toBeNull();
+
+    await read();
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+  },
+);

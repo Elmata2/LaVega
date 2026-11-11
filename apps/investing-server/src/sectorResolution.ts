@@ -8,6 +8,7 @@ import {
   type SectorWeight,
   type SectorWeightSource,
 } from "@lavega/core";
+import { isPartnerBudgetStop } from "@lavega/adapters";
 import type {
   FundSectorProfile,
   PriceStore,
@@ -254,11 +255,14 @@ async function resolveWeights(
         let fetched: SectorProfile | null | "timeout" | "threw";
         try {
           fetched = await raceBudget(fetchProfile(lookupSymbol), remaining);
-        } catch {
-          fetched = "threw";
+        } catch (error) {
+          /* A budget stop sent no request, so it is no answer about the symbol,
+           * the same as a timeout. Recording it would hide the symbol from every
+           * tenant for 24 hours on the strength of a queue, not of Yahoo. */
+          fetched = isPartnerBudgetStop(error) ? "timeout" : "threw";
         }
-        /* A timeout is not an answer: nothing is stored or recorded, and the
-         * symbol resolves from what is already stored. */
+        /* A timeout or budget stop is not an answer: nothing is stored or
+         * recorded, and the symbol resolves from what is already stored. */
         if (fetched === null || fetched === "threw") {
           await store.recordProviderAttempt(lookupSymbol, new Date().toISOString());
         } else if (fetched !== "timeout") {
