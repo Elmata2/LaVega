@@ -321,6 +321,10 @@ export const isPartnerBudgetStop = (
 export function createPartnerBudgetClient(
   layer: Layer.Layer<PartnerBudget>,
 ): PartnerBudgetClient & { dispose(): Promise<void> } {
+  // Not disposed per request on purpose: the layers hold no resource that needs
+  // releasing (memory is a Map; the Neon store sends stateless HTTP queries and
+  // keeps no connection or timer). `dispose` stays for a caller that builds a
+  // layer which does.
   const runtime = ManagedRuntime.make(layer);
   const run = async <A, E>(effect: Effect.Effect<A, E, PartnerBudget>): Promise<A> => {
     const exit = await runtime.runPromiseExit(effect);

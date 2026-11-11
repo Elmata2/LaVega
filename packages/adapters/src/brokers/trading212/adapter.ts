@@ -58,6 +58,8 @@ export type Trading212DiagnosticEvent =
       resetAt: string | null;
     }
   | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
+  /** The budget could not record what a 2xx response said. The response is kept. */
+  | { type: "budget-observe-failed"; endpoint: string; message: string }
   | {
       type: "history-page";
       page: number;
@@ -181,6 +183,9 @@ type Trading212Budget = { client: PartnerBudgetClient; scopeId: AccountScopeId }
  *  outrank `force`). The resume cursor is kept. */
 const BUDGET_UNAVAILABLE_MESSAGE =
   "Trading 212 sync paused: the request budget store is unavailable";
+
+/** A wait shorter than this is scheduling noise, not a budget wait worth reporting. */
+const MIN_REPORTED_WAIT_MS = 250;
 
 function budgetKey(budget: Trading212Budget, limit: AccountLimitName): PartnerKey {
   return partnerKey(limit, budget.scopeId);
@@ -832,7 +837,7 @@ async function request(
     const waitingSince = Date.now();
     await budget.client.awaitSlot(key, config.deadlineMs).catch(pauseOnBudgetError);
     const waitedMs = Date.now() - waitingSince;
-    if (waitedMs > 0)
+    if (waitedMs >= MIN_REPORTED_WAIT_MS)
       config.diagnostics?.({
         type: "wait",
         endpoint: path,
@@ -855,7 +860,16 @@ async function request(
     });
     if (response.status !== 429) {
       const seen = seenFromHeaders(response);
-      if (seen) await budget.client.observe(key, seen).catch(pauseOnBudgetError);
+      // The data is already here: a failure to record the headers must not throw
+      // it away. The next slot request meets a down store and pauses the sync.
+      if (seen)
+        await budget.client.observe(key, seen).catch((error: unknown) => {
+          config.diagnostics?.({
+            type: "budget-observe-failed",
+            endpoint: path,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
       return response;
     }
     const waitMs = rateLimitWaitMs(response, retry);

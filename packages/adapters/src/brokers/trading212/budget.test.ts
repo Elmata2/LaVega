@@ -376,3 +376,60 @@ test("a store that goes down mid-history keeps the resume cursor, carries no ret
     clock.restore();
   }
 });
+
+test("a store that fails to record the headers of a 2xx response does not discard the data", async () => {
+  const clock = withVirtualClock();
+  vi.stubGlobal("fetch", respondingWith({ "x-ratelimit-limit": "3", "x-ratelimit-period": "10" }));
+  try {
+    const healthy = createMemoryPartnerBudgetClient();
+    const diagnostics = vi.fn();
+    const result = await createTrading212Adapter({
+      ...config,
+      diagnostics,
+      partnerBudget: { ...healthy, observe: () => Promise.reject(new Error("observe down")) },
+    }).sync({ entity: "BV" });
+    expect(result.sections.positions.rows).toHaveLength(1);
+    expect(diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "budget-observe-failed", message: "observe down" }),
+    );
+  } finally {
+    clock.restore();
+  }
+});
+
+test("the budget-exhausted wait is reported only when it lasted at least 250 ms", async () => {
+  const clock = withVirtualClock();
+  vi.stubGlobal("fetch", fakeTrading212(50).fetch);
+  try {
+    const waits = (spacingMs: number) => {
+      const diagnostics = vi.fn();
+      const healthy = createMemoryPartnerBudgetClient();
+      return {
+        diagnostics,
+        adapter: createTrading212Adapter({
+          ...config,
+          diagnostics,
+          partnerBudget: {
+            ...healthy,
+            awaitSlot: async (key, deadlineMs) => {
+              await healthy.awaitSlot(key, deadlineMs);
+              await new Promise((resolve) => setTimeout(resolve, spacingMs));
+            },
+          },
+        }),
+      };
+    };
+    const short = waits(249);
+    await short.adapter.sync({ entity: "BV" });
+    expect(short.diagnostics).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "budget-exhausted" }),
+    );
+    const long = waits(250);
+    await long.adapter.sync({ entity: "BV" });
+    expect(long.diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "budget-exhausted" }),
+    );
+  } finally {
+    clock.restore();
+  }
+});
