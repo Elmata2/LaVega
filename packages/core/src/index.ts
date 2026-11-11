@@ -4,6 +4,7 @@ export * from "./balance.js";
 export * from "./hash.js";
 export * from "./money.js";
 export * from "./transfers.js";
+export * from "./labels.js";
 export * from "./ingest.js";
 export * from "./views.js";
 /* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
