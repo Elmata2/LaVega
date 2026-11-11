@@ -1,6 +1,6 @@
 import { type CredentialStore, type Position } from "@lavega/core";
 import { expect, test, vi } from "vitest";
-import type { BrokerResult } from "./BrokerAccessAdapter.js";
+import type { BrokerResult, BrokerSyncRequest } from "./BrokerAccessAdapter.js";
 import {
   createMemoryBrokerSyncStateStore,
   syncScheduledBrokers,
@@ -17,7 +17,7 @@ const credentials = {
   async putCredentials() {},
 } as unknown as CredentialStore;
 
-function adapters(sync: () => Promise<BrokerResult>) {
+function adapters(sync: (request: BrokerSyncRequest) => Promise<BrokerResult>) {
   return [{ broker: "trading212" as const, adapter: { sync } }];
 }
 
@@ -41,6 +41,7 @@ const empty = (overrides: {
   cashBalancesComplete?: boolean;
   resume?: BrokerResult["resume"];
   retryAfter?: string;
+  fullStreams?: BrokerResult["fullStreams"];
 }): BrokerResult => ({
   sections: {
     positions: {
@@ -59,6 +60,7 @@ const empty = (overrides: {
     cashFlows: { status: "complete", rows: [] },
   },
   source: "trading-212",
+  ...(overrides.fullStreams ? { fullStreams: overrides.fullStreams } : {}),
   problems: overrides.problems ?? [],
   resume: overrides.resume,
   retryAfter: overrides.retryAfter,
@@ -77,6 +79,7 @@ test("order rebuild starts at first page, then resumes saved cursor", async () =
     }),
   );
   const input = {
+    lanes: ["holdings", "history"] as const,
     adapters: adapters(sync),
     credentials,
     operations,
@@ -123,12 +126,13 @@ async function seed(store: BrokerSyncOperationStore, state: BrokerSyncState) {
 }
 
 function run(
-  sync: () => Promise<BrokerResult>,
+  sync: (request: BrokerSyncRequest) => Promise<BrokerResult>,
   operations: BrokerSyncOperationStore,
   now: Date,
   force = true,
 ) {
   return syncScheduledBrokers({
+    lanes: ["holdings", "history"],
     adapters: adapters(sync),
     credentials,
     operations,
@@ -188,6 +192,7 @@ test("a successful sync clears a stored hold-off", async () => {
 
   expect(await state.get("trading212")).toEqual({
     lastSyncedAt: "2026-08-19T12:06:00.000Z",
+    holdingsSyncedAt: "2026-08-19T12:06:00.000Z",
     retryAfter: null,
     resume: null,
   });
@@ -219,10 +224,13 @@ test("row problems do not condemn the next run to replaying the whole history", 
   );
 
   await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  // Five minutes later the holdings lane is due again (cheap, two requests) but
+  // the history lane is not: the whole-history replay is what must not recur.
   const second = await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
 
-  expect(sync).toHaveBeenCalledTimes(1);
-  expect(second.outcomes[0]?.status).toBe("skipped");
+  expect(sync).toHaveBeenCalledTimes(2);
+  expect(sync).toHaveBeenLastCalledWith(expect.objectContaining({ lanes: ["holdings"] }));
+  expect(second.outcomes[0]?.status).toBe("problem");
 });
 
 test("a truncated history keeps retrying, because nothing complete ever landed", async () => {
@@ -281,6 +289,7 @@ test("an unfinished history stores the resume cursor and does not set lastSynced
 
   expect(await state.get("trading212")).toEqual({
     lastSyncedAt: null,
+    holdingsSyncedAt: "2026-08-19T12:00:00.000Z",
     retryAfter: "2026-08-19T12:01:00.000Z",
     resume,
   });
@@ -312,8 +321,12 @@ test("a holdings failure does not set lastSyncedAt, so the next open retries", a
   await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
   const second = await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
 
-  expect(await state.get("trading212")).toMatchObject({ lastSyncedAt: null });
+  // History completed, so the history gate is satisfied; holdings did not, so
+  // the next open retries the holdings lane specifically.
+  expect(await state.get("trading212")).toMatchObject({ lastSyncedAt: "2026-08-19T12:00:00.000Z" });
+  expect((await state.get("trading212")).holdingsSyncedAt).toBeUndefined();
   expect(sync).toHaveBeenCalledTimes(2);
+  expect(sync).toHaveBeenLastCalledWith(expect.objectContaining({ lanes: ["holdings"] }));
   expect(second.outcomes[0]?.status).toBe("problem");
 });
 
@@ -325,7 +338,14 @@ test("the next run after the cooldown passes the stored resume into sync", async
 
   await run(sync, state, new Date("2026-08-19T12:01:01.000Z"));
 
-  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume, deadlineMs: undefined });
+  expect(sync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      entity: "BV",
+      lanes: ["holdings", "history"],
+      resume,
+      deadlineMs: undefined,
+    }),
+  );
 });
 
 test("the scheduler passes the same absolute deadline to the adapter", async () => {
@@ -334,6 +354,7 @@ test("the scheduler passes the same absolute deadline to the adapter", async () 
   const deadlineMs = 1_797_854_400_000;
 
   await syncScheduledBrokers({
+    lanes: ["holdings", "history"],
     adapters: adapters(sync),
     credentials,
     operations: state,
@@ -344,7 +365,13 @@ test("the scheduler passes the same absolute deadline to the adapter", async () 
     deadlineMs,
   });
 
-  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume: undefined, deadlineMs });
+  expect(sync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      entity: "BV",
+      lanes: ["holdings", "history"],
+      deadlineMs,
+    }),
+  );
 });
 
 test("a second run while one is in flight waits for it instead of syncing again", async () => {
@@ -405,6 +432,7 @@ test("a broker with no configured credentials is skipped, not a problem", async 
   );
 
   const result = await syncScheduledBrokers({
+    lanes: ["holdings", "history"],
     adapters: [
       { broker: "ibkr", adapter: { sync: ibkrSync } },
       { broker: "trading212", adapter: { sync: trading212Sync } },
@@ -435,6 +463,7 @@ test("credentials that fail to decrypt stay a problem with a message", async () 
   });
 
   const result = await syncScheduledBrokers({
+    lanes: ["holdings", "history"],
     adapters: [{ broker: "ibkr", adapter: { sync: vi.fn() } }],
     credentials: creds,
     operations,
@@ -475,6 +504,7 @@ test("a stored stale problem clears on the next run", async () => {
   expect((await operations.progress("ibkr"))?.status).toBe("problem");
 
   await syncScheduledBrokers({
+    lanes: ["holdings", "history"],
     adapters: [{ broker: "ibkr", adapter: { sync: vi.fn() } }],
     credentials: credentialsWith(() => null),
     operations,
@@ -485,4 +515,184 @@ test("a stored stale problem clears on the next run", async () => {
   });
 
   expect((await operations.progress("ibkr"))?.status).not.toBe("problem");
+});
+
+/* --- two freshness lanes (#304) -------------------------------------------- */
+
+test("each lane has its own interval: holdings at 60 s, history at 15 min", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const calls: Array<Record<string, unknown>> = [];
+  const sync = vi.fn(async (request: Record<string, unknown>) => {
+    calls.push(request);
+    return empty({ fullStreams: ["orders", "transactions", "dividends"], positions: [] });
+  });
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  expect(calls[0]).toMatchObject({ lanes: ["holdings", "history"] });
+
+  // 61 s later only the holdings lane is due: it retries, history does not.
+  await run(sync, state, new Date("2026-08-19T12:01:01.000Z"), false);
+  expect(calls[1]).toMatchObject({ lanes: ["holdings"] });
+  expect(calls[1]).not.toHaveProperty("resume");
+
+  // Inside the 15-minute history interval nothing runs.
+  await run(sync, state, new Date("2026-08-19T12:02:00.000Z"), false);
+  expect(sync).toHaveBeenCalledTimes(2);
+
+  // Past it, history runs as a tail (the first run recorded a full read) and
+  // holdings is due too.
+  await run(sync, state, new Date("2026-08-19T12:16:00.000Z"), false);
+  expect(calls[2]).toMatchObject({ lanes: ["holdings", "history"] });
+  expect(calls[2]?.fullReadStreams).toEqual([]);
+  expect(calls[2]?.knownHistory).toMatchObject({
+    tradeIds: new Set(),
+    cashFlowIds: new Set(),
+    dividendIds: new Set(),
+  });
+});
+
+test("a first history run with no per-stream full-read record reads every stream in full", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const calls: Array<Record<string, unknown>> = [];
+  const sync = vi.fn(async (request: Record<string, unknown>) => {
+    calls.push(request);
+    return empty({ fullStreams: ["orders", "transactions", "dividends"] });
+  });
+
+  await syncScheduledBrokers({
+    lanes: ["history"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-08-19T12:00:00.000Z"),
+  });
+
+  expect(calls[0]).toMatchObject({
+    lanes: ["history"],
+    fullReadStreams: ["orders", "transactions", "dividends"],
+  });
+  expect(calls[0]).not.toHaveProperty("knownHistory");
+  // Only the holdings lane was not requested, so the cursor still advances.
+  expect((await state.get("trading212")).lastSyncedAt).toBe("2026-08-19T12:00:00.000Z");
+  expect((await state.get("trading212")).fullReadAt).toEqual({
+    orders: "2026-08-19T12:00:00.000Z",
+    transactions: "2026-08-19T12:00:00.000Z",
+    dividends: "2026-08-19T12:00:00.000Z",
+  });
+});
+
+test("a holdings-only run reads two requests' worth of sections and leaves history untouched", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  await seed(state, { lastSyncedAt: "2026-08-01T00:00:00.000Z" });
+  const calls: Array<Record<string, unknown>> = [];
+  const sync = vi.fn(async (request: Record<string, unknown>) => {
+    calls.push(request);
+    return empty({ positions: [] });
+  });
+
+  await syncScheduledBrokers({
+    lanes: ["holdings"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    now: new Date("2026-08-19T12:00:00.000Z"),
+  });
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ lanes: ["holdings"] });
+  expect(calls[0]).not.toHaveProperty("resume");
+  expect(calls[0]).not.toHaveProperty("fullReadStreams");
+  const stored = await state.get("trading212");
+  expect(stored.holdingsSyncedAt).toBe("2026-08-19T12:00:00.000Z");
+  // The history gate was not touched by a holdings read.
+  expect(stored.lastSyncedAt).toBe("2026-08-01T00:00:00.000Z");
+});
+
+test("forced holdings keep a 5 s floor; forced history bypasses the 15 min gate", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({}));
+  await syncScheduledBrokers({
+    lanes: ["holdings"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    now: new Date("2026-08-19T12:00:00.000Z"),
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+
+  // Forced inside 5 s: skipped, no problem line.
+  const early = await syncScheduledBrokers({
+    lanes: ["holdings"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-08-19T12:00:03.000Z"),
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(early.outcomes[0]?.status).toBe("skipped");
+  expect(early.problems).toEqual([]);
+
+  // Forced after the floor: due.
+  await syncScheduledBrokers({
+    lanes: ["holdings"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-08-19T12:00:06.000Z"),
+  });
+  expect(sync).toHaveBeenCalledTimes(2);
+
+  await syncScheduledBrokers({
+    lanes: ["history"],
+    adapters: adapters(sync),
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    force: true,
+    now: new Date("2026-08-19T12:00:30.000Z"),
+  });
+  expect(sync).toHaveBeenCalledTimes(3);
+});
+
+test("IBKR reads its one Flex statement only on the history lane", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const ibkr = vi.fn(async () => empty({}));
+  const onlyHoldings = await syncScheduledBrokers({
+    lanes: ["holdings"],
+    adapters: [{ broker: "ibkr", adapter: { sync: ibkr } }],
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    now: new Date("2026-08-19T12:00:00.000Z"),
+  });
+  expect(ibkr).not.toHaveBeenCalled();
+  expect(onlyHoldings.outcomes[0]?.status).toBe("skipped");
+  expect(onlyHoldings.problems).toEqual([]);
+
+  await syncScheduledBrokers({
+    lanes: ["history"],
+    adapters: [{ broker: "ibkr", adapter: { sync: ibkr } }],
+    credentials,
+    operations: state,
+    tenantId: "local",
+    entity: "BV",
+    now: new Date("2026-08-19T12:00:00.000Z"),
+  });
+  expect(ibkr).toHaveBeenCalledTimes(1);
+  expect(ibkr).toHaveBeenCalledWith(expect.objectContaining({ lanes: ["history"] }));
 });

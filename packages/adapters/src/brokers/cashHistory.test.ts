@@ -301,7 +301,7 @@ describe("Trading 212 history that is paginated short and holds an ambiguous tra
       token: "token",
       secret: "secret",
       baseUrl: await trading212(),
-    }).sync({ entity: "personal" });
+    }).sync({ lanes: ["holdings", "history"], entity: "personal" });
     /* The runtime proves from the merged history and refuses while pagination
      * is unfinished; the adapter states no window on its own. */
     const resolved = resolveTrading212CashHistory({

@@ -5,7 +5,12 @@ import { parseFlexStatement } from "./flexParser.js";
 
 export function createIbkrFlexAdapter(config: FlexQueryConfig): BrokerAccessAdapter {
   return {
-    async sync({ entity, deadlineMs }) {
+    async sync({ entity, lanes, deadlineMs }) {
+      // One Flex statement carries holdings and history together, so the
+      // holdings lane alone has nothing to read here and must not spend a
+      // partner request: the history lane owns the whole statement.
+      if (!lanes.includes("history"))
+        return { sections: allSections("unavailable"), source: "ibkr-flex", problems: [] };
       try {
         const xml = await loadFlexStatement({ ...config, deadlineMs });
         const parsed = parseFlexStatement(xml, entity);

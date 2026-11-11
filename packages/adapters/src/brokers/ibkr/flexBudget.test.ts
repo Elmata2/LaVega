@@ -77,7 +77,7 @@ test("a budget store that is down sends nothing and the adapter reports a pause,
     ...base,
     partnerBudget: createFailingPartnerBudget(new PartnerBudgetUnavailable({ message: "down" })),
   });
-  const result = await adapter.sync({ entity: "BV" });
+  const result = await adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
   expect(transport).not.toHaveBeenCalled();
   expect(result.problems).toEqual([
     "IBKR Flex sync paused: the shared request budget is unavailable; retry on the next sync",
