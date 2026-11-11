@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { PriceBar } from "@lavega/core";
-import type { PriceCoverage, PriceStore } from "./PriceStore.js";
+import type { PriceCoverage, PriceStore, SharedPriceStore } from "./PriceStore.js";
+import { createMemorySharedBackend, type SerializedSharedPrices } from "./sharedPriceStoreCore.js";
 
 const DEFAULT_DB_NAME = "lavega-prices";
 const DB_VERSION = 3;
@@ -106,6 +107,101 @@ export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore 
       ]);
       await tx.done;
       db.close();
+    },
+  };
+}
+
+/* ---------- the shared, instrument-keyed store (issue #307) ---------- */
+
+/** The shared store lives in its own database so the old per-tenant DB is never
+ *  opened by the new code and vice versa. Old-shape price data is a rebuildable
+ *  cache: the first shared read starts empty and the next sync refills it. */
+const SHARED_DB_NAME = "lavega-prices-shared";
+const SHARED_STORE_NAME = "state";
+const SHARED_RECORD_KEY = "series";
+
+function openSharedPriceDb(dbName: string): Promise<IDBPDatabase> {
+  return openDB(dbName, 1, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(SHARED_STORE_NAME)) db.createObjectStore(SHARED_STORE_NAME);
+    },
+  });
+}
+
+/**
+ * IndexedDB implementation of the shared store (browser tier). The whole cache
+ * is a rebuildable reference-data set, so it is held as one snapshot record:
+ * a read hydrates the same in-memory backend the other adapters use, a write
+ * replaces the snapshot. Series are keyed by instrument, never by user.
+ */
+export function createIndexedDbSharedPriceStore(
+  dbName = SHARED_DB_NAME,
+  now?: () => number,
+): SharedPriceStore {
+  const backend = createMemorySharedBackend(now);
+  let ready: Promise<void> | null = null;
+  const load = (): Promise<void> => {
+    ready ??= (async () => {
+      try {
+        const db = await openSharedPriceDb(dbName);
+        const stored = (await db.get(SHARED_STORE_NAME, SHARED_RECORD_KEY)) as
+          | SerializedSharedPrices
+          | undefined;
+        db.close();
+        if (stored && stored.version === 2) backend.hydrate(stored);
+      } catch {
+        // A private window without IndexedDB still serves prices for this visit.
+      }
+    })();
+    return ready;
+  };
+  const write = async <R>(operation: () => Promise<R>): Promise<R> => {
+    await load();
+    const result = await operation();
+    try {
+      const db = await openSharedPriceDb(dbName);
+      await db.put(SHARED_STORE_NAME, backend.snapshot(), SHARED_RECORD_KEY);
+      db.close();
+    } catch {
+      // Persistence is best-effort; the in-memory snapshot is still correct.
+    }
+    return result;
+  };
+
+  return {
+    async getRange(key, from, to) {
+      await load();
+      return backend.store.getRange(key, from, to);
+    },
+    async getRanges(keys) {
+      await load();
+      return backend.store.getRanges(keys);
+    },
+    async lastDate(key) {
+      await load();
+      return backend.store.lastDate(key);
+    },
+    upsert: (instrumentKey, bars) => write(() => backend.store.upsert(instrumentKey, bars)),
+    replaceRange: (instrumentKey, bars, from, to) =>
+      write(() => backend.store.replaceRange(instrumentKey, bars, from, to)),
+    async getCoverage(key) {
+      await load();
+      return backend.store.getCoverage(key);
+    },
+    putCoverage: (instrumentKey, coverage) =>
+      write(() => backend.store.putCoverage(instrumentKey, coverage)),
+    async latestChange(keys) {
+      await load();
+      return backend.store.latestChange(keys);
+    },
+    adoptAlias: (key, alias) => write(() => backend.store.adoptAlias(key, alias)),
+    async claim(key, owner, ttlMs) {
+      await load();
+      return backend.store.claim(key, owner, ttlMs);
+    },
+    async release(key, owner) {
+      await load();
+      return backend.store.release(key, owner);
     },
   };
 }

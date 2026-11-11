@@ -1,6 +1,8 @@
 import type { PriceBar } from "@lavega/core";
 import type { PriceCoverage, PriceStore } from "./PriceStore.js";
 
+export { createInMemorySharedPriceStore } from "./sharedPriceStoreCore.js";
+
 /** Local fake for tests. Nested maps so a symbol containing the separator
  *  character cannot collide with another tenant or symbol. */
 export function createInMemoryPriceStore(): PriceStore {

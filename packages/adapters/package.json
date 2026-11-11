@@ -10,7 +10,8 @@
     "./src/brokers/brokerSyncLease.contract.js": "./src/brokers/brokerSyncLease.contract.ts",
     "./src/partnerBudget/partnerBudget.contract.js": "./src/partnerBudget/partnerBudget.contract.ts",
     "./src/partnerBudget/fakes.js": "./src/partnerBudget/fakes.ts",
-    "./credentials/localKeySource": "./src/credentials/localKeySource.ts"
+    "./credentials/localKeySource": "./src/credentials/localKeySource.ts",
+    "./src/prices/sharedPriceStore.contract.js": "./src/prices/sharedPriceStore.contract.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
