@@ -197,3 +197,217 @@ test("a slot past the deadline sends no request, rethrows the wait, and caches n
   expect(calls()).toBe(1);
   expect(retry?.match.ticker).toBe("ASML");
 });
+
+/* WS5 / Jev-03 (issue #136): candidate selection. The provider is the seam;
+ * the selector is injected, so every test asserts what a caller observes: which
+ * match comes back, whether a selector call happened, and what is cached. */
+
+import type { IdentifierCandidateSelector, IdentifierSelection } from "../lanes.js";
+
+const RAW_CANDIDATES = [
+  { ticker: "VUAA", exchCode: "LSE", name: "Vanguard S&P 500 UCITS ETF", currency: "USD" },
+  { ticker: "VUAA", exchCode: "XETRA", name: "Vanguard S&P 500 UCITS ETF", currency: "EUR" },
+];
+const CANDIDATES = [
+  { ticker: "VUAA", exchange: "LSE", name: "Vanguard S&P 500 UCITS ETF", currency: "USD" },
+  { ticker: "VUAA", exchange: "XETRA", name: "Vanguard S&P 500 UCITS ETF", currency: "EUR" },
+];
+const TWO_CANDIDATES = [{ data: RAW_CANDIDATES }];
+
+function countingSelector(answer: IdentifierSelection | (() => IdentifierSelection)) {
+  const calls: Array<Parameters<IdentifierCandidateSelector>[0]> = [];
+  const selector: IdentifierCandidateSelector = async (input) => {
+    calls.push(input);
+    return typeof answer === "function" ? answer() : answer;
+  };
+  return { selector, calls: () => calls };
+}
+
+const withCandidates = (data: unknown[]) => countingPost(async () => [{ data }]);
+
+test("one candidate is taken with zero selector calls and is cached", async () => {
+  const { post, calls } = withCandidates([{ ticker: "ASML", exchCode: "AMS" }]);
+  const fake = countingSelector({ kind: "no-match", confidence: 0.1 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const first = await provider.get({ isin: "NL0010273215", allowModelSelection: true });
+  const second = await provider.get({ isin: "NL0010273215", allowModelSelection: true });
+
+  expect(first).toMatchObject({
+    match: { ticker: "ASML", exchange: "AMS" },
+    problems: [],
+    resolution: { tier: "provider", confidence: null },
+  });
+  expect(second).toBe(first);
+  expect(fake.calls()).toHaveLength(0);
+  expect(calls()).toBe(1);
+});
+
+test("zero candidates keeps the existing problem and calls no selector", async () => {
+  const { post, calls } = withCandidates([]);
+  const fake = countingSelector({ kind: "selected", ticker: "ASML", confidence: 0.9 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({ isin: "NL0000", allowModelSelection: true }))!;
+
+  expect(result.match.ticker).toBe("");
+  expect(result.problems).toEqual(["OpenFIGI identifier request failed: ISIN not found"]);
+  expect(result.resolution).toMatchObject({ tier: "unresolved", candidates: [] });
+  expect(fake.calls()).toHaveLength(0);
+  expect(calls()).toBe(1);
+});
+
+test("an ambiguous identifier goes to the selector, and the returned ticker is a candidate", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({
+    kind: "selected",
+    ticker: "VUAA",
+    exchange: "XETRA",
+    confidence: 0.82,
+  });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({
+    isin: "IE00BFMXXD54",
+    instrument: { name: "Vanguard S&P 500", currency: "EUR" },
+    allowModelSelection: true,
+  }))!;
+
+  expect(result.match).toEqual({
+    isin: "IE00BFMXXD54",
+    ticker: "VUAA",
+    exchange: "XETRA",
+    name: "Vanguard S&P 500 UCITS ETF",
+    currency: "EUR",
+  });
+  expect(result.problems).toEqual([]);
+  expect(result.resolution.tier).toBe("model");
+  expect(result.resolution.confidence).toBeCloseTo(0.82);
+  expect(result.resolution.candidates).toEqual(CANDIDATES);
+  // The selector sees the provider's own candidate set and the instrument context.
+  expect(fake.calls()).toHaveLength(1);
+  expect(fake.calls()[0]).toEqual({
+    isin: "IE00BFMXXD54",
+    instrument: { name: "Vanguard S&P 500", currency: "EUR" },
+    candidates: CANDIDATES,
+  });
+  // Selection adds no OpenFIGI requests.
+  expect(calls()).toBe(1);
+});
+
+test("a selected ticker outside the candidate set is refused, never normalised", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({ kind: "selected", ticker: "SPY", confidence: 0.99 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true }))!;
+
+  expect(result.match.ticker).toBe("");
+  expect(result.problems).toHaveLength(1);
+  expect(result.resolution.tier).toBe("unresolved");
+  // Nothing was cached: the next call asks again.
+  await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true });
+  expect(calls()).toBe(2);
+});
+
+test("a no-match selection leaves the identifier unresolved with the existing shape", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({ kind: "no-match", confidence: 0.7 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true }))!;
+
+  expect(result.match).toEqual({ isin: "IE00BFMXXD54", ticker: "" });
+  expect(result.problems).toEqual([
+    "OpenFIGI identifier request failed: none of the candidates fits this holding",
+  ]);
+  expect(result.resolution).toMatchObject({ tier: "unresolved" });
+  // A refusal is not cached as an answer: the next call asks the provider again.
+  await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true });
+  expect(calls()).toBe(2);
+});
+
+test("a selection is cached, so the same decision is not paid for twice", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({ kind: "selected", ticker: "VUAA", confidence: 0.8 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true });
+  const second = (await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true }))!;
+
+  expect(second.match.ticker).toBe("VUAA");
+  expect(fake.calls()).toHaveLength(1);
+  expect(calls()).toBe(1);
+});
+
+test("without consent/enable, ambiguity keeps today's behaviour: first candidate, no model call", async () => {
+  const { post } = withCandidates(TWO_CANDIDATES[0]!.data);
+  const fake = countingSelector({ kind: "selected", ticker: "VUAA", confidence: 0.8 });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({ isin: "IE00BFMXXD54" }))!;
+
+  expect(result.match).toMatchObject({ ticker: "VUAA", exchange: "LSE" });
+  expect(result.resolution).toMatchObject({ tier: "provider", confidence: null });
+  expect(result.resolution.candidates).toHaveLength(2);
+  expect(fake.calls()).toHaveLength(0);
+});
+
+test("an owner override outranks a stored model selection and asks nobody", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({
+    kind: "selected",
+    ticker: "VUAA",
+    exchange: "LSE",
+    confidence: 0.6,
+  });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  await provider.get({ isin: "IE00BFMXXD54", allowModelSelection: true });
+  const overridden = await provider.get({
+    isin: "IE00BFMXXD54",
+    allowModelSelection: true,
+    override: { ticker: "VUSA", exchange: "AMS" },
+  });
+
+  expect(overridden).toMatchObject({
+    match: { ticker: "VUSA", exchange: "AMS" },
+    problems: [],
+    resolution: { tier: "owner-override", confidence: null },
+  });
+  // The cached model selection was not used and no new request went out.
+  expect(fake.calls()).toHaveLength(1);
+  expect(calls()).toBe(1);
+});
