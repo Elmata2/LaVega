@@ -3,7 +3,7 @@ id: tax-return
 family: seizoen
 title: "Dutch tax return for 2026, filed in 2027: checklist"
 description: "What to gather for the Dutch tax return filed in 2027 (income tax over 2026), based on the latest checklist published by the Belastingdienst."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -84,5 +84,3 @@ An overview of all accounts and investments in one place helps. LaVega is one su
 ## A first step this week
 
 Create the folder, drop in your mortgage details and WOZ notice, and note when your employer sends the annual statement. That is enough for now.
-
-This is information, not advice.

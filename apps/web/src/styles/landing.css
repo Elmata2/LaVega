@@ -1,6 +1,6 @@
 /* LaVega public landing page. Ported from the approved mockup
  * (docs/superpowers/specs/2026-11-02-website-redesign-mockup.html): midnight
- * palette, Instrument Serif everywhere on the page, the cantaloupe gradient
+ * palette, Libron everywhere on the page, the cantaloupe gradient
  * only in the hero and the closing call to action.
  *
  * Every page rule is scoped under `.lp` so it never reaches the app, and sits
@@ -37,7 +37,10 @@
     --gutter: clamp(20px, 5vw, 80px);
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --space: clamp(112px, 15vw, 216px);
-    --serif: "Instrument Serif", Georgia, serif;
+    --serif: "Libron", Georgia, serif;
+
+    /* Lets the FAQ accordion interpolate its height from 0 to auto. */
+    interpolate-size: allow-keywords;
 
     min-height: 100vh;
     color: var(--text);
@@ -117,8 +120,25 @@
     text-align: center;
     transition: transform 0.12s var(--ease-out);
   }
-  .lp .btn:active {
+  /* Press feedback on every real control: 140ms, scale(0.98) from an already
+   * visible shape. :not(:active) on the hover rule below keeps the later,
+   * equal-specificity hover declaration from overriding the press. */
+  .lp .btn:active,
+  .lp .login:active,
+  .lp .burger:active,
+  .lp .stack:active,
+  .lp .move:active,
+  .lp .faq summary:active {
     transform: scale(0.98);
+  }
+  .lp .login {
+    transition:
+      transform 140ms var(--ease-out),
+      color 140ms ease;
+  }
+  .lp .burger,
+  .lp .stack {
+    transition: transform 140ms var(--ease-out);
   }
   .lp .btn:focus-visible,
   .lp a:focus-visible,
@@ -239,27 +259,37 @@
     font-size: 2rem;
     opacity: 0;
     visibility: hidden;
+    /* Asymmetric enter/exit: closing is faster than opening, and visibility
+     * holds on only until the 160ms fade has finished. */
     transition:
-      opacity 0.3s var(--ease-out),
-      visibility 0.3s;
+      opacity 160ms var(--ease-out),
+      visibility 0s linear 160ms;
   }
   .lp .panel.open {
     opacity: 1;
     visibility: visible;
+    transition:
+      opacity 300ms var(--ease-out),
+      visibility 0s;
   }
   .lp .panel a,
   .lp .panel button {
     opacity: 0;
     transform: translateY(24px);
+    /* Exit: no stagger, 140ms. Items leave the way they arrived. */
     transition:
-      opacity 0.4s var(--ease-out),
-      transform 0.4s var(--ease-out);
-    transition-delay: calc(var(--n) * 60ms);
+      opacity 140ms var(--ease-out),
+      transform 140ms var(--ease-out);
   }
   .lp .panel.open a,
   .lp .panel.open button {
     opacity: 1;
     transform: none;
+    /* Entrance: 400ms with a 60ms stagger, within the 30-80ms guidance. */
+    transition:
+      opacity 400ms var(--ease-out),
+      transform 400ms var(--ease-out);
+    transition-delay: calc(var(--n) * 60ms);
   }
 
   /* ---- Gradients: hero and closing call to action only ---- */
@@ -428,8 +458,10 @@
     margin: 0 auto;
     text-align: center;
   }
+  /* 0.4 keeps unlit words at ~3.7:1 on midnight (WCAG AA large text). 0.3
+   * computed to 2.5:1 — the sentence was unreadable before its turn. */
   .lp .reveal span {
-    opacity: 0.3;
+    opacity: 0.4;
     transition: opacity 0.4s var(--ease-out);
   }
   .lp .reveal span.on {
@@ -552,7 +584,9 @@
     border-radius: 14px;
     background: var(--box2);
     border: 1px solid transparent;
-    transition: border-color 0.2s var(--ease-out);
+    transition:
+      border-color 0.2s ease,
+      transform 140ms var(--ease-out);
   }
   .lp .move span {
     color: var(--text2);
@@ -797,6 +831,24 @@
     padding: 20px 24px;
     margin-bottom: 12px;
   }
+  /* Purpose: prevent a jarring height jump when an answer appears. An
+   * occasional interaction gets a standard 240ms ease-out. Height is the one
+   * layout property an accordion may animate (no transform equivalent), and
+   * ::details-content with allow-discrete keeps it painted through the exit.
+   * Browsers without ::details-content keep the old instant behaviour. */
+  .lp .faq details::details-content {
+    block-size: 0;
+    overflow: clip;
+    opacity: 0;
+    transition:
+      block-size 240ms var(--ease-out),
+      opacity 200ms var(--ease-out),
+      content-visibility 240ms allow-discrete;
+  }
+  .lp .faq details[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
   .lp .faq summary {
     cursor: pointer;
     font-size: 1.3rem;
@@ -804,7 +856,9 @@
     display: flex;
     justify-content: space-between;
     gap: 24px;
-    transition: color 0.2s var(--ease-out);
+    transition:
+      color 0.2s ease,
+      transform 140ms var(--ease-out);
   }
   .lp .faq summary::-webkit-details-marker {
     display: none;
@@ -845,13 +899,21 @@
   }
 
   /* ---- Scroll reveal ---- */
+  /* Visible by default. Landing.tsx adds .lp-reveal only when an
+   * IntersectionObserver can actually restore the elements, so a failed
+   * bundle cannot leave the prerendered page blank. The hidden state carries
+   * no transition; the reveal transition lives on the default rule, so the
+   * first .in-view change animates from hidden instead of fading out. */
   .lp .r {
-    opacity: 0;
-    transform: translateY(12px);
     transition:
       opacity 0.4s var(--ease-out),
       transform 0.4s var(--ease-out);
     transition-delay: calc(var(--d, 0) * 60ms);
+  }
+  .lp.lp-reveal .r:not(.in-view) {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: none;
   }
   .lp .r.in-view {
     opacity: 1;
@@ -859,20 +921,43 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .lp .r {
+    /* Reduced motion gets the end state, not a faster animation (DESIGN.md). */
+    .lp .r,
+    .lp.lp-reveal .r:not(.in-view) {
+      opacity: 1;
       transform: none;
-      transition: opacity 0.2s;
+      transition: none;
     }
     .lp .btn {
       transition: none;
+    }
+    /* Keep colour/opacity feedback, drop the movement. */
+    .lp .btn:active,
+    .lp .login:active,
+    .lp .burger:active,
+    .lp .stack:active,
+    .lp .move:active,
+    .lp .faq summary:active {
+      transform: none;
     }
     .lp .reveal span {
       opacity: 1;
       transition: none;
     }
+    .lp .panel,
+    .lp .panel.open,
+    .lp .panel a,
+    .lp .panel button,
+    .lp .panel.open a,
+    .lp .panel.open button {
+      transition: none;
+    }
     .lp .panel a,
     .lp .panel button {
       transform: none;
+    }
+    .lp .faq details::details-content {
+      transition: none;
     }
     .lp .acct,
     .lp .note {
@@ -883,7 +968,9 @@
     }
   }
   @media (hover: hover) and (pointer: fine) {
-    .lp .btn:hover {
+    /* :not(:active) preserves the press feedback: this rule sits later in the
+     * file than .btn:active and has equal specificity, so it used to win. */
+    .lp .btn:hover:not(:active) {
       transform: translateY(-1px);
     }
     .lp .links a:hover,
@@ -975,7 +1062,7 @@
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   width: 100%;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-size: 1.15rem;
   line-height: 1.4;
   color: #fff;
@@ -1014,7 +1101,7 @@
   }
 }
 .lp-signin-dialog h2 {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-weight: 400;
   font-size: 2.2rem;
   line-height: 1.05;
@@ -1027,7 +1114,7 @@
 .lp-signin-dialog input,
 .lp-signin-dialog button,
 .lp-signin-dialog span {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
 }
 .lp-signin-dialog p {
   margin: 0 0 16px;
@@ -1113,6 +1200,12 @@
   font-weight: 400;
   min-height: 48px;
   margin-top: 4px;
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    filter 140ms ease;
+}
+.lp-signin-dialog .bg-accent:active:enabled {
+  transform: scale(0.98);
 }
 .lp-signin-dialog .bg-accent:disabled {
   opacity: 0.4;
@@ -1151,11 +1244,17 @@
   background: #16222a;
   border: 0;
   border-radius: 999px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Libron", Georgia, serif;
   font-size: 1.6rem;
   line-height: 1;
   color: #fff;
   cursor: pointer;
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms ease;
+}
+.lp-signin-dialog-close:active {
+  transform: scale(0.96);
 }
 .lp-signin-dialog-close:hover {
   background: #22313b;
@@ -1167,6 +1266,10 @@
       opacity 250ms ease,
       overlay 250ms allow-discrete,
       display 250ms allow-discrete;
+  }
+  .lp-signin-dialog .bg-accent:active:enabled,
+  .lp-signin-dialog-close:active {
+    transform: none;
   }
   @starting-style {
     .lp-signin-dialog[open] {

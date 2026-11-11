@@ -1,9 +1,11 @@
+import { replayCostBasis, selectCostBasis, type CostBasisSummary } from "./costBasis.js";
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
+import { instrumentKey } from "./securities.js";
 import { valuePosition, type QuoteQuality } from "./valuation.js";
 
 export type PositionPriceStatus = QuoteQuality;
@@ -35,6 +37,8 @@ export type CurrentPosition = {
   symbol: string;
   entity: string;
   isin?: string;
+  /** ISIN-first canonical identity (WS4.5, #297), when the snapshot names one. */
+  instrumentKey?: string;
   description?: string;
   quantity: number;
   currency: string;
@@ -43,6 +47,10 @@ export type CurrentPosition = {
   portfolioWeight: number | null;
   priceStatus: PositionPriceStatus;
   returns: PositionReturn;
+  /** Why the cost basis behind those returns is known or unknown (WS4.2).
+   *  Set by `buildCurrentPositions`; optional so a row shaped before the
+   *  provenance slice still type-checks. */
+  basis?: CostBasisSummary;
 };
 
 const EPSILON = 1e-9;
@@ -329,26 +337,60 @@ export function buildCurrentPositions(input: {
     });
     const marketValue = valuation.value;
     const priceStatus = valuation.quality;
+    const groupTrades = input.trades.filter((trade) => key(trade) === groupKey);
+    const groupDividends = input.dividends.filter((dividend) => key(dividend) === groupKey);
+    const providerCoverage = brokerCostCoverage(anchors);
+    const basis = selectCostBasis({
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+      // A manual value speaks for the whole group only when every broker row
+      // carries one; a partial override would average different claims.
+      manual:
+        anchors.length > 0 && anchors.every((anchor) => anchor.manualCostBasis)
+          ? {
+              legs: anchors.map((anchor) => ({
+                amountCents: anchor.manualCostBasis!.amountCents,
+                currency: anchor.manualCostBasis!.currency,
+                date: anchor.asOf,
+                locked: anchor.manualCostBasis!.locked,
+              })),
+            }
+          : null,
+      calculated: replayCostBasis({
+        trades: groupTrades,
+        presentationCurrency: input.presentationCurrency,
+        fxRates: input.fxRates,
+        expectedQuantity: quantity,
+      }),
+      provider:
+        providerCoverage.status === "complete"
+          ? { status: "complete", legs: providerCoverage.legs }
+          : providerCoverage.coveredQuantity > 0
+            ? { status: "incomplete" }
+            : null,
+    });
     const calculatedReturns = calculatePositionReturn(
       quantity,
       marketValue,
-      input.trades.filter((trade) => key(trade) === groupKey),
-      input.dividends.filter((dividend) => key(dividend) === groupKey),
+      groupTrades,
+      groupDividends,
       input.presentationCurrency,
       input.fxRates,
       {
         ...(valuation.quoteDate ? { valuationDate: valuation.quoteDate } : {}),
-        brokerCost: brokerCostCoverage(anchors),
+        brokerCost: providerCoverage,
       },
     );
     const returns =
       priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
         ? { ...calculatedReturns, status: "missing-fx" as const }
         : calculatedReturns;
+    const canonicalKey = instrumentKey({ isin: sample.isin, ticker: sample.symbol });
     const row = {
       symbol: sample.symbol,
       entity: sample.entity,
       ...(sample.isin ? { isin: sample.isin } : {}),
+      ...(canonicalKey ? { instrumentKey: canonicalKey } : {}),
       ...(sample.description ? { description: sample.description } : {}),
       quantity,
       currency: sample.currency,
@@ -360,6 +402,7 @@ export function buildCurrentPositions(input: {
       portfolioWeight: null,
       priceStatus,
       returns,
+      basis,
     } satisfies CurrentPosition;
     return [row];
   });

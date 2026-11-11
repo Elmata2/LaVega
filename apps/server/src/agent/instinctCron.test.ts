@@ -163,12 +163,20 @@ test("the run stops starting users once 80 percent of the function limit is used
   expect((await res.json()).skipped).toBe(1);
 });
 
-test("the route is registered on a cron entry that runs every hour", () => {
+test("the hourly trigger is the GitHub workflow, not a Vercel cron entry", () => {
   const build = readFileSync(
     new URL("../../../../scripts/vercel-build.mjs", import.meta.url),
     "utf8",
   );
-  expect(build).toContain('{ path: "/api/cron/instinct", schedule: "0 * * * *" }');
+  // The Vercel plan allows daily crons only; an hourly entry fails every deploy.
+  expect(build).not.toContain('path: "/api/cron/instinct"');
+  const workflow = readFileSync(
+    new URL("../../../../.github/workflows/instinct-cron.yml", import.meta.url),
+    "utf8",
+  );
+  expect(workflow).toContain('cron: "7 * * * *"');
+  expect(workflow).toContain("secrets.CRON_SECRET");
+  expect(workflow).toContain("vars.INSTINCT_CRON_URL");
 });
 
 /* Two overlapping runs against the real database: the day claim is what makes

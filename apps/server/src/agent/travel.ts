@@ -1,10 +1,11 @@
 import { AGENTS, isSafeFact, makeFact } from "@lavega/core";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
-import type { LlmProvider } from "./provider.js";
+import type { LlmProvider, LlmUsage } from "./provider.js";
 import { createMistralProvider } from "./mistral.js";
 import { createAiObservationContext } from "./aiObservability.js";
-import { checkBudget, recordUsage } from "./budget.js";
+import { checkBudget, recordFailure, recordUsage } from "./budget.js";
+import { aiFailureCode, upstreamHttpStatus } from "./failure.js";
 import { MISTRAL_MEDIUM } from "./models.js";
 import { ValidationError } from "./validationError.js";
 
@@ -183,7 +184,7 @@ export async function lookupProviderTerms(
   if (!budget.ok) throw new Error(`agent/travel: AI-limiet bereikt (${budget.scope})`);
 
   let text: string;
-  let usage: { input: number; output: number } | undefined;
+  let usage: LlmUsage | undefined;
   try {
     ({ text, usage } = await provider.chatWithSearch({
       system,
@@ -193,16 +194,17 @@ export async function lookupProviderTerms(
     }));
   } catch (e) {
     /* SEARCH_TIMEOUT_MS sits BELOW the top of this lookup's own stated range, so
-     * a timeout here is expected rather than exotic — and the searches were
-     * bought before it fired. Recording at the ceiling keeps a run of timeouts
-     * from being free. */
-    await recordUsage(
+     * a timeout here is expected rather than exotic — and the search was bought
+     * before it fired. A FAILED row keeps that charge (searches: 1) while
+     * recording why the call died and the upstream status, instead of a generic
+     * "ok" row that could not be told apart from a success (#300, WS5.7). */
+    await recordFailure(
       {
         route: "travel",
         model: MISTRAL_MEDIUM,
-        inputTokens: 0,
-        outputTokens: 0,
+        errorCode: aiFailureCode(e),
         searches: 1,
+        ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
       },
       budget.reservation,
     );
@@ -220,6 +222,10 @@ export async function lookupProviderTerms(
       inputTokens: usage?.input,
       outputTokens: usage?.output,
       searches: 1,
+      ...(usage?.cacheWriteTokens === undefined
+        ? {}
+        : { cacheWriteTokens: usage.cacheWriteTokens }),
+      ...(usage?.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
     },
     budget.reservation,
   );

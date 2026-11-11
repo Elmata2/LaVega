@@ -4,7 +4,8 @@
  * `browse` binary that records its arguments. Nothing here reaches a real
  * deploy, broker or browser.
  *
- *   node --test .claude/skills/verify-investing/
+ *   pnpm test:verify-investing
+ *   (or: node --test .claude/skills/verify-investing/control-investing.test.mjs)
  */
 import { execFile } from "node:child_process";
 import {
@@ -27,6 +28,15 @@ import { fileURLToPath } from "node:url";
 const cli = join(dirname(fileURLToPath(import.meta.url)), "control-investing.mjs");
 const loginShim = join(dirname(fileURLToPath(import.meta.url)), "browser-login.mjs");
 
+/** True when both paths resolve and candidate sits under realpath("/tmp"). */
+function underTmp(candidate) {
+  try {
+    return realpathSync(candidate).startsWith(realpathSync("/tmp"));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The screenshot tests write PNGs, and the CLI only accepts a PNG under
  * realpath("/tmp") (see PNG_PATH_FIX). `os.tmpdir()` is not under /tmp on
@@ -36,14 +46,25 @@ const loginShim = join(dirname(fileURLToPath(import.meta.url)), "browser-login.m
  * write, exactly as the docs require.
  */
 function stateRoot() {
-  const underTmp = (candidate) => {
-    try {
-      return realpathSync(candidate).startsWith(`${realpathSync("/tmp")}`);
-    } catch {
-      return false;
-    }
-  };
   return underTmp(tmpdir()) ? tmpdir() : "/tmp";
+}
+
+/**
+ * A temp dir that is not under /tmp, for "screenshot defaults under /tmp when
+ * the state dir is not". HOME is the natural parent, but a sandbox can block
+ * every write outside the workspace. Fall back to the skill dir then; the test
+ * needs a writable state dir outside /tmp, not that parent in particular.
+ */
+function outsideTmpDir() {
+  for (const parent of [process.env.HOME, dirname(fileURLToPath(import.meta.url))]) {
+    if (!parent || underTmp(parent)) continue;
+    try {
+      return mkdtempSync(join(parent, "control-investing-outside-"));
+    } catch {
+      // parent is not writable in this sandbox; try the next one
+    }
+  }
+  throw new Error("no writable parent dir outside /tmp");
 }
 
 let server;
@@ -110,6 +131,7 @@ beforeEach(() => {
     fakeVercel,
     `#!/bin/sh
 echo "$@" >> "${vercelLog}"
+if [ "$1" = "--global-config" ]; then shift 2; fi
 if [ "$1" = "env" ] && [ "$2" = "pull" ]; then
   if [ -n "$LAVEGA_TEST_ENV_PULL" ]; then
     cp "$LAVEGA_TEST_ENV_PULL" "$3"
@@ -853,6 +875,26 @@ describe("session", () => {
     assert.match(vercelCalls()[0], /--environment preview/);
   });
 
+  test("login env pull honours LAVEGA_VERCEL_GLOBAL_CONFIG", async () => {
+    const base = `http://127.0.0.1:${port}`;
+    const cfg = join(stateDir, "vercel-global");
+    mkdirSync(cfg, { recursive: true });
+    const pullFile = join(stateDir, "pull.env");
+    writeFileSync(
+      pullFile,
+      'LAVEGA_VERIFY_EMAIL="preview@x"\nLAVEGA_VERIFY_PASSWORD="pull-secret"\n',
+    );
+    route("POST", "/api/auth/sign-in/email", 200, { ok: true });
+    route("GET", "/api/auth/get-session", 200, { user: { id: "u1", email: "preview@x" } });
+    const result = await run(["login", "--base", base], {
+      LAVEGA_TEST_ENV_PULL: pullFile,
+      LAVEGA_VERCEL_GLOBAL_CONFIG: cfg,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.ok(vercelCalls()[0].startsWith(`--global-config ${cfg} env pull `), vercelCalls()[0]);
+    assert.doesNotMatch(result.stdout, /pull-secret/);
+  });
+
   test("an unreadable auth.preview.json falls through to the vercel pull", async () => {
     const base = `http://127.0.0.1:${port}`;
     const hidden = join(stateDir, "auth.preview.json");
@@ -918,6 +960,22 @@ describe("preview lookup", () => {
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.json.would.url, "https://lavega-newest.vercel.app/api/brokers/sync");
     assert.match(vercelCalls()[0], /^ls --environment preview --status READY --format json --cwd /);
+  });
+
+  test("LAVEGA_VERCEL_GLOBAL_CONFIG reaches the preview listing", async () => {
+    const cfg = join(stateDir, "vercel-global");
+    mkdirSync(cfg, { recursive: true });
+    const result = await run(["sync", "--dry-run", "--target", "preview"], {
+      ...previewEnv,
+      LAVEGA_VERCEL_GLOBAL_CONFIG: cfg,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.ok(
+      vercelCalls()[0].startsWith(
+        `--global-config ${cfg} ls --environment preview --status READY --format json --cwd `,
+      ),
+      vercelCalls()[0],
+    );
   });
 
   test("the pin holds even after a newer deploy lands", async () => {
@@ -1165,7 +1223,7 @@ echo "browse-ok $1"
 
   test("screenshot defaults under /tmp when the state dir is not", async () => {
     pngBrowse();
-    const outside = mkdtempSync(join(process.env.HOME, "control-investing-outside-"));
+    const outside = outsideTmpDir();
     try {
       const result = await run(["browser", "screenshot"], { VERIFY_INVESTING_DIR: outside });
       assert.equal(result.code, 0, result.stderr);

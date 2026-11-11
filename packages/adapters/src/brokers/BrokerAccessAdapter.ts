@@ -17,8 +17,32 @@ export type BrokerSyncResume = {
   dividendsComplete?: boolean;
 };
 
+/** Which freshness lane a sync call reads. There is no default: every call
+ *  site states its intent, so holdings can be refreshed without dragging the
+ *  expensive history streams along. */
+export type BrokerSyncLane = "holdings" | "history";
+
+/** A history stream a broker can page through. */
+export type BrokerHistoryStream = "orders" | "transactions" | "dividends";
+
+/** Ids of history rows already stored. A tail read stops at the first page
+ *  that adds none. Absent means a full read. */
+export type BrokerKnownHistory = {
+  tradeIds?: ReadonlySet<string>;
+  cashFlowIds?: ReadonlySet<string>;
+  dividendIds?: ReadonlySet<string>;
+};
+
 export type BrokerSyncRequest = {
   entity: string;
+  /** Which lanes this call reads. */
+  lanes: readonly BrokerSyncLane[];
+  /** Present = tail read. Absent = full read. Ignored when `resume` is set. */
+  knownHistory?: BrokerKnownHistory;
+  /** Streams to read to their last page; every other tail-capable stream runs
+   *  as a tail read. Absent means the caller did not decide, and the adapter
+   *  keeps its full-read behaviour. */
+  fullReadStreams?: readonly BrokerHistoryStream[];
   resume?: BrokerSyncResume;
   /** Absolute Unix time. Undefined keeps local sync unlimited. */
   deadlineMs?: number;
@@ -55,6 +79,9 @@ export type BrokerResult = {
   /** What these sections prove about past cash. Absent means unknown. */
   cashHistory?: CashHistoryCoverage;
   historyMode?: "snapshot" | "incremental";
+  /** History streams this run read in full to their last page. The snapshot
+   *  replaces only those collections; every other read merges by row id. */
+  fullStreams?: readonly BrokerHistoryStream[];
   /** Inclusive dates the history sections cover, when the broker states them. */
   period?: { from: string; to: string };
   /** Accounts the statement covers; rows of other accounts are not its to replace. */

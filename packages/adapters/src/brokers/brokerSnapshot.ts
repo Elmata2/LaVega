@@ -1,3 +1,4 @@
+import { carryForwardCostBasis } from "@lavega/core";
 import type {
   CashBalance,
   CashFlow,
@@ -6,6 +7,7 @@ import type {
   Position,
   Trade,
 } from "@lavega/core";
+import type { BrokerResult } from "./BrokerAccessAdapter.js";
 import type { ScheduledSyncResult } from "./scheduledSync.js";
 
 /* What a broker knows about an account, as this runtime keeps it.
@@ -178,6 +180,19 @@ function replacesAll(broker: string, historyMode: string | undefined): boolean {
   return broker !== "ibkr" && historyMode !== "incremental";
 }
 
+function replacesCollection(
+  broker: string,
+  result: BrokerResult,
+  stream: "orders" | "transactions" | "dividends",
+  status: "complete" | "partial" | "unavailable",
+): boolean {
+  if (status !== "complete") return false;
+  // A result that names the streams it read in full replaces only those; every
+  // other collection was a tail (or not requested) and must merge by id.
+  if (result.fullStreams !== undefined) return result.fullStreams.includes(stream);
+  return replacesAll(broker, result.historyMode);
+}
+
 function restoreTrades(broker: string, trades: readonly Trade[]): Trade[] {
   return withBroker(
     broker,
@@ -205,7 +220,7 @@ function restorePositions(broker: string, positions: readonly Position[]): Posit
   );
 }
 
-function stableTradeId(trade: Omit<Trade, "id">): string {
+export function stableTradeId(trade: Omit<Trade, "id">): string {
   if (trade.brokerTradeId) return trade.brokerTradeId;
   let value = 2166136261;
   for (const character of JSON.stringify(trade)) {
@@ -267,11 +282,18 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           statementEnd !== undefined &&
           storedLatest !== undefined &&
           statementEnd < storedLatest;
-        if (sections.positions.status === "complete" && !backfill)
+        if (sections.positions.status === "complete" && !backfill) {
+          // A provider sync has no authority over a user-entered basis and its
+          // lock, and an unchanged row may carry a basis forward (WS4.2).
+          const stored = positionsByBroker.get(outcome.broker) ?? [];
           positionsByBroker.set(
             outcome.broker,
-            restorePositions(outcome.broker, sections.positions.rows),
+            carryForwardCostBasis(
+              stored,
+              restorePositions(outcome.broker, sections.positions.rows),
+            ),
           );
+        }
         const mappedTrades = sections.trades.rows.map((trade) => ({
           ...withBroker(outcome.broker, [trade])[0],
           id: `${outcome.broker}:${stableTradeId(trade)}`,
@@ -290,10 +312,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
               ),
             ),
           );
-        else if (
-          sections.trades.status === "complete" &&
-          replacesAll(outcome.broker, incoming.historyMode)
-        )
+        else if (replacesCollection(outcome.broker, incoming, "orders", sections.trades.status))
           tradesByBroker.set(outcome.broker, mappedTrades);
         else if (sections.trades.status !== "unavailable" && mappedTrades.length > 0)
           tradesByBroker.set(
@@ -319,7 +338,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
               incoming.accounts,
             ),
           );
-        else if (sections.dividends.status === "complete" && incoming.historyMode !== "incremental")
+        else if (
+          replacesCollection(outcome.broker, incoming, "dividends", sections.dividends.status)
+        )
           dividendsByBroker.set(outcome.broker, incomingDividends);
         else if (sections.dividends.status !== "unavailable" && incomingDividends.length > 0)
           dividendsByBroker.set(
@@ -343,7 +364,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
               incoming.accounts,
             ),
           );
-        else if (sections.cashFlows.status === "complete" && incoming.historyMode !== "incremental")
+        else if (
+          replacesCollection(outcome.broker, incoming, "transactions", sections.cashFlows.status)
+        )
           cashFlowsByBroker.set(outcome.broker, incomingFlows);
         else if (sections.cashFlows.status !== "unavailable" && incomingFlows.length > 0)
           cashFlowsByBroker.set(

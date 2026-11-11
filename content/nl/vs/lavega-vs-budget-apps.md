@@ -3,7 +3,7 @@ id: vs-budget-apps
 family: vs
 title: "LaVega vs de budgetfuncties van bunq"
 description: "Wat de budgetfuncties van bunq doen, wat LaVega doet en waar ze verschillen. Feiten van de eigen websites, met datum. Andere apps laten we buiten beschouwing."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -70,5 +70,3 @@ LaVega is in testfase; er is nog geen prijs gepubliceerd.
 Wil je geld praktisch indelen in potjes binnen één bank, of wil je vooral overzicht en vooruitkijken over meerdere partijen heen? Dat bepaalt welk type hulpmiddel bij je situatie aansluit. Je kunt ook beide gebruiken.
 
 Zie ook [LaVega vs Excel](/vs/lavega-vs-excel), [Abonnementen opschonen in vier stappen](/gids/abonnementen-opschonen) en [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo).
-
-Dit is informatie, geen advies.

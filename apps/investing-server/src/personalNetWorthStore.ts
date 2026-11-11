@@ -1,8 +1,9 @@
-/** One day's opted-in Personal total, mirroring @lavega/database's
- *  PersonalNetWorthTotal — restated here rather than imported from
- *  @lavega/core's PersonalNetWorthTotal so this store's contract does not
- *  depend on which of the two packages happens to define the read model. */
-export type PersonalNetWorthTotal = { date: string; totalCents: number };
+/** One day's opted-in Personal total. It IS @lavega/core's read model (which now
+ *  carries an optional provenance citation, #300 WS5.5), imported rather than
+ *  restated so the store cannot drift from the schema the route encodes with. */
+import type { PersonalNetWorthTotal } from "@lavega/core";
+
+export type { PersonalNetWorthTotal };
 
 /**
  * Investing's read side of Personal's opt-in net worth share. Personal owns

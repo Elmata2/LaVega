@@ -25,7 +25,7 @@ When unknown cash leaves the account series short of 60 valid returns, the card 
 | Regression alpha  | 252 × (mean daily portfolio return − beta × mean daily benchmark return) | Assumes 0% cash rate; benchmark price return excludes dividends        |
 | Maximum drawdown  | Lowest decline from a peak of compounded flow-adjusted returns           | Requires continuous valid history; no balance-based drawdown           |
 
-The risk benchmark is named and selected from chart benchmarks. The first configured benchmark is the initial choice. No benchmark means beta and alpha are unavailable. A benchmark quoted in a currency other than the presentation currency is rejected for these two metrics.
+The risk benchmark is named and selected from chart benchmarks. The first configured benchmark is the initial choice. An empty selection measures against MSCI World (`IWDA.AS`, EUR), so beta and alpha are not structurally unavailable; the Summary card shows a `Choose benchmark` action beside an unavailable beta. A benchmark quoted in another currency is converted into the presentation currency with historical FX before the risk metrics read it. A dashboard built with no benchmark at all leaves beta and alpha unavailable.
 
 Account conversion currently uses fixed latest FX rates. Currency movements are therefore excluded from historical returns. All available results are labelled estimates. These values must not be presented as full historical EUR risk, CAPM alpha or total-return benchmark alpha. Historical FX and dividend-adjusted benchmark history remain prerequisites for those definitions.
 
@@ -50,5 +50,6 @@ Axis: selected risk period. Persona: signed-in account owner. Screen: `/investin
 3. Account history: select `Account history`. History starts at the first dated account evidence, not the earliest market quote. Confirm the stated risk start and data limits.
 4. Method disclosure: expand `How to read these metrics`. Account basis states the end-of-day cash-flow convention and included dividends, fees and interest. Holdings basis states that cash, dividends and fees are excluded. Both state fixed latest FX, 0% cash rate and price-only benchmark limits. Collapse and re-open it.
 5. Current composition: read investment-only denominator, missing/estimated counts and sector limitation; percentages have no `+` gain sign.
+6. Default benchmark: an account with no stored benchmark reads MSCI World (`IWDA.AS`, EUR) in the risk projection, the chart comparison and the price-sync targets. Beta and alpha appear after its prices arrive. Select a different benchmark in `Compare`; the choice replaces the default on the next dashboard read.
 
 Numeric oracles are independent hand-calculated regression fixtures: a deposit into a flat account creates no volatility or drawdown; portfolio returns `1.5 × benchmark + 0.0007` produce beta 1.5 and annual regression alpha 0.1764. Core tests also cover null flows, weekends, duplicates, negative values and mismatched intervals. API tests check validation and composition; UI tests check unavailable states and period requests.

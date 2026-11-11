@@ -1,21 +1,34 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { SectorProfile } from "@lavega/adapters";
-import { app, createApp } from "./app.js";
+import { priceInstrumentKey } from "@lavega/core";
+import type { PriceCoverage, SharedPriceBar, SharedPriceStore } from "@lavega/adapters";
+import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
+import { DateTime } from "effect";
+import { app, createApp as createPacedApp } from "./app.js";
+
+/* These tests are about routes and reads. Pacing of partner calls has its own
+ * tests, so every slot is granted at once instead of sleeping real time. */
+const createApp = (dependencies: Parameters<typeof createPacedApp>[0] = {}) =>
+  createPacedApp({ partnerBudgetClient: createImmediatePartnerBudget(), ...dependencies });
 import {
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
+import { createMemorySyncRunStore } from "./syncRun.js";
+import { createMemoryCashFlowStore } from "./cashFlowSuggestions.js";
 import {
   buildCompositionProjection,
   buildRiskProjection,
   emptyInvestingDashboard,
+  emptyRealizedReport,
 } from "@lavega/core";
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
 import { createInMemorySectorInferenceSettingStore } from "./sectorInferenceSetting.js";
 
@@ -57,13 +70,18 @@ const acceptedConsentStore = () => ({
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+  expect(await response.json()).toEqual({
+    ok: true,
+    service: "investing-server",
+    sharedPriceStore: false,
+  });
 });
 
 test("dashboard route returns injected core-shaped read model and selected symbol", async () => {
@@ -163,7 +181,6 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
   const investingApp = createApp({
     benchmarkSelectionStore,
     priceSyncTargets: () => [],
-    priceSyncPaceMs: 0,
   });
   const saved = await investingApp.request("/api/investing/benchmarks", {
     method: "PUT",
@@ -181,6 +198,43 @@ test("benchmark API persists ordered replace-whole selection and rejects invalid
     body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }),
   });
   expect(invalid.status).toBe(400);
+});
+
+test("benchmark API starts an unselected account on MSCI World", async () => {
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const investingApp = createApp({
+    benchmarkSelectionStore,
+    priceSyncTargets: () => [],
+  });
+
+  /* An account that never chose is measured against MSCI World instead of
+   * leaving beta and alpha structurally unavailable. */
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["IWDA.AS"],
+  });
+
+  await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: ["^AEX"] }),
+  });
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["^AEX"],
+  });
+
+  /* Removing every choice returns the account to the default rather than to a
+   * state where the card can never compute beta. */
+  await investingApp.request("/api/investing/benchmarks", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: [] }),
+  });
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({
+    tenantId: "local",
+    symbols: ["IWDA.AS"],
+  });
 });
 
 test("layout route persists per-tenant choices and drops unknown ids", async () => {
@@ -237,6 +291,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
   // writes that store. Nothing here calls into the orchestrator that is running.
   const holdings: PriceSyncTarget[] = [
     {
+      instrumentKey: `sym:${"ASML"}:${"EUR"}`,
       kind: "current",
       symbol: "ASML",
       ticker: "ASML",
@@ -245,6 +300,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
       backfillFrom: "2024-01-01",
     },
     {
+      instrumentKey: `sym:${"ADYEN"}:${"EUR"}`,
       kind: "current",
       symbol: "ADYEN",
       ticker: "ADYEN",
@@ -258,6 +314,7 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
     const { symbols } = await benchmarkSelectionStore.get(tenantId);
     return [
       ...symbols.map((symbol) => ({
+        instrumentKey: symKey(symbol, "EUR"),
         kind: "benchmark" as const,
         symbol,
         ticker: symbol,
@@ -284,7 +341,6 @@ test("a benchmark added via PUT during an already-running sync is fetched next b
     provider: provider as never,
     benchmarkSelectionStore,
     priceSyncTargets,
-    priceSyncPaceMs: 0,
     // The default 5 s throttle on the mid-sync re-check (see priceOrchestrator's
     // benchmarkRecheckEveryMs) would outlast this test's real-time window.
     priceSyncBenchmarkRecheckEveryMs: 0,
@@ -354,6 +410,7 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -362,7 +419,6 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
   });
 
   expect((await investingApp.request("/api/investing/benchmarks/search?q=AEX")).status).toBe(428);
@@ -388,10 +444,11 @@ test("Yahoo search and price calls fail before consent, and consent alone fetche
 test("price sync uses Yahoo Finance after persisted consent", async () => {
   const fetchJsonWithCrumb = vi.fn();
   const investingApp = createApp({
-    store: createInMemoryPriceStore(),
+    store: createInMemorySharedPriceStore(),
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -400,7 +457,6 @@ test("price sync uses Yahoo Finance after persisted consent", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   const response = await investingApp.request("/api/prices/sync", { method: "POST" });
@@ -421,6 +477,7 @@ test("router problems reach HTTP response unchanged", async () => {
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"ASML"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -429,7 +486,6 @@ test("router problems reach HTTP response unchanged", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   await investingApp.request("/api/prices/sync", { method: "POST" });
@@ -453,6 +509,7 @@ test("a closed position Yahoo confirms delisted does not flip Price history to p
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"SKX_US_EQ"}:${"USD"}`,
         kind: "closed",
         symbol: "SKX_US_EQ",
         ticker: "SKX_US_EQ",
@@ -461,7 +518,6 @@ test("a closed position Yahoo confirms delisted does not flip Price history to p
         backfillFrom: "2024-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
@@ -533,6 +589,7 @@ test("price sync resolves ISIN before asking price provider", async () => {
     identifierProvider: identifierProvider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
         kind: "current",
         symbol: "ASML",
         ticker: "ASML",
@@ -542,12 +599,13 @@ test("price sync resolves ISIN before asking price provider", async () => {
         backfillFrom: "2026-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
   await investingApp.request("/api/prices/sync", { method: "POST" });
   expect(provider.get).toHaveBeenCalled();
-  expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
+  expect(identifierProvider.get).toHaveBeenCalledWith(
+    expect.objectContaining({ isin: "NL0010273215" }),
+  );
   expect(provider.get).toHaveBeenCalledWith(
     expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }),
   );
@@ -575,6 +633,7 @@ test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
       identifierProvider: identifierProvider as never,
       priceSyncTargets: () => [
         {
+          instrumentKey: priceInstrumentKey({ symbol: ticker, currency: "USD", isin }),
           kind: "current",
           symbol: ticker,
           ticker,
@@ -584,7 +643,6 @@ test.each(["CPRX_US_EQ", "MASI_US_EQ", "SKX_US_EQ"])(
           backfillFrom: "2026-01-01",
         },
       ],
-      priceSyncPaceMs: 0,
       marketDataConsentStore: acceptedConsentStore(),
     });
 
@@ -672,12 +730,17 @@ test.each([
         problems: [],
       }),
     };
-    const store = createInMemoryPriceStore();
+    const store = createInMemorySharedPriceStore();
     const investingApp = createApp({
       store,
       identifierProvider: identifierProvider as never,
       priceSyncTargets: () => [
         {
+          instrumentKey: priceInstrumentKey({
+            symbol: "TSFAd_EQ",
+            currency: "EUR",
+            ...(isin ? { isin } : {}),
+          }),
           kind: "current",
           symbol: "TSFAd_EQ",
           ticker: "TSFAd_EQ",
@@ -688,29 +751,36 @@ test.each([
           today: "2026-01-02",
         },
       ],
-      priceSyncPaceMs: 0,
       marketDataConsentStore: acceptedConsentStore(),
     });
 
     expect((await investingApp.request("/api/prices/sync", { method: "POST" })).status).toBe(200);
 
-    if (isin) expect(identifierProvider.get).toHaveBeenCalledWith({ isin });
+    if (isin)
+      expect(identifierProvider.get).toHaveBeenCalledWith(expect.objectContaining({ isin }));
     else expect(identifierProvider.get).not.toHaveBeenCalled();
     expect(requested[0]).toBe("TSFA.DE");
     if (resolved) {
       expect(requested).toContain("TSM");
-      expect(await store.getCoverage("local", "TSFAd_EQ")).toMatchObject({
-        symbol: "TSFAd_EQ",
+      expect(
+        await store.getCoverage({
+          key: `isin:${String(isin).toUpperCase()}:EUR`,
+          alias: symKey("TSFAd_EQ"),
+        }),
+      ).toMatchObject({
         listing: "TSM",
         currency: "USD",
       });
-      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([
-        { symbol: "TSFAd_EQ", date: "2026-01-01", close: 200, currency: "USD", split: 1 },
-      ]);
+      expect(
+        await store.getRange({
+          key: `isin:${String(isin).toUpperCase()}:EUR`,
+          alias: symKey("TSFAd_EQ"),
+        }),
+      ).toEqual([{ date: "2026-01-01", close: 200, currency: "USD", split: 1 }]);
     } else {
       expect(requested).toEqual(["TSFA.DE"]);
-      expect(await store.getCoverage("local", "TSFAd_EQ")).toBeNull();
-      expect(await store.getRange("local", "TSFAd_EQ")).toEqual([]);
+      expect(await legacyPrices(store).getCoverage("local", "TSFAd_EQ")).toBeNull();
+      expect(await legacyPrices(store).getRange("local", "TSFAd_EQ")).toEqual([]);
     }
   },
 );
@@ -727,11 +797,11 @@ test("broker sync route forwards force and keeps problems in response", async ()
     outcomes: [{ status: "synced" }],
     problems: ["ibkr: unavailable"],
   });
-  expect(brokerSync).toHaveBeenCalledWith(true, undefined, false);
+  expect(brokerSync).toHaveBeenCalledWith(true, ["holdings", "history"], undefined, false);
   await investingApp.request("/api/brokers/sync?force=true&rebuildOrders=true", {
     method: "POST",
   });
-  expect(brokerSync).toHaveBeenLastCalledWith(true, undefined, true);
+  expect(brokerSync).toHaveBeenLastCalledWith(true, ["holdings", "history"], undefined, true);
 });
 
 test("broker sync passes host deadline to broker work", async () => {
@@ -741,7 +811,7 @@ test("broker sync passes host deadline to broker work", async () => {
   const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
 
   expect(response.status).toBe(200);
-  expect(brokerSync).toHaveBeenCalledWith(false, 1_234, false);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings", "history"], 1_234, false);
 });
 
 test("broker sync starts server-side price orchestration despite broker problems", async () => {
@@ -755,6 +825,7 @@ test("broker sync starts server-side price orchestration despite broker problems
     provider: provider as never,
     priceSyncTargets: () => [
       {
+        instrumentKey: `sym:${"CLOSED"}:${"EUR"}`,
         kind: "closed",
         symbol: "CLOSED",
         ticker: "CLOSED",
@@ -763,12 +834,87 @@ test("broker sync starts server-side price orchestration despite broker problems
         backfillFrom: "2024-01-01",
       },
     ],
-    priceSyncPaceMs: 0,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
   await investingApp.request("/api/brokers/sync", { method: "POST" });
   expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("the holdings lane request never starts price sync", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: symKey("CLOSED", "EUR"),
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=holdings", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+  expect(brokerSync).toHaveBeenCalledWith(false, ["holdings"], undefined, false);
+  expect(provider.get).not.toHaveBeenCalled();
+});
+
+test("the history lane request starts price sync and asks only for history", async () => {
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({ bars: [], problems: [] }),
+  };
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({
+    brokerSync,
+    provider: provider as never,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: symKey("CLOSED", "EUR"),
+        kind: "closed",
+        symbol: "CLOSED",
+        ticker: "CLOSED",
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: "2024-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  await investingApp.request("/api/brokers/sync?lane=history", { method: "POST" });
+
+  expect(brokerSync).toHaveBeenCalledWith(false, ["history"], undefined, false);
+  expect(provider.get).toHaveBeenCalledOnce();
+});
+
+test("an unknown lane is rejected without starting any work", async () => {
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({ brokerSync });
+
+  const response = await investingApp.request("/api/brokers/sync?lane=everything", {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["Unknown lane: everything"] });
+  expect(brokerSync).not.toHaveBeenCalled();
 });
 
 test("broker sync route converts unexpected failures into a useful response", async () => {
@@ -863,19 +1009,33 @@ test("reporting stays disabled when SENTRY_DSN is absent", () => {
   expect(sentry.captureException).not.toHaveBeenCalled();
 });
 
-test("price cache delete purges store and returns success", async () => {
-  const store = createInMemoryPriceStore();
+test("without a database the cache route clears the local shared store", async () => {
+  const store = createInMemorySharedPriceStore();
   const onPriceDataChanged = vi.fn();
-  await store.upsert("local", [
+  const clearPriceCache = vi.fn(async () => undefined);
+  await legacyPrices(store).upsert("local", [
     { symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" },
   ]);
-  const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", {
-    method: "DELETE",
-  });
+  const response = await createApp({
+    store,
+    clearPriceCache,
+    onPriceDataChanged,
+  }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
-  expect(await store.getRange("local", "ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(clearPriceCache).toHaveBeenCalledOnce();
   expect(onPriceDataChanged).toHaveBeenCalledOnce();
+});
+
+test("with a database the cache route refuses: prices are shared, not one user's", async () => {
+  const store = createInMemorySharedPriceStore();
+  const response = await createApp({ store, sharedPriceStore: true }).request("/api/prices/cache", {
+    method: "DELETE",
+  });
+  expect(response.status).toBe(405);
+  expect(await response.json()).toMatchObject({
+    problems: ["Shared price data cannot be cleared from one account"],
+  });
 });
 
 test("summary route composes metrics, cached sectors, and top positions; sector failure degrades to Unknown", async () => {
@@ -926,6 +1086,14 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
       },
     },
   );
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPL", {
+    kind: "stock",
+    sector: "Technology",
+    industry: "Hardware",
+    source: "provider",
+  });
+  const sectorProfile = vi.fn(async () => null);
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({
       ...dashboard,
@@ -933,27 +1101,14 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
       composition: buildCompositionProjection(dashboard.positions),
       problems: [],
     })),
-    sectorProfile: vi.fn(async (symbol: string) =>
-      symbol === "MYST"
-        ? null
-        : {
-            kind: "stock" as const,
-            sector: "Technology",
-            industry: "Hardware",
-            source: "provider" as const,
-          },
-    ),
-    sectorStore: (() => {
-      const map = new Map<string, SectorProfile>();
-      return {
-        get: async (symbol: string) => map.get(symbol) ?? null,
-        set: async (symbol: string, profile: SectorProfile) => void map.set(symbol, profile),
-      };
-    })(),
+    sectorProfile,
+    sectorStore,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
   const response = await investingApp.request("/api/investing/summary");
+  /* #309: even with consent, the summary reads stored profiles only. */
+  expect(sectorProfile).not.toHaveBeenCalled();
   expect(response.status).toBe(200);
   const payload = (await response.json()) as {
     metrics: unknown;
@@ -976,7 +1131,7 @@ test("summary route composes metrics, cached sectors, and top positions; sector 
   ]);
 });
 
-test("summary route fetches a renamed holding's sector under the ticker price sync resolved it to", async () => {
+test("summary route reads a renamed holding's stored sector under the ticker price sync resolved it to, without a provider call", async () => {
   const dashboard = emptyInvestingDashboard();
   dashboard.positions.push({
     symbol: "OAC_US_EQ",
@@ -1000,13 +1155,15 @@ test("summary route fetches a renamed holding's sector under the ticker price sy
       firstBuyDate: null,
     },
   });
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
-    symbol: "OAC_US_EQ",
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:USD", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "HIMS",
     currency: "USD",
+    provider: "yahoo",
   });
   const sectorProfile = vi.fn(async (symbol: string) =>
     symbol === "HIMS"
@@ -1018,10 +1175,18 @@ test("summary route fetches a renamed holding's sector under the ticker price sy
         }
       : null,
   );
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("HIMS", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Health Information Services",
+    source: "provider",
+  });
   const investingApp = createApp({
     dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
     store,
     sectorProfile,
+    sectorStore,
     marketDataConsentStore: acceptedConsentStore(),
   });
 
@@ -1030,8 +1195,50 @@ test("summary route fetches a renamed holding's sector under the ticker price sy
   expect(response.status).toBe(200);
   const payload = (await response.json()) as { sectors: Array<{ sector: string; weight: number }> };
   expect(payload.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
-  expect(sectorProfile).toHaveBeenCalledWith("HIMS");
-  expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(sectorProfile).not.toHaveBeenCalled();
+});
+
+test("GET sectors with consent still fetches a never-attempted symbol under its listing ticker and stores the profile", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(pricedPosition("OAC_US_EQ", 100));
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:EUR", {
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "HIMS",
+    currency: "USD",
+    provider: "yahoo",
+  });
+  const sectorStore = createInMemorySectorProfileStore();
+  const sectorProfile = vi.fn(async (symbol: string) =>
+    symbol === "HIMS"
+      ? {
+          kind: "stock" as const,
+          sector: "Healthcare",
+          industry: "Health Information Services",
+          source: "provider" as const,
+        }
+      : null,
+  );
+  const investingApp = createApp({
+    dashboardReader: async () => dashboard,
+    store,
+    sectorProfile,
+    sectorStore,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  const response = await investingApp.request("/api/investing/sectors");
+
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { sectors: unknown }).sectors).toEqual([
+    { sector: "Healthcare", weight: 1 },
+  ]);
+  expect(sectorProfile).toHaveBeenCalledWith("HIMS", { deadlineMs: expect.any(Number) });
+  expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ", expect.anything());
+  expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare" });
 });
 
 test("summary route includes a position's description in top positions when set", async () => {
@@ -1385,7 +1592,11 @@ test("health answers under /api/ too, because that is the only path a mount forw
   const response = await runtime.request("/api/investing/health");
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+  expect(await response.json()).toEqual({
+    ok: true,
+    service: "investing-server",
+    sharedPriceStore: false,
+  });
 });
 
 test("detailed health fails when Trading 212 data is stale", async () => {
@@ -1566,13 +1777,15 @@ test("GET position sector finds a renamed holding's profile under the ticker pri
     industry: "Health Information Services",
     source: "provider",
   });
-  const store = createInMemoryPriceStore();
-  await store.putCoverage("local", {
-    symbol: "OAC_US_EQ",
+  const store = createInMemorySharedPriceStore();
+  // The series key carries the position's currency; the coverage records the
+  // listing's quote currency (issue #307).
+  await store.putCoverage("sym:OAC_US_EQ:EUR", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "HIMS",
     currency: "USD",
+    provider: "yahoo",
   });
   const investingApp = createApp({ store, sectorStore });
 
@@ -2149,4 +2362,630 @@ test("a correction write raises the sector revision so the very next sector read
   };
   expect(after.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
   expect(after.revision).toBe(1);
+});
+
+test("a price run hands its deadline to every partner slot: OpenFIGI, the crumb and the chart", async () => {
+  const urls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("openfigi"))
+        return new Response(JSON.stringify([{ data: [{ ticker: "ASML", exchCode: "NA" }] }]));
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb");
+      return new Response(
+        JSON.stringify({
+          chart: {
+            result: [
+              {
+                meta: { currency: "EUR" },
+                timestamp: [1_700_000_000],
+                indicators: { quote: [{ close: [100] }] },
+              },
+            ],
+          },
+        }),
+      );
+    }),
+  );
+  const partnerBudget = createImmediatePartnerBudget();
+  const deadline = Date.now() + 3_600_000;
+  const investingApp = createPacedApp({
+    partnerBudgetClient: partnerBudget,
+    priceSyncDeadline: () => deadline,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: `isin:${"NL0010273215"}:${"EUR"}`,
+        kind: "current",
+        symbol: "ASML",
+        ticker: "ASML",
+        exchange: "AMS",
+        currency: "EUR",
+        isin: "NL0010273215",
+        backfillFrom: "2026-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+  try {
+    const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+    expect(response.status).toBe(200);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  const slots = partnerBudget.calls.filter((call) => call.call === "awaitSlot");
+  expect(new Set(slots.map((call) => call.key.partner))).toEqual(new Set(["openfigi", "yahoo"]));
+  expect(slots.length).toBe(urls.length);
+  // The two crumb slots belong to the shared negotiation, which has its own 10 s
+  // bound; every other slot carries the run's deadline.
+  const own = slots.filter((call) => call.deadlineMs === deadline);
+  const negotiation = slots.filter((call) => call.deadlineMs !== deadline);
+  expect(negotiation).toHaveLength(2);
+  for (const call of negotiation) {
+    expect(call.key.partner).toBe("yahoo");
+    expect(call.deadlineMs).toBeLessThanOrEqual(Date.now() + 10_000);
+    expect(call.deadlineMs).toBeGreaterThan(Date.now());
+  }
+  expect(own).toHaveLength(slots.length - 2);
+});
+
+/* A budget stop on the OpenFIGI fallback is "no slot", not "no such listing".
+ * Only a genuine Yahoo and OpenFIGI answer may mark a closed position delisted. */
+test.each([
+  ["PartnerBudgetUnavailable", () => new PartnerBudgetUnavailable({ message: "store down" })],
+  ["PartnerWait", () => new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 600_000) })],
+])(
+  "a closed position whose OpenFIGI slot fails with %s is not recorded as delisted",
+  async (_name, makeError) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "https://fc.yahoo.com/")
+          return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+        if (url.includes("getcrumb")) return new Response("crumb");
+        if (url.includes("/search")) return new Response(JSON.stringify({ quotes: [] }));
+        return new Response(
+          JSON.stringify({ chart: { result: null, error: { code: "Not Found" } } }),
+          {
+            status: 404,
+          },
+        );
+      }),
+    );
+    const immediate = createImmediatePartnerBudget();
+    const partnerBudget = {
+      ...immediate,
+      awaitSlot: async (key: { partner: string }, deadlineMs?: number) => {
+        if (key.partner === "openfigi") throw makeError();
+        await immediate.awaitSlot(key as never, deadlineMs);
+      },
+    };
+    const store = createInMemorySharedPriceStore();
+    const investingApp = createPacedApp({
+      partnerBudgetClient: partnerBudget,
+      store,
+      priceSyncDeadline: () => Date.now() + 3_600_000,
+      priceSyncTargets: () => [
+        {
+          instrumentKey: `isin:${"US8740391003"}:${"EUR"}`,
+          kind: "closed",
+          symbol: "GONEd_EQ",
+          ticker: "GONEd_EQ",
+          exchange: "UNKNOWN",
+          currency: "EUR",
+          isin: "US8740391003",
+          backfillFrom: "2026-01-01",
+        },
+      ],
+      marketDataConsentStore: acceptedConsentStore(),
+    });
+    try {
+      const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+      const progress = (await response.json()) as { status: string; problems: string[] };
+      expect(progress.status).toBe("paused");
+      expect(progress.problems).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const coverage = await legacyPrices(store).getCoverage("local", "GONEd_EQ");
+    expect(coverage?.delistedSince).toBeUndefined();
+    expect(coverage?.listingMissingSince).toBeUndefined();
+  },
+);
+
+test("the identifier route answers 503 with problems when the budget has no slot", async () => {
+  const identifierProvider = {
+    sourceKey: "openfigi",
+    priority: 10,
+    get: vi.fn(async () => {
+      throw new PartnerBudgetUnavailable({ message: "store down" });
+    }),
+  };
+  const investingApp = createApp({ identifierProvider: identifierProvider as never });
+  const response = await investingApp.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(response.status).toBe(503);
+  const body = (await response.json()) as { problems: string[] };
+  expect(body.problems.length).toBeGreaterThan(0);
+});
+
+test("report route serves the dashboard's realised section", async () => {
+  const report = emptyRealizedReport("EUR", "2026-11-11", ["A label needs attention."]);
+  const investingApp = createApp({
+    dashboardReader: async () => ({ ...emptyInvestingDashboard(), realized: report }),
+  });
+
+  const response = await investingApp.request("/api/investing/reports/realized");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(report);
+});
+
+test("report route degrades to an empty report when the read fails", async () => {
+  const problemReporter = vi.fn();
+  const investingApp = createApp({
+    dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")),
+    problemReporter,
+  });
+
+  const response = await investingApp.request("/api/investing/reports/realized");
+
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as {
+    notice: string;
+    problems: string[];
+    disposals: unknown[];
+  };
+  expect(body.disposals).toEqual([]);
+  expect(body.notice).toMatch(/does not file taxes/);
+  expect(body.problems).toEqual(["The realised report could not be loaded."]);
+  expect(problemReporter).toHaveBeenCalledWith({
+    source: "realized-report-read",
+    problems: ["read failed"],
+  });
+});
+
+test("account-wrapper route persists labels, drops unknown ones and rejects a non-array body", async () => {
+  const accountWrapperStore = createInMemoryAccountWrapperStore();
+  const investingApp = createApp({ accountWrapperStore });
+
+  const put = await investingApp.request("/api/investing/account-wrappers", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      entries: [
+        { broker: "trading212", account: "ISA", wrapper: "isa" },
+        { broker: "ibkr", account: "Main", wrapper: "not-a-wrapper" },
+      ],
+    }),
+  });
+  expect(put.status).toBe(200);
+  expect(await put.json()).toEqual({
+    tenantId: "local",
+    entries: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+  });
+
+  const get = await investingApp.request("/api/investing/account-wrappers");
+  expect(await get.json()).toEqual({
+    tenantId: "local",
+    entries: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+  });
+
+  const rejected = await investingApp.request("/api/investing/account-wrappers", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries: "nope" }),
+  });
+  expect(rejected.status).toBe(400);
+});
+
+/** The test-side translation from the old per-tenant price calls to the shared
+ *  instrument keys (issue #307); production callers build the same keys. */
+const symKey = (symbol: string, currency = "EUR"): string =>
+  priceInstrumentKey({ symbol, currency });
+function legacyPrices(store: SharedPriceStore) {
+  return {
+    async upsert(
+      _tenant: string,
+      bars: readonly (SharedPriceBar & { symbol?: string })[],
+    ): Promise<void> {
+      const groups = new Map<string, SharedPriceBar[]>();
+      for (const bar of bars) {
+        const key = symKey(bar.symbol ?? "", bar.currency);
+        const { symbol: _symbol, ...rest } = bar;
+        groups.set(key, [...(groups.get(key) ?? []), rest]);
+      }
+      await Promise.all([...groups].map(([key, rows]) => store.upsert(key, rows)));
+    },
+    async getRange(tenant: string, symbol: string, from?: string, to?: string) {
+      void tenant;
+      return store.getRange({ key: symKey(symbol) }, from, to);
+    },
+    async getCoverage(tenant: string, symbol: string) {
+      void tenant;
+      const coverage = await store.getCoverage({ key: symKey(symbol) });
+      return coverage === null ? null : { ...coverage, symbol };
+    },
+    async putCoverage(_tenant: string, coverage: PriceCoverage) {
+      const { symbol, ...rest } = coverage;
+      return store.putCoverage(symKey(symbol, coverage.currency), {
+        ...rest,
+        provider: "unknown",
+      });
+    },
+  };
+}
+
+test("POST /api/sync/continue refuses the wrong caller and validates runId and hop", async () => {
+  vi.stubEnv("CRON_SECRET", "cron-secret");
+  const syncRun = createApp({
+    syncRunStore: createMemorySyncRunStore(),
+    syncRunBackground: async () => undefined,
+  });
+  const body = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({ tenantId: "local", runId: "run-1", hop: 1, ...over });
+  const send = (payload: string, authorized = true) =>
+    syncRun.request("/api/sync/continue", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorized ? { authorization: "Bearer cron-secret" } : {}),
+      },
+      body: payload,
+    });
+
+  // No bearer secret: the route is machine-only.
+  expect((await send(body(), false)).status).toBe(401);
+  // Hop above MAX_HOPS is a schema-level 400, not a silent no-op.
+  expect((await send(body({ hop: 21 }))).status).toBe(400);
+  expect((await send(body({ runId: "" }))).status).toBe(400);
+  // A run id that is not the stored one is accepted and does no work.
+  const accepted = await send(body({ runId: "not-the-run" }));
+  expect(accepted.status).toBe(202);
+  expect(await accepted.json()).toEqual({ accepted: false });
+});
+
+test("POST /api/sync/refresh names the missing CRON_SECRET on a hosted host", async () => {
+  vi.stubEnv("VERCEL", "1");
+  vi.stubEnv("CRON_SECRET", "");
+  const syncRun = createApp({});
+
+  const response = await syncRun.request("/api/sync/refresh", { method: "POST" });
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("CRON_SECRET");
+});
+
+/* Jev-03 (issue #136): the app is the tenant-aware caller of the identifier
+ * seam. It supplies the owner's override, and it passes the model-selection
+ * flag only when market-data consent AND the owner's enable setting agree. */
+
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
+
+const identifierProviderReturning = () => {
+  const calls: unknown[] = [];
+  return {
+    calls,
+    provider: {
+      sourceKey: "openfigi",
+      priority: 10,
+      get: vi.fn(async (request: unknown) => {
+        calls.push(request);
+        return {
+          match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" },
+          problems: [],
+          resolution: { tier: "provider", confidence: null, candidates: [] },
+        };
+      }),
+    },
+  };
+};
+
+const acceptedConsent = () => ({
+  get: vi.fn(async () => ({
+    tenantId: "local",
+    accepted: true,
+    decidedAt: "2026-11-11T00:00:00.000Z",
+    disclosureVersion: "yahoo-finance-v1",
+  })),
+  set: vi.fn(async () => undefined),
+});
+
+test("identifier selection is allowed only with market-data consent AND the enable setting", async () => {
+  const { calls, provider } = identifierProviderReturning();
+  const setting = createInMemoryIdentifierSelectionSettingStore();
+  const consent = acceptedConsent();
+
+  const withoutSetting = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: consent as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await withoutSetting.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(calls.at(-1)).toMatchObject({ isin: "NL0010273215", allowModelSelection: false });
+
+  await setting.set("local", true);
+  const withSetting = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: consent as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await withSetting.request("/api/market-data/identifier?isin=NL0010273215&name=ASML&currency=EUR");
+  expect(calls.at(-1)).toMatchObject({
+    isin: "NL0010273215",
+    allowModelSelection: true,
+    instrument: { name: "ASML", currency: "EUR" },
+  });
+
+  // Consent is the other half of the gate.
+  const noConsent = createApp({
+    identifierProvider: provider as never,
+    marketDataConsentStore: {
+      get: async () => ({
+        tenantId: "local",
+        accepted: false,
+        decidedAt: null,
+        disclosureVersion: "yahoo-finance-v1",
+      }),
+      set: async () => undefined,
+    } as never,
+    identifierSelectionSettingStore: setting,
+  });
+  await noConsent.request("/api/market-data/identifier?isin=NL0010273215");
+  expect(calls.at(-1)).toMatchObject({ allowModelSelection: false });
+});
+
+test("the owner's identifier override is passed to the seam and outranks it", async () => {
+  const { calls, provider } = identifierProviderReturning();
+  const overrides = createInMemoryIdentifierOverrideStore();
+  await overrides.set("local", { NL0010273215: { ticker: "ASML", exchange: "AMS" } });
+  const investingApp = createApp({
+    identifierProvider: provider as never,
+    identifierOverrideStore: overrides,
+  });
+
+  await investingApp.request("/api/market-data/identifier?isin=nl0010273215");
+
+  expect(calls.at(-1)).toMatchObject({
+    isin: "NL0010273215",
+    override: { ticker: "ASML", exchange: "AMS" },
+  });
+});
+
+test("the identifier-selection and override routes persist per tenant and validate input", async () => {
+  const setting = createInMemoryIdentifierSelectionSettingStore();
+  const overrides = createInMemoryIdentifierOverrideStore();
+  const investingApp = createApp({
+    identifierSelectionSettingStore: setting,
+    identifierOverrideStore: overrides,
+    identifierSelectorForTenant: () => undefined,
+  });
+
+  const initial = await investingApp.request("/api/investing/identifier-selection");
+  expect(await initial.json()).toEqual({ enabled: false, available: true });
+
+  const put = await investingApp.request("/api/investing/identifier-selection", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  });
+  expect(put.status).toBe(200);
+  expect(await setting.get("local")).toBe(true);
+
+  const putOverrides = await investingApp.request("/api/investing/identifier-overrides", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      overrides: {
+        nl0010273215: { ticker: "asml", exchange: "ams" },
+        "not-an-isin": { ticker: "X" },
+        NL0000000002: { ticker: "" },
+      },
+    }),
+  });
+  expect(await putOverrides.json()).toEqual({
+    overrides: { NL0010273215: { ticker: "ASML", exchange: "AMS" } },
+  });
+  const read = await investingApp.request("/api/investing/identifier-overrides");
+  expect(await read.json()).toEqual({
+    overrides: { NL0010273215: { ticker: "ASML", exchange: "AMS" } },
+  });
+});
+
+const cashFlowSuggestion = (over: Record<string, unknown> = {}) => ({
+  broker: "trading212",
+  typeKey: "NEW_KIND",
+  rawType: "NEW_KIND",
+  kind: "withdrawal" as const,
+  confidence: 0.82,
+  state: "pending" as const,
+  amount: 100,
+  sign: 1 as const,
+  currency: "EUR",
+  description: "Trading 212 NEW_KIND",
+  createdAt: "2026-11-11T10:00:00.000Z",
+  ...over,
+});
+
+test("cash-flow suggestions are listed with their sign-change flag and have no effect on rules", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion() as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const list = (await (await syncRun.request("/api/investing/cash-flow-suggestions")).json()) as {
+    enabled: boolean;
+    count: number;
+    pending: Array<Record<string, unknown>>;
+  };
+  expect(list).toMatchObject({ enabled: false, count: 1 });
+  expect(list.pending[0]).toMatchObject({
+    rawType: "NEW_KIND",
+    kind: "withdrawal",
+    confidence: 0.82,
+    amount: 100,
+    sign: 1,
+    signChange: true,
+  });
+  // An unconfirmed suggestion is not a rule.
+  const rules = (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+    rules: unknown[];
+  };
+  expect(rules.rules).toEqual([]);
+});
+
+test("a sign-changing confirmation needs the acknowledged before/after, then creates the rule", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion() as never]);
+  const syncRun = createApp({ cashFlowStore });
+  const confirm = (body: Record<string, unknown>) =>
+    syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        broker: "trading212",
+        typeKey: "NEW_KIND",
+        kind: "withdrawal",
+        ...body,
+      }),
+    });
+
+  const refused = await confirm({});
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toEqual({
+    reason: "sign-change-unacknowledged",
+    before: 100,
+    after: -100,
+  });
+  expect(await cashFlowStore.listRules()).toEqual([]);
+
+  const accepted = await confirm({ acknowledgeSignChange: true });
+  expect(accepted.status).toBe(200);
+  const body = (await accepted.json()) as { rule: Record<string, unknown> };
+  expect(body.rule).toMatchObject({
+    broker: "trading212",
+    typeKey: "NEW_KIND",
+    kind: "withdrawal",
+  });
+  expect(await cashFlowStore.listRules()).toHaveLength(1);
+  // The suggestion is resolved, so it leaves the pending list.
+  const list = (await (await syncRun.request("/api/investing/cash-flow-suggestions")).json()) as {
+    count: number;
+  };
+  expect(list.count).toBe(0);
+});
+
+test("a non-sign-changing confirmation creates the rule without acknowledgement", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const response = await syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND", kind: "deposit" }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await cashFlowStore.listRules()).toEqual([
+    expect.objectContaining({ kind: "deposit", broker: "trading212", typeKey: "NEW_KIND" }),
+  ]);
+});
+
+test("a rejection is remembered and creates no rule", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const response = await syncRun.request("/api/investing/cash-flow-suggestions/reject", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND" }),
+  });
+
+  expect(response.status).toBe(200);
+  expect((await cashFlowStore.listSuggestions())[0]!.state).toBe("rejected");
+  expect(await cashFlowStore.listRules()).toEqual([]);
+});
+
+test("invalid confirmations are 400 and an unknown type is 404", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveSuggestions([cashFlowSuggestion({ kind: "deposit" }) as never]);
+  const syncRun = createApp({ cashFlowStore });
+  const confirm = (body: Record<string, unknown>) =>
+    syncRun.request("/api/investing/cash-flow-suggestions/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  expect((await confirm({ broker: "trading212", typeKey: "NEW_KIND", kind: "other" })).status).toBe(
+    400,
+  );
+  expect(
+    (await confirm({ broker: "trading212", typeKey: "NEW_KIND", kind: "nonsense" })).status,
+  ).toBe(400);
+  expect(
+    (await confirm({ broker: "trading212", typeKey: "UNKNOWN_KIND", kind: "deposit" })).status,
+  ).toBe(404);
+});
+
+test("the suggestion step is gated on an explicit owner setting, default off", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  const syncRun = createApp({ cashFlowStore });
+
+  expect(
+    await (await syncRun.request("/api/investing/cash-flow-suggestions/settings")).json(),
+  ).toEqual({ enabled: false });
+  const put = await syncRun.request("/api/investing/cash-flow-suggestions/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  });
+  expect(put.status).toBe(200);
+  expect(await cashFlowStore.suggestionsEnabled()).toBe(true);
+  expect(
+    (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+      enabled: boolean;
+    },
+  ).toMatchObject({ enabled: true });
+});
+
+test("rules are exportable owner data and removable", async () => {
+  const cashFlowStore = createMemoryCashFlowStore();
+  await cashFlowStore.saveRules([
+    {
+      broker: "trading212",
+      typeKey: "NEW_KIND",
+      kind: "deposit",
+      confirmedAt: "2026-11-11T10:00:00.000Z",
+    },
+  ]);
+  const syncRun = createApp({ cashFlowStore });
+
+  const exported = (await (await syncRun.request("/api/investing/cash-flow-rules")).json()) as {
+    rules: unknown[];
+  };
+  expect(exported.rules).toEqual([
+    {
+      broker: "trading212",
+      typeKey: "NEW_KIND",
+      kind: "deposit",
+      confirmedAt: "2026-11-11T10:00:00.000Z",
+    },
+  ]);
+
+  const removed = await syncRun.request("/api/investing/cash-flow-rules/remove", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", typeKey: "NEW_KIND" }),
+  });
+  expect(removed.status).toBe(200);
+  expect(await cashFlowStore.listRules()).toEqual([]);
 });

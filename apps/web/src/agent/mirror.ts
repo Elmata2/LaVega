@@ -1,14 +1,16 @@
 import {
   amsterdamDay,
   PLAN_THRESHOLDS,
+  isRuleV2,
   type AgentMirror,
+  type LegacyRule,
   type PlanResult,
   type Rule,
   type ScheduledFlow,
 } from "@lavega/core";
 import { instinctCopy } from "../copy/instinct.js";
 
-/* The browser half of the daily message (ADR 0010). The server reads the bank
+/* The browser half of the daily message (ADR 0014). The server reads the bank
  * itself at night but cannot see the vault, so the browser hands it the three
  * things it needs to phrase a message: the category rules, the dates of coming
  * deadlines, and one card-offer figure. Nothing else goes. No flow amounts, no
@@ -22,6 +24,32 @@ const MAX_RULES = 500;
 const FULL_YEAR_MONTHS = 12;
 
 const clip = (value: string, max: number): string => value.slice(0, max);
+
+/** The inverse of core's `lowerRule`, for exactly the shape it produces: one text
+ *  `contains` condition on `text`, one `setCategory` action, `stopProcessing`,
+ *  no `effectiveFrom`. The app holds every legacy rule lowered, and the server
+ *  re-lowers a legacy row with the same function, so it matches identically.
+ *  Any other v2 rule has semantics a `{match, category}` row cannot carry and is
+ *  not mirrored (its transactions use the built-in categories on the server). */
+function toLegacyRule(rule: Rule): LegacyRule | null {
+  if (!isRuleV2(rule)) return rule;
+  const [condition, ...moreConditions] = rule.conditions;
+  const [action, ...moreActions] = rule.actions;
+  if (
+    !condition ||
+    !action ||
+    moreConditions.length > 0 ||
+    moreActions.length > 0 ||
+    condition.kind !== "text" ||
+    condition.target !== "text" ||
+    condition.op !== "contains" ||
+    action.kind !== "setCategory" ||
+    rule.stopProcessing !== true ||
+    rule.effectiveFrom !== undefined
+  )
+    return null;
+  return { id: rule.id, match: condition.value, category: action.category };
+}
 
 export function buildMirror(i: {
   rules: Rule[];
@@ -48,6 +76,10 @@ export function buildMirror(i: {
 
   return {
     rules: i.rules
+      .flatMap((r) => {
+        const legacy = toLegacyRule(r);
+        return legacy ? [legacy] : [];
+      })
       .slice(0, MAX_RULES)
       .map((r) => ({ id: r.id, match: clip(r.match, 200), category: clip(r.category, 100) })),
     dueDates,

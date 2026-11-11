@@ -1,12 +1,9 @@
-import { jsonSchema, tool, type ToolSet } from "ai";
-import {
-  isRiskTolerance,
-  RISK_TOLERANCES,
-  type AgentMemoryRepository,
-  type Goal,
-  type MemorySummary,
-  type RiskTolerance,
-  type Thesis,
+import type {
+  AgentMemoryRepository,
+  Goal,
+  MemorySummary,
+  RiskTolerance,
+  Thesis,
 } from "@lavega/database";
 import type { PortfolioAgentId } from "./portfolioAgent.js";
 
@@ -25,7 +22,6 @@ export type ThreadMemory = {
   threadId: string;
 };
 
-const RECALL_LIMIT = 20;
 const RISK_LABEL: Record<RiskTolerance, string> = {
   conservative: "Conservative",
   balanced: "Balanced",
@@ -82,130 +78,4 @@ export function renderMemoryBrief(summary: MemorySummary, named: readonly string
 - Use note_observation, without asking, for something the owner said that is worth bringing up in a later conversation.
 - Use recall_memory for theses of holdings not shown here, older observations and past conversations.`);
   return lines.join("\n");
-}
-
-const optionalText = { type: "string" as const };
-
-export function memoryTools(memory: ThreadMemory, held: ReadonlySet<string>): ToolSet {
-  const { repository, agentId, threadId } = memory;
-  const symbolOrNull = (symbol: string | undefined) => symbol?.trim().toUpperCase() || null;
-  return {
-    recall_memory: tool({
-      description:
-        "Read saved memory. theses: the owner's current theses. goals: their goals. observations: what you noted in earlier conversations. threads: titles and dates of your earlier conversations with them. Filter by symbol, and for observations and threads by a start date.",
-      inputSchema: jsonSchema<{
-        kind: "theses" | "goals" | "observations" | "threads";
-        symbol?: string;
-        since?: string;
-      }>({
-        type: "object",
-        properties: {
-          kind: { type: "string", enum: ["theses", "goals", "observations", "threads"] },
-          symbol: optionalText,
-          since: { type: "string", description: "YYYY-MM-DD" },
-        },
-        required: ["kind"],
-        additionalProperties: false,
-      }),
-      execute: async ({ kind, symbol, since }) => {
-        const filter = { symbol: symbolOrNull(symbol) ?? undefined };
-        const from = since && /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : undefined;
-        return repository.recall(
-          kind === "observations"
-            ? { kind, agentId, ...filter, since: from }
-            : kind === "threads"
-              ? { kind, agentId, since: from }
-              : { kind, ...filter },
-          RECALL_LIMIT,
-        );
-      },
-    }),
-    save_thesis: tool({
-      description:
-        "Save the owner's thesis for a holding, after they confirmed it. Replaces the previous thesis for that symbol and makes it current.",
-      inputSchema: jsonSchema<{
-        symbol: string;
-        why: string;
-        worth?: string;
-        entry?: string;
-        wrong_if?: string;
-      }>({
-        type: "object",
-        properties: {
-          symbol: { type: "string" },
-          why: { type: "string", description: "Why they own it." },
-          worth: { type: "string", description: "What they think it is worth." },
-          entry: { type: "string", description: "Why they bought when they did." },
-          wrong_if: { type: "string", description: "What would prove them wrong." },
-        },
-        required: ["symbol", "why"],
-        additionalProperties: false,
-      }),
-      execute: async ({ symbol, why, worth, entry, wrong_if }) => {
-        const key = symbolOrNull(symbol);
-        if (!key || !held.has(key)) return `Not saved: the owner does not hold ${symbol}.`;
-        if (!why.trim()) return "Not saved: a thesis needs the reason they own it.";
-        const thesis = await repository.confirmThesis(key, {
-          why: why.trim(),
-          worth: worth?.trim() || null,
-          entry: entry?.trim() || null,
-          wrongIf: wrong_if?.trim() || null,
-        });
-        return { saved: "thesis", symbol: thesis.symbol };
-      },
-    }),
-    save_goal: tool({
-      description:
-        "Save a goal the owner confirmed: a target outcome for the whole portfolio, or for one holding when symbol is given.",
-      inputSchema: jsonSchema<{ text: string; symbol?: string }>({
-        type: "object",
-        properties: { text: { type: "string" }, symbol: optionalText },
-        required: ["text"],
-        additionalProperties: false,
-      }),
-      execute: async ({ text, symbol }) => {
-        if (!text.trim()) return "Not saved: the goal is empty.";
-        const goal = await repository.confirmGoal({
-          symbol: symbolOrNull(symbol),
-          text: text.trim(),
-          sourceThreadId: threadId,
-        });
-        return { saved: "goal", id: goal.id };
-      },
-    }),
-    note_observation: tool({
-      description:
-        "Note something the owner said that is worth bringing up later. Belongs to this conversation and is deleted with it.",
-      inputSchema: jsonSchema<{ text: string; symbol?: string }>({
-        type: "object",
-        properties: { text: { type: "string" }, symbol: optionalText },
-        required: ["text"],
-        additionalProperties: false,
-      }),
-      execute: async ({ text, symbol }) => {
-        if (!text.trim()) return "Not noted: the observation is empty.";
-        await repository.addObservation({
-          agentId,
-          threadId,
-          symbol: symbolOrNull(symbol),
-          text: text.trim(),
-        });
-        return { noted: true };
-      },
-    }),
-    set_risk_tolerance: tool({
-      description: "Save the owner's risk tolerance after they told you what it is.",
-      inputSchema: jsonSchema<{ level: RiskTolerance }>({
-        type: "object",
-        properties: { level: { type: "string", enum: [...RISK_TOLERANCES] } },
-        required: ["level"],
-        additionalProperties: false,
-      }),
-      execute: async ({ level }) => {
-        if (!isRiskTolerance(level)) return "Not saved: use conservative, balanced or aggressive.";
-        await repository.setRiskTolerance(level);
-        return { saved: "risk tolerance", level };
-      },
-    }),
-  };
 }

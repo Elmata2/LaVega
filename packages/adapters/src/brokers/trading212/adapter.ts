@@ -15,9 +15,26 @@ import {
   hasBrokerSyncTime,
   historyPending,
   type BrokerAccessAdapter,
+  type BrokerHistoryStream,
   type BrokerResult,
   type BrokerSyncResume,
 } from "../BrokerAccessAdapter.js";
+import { stableTradeId } from "../brokerSnapshot.js";
+import { DateTime } from "effect";
+import {
+  createMemoryPartnerBudgetClient,
+  isPartnerBudgetUnavailable,
+  isPartnerWait,
+  type PartnerBudgetClient,
+  type PartnerSeen,
+} from "../../partnerBudget/PartnerBudget.js";
+import {
+  accountScopeId,
+  partnerKey,
+  type AccountLimitName,
+  type AccountScopeId,
+  type PartnerKey,
+} from "../../partnerBudget/limits.js";
 
 export type Trading212Config = {
   token: string;
@@ -25,6 +42,9 @@ export type Trading212Config = {
   baseUrl: string;
   diagnostics?: (event: Trading212DiagnosticEvent) => void;
   resume?: BrokerSyncResume;
+  /** Where request slots come from. Defaults to a budget of this adapter's own,
+   *  so a caller that shares none still paces its requests. */
+  partnerBudget?: PartnerBudgetClient;
 };
 
 type Trading212RequestConfig = Trading212Config & { deadlineMs?: number };
@@ -40,6 +60,8 @@ export type Trading212DiagnosticEvent =
       resetAt: string | null;
     }
   | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
+  /** The budget could not record what a 2xx response said. The response is kept. */
+  | { type: "budget-observe-failed"; endpoint: string; message: string }
   | {
       type: "history-page";
       page: number;
@@ -88,9 +110,10 @@ const TRADE_CASH_STREAM = "trade-settlement" as const;
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
-  readonly retryAfterMs: number;
+  /** Null when the pause is not a cooldown the provider imposed. */
+  readonly retryAfterMs: number | null;
 
-  constructor(message: string, retryAfterMs: number) {
+  constructor(message: string, retryAfterMs: number | null) {
     super(message);
     this.retryAfterMs = retryAfterMs;
   }
@@ -152,47 +175,55 @@ function rateLimitWaitMs(response: Response, retry: number): number {
   return Math.min(1_000 * 2 ** retry, MAX_RATE_LIMIT_WAIT_MS);
 }
 
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+/** Trading 212's request budget for one account: where slots come from and
+ *  whose they are. The scope id is a hash of the API key, never the key. */
+type Trading212Budget = { client: PartnerBudgetClient; scopeId: AccountScopeId };
+
+/** The budget store is down: no request goes out, and the next run tries again.
+ *  This is our own outage, not a broker cooldown, so the pause carries no
+ *  `retryAfter` (the scheduler would report it as a broker rate limit and let it
+ *  outrank `force`). The resume cursor is kept. */
+const BUDGET_UNAVAILABLE_MESSAGE =
+  "Trading 212 sync paused: the request budget store is unavailable";
+
+/** A wait shorter than this is scheduling noise, not a budget wait worth reporting. */
+const MIN_REPORTED_WAIT_MS = 250;
+
+function budgetKey(budget: Trading212Budget, limit: AccountLimitName): PartnerKey {
+  return partnerKey(limit, budget.scopeId);
 }
 
-type RateLimiter = ReturnType<typeof createRateLimiter>;
+/** A budget failure is a pause, never a reason to send the request anyway. */
+function pauseOnBudgetError(error: unknown): never {
+  if (isPartnerWait(error))
+    throw new Trading212SyncPausedError(
+      HOST_DEADLINE_MESSAGE,
+      Math.max(0, DateTime.toEpochMillis(error.until) - Date.now()),
+    );
+  if (isPartnerBudgetUnavailable(error))
+    throw new Trading212SyncPausedError(BUDGET_UNAVAILABLE_MESSAGE, null);
+  throw error;
+}
 
 /**
- * Paces requests against the per-endpoint budget Trading 212 reports on every
- * response, so a sync waits out a spent window instead of spending a request to
- * discover it is spent.
+ * What the response headers say about the budget, as two independent pairs.
+ * `x-ratelimit-limit` is a count and `-period` is seconds: both valid and
+ * positive give the spacing `period / limit`. `-remaining` with `-reset` (Unix
+ * seconds) can block the key. A pair with a missing or invalid part is ignored.
  */
-function createRateLimiter(
-  diagnostics: (event: Trading212DiagnosticEvent) => void,
-  deadlineMs?: number,
-) {
-  const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
-
-  const sleep = async (milliseconds: number): Promise<void> => {
-    if (milliseconds <= 0) return;
-    await wait(milliseconds);
-  };
-
-  return {
-    async reserve(path: string): Promise<void> {
-      const budget = budgets.get(path);
-      if (!budget || budget.remaining > 0) return;
-      budgets.delete(path);
-      const waitMs = Math.max(0, budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
-      throwIfHostDeadline(deadlineMs, waitMs);
-      diagnostics({ type: "wait", endpoint: path, reason: "budget-exhausted", waitMs });
-      await sleep(waitMs);
-    },
-    observe(path: string, response: Response): void {
-      if (response.status === 429) return;
-      const remaining = headerNumber(response, "x-ratelimit-remaining");
-      const reset = resetAtMs(response);
-      if (remaining === null || reset === null) return;
-      budgets.set(path, { remaining, resetAtMs: reset });
-    },
-    sleep,
-  };
+function seenFromHeaders(response: Response): PartnerSeen | null {
+  const limit = headerNumber(response, "x-ratelimit-limit");
+  const period = headerNumber(response, "x-ratelimit-period");
+  const remaining = headerNumber(response, "x-ratelimit-remaining");
+  const reset = resetAtMs(response);
+  const seen: PartnerSeen = {};
+  if (limit !== null && period !== null && limit > 0 && period > 0)
+    seen.intervalMs = Math.ceil((period * 1_000) / limit);
+  if (remaining !== null && reset !== null && remaining >= 0 && reset > 0) {
+    seen.remaining = remaining;
+    seen.resetAt = DateTime.makeUnsafe(reset);
+  }
+  return Object.keys(seen).length === 0 ? null : seen;
 }
 
 function value(order: Trading212Order, ...keys: string[]): unknown {
@@ -678,6 +709,7 @@ function result(
     dividends: "complete" | "partial" | "unavailable";
     cashFlows: "complete" | "partial" | "unavailable";
   },
+  fullStreams?: readonly BrokerHistoryStream[],
 ): BrokerResult {
   return {
     sections: {
@@ -689,6 +721,7 @@ function result(
     },
     source: SOURCE,
     problems,
+    ...(fullStreams !== undefined ? { fullStreams } : {}),
     ...(retryAfterMs !== null
       ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() }
       : {}),
@@ -699,9 +732,9 @@ function result(
 async function accountSummary(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Order> {
-  const response = await request(url, config, limiter);
+  const response = await request(url, config, budget, "trading212:account-summary");
   if (!response.ok) throw responseError("account-summary", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -718,9 +751,14 @@ async function historyPage(
   url: string,
   label: "transaction" | "dividend",
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Page> {
-  const response = await request(url, config, limiter);
+  const response = await request(
+    url,
+    config,
+    budget,
+    label === "transaction" ? "trading212:history-transactions" : "trading212:history-dividends",
+  );
   if (!response.ok) throw responseError(`${label}-history`, response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -758,11 +796,11 @@ async function historyPage(
 async function page(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Page> {
-  // Order history allows 6 requests per minute. `limiter` waits out a spent
-  // window between cursors, so sync stays one sequential request per cursor.
-  const response = await request(url, config, limiter);
+  // Order history allows 20 requests per minute. The budget spaces the cursors
+  // out, so sync stays one sequential request per cursor.
+  const response = await request(url, config, budget, "trading212:history-orders");
   if (!response.ok) throw responseError("order-history", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -793,11 +831,23 @@ async function page(
 async function request(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
+  limit: AccountLimitName,
 ): Promise<Response> {
   const path = new URL(url).pathname;
+  // The key names the stream, not the path: a cursor URL is opaque to us.
+  const key = budgetKey(budget, limit);
   for (let retry = 0; ; retry += 1) {
-    await limiter.reserve(path);
+    const waitingSince = Date.now();
+    await budget.client.awaitSlot(key, config.deadlineMs).catch(pauseOnBudgetError);
+    const waitedMs = Date.now() - waitingSince;
+    if (waitedMs >= MIN_REPORTED_WAIT_MS)
+      config.diagnostics?.({
+        type: "wait",
+        endpoint: path,
+        reason: "budget-exhausted",
+        waitMs: waitedMs,
+      });
     throwIfHostDeadline(config.deadlineMs);
     const response = await fetch(url, {
       headers: { Authorization: basicAuth(config.token, config.secret) },
@@ -812,23 +862,36 @@ async function request(
       remaining: headerNumber(response, "x-ratelimit-remaining"),
       resetAt: reset === null ? null : new Date(reset).toISOString(),
     });
-    limiter.observe(path, response);
-    if (response.status !== 429) return response;
-    if (retry >= MAX_RATE_LIMIT_RETRIES)
-      throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
+    if (response.status !== 429) {
+      const seen = seenFromHeaders(response);
+      // The data is already here: a failure to record the headers must not throw
+      // it away. The next slot request meets a down store and pauses the sync.
+      if (seen)
+        await budget.client.observe(key, seen).catch((error: unknown) => {
+          config.diagnostics?.({
+            type: "budget-observe-failed",
+            endpoint: path,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+      return response;
+    }
     const waitMs = rateLimitWaitMs(response, retry);
+    // The block is recorded before giving up, so the next sync, on any
+    // instance, starts after the cooldown instead of meeting the 429 again.
+    await budget.client.reject(key, Date.now() + waitMs).catch(pauseOnBudgetError);
+    if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(waitMs);
     throwIfHostDeadline(config.deadlineMs, waitMs);
     config.diagnostics?.({ type: "wait", endpoint: path, reason: "http-429", waitMs });
-    await limiter.sleep(waitMs);
   }
 }
 
 async function positions(
   url: string,
   config: Trading212RequestConfig,
-  limiter: RateLimiter,
+  budget: Trading212Budget,
 ): Promise<Trading212Positions> {
-  const response = await request(url, config, limiter);
+  const response = await request(url, config, budget, "trading212:positions");
   if (!response.ok) throw responseError("holdings", response.status);
   const payload: unknown = await response.json().catch(() => {
     throw new Error(
@@ -858,24 +921,40 @@ async function positions(
   return items as Trading212Order[];
 }
 
+/** Streams whose newest-first order the tail read relies on. The live sort
+ *  check (scripts/t212-verify.ts --sort-order) needs the owner's broker
+ *  credentials; this environment could not run it. Until it passes, remove a
+ *  stream here and that stream falls back to a full read. */
+export const TAIL_READ_STREAMS: readonly BrokerHistoryStream[] = [
+  "orders",
+  "transactions",
+  "dividends",
+];
+
 export function createTrading212Adapter(config: Trading212Config): BrokerAccessAdapter {
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
+  const partnerBudget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
   return {
-    async sync({ entity, resume: inputResume, deadlineMs }) {
+    async sync({ entity, resume: inputResume, deadlineMs, lanes, knownHistory, fullReadStreams }) {
       const requestConfig: Trading212RequestConfig = { ...config, deadlineMs };
       const resume = inputResume ?? config.resume ?? {};
+      const readHoldings = lanes.includes("holdings");
+      const readHistory = lanes.includes("history");
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
       const dividends: Dividend[] = [];
       const cashBalances: CashBalance[] = [];
       const cashFlows: CashFlow[] = [];
       const problems: string[] = [];
-      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), deadlineMs);
+      const budget: Trading212Budget = {
+        client: partnerBudget,
+        scopeId: await accountScopeId(config.token),
+      };
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
         if (error instanceof Trading212CredentialsRejectedError) throw error;
-        if (error instanceof Trading212SyncPausedError)
+        if (error instanceof Trading212SyncPausedError && error.retryAfterMs !== null)
           retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
       };
       const firstHistoryUrl = () => {
@@ -888,18 +967,43 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         url.searchParams.set("limit", String(CASH_HISTORY_PAGE_SIZE));
         return url.toString();
       };
-      let ordersComplete = resume.ordersComplete === true;
-      let transactionsComplete = resume.transactionsComplete === true;
-      let dividendsComplete = resume.dividendsComplete === true;
-      let ordersResume = !ordersComplete
-        ? (resume.ordersNextPagePath ?? firstHistoryUrl())
-        : undefined;
-      let transactionsResume = !transactionsComplete
-        ? (resume.transactionsNextPagePath ?? undefined)
-        : undefined;
-      let dividendsResume = !dividendsComplete
-        ? (resume.dividendsNextPagePath ?? undefined)
-        : undefined;
+      /* Absent `fullReadStreams` keeps the old full-read behaviour for direct
+       * callers that did not decide. A listed stream reads in full; an
+       * unlisted, tail-capable stream reads as a tail when the caller supplied
+       * the ids it already stores; otherwise it still reads in full (first
+       * connect). */
+      const streamFull = (stream: BrokerHistoryStream) =>
+        fullReadStreams === undefined || fullReadStreams.includes(stream);
+      const tailCapable = (stream: BrokerHistoryStream) => TAIL_READ_STREAMS.includes(stream);
+      const tailOrders =
+        readHistory &&
+        !streamFull("orders") &&
+        tailCapable("orders") &&
+        knownHistory?.tradeIds != null;
+      const tailTransactions =
+        readHistory &&
+        !streamFull("transactions") &&
+        tailCapable("transactions") &&
+        knownHistory?.cashFlowIds != null;
+      const tailDividends =
+        readHistory &&
+        !streamFull("dividends") &&
+        tailCapable("dividends") &&
+        knownHistory?.dividendIds != null;
+      let usedTail = false;
+      let ordersComplete = readHistory && resume.ordersComplete === true;
+      let transactionsComplete = readHistory && resume.transactionsComplete === true;
+      let dividendsComplete = readHistory && resume.dividendsComplete === true;
+      let ordersResume =
+        readHistory && !ordersComplete
+          ? (resume.ordersNextPagePath ?? firstHistoryUrl())
+          : undefined;
+      let transactionsResume =
+        readHistory && !transactionsComplete
+          ? (resume.transactionsNextPagePath ?? undefined)
+          : undefined;
+      let dividendsResume =
+        readHistory && !dividendsComplete ? (resume.dividendsNextPagePath ?? undefined) : undefined;
       let holdingsComplete = false;
       let summaryComplete = false;
       let holdingsPartial = false;
@@ -907,60 +1011,71 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let ordersPartial = false;
       let transactionsPartial = false;
       let dividendsPartial = false;
-
-      try {
-        throwIfHostDeadline(deadlineMs, 0);
-        // Holdings and cash are one request each. Read them before order
-        // history so a host time limit still leaves the dashboard something
-        // current to show.
-        const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
-        const holdings = await positions(holdingsUrl, requestConfig, limiter);
-        holdingsComplete = true;
-        config.diagnostics?.({ type: "positions", count: holdings.length });
-        // `asOf` is when the broker reported the holding, not when it was
-        // opened. Trading 212's per-position `createdAt` is the opening date,
-        // and reading it as a statement date anchored every holding in its own
-        // past: the FX rate used to value it, and the quantity the chart walks
-        // trades out from, both came from the day it was bought.
-        const asOf = snapshotDate();
-        for (const holding of holdings) {
-          try {
-            positionsResult.push(mapPosition(holding, entity, asOf));
-          } catch (error) {
-            holdingsPartial = true;
-            problems.push(
-              error instanceof Error ? error.message : "Trading 212 holding is invalid",
-            );
-          }
-        }
-      } catch (error) {
-        notePaused(error);
-        problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
-      }
+      let ordersReadFull = false;
+      let transactionsReadFull = false;
+      let dividendsReadFull = false;
 
       let accountCurrency = "";
-      try {
-        throwIfHostDeadline(deadlineMs, 0);
-        const summary = await accountSummary(
-          new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
-          requestConfig,
-          limiter,
-        );
-        summaryComplete = true;
-        accountCurrency = string(summary.currency, "account summary currency");
-        const mapped = mapCashBalance(summary, entity, snapshotDate());
-        if (mapped.balance) cashBalances.push(mapped.balance);
-        if (mapped.problems.length > 0) summaryPartial = true;
-        problems.push(...mapped.problems);
-      } catch (error) {
-        notePaused(error);
-        problems.push(
-          error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
-        );
+      if (readHoldings) {
+        try {
+          throwIfHostDeadline(deadlineMs, 0);
+          // Holdings and cash are one request each. Read them before order
+          // history so a host time limit still leaves the dashboard something
+          // current to show.
+          const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
+          const holdings = await positions(holdingsUrl, requestConfig, budget);
+          holdingsComplete = true;
+          config.diagnostics?.({ type: "positions", count: holdings.length });
+          // `asOf` is when the broker reported the holding, not when it was
+          // opened. Trading 212's per-position `createdAt` is the opening date,
+          // and reading it as a statement date anchored every holding in its own
+          // past: the FX rate used to value it, and the quantity the chart walks
+          // trades out from, both came from the day it was bought.
+          const asOf = snapshotDate();
+          for (const holding of holdings) {
+            try {
+              positionsResult.push(mapPosition(holding, entity, asOf));
+            } catch (error) {
+              holdingsPartial = true;
+              problems.push(
+                error instanceof Error ? error.message : "Trading 212 holding is invalid",
+              );
+            }
+          }
+        } catch (error) {
+          notePaused(error);
+          problems.push(
+            error instanceof Error ? error.message : "Trading 212 holdings sync failed",
+          );
+        }
+
+        try {
+          throwIfHostDeadline(deadlineMs, 0);
+          const summary = await accountSummary(
+            new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
+            requestConfig,
+            budget,
+          );
+          summaryComplete = true;
+          accountCurrency = string(summary.currency, "account summary currency");
+          const mapped = mapCashBalance(summary, entity, snapshotDate());
+          if (mapped.balance) cashBalances.push(mapped.balance);
+          if (mapped.problems.length > 0) summaryPartial = true;
+          problems.push(...mapped.problems);
+        } catch (error) {
+          notePaused(error);
+          problems.push(
+            error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
+          );
+        }
       }
 
-      let historyComplete = ordersComplete;
-      if (!ordersComplete) {
+      // Account currency is only known from the summary. A history-only call
+      // therefore maps rows that state their own currency and reports a
+      // problem for rows that do not; the app always reads the holdings lane
+      // first, and the cron reads both, so the summary is normally present.
+
+      if (readHistory && !ordersComplete) {
         let nextUrl = ordersResume ?? firstHistoryUrl();
         const seenOrderPaths = new Set<string>();
         let historyPages = 0;
@@ -971,16 +1086,19 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             if (seenOrderPaths.has(nextUrl))
               throw new Error("Trading 212 orders pagination repeated nextPagePath");
             seenOrderPaths.add(nextUrl);
-            const current = await page(nextUrl, requestConfig, limiter);
+            const current = await page(nextUrl, requestConfig, budget);
             historyPages += 1;
             ordersRead += current.items.length;
             let skipped = 0;
             const skippedTypes = new Set<string>();
+            const pageTrades: TradeWithoutId[] = [];
             for (const order of current.items) {
               try {
                 const trade = mapOrder(order, entity);
-                if (trade) trades.push(trade);
-                else {
+                if (trade) {
+                  trades.push(trade);
+                  pageTrades.push(trade);
+                } else {
                   skipped += 1;
                   const fill =
                     order.fill && typeof order.fill === "object" && !Array.isArray(order.fill)
@@ -1004,15 +1122,28 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               skipped,
               skippedTypes: [...skippedTypes],
             });
+            // Tail stop: the first page that adds no new row is the end of what
+            // the broker has new. A page with zero mapped rows proves nothing
+            // and keeps paging.
+            if (
+              tailOrders &&
+              current.nextPagePath &&
+              pageTrades.length > 0 &&
+              pageTrades.every((trade) =>
+                knownHistory!.tradeIds!.has(`trading212:${stableTradeId(trade)}`),
+              )
+            ) {
+              usedTail = true;
+              break;
+            }
             nextUrl = current.nextPagePath
               ? new URL(current.nextPagePath, config.baseUrl).toString()
               : "";
           }
           ordersComplete = true;
-          historyComplete = true;
           ordersResume = undefined;
+          ordersReadFull = !tailOrders;
         } catch (error) {
-          historyComplete = false;
           ordersComplete = false;
           ordersResume = nextUrl || firstHistoryUrl();
           notePaused(error);
@@ -1020,7 +1151,11 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         }
       }
 
-      const readCashHistory = async (history: "transactions" | "dividends") => {
+      const readCashHistory = async (
+        history: "transactions" | "dividends",
+        tail: boolean,
+        known: ReadonlySet<string> | undefined,
+      ): Promise<boolean> => {
         const path = history === "transactions" ? TRANSACTIONS_PATH : DIVIDENDS_PATH;
         const seenPaths = new Set<string>();
         const seenReferences = new Set<string>();
@@ -1037,7 +1172,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               nextUrl,
               history === "transactions" ? "transaction" : "dividend",
               requestConfig,
-              limiter,
+              budget,
             );
             pageNumber += 1;
             config.diagnostics?.({
@@ -1047,6 +1182,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               pageItems: current.items.length,
               hasNext: Boolean(current.nextPagePath),
             });
+            const pageIds: string[] = [];
             for (const row of current.items) {
               try {
                 const reference = string(
@@ -1057,10 +1193,15 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                 seenReferences.add(reference);
                 if (history === "transactions") {
                   const mapped = mapTransaction(row, entity, accountCurrency);
-                  if (mapped.flow) cashFlows.push(mapped.flow);
+                  if (mapped.flow) {
+                    cashFlows.push(mapped.flow);
+                    pageIds.push(mapped.flow.id);
+                  }
                   if (mapped.problem) problems.push(mapped.problem);
                 } else {
-                  dividends.push(mapDividend(row, entity, accountCurrency));
+                  const dividend = mapDividend(row, entity, accountCurrency);
+                  dividends.push(dividend);
+                  pageIds.push(dividend.id);
                 }
               } catch (error) {
                 if (history === "transactions") transactionsPartial = true;
@@ -1070,10 +1211,21 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                 );
               }
             }
+            if (
+              tail &&
+              known &&
+              current.nextPagePath &&
+              pageIds.length > 0 &&
+              pageIds.every((id) => known.has(id))
+            ) {
+              usedTail = true;
+              return true;
+            }
             nextUrl = current.nextPagePath
               ? new URL(current.nextPagePath, config.baseUrl).toString()
               : "";
           }
+          return false;
         } catch (error) {
           if (history === "transactions") transactionsResume = nextUrl || firstCashUrl(path);
           else dividendsResume = nextUrl || firstCashUrl(path);
@@ -1082,19 +1234,26 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       };
 
       // Cash history waits until order history is done so a resumed run does
-      // not spend the 6/min budget on a second stream while trades are incomplete.
-      if (ordersComplete) {
+      // not spend the request budget on a second stream while trades are incomplete.
+      if (readHistory && ordersComplete) {
         for (const history of ["transactions", "dividends"] as const) {
           const alreadyDone = history === "transactions" ? transactionsComplete : dividendsComplete;
           if (alreadyDone) continue;
+          const tail = history === "transactions" ? tailTransactions : tailDividends;
+          const known =
+            history === "transactions" ? knownHistory?.cashFlowIds : knownHistory?.dividendIds;
           try {
-            await readCashHistory(history);
+            await readCashHistory(history, tail, known);
+            // A stream that ran as a tail never read the full history, so it
+            // must merge even when this run exhausted its cursor.
             if (history === "transactions") {
               transactionsComplete = true;
               transactionsResume = undefined;
+              transactionsReadFull = !tailTransactions;
             } else {
               dividendsComplete = true;
               dividendsResume = undefined;
+              dividendsReadFull = !tailDividends;
             }
           } catch (error) {
             notePaused(error);
@@ -1105,23 +1264,31 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         }
       }
 
-      const nextResume: BrokerSyncResume = {
-        ...(ordersComplete
-          ? { ordersComplete: true }
-          : ordersResume
-            ? { ordersNextPagePath: ordersResume }
-            : {}),
-        ...(transactionsComplete
-          ? { transactionsComplete: true }
-          : transactionsResume
-            ? { transactionsNextPagePath: transactionsResume }
-            : {}),
-        ...(dividendsComplete
-          ? { dividendsComplete: true }
-          : dividendsResume
-            ? { dividendsNextPagePath: dividendsResume }
-            : {}),
-      };
+      const nextResume: BrokerSyncResume | undefined = readHistory
+        ? {
+            ...(ordersComplete
+              ? { ordersComplete: true }
+              : ordersResume
+                ? { ordersNextPagePath: ordersResume }
+                : {}),
+            ...(transactionsComplete
+              ? { transactionsComplete: true }
+              : transactionsResume
+                ? { transactionsNextPagePath: transactionsResume }
+                : {}),
+            ...(dividendsComplete
+              ? { dividendsComplete: true }
+              : dividendsResume
+                ? { dividendsNextPagePath: dividendsResume }
+                : {}),
+          }
+        : undefined;
+      const fullStreams: BrokerHistoryStream[] = [];
+      if (readHistory) {
+        if (ordersReadFull) fullStreams.push("orders");
+        if (transactionsReadFull) fullStreams.push("transactions");
+        if (dividendsReadFull) fullStreams.push("dividends");
+      }
       const synced = result(
         positionsResult,
         trades,
@@ -1130,38 +1297,55 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         cashFlows,
         problems,
         retryAfterMs,
-        historyComplete && !ordersPartial,
+        readHistory && ordersComplete && !ordersPartial,
         nextResume,
         {
-          positions: holdingsComplete
-            ? holdingsPartial
-              ? "partial"
-              : "complete"
-            : positionsResult.length > 0
-              ? "partial"
-              : "unavailable",
-          cashBalances: summaryComplete ? (summaryPartial ? "partial" : "complete") : "unavailable",
-          dividends: dividendsComplete
-            ? dividendsPartial
-              ? "partial"
-              : "complete"
-            : dividends.length > 0
-              ? "partial"
-              : "unavailable",
-          cashFlows: transactionsComplete
-            ? transactionsPartial
-              ? "partial"
-              : "complete"
-            : cashFlows.length > 0
-              ? "partial"
-              : "unavailable",
+          positions: readHoldings
+            ? holdingsComplete
+              ? holdingsPartial
+                ? "partial"
+                : "complete"
+              : positionsResult.length > 0
+                ? "partial"
+                : "unavailable"
+            : "unavailable",
+          cashBalances: readHoldings
+            ? summaryComplete
+              ? summaryPartial
+                ? "partial"
+                : "complete"
+              : "unavailable"
+            : "unavailable",
+          dividends: readHistory
+            ? dividendsComplete
+              ? dividendsPartial
+                ? "partial"
+                : "complete"
+              : dividends.length > 0
+                ? "partial"
+                : "unavailable"
+            : "unavailable",
+          cashFlows: readHistory
+            ? transactionsComplete
+              ? transactionsPartial
+                ? "partial"
+                : "complete"
+              : cashFlows.length > 0
+                ? "partial"
+                : "unavailable"
+            : "unavailable",
         },
+        readHistory ? fullStreams : undefined,
       );
+      if (!readHistory) {
+        synced.sections.trades = { status: "unavailable", rows: [] };
+        synced.sections.dividends = { status: "unavailable", rows: [] };
+        synced.sections.cashFlows = { status: "unavailable", rows: [] };
+      }
+      const incremental = readHistory && (usedTail || historyPending(inputResume ?? config.resume));
       return {
         ...synced,
-        ...(historyPending(inputResume ?? config.resume)
-          ? { historyMode: "incremental" as const }
-          : {}),
+        ...(incremental ? { historyMode: "incremental" as const } : {}),
       };
     },
   };

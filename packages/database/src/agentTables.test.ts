@@ -105,10 +105,10 @@ test.each(AGENT_TABLES)("%s has forced RLS and a runtime grant", async (table) =
   );
 });
 
-test("applying 0027 twice changes nothing and keeps the UPDATE revoke", async () => {
+test("applying 0038 twice changes nothing and keeps the UPDATE revoke", async () => {
   await pglite.exec("RESET ROLE;");
   const sql = readFileSync(
-    new URL("../../../db/migrations/0027_instinct_agent.sql", import.meta.url),
+    new URL("../../../db/migrations/0038_instinct_agent.sql", import.meta.url),
     "utf8",
   );
   await pglite.exec(sql);
@@ -216,7 +216,7 @@ test("list_agent_due_users is SECURITY DEFINER with a pinned search_path and no 
   expect(runtime.rows[0]!.ok).toBe(true);
 });
 
-/* WhatsApp links (0029). `RESET ROLE` is the superuser, used for what a test must
+/* WhatsApp links (0040). `RESET ROLE` is the superuser, used for what a test must
  * see past FORCE RLS or to age a code. */
 const PHONE_A = "+31612345678";
 const PHONE_B = "+31687654321";
@@ -419,7 +419,7 @@ test("phoneHash and linkCodeHash fail closed without a valid AGENT_PHONE_HMAC_KE
   }
 });
 
-/* Durable brute-force throttle on link codes (0029): the attempts table lives in
+/* Durable brute-force throttle on link codes (0040): the attempts table lives in
  * Postgres, so a cold start or a second instance cannot reset it. */
 const attempts = () =>
   asSuperuser<{ phone_hash: string }>("SELECT phone_hash FROM personal.agent_link_attempts");
@@ -553,10 +553,10 @@ test("a code whose user has no settings row at all does not link (W1)", async ()
   expect(await attempts()).toHaveLength(0);
 });
 
-const migration0029 = () =>
-  readFileSync(new URL("../../../db/migrations/0029_whatsapp_links.sql", import.meta.url), "utf8");
+const migration0040 = () =>
+  readFileSync(new URL("../../../db/migrations/0040_whatsapp_links.sql", import.meta.url), "utf8");
 
-test("0029 over an early-draft shape adds ai_consent_at to both tables and the functions work (W3)", async () => {
+test("0040 over an early-draft shape adds ai_consent_at to both tables and the functions work (W3)", async () => {
   await pglite.exec("RESET ROLE;");
   await pglite.exec(`
     DELETE FROM personal.agent_link_codes;
@@ -575,7 +575,7 @@ test("0029 over an early-draft shape adds ai_consent_at to both tables and the f
     ).rows;
   expect(await columns()).toEqual([]);
 
-  await pglite.exec(migration0029());
+  await pglite.exec(migration0040());
   expect(await columns()).toEqual([
     { table_name: "agent_link_codes", is_nullable: "NO" },
     { table_name: "agent_whatsapp", is_nullable: "YES" },
@@ -587,7 +587,7 @@ test("0029 over an early-draft shape adds ai_consent_at to both tables and the f
   await pglite.exec("SET ROLE lavega_runtime;");
   const { code } = await makeCode("a");
   await pglite.exec("RESET ROLE;");
-  await pglite.exec(migration0029());
+  await pglite.exec(migration0040());
   expect((await pglite.query("SELECT 1 FROM personal.agent_link_codes")).rows).toHaveLength(1);
   await pglite.exec("SET ROLE lavega_runtime;");
   const sealed = (await import("./index.js")).encryptBlob(PHONE_A);

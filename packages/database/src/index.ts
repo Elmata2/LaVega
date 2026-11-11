@@ -253,9 +253,21 @@ export async function listBrokerSyncTenants(db: Database): Promise<string[]> {
 
 export type DashboardSnapshotRepository = {
   /** The stored dashboard for a query while it is still current, and the
-   *  source version a dashboard built now has to be stored under. */
-  get(cacheKey: string): Promise<{ version: number; dashboard: unknown | null }>;
-  put(cacheKey: string, version: number, dashboard: unknown): Promise<void>;
+   *  source version a dashboard built now has to be stored under. `priceKeys`
+   *  are the instrument keys the stored build read (issue #307), so a shared
+   *  price write can invalidate it; `updatedAt` is its build time. */
+  get(cacheKey: string): Promise<{
+    version: number;
+    dashboard: unknown | null;
+    priceKeys: string[];
+    updatedAt: string | null;
+  }>;
+  put(
+    cacheKey: string,
+    version: number,
+    dashboard: unknown,
+    priceKeys?: readonly string[],
+  ): Promise<void>;
 };
 
 /**
@@ -271,7 +283,8 @@ export function createDashboardSnapshotRepository(
     async get(cacheKey) {
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT current.version, stored.blob
+          `SELECT current.version, stored.blob, stored.price_keys,
+                  to_char(stored.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
            FROM (
              SELECT COALESCE(
                (SELECT version FROM investing.dashboard_sources
@@ -291,20 +304,23 @@ export function createDashboardSnapshotRepository(
         return {
           version: Number(row?.version ?? 0),
           dashboard: stored?.readable ? stored.value : null,
+          priceKeys: Array.isArray(row?.price_keys) ? (row.price_keys as string[]) : [],
+          updatedAt: (row?.updated_at as string | null) ?? null,
         };
       });
     },
-    async put(cacheKey, version, dashboard) {
+    async put(cacheKey, version, dashboard, priceKeys = []) {
       const blob = encryptBlob(dashboard);
       await withTenantStatement(db, userId, async (client) => {
         await client.query(
-          `INSERT INTO investing.dashboard_snapshots (user_id, cache_key, version, as_of, blob)
-           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3)
+          `INSERT INTO investing.dashboard_snapshots
+             (user_id, cache_key, version, as_of, blob, price_keys)
+           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3, $4::text[])
            ON CONFLICT (user_id, cache_key) DO UPDATE
              SET version = EXCLUDED.version, as_of = EXCLUDED.as_of, blob = EXCLUDED.blob,
-                 updated_at = CURRENT_TIMESTAMP
+                 price_keys = EXCLUDED.price_keys, updated_at = CURRENT_TIMESTAMP
              WHERE investing.dashboard_snapshots.version <= EXCLUDED.version`,
-          [cacheKey, version, blob],
+          [cacheKey, version, blob, [...priceKeys]],
         );
       });
     },
@@ -361,54 +377,50 @@ export type { PoolClient, QueryResult };
 const isoDate = (value: unknown): string | null =>
   value == null ? null : value instanceof Date ? value.toISOString() : String(value);
 
-export type PriceBarRepository = {
-  /** Omitting a bound means no bound. There is no date that stands for "all time". */
-  getRange(symbol: string, from?: string, to?: string): Promise<PriceBarRow[]>;
-  getRanges(symbols: readonly string[]): Promise<PriceBarRow[]>;
-  lastDate(symbol: string): Promise<string | null>;
-  upsert(bars: readonly PriceBarRow[]): Promise<void>;
-  /** Makes `bars` the symbol's whole history from `from` to `to`: a stored bar
-   *  in that window that `bars` lacks is deleted. Omitting a bound means no bound. */
-  replaceRange(
-    symbol: string,
-    bars: readonly PriceBarRow[],
-    from?: string,
-    to?: string,
-  ): Promise<void>;
-  getCoverage(symbol: string): Promise<PriceCoverageRow | null>;
-  putCoverage(coverage: PriceCoverageRow): Promise<void>;
-  /** Clears coverage with the bars, so an emptied cache is fetched again. */
-  purgeAll(): Promise<void>;
-};
+/* ---------- shared market data (issue #307) ---------- */
 
-/** The dates the provider answered for one symbol, and what it quoted them
- *  as. `delistedSince` and `listingMissingSince` mirror the `PriceCoverage`
- *  fields of the same name (adapters). */
-export type PriceCoverageRow = {
-  symbol: string;
-  from: string;
-  to: string;
-  listing: string | null;
-  currency: string;
-  delistedSince?: string;
-  listingMissingSince?: string;
-};
-
-/** The repository is built for one tenant, so a row never names its own. */
-export type PriceBarRow = {
-  symbol: string;
+/** One stored bar of a shared series: keyed by instrument, no symbol. */
+export type SharedPriceBarRow = {
+  instrumentKey: string;
   date: string;
   close: number;
   currency: string;
   split?: number;
 };
 
-const PRICE_BAR_COLUMNS = "symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency, split";
+/** One shared coverage row. `provider` is always known (the write path
+ *  requires it); the rest mirror the per-user coverage shape. */
+export type SharedPriceCoverageRow = {
+  instrumentKey: string;
+  from: string;
+  to: string;
+  listing: string | null;
+  currency: string;
+  provider: string;
+  delistedSince?: string;
+  listingMissingSince?: string;
+  listingStart?: string;
+  provisionalThrough?: string;
+};
 
-// NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-function priceBarRow(row: QueryResultRow): PriceBarRow {
+/** A read address: the instrument key plus the `sym:` alias to fall back to. */
+export type SharedPriceKey = { key: string; alias?: string };
+
+const SHARED_PRICE_BAR_COLUMNS =
+  "instrument_key AS \"instrumentKey\", to_char(date, 'YYYY-MM-DD') AS date, close, currency, split";
+
+const SHARED_PRICE_COVERAGE_COLUMNS = `instrument_key AS "instrumentKey",
+  to_char(from_date, 'YYYY-MM-DD') AS "from",
+  to_char(to_date, 'YYYY-MM-DD') AS "to",
+  listing, currency, provider,
+  to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince",
+  to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince",
+  to_char(listing_start, 'YYYY-MM-DD') AS "listingStart",
+  to_char(provisional_through, 'YYYY-MM-DD') AS "provisionalThrough"`;
+
+function sharedPriceBarRow(row: QueryResultRow): SharedPriceBarRow {
   return {
-    symbol: row.symbol as string,
+    instrumentKey: row.instrumentKey as string,
     date: row.date as string,
     close: Number(row.close),
     currency: row.currency as string,
@@ -416,132 +428,274 @@ function priceBarRow(row: QueryResultRow): PriceBarRow {
   };
 }
 
-const UPSERT_PRICE_BARS =
-  "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider, split) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[], $6::numeric[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP";
+function sharedPriceCoverageRow(row: QueryResultRow): SharedPriceCoverageRow {
+  const coverage = row as QueryResultRow & {
+    delistedSince: string | null;
+    listingMissingSince: string | null;
+    listingStart: string | null;
+    provisionalThrough: string | null;
+  };
+  return {
+    instrumentKey: coverage.instrumentKey as string,
+    from: coverage.from as string,
+    to: coverage.to as string,
+    listing: (coverage.listing as string | null) ?? null,
+    currency: coverage.currency as string,
+    provider: coverage.provider as string,
+    ...(coverage.delistedSince == null ? {} : { delistedSince: coverage.delistedSince }),
+    ...(coverage.listingMissingSince == null
+      ? {}
+      : { listingMissingSince: coverage.listingMissingSince }),
+    ...(coverage.listingStart == null ? {} : { listingStart: coverage.listingStart }),
+    ...(coverage.provisionalThrough == null
+      ? {}
+      : { provisionalThrough: coverage.provisionalThrough }),
+  };
+}
 
-function priceBarParams(bars: readonly PriceBarRow[], provider: string): unknown[] {
+const UPSERT_SHARED_PRICE_BARS = `INSERT INTO investing.instrument_price_bars
+  (instrument_key, date, close, currency, provider, split)
+  SELECT $1, d, c, cur, COALESCE(
+    (SELECT provider FROM investing.instrument_price_coverage WHERE instrument_key = $1),
+    'unknown'
+  ), sp
+  FROM unnest($2::date[], $3::numeric[], $4::text[], $5::numeric[]) AS rows(d, c, cur, sp)
+  ON CONFLICT (instrument_key, date) DO UPDATE SET
+    close = EXCLUDED.close, currency = EXCLUDED.currency,
+    provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP`;
+
+function sharedPriceBarParams(
+  instrumentKey: string,
+  bars: readonly { date: string; close: number; currency: string; split?: number }[],
+): unknown[] {
   return [
-    bars.map((bar) => bar.symbol),
+    instrumentKey,
     bars.map((bar) => bar.date),
     bars.map((bar) => bar.close),
-    /* Stored verbatim. `GBp` and `GBP` differ by case and by a factor
-     * of 100, so uppercasing here repriced pence as pounds; providers
-     * canonicalise on the way in instead. */
     bars.map((bar) => bar.currency),
-    bars.map(() => provider),
     bars.map((bar) => bar.split ?? null),
   ];
 }
 
+export type SharedPriceRepository = {
+  getRange(key: SharedPriceKey, from?: string, to?: string): Promise<SharedPriceBarRow[]>;
+  getRanges(keys: readonly SharedPriceKey[]): Promise<Map<string, SharedPriceBarRow[]>>;
+  lastDate(key: SharedPriceKey): Promise<string | null>;
+  upsert(instrumentKey: string, bars: readonly SharedPriceBarRow[]): Promise<void>;
+  replaceRange(
+    instrumentKey: string,
+    bars: readonly SharedPriceBarRow[],
+    from?: string,
+    to?: string,
+  ): Promise<void>;
+  getCoverage(key: SharedPriceKey): Promise<SharedPriceCoverageRow | null>;
+  putCoverage(instrumentKey: string, coverage: SharedPriceCoverageRow): Promise<void>;
+  latestChange(instrumentKeys: readonly string[]): Promise<string | null>;
+  adoptAlias(key: string, alias: string): Promise<void>;
+  claim(key: string, owner: string, ttlMs: number): Promise<boolean>;
+  release(key: string, owner: string): Promise<void>;
+};
+
 /**
- * Daily bars for one user. `provider` records where a bar came from; the bar
- * itself does not carry that, so the caller names its provider once.
+ * The shared, instrument-keyed price data (issue #307). These tables belong to
+ * no user and have no row-level security, so no `app.user_id` is set: exactly
+ * like `createFxRateRepository`. Rows are keyed by the `PriceKey` from
+ * `packages/core/src/investing/instrumentKey.ts`.
  */
-export function createPriceBarRepository(
-  db: Database,
-  userId: string | undefined | null,
-  provider = "yahoo",
-): PriceBarRepository {
-  const tenantId = requireUserId(userId);
+export function createSharedPriceRepository(db: Database): SharedPriceRepository {
+  /** The key a read must use: the requested key when it has any rows, else its
+   *  `sym:` alias. "Any rows" means a bar or a coverage row. */
+  const resolveReadKey = async (key: SharedPriceKey): Promise<string> => {
+    const exists = async (candidate: string): Promise<boolean> => {
+      const result = await db.http.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM investing.instrument_price_bars WHERE instrument_key = $1
+           UNION ALL
+           SELECT 1 FROM investing.instrument_price_coverage WHERE instrument_key = $1
+         ) AS present`,
+        [candidate],
+      );
+      return Boolean(result.rows[0]?.present);
+    };
+    if (key.alias === undefined || (await exists(key.key))) return key.key;
+    return (await exists(key.alias)) ? key.alias : key.key;
+  };
+
+  const touchCoverage = (instrumentKey: string) =>
+    db.http.query(
+      "UPDATE investing.instrument_price_coverage SET updated_at = CURRENT_TIMESTAMP WHERE instrument_key = $1",
+      [instrumentKey],
+    );
+
   return {
-    async getRanges(symbols) {
-      if (symbols.length === 0) return [];
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol`,
-          [[...new Set(symbols)]],
-        );
-        return result.rows.map(priceBarRow);
-      });
-    },
-    async getRange(symbol, from, to) {
-      /* Built from the bounds actually given. A caller wanting the whole history
-       * passes none: spelling it as a wide date range is how '0000-01-01' — a
-       * year Postgres does not have — got into this query. */
-      const values: unknown[] = [symbol];
-      const conditions = ["symbol = $1"];
+    async getRange(key, from, to) {
+      const resolved = await resolveReadKey(key);
+      const values: unknown[] = [resolved];
+      const conditions = ["instrument_key = $1"];
       if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
       if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT ${PRICE_BAR_COLUMNS} FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
-          values,
-        );
-        return result.rows.map(priceBarRow);
-      });
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_BAR_COLUMNS} FROM investing.instrument_price_bars
+         WHERE ${conditions.join(" AND ")} ORDER BY date`,
+        values,
+      );
+      return result.rows.map(sharedPriceBarRow);
     },
-    async lastDate(symbol) {
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          "SELECT to_char(max(date), 'YYYY-MM-DD') AS date FROM investing.price_bars WHERE symbol = $1",
-          [symbol],
-        );
-        return (result.rows[0]?.date as string | null) ?? null;
-      });
+    async getRanges(keys) {
+      const resolved = await Promise.all(
+        keys.map(async (key) => ({ requested: key.key, actual: await resolveReadKey(key) })),
+      );
+      const out = new Map<string, SharedPriceBarRow[]>();
+      for (const key of keys) out.set(key.key, []);
+      if (resolved.length === 0) return out;
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_BAR_COLUMNS} FROM investing.instrument_price_bars
+         WHERE instrument_key = ANY($1::text[]) ORDER BY date`,
+        [[...new Set(resolved.map((entry) => entry.actual))]],
+      );
+      const byActual = new Map<string, SharedPriceBarRow[]>();
+      for (const row of result.rows.map(sharedPriceBarRow)) {
+        const list = byActual.get(row.instrumentKey) ?? [];
+        list.push(row);
+        byActual.set(row.instrumentKey, list);
+      }
+      for (const entry of resolved) out.set(entry.requested, byActual.get(entry.actual) ?? []);
+      return out;
     },
-    async upsert(bars) {
+    async lastDate(key) {
+      const resolved = await resolveReadKey(key);
+      const result = await db.http.query(
+        "SELECT to_char(max(date), 'YYYY-MM-DD') AS date FROM investing.instrument_price_bars WHERE instrument_key = $1",
+        [resolved],
+      );
+      return (result.rows[0]?.date as string | null) ?? null;
+    },
+    async upsert(instrumentKey, bars) {
       if (bars.length === 0) return;
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(UPSERT_PRICE_BARS, priceBarParams(bars, provider));
-      });
+      await db.http.transaction([
+        db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
+        touchCoverage(instrumentKey),
+      ]);
     },
-    async replaceRange(symbol, bars, from, to) {
-      /* One statement: the delete spares the dates the insert writes, so the
-       * two never touch the same row. */
-      const values = priceBarParams(bars, provider);
-      const conditions = [`symbol = $${values.push(symbol)}`, "date <> ALL($2::date[])"];
-      if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
-      if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          `WITH stale AS (DELETE FROM investing.price_bars WHERE ${conditions.join(" AND ")}) ${UPSERT_PRICE_BARS}`,
-          values,
+    async replaceRange(instrumentKey, bars, from, to) {
+      const conditions = ["instrument_key = $1", "date <> ALL($2::date[])"];
+      const params: unknown[] = [instrumentKey, bars.map((bar) => bar.date)];
+      if (from !== undefined) conditions.push(`date >= $${params.push(from)}`);
+      if (to !== undefined) conditions.push(`date <= $${params.push(to)}`);
+      const statements = [
+        db.http.query(
+          `DELETE FROM investing.instrument_price_bars WHERE ${conditions.join(" AND ")}`,
+          params,
+        ),
+      ];
+      if (bars.length > 0)
+        statements.push(
+          db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
         );
-      });
+      statements.push(touchCoverage(instrumentKey));
+      await db.http.transaction(statements);
     },
-    async getCoverage(symbol) {
-      return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(from_date, 'YYYY-MM-DD') AS "from", to_char(to_date, 'YYYY-MM-DD') AS "to", listing, currency, to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince", to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince" FROM investing.price_coverage WHERE symbol = $1`,
-          [symbol],
-        );
-        const row = result.rows[0] as
-          | (PriceCoverageRow & {
-              delistedSince: string | null;
-              listingMissingSince: string | null;
-            })
-          | undefined;
-        return row
-          ? {
-              ...row,
-              delistedSince: row.delistedSince ?? undefined,
-              listingMissingSince: row.listingMissingSince ?? undefined,
-            }
-          : null;
-      });
+    async getCoverage(key) {
+      const resolved = await resolveReadKey(key);
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_COVERAGE_COLUMNS} FROM investing.instrument_price_coverage WHERE instrument_key = $1`,
+        [resolved],
+      );
+      const row = result.rows[0];
+      return row ? sharedPriceCoverageRow(row) : null;
     },
-    async putCoverage(coverage) {
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.price_coverage (user_id, symbol, from_date, to_date, listing, currency, delisted_since, listing_missing_since) VALUES (current_setting('app.user_id'), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (user_id, symbol) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, listing = EXCLUDED.listing, currency = EXCLUDED.currency, delisted_since = EXCLUDED.delisted_since, listing_missing_since = EXCLUDED.listing_missing_since, updated_at = CURRENT_TIMESTAMP",
-          [
-            coverage.symbol,
-            coverage.from,
-            coverage.to,
-            coverage.listing,
-            coverage.currency,
-            coverage.delistedSince ?? null,
-            coverage.listingMissingSince ?? null,
-          ],
-        );
-      });
+    async putCoverage(instrumentKey, coverage) {
+      await db.http.query(
+        `INSERT INTO investing.instrument_price_coverage
+           (instrument_key, from_date, to_date, listing, currency, provider,
+            delisted_since, listing_missing_since, listing_start, provisional_through)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (instrument_key) DO UPDATE SET
+           from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date,
+           listing = EXCLUDED.listing, currency = EXCLUDED.currency,
+           provider = EXCLUDED.provider, delisted_since = EXCLUDED.delisted_since,
+           listing_missing_since = EXCLUDED.listing_missing_since,
+           listing_start = EXCLUDED.listing_start,
+           provisional_through = EXCLUDED.provisional_through,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          instrumentKey,
+          coverage.from,
+          coverage.to,
+          coverage.listing,
+          coverage.currency,
+          coverage.provider,
+          coverage.delistedSince ?? null,
+          coverage.listingMissingSince ?? null,
+          coverage.listingStart ?? null,
+          coverage.provisionalThrough ?? null,
+        ],
+      );
     },
-    async purgeAll() {
-      await withTenantStatement(db, tenantId, async (client) => {
-        await client.query(
-          "WITH coverage AS (DELETE FROM investing.price_coverage) DELETE FROM investing.price_bars",
-        );
-      });
+    async latestChange(instrumentKeys) {
+      if (instrumentKeys.length === 0) return null;
+      const result = await db.http.query(
+        `SELECT to_char(max(updated_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at
+         FROM investing.instrument_price_coverage WHERE instrument_key = ANY($1::text[])`,
+        [[...new Set(instrumentKeys)]],
+      );
+      return (result.rows[0]?.at as string | null) ?? null;
+    },
+    async adoptAlias(key, alias) {
+      const present = await db.http.query(
+        `SELECT EXISTS (SELECT 1 FROM investing.instrument_price_bars WHERE instrument_key = $1)
+             OR EXISTS (SELECT 1 FROM investing.instrument_price_coverage WHERE instrument_key = $1) AS present`,
+        [alias],
+      );
+      if (!present.rows[0]?.present) return;
+      await db.http.transaction([
+        db.http.query(
+          `INSERT INTO investing.instrument_price_bars
+             (instrument_key, date, close, currency, provider, split, updated_at)
+           SELECT $1, date, close, currency, provider, split, updated_at
+           FROM investing.instrument_price_bars WHERE instrument_key = $2
+           ON CONFLICT (instrument_key, date) DO NOTHING`,
+          [key, alias],
+        ),
+        db.http.query("DELETE FROM investing.instrument_price_bars WHERE instrument_key = $1", [
+          alias,
+        ]),
+        db.http.query(
+          `INSERT INTO investing.instrument_price_coverage
+             (instrument_key, from_date, to_date, listing, currency, provider,
+              delisted_since, listing_missing_since, listing_start, provisional_through, updated_at)
+           SELECT $1, from_date, to_date, listing, currency, provider,
+              delisted_since, listing_missing_since, listing_start, provisional_through, updated_at
+           FROM investing.instrument_price_coverage WHERE instrument_key = $2
+           ON CONFLICT (instrument_key) DO UPDATE SET
+             from_date = LEAST(investing.instrument_price_coverage.from_date, EXCLUDED.from_date),
+             to_date = GREATEST(investing.instrument_price_coverage.to_date, EXCLUDED.to_date),
+             updated_at = CURRENT_TIMESTAMP`,
+          [key, alias],
+        ),
+        db.http.query("DELETE FROM investing.instrument_price_coverage WHERE instrument_key = $1", [
+          alias,
+        ]),
+        touchCoverage(key),
+      ]);
+    },
+    async claim(key, owner, ttlMs) {
+      const result = await db.http.query(
+        `INSERT INTO investing.instrument_price_claims (instrument_key, owner, claimed_until)
+         VALUES ($1, $2, now() + ($3::double precision * INTERVAL '1 millisecond'))
+         ON CONFLICT (instrument_key) DO UPDATE
+           SET owner = EXCLUDED.owner, claimed_until = EXCLUDED.claimed_until
+           WHERE investing.instrument_price_claims.claimed_until < now()
+         RETURNING instrument_key`,
+        [key, owner, ttlMs],
+      );
+      return result.rows.length > 0;
+    },
+    async release(key, owner) {
+      await db.http.query(
+        "DELETE FROM investing.instrument_price_claims WHERE instrument_key = $1 AND owner = $2",
+        [key, owner],
+      );
     },
   };
 }
@@ -553,6 +707,15 @@ export type PreferencesRepository = {
   setMarketDataConsent(decision: unknown): Promise<void>;
   getLayout(): Promise<unknown | null>;
   setLayout(layout: unknown): Promise<void>;
+  /** Account tax-treatment labels (plan §3 WS4.4, #296). */
+  getAccountWrappers(): Promise<unknown | null>;
+  setAccountWrappers(entries: unknown): Promise<void>;
+  /** The owner's switch for identifier candidate selection (Jev-03, #136). */
+  getIdentifierSelectionEnabled(): Promise<boolean>;
+  setIdentifierSelectionEnabled(enabled: boolean): Promise<void>;
+  /** The owner's symbol choice per ISIN, most trusted resolution tier (#136). */
+  getIdentifierOverrides(): Promise<unknown | null>;
+  setIdentifierOverrides(overrides: unknown): Promise<void>;
   getSectorCorrections(): Promise<Record<string, string>>;
   setSectorCorrection(symbol: string, sector: string): Promise<void>;
   clearSectorCorrection(symbol: string): Promise<void>;
@@ -561,6 +724,15 @@ export type PreferencesRepository = {
    *  an instrument's name and description to an external model. */
   getSectorInferenceEnabled(): Promise<boolean>;
   setSectorInferenceEnabled(enabled: boolean): Promise<void>;
+  /** Owner-confirmed cash-flow vocabulary rules (issue #137). */
+  getCashFlowRules(): Promise<unknown>;
+  setCashFlowRules(rules: unknown): Promise<void>;
+  /** Stored suggestions, separate from rules; no effect until confirmed. */
+  getCashFlowSuggestions(): Promise<unknown>;
+  setCashFlowSuggestions(suggestions: unknown): Promise<void>;
+  /** Explicit owner switch for the suggestion step, default off. */
+  getCashFlowSuggestionsEnabled(): Promise<boolean>;
+  setCashFlowSuggestionsEnabled(enabled: boolean): Promise<void>;
 };
 
 /** Benchmarks, market-data consent, layout, sector corrections and the sector-inference switch
@@ -603,6 +775,13 @@ export function createPreferencesRepository(
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
     getLayout: () => read<unknown | null>("layout", null),
     setLayout: (layout) => write("layout", layout),
+    getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
+    setAccountWrappers: (entries) => write("account_wrappers", entries),
+    getIdentifierSelectionEnabled: () => read<boolean>("identifier_selection_enabled", false),
+    setIdentifierSelectionEnabled: (enabled) =>
+      writeBoolean("identifier_selection_enabled", enabled),
+    getIdentifierOverrides: () => read<unknown | null>("identifier_overrides", null),
+    setIdentifierOverrides: (overrides) => write("identifier_overrides", overrides),
     getSectorCorrections: readCorrections,
     async setSectorCorrection(symbol, sector) {
       const current = await readCorrections();
@@ -615,6 +794,13 @@ export function createPreferencesRepository(
     },
     getSectorInferenceEnabled: () => read<boolean>("sector_inference_enabled", false),
     setSectorInferenceEnabled: (enabled) => writeBoolean("sector_inference_enabled", enabled),
+    getCashFlowRules: () => read<unknown>("cash_flow_rules", []),
+    setCashFlowRules: (rules) => write("cash_flow_rules", rules),
+    getCashFlowSuggestions: () => read<unknown>("cash_flow_suggestions", []),
+    setCashFlowSuggestions: (suggestions) => write("cash_flow_suggestions", suggestions),
+    getCashFlowSuggestionsEnabled: () => read<boolean>("cash_flow_suggestions_enabled", false),
+    setCashFlowSuggestionsEnabled: (enabled) =>
+      writeBoolean("cash_flow_suggestions_enabled", enabled),
   };
 }
 
@@ -965,6 +1151,92 @@ export function createPriceSyncStateRepository(
   };
 }
 
+export type SyncRunRepository = {
+  get(): Promise<unknown | null>;
+  /** Writes the run state only while `leaseId` still owns it. */
+  put(state: unknown, status: string, leaseId: string): Promise<boolean>;
+  /** Atomic claim. Returns null when claimed, the live state when another run holds it. */
+  claim(state: unknown, status: string, staleBefore: string): Promise<unknown | null>;
+};
+
+/* The server-owned run is a sync like any other: one row, keyed by what it
+ * drives. `state.lease.heartbeatAt` is what makes a run live; a lease older
+ * than the caller's staleBefore may be taken over. */
+const SYNC_RUN_KEY = "run";
+const SYNC_RUN_STATUS_COLUMN: Record<string, string> = {
+  running: "running",
+  waiting: "running",
+  done: "succeeded",
+  failed: "failed",
+};
+
+export function createSyncRunRepository(
+  db: Database,
+  userId: string | undefined | null,
+): SyncRunRepository {
+  const tenantId = requireUserId(userId);
+  return {
+    async get() {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [SYNC_RUN_KEY],
+        );
+        const state = result.rows[0]?.state as Record<string, unknown> | undefined;
+        return state && Object.keys(state).length > 0 ? state : null;
+      });
+    },
+    async put(state, status, leaseId) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->'lease'->>'id' = $4 RETURNING state",
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            leaseId,
+            (state as { outcome?: unknown }).outcome === "failed" ? "run failed" : null,
+          ],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async claim(state, status, staleBefore) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = EXCLUDED.status,
+                   state = EXCLUDED.state,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE investing.sync_state.state->'lease'->>'heartbeatAt' IS NULL
+                OR (investing.sync_state.state->'lease'->>'heartbeatAt')::timestamptz < $4::timestamptz
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            staleBefore,
+          ],
+        );
+        const row = result.rows[0];
+        return row?.claimed ? null : (row?.state ?? null);
+      });
+    },
+  };
+}
+
 export type AgentRunRow = {
   id: string;
   agentId?: string;
@@ -1181,7 +1453,13 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-export type PersonalNetWorthTotal = { date: string; totalCents: number };
+export type PersonalNetWorthTotal = {
+  date: string;
+  totalCents: number;
+  /** The agent-path citation for this valuation (#300, WS5.5), as stored JSON.
+   *  Absent on rows the browser's own share flow wrote. */
+  provenance?: Record<string, unknown>;
+};
 
 /**
  * Personal's opt-in share of its own "Totale positie" into Investing's net
@@ -1195,15 +1473,20 @@ export type PersonalNetWorthTotal = { date: string; totalCents: number };
 export function createPersonalNetWorthRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
-    async put(date: string, totalCents: number): Promise<void> {
+    async put(
+      date: string,
+      totalCents: number,
+      provenance?: Record<string, unknown>,
+    ): Promise<void> {
       await withTenantStatement(db, tenantId, async (client) => {
         await client.query(
-          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency)
-           VALUES (current_setting('app.user_id'), $1, $2, 'EUR')
+          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency, provenance)
+           VALUES (current_setting('app.user_id'), $1, $2, 'EUR', $3::jsonb)
            ON CONFLICT (user_id, date) DO UPDATE SET
              total_cents = EXCLUDED.total_cents,
+             provenance = EXCLUDED.provenance,
              updated_at = CURRENT_TIMESTAMP`,
-          [date, totalCents],
+          [date, totalCents, provenance === undefined ? null : JSON.stringify(provenance)],
         );
       });
     },
@@ -1216,12 +1499,15 @@ export function createPersonalNetWorthRepository(db: Database, userId: string | 
     async list(): Promise<PersonalNetWorthTotal[]> {
       return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents
+          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents, provenance
            FROM personal.net_worth_totals ORDER BY date ASC`,
         );
         return result.rows.map((row) => ({
           date: row.date as string,
           totalCents: Number(row.total_cents),
+          ...(row.provenance && typeof row.provenance === "object"
+            ? { provenance: row.provenance as Record<string, unknown> }
+            : {}),
         }));
       });
     },
@@ -1259,8 +1545,6 @@ const USER_DATA_TABLES = [
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
-  "investing.price_coverage",
-  "investing.price_bars",
   "investing.broker_vaults",
   // After the tables above: deleting their rows raises this user's dashboard version.
   "investing.dashboard_snapshots",
@@ -1530,6 +1814,8 @@ export function createEbFlowRepository(db: Database) {
   };
 }
 
+export type AiUsageOutcome = "ok" | "failed";
+
 export type AiUsage = {
   day: string; // "YYYY-MM-DD"
   route:
@@ -1539,6 +1825,8 @@ export type AiUsage = {
     | "travel"
     | "portfolio-persona"
     | "sector-inference"
+    | "cash-flow-suggestion"
+    | "identifier-selection"
     | "instinct-reply";
   model: string;
   inputTokens: number;
@@ -1546,6 +1834,16 @@ export type AiUsage = {
   pages: number;
   searches: number;
   costCents: number;
+  /** Provider-reported prompt-cache usage (#300, WS5.7). 0 when it reports none. */
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+  /** "ok" for a call that completed; "failed" for one that reached the model
+   *  and threw. Failed rows carry cost 0 and error metadata instead of a price. */
+  outcome?: AiUsageOutcome;
+  /** The route's own machine code for a failure; never a provider message. */
+  errorCode?: string;
+  /** Upstream HTTP status for a failure, 0 for timeout/transport. */
+  httpStatus?: number;
 };
 
 export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope: "day" | "month" };
@@ -1665,7 +1963,8 @@ export function createAiUsageRepository(db: Database) {
         await client.query(
           `UPDATE personal.ai_usage
            SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
-               cost_cents = $7, reconciled_at = CURRENT_TIMESTAMP
+               cost_cents = $7, cache_write_tokens = $9, cache_read_tokens = $10,
+               outcome = 'ok', reconciled_at = CURRENT_TIMESTAMP
            WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
           [
             usage.id,
@@ -1676,6 +1975,65 @@ export function createAiUsageRepository(db: Database) {
             usage.searches,
             usage.costCents,
             identity,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+          ],
+        );
+      });
+    },
+
+    /** Turn a reservation into a FAILED ledger row (#300, WS5.7 leftover).
+     *
+     *  Before this, the failure path deleted the placeholder, so a provider
+     *  refusal, timeout or 5xx left no trace and an operator could not see why
+     *  spend stopped. The row keeps the reservation id, records the route's own
+     *  machine error code and the upstream HTTP status (0 = timeout/transport),
+     *  sets cost 0 — nothing was billed with certainty — and marks
+     *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
+     *
+     *  `costCents` applies only when the row was NOT already reconciled. The
+     *  provider call sites deliberately record their worst-case/ceiling usage
+     *  BEFORE they throw ("a failed call was still billed"), so a row marked
+     *  failed afterwards usually already carries a real charge: that charge and
+     *  its cache counts are KEPT and only the outcome/error columns are added.
+     *  Either way the row ends up `reconciled_at`-stamped, so it counts exactly
+     *  once in the cap sums. */
+    async fail(
+      failure: {
+        id: number;
+        model: string;
+        errorCode: string;
+        httpStatus?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+        costCents?: number;
+      },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2,
+               input_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE input_tokens END,
+               output_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE output_tokens END,
+               pages = CASE WHEN reconciled_at IS NULL THEN 0 ELSE pages END,
+               searches = CASE WHEN reconciled_at IS NULL THEN 0 ELSE searches END,
+               cost_cents = CASE WHEN reconciled_at IS NULL THEN $8 ELSE cost_cents END,
+               cache_write_tokens = CASE WHEN reconciled_at IS NULL THEN $4 ELSE cache_write_tokens END,
+               cache_read_tokens = CASE WHEN reconciled_at IS NULL THEN $5 ELSE cache_read_tokens END,
+               outcome = 'failed', error_code = $3, http_status = $6,
+               reconciled_at = COALESCE(reconciled_at, CURRENT_TIMESTAMP)
+           WHERE id = $1 AND user_id = $7`,
+          [
+            failure.id,
+            failure.model,
+            failure.errorCode,
+            failure.cacheWriteTokens ?? 0,
+            failure.cacheReadTokens ?? 0,
+            failure.httpStatus ?? null,
+            identity,
+            Math.max(0, Math.round(failure.costCents ?? 0)),
           ],
         );
       });
@@ -1702,7 +2060,10 @@ export function createAiUsageRepository(db: Database) {
       const identity = requireUserId(usage.userId);
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+          `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             usage.day,
             usage.route,
@@ -1712,6 +2073,11 @@ export function createAiUsageRepository(db: Database) {
             usage.pages,
             usage.searches,
             usage.costCents,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+            usage.outcome ?? "ok",
+            usage.errorCode ?? null,
+            usage.httpStatus ?? null,
             identity,
           ],
         );
@@ -1827,3 +2193,5 @@ export function createN8nForwardingRepository(db: Database) {
 export * from "./agent.js";
 export * from "./agentMemory.js";
 export * from "./rateLimit.js";
+export * from "./mcpTokens.js";
+export * from "./partnerBudget.js";

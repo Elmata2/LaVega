@@ -10,6 +10,7 @@ export type View =
   | "accounts"
   | "rules"
   | "forecast"
+  | "bills"
   | "optimalisatie"
   | "valuta"
   | "belasting"
@@ -31,6 +32,7 @@ const VIEW_BY_SEGMENT: Record<string, View> = {
   accounts: "accounts",
   rules: "rules",
   forecast: "forecast",
+  bills: "bills",
   optimalisatie: "optimalisatie",
   valuta: "valuta",
   belasting: "belasting",

@@ -15,6 +15,29 @@ hij, dan het volgende.
 
 ---
 
+## Sure-adoptieprogramma — afgerond 11 november 2026 (#302)
+
+Het volledige Sure-programma (plan §3, WS1–WS6) is afgerond en gesloten. Wat er nu ligt en waar
+je moet kijken voordat je eraan zit:
+
+- **Draagbare export**: `packages/core/src/interop/export.ts` maakt een versie-ZIP met manifest,
+  NDJSON en CSV; het scherm Back-up leest het bestand na en zegt pas dan dat het klopt. De
+  versleutelde `.lavega`-back-up blijft het herstelbestand; er is geen importeur en er wordt geen
+  dedupe over formaten beloofd (ADR 0013).
+- **Attributie**: `pnpm run check:attribution` controleert in beide richtingen dat elk geport
+  bestand een Sure-header, een Appendix A-rij en `NOTICE`-dekking heeft. Nu: 42 bestanden,
+  23 rijen.
+- **Metrieken**: `docs/metrics/2026-11-11-sure-program-metrics.md` met gemeten aggregaten op
+  synthetische fixtures en de acht owner-pending metrieken (o.a. forecast-fout op echte historie,
+  transferdekking, statement-dekking, MCP-gebruik). #303 is owner-blocked; vul die aan met de
+  runbook uit plan §8 en verzin geen getal.
+- **Grenzen**: ADR 0013 legt vast dat persoonlijke plaintext browser-only blijft, family sharing
+  wacht op een key-ownership-ADR, het budget envelop + carry blijft en Sure geen runtime is.
+- **Dode experimenten**: de losse terminal-transcript in de root is verwijderd. `.scratch/` blijft,
+  want dat is de gedocumenteerde plek voor batch-run-logs.
+
+---
+
 ## 0. Afgesloten sinds 19 augustus — verdwijnt uit deze backlog
 
 Alle drie de reviews van 20 augustus zijn verwerkt, in de 50 commits die die dag draagt. Wat
@@ -455,7 +478,7 @@ verdubbelen een oversteek; de woordwacht mist verbogen vormen) staan in §0b. **
 | #      | De vraag                                   | Waarom niemand anders hem kan beantwoorden                                                                                                                                                                                                                                                                                                                        |
 | ------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **V5** | **Kleuren en fontgroottes**                | **Gevraagd op 22 sep, antwoord: nog niet — ná de test van Tom.** Zijn feedback kan de inhoud opnieuw verschuiven, en twee keer een palet doen is precies wat de oorspronkelijke regel moest voorkomen                                                                                                                                                             |
-| **V7** | **Meldingen in het profiel**               | **Gevraagd op 22 sep, antwoord: uitstellen.** **Gebouwd door de Instinct-agent (11 nov 2026, branch `docs/instinct-agent-design`, nog niet uitgerold):** een opt-in dagelijks bericht per feed, web push, e-mail en WhatsApp, zie `docs/adr/0010-server-reads-transactions-at-night.md`. De aandachtskaart op Overzicht blijft bestaan voor wie de app open heeft |
+| **V7** | **Meldingen in het profiel**               | **Gevraagd op 22 sep, antwoord: uitstellen.** **Gebouwd door de Instinct-agent (11 nov 2026, branch `docs/instinct-agent-design`, nog niet uitgerold):** een opt-in dagelijks bericht per feed, web push, e-mail en WhatsApp, zie `docs/adr/0014-server-reads-transactions-at-night.md`. De aandachtskaart op Overzicht blijft bestaan voor wie de app open heeft |
 | **V8** | **Disclaimers en voorwaarden**             | Bij lancering, niet in het werkscherm                                                                                                                                                                                                                                                                                                                             |
 | **V9** | **Enable Banking met meerdere rekeningen** | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst                                                                                                                                                                                                                                                                                                     |
 

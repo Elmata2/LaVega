@@ -1,8 +1,11 @@
 import { expect, test } from "vitest";
 import {
+  ALLOCATION_DENOMINATOR_RULE,
   bucketAllocationByEntity,
   bucketAllocationByInstrument,
   bucketPricedAllocation,
+  buildAllocationLadder,
+  ladderDrillDown,
 } from "./allocation.js";
 import type { Position } from "./model.js";
 
@@ -113,4 +116,83 @@ test("keeps priced entity subtotal when another holding is unpriced", () => {
     buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }],
     unpriced: ["OLD"],
   });
+});
+
+/* WS4.6 acceptance (#297): cash appears in the ladder; the unclassified bucket
+ * is labelled; weights sum to at most 100% and the denominator rule is
+ * documented. */
+
+test("cash is a ladder bucket and counts in the documented denominator", () => {
+  const ladder = buildAllocationLadder({
+    holdings: [
+      { key: "AAPL", label: "Apple", value: 750 },
+      { key: "ASML", label: "ASML", value: 250 },
+    ],
+    cash: [{ value: 250 }],
+  });
+  expect(ladder.denominatorRule).toBe(ALLOCATION_DENOMINATOR_RULE);
+  expect(ladder).toMatchObject({
+    cash: 250,
+    holdings: 1000,
+    total: 1250,
+    denominator: 1250,
+    weightsSum: 1,
+  });
+  expect(ladder.rows.map((row) => [row.kind, row.label, row.weight])).toEqual([
+    ["holding", "Apple", 0.6],
+    ["holding", "ASML", 0.2],
+    ["cash", "Cash", 0.2],
+  ]);
+});
+
+test("a negative cash balance cannot shrink the invested part below the holdings", () => {
+  const ladder = buildAllocationLadder({
+    holdings: [{ key: "AAPL", label: "Apple", value: 1000 }],
+    cash: [{ value: -200 }],
+  });
+  // max(1000 - 200, 1000) = 1000, so the weights sum to 80%, not 100%.
+  expect(ladder.denominator).toBe(1000);
+  expect(ladder.weightsSum).toBeCloseTo(0.8, 10);
+  expect(ladder.weightsSum!).toBeLessThanOrEqual(1);
+});
+
+test("an unclassified holding is a real, labelled bucket", () => {
+  const ladder = buildAllocationLadder({
+    holdings: [
+      { key: "AAPL", label: "Apple", value: 600 },
+      { key: "", label: "Legacy row", value: 200 },
+      { key: "unknown", label: "Unmapped", value: 200 },
+    ],
+  });
+  const unclassified = ladder.rows.find((row) => row.kind === "unclassified")!;
+  expect(unclassified).toMatchObject({
+    key: "unclassified",
+    label: "Unclassified",
+    value: 400,
+    weight: 0.4,
+  });
+  expect(ladder.weightsSum).toBe(1);
+});
+
+test("an unpriced holding carries no weight and never invents value", () => {
+  const ladder = buildAllocationLadder({
+    holdings: [
+      { key: "AAPL", label: "Apple", value: 500 },
+      { key: "MYSTERY", label: "Mystery", value: null },
+    ],
+    cash: [{ value: null }],
+  });
+  expect(ladder.rows.find((row) => row.key === "MYSTERY")?.weight).toBeNull();
+  expect(ladder.rows.find((row) => row.key === "cash")?.unpriced).toBe(true);
+  expect(ladder.unpriced).toEqual(["Cash", "Mystery"]);
+  expect(ladder.weightsSum).toBeLessThanOrEqual(1);
+});
+
+test("the instrument ladder drills down inside one parent entity", () => {
+  const holdings = [
+    { key: "AAPL", label: "Apple", value: 600, parentKey: "personal" },
+    { key: "ASML", label: "ASML", value: 400, parentKey: "personal" },
+    { key: "BTC", label: "Bitcoin", value: 100, parentKey: "crypto" },
+  ];
+  expect(ladderDrillDown(holdings, "personal").map((row) => row.key)).toEqual(["AAPL", "ASML"]);
 });

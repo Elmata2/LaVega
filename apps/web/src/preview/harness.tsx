@@ -6,7 +6,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createEncryptedStorage, vaultKeyFromBase64 } from "@lavega/adapters";
 import { PREVIEW_KEY_B64, refusedRequests } from "./network";
-import { buildVaultSeed, completeProfile, profileResumingAt, type WizardStop } from "./fixtures";
+import {
+  budgetSeed,
+  buildVaultSeed,
+  completeProfile,
+  profileResumingAt,
+  type WizardStop,
+} from "./fixtures";
 import { readAppLocale, setAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { markOnboardingSeen } from "../onboarding.js";
@@ -62,6 +68,8 @@ export const MODES: Mode[] = [
     path: "/app/transactions",
   },
   { id: "forecast", group: "App", label: "Forecast", kind: "app", path: "/app/forecast" },
+  { id: "bills", group: "App", label: "Bills", kind: "app", path: "/app/bills" },
+  { id: "backup", group: "App", label: "Backup", kind: "app", path: "/app/backup" },
   { id: "optimise", group: "App", label: "Optimise", kind: "app", path: "/app/optimalisatie" },
   { id: "points", group: "App", label: "Points", kind: "app", path: "/app/punten" },
   { id: "profile", group: "App", label: "Profile", kind: "app", path: "/app/profiel" },
@@ -96,7 +104,13 @@ async function seedVault(
     await storage.putTxs(seed.txs);
     await storage.putRewards(seed.rewards);
     await storage.putScheduledFlows(seed.flows);
+    await storage.putBillPlan(seed.bills, seed.billOccurrences);
+    await storage.putValuations(seed.valuations);
+    await storage.putImportSessions(seed.importSessions);
     await storage.putProfile(completeProfile(today));
+    const budget = budgetSeed(seed.accounts, seed.txs, today);
+    await storage.putBudgetPeriods(budget.periods);
+    await storage.putCategoryGroups(budget.groups);
   }
   storage.lock();
 }

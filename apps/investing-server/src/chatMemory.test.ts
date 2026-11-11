@@ -8,6 +8,8 @@ const thesis = (symbol: string, status: "active" | "dormant") => ({
   worth: "$250",
   entry: null,
   wrongIf: null,
+  instrumentKey: null,
+  reviewRequired: false,
   updatedAt: "2026-01-01T00:00:00.000Z",
 });
 

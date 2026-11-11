@@ -35,5 +35,6 @@ Each feature file has an H1, one paragraph of user-visible behaviour, then exact
 - [Bank file import](./import-bank-file.md) — CSV/MT940 import from the home card; entity assignment; problems surfaced, never a crash.
 - [Cash-flow forecast](./forecast.md) — 13-week forecast, shortfall banner, per-week drivers.
 - [AI agents](./agents.md) — categorize, chat, invoice extraction: opt-in, confirm-first, dark without a key.
+- [Personal assistant](./assistant.md) — client-side tools over the vault; an approval event for the one write, persisted in the vault and still there after reload.
 
 Not yet mapped (add as they are driven): Rekeningen, Transacties, Regels, Optimalisatie, Valuta, Belasting, Facturen (manual/CSV/UBL), Punten, Koppelingen (Enable Banking), Back-up (`.lavega` download + server backup), Profiel (erase).

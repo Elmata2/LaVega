@@ -74,3 +74,26 @@ test("REAL v1->v2 upgrade: a pre-existing v1 DB's accounts/txs survive the schem
   expect(txs[0]).toMatchObject({ id: "old1", amount: 30 });
   expect(await storage.getRules()).toEqual([]); // new v2 store exists and is empty
 });
+
+test("a v2 rule round-trips the rules store unchanged", async () => {
+  // WS1.3 added the typed shape to the SAME store; a vault write/read must not
+  // reshape it (the engine treats a re-saved row as the source of truth).
+  const storage = createIndexedDbStorage();
+  const v2: Rule = {
+    v: 2,
+    id: "r-v2",
+    name: "Boodschappen",
+    conditions: [
+      { kind: "merchant", op: "contains", value: "albert heijn" },
+      { kind: "amount", op: "between", valueCents: -5000, upperCents: -100 },
+    ],
+    actions: [
+      { kind: "setCategory", category: "Boodschappen" },
+      { kind: "addTag", tag: "boodschappen" },
+    ],
+    stopProcessing: false,
+    effectiveFrom: "2026-01-01",
+  };
+  await storage.putRules([v2]);
+  expect(await storage.getRules()).toEqual([v2]);
+});

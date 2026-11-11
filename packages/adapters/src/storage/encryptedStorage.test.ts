@@ -3,12 +3,23 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeAll, expect, test } from "vitest";
 import { openDB } from "idb";
-import type { Account, Tx } from "@lavega/core";
+import type {
+  Account,
+  Bill,
+  BillOccurrence,
+  Merchant,
+  TransferPair,
+  Tx,
+  Valuation,
+  VaultDocument,
+  ImportSession,
+} from "@lavega/core";
 import {
   AdvisorProfile,
   type ProfileRead,
   LOCAL_TENANT_ID,
   commitProfile,
+  emptyPlanPreferences,
   emptyProfile,
   emptyProfileStore,
   encodeProfileStore,
@@ -287,6 +298,145 @@ test("rewards round-trip; legacy vault defaults to []", async () => {
   };
   await s.putRewards([reward]);
   expect(await s.getRewards()).toEqual([reward]);
+});
+
+const transferPair = (over: Partial<TransferPair> = {}): TransferPair => ({
+  id: "pair-1",
+  outflowTxId: "t-out",
+  inflowTxId: "t-in",
+  status: "confirmed",
+  kind: "funds_movement",
+  amountCents: 12500,
+  currency: "EUR",
+  createdAt: "2026-06-02",
+  ...over,
+});
+
+test("transfers round-trip exactly; a legacy vault without the field reads []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault sealed before transfer records existed: no `transfers` field.
+  const legacy = await sealJSON(KEY, { accounts: [], txs: [], rules: [] });
+  const v = createEncryptedStorage("lavega-vault-test-transfers");
+  await v.open(KEY, "user:a");
+  expect(await v.getTransfers()).toEqual([]); // created vault, same default
+  expect(await v.restore(legacy)).toBe(true); // legacy blob decrypts unchanged
+  expect(await v.getTransfers()).toEqual([]);
+
+  const confirmed = transferPair({
+    id: "pair-confirmed",
+    feeTxIds: ["fee-1"],
+    decidedAt: "2026-06-03",
+    evidence: { rank: "exact", dateDiffDays: 0, amountDeltaCents: 0, crossRate: null },
+  });
+  const rejected = transferPair({
+    id: "pair-rejected",
+    outflowTxId: "t-out-2",
+    inflowTxId: "t-in-2",
+    status: "rejected",
+    kind: "cc_payment",
+    amountCents: 5000,
+    currency: "HUF",
+    decidedAt: "2026-06-04",
+    evidence: { rank: "fx", dateDiffDays: 4, amountDeltaCents: 120, crossRate: 390.5 },
+  });
+  await v.putTransfers([confirmed, rejected]);
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+
+  // The getter hands out a fresh array: mutating it cannot alter vault state.
+  const read = await v.getTransfers();
+  read.push(transferPair({ id: "pair-extra" }));
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+
+  // Survives a lock/unlock cycle — i.e. it really went through the sealed blob.
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getTransfers()).toEqual([confirmed, rejected]);
+});
+
+test("putTransfers replaces the whole list; get/put while locked throws", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-transfers-replace");
+  await v.open(KEY, "user:a");
+  const first = transferPair({ id: "pair-1" });
+  const second = transferPair({ id: "pair-2", outflowTxId: "t-out-2", inflowTxId: "t-in-2" });
+  await v.putTransfers([first, second]);
+  await v.putTransfers([second]);
+  expect(await v.getTransfers()).toEqual([second]); // replace-all, not upsert
+
+  v.lock();
+  await expect(v.getTransfers()).rejects.toBeTruthy();
+  await expect(v.putTransfers([first])).rejects.toBeTruthy();
+});
+
+test("merchants round-trip exactly; a legacy vault without the field reads []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const legacy = await sealJSON(KEY, { accounts: [], txs: [], rules: [] });
+  const v = createEncryptedStorage("lavega-vault-test-merchants");
+  await v.open(KEY, "user:a");
+  expect(await v.getMerchants()).toEqual([]);
+  expect(await v.restore(legacy)).toBe(true);
+  expect(await v.getMerchants()).toEqual([]);
+
+  const registry: Merchant[] = [
+    { key: "ah", name: "Albert Heijn", aliases: ["AH", "ALBERT HEIJN"] },
+    { key: "simyo", name: "Simyo", aliases: ["Simyo"] },
+  ];
+  await v.putMerchants(registry);
+  expect(await v.getMerchants()).toEqual(registry);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getMerchants()).toEqual(registry);
+  await v.putMerchants([registry[0]]);
+  expect(await v.getMerchants()).toEqual([registry[0]]); // replace-all
+});
+
+test("an old vault gets the tx-state defaults in ONE save on first open", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault sealed before WS1.6: rows have no state fields.
+  const old = await sealJSON(KEY, {
+    accounts: [],
+    txs: [tx("t1", "A"), tx("t2", "A")],
+    rules: [],
+  });
+  const v = createEncryptedStorage("lavega-vault-test-tx-states");
+  await v.open(KEY, "user:a");
+  expect(await v.restore(old)).toBe(true); // restore also runs the pass
+
+  const migrated = await v.getTxs();
+  expect(migrated[0]).toMatchObject({
+    id: "t1",
+    excluded: false,
+    pending: false,
+    notes: "",
+    tags: [],
+  });
+
+  // The one save happened during the restore that adopted the old blob; the
+  // next open must not re-seal it (a re-seal always changes the ciphertext).
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration);
+  expect(await v.getTxs()).toEqual(migrated);
+});
+
+test("a reopen of a vault with old rows runs the pass and writes once", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-tx-states-open");
+  await v.open(KEY, "user:a");
+  await v.putTxs([tx("t1", "A")]); // stored without state fields
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect((await v.getTxs())[0]).toMatchObject({
+    excluded: false,
+    pending: false,
+    notes: "",
+    tags: [],
+  });
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration); // no second re-seal
 });
 
 test("deleteAccount / deleteTxs remove only their rows (parity with plaintext adapter)", async () => {
@@ -653,4 +803,443 @@ test("two rapid puts: the second wins (enqueueWrite ordering)", async () => {
   v.lock();
   await v.open(KEY, "user:a");
   expect(currentWorry(await v.getProfile())).toBe("second");
+});
+
+test("legacy categoryLimits migrate to the first budget period in ONE save; a reopen writes nothing", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault from before WS2.9: the plan holds only the legacy category limits.
+  const preferences = emptyPlanPreferences();
+  (preferences.categoryLimits as Record<string, { cents: number; at: string }>)["Boodschappen"] = {
+    cents: 40_000,
+    at: "2026-10-01",
+  };
+  const legacy = await sealJSON(KEY, {
+    accounts: [],
+    txs: [],
+    rules: [],
+    plan: { preferences: { at: "2026-10-02", value: preferences }, snapshots: {} },
+  });
+  const v = createEncryptedStorage("lavega-vault-test-budgets");
+  await v.open(KEY, "user:a");
+  expect(await v.getBudgetPeriods()).toEqual([]);
+  expect(await v.restore(legacy)).toBe(true); // restore runs the same pass
+
+  const periods = await v.getBudgetPeriods();
+  expect(periods).toEqual([
+    {
+      month: "2026-10",
+      currency: "EUR",
+      budgetedSpendingCents: 40_000,
+      rollover: false,
+      lines: [{ category: "Boodschappen", allocationCents: 40_000 }],
+      billsReservedCents: null,
+    },
+  ]);
+  // The legacy record is untouched: an older build still reads it.
+  const plan = await v.getSection("plan");
+  expect(plan.preferences?.value).toMatchObject({
+    categoryLimits: { Boodschappen: { cents: 40_000 } },
+  });
+
+  // The pass wrote once, during the restore that adopted the old blob. A later
+  // open must not re-seal it (a re-seal always changes the ciphertext).
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration);
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+});
+
+test("budget periods and category groups round-trip; fields are optional", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-budget-roundtrip");
+  await v.open(KEY, "user:a");
+  const periods = [
+    {
+      month: "2026-10",
+      currency: "EUR",
+      budgetedSpendingCents: 50_000,
+      rollover: true,
+      lines: [{ category: "Boodschappen", allocationCents: 30_000, rollover: true }],
+      billsReservedCents: null,
+    },
+  ];
+  const groups = [{ name: "Huishouden", categories: ["Boodschappen"] }];
+  await v.putBudgetPeriods(periods);
+  await v.putCategoryGroups(groups);
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+  expect(await v.getCategoryGroups()).toEqual(groups);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+  expect(await v.getCategoryGroups()).toEqual(groups);
+});
+
+const document = (sha256: string, overrides: Partial<VaultDocument> = {}): VaultDocument => ({
+  id: sha256,
+  sha256,
+  filename: `${sha256}.pdf`,
+  mime: "application/pdf",
+  byteSize: 8,
+  kind: "statement",
+  source: "manual-upload",
+  uploadedAt: "2026-11-11",
+  periodFrom: "2026-10-01",
+  periodTo: "2026-10-31",
+  currency: "EUR",
+  accountKey: null,
+  suggestedAccountKey: null,
+  matchConfidence: null,
+  accountLast4: null,
+  institutionHint: null,
+  accountNameHint: null,
+  openingBalanceCents: null,
+  closingBalanceCents: null,
+  reviewStatus: "unmatched",
+  metadataSources: [],
+  ...overrides,
+});
+
+const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
+const textOf = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
+
+test("document bytes live in their own store: one record per SHA-256, no vault rewrite", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-documents");
+  await s.open(KEY, "user:a");
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+
+  await s.putDocuments([document("aaa")]);
+  await s.putDocumentBytes("aaa", bytesOf("PDF-a"));
+  // The same bytes twice is ONE record.
+  await s.putDocumentBytes("aaa", bytesOf("PDF-a"));
+  expect(await s.listDocumentBytes()).toEqual(["aaa"]);
+  expect(await s.hasDocumentBytes("aaa")).toBe(true);
+  expect(textOf((await s.getDocumentBytes("aaa"))!)).toBe("PDF-a");
+
+  // The vault ciphertext is untouched by a document write: the blob before and
+  // after a document upload is the same record object (no persist ran).
+  const before = s.export();
+  await s.putDocumentBytes("bbb", bytesOf("PDF-b"));
+  expect(s.export()).toBe(before);
+
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getDocuments()).toEqual([document("aaa")]);
+  expect(await s.listDocumentBytes()).toEqual(["aaa", "bbb"]);
+  expect(textOf((await s.getDocumentBytes("bbb"))!)).toBe("PDF-b");
+
+  await s.deleteDocumentBytes("bbb");
+  expect(await s.listDocumentBytes()).toEqual(["aaa"]);
+  expect(await s.getDocumentBytes("bbb")).toBeNull();
+});
+
+test("a full bundle carries the vault AND the documents, and restores both into a fresh store", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const source = createEncryptedStorage("lavega-vault-test-bundle-source");
+  await source.open(KEY, "user:a");
+  await source.putAccounts([acc("A", 1200)]);
+  await source.putDocuments([document("sha-1"), document("sha-2")]);
+  await source.putDocumentBytes("sha-1", bytesOf("bytes-one"));
+  await source.putDocumentBytes("sha-2", bytesOf("bytes-two"));
+  const bundle = await source.exportBundle();
+  expect(bundle?.v).toBe(3);
+  expect(source.export()).toMatchObject({ v: 2 }); // the vault-only blob is unchanged
+  source.lock();
+
+  // A FRESH browser profile: a new IndexedDB factory and a different owner DB.
+  globalThis.indexedDB = new IDBFactory();
+  const fresh = createEncryptedStorage("lavega-vault-test-bundle-fresh");
+  expect(await fresh.open(KEY, "user:a")).toBe("created");
+  expect(await fresh.getDocuments()).toEqual([]);
+  expect(await fresh.restore(bundle!)).toBe(true);
+  expect((await fresh.getAccounts())[0]?.balance).toBe(1200);
+  expect((await fresh.getDocuments()).map((d) => d.id)).toEqual(["sha-1", "sha-2"]);
+  expect(textOf((await fresh.getDocumentBytes("sha-1"))!)).toBe("bytes-one");
+  expect(textOf((await fresh.getDocumentBytes("sha-2"))!)).toBe("bytes-two");
+
+  // And a wrong key still refuses the bundle, leaving the fresh vault as it was.
+  globalThis.indexedDB = new IDBFactory();
+  const other = createEncryptedStorage("lavega-vault-test-bundle-other");
+  await other.open(OTHER_KEY, "user:b");
+  expect(await other.restore(bundle!)).toBe(false);
+  expect(await other.getDocuments()).toEqual([]);
+});
+
+test("erase removes metadata AND bytes; startFresh clears both stores", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-erase");
+  await s.open(KEY, "user:a");
+  await s.putDocuments([document("sha-1"), document("sha-2")]);
+  await s.putDocumentBytes("sha-1", bytesOf("one"));
+  await s.putDocumentBytes("sha-2", bytesOf("two"));
+
+  expect(await s.eraseDocuments()).toBe(2);
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+  // The erase survives a reopen: neither store kept a row.
+  s.lock();
+  await s.open(KEY, "user:a");
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+
+  await s.putDocuments([document("sha-3")]);
+  await s.putDocumentBytes("sha-3", bytesOf("three"));
+  await s.startFresh();
+  expect(await s.getDocuments()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+});
+
+test("a vault-only (v2) restore clears the document store instead of orphaning bytes", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const source = createEncryptedStorage("lavega-vault-test-v2-source");
+  await source.open(KEY, "user:a");
+  await source.putAccounts([acc("A", 500)]);
+  const vaultOnly = source.export()!; // v2: no documents in this format
+  source.lock();
+
+  globalThis.indexedDB = new IDBFactory();
+  const target = createEncryptedStorage("lavega-vault-test-v2-target");
+  await target.open(KEY, "user:a");
+  await target.putDocuments([document("oud")]);
+  await target.putDocumentBytes("oud", bytesOf("old"));
+  expect(await target.restore(vaultOnly)).toBe(true);
+  expect((await target.getAccounts())[0]?.balance).toBe(500);
+  // The replaced vault's documents are gone, not pointing at nothing.
+  expect(await target.getDocuments()).toEqual([]);
+  expect(await target.listDocumentBytes()).toEqual([]);
+});
+
+test("a version-1 database upgrades in place and gains the document store", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const dbName = "lavega-vault-test-upgrade";
+  // A vault sealed with a password, written by the pre-account-key build.
+  await writePasswordVault(dbName, "geheim", { accounts: [acc("A", 10)], txs: [], rules: [] });
+  const s = createEncryptedStorage(dbName);
+  expect(await s.open(KEY, "user:a")).toBe("password-vault");
+  expect(await s.adoptPasswordVault("geheim")).toBe(true);
+  expect((await s.getAccounts())[0]?.balance).toBe(10);
+  // The upgrade created the document store beside the vault blob.
+  await s.putDocumentBytes("nieuw", bytesOf("bytes"));
+  expect(await s.hasDocumentBytes("nieuw")).toBe(true);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.hasDocumentBytes("nieuw")).toBe(true);
+});
+
+test("valuations round-trip; a legacy vault defaults to [] and a rewrite is replace-all", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-valuations");
+  await s.open(KEY, "user:a");
+  expect(await s.getValuations()).toEqual([]); // legacy vault default
+
+  const valuation: Valuation = {
+    id: "A|2026-11-05",
+    accountKey: "A",
+    date: "2026-11-05",
+    amountCents: 42_000_000,
+    currency: "EUR",
+    kind: "reconciliation",
+    source: "manual",
+    createdAt: "2026-11-11",
+  };
+  await s.putValuations([valuation]);
+  expect(await s.getValuations()).toEqual([valuation]);
+
+  // Replace-all: a merge/delete rewrites the whole list, so a removed row can
+  // never come back from a stale snapshot.
+  await s.putValuations([]);
+  expect(await s.getValuations()).toEqual([]);
+  await s.putValuations([valuation]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getValuations()).toEqual([valuation]);
+});
+
+test("import sessions round-trip; a legacy vault defaults to [] and a rewrite is replace-all", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-import-sessions");
+  await s.open(KEY, "user:a");
+  expect(await s.getImportSessions()).toEqual([]); // legacy vault default
+  const session: ImportSession = {
+    id: "import-1",
+    documentId: "sha",
+    filename: "export.csv",
+    accountKey: "A",
+    format: "generic-csv",
+    importedAt: "2026-11-11",
+    txIds: ["t1", "t2"],
+    rowsRead: 3,
+    rowsImported: 2,
+    duplicatesSkipped: 0,
+    rowsRejected: 1,
+  };
+  await s.putImportSessions([session]);
+  expect(await s.getImportSessions()).toEqual([session]);
+  // Replace-all: a revert rewrites the list, so a removed session cannot return
+  // from a stale snapshot.
+  await s.putImportSessions([]);
+  expect(await s.getImportSessions()).toEqual([]);
+  await s.putImportSessions([session]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getImportSessions()).toEqual([session]);
+});
+
+test("opening a vault migrates a known account-type spelling once", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-types");
+  await s.open(KEY, "user:a");
+  await s.putAccounts([{ ...acc("A"), type: "Savings" }]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getAccounts())[0]?.type).toBe("Spaarrekening");
+  // Canonical already: a second open changes nothing.
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getAccounts())[0]?.type).toBe("Spaarrekening");
+});
+
+test("bills + occurrences round-trip in one save; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-bills");
+  await s.open(KEY, "user:a");
+  expect(await s.getBills()).toEqual([]); // default
+  expect(await s.getBillOccurrences()).toEqual([]);
+
+  const bill: Bill = {
+    id: "b1",
+    name: "Huur",
+    type: "bill",
+    status: "active",
+    direction: "out",
+    amountCents: 98_500,
+    amountStrategy: "fixed",
+    currency: "EUR",
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 1 }],
+    anchorDate: "2026-11-01",
+    weekendAdjust: "none",
+    endMode: "never",
+    tags: [],
+  };
+  const occurrence: BillOccurrence = {
+    id: "b1|2026-11-01",
+    billId: "b1",
+    originalDueOn: "2026-11-01",
+    dueOn: "2026-11-01",
+    currency: "EUR",
+    expectedAmountCents: null,
+    status: "scheduled",
+  };
+  await s.putBillPlan([bill], [occurrence]);
+  expect(await s.getBills()).toEqual([bill]);
+  expect(await s.getBillOccurrences()).toEqual([occurrence]);
+
+  // Re-open: both survive the seal/unseal cycle in the same section pair.
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect((await s.getBills())[0].id).toBe("b1");
+  expect((await s.getBillOccurrences())[0].id).toBe("b1|2026-11-01");
+});
+
+test("bill decisions ride in the same putBillPlan save and survive without one", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-bill-decisions");
+  await s.open(KEY, "user:a");
+  expect(await s.getBillDecisions()).toEqual({
+    matches: [],
+    marks: [],
+    rejections: [],
+    priceChanges: [],
+  });
+
+  const decisions = {
+    matches: [
+      {
+        id: "m1",
+        occurrenceId: "b1|2026-11-01",
+        billId: "b1",
+        txId: "t1",
+        amountCents: 98_500,
+        currency: "EUR",
+        source: "auto" as const,
+        confidence: 0.95,
+        decidedAt: "2026-11-11",
+      },
+    ],
+    marks: [
+      {
+        occurrenceId: "b1|2026-12-01",
+        billId: "b1",
+        paidOn: "2026-11-11",
+        amountCents: 98_500,
+        currency: "EUR",
+        markedAt: "2026-11-11",
+      },
+    ],
+    rejections: [
+      { billId: "b1", txId: "t9", occurrenceId: "b1|2027-01-01", rejectedAt: "2026-11-11" },
+    ],
+    priceChanges: [
+      {
+        billId: "b1",
+        effectiveOn: "2026-11-01",
+        oldAmountCents: 95_000,
+        newAmountCents: 98_500,
+        currency: "EUR",
+        detectedAt: "2026-11-11",
+        source: "auto" as const,
+      },
+    ],
+  };
+  await s.putBillPlan([], [], decisions);
+  expect(await s.getBillDecisions()).toEqual(decisions);
+
+  // A later save without a decisions argument (a schedule edit, a lazy
+  // materialization) must not forget them.
+  await s.putBillPlan([], []);
+  expect(await s.getBillDecisions()).toEqual(decisions);
+
+  // Mutating the getter's copy cannot change vault state.
+  const read = await s.getBillDecisions();
+  read.matches.push({ ...decisions.matches[0], id: "m2" });
+  expect((await s.getBillDecisions()).matches).toHaveLength(1);
+
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getBillDecisions()).toEqual(decisions);
+});
+
+test("assistant approvals and memories round-trip across lock/unlock; legacy vault reads empty", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-assistant");
+  await v.open(KEY, "user:a");
+  expect(await v.getAssistant()).toEqual({ approvals: [], memories: [] }); // legacy/new vault
+
+  const state = {
+    approvals: [
+      {
+        id: "approval-1",
+        tool: "remember_preference" as const,
+        payload: { subject: "lengte", valueId: "kort" },
+        decision: "approved" as const,
+        decidedAt: "2026-11-11T10:00:00.000Z",
+        createdAt: "2026-11-11T09:59:00.000Z",
+      },
+    ],
+    memories: [
+      {
+        id: "assistant-memory-lengte",
+        subject: "lengte" as const,
+        valueId: "kort",
+        createdAt: "2026-11-11T10:00:00.000Z",
+      },
+    ],
+  };
+  await v.putAssistant(state);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  // The decision must survive the reload the owner experiences.
+  expect(await v.getAssistant()).toEqual(state);
 });

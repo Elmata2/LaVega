@@ -1,5 +1,5 @@
 import type { Locale } from "../locale.js";
-import type { FlowLabel } from "@lavega/core";
+import type { FlowLabel, TransferKind } from "@lavega/core";
 import { monthShort, formatEuroIn } from "../format.js";
 import type { AlertBody } from "@lavega/core";
 
@@ -159,6 +159,28 @@ type RekeningenCopy = {
   koppelmomentOnbekend: string;
   linkedNoteKnown: (date: string) => string;
   linkedNoteUnknown: string;
+  /** What an account merge/delete had to drop: a stored transfer pair whose
+   *  legs no longer both exist. The count is the honest part — an orphan link
+   *  would otherwise disappear without a word. */
+  transferLinksDropped: (n: number) => string;
+  /* WS3.1 valuations: the opening anchor and dated absolute valuations. */
+  waarderingen: string;
+  waarderingenUitleg: string;
+  begintotaal: string;
+  begindatum: string;
+  begintotaalVanLabel: (naam: string) => string;
+  begindatumVanLabel: (naam: string) => string;
+  waarderingDatum: string;
+  waarderingBedrag: string;
+  waarderingToevoegen: string;
+  waarderingVerwijderen: (datum: string) => string;
+  waarderingDatumVanLabel: (naam: string) => string;
+  waarderingBedragVanLabel: (naam: string) => string;
+  waarderingGeen: string;
+  waarderingGap: string;
+  waarderingActueel: (datum: string) => string;
+  waarderingVerouderd: (datum: string, dagen: number) => string;
+  waarderingOngeldig: string;
 };
 
 type TransactiesReasonCopy = { label: string; what: string };
@@ -218,6 +240,22 @@ type TransactiesCopy = {
   tableBedrag: string;
   tableEntiteit: string;
   tableCategorie: string;
+  /* Transfers (issue #282): the badge on a stored pair's legs, and the panel
+   * where a DERIVED suggestion becomes a stored decision. The panel copy has to
+   * say that confirming changes the spending totals — that is the whole reason
+   * the owner is asked. */
+  transferBadge: string;
+  possibleTransferBadge: string;
+  transferKinds: Record<TransferKind, string>;
+  possibleTransfersHeading: string;
+  possibleTransfersIntro: string;
+  possibleTransfersFootnote: string;
+  possibleTransferConfirm: string;
+  possibleTransferReject: string;
+  possibleTransferConfirmAria: (from: string, to: string) => string;
+  possibleTransferRejectAria: (from: string, to: string) => string;
+  possibleTransferAmbiguous: string;
+  possibleTransferDayGap: (days: number) => string;
 };
 
 type ForecastCopy = {
@@ -247,6 +285,10 @@ type ForecastCopy = {
   geenHerkendeUitgavenstromen: string;
   gestoptNietMeegeteld: string;
   laatst: (date: string) => string;
+  /** WS2.10 (#290): committed bills dates behind a driver. */
+  vastgelegd: (dates: string) => string;
+  /** WS2.10: how observed a bills series' recurrence is. */
+  zekerheid: { low: string; medium: string; high: string };
   nogGeenLopendeStromen: string;
   positieAsOfLabel: string;
   verwachteKaspositieAria: string;
@@ -538,6 +580,16 @@ type BetaalschemaCopy = {
   flowLabel: (f: { label: string; labelParts?: FlowLabel }) => string;
   nietsIngepland: string;
   voorspeldTag: string;
+  /** The paycheck preview above the agenda (#288): the declared-income slice. */
+  paycheck: {
+    until: (date: string) => string;
+    due: (amount: string) => string;
+    reserved: (amount: string) => string;
+    short: (amount: string) => string;
+    covered: string;
+    unknown: string;
+    noIncome: string;
+  };
 };
 
 type RecenteTransactiesCopy = {
@@ -575,6 +627,11 @@ type AccountTypesCopy = {
   savings: string;
   credit: string;
   investment: string;
+  loan: string;
+  property: string;
+  vehicle: string;
+  otherAsset: string;
+  otherLiability: string;
   other: string;
 };
 
@@ -694,12 +751,40 @@ const nl: MoneyCopy = {
       ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
       ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
       ` koppelt of importeert krijgen hun moment wel.`,
+    transferLinksDropped: (n) =>
+      `${n} overboekingskoppeling${n === 1 ? "" : "en"} losgelaten: een van de twee transacties` +
+      ` bestaat niet meer na het samenvoegen of verwijderen.`,
+    waarderingen: "Waarderingen",
+    waarderingenUitleg:
+      "Een waardering is een absoluut bedrag op een datum. Tot het eerste bedrag is het vermogen onbekend; daarna loopt de reeks met je transacties mee.",
+    begintotaal: "Beginsaldo",
+    begindatum: "Begindatum",
+    begintotaalVanLabel: (naam) => `Beginsaldo van ${naam}`,
+    begindatumVanLabel: (naam) => `Begindatum van ${naam}`,
+    waarderingDatum: "Datum",
+    waarderingBedrag: "Bedrag",
+    waarderingToevoegen: "Waardering toevoegen",
+    waarderingVerwijderen: (datum) => `Waardering van ${datum} verwijderen`,
+    waarderingDatumVanLabel: (naam) => `Waarderingsdatum van ${naam}`,
+    waarderingBedragVanLabel: (naam) => `Waarderingsbedrag van ${naam}`,
+    waarderingGeen: "Nog geen waardering.",
+    waarderingGap:
+      "Geen waardering: het vermogen van deze rekening is onbekend tot je er een invult. Onbekend telt niet als nul.",
+    waarderingActueel: (datum) => `Laatste waardering: ${datum}.`,
+    waarderingVerouderd: (datum, dagen) =>
+      `Laatste waardering: ${datum} (${dagen} dagen oud). Het bedrag is meegenomen, niet opnieuw vastgesteld.`,
+    waarderingOngeldig: "Vul een geldige datum en een bedrag in.",
   },
   accountTypes: {
     current: "Betaalrekening",
     savings: "Spaarrekening",
     credit: "Creditcard",
     investment: "Beleggingsrekening",
+    loan: "Lening",
+    property: "Woning",
+    vehicle: "Voertuig",
+    otherAsset: "Overig bezit",
+    otherLiability: "Overige schuld",
     other: "Overig",
   },
   transacties: {
@@ -774,6 +859,26 @@ const nl: MoneyCopy = {
     tableBedrag: "Bedrag",
     tableEntiteit: "Entiteit",
     tableCategorie: "Categorie",
+    transferBadge: "Transfer",
+    possibleTransferBadge: "Mogelijk",
+    transferKinds: {
+      funds_movement: "eigen overboeking",
+      cc_payment: "creditcardafbetaling",
+      loan_payment: "leningbetaling",
+      investment_contribution: "beleggingsinleg",
+    },
+    possibleTransfersHeading: "Mogelijke overboekingen",
+    possibleTransfersIntro:
+      "Twee kanten van hetzelfde geld: hetzelfde bedrag, dicht bij elkaar in datum, op twee verschillende rekeningen." +
+      " Bevestigen telt ze als overboeking en haalt ze uit je uitgaven; afwijzen onthoudt dat het geen overboeking is.",
+    possibleTransfersFootnote: "LaVega bevestigt dit niet vanzelf — jij beslist.",
+    possibleTransferConfirm: "Bevestig",
+    possibleTransferReject: "Afwijzen",
+    possibleTransferConfirmAria: (from, to) => `Bevestig overboeking ${from} naar ${to}`,
+    possibleTransferRejectAria: (from, to) => `Wijs overboeking ${from} naar ${to} af`,
+    possibleTransferAmbiguous: "Meerdere kandidaten voor dezelfde kant — kies zelf",
+    possibleTransferDayGap: (days) =>
+      days === 0 ? "zelfde dag" : `${days} dag${days === 1 ? "" : "en"} ertussen`,
   },
   forecast: {
     tekortSignaleringAria: "Tekort-signalering",
@@ -807,6 +912,8 @@ const nl: MoneyCopy = {
     geenHerkendeUitgavenstromen: "Geen herkende uitgavenstromen.",
     gestoptNietMeegeteld: "Gestopt · niet meegeteld",
     laatst: (date) => `laatst ${date}`,
+    vastgelegd: (dates) => `Vastgelegd: ${dates}`,
+    zekerheid: { low: "nog niet gezien", medium: "een keer gezien", high: "reeks gezien" },
     nogGeenLopendeStromen: "Nog geen lopende terugkerende stromen herkend.",
     positieAsOfLabel: "nu",
     verwachteKaspositieAria: "Verwachte kaspositie komende 13 weken",
@@ -1211,6 +1318,15 @@ const nl: MoneyCopy = {
     nietsIngepland:
       "Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.",
     voorspeldTag: "voorspeld",
+    paycheck: {
+      until: (date) => `Tot ${date}`,
+      due: (amount) => `${amount} te betalen`,
+      reserved: (amount) => `${amount} gereserveerd`,
+      short: (amount) => `${amount} tekort`,
+      covered: "gedekt",
+      unknown: "saldo onbekend",
+      noIncome: "Nog geen inkomensreeks",
+    },
   },
   recenteTransacties: {
     title: "Recente transacties",
@@ -1338,12 +1454,40 @@ const en: MoneyCopy = {
       ` tracking the link moment. Filling in today's date would turn an account from months ago into a` +
       ` fresh link, so that does not happen — this stays unknown. Accounts you link or import from now` +
       ` on will get their moment recorded.`,
+    transferLinksDropped: (n) =>
+      `${n} transfer link${n === 1 ? "" : "s"} dropped: one of the two transactions no longer` +
+      ` exists after the merge or delete.`,
+    waarderingen: "Valuations",
+    waarderingenUitleg:
+      "A valuation is an absolute amount on a date. Before the first one the account's value is unknown; after it the series follows your transactions.",
+    begintotaal: "Opening balance",
+    begindatum: "Opening date",
+    begintotaalVanLabel: (naam) => `Opening balance of ${naam}`,
+    begindatumVanLabel: (naam) => `Opening date of ${naam}`,
+    waarderingDatum: "Date",
+    waarderingBedrag: "Amount",
+    waarderingToevoegen: "Add valuation",
+    waarderingVerwijderen: (datum) => `Remove the ${datum} valuation`,
+    waarderingDatumVanLabel: (naam) => `Valuation date of ${naam}`,
+    waarderingBedragVanLabel: (naam) => `Valuation amount of ${naam}`,
+    waarderingGeen: "No valuation yet.",
+    waarderingGap:
+      "No valuation: this account's value is unknown until you add one. Unknown does not count as zero.",
+    waarderingActueel: (datum) => `Last valuation: ${datum}.`,
+    waarderingVerouderd: (datum, dagen) =>
+      `Last valuation: ${datum} (${dagen} days old). The amount is carried, not re-established.`,
+    waarderingOngeldig: "Enter a valid date and amount.",
   },
   accountTypes: {
     current: "Current account",
     savings: "Savings account",
     credit: "Credit card",
     investment: "Investment account",
+    loan: "Loan",
+    property: "Property",
+    vehicle: "Vehicle",
+    otherAsset: "Other asset",
+    otherLiability: "Other liability",
     other: "Other",
   },
   transacties: {
@@ -1417,6 +1561,26 @@ const en: MoneyCopy = {
     tableBedrag: "Amount",
     tableEntiteit: "Entity",
     tableCategorie: "Category",
+    transferBadge: "Transfer",
+    possibleTransferBadge: "Possible",
+    transferKinds: {
+      funds_movement: "own transfer",
+      cc_payment: "credit card payment",
+      loan_payment: "loan payment",
+      investment_contribution: "investment contribution",
+    },
+    possibleTransfersHeading: "Possible transfers",
+    possibleTransfersIntro:
+      "Two sides of the same money: the same amount, close together in date, on two different accounts." +
+      " Confirming counts them as a transfer and leaves them out of your spending; rejecting remembers that this is not a transfer.",
+    possibleTransfersFootnote: "LaVega never confirms these by itself — you decide.",
+    possibleTransferConfirm: "Confirm",
+    possibleTransferReject: "Reject",
+    possibleTransferConfirmAria: (from, to) => `Confirm transfer from ${from} to ${to}`,
+    possibleTransferRejectAria: (from, to) => `Reject transfer from ${from} to ${to}`,
+    possibleTransferAmbiguous: "More than one candidate for the same leg — you choose",
+    possibleTransferDayGap: (days) =>
+      days === 0 ? "same day" : `${days} day${days === 1 ? "" : "s"} apart`,
   },
   forecast: {
     tekortSignaleringAria: "Shortfall signal",
@@ -1450,6 +1614,8 @@ const en: MoneyCopy = {
     geenHerkendeUitgavenstromen: "No recognised expense streams.",
     gestoptNietMeegeteld: "Stopped · not counted",
     laatst: (date) => `last ${date}`,
+    vastgelegd: (dates) => `Committed: ${dates}`,
+    zekerheid: { low: "not seen yet", medium: "seen once", high: "series observed" },
     nogGeenLopendeStromen: "No active recurring flows recognised yet.",
     positieAsOfLabel: "now",
     verwachteKaspositieAria: "Expected cash position over the next 13 weeks",
@@ -1843,6 +2009,15 @@ const en: MoneyCopy = {
     nietsIngepland:
       "Nothing scheduled yet — your VAT (BTW) set-asides, outstanding invoices and recognised fixed costs will show up here.",
     voorspeldTag: "predicted",
+    paycheck: {
+      until: (date) => `Through ${date}`,
+      due: (amount) => `${amount} to pay`,
+      reserved: (amount) => `${amount} reserved`,
+      short: (amount) => `${amount} short`,
+      covered: "covered",
+      unknown: "balance unknown",
+      noIncome: "No income series yet",
+    },
   },
   recenteTransacties: {
     title: "Recent transactions",

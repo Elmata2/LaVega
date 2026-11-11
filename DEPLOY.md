@@ -160,7 +160,7 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
   | Store                              | Table                                 |
   | ---------------------------------- | ------------------------------------- |
   | Broker credentials and snapshots   | `investing.broker_vaults` (encrypted) |
-  | Daily price bars                   | `investing.price_bars`                |
+  | Daily price bars (shared)          | `investing.instrument_price_bars`     |
   | Benchmarks and market-data consent | `investing.preferences`               |
   | Broker sync state                  | `investing.sync_state` (per broker)   |
   | Price sync progress                | `investing.sync_state` (key `prices`) |
@@ -302,7 +302,7 @@ locally, create your own Neon branch and put its connection string, a
   must use the same value.
 - `AGENT_DEDUPE_HMAC_KEY` — 32 bytes, 64 hex characters (`openssl rand -hex 32`).
   Keys the HMAC stored in `personal.agent_events.dedupe_key`, so no merchant
-  name or amount sits in that clear-text column (docs/adr/0010). Required once
+  name or amount sits in that clear-text column (docs/adr/0014). Required once
   the instinct agent is on. `assertAgentConfig()` checks it, and
   `LAVEGA_ENCRYPTION_KEY`, on every agent route and every cron run, not at
   boot: a missing key answers `503 agent-not-configured` and never stops the
@@ -340,9 +340,10 @@ locally, create your own Neon branch and put its connection string, a
   existing browser subscriptions are tied to the public key.
 - `CRON_SECRET` — bearer secret that Vercel sends to the cron routes. It
   guards `/api/cron/investing-sync` (daily, `0 4 * * *`) and the instinct
-  agent's `/api/cron/instinct` (hourly, `0 * * * *`). The hourly schedule is in
-  `scripts/vercel-build.mjs` and needs a Vercel plan that allows hourly crons.
-  Redeploy after the plan is confirmed so the cron config updates.
+  agent's `/api/cron/instinct`. The instinct route runs hourly, but not from
+  Vercel (the plan allows daily crons only): the GitHub workflow
+  `.github/workflows/instinct-cron.yml` calls it at minute 7 of every hour with
+  this same secret as a bearer token. The route and its guard are unchanged.
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
@@ -388,13 +389,13 @@ cron and WhatsApp answers skip them until they do).
 
 Still open for the owner, in this order:
 
-1. **Preview database.** Migrations 0027 to 0029 were applied on 11 Nov 2026 to
+1. **Preview database.** Migrations 0038 to 0040 (named 0027 to 0029 until the merge with master; the runner will apply them again under the new names, all statements are rerunnable) were applied on 11 Nov 2026 to
    a throwaway Neon branch `instinct-preview` (created from `preview`) for
    local preview. Delete that branch after the preview.
-2. **Apply the migrations** `0027_instinct_agent.sql`, `0028_agent_due_users.sql`
-   and `0029_whatsapp_links.sql` on `preview` AND `main` (neither is migrated
+2. **Apply the migrations** `0038_instinct_agent.sql`, `0039_agent_due_users.sql`
+   and `0040_whatsapp_links.sql` on `preview` AND `main` (neither is migrated
    yet). Connect as the schema owner, using a role with `BYPASSRLS` (or
-   superuser): 0028 and 0029 refuse to apply otherwise, because their lookup
+   superuser): 0039 and 0040 refuse to apply otherwise, because their lookup
    functions run as the owner and must see past forced row-level security. If
    the SQL editor says "Failed transaction", run `ROLLBACK;` first. Then
    `pnpm db:migrate:check`.
@@ -436,8 +437,14 @@ owner legal review pending`, at the draft text (section "Dagelijkse
 6. **Review the phrase lists** in `apps/server/src/whatsapp/copy.ts`
    (`FRAMING_PHRASES`, NL and EN): the fixed greetings and closings that
    WhatsApp answers can use.
-7. **Confirm the Vercel plan allows an hourly cron** (`0 * * * *` on
-   `/api/cron/instinct`), then deploy so the cron config updates.
+7. **Set up the hourly trigger on GitHub.** Add repository variable
+   `INSTINCT_CRON_URL` (production: `https://www.lavega.dev/api/cron/instinct`)
+   and repository secret `CRON_SECRET` (same value as on Vercel). Until both are
+   set the workflow prints a notice and does nothing. Scheduled workflows run
+   only from the default branch, so the trigger starts after the merge to
+   master. To test on a preview deployment, call the URL by hand with `curl`
+   (item 8). GitHub schedules can run late or skip an hour; the 2-hour retry
+   window after each user's send hour covers that.
 8. **Verify on the preview deployment**: turn the agent on for a test account
    with a sandbox bank, call
    `curl -H "Authorization: Bearer $CRON_SECRET" https://<preview>/api/cron/instinct`,

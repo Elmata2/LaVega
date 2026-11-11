@@ -1,3 +1,4 @@
+import { isPartnerBudgetStop } from "../../partnerBudget/PartnerBudget.js";
 import { YahooHttpClient } from "./http.js";
 import { getYahooSymbolsToTry } from "./symbols.js";
 import { formatSectorWeightKey } from "@lavega/core";
@@ -50,8 +51,10 @@ type YahooCombinedResponse = {
 const FUND_QUOTE_TYPES = new Set(["ETF", "MUTUALFUND"]);
 
 /** Fetches sector data for one symbol in one call. Returns null on any
- *  failure or when neither a stock sector nor fund weights answer — never
- *  throws. */
+ *  failure or when neither a stock sector nor fund weights answer. The one
+ *  exception is a budget stop (`PartnerWait`, `PartnerBudgetUnavailable`): no
+ *  request went out, so there is no answer to report, and it is rethrown for
+ *  the caller to tell apart from a provider failure. */
 export async function fetchYahooSectorProfile(
   symbol: string,
   client?: YahooHttpClient,
@@ -68,12 +71,14 @@ export async function fetchYahooSectorProfile(
         const profile = toSectorProfile(result);
         if (profile) return profile;
       } catch (error) {
+        if (isPartnerBudgetStop(error)) throw error;
         if (error instanceof Error && error.message.startsWith("[404]")) continue;
         return null;
       }
     }
     return null;
-  } catch {
+  } catch (error) {
+    if (isPartnerBudgetStop(error)) throw error;
     return null;
   }
 }

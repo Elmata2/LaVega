@@ -155,7 +155,7 @@ test("erasing an account empties every personal.agent_* table for it and lists e
 test("every personal.agent_* table that holds a user id is in the erasure report, and the throttle table holds none", async () => {
   /* Drift guard: a table added to the schema later but not to USER_DATA_TABLES
    * fails here, by name. agent_link_attempts has no user id (it is keyed by a
-   * phone hash, migration 0029) and expires on its own, so it is not erased by user. */
+   * phone hash, migration 0040) and expires on its own, so it is not erased by user. */
   await pglite.exec("RESET ROLE;");
   const withUser = await rows<{ table_name: string }>(
     `SELECT table_name FROM information_schema.columns

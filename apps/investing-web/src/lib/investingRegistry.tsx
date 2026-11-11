@@ -22,6 +22,10 @@ export type InvestingWidgetDef = {
   id: InvestingWidgetId;
   label: string;
   what: string;
+  /** Whether the card shows for a reader who never chose. Absent means on.
+   *  A default is not stored: flipping it changes only readers who made no
+   *  explicit choice, and every saved layout still decodes unchanged. */
+  defaultOn?: boolean;
   preview: ReactNode;
 };
 
@@ -101,7 +105,7 @@ export const MODULES: InvestingModuleDef[] = [
         <path
           d="M8 40 L26 34 L44 38 L62 24 L80 16"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -116,9 +120,9 @@ export const MODULES: InvestingModuleDef[] = [
     path: "/agents",
     preview: (
       <Thumb>
-        <circle cx="24" cy="30" r="12" className="fill-primary" opacity="0.35" />
-        <circle cx="56" cy="20" r="9" className="fill-primary" opacity="0.25" />
-        <circle cx="78" cy="38" r="9" className="fill-primary" opacity="0.2" />
+        <circle cx="24" cy="30" r="12" className="fill-accent" opacity="0.35" />
+        <circle cx="56" cy="20" r="9" className="fill-accent" opacity="0.25" />
+        <circle cx="78" cy="38" r="9" className="fill-accent" opacity="0.2" />
       </Thumb>
     ),
   },
@@ -141,8 +145,8 @@ export function resolveModules(
   return chosen;
 }
 
-/** In the order they appear on Overview: left column, then right column,
- *  then full-width cards below (spec §3's table). */
+/** In the order the layout picker lists them. Overview places each card in its
+ *  own grid (app.tsx); the headline figures above that grid are not a widget. */
 export const WIDGETS: InvestingWidgetDef[] = [
   {
     id: "performance",
@@ -153,7 +157,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
         <path
           d="M8 44 L28 30 L48 36 L68 18 L88 24"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -172,7 +176,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
           cy="30"
           r="18"
           fill="none"
-          className="stroke-primary"
+          className="stroke-accent"
           strokeWidth="8"
           opacity="0.7"
         />
@@ -182,7 +186,8 @@ export const WIDGETS: InvestingWidgetDef[] = [
   {
     id: "kpis",
     label: "Key figures",
-    what: "Portfolio value, daily change and total return since inception.",
+    what: "Portfolio value, daily change and total return. The same figures head the Overview, so this card only repeats them in the grid.",
+    defaultOn: false,
     preview: (
       <Thumb>
         <Line x={8} y={12} w={40} strong />
@@ -210,9 +215,9 @@ export const WIDGETS: InvestingWidgetDef[] = [
     what: "What sector your priced holdings are concentrated in.",
     preview: (
       <Thumb>
-        <rect x="8" y="14" width="80" height="6" rx="3" className="fill-primary" opacity="0.7" />
-        <rect x="8" y="26" width="56" height="6" rx="3" className="fill-primary" opacity="0.5" />
-        <rect x="8" y="38" width="34" height="6" rx="3" className="fill-primary" opacity="0.35" />
+        <rect x="8" y="14" width="80" height="6" rx="3" className="fill-accent" opacity="0.7" />
+        <rect x="8" y="26" width="56" height="6" rx="3" className="fill-accent" opacity="0.5" />
+        <rect x="8" y="38" width="34" height="6" rx="3" className="fill-accent" opacity="0.35" />
       </Thumb>
     ),
   },
@@ -222,7 +227,7 @@ export const WIDGETS: InvestingWidgetDef[] = [
     what: "Ask a chosen investor lens about your positions.",
     preview: (
       <Thumb>
-        <circle cx="24" cy="30" r="12" className="fill-primary" opacity="0.35" />
+        <circle cx="24" cy="30" r="12" className="fill-accent" opacity="0.35" />
         <Line x={44} y={22} w={40} strong />
         <Line x={44} y={34} w={30} />
       </Thumb>
@@ -230,9 +235,10 @@ export const WIDGETS: InvestingWidgetDef[] = [
   },
 ];
 
-/** Every widget defaults on (spec §3's table); an absent key means "on". */
+/** A widget defaults on unless its def says otherwise (spec §3's table); an
+ *  absent key means "the default", never "off". */
 export function resolveWidgets(
   stored: Partial<Record<InvestingWidgetId, boolean>>,
 ): InvestingWidgetId[] {
-  return WIDGETS.filter((w) => stored[w.id] ?? true).map((w) => w.id);
+  return WIDGETS.filter((w) => stored[w.id] ?? w.defaultOn ?? true).map((w) => w.id);
 }

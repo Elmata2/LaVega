@@ -4,6 +4,7 @@
 import {
   AdvisorProfile,
   RISK_SCALE,
+  categorize,
   emptyProfileStore,
   makeRewardsBalance,
   makeScheduledFlow,
@@ -12,8 +13,18 @@ import {
   type Goal,
   type RewardsBalance,
   type ScheduledFlow,
+  type BudgetPeriod,
+  type CategoryGroup,
   type Tx,
+  type Bill,
+  type BillOccurrence,
+  type Valuation,
+  type ImportSession,
   assignTxIds,
+  ownAccounts,
+  generateBillOccurrences,
+  resolveBillAmountCents,
+  valuationId,
 } from "@lavega/core";
 import { createFileImport } from "@lavega/adapters";
 import {
@@ -174,7 +185,166 @@ export type VaultSeed = {
   txs: Tx[];
   rewards: RewardsBalance[];
   flows: ScheduledFlow[];
+  bills: Bill[];
+  billOccurrences: BillOccurrence[];
+  valuations: Valuation[];
+  /** One earlier import in a DIFFERENT format, so the generic session's
+   *  cross-format warning is visible in the preview (WS3.6). */
+  importSessions: ImportSession[];
 };
+
+/** A bills screen that has something to say: rent, energy, two subscriptions,
+ *  a paused gym, a yearly insurance, a salary series as the payday, and a finite
+ *  instalment plan. Most past rows are already closed so the "paid" section is
+ *  not empty; the most recent Netflix and Basic-Fit rows stay open on purpose,
+ *  so the real transactions beside them are shown as #287 match suggestions
+ *  (confirm / reject), and an open Huur row demonstrates mark-paid. */
+function billSeed(today: Date): { bills: Bill[]; billOccurrences: BillOccurrence[] } {
+  const asOf = iso(today);
+  const day = (n: number) => dayOf(today, n);
+  const month = today.getUTCMonth() + 1;
+  const firstOfLastMonth = iso(
+    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)),
+  );
+  const base: Omit<Bill, "id" | "name" | "amountCents" | "rules" | "anchorDate"> = {
+    type: "bill",
+    status: "active",
+    direction: "out",
+    amountStrategy: "fixed",
+    currency: "EUR",
+    weekendAdjust: "none",
+    endMode: "never",
+    tags: [],
+  };
+  const bills: Bill[] = [
+    {
+      ...base,
+      id: "b-huur",
+      name: "Huur",
+      amountCents: 125_000,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 1 }],
+      anchorDate: firstOfLastMonth,
+      category: "Wonen",
+    },
+    {
+      ...base,
+      id: "b-energie",
+      name: "Energie",
+      amountCents: 9_200,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 8 }],
+      anchorDate: firstOfLastMonth,
+      category: "Wonen",
+    },
+    {
+      ...base,
+      id: "b-spotify",
+      name: "Spotify",
+      type: "subscription",
+      amountCents: 1_099,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 15 }],
+      anchorDate: firstOfLastMonth,
+      merchant: "Spotify",
+      category: "Abonnementen",
+    },
+    {
+      ...base,
+      id: "b-gym",
+      name: "Sportschool",
+      type: "subscription",
+      status: "paused",
+      amountCents: 3_495,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 5 }],
+      anchorDate: firstOfLastMonth,
+    },
+    {
+      ...base,
+      id: "b-verzekering",
+      name: "Inboedelverzekering",
+      amountCents: 48_000,
+      rules: [{ frequency: "yearly", interval: 1, monthOfYear: month, dayOfMonth: day(20) }],
+      anchorDate: asOf,
+    },
+    {
+      ...base,
+      id: "b-studie",
+      name: "Studieschuld",
+      type: "installment",
+      amountCents: 14_500,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+      anchorDate: firstOfLastMonth,
+      endMode: "after_count",
+      endAfterCount: 24,
+    },
+    {
+      ...base,
+      id: "b-netflix",
+      name: "Netflix",
+      type: "subscription",
+      amountCents: 1_329,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 7 }],
+      anchorDate: firstOfLastMonth,
+      category: "Abonnementen",
+    },
+    {
+      ...base,
+      id: "b-sportschool",
+      name: "Basic-Fit",
+      type: "subscription",
+      amountCents: 2_929,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 12 }],
+      anchorDate: firstOfLastMonth,
+      category: "Sport",
+    },
+    {
+      ...base,
+      id: "b-salaris",
+      name: "Salaris",
+      type: "income",
+      direction: "in",
+      amountCents: 380_000,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+      anchorDate: firstOfLastMonth,
+    },
+  ];
+  const generated = generateBillOccurrences(bills, [], asOf);
+  // Every cycle before today is closed, the way real history would be: an open
+  // past row with no matcher behind it would read as debt the owner already paid.
+  // The latest past Netflix / Basic-Fit row is the exception: those are the two
+  // rows the fixture transactions in `rows(today)` are meant to pay, so the
+  // matcher has something real to suggest.
+  const byId = new Map(bills.map((b) => [b.id, b]));
+  const latestOpen = new Map<string, string>();
+  for (const billId of ["b-netflix", "b-sportschool"]) {
+    const past = generated.occurrences.filter((o) => o.billId === billId && o.dueOn < asOf);
+    const latest = past
+      .map((o) => o.dueOn)
+      .sort()
+      .pop();
+    if (latest != null) latestOpen.set(billId, latest);
+  }
+  const occurrences: BillOccurrence[] = generated.occurrences.map((o) => {
+    if (o.dueOn >= asOf) return o;
+    if (o.billId === "b-gym") {
+      return { ...o, status: "skipped", closedAt: o.dueOn, closedSource: "user" };
+    }
+    if (latestOpen.get(o.billId) === o.dueOn) return o;
+    const bill = byId.get(o.billId);
+    return {
+      ...o,
+      status: "paid",
+      paidOn: o.dueOn,
+      paidAmountCents: bill == null ? 0 : resolveBillAmountCents(bill),
+      closedAt: o.dueOn,
+      closedSource: "auto",
+    };
+  });
+  return { bills, billOccurrences: occurrences };
+}
+
+/** The day-of-month of `today + n` days, for a yearly fixture anchored near today. */
+function dayOf(today: Date, n: number): number {
+  return new Date(today.getTime() + n * 86_400_000).getUTCDate();
+}
 
 export async function buildVaultSeed(today: Date, entity: string): Promise<VaultSeed> {
   const result = await createFileImport().load({
@@ -204,10 +374,63 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
       type: "Creditcard",
     },
   };
-  const accounts = result.accounts.map((a) => {
-    const p = patch[a.iban] ?? patch[a.key];
-    return p ? { ...a, ...p, balanceDate: asOf } : a;
-  });
+  // WS3.1 asset/liability accounts that no statement imports: a house with one
+  // dated valuation (so the series has a hard reset and a stale label), a
+  // mortgage with an opening anchor (forward replay), and a car with NO
+  // valuation at all, which is the visible unknown/gap case.
+  const manualAccounts: Account[] = [
+    {
+      key: "preview-woning",
+      iban: "",
+      name: "Woning",
+      bank: "",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Woning",
+    },
+    {
+      key: "preview-lening",
+      iban: "",
+      name: "Hypotheek",
+      bank: "ING",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Lening",
+      openingBalanceCents: -18_000_000,
+      openingDate: iso(addDays(today, -120)),
+    },
+    {
+      key: "preview-auto",
+      iban: "",
+      name: "Auto",
+      bank: "",
+      entity,
+      currency: "EUR",
+      balance: null,
+      type: "Voertuig",
+    },
+  ];
+  const valuations: Valuation[] = [
+    {
+      id: valuationId("preview-woning", iso(addDays(today, -60))),
+      accountKey: "preview-woning",
+      date: iso(addDays(today, -60)),
+      amountCents: 42_000_000,
+      currency: "EUR",
+      kind: "reconciliation",
+      source: "manual",
+      createdAt: asOf,
+    },
+  ];
+  const accounts = [
+    ...result.accounts.map((a) => {
+      const p = patch[a.iban] ?? patch[a.key];
+      return p ? { ...a, ...p, balanceDate: asOf } : a;
+    }),
+    ...manualAccounts,
+  ];
   const flows = [
     makeScheduledFlow({
       entity,
@@ -237,7 +460,83 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
       note: "10 nights = 1 free",
     }),
   ];
-  return { accounts, txs: assignTxIds(result.txs), rewards, flows };
+  const bills = billSeed(today);
+  return {
+    accounts,
+    txs: assignTxIds(result.txs),
+    rewards,
+    flows,
+    bills: bills.bills,
+    billOccurrences: bills.billOccurrences,
+    valuations,
+    importSessions: [
+      {
+        id: "preview-mt940",
+        documentId: null,
+        filename: "ing-afschrift-2026-09.sta",
+        // The savings account: importing its generic CSV is the second format.
+        accountKey: SAVINGS_IBAN,
+        format: "mt940",
+        importedAt: iso(addDays(today, -30)),
+        txIds: [],
+        rowsRead: 12,
+        rowsImported: 12,
+        duplicatesSkipped: 0,
+        rowsRejected: 0,
+      },
+    ],
+  };
+}
+
+/** Two stored budget envelopes for the fixture vault (issue #289): the last
+ *  full month and the month in progress, with one line per real category and a
+ *  deliberate 200 EUR surplus per line so the carry is visible. Categories come
+ *  from the same categorizer the app uses, so a line always matches a row. */
+export function budgetSeed(
+  accounts: readonly Account[],
+  txs: readonly Tx[],
+  today: Date,
+): { periods: BudgetPeriod[]; groups: CategoryGroup[] } {
+  const own = ownAccounts([...accounts]);
+  const current = iso(today).slice(0, 7);
+  const previous = iso(
+    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)),
+  ).slice(0, 7);
+  const spent = new Map<string, Map<string, number>>();
+  for (const t of txs) {
+    if (t.amount >= 0) continue;
+    const month = t.date.slice(0, 7);
+    if (month !== current && month !== previous) continue;
+    const category = categorize(t, [], own);
+    if (category === "") continue;
+    const per = spent.get(category) ?? new Map<string, number>();
+    per.set(month, (per.get(month) ?? 0) + Math.round(-t.amount * 100));
+    spent.set(category, per);
+  }
+  const lines = [...spent]
+    .filter(([, per]) => (per.get(previous) ?? 0) > 0)
+    .sort((a, b) => (b[1].get(previous) ?? 0) - (a[1].get(previous) ?? 0))
+    .slice(0, 4)
+    .map(([category, per]) => ({
+      category,
+      allocationCents: (per.get(previous) ?? 0) + 20_000,
+      rollover: true,
+    }));
+  if (lines.length === 0) return { periods: [], groups: [] };
+  const budgetedSpendingCents = lines.reduce((sum, l) => sum + l.allocationCents, 0);
+  const period = (month: string): BudgetPeriod => ({
+    month,
+    currency: "EUR",
+    budgetedSpendingCents,
+    rollover: true,
+    lines,
+    billsReservedCents: null,
+  });
+  const groups: CategoryGroup[] =
+    lines.length >= 2
+      ? [{ name: "Huishouden", categories: lines.slice(0, 2).map((l) => l.category) }]
+      : [];
+  return { periods: [period(previous), period(current)], groups };
 }
 
 const GOALS = (today: Date): Goal[] =>

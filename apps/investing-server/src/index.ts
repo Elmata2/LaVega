@@ -22,6 +22,13 @@ import {
   type RunPortfolioAgentOptions,
 } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
+import {
+  CASH_FLOW_SUGGESTION_ROUTE,
+  createCashFlowSuggestionService,
+  createMemoryCashFlowStore,
+  type CashFlowStore,
+} from "./cashFlowSuggestions.js";
+import { parseSyncRunRow, type SyncRunStore } from "./syncRun.js";
 import { attributeHistory, findMentions } from "./agentMentions.js";
 import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
 import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
@@ -29,7 +36,12 @@ import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
 import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
 import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
 import {
+  cashFlowSuggestionContexts,
+  suggestionSample,
+  resolveSecurityIdentities,
+  type CashFlowRule,
   sentryOptions,
+  type AccountWrapperStore,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
   type InvestingLayoutStore,
@@ -38,16 +50,22 @@ import {
   createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
+  createPartnerBudgetClient,
   createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
   SCHEDULED_BROKERS,
   syncScheduledBrokers,
+  PartnerBudget,
+  YahooHttpClient,
+  type BrokerSyncLane,
   type BrokerSyncOperationStore,
-  type PriceStore,
+  type PartnerBudgetClient,
+  type SharedPriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
+import type { PriceBar } from "@lavega/core";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 import {
   createRuntimeCredentialStore,
@@ -60,6 +78,7 @@ import {
   createNeonBrokerSyncStateStore,
   createNeonPriceSyncProgressStore,
 } from "./neonStores.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 import {
   createFileBrokerSyncStateStore,
   runtimeBrokerSyncStateFile,
@@ -83,8 +102,18 @@ import {
   type SectorInferenceSettingStore,
 } from "./sectorInferenceSetting.js";
 import { createSystemOneSectorClassifier } from "./sectorClassifier.js";
+import {
+  createSystemOneIdentifierSelector,
+  IDENTIFIER_SELECTION_WORST_CASE_CENTS,
+} from "./identifierSelector.js";
 import { createSystemOneProvider } from "./systemOne.js";
-import { useDatabaseSource } from "./systemOneUsage.js";
+import { checkSystemOneBudget, useDatabaseSource } from "./systemOneUsage.js";
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
 import {
   createDevFixtureBrokerData,
   createDevFixtureFxProvider,
@@ -93,22 +122,28 @@ import {
 import {
   createInMemoryPriceSyncProgressStore,
   discoverPriceSyncTargets,
+  instrumentKeys,
+  priceReadKeys,
 } from "./priceOrchestrator.js";
 import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
 import {
   createAgentMemoryRepository,
   createDashboardSnapshotRepository,
   createFxRateRepository,
+  createSyncRunRepository,
   type AgentMemoryRepository,
 } from "@lavega/database";
 import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { trimToolHistory, type ToolLoopTurnStatus } from "./toolLoop.js";
+import { attachMcpReadRoutes } from "./tools/readRoutes.js";
 import { attachLetterRoutes } from "./letterRoutes.js";
 import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
 import { createStoredFxProvider } from "./storedFxProvider.js";
+import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
-import { ManagedRuntime } from "effect";
+import { ManagedRuntime, type Layer } from "effect";
 import { createAgentRunController } from "./agentRun.js";
 
 export { app };
@@ -176,23 +211,34 @@ export function createRuntimeBrokerSync(
   operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
-): (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => Promise<ScheduledSyncResult> {
+  partnerBudget?: PartnerBudgetClient,
+  loadCashFlowRules?: () => Promise<readonly CashFlowRule[]>,
+): (
+  force: boolean,
+  lanes: readonly BrokerSyncLane[],
+  deadlineMs?: number,
+  rebuildOrders?: boolean,
+) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
     credentials,
     tenantId,
     onTrading212Diagnostic,
+    partnerBudget,
   });
-  return async (force, deadlineMs, rebuildOrders) => {
+  return async (force, lanes, deadlineMs, rebuildOrders) => {
+    const cashFlowKindRules = loadCashFlowRules ? await loadCashFlowRules() : [];
     const result = await syncScheduledBrokers({
       adapters,
       credentials,
       operations,
       tenantId,
       entity,
+      lanes,
       force,
       rebuildOrders,
       deadlineMs,
+      cashFlowKindRules,
     });
     await onCompleted?.(result);
     return result;
@@ -203,16 +249,30 @@ export type PortfolioAgentRunner = (
   options: RunPortfolioAgentOptions,
 ) => Promise<PortfolioJudgmentRun>;
 export type RuntimeAppOptions = {
-  priceStore: PriceStore;
+  /** The shared, instrument-keyed price store (#307). */
+  priceStore: SharedPriceStore;
+  /** True when that store is the shared database one: the cache route answers
+   *  405 instead of letting one account delete data every account reads. */
+  sharedPriceStore?: boolean;
+  /** Clears a local (file) shared store; the database store has no such
+   *  operation. */
+  clearPriceCache?: () => Promise<void>;
   resolveTenantId?: () => string | Promise<string>;
   benchmarkSelectionStore?: BenchmarkSelectionStore;
   investingLayoutStore?: InvestingLayoutStore;
+  /** Account tax-treatment labels (WS4.4, #296). Defaults to Neon with a
+   *  database, in-memory without one. */
+  accountWrapperStore?: AccountWrapperStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
   personalNetWorthStore?: PersonalNetWorthStore;
   sectorStore?: SectorProfileStore;
   sectorCorrectionStore?: SectorCorrectionStore;
   sectorInferenceSettingStore?: SectorInferenceSettingStore;
+  /** Identifier candidate selection (Jev-03, #136): the owner's switch and the
+   *  owner's symbol overrides. In-memory without an injected store. */
+  identifierSelectionSettingStore?: IdentifierSelectionSettingStore;
+  identifierOverrideStore?: IdentifierOverrideStore;
   /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
   agentRunStore?: AgentRunStore;
   agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
@@ -224,6 +284,14 @@ export type RuntimeAppOptions = {
   dashboardCache?: DashboardCache;
   /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
   agentMemory?: (tenantId: string) => AgentMemoryRepository;
+  /** Where partner request slots come from. Built into one runtime per app.
+   *  Defaults to a memory budget. */
+  partnerBudget?: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged, for a runtime that outlives the app. */
+  partnerBudgetClient?: PartnerBudgetClient;
+  /** Owner-confirmed cash-flow rules + suggestions (issue #137). Defaults to an
+   *  in-memory store; the mounted app passes Neon or the file store. */
+  cashFlowStore?: CashFlowStore;
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
@@ -237,7 +305,13 @@ export { createBrokerDataCache as createRuntimeBrokerDataCache };
 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
+  /* One budget for every partner call of this runtime: the broker adapters, the
+   * price and sector reads and the fundamentals. Hosted, it is Neon's. */
+  const partnerBudget =
+    options.partnerBudgetClient ??
+    createPartnerBudgetClient(options.partnerBudget ?? PartnerBudget.memoryLayer);
   const priceStore = options.priceStore;
+  const cashFlowStore = options.cashFlowStore ?? createMemoryCashFlowStore();
   const benchmarkSelectionStore =
     options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
@@ -253,6 +327,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       ? createStoredFxProvider(createFxRateRepository(database), createFrankfurterFxProvider())
       : createFrankfurterFxProvider();
   const dashboardCache = options.dashboardCache ?? createDashboardCache();
+  /* Wrapper labels are account metadata with no data path of their own: a
+   * runtime that can persist them injects its store (Neon when a database
+   * exists, a file locally). The default is in-memory so a bare runtime and a
+   * test still answer the same empty map instead of reaching for a database
+   * it may not have. */
+  const accountWrapperStore = options.accountWrapperStore ?? createInMemoryAccountWrapperStore();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
     priceDataVersion += 1;
@@ -316,7 +396,32 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
-      await priceStore.upsert(tenantId, createDevFixturePriceBars());
+      /* The fixture quotes by symbol; the shared store keys by instrument, and
+       * the read computes the key from the position (ISIN first), so the seed
+       * uses the same identity or the fixture would read unpriced. */
+      const fixtureData = brokerData.read();
+      const isinBySymbol = new Map(
+        [...fixtureData.positions, ...fixtureData.trades]
+          .filter((row) => row.isin)
+          .map((row) => [row.symbol.toUpperCase(), row.isin!.trim().toUpperCase()]),
+      );
+      const byKey = new Map<string, PriceBar[]>();
+      for (const bar of createDevFixturePriceBars()) {
+        const key = instrumentKeys({
+          symbol: bar.symbol,
+          ...(isinBySymbol.has(bar.symbol.toUpperCase())
+            ? { isin: isinBySymbol.get(bar.symbol.toUpperCase()) }
+            : {}),
+          currency: bar.currency,
+        }).key;
+        byKey.set(key, [...(byKey.get(key) ?? []), bar]);
+      }
+      for (const [key, bars] of byKey) {
+        await priceStore.upsert(
+          key,
+          bars.map(({ symbol: _symbol, ...rest }) => rest),
+        );
+      }
       onPriceDataChanged();
     }
     const brokerSnapshot = createBrokerSnapshotReader({
@@ -376,7 +481,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           updatedAt,
           message: "Positions are loaded",
         };
-      } else {
+      } else if (event.type === "response") {
         syncProgress = {
           ...syncProgress,
           status: "running",
@@ -439,8 +544,65 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       syncStateStore,
       updateProgress,
       tenantId,
+      partnerBudget,
+      () => cashFlowStore.listRules(),
     );
-    const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+    /* Jev-04: suggestions run OFF the sync path. A model that is down, slow or
+     * disabled leaves today's state exactly as it is. */
+    const suggestCashFlows = async (result: ScheduledSyncResult) => {
+      try {
+        if (!(await cashFlowStore.suggestionsEnabled())) return;
+        if (!process.env.TYPESAFE_API_KEY?.trim()) return;
+        const [rules, suggestions] = await Promise.all([
+          cashFlowStore.listRules(),
+          cashFlowStore.listSuggestions(),
+        ]);
+        const candidates = [];
+        for (const [broker, snapshot] of Object.entries(result.committed)) {
+          const flows = snapshot.cashFlows ?? [];
+          for (const context of cashFlowSuggestionContexts({
+            broker,
+            flows,
+            problems: result.problems,
+            rules,
+            suggestions,
+          })) {
+            candidates.push({
+              context,
+              sample: suggestionSample(broker, context.typeKey, flows, result.problems),
+            });
+          }
+        }
+        if (candidates.length === 0) return;
+        const provider = createSystemOneProvider({
+          userId: tenantId,
+          route: CASH_FLOW_SUGGESTION_ROUTE as never,
+        });
+        await createCashFlowSuggestionService({
+          store: cashFlowStore,
+          provider: () => provider,
+          reportProblem: (message, error) =>
+            syncRunReporter({
+              source: "broker-sync",
+              problems: [message, ...(error instanceof Error ? [error.message] : [])],
+            }),
+        }).request(candidates);
+      } catch (error) {
+        syncRunReporter({
+          source: "broker-sync",
+          problems: [
+            "Cash-flow suggestions failed",
+            ...(error instanceof Error ? [error.message] : []),
+          ],
+        });
+      }
+    };
+    const brokerSync = async (
+      force: boolean,
+      lanes: readonly BrokerSyncLane[],
+      deadlineMs?: number,
+      rebuildOrders?: boolean,
+    ) => {
       if (devFixtureEnabled) {
         syncProgress = {
           status: "completed",
@@ -469,7 +631,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
       }
       try {
-        const result = await scheduledBrokerSync(force, deadlineMs, rebuildOrders);
+        const result = await scheduledBrokerSync(force, lanes, deadlineMs, rebuildOrders);
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
@@ -480,6 +642,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           updatedAt: new Date().toISOString(),
           message: trading212Problem ?? "Trading 212 synchronization completed",
         };
+        /* Fire and forget: never awaited by the sync, never able to fail it. */
+        void suggestCashFlows(result);
         return result;
       } catch (error) {
         syncProgress = {
@@ -505,7 +669,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         fxProvider,
         benchmarks: benchmarkSymbols
           ? (id) => Promise.resolve(benchmarkSymbols(id))
-          : async (id) => (await benchmarkSelectionStore.get(id)).symbols,
+          : (id) => effectiveBenchmarkSymbols(benchmarkSelectionStore, id),
+        accountWrappers: (id) => accountWrapperStore.get(id),
         priceDataVersion: () => priceDataVersion,
       }),
     );
@@ -609,10 +774,19 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         dashboard: await dashboardReader({}),
         trades: () => brokerData.read().trades,
         price: async (symbol: string, date?: string) => {
-          const bar = (await priceStore.getRange(tenantId, symbol, undefined, date)).at(-1);
-          return bar
-            ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency }
-            : null;
+          /* A chat price question names a symbol; the shared store answers by
+           * instrument key, so the key is resolved the same way the dashboard
+           * resolves it (issue #307). Unknown symbols fall back to a `sym:` key,
+           * which is what an ISIN-less series uses anyway. */
+          const { positions, trades } = brokerData.read();
+          const match = priceReadKeys({ positions, trades }).find(
+            (entry) => entry.symbol.toUpperCase() === symbol.toUpperCase(),
+          );
+          const key = match?.key ?? instrumentKeys({ symbol, currency: "EUR" }).key;
+          const alias = match?.alias;
+          const bars = await priceStore.getRange(alias ? { key, alias } : { key }, undefined, date);
+          const bar = bars.at(-1);
+          return bar ? { symbol, date: bar.date, close: bar.close, currency: bar.currency } : null;
         },
       };
     };
@@ -663,7 +837,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         const { positions, trades } = await brokerSnapshot.read("fresh");
         const benchmarkSymbols = options.benchmarkSymbols
           ? await options.benchmarkSymbols(tenantId)
-          : (await benchmarkSelectionStore.get(tenantId)).symbols;
+          : await effectiveBenchmarkSymbols(benchmarkSelectionStore, tenantId);
         return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
       },
       runPortfolioAgentOnce,
@@ -701,11 +875,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     priceSyncTargets: async (tenantId: string) =>
       (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean, deadlineMs?: number, rebuildOrders?: boolean) => {
+  const brokerSync = async (
+    force: boolean,
+    lanes: readonly BrokerSyncLane[],
+    deadlineMs?: number,
+    rebuildOrders?: boolean,
+  ) => {
     const tenantId = await resolveTenantId();
     const result = await (
       await tenantRuntime(tenantId)
-    ).brokerSync(force, deadlineMs, rebuildOrders);
+    ).brokerSync(force, lanes, deadlineMs, rebuildOrders);
     dashboardCache.invalidate(tenantId);
     return result;
   };
@@ -713,7 +892,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
-  const freshFundamentals = options.fundamentalsProvider ?? createYahooFundamentalsProvider();
+  const freshFundamentals =
+    options.fundamentalsProvider ??
+    createYahooFundamentalsProvider(
+      new YahooHttpClient(undefined, undefined, undefined, { partnerBudget }),
+      // Awaited by a request (stock research, chat): no partner slot past 10 s.
+      { budgetMs: 10_000 },
+    );
   const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
   const unavailableFundamentals: FundamentalsProvider = {
     fetch: async () => {
@@ -737,7 +922,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       store: sectorDependencies.sectorStore,
       correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
       showInferred: consent.accepted && inferenceEnabled,
-      resolveListing: (symbol) => resolveSectorListing(priceStore, tenantId, symbol),
+      resolveListing: (position) => {
+        const keys = instrumentKeys({
+          symbol: position.symbol,
+          ...(position.isin ? { isin: position.isin } : {}),
+          currency: position.currency ?? "EUR",
+        });
+        return resolveSectorListing(priceStore, { key: keys.key });
+      },
     }).catch(() => ({ exposure: null }));
     return {
       ...data,
@@ -754,6 +946,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     attachMemoryRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
       memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      /* The thesis migration's identity source (WS4.5, #297): the current
+       * broker snapshot's holdings and trades, grouped by ISIN first. */
+      instrumentKeys: async () => {
+        const tenantId = await resolveTenantId();
+        const data = await (await tenantRuntime(tenantId)).portfolioChatData();
+        const rows = [
+          ...data.dashboard.positions.map((position) => ({
+            symbol: position.symbol,
+            ...(position.isin ? { isin: position.isin } : {}),
+          })),
+          ...data.trades().map((trade) => ({
+            symbol: trade.symbol,
+            ...(trade.isin ? { isin: trade.isin } : {}),
+            ...(trade.broker ? { broker: trade.broker } : {}),
+          })),
+        ];
+        return resolveSecurityIdentities(rows).bySymbol;
+      },
     });
     attachLetterRoutes(honoApp, {
       resolveTenantId: async () => resolveTenantId(),
@@ -766,6 +976,14 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       consent: marketDataConsentStore,
       fundamentals: freshFundamentals,
       chatModel: options.chatModel,
+    });
+    /* The reads the external MCP tools call (#285). Projected from the same
+     * tenant-scoped context the chat uses, so the dashboard and `/mcp` cannot
+     * disagree about a position, a trade or a price. */
+    attachMcpReadRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      context: portfolioChatContext,
+      consent: async () => (await marketDataConsentStore.get(await resolveTenantId())).accepted,
     });
     honoApp.get("/api/agents/portfolio", (c) =>
       c.json({
@@ -794,8 +1012,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         .catch(() => ({}));
       if (!isPortfolioAgentId(body.agentId))
         return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      /* Pair-safe trim: never hand the model a tool result whose assistant
+       * call was cut off (WS5.6). */
       const messages = Array.isArray(body.messages)
-        ? (body.messages as UIMessage[]).slice(-12)
+        ? trimToolHistory(body.messages as UIMessage[], 12)
         : [];
       const last = messages.at(-1);
       const message =
@@ -815,6 +1035,29 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return c.json({ problems: ["Conversation thread id is required"] }, 400);
       const title = message.trim().replace(/\s+/g, " ").slice(0, THREAD_TITLE_LENGTH);
       try {
+        /* The hardened turn status (WS5.6): a turn that ran out of rounds
+         * without text, errored or was aborted is persisted as FAILED, never as
+         * a completed answer. */
+        let turnStatus: ToolLoopTurnStatus | null = null;
+        let streamError = false;
+        const persistFailedTurn = async (reason: string) => {
+          if (!repository || !threadId) return;
+          await repository
+            .appendMessages(threadId, host, title, [
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                parts: [
+                  {
+                    type: "text",
+                    text: "The agent could not finish this answer. Try again.",
+                  },
+                ],
+                metadata: { failed: true, reason },
+              },
+            ])
+            .catch((error: unknown) => console.error("[memory] failed turn not saved", error));
+        };
         const [agent] = await Promise.all([
           portfolioChatContext().then((context) =>
             createPortfolioChatAgent({
@@ -826,6 +1069,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 ? { memory: { repository, agentId: host, threadId } }
                 : {}),
               ...(options.chatModel ? { model: options.chatModel } : {}),
+              onTurnStatus: (status) => {
+                turnStatus = status;
+              },
             }),
           ),
           repository && threadId
@@ -837,12 +1083,35 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           uiMessages: attributeHistory(messages, responder, host),
           messageMetadata: () => ({ agentId: responder }),
           abortSignal: c.req.raw.signal,
-          onError: () => "The agent could not answer. Try again.",
+          onError: () => {
+            /* Remembered, not persisted here: a provider can error after
+             * producing usable text, and onEnd decides what the turn was. */
+            streamError = true;
+            return "The agent could not answer. Try again.";
+          },
           generateMessageId: () => crypto.randomUUID(),
           onEnd: async ({ responseMessage }) => {
-            if (!repository || !threadId || responseMessage.parts.length === 0) return;
+            if (!repository || !threadId) return;
+            const status = turnStatus as ToolLoopTurnStatus | null;
+            const failedTurn = status?.status === "failed" || streamError;
+            const hasText = responseMessage.parts.some((part) => part.type === "text");
+            /* A turn with no usable text is persisted as FAILED, never as an
+             * empty completed answer (WS5.6). A turn that produced text but
+             * ended on an error keeps the text and is marked failed. */
+            if (failedTurn && !hasText) {
+              await persistFailedTurn(status?.status === "failed" ? status.reason : "error");
+              return;
+            }
+            if (responseMessage.parts.length === 0) return;
             await repository
-              .appendMessages(threadId, host, title, [responseMessage])
+              .appendMessages(threadId, host, title, [
+                failedTurn
+                  ? {
+                      ...responseMessage,
+                      metadata: { ...responseMessage.metadata, failed: true },
+                    }
+                  : responseMessage,
+              ])
               .catch((error: unknown) => console.error("[memory] reply not saved", error));
           },
         });
@@ -856,6 +1125,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce, portfolioChatContext });
   };
   const sectorDependencies = {
+    identifierSelectionSettingStore:
+      options.identifierSelectionSettingStore ?? createInMemoryIdentifierSelectionSettingStore(),
+    identifierOverrideStore:
+      options.identifierOverrideStore ?? createInMemoryIdentifierOverrideStore(),
     sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
     sectorCorrectionStore: options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
     sectorInferenceSettingStore:
@@ -878,6 +1151,20 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 failedRequestInputTokens: 500,
               }),
             )(instrument),
+          /* The identifier selector is per tenant because its usage row is
+           * billed to the account asking; the provider only calls it on
+           * ambiguity and only when the request carries consent + the owner's
+           * enable setting (#136). */
+          identifierSelectorForTenant: (tenantId: string) =>
+            createSystemOneIdentifierSelector(
+              createSystemOneProvider({
+                userId: tenantId,
+                route: "identifier-selection",
+                failedRequestInputTokens: 2_000,
+                checkBudget: () =>
+                  checkSystemOneBudget(tenantId, IDENTIFIER_SELECTION_WORST_CASE_CENTS),
+              }),
+            ),
         }
       : {}),
   };
@@ -885,17 +1172,23 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return withPortfolioAgentRoute(
       createApp({
         brokerSync,
+        partnerBudgetClient: partnerBudget,
+        cashFlowStore,
         ...credentialDependencies,
         ...sectorDependencies,
         resolveTenantId: options.resolveTenantId,
         store: priceStore,
+        sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+        ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
         fxProvider,
         benchmarkSelectionStore,
         investingLayoutStore,
+        accountWrapperStore,
         marketDataConsentStore,
         personalNetWorthStore,
         dashboardReader,
         onPriceDataChanged,
+        onAccountWrappersChanged: onPriceDataChanged,
         priceSyncProgressStore,
       }),
     );
@@ -906,20 +1199,61 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     app: "investing-server",
   });
   if (sentryConfig && !sentry.getClient()) sentry.init(sentryConfig);
+  const syncRunStore: SyncRunStore | undefined = database
+    ? {
+        async get() {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          return parseSyncRunRow(await repository.get());
+        },
+        async claim(candidate, staleBefore) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const held = await repository.claim(candidate, "running", staleBefore);
+          return held === null ? null : parseSyncRunRow(held);
+        },
+        async put(row, leaseId) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const status =
+            row.outcome === "done" ? "done" : row.outcome === "failed" ? "failed" : "running";
+          return repository.put(row, status, leaseId);
+        },
+      }
+    : undefined;
+  const syncRunReporter = createProblemReporter({ dsn, sentry });
+  const syncRunBackground = async (work: Promise<unknown>) => {
+    if (process.env.VERCEL !== undefined) {
+      const { waitUntil } = await import("@vercel/functions");
+      waitUntil(work);
+      return;
+    }
+    void work.catch((error: unknown) => {
+      syncRunReporter({
+        source: "broker-sync",
+        problems: [error instanceof Error ? error.message : "Background sync run failed"],
+      });
+    });
+  };
   return withPortfolioAgentRoute(
     createApp({
+      syncRunStore,
+      syncRunBackground,
       brokerSync,
+      cashFlowStore,
+      partnerBudgetClient: partnerBudget,
       ...credentialDependencies,
       ...sectorDependencies,
       resolveTenantId: options.resolveTenantId,
       store: priceStore,
+      sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+      ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
       fxProvider,
       benchmarkSelectionStore,
       investingLayoutStore,
+      accountWrapperStore,
       marketDataConsentStore,
       personalNetWorthStore,
       dashboardReader,
       onPriceDataChanged,
+      onAccountWrappersChanged: onPriceDataChanged,
       priceSyncProgressStore,
       problemReporter: createProblemReporter({ dsn, sentry }),
     }),

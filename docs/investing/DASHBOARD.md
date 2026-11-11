@@ -146,9 +146,13 @@ type MwrPoint = { date: string; xirr: number | null };
 
 ## Price backfill and dashboard refresh
 
+Since issue #307 prices live once per instrument for the whole installation: `investing.instrument_price_bars` / `instrument_price_coverage`, keyed by `isin:<ISIN>:<CUR>` or `sym:<ticker>:<CUR>`. The numbers below describe one user's own history under the old per-user tables (358,756 rows for 144 symbols), which issue #310 dropped in migration `0037`; the shared store stores that shape once for any number of users. The first sync after the switch adopts the `sym:` rows an earlier release stored when an `isin:` key appears (alias move), so a symbol upgraded to ISIN identity is not refetched. A per-key claim (120 s) makes two concurrent syncs for one instrument fetch it once; the loser reports the key as pending and completes on its next slice.
+
 Price backfill runs on the server, separate from broker sync ([Backfill set and sync orchestration](https://github.com/Elmata2/LaVega/issues/74)). Remove the browser's page-open `POST /api/prices/sync` call and the hardcoded S&P 500 request.
 
 After broker sync completes, start the price orchestrator. Its symbol set is every traded symbol, including closed positions, plus the selected benchmarks. Backfill a position symbol from its first trade. Backfill a benchmark from the portfolio's first trade.
+
+**App open sends one refresh intent and reads one state.** The browser posts `POST /api/sync/refresh` once (with `force` when the user asked for one) and then polls `GET /api/sync/state` every 2 s while `active` is true; it no longer holds the sync request open and no longer loops `/api/prices/sync`. The server runs the lanes in order — holdings (two Trading 212 requests, 60 s gate), history (tail-only, 15 min gate) and prices — inside one leased run that continues after the response, so closing the tab does not stop it. The dashboard refreshes when a lane's `syncedAt` changes. [[#304](https://github.com/Elmata2/LaVega/issues/304)] [[#306](https://github.com/Elmata2/LaVega/issues/306)]
 
 Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. The browser waits for that run to settle, then starts a fresh discovery so a benchmark chosen during the run is included. A paused slice also includes selected benchmarks, including ones chosen since the previous slice. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
 
@@ -189,6 +193,14 @@ Risk is a projection of the read model, not a per-request computation. `buildInv
 Composition is the second projection. `buildInvestingDashboard` also stores `InvestingDashboardData.composition` — the five largest priced positions (weighted against the priced total, `positionsByMarketValueDesc` owns the one ordering the portfolio-agent snapshot shares) and the priced / missing / estimated holding counts (`buildCompositionProjection`). It is a pure function of `positions`, travels in the same version-keyed snapshot, and the Overview reads it from the shared dashboard instead of a second summary request; `/api/investing/summary` now returns its `topPositions` and counts from the projection too.
 
 Sectors are not a projection of the dashboard. They come from tenant stores (market-data consent, corrections, the inference setting) whose writes are not keyed to `dataVersion`. `apps/investing-server/src/sectorRead.ts` is a tenant-scoped Effect read — a sibling of `portfolioRead.ts` — returning `{ sectors, sectorCoverage, revision }`. It caches its per-symbol resolution on a sector-store revision (`sectorRevision.ts`) raised by any write to the correction store or the inference setting, plus the consent/inference visibility flag; a correction therefore appears on the very next read, while a broker or price write re-weights the exposure over the current positions and keeps the resolution. `GET /api/investing/sectors` exposes it, and the Overview reads it only while a sector widget is on screen. The consent gate, the inference-setting gate and the correction precedence (`correction` > `provider` > `inferred` > `unknown`) are identical to the summary route's.
+
+A sector read may call the provider (Yahoo) for a symbol. Three rules in `apps/investing-server/src/sectorResolution.ts` limit that (#309):
+
+1. **Attempt memory.** When a provider fetch returns no profile (or throws), the store records the time of the attempt for that symbol. The provider is not asked again for that symbol for `PROVIDER_RETRY_HOURS` (24 hours). A timeout (rule 3) is not an answer and records nothing. The time lives in the existing JSON row of `investing.sector_profiles` as the key `providerAttemptedAt`. A symbol with no profile gets a row `{"kind": "none", "providerAttemptedAt": ...}`, which `get` reads as no profile; migration `0032_sector_profiles_attempt_rows.sql` allows `kind: "none"` in the table check. Writing a non-provider profile (an inference) keeps the attempt time; writing a provider profile replaces the row. Apply the migration before you deploy this code.
+2. **One freshness rule.** `needsProviderFetch(profile, lastAttempt, now)` is the only test that decides if a symbol needs a provider fetch. A fresh provider profile never needs one (a fund is fresh for `FUND_PROFILE_REFRESH_DAYS`, 90 days). A symbol with no profile, an inferred profile, or a stale or undated provider fund needs one only if the last attempt is missing, unparseable, or older than 24 hours.
+3. **Time budget.** One read spends at most `SECTOR_FETCH_BUDGET_MS` (8 seconds) on provider fetches. Each provider call is raced against the time that is left. After the budget, the remaining symbols resolve from stored data only.
+
+`GET /api/investing/summary` never calls the provider: it resolves sectors from stored profiles only. `GET /api/investing/sectors` still fetches, within these rules. To roll back, revert the change. Rows with `kind: "none"` break the old reader, so also run `DELETE FROM investing.sector_profiles WHERE profile->>'kind' = 'none'; UPDATE investing.sector_profiles SET profile = profile - 'providerAttemptedAt';` (the old table check allows only `stock` and `fund`, so delete the `none` rows before you restore it).
 
 The web app holds one shared dashboard read model per query identity. `apps/investing-web/src/lib/dashboardResource.ts` keeps one entry per identity (the optional position symbol) behind a `useSyncExternalStore`-shaped subscribe function. Every consumer of the same identity subscribes to that one entry: a second widget starts no second request, the refresh event fans out once, only the newest request for an identity may write it, and navigating between Overview, Positions and a position detail reuses the model already held. Overview reads risk from `InvestingDashboardData.risk` and composition from `InvestingDashboardData.composition` in that model, so switching the risk range or benchmark is a client-side view, not a fetch, and the Overview makes one dashboard read. Sectors come from their own `apps/investing-web/src/lib/sectorResource.ts` read (`GET /api/investing/sectors`), which the page makes only while a sector widget is on screen and which never re-fetches the dashboard. `/api/investing/summary` stays server-side for one release but no component calls it.
 
@@ -277,9 +289,9 @@ If the visible window starts with unknown portfolio value, return `null` until t
 
 ## Benchmark selection
 
-Allow zero to three benchmarks ([Benchmark selection](https://github.com/Elmata2/LaVega/issues/76)). Put a chip row under the portfolio-chart header. `+ Vergelijk` opens an inline combobox. Each selection becomes a removable chip. Hide `+ Vergelijk` when three benchmarks are selected and show it again after removal.
+Allow zero to three stored benchmarks ([Benchmark selection](https://github.com/Elmata2/LaVega/issues/76)). An empty selection is not "compare with nothing": every benchmark read resolves it to MSCI World (`IWDA.AS`, EUR), so beta and alpha are available before the owner has chosen. The default is applied on read and is never written to the store, so removing every benchmark returns the account to it. Put a chip row under the portfolio-chart header. `+ Vergelijk` opens an inline combobox. Each selection becomes a removable chip. Hide `+ Vergelijk` when three benchmarks are selected and show it again after removal.
 
-Implementation status: selection store contract now has one-row-per-tenant IndexedDB storage plus file-backed Docker storage at `.lavega/benchmarks.json` (or `INVESTING_BENCHMARK_STORE_FILE`). Runtime exposes get and replace-whole APIs, searches Yahoo with curated European fallback, includes selected symbols in server price orchestration, and renders EUR or indexed chart mode from selection. Hosted database storage remains a hosted-runtime implementation of same contract.
+Implementation status: selection store contract now has one-row-per-tenant IndexedDB storage plus file-backed Docker storage at `.lavega/benchmarks.json` (or `INVESTING_BENCHMARK_STORE_FILE`). Runtime exposes get and replace-whole APIs, searches Yahoo with curated European fallback, includes selected symbols in server price orchestration, and renders EUR or indexed chart mode from selection. Hosted database storage remains a hosted-runtime implementation of same contract. Every read that needs benchmarks (dashboard risk projection, `GET /api/investing/benchmarks`, price-sync target discovery) resolves an empty selection to MSCI World. The Risk card also carries a `Choose benchmark` action beside an unavailable beta and writes the selection through the same replace-whole API.
 
 Search Yahoo through `GET https://query1.finance.yahoo.com/v1/finance/search`, using the existing `YahooHttpClient` crumb, cookie, retry, and backoff behavior ([Research: Yahoo Finance instrument search](https://github.com/Elmata2/LaVega/issues/69)). Use live search first and the curated European benchmark list as fallback. Search results do not include currency. Confirm EUR denomination with a quote or chart request when required. Update Yahoo consent disclosure to say that accepted use includes interactive search; do not add a second consent gate.
 
@@ -444,12 +456,21 @@ Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega
 ### Personal's opt-in share (owner's own bank money)
 
 The owner may opt in, from Personal's (`apps/web`) own profile settings, to
-share their Personal "Totale positie" (the same EUR total Overzicht's
-SaldoBlock shows — `positionSeries` in `apps/web/src/totalePositie.ts`) into
-this chart. Off by default; nothing crosses the network until the owner turns
-the switch on. The switch is **per device**: turning it on only shares totals
-from visits on that browser, and a total already shared stays with Investing
-until the switch is turned off again on a device where it is on.
+share their Personal bank position into this chart. The figure is
+`positionSeries` (`apps/web/src/totalePositie.ts`) over the accounts that are
+NOT investment accounts: a `Beleggingsrekening` (or an explicitly crypto-typed
+account) is the Investing portfolio's own figure, so adding its Personal
+balance too would count the same euro twice. This is a deliberate difference
+from Overzicht's SaldoBlock, which still sums every account for the Personal
+card; the shared total is the bank half only, and `personalShareAccounts`
+(`@lavega/core`) is the one rule both the share and the transfer
+classification use. A confirmed contribution from a bank account into an
+investment account therefore lowers the shared total and raises the portfolio
+by the same cents, leaving the combined net worth unchanged. Off by default;
+nothing crosses the network until the owner turns the switch on. The switch is
+**per device**: turning it on only shares totals from visits on that browser,
+and a total already shared stays with Investing until the switch is turned off
+again on a device where it is on.
 
 What crosses the boundary, and nothing else: while the switch is on and the
 Personal vault is unlocked, after every sync/import and on unlock, Personal
@@ -476,8 +497,10 @@ into each range's portfolio series with `mergeInPersonalNetWorth`
 (`@lavega/core`): the latest total on or before a date is carried forward,
 a date before the owner's first shared total gets no Personal part, and the
 chart's own "Total" line and headline figure become portfolio value plus
-Personal value. Returns, risk, and allocation elsewhere keep reading the
-unmerged, portfolio-only series and never include Personal money.
+Personal value. Because the shared total excludes investment accounts, that
+sum counts each euro once and a confirmed contribution does not change it.
+Returns, risk, and allocation elsewhere keep reading the unmerged,
+portfolio-only series and never include Personal money.
 
 Personal's total always arrives in EUR (the PUT body is hardcoded
 `currency: "EUR"`), so `NetWorthPage.tsx` only performs this merge while
@@ -495,14 +518,14 @@ this existed.
 
 Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
 
-One module, `apps/investing-web/src/lib/syncSession.ts`, owns sync polling for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls `startBrokerSync` or `continuePriceSync` there, and every status reader subscribes to the same snapshot. The module keeps these rules:
+One module, `apps/investing-web/src/lib/syncSession.ts`, owns the sync session for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls the ONE intent, `requestRefresh(force)`, which posts `POST /api/sync/refresh`; every status reader subscribes to the same snapshot. The server owns the run, so the module keeps these rules:
 
-- At most one status read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
-- While a broker or price run is known to be active, the module reads status every second. Active means a broker or price row that is `running` or `waiting`, or a start this page still owns. A `paused` price row counts only while this page is posting the next round; a paused row on its own (a cron slice, or a run that hit the round limit) is at rest and does not poll. A failed read during an active run retries with backoff (2, 4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the one-second rhythm without a reload.
-- Idle, completed, and problem states stop polling. A failed read with no active run also stops and shows **Connection: Offline** until the next wake (a new subscriber or a sync start).
-- The dashboard is invalidated once per price round this page posts, because each round stores new bars, and once when a channel this page saw unfinished reaches completed or problem. A final price round that is also that transition invalidates once, not twice. A failed status read or a recovery from one does not invalidate.
+- At most one state read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
+- While a run is active (`active: true` in the state body), the module reads `GET /api/sync/state` every 2 seconds. That is one request per 2 s and none to the old broker/price status routes. A failed read while a run was active retries with backoff (4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the two-second rhythm without a reload.
+- An inactive state stops polling; the module never polls a paused or completed row on its own. A failed read with no run stops and shows **Connection: Offline** until the next wake (a new subscriber or a refresh intent).
+- The dashboard is invalidated once when each lane finishes a read, proven by a changed `holdings.syncedAt`, `history.syncedAt` or `prices.syncedAt`, and nowhere else. A failed read or a recovery does not invalidate.
 - One subscriber that unmounts removes only its listener. Polling stops when the last subscriber leaves.
-- Price continuation that reaches its round limit returns an explicit `incomplete` outcome. The status rail shows **Price history: Incomplete** with a message to start sync again.
+- The browser no longer posts price rounds and has no round limit. If the server cannot continue the run, `GET /api/sync/state` keeps reporting the stored lane state and the next refresh intent or daily cron resumes it from the durable cursors.
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.

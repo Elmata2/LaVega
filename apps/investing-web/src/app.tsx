@@ -13,7 +13,6 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  buildIndexedSeries,
   findMentions,
   type InvestingDashboardData,
   type InvestingPositionDetail,
@@ -31,6 +30,7 @@ import {
   ResetPasswordPage,
 } from "./components/AuthForm";
 import { Profile } from "./components/Profile";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { NetWorthPage } from "./components/NetWorthPage.js";
 import { AgentsList } from "./components/AgentsList.js";
 import { StockResearch } from "./components/StockResearch.js";
@@ -38,13 +38,19 @@ import { AgentThreads } from "./components/AgentThreads.js";
 import { fetchThreadMessages } from "./lib/agentMemory.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
+import { AgentCatalogProblem, PortfolioAgentCard } from "./components/PortfolioAgentCard.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
+import { RealizedReport } from "./components/RealizedReport.js";
+import { saveAccountWrappers, withWrapper } from "./lib/accountWrappers.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
-import { longDate } from "./lib/dates.js";
+import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
+import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
+import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
+import { longDate, shortDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
@@ -58,19 +64,9 @@ import {
   portfolioChat,
   selectThread,
   startNewThread,
-  runPortfolioAgent,
   useAgentCatalog,
-  useAgentRequests,
-  type PortfolioAgentDefinition,
-  type PortfolioAgentInsight,
 } from "./lib/portfolioAgents";
-import { priceOutcomeProblems } from "./lib/priceSync";
-import {
-  continuePriceSync,
-  filterVisibleSyncProblems,
-  startBrokerSync,
-  useSyncSession,
-} from "./lib/syncSession";
+import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "./lib/syncSession";
 import { PERSONAL_URL } from "./lib/personal";
 import { brokerLabel, historyGate } from "./lib/historyGate";
 
@@ -92,37 +88,62 @@ function DashboardError({ message }: { message: string }) {
   return <EmptyState title="Dashboard unavailable" description={message} />;
 }
 
-function DashboardRefreshError({ message }: { message: string }) {
-  return (
-    <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm">
-      <p className="font-semibold">Refresh failed</p>
-      <p className="mt-1 text-muted-foreground">{message} Cached data remains visible.</p>
-    </div>
-  );
+/** Every reason the Overview's data may be wrong or stale, as one list for the
+ *  single status line. Broker credentials that cannot be read keep their
+ *  reconnect action. */
+function overviewStatusItems({
+  refreshError,
+  syncProblems,
+  readingProblems,
+  needsAttention,
+}: {
+  refreshError: string | null;
+  syncProblems: readonly string[];
+  readingProblems: readonly string[];
+  needsAttention: boolean;
+}): StatusItem[] {
+  const items: StatusItem[] = [];
+  if (refreshError)
+    items.push({
+      message: `Refresh failed: ${refreshError} Cached data remains visible.`,
+      severity: "warning",
+    });
+  for (const message of syncProblems) items.push({ message, severity: "problem" });
+  for (const message of filterVisibleSyncProblems([...readingProblems]))
+    items.push({
+      message,
+      severity: "problem",
+      action: /credentials cannot be read/i.test(message)
+        ? { to: "/brokers/connect", label: "Reconnect broker" }
+        : undefined,
+    });
+  if (needsAttention)
+    items.push({
+      message: "Broker or price status needs attention.",
+      severity: "warning",
+      action: { to: "/profile#brokers", label: "Review it in Profile" },
+    });
+  return mergeStatusItems(items);
 }
 
-function DashboardProblems({ problems }: { problems: string[] }) {
-  const visibleProblems = filterVisibleSyncProblems(problems);
-  if (visibleProblems.length === 0) return null;
+/** The status line for pages that show the dashboard read without the open-time
+ *  sync: refresh failure and reading problems, merged into one line. */
+function DashboardStatus({
+  data,
+  refreshError,
+}: {
+  data: InvestingDashboardData;
+  refreshError?: string;
+}) {
   return (
-    <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Reading problems</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
-        {visibleProblems.map((problem, index) => (
-          <li key={`${problem}-${index}`}>
-            {problem}{" "}
-            {/credentials cannot be read/i.test(problem) && (
-              <Link
-                to="/brokers/connect"
-                className="font-semibold text-primary underline-offset-2 hover:underline"
-              >
-                Reconnect broker
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <OverviewStatus
+      items={overviewStatusItems({
+        refreshError: refreshError ?? null,
+        syncProblems: [],
+        readingProblems: data.problems,
+        needsAttention: false,
+      })}
+    />
   );
 }
 
@@ -144,6 +165,31 @@ function numericCompare(
   if (left === null) return right === null ? 0 : 1;
   if (right === null) return -1;
   return (left - right) * (direction === "asc" ? 1 : -1);
+}
+
+/** WS4.2: say why a basis is unknown instead of only "return unavailable".
+ *  The code is typed in core (`CostBasisUnknownReason`); copy lives here. */
+function basisUnknownCopy(
+  basis: InvestingDashboardData["positions"][number]["basis"],
+): string | null {
+  switch (basis?.reason) {
+    case "transfer-in":
+      return "Basis unknown: units arrived by transfer, so the purchase price is not known.";
+    case "missing-fx":
+      return "Basis unknown: an FX rate is missing.";
+    case "missing-price":
+      return "Basis unknown: a trade has no price.";
+    case "missing-fee":
+      return "Basis unknown: a trade fee is missing.";
+    case "quantity-mismatch":
+      return "Basis unknown: the trade history does not match the broker quantity.";
+    case "provider-incomplete":
+      return "Basis unknown: the broker reports only part of the position.";
+    case "no-history":
+      return "Basis unknown: there is no trade history for this position.";
+    default:
+      return null;
+  }
 }
 
 function PositionList({
@@ -227,7 +273,7 @@ function PositionList({
               <button
                 type="button"
                 onClick={() => changeSort(column.key)}
-                className="rounded-xs text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="rounded-chip text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {column.label}
                 {sort === column.key ? (direction === "asc" ? " ↑" : " ↓") : ""}
@@ -247,7 +293,7 @@ function PositionList({
               className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-hidden hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <div role="cell" className="min-w-0 pr-4">
-                <span className="block truncate font-semibold text-primary">
+                <span className="block truncate font-semibold text-accent">
                   {position.description ?? position.symbol}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
@@ -327,8 +373,8 @@ function PositionList({
                     </span>
                     {position.returns.status === "missing-cost" && (
                       <span className="block text-xs leading-5 text-muted-foreground">
-                        Import earlier transactions or connect your other brokers to calculate
-                        return.
+                        {basisUnknownCopy(position.basis) ??
+                          "Import earlier transactions or connect your other brokers to calculate return."}
                       </span>
                     )}
                   </>
@@ -343,62 +389,28 @@ function PositionList({
 }
 
 function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
-  const points = data.portfolio.All;
-  const latest = points.at(-1);
-  const previous = points.at(-2);
-  const pricedPositionsValue = data.positions.reduce(
-    (sum, position) => sum + (position.marketValue ?? 0),
-    0,
-  );
-  const portfolioValue = latest?.value ?? (pricedPositionsValue > 0 ? pricedPositionsValue : null);
-  const usingPositionsFallback =
-    (latest?.value === null || latest?.value === undefined) && pricedPositionsValue > 0;
-  const dailyChange =
-    latest?.value !== null &&
-    latest?.value !== undefined &&
-    previous?.value !== null &&
-    previous?.value !== undefined
-      ? latest.value - previous.value
-      : null;
-  const dailyChangePercentage =
-    dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
-  const totalReturn =
-    buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
+  const figures = portfolioFigures(data);
+  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn, since } = figures;
   const money = (value: number | null, signDisplay: "auto" | "always" = "auto") =>
-    value === null
-      ? "Value unknown"
-      : value.toLocaleString("en-GB", {
-          style: "currency",
-          currency: data.presentationCurrency,
-          maximumFractionDigits: 2,
-          signDisplay,
-        });
+    value === null ? "Value unknown" : formatMoney(value, data.presentationCurrency, signDisplay);
   const percentage = (value: number | null) =>
-    value === null
-      ? "Return unknown"
-      : value.toLocaleString("en-GB", {
-          style: "percent",
-          maximumFractionDigits: 2,
-          signDisplay: "always",
-        });
+    value === null ? "Return unknown" : formatSignedPercent(value);
   return (
     <section
       aria-label="Portfolio KPIs"
-      className="rounded-card border border-border bg-card p-5 shadow-md"
+      className="rounded-card border border-border bg-card p-5"
       data-dashboard-section="kpis"
     >
-      <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
-        Key figures
-      </p>
+      <h3 className="font-display text-2xl">Key figures</h3>
       <dl className="mt-4 space-y-4">
         <div>
           <dt className="text-xs text-muted-foreground">Portfolio value</dt>
           <dd
-            className={`mt-1 font-display text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
+            className={`mt-1 text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
           >
             {money(portfolioValue)}
           </dd>
-          {usingPositionsFallback && (
+          {figures.usingPositionsFallback && (
             <dd className="text-xs text-muted-foreground">
               Priced positions only; cash and history are still missing.
             </dd>
@@ -407,7 +419,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div className="border-t border-border pt-4">
           <dt className="text-xs text-muted-foreground">Daily change</dt>
           <dd
-            className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
+            className={`mt-1 text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
           >
             {money(dailyChange, "always")}
           </dd>
@@ -416,232 +428,18 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div className="border-t border-border pt-4">
           <dt className="text-xs text-muted-foreground">Total return</dt>
           <dd
-            className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
+            className={`mt-1 text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
           >
             {percentage(totalReturn)}
           </dd>
-          <dd className="text-xs text-muted-foreground">TWR after deposits and withdrawals</dd>
+          <dd className="text-xs text-muted-foreground">
+            {since
+              ? `TWR since ${shortDate(since)}, after deposits and withdrawals`
+              : "TWR after deposits and withdrawals"}
+          </dd>
         </div>
       </dl>
-      {latest && latest.forwardFilled.length > 0 && (
-        <details className="mt-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">
-            Estimated prices ({latest.forwardFilled.length})
-          </summary>
-          <p className="mt-1 break-words">
-            <span className="sr-only">Estimated price: </span>
-            {latest.forwardFilled.join(", ")}
-          </p>
-        </details>
-      )}
-      {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
-        <div
-          role="status"
-          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"
-        >
-          <p className="font-semibold">Value partly unknown</p>
-          {latest.unpriced.length > 0 && <p>No usable price: {latest.unpriced.join(", ")}</p>}
-          {latest.cashUnknown.length > 0 && (
-            <p>Cash history unknown: {latest.cashUnknown.join(", ")}</p>
-          )}
-          {Object.entries(latest.cashShortfall ?? {}).map(([wallet, amount]) => (
-            <p key={wallet}>
-              {wallet} is missing about {money(Math.abs(amount))} of{" "}
-              {amount < 0 ? "funding" : "spending"} before its balances add up.
-            </p>
-          ))}
-        </div>
-      )}
-      {latest && (latest.cashEstimated?.length ?? 0) > 0 && (
-        <p className="mt-4 text-xs text-muted-foreground">
-          Estimated cash: {latest.cashEstimated?.join(", ")}. Walked from movements your broker
-          reported without proving the history complete.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function AgentCatalogProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="mt-4">
-      <p role="alert" className="text-sm text-negative">
-        {message}
-      </p>
-      <Button type="button" variant="outline" className="mt-3" onClick={onRetry}>
-        Try again
-      </Button>
-    </div>
-  );
-}
-
-function PersonaRadioGroup({
-  agents,
-  selectedId,
-  onSelect,
-  onOpen,
-}: {
-  agents: PortfolioAgentDefinition[];
-  selectedId: string;
-  onSelect: (agentId: string) => void;
-  onOpen: (agentId: string) => void;
-}) {
-  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
-
-  function moveSelection(from: number, step: number) {
-    const next = (from + step + agents.length) % agents.length;
-    onSelect(agents[next].id);
-    buttons.current[next]?.focus();
-  }
-
-  return (
-    <div role="radiogroup" aria-label="Choose agent" className="mt-4 grid grid-cols-2 gap-2">
-      {agents.map((agent, index) => {
-        const checked = agent.id === selectedId;
-        return (
-          <button
-            key={agent.id}
-            ref={(element) => {
-              buttons.current[index] = element;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            onClick={() => {
-              onSelect(agent.id);
-              onOpen(agent.id);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                event.preventDefault();
-                moveSelection(index, 1);
-              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                event.preventDefault();
-                moveSelection(index, -1);
-              }
-            }}
-            className={`pressable rounded-tile border px-3 py-2 text-left text-xs font-semibold transition-colors ${checked ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
-          >
-            {agent.displayName}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PortfolioAgentCard() {
-  const { catalog, reload } = useAgentCatalog();
-  const { requestFor, start, settle } = useAgentRequests();
-  const [selectedId, setSelectedId] = useState("");
-  const [insights, setInsights] = useState<Record<string, PortfolioAgentInsight>>({});
-  const navigate = useNavigate();
-
-  const agents = catalog.status === "ready" ? catalog.agents : [];
-  /* Selection is derived, so a catalog reload that drops the chosen persona
-   * falls back to the first one instead of leaving Analyse pointed at an id
-   * the reader can no longer see. */
-  const active = agents.find((agent) => agent.id === selectedId) ?? agents[0];
-  const request = requestFor(active?.id ?? "");
-  const insight = active ? insights[active.id] : undefined;
-
-  async function run() {
-    if (!active) return;
-    const agentId = active.id;
-    start(agentId);
-    try {
-      const result = await runPortfolioAgent(agentId);
-      setInsights((current) => ({ ...current, [agentId]: result }));
-      settle(agentId, null);
-    } catch (error) {
-      settle(agentId, error instanceof Error ? error.message : "Agent run failed.");
-    }
-  }
-
-  function openAgentTab(agentId: string) {
-    const base = window.location.pathname.startsWith("/investing") ? "/investing" : "";
-    const target = `${base}/agents/${encodeURIComponent(agentId)}`;
-    const tab = window.open(target, "_blank");
-    if (!tab) navigate(`/agents/${encodeURIComponent(agentId)}`);
-  }
-
-  const tone =
-    insight?.signal === "bullish"
-      ? "text-positive"
-      : insight?.signal === "bearish"
-        ? "text-negative"
-        : "text-muted-foreground";
-  return (
-    <section
-      aria-labelledby="portfolio-agent-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md"
-      data-dashboard-section="agent"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Agent</p>
-          <h3 id="portfolio-agent-title" className="mt-1 font-display text-2xl font-semibold">
-            Investor lens
-          </h3>
-        </div>
-        {insight && (
-          <span className={`rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold ${tone}`}>
-            {insight.signal} · {Math.round(insight.confidence)}%
-          </span>
-        )}
-      </div>
-      {catalog.status === "loading" && (
-        <p role="status" className="mt-4 text-sm text-muted-foreground">
-          Loading agents…
-        </p>
-      )}
-      {catalog.status === "error" && (
-        <AgentCatalogProblem message={catalog.message} onRetry={reload} />
-      )}
-      {catalog.status === "empty" && (
-        <AgentCatalogProblem message="No portfolio agents available." onRetry={reload} />
-      )}
-      {active && (
-        <>
-          <PersonaRadioGroup
-            agents={agents}
-            selectedId={active.id}
-            onSelect={setSelectedId}
-            onOpen={openAgentTab}
-          />
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
-          <Link
-            to={`/agents/${active.id}`}
-            className="pressable mt-4 flex items-center justify-between rounded-tile border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
-          >
-            <span>Open conversation with {active.displayName}</span>
-            <span aria-hidden="true">→</span>
-          </Link>
-          <Button type="button" className="mt-4 w-full" onClick={run} disabled={request.pending}>
-            {request.pending ? "Agent reading…" : "Analyse portfolio"}
-          </Button>
-          {request.error && (
-            <p role="alert" className="mt-3 text-sm text-negative">
-              {request.error}
-            </p>
-          )}
-          {insight && (
-            <article className="mt-4 rounded-tile border border-border bg-secondary/30 p-4">
-              <p className="text-sm font-semibold">{insight.displayName}</p>
-              <p className="mt-2 text-sm leading-6">{insight.summary}</p>
-              {insight.insights.length > 0 && (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
-                  {insight.insights.map((item, index) => (
-                    <li key={`${insight.snapshotHash}-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">{insight.reasoning}</p>
-            </article>
-          )}
-        </>
-      )}
+      <PortfolioFigureNotes figures={figures} currency={data.presentationCurrency} />
     </section>
   );
 }
@@ -751,20 +549,17 @@ function AgentView() {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-md">
+      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card">
         <div className="border-b border-border px-5 py-5 sm:px-6">
-          <Link to="/" className="text-sm font-semibold text-primary hover:underline">
+          <Link to="/" className="text-sm font-semibold text-accent hover:underline">
             ← Back to overview
           </Link>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-eyebrow text-primary">
-            Portfolio agent
-          </p>
-          <h2 className="mt-1 font-display text-4xl font-semibold">{agent.displayName}</h2>
+          <h2 className="mt-6 font-display text-5xl">{agent.displayName}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
           <div className="flex justify-start">
-            <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+            <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
               I am {agent.displayName}. I look at your positions through this lens. Ask a question
               about a holding, concentration, return or risk.
             </p>
@@ -775,13 +570,13 @@ function AgentView() {
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {message.role === "user" ? (
-                <p className="max-w-[86%] whitespace-pre-line rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+                <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-accent px-4 py-3 text-sm leading-6 text-accent-foreground">
                   <MentionText text={message.text} agents={agents} />
                 </p>
               ) : (
-                <div className="max-w-[86%] rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                <div className="max-w-[86%] rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
                   {message.speaker && (
-                    <p className="mb-1 text-xs font-semibold text-primary">{message.speaker}</p>
+                    <p className="mb-1 text-xs font-semibold text-accent">{message.speaker}</p>
                   )}
                   <AgentMessageText text={message.text} />
                 </div>
@@ -798,7 +593,7 @@ function AgentView() {
           <label htmlFor="agent-message" className="sr-only">
             Ask {agent.displayName}
           </label>
-          <div className="rounded-2xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="rounded-tile border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
             <MentionInput
               id="agent-message"
               value={input}
@@ -832,7 +627,7 @@ function AgentView() {
       </section>
       <aside
         aria-label="Conversation context"
-        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-md lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
+        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
       >
         <AgentThreads
           agentId={agent.id}
@@ -844,8 +639,7 @@ function AgentView() {
         />
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">Context</p>
-            <h3 className="mt-1 font-display text-2xl font-semibold">Your positions</h3>
+            <h3 className="font-display text-3xl">Your positions</h3>
           </div>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {contextPositions.length}
@@ -859,7 +653,7 @@ function AgentView() {
               <Link
                 key={`${position.symbol}-${position.entity}`}
                 to={`/positions/${encodeURIComponent(position.symbol)}`}
-                className="pressable flex items-center justify-between gap-3 rounded-xl bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
+                className="pressable flex items-center justify-between gap-3 rounded-tile bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">
@@ -884,7 +678,7 @@ function AgentView() {
         </div>
         <Link
           to="/positions"
-          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-primary hover:underline"
+          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-accent hover:underline"
         >
           View all positions →
         </Link>
@@ -893,17 +687,23 @@ function AgentView() {
   );
 }
 
-function AppOpenSync() {
+/** Runs the open-time sync and owns the Yahoo consent prompt. Its problems are
+ *  reported up through `onProblems` and shown in the Overview's one status
+ *  line; the consent prompt keeps showing its own error because that is the
+ *  reader's next action. */
+function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void }) {
   const [problems, setProblems] = useState<string[]>([]);
   const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
   const [consentBusy, setConsentBusy] = useState(false);
+  useEffect(() => {
+    onProblems(consent === "required" ? [] : problems);
+  }, [consent, problems, onProblems]);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
-      const brokerResult = await startBrokerSync();
-      if (current()) setProblems(filterVisibleSyncProblems(brokerResult?.problems ?? []));
-      const priceProblems = priceOutcomeProblems(await continuePriceSync());
-      if (current() && priceProblems.length > 0)
-        setProblems((existing) => [...existing, ...priceProblems]);
+      /* ONE intent. The server owns the run from here; the state poll shows
+       * its progress, and the tab may close. */
+      const result = await requestRefresh();
+      if (current()) setProblems(filterVisibleSyncProblems(result?.problems ?? []));
     } catch {
       if (current()) setProblems(["Broker sync failed."]);
     }
@@ -958,7 +758,7 @@ function AppOpenSync() {
         aria-labelledby="yahoo-consent-title"
         className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm"
       >
-        <h3 id="yahoo-consent-title" className="font-semibold">
+        <h3 id="yahoo-consent-title" className="text-xl">
           Yahoo Finance consent
         </h3>
         <p className="mt-2 leading-6 text-muted-foreground">
@@ -981,20 +781,10 @@ function AppOpenSync() {
         role="status"
         className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground"
       >
-        Checking market data consent…
+        Checking your market data settings…
       </div>
     );
-  if (problems.length === 0) return null;
-  return (
-    <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Sync problems</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
-        {problems.map((problem, index) => (
-          <li key={`${problem}-${index}`}>{problem}</li>
-        ))}
-      </ul>
-    </div>
-  );
+  return null;
 }
 
 export function HealthStatus() {
@@ -1018,13 +808,12 @@ export function HealthStatus() {
         setError(reason instanceof Error ? reason.message : "Health check failed"),
       );
   }, []);
-  if (error) return <span className="text-negative">Server unavailable: {error}</span>;
-  if (!health) return <span>Verbinden met investeringsserver…</span>;
-  return (
-    <span>
-      {health.service ?? "server"}: {health.ok ? "available" : "unavailable"}
-    </span>
-  );
+  /* Operator status stays out of the user's way: silent while the server is
+   * fine, one plain line when it is not. */
+  if (error || (health && !health.ok))
+    return <span>Investing data is offline. Figures may be out of date.</span>;
+  if (!health) return <span>Connecting to your investing data…</span>;
+  return null;
 }
 
 function ModuleRoute({
@@ -1040,6 +829,58 @@ function ModuleRoute({
   return <>{children}</>;
 }
 
+/** The module pill track. On a phone it scrolls sideways: an edge fade says
+ *  more is off-screen, and the active pill is scrolled into view on navigation. */
+function ModuleNav({ moduleIds }: { moduleIds: Parameters<typeof investingModulePath>[0][] }) {
+  const ref = useRef<HTMLElement>(null);
+  const location = useLocation();
+  const [fade, setFade] = useState<"none" | "start" | "end" | "both">("none");
+  const measure = useCallback(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const start = nav.scrollLeft > 1;
+    const end = nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 1;
+    setFade(start && end ? "both" : start ? "start" : end ? "end" : "none");
+  }, []);
+  useEffect(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    // Not every environment (jsdom) implements scrollIntoView.
+    if (typeof active?.scrollIntoView === "function")
+      active.scrollIntoView({ inline: "center", block: "nearest" });
+    measure();
+    const frame = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+    };
+  }, [location.pathname, moduleIds.length, measure]);
+  return (
+    <nav
+      ref={ref}
+      aria-label="Main navigation"
+      data-fade={fade}
+      onScroll={measure}
+      className="scroll-fade-x flex max-w-full items-center gap-1 overflow-x-auto rounded-pill bg-secondary p-1 [scrollbar-width:none]"
+    >
+      {moduleIds.map((id) => (
+        <NavLink
+          key={id}
+          to={investingModulePath(id)}
+          end={id === HOME_MODULE}
+          className={({ isActive }) =>
+            `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
+          }
+        >
+          {MODULES.find((m) => m.id === id)?.label ?? id}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1048,35 +889,42 @@ function Layout() {
   const positionsList = location.pathname === "/positions";
   const agentView = location.pathname.startsWith("/agents/");
   const isStockResearch = location.pathname === "/agents/research";
+  const pageTitle = detail
+    ? "Position"
+    : agentView
+      ? "Agent"
+      : positionsList
+        ? "Positions"
+        : location.pathname === "/net-worth"
+          ? "Net worth"
+          : location.pathname === "/agents"
+            ? "Agents"
+            : location.pathname === "/reports"
+              ? "Reports"
+              : null;
   const isProfile = location.pathname === "/profile";
   const isOverview = location.pathname === "/";
   return (
     <div className="min-h-screen p-3 sm:p-6">
-      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background shadow-xl sm:min-h-[calc(100vh-3rem)]">
+      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background sm:min-h-[calc(100vh-3rem)]">
         <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <Link to="/" className="pressable group">
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-              LaVega
-            </span>
-            <h1 className="font-display text-3xl font-semibold leading-none">Investing</h1>
+          <Link to="/" className="pressable group flex items-baseline gap-3">
+            <span className="font-display text-3xl">LaVega</span>
+            <h1 className="font-sans text-sm font-medium leading-none text-muted-foreground">
+              Investing
+            </h1>
           </Link>
-          <nav
-            aria-label="Main navigation"
-            className="flex items-center gap-1 rounded-pill bg-secondary p-1"
-          >
-            {(layout.status === "loading" ? [HOME_MODULE] : layout.modules).map((id) => (
-              <NavLink
-                key={id}
-                to={investingModulePath(id)}
-                end={id === HOME_MODULE}
-                className={({ isActive }) =>
-                  `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
-                }
-              >
-                {MODULES.find((m) => m.id === id)?.label ?? id}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
+            <NavLink
+              to="/reports"
+              className={({ isActive }) =>
+                `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`
+              }
+            >
+              Reports
+            </NavLink>
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
                 gewone cross-document link, want de persoonlijke app is een eigen
@@ -1086,7 +934,7 @@ function Layout() {
             {PERSONAL_URL && (
               <a
                 href={PERSONAL_URL}
-                className="flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                className="flex min-h-11 items-center gap-2 rounded-pill px-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <svg
                   width="16"
@@ -1109,15 +957,16 @@ function Layout() {
               <button
                 type="button"
                 onClick={() => navigate("/profile#widgets")}
-                className="pressable rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
+                className="pressable min-h-11 rounded-pill border border-border bg-card px-4 text-xs font-semibold transition-colors hover:bg-secondary"
               >
                 <span aria-hidden="true">+</span> Add widget
               </button>
             )}
+            <ThemeToggle />
             <Link
               to="/profile"
               aria-label="Profile"
-              className={`pressable flex size-9 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
+              className={`pressable flex size-11 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
             >
               <svg
                 width="16"
@@ -1137,37 +986,11 @@ function Layout() {
           </div>
         </header>
         <main className="px-5 py-8 sm:px-8 sm:py-12">
-          {!isProfile && !isStockResearch && (
-            <div className="mb-8 flex items-end justify-between gap-4">
-              <div>
-                <p className="mb-2 text-sm font-medium text-primary">
-                  {detail
-                    ? "Position detail"
-                    : agentView
-                      ? "Agent conversation"
-                      : positionsList
-                        ? "Positions"
-                        : location.pathname === "/net-worth"
-                          ? "Net worth"
-                          : location.pathname === "/agents"
-                            ? "Agents"
-                            : "Your financial overview"}
-                </p>
-                <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {detail
-                    ? "Position"
-                    : agentView
-                      ? "Agent"
-                      : positionsList
-                        ? "Positions"
-                        : location.pathname === "/net-worth"
-                          ? "Net worth"
-                          : location.pathname === "/agents"
-                            ? "Agents"
-                            : "Overview"}
-                </h2>
-              </div>
-            </div>
+          {/* Overview has no title here: the headline figures are its title, and the
+              nav already says where you are. Its heading stays in the page for
+              screen readers. */}
+          {!isProfile && !isStockResearch && pageTitle && (
+            <h2 className="mb-8 font-display text-5xl sm:text-6xl">{pageTitle}</h2>
           )}
           <Outlet />
         </main>
@@ -1245,6 +1068,7 @@ function Overview() {
   const navigate = useNavigate();
   const { broker, price, priceProblem, connection, vault } = useSyncSession();
   const layout = useInvestingLayout();
+  const [syncProblems, setSyncProblems] = useState<string[]>([]);
   const gate = historyGate(broker?.history);
   /* Until the layout loads, the registry defaults would flash widgets the
    * reader switched off and start their reads, so none render yet. */
@@ -1306,100 +1130,68 @@ function Overview() {
     });
     navigate(`/agents/${LETTER_AGENT_ID}`);
   }
+  const needsAttention =
+    connection !== "online" ||
+    broker?.status === "problem" ||
+    price?.status === "problem" ||
+    !!priceProblem ||
+    vault === "locked";
+  const statusItems =
+    state.status === "ready" && gate.kind === "ready"
+      ? overviewStatusItems({
+          refreshError: state.refreshError ?? null,
+          syncProblems,
+          readingProblems: state.data.problems,
+          needsAttention,
+        })
+      : [];
   return (
-    <div className="space-y-5">
-      <AppOpenSync />
+    <div className="space-y-6">
+      <h2 className="sr-only">Overview</h2>
+      {state.status === "ready" && gate.kind === "ready" && <PortfolioKpiRow data={state.data} />}
+      <OverviewStatus items={statusItems} />
+      <AppOpenSync onProblems={setSyncProblems} />
       {state.status === "loading" ? (
         <DashboardLoading />
       ) : state.status === "error" ? (
         <DashboardError message={state.message} />
       ) : gate.kind === "first-sync" ? (
         <HistoryLoading brokers={gate.brokers} />
+      ) : !layoutReady ? null : widgets.size === 0 ? (
+        <OverviewEmptyState />
       ) : (
         <>
-          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-          <DashboardProblems problems={state.data.problems} />
-          {(connection !== "online" ||
-            broker?.status === "problem" ||
-            price?.status === "problem" ||
-            priceProblem ||
-            vault === "locked") && (
-            <div
-              role="alert"
-              className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"
-            >
-              <p>
-                Status needs attention.{" "}
-                <Link to="/profile#brokers" className="font-semibold underline">
-                  Review it in Profile
-                </Link>
-              </p>
-            </div>
-          )}
-          {!layoutReady ? null : widgets.size === 0 ? (
-            <OverviewEmptyState />
-          ) : (
-            <>
-              <div
-                className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
-                data-dashboard-layout="overview"
-              >
-                <div className="min-w-0 space-y-5">
-                  {widgets.has("performance") && (
-                    <div data-dashboard-section="performance">
-                      <PortfolioBenchmarkChart
-                        data={state.data.portfolio}
-                        benchmarks={state.data.benchmarks}
-                        externalCashFlows={state.data.externalCashFlows}
-                        currency={state.data.presentationCurrency}
-                      />
-                    </div>
-                  )}
-                  {widgets.has("allocation") && (
-                    <div data-dashboard-section="allocation">
-                      <AllocationDonut
-                        instrument={state.data.allocation.instrument}
-                        entity={state.data.allocation.entity}
-                        currency={state.data.presentationCurrency}
-                      />
-                    </div>
-                  )}
+          {/* Left stack: the wide, time-based cards. Right rail: the narrow,
+              read-and-act cards. Two stacks (not one shared row grid) so a tall
+              letter never leaves a hole under a short chart, and any subset a
+              saved layout switches on still packs from the top. */}
+          <div
+            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]"
+            data-dashboard-layout="overview"
+          >
+            <div className="min-w-0 space-y-5">
+              {widgets.has("performance") && (
+                <div data-dashboard-section="performance">
+                  <PortfolioBenchmarkChart
+                    data={state.data.portfolio}
+                    benchmarks={state.data.benchmarks}
+                    externalCashFlows={state.data.externalCashFlows}
+                    currency={state.data.presentationCurrency}
+                  />
                 </div>
-                <aside aria-label="Portfolio overview" className="space-y-5">
-                  {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
-                  {showRisk && (
-                    <PortfolioSummaryCard
-                      /* De kaart is presentational; of er nog iets binnenkomt weet
-                         dit scherm, dat de sync-sessie toch al leest. */
-                      stillLoading={
-                        gate.updating.length > 0 ||
-                        broker?.status === "running" ||
-                        broker?.status === "waiting" ||
-                        price?.status === "running" ||
-                        price?.status === "paused" ||
-                        (price?.remainingSymbols?.length ?? 0) > 0
-                      }
-                      currency={state.data.presentationCurrency}
-                      state={summaryState}
-                      refresh={refreshRisk}
-                      range={range}
-                      onRangeChange={setRange}
-                      benchmark={benchmark}
-                      onBenchmarkChange={(value) =>
-                        setBenchmarkSelection({ value, revision: benchmarksRevision })
-                      }
-                    />
-                  )}
-                  {showLetter && (
-                    <PortfolioLetterCard
-                      state={letter.state}
-                      writeState={letter.writeState}
-                      onDiscuss={discussLetter}
-                      onWrite={letter.write}
-                    />
-                  )}
-                </aside>
-              </div>
+              )}
+              {widgets.has("allocation") && (
+                <div data-dashboard-section="allocation">
+                  <AllocationDonut
+                    instrument={state.data.allocation.instrument}
+                    entity={state.data.allocation.entity}
+                    {...(state.data.allocation.ladder
+                      ? { ladder: state.data.allocation.ladder }
+                      : {})}
+                    currency={state.data.presentationCurrency}
+                  />
+                </div>
+              )}
               {showSectors && (
                 <SectorAllocationCard
                   currency={state.data.presentationCurrency}
@@ -1407,9 +1199,43 @@ function Overview() {
                   refresh={refreshSectors}
                 />
               )}
+            </div>
+            <aside aria-label="Portfolio overview" className="min-w-0 space-y-5">
+              {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
+              {showRisk && (
+                <PortfolioSummaryCard
+                  /* De kaart is presentational; of er nog iets binnenkomt weet
+                     dit scherm, dat de sync-sessie toch al leest. */
+                  stillLoading={
+                    gate.updating.length > 0 ||
+                    broker?.status === "running" ||
+                    broker?.status === "waiting" ||
+                    price?.status === "running" ||
+                    price?.status === "paused" ||
+                    (price?.remainingSymbols?.length ?? 0) > 0
+                  }
+                  currency={state.data.presentationCurrency}
+                  state={summaryState}
+                  refresh={refreshRisk}
+                  range={range}
+                  onRangeChange={setRange}
+                  benchmark={benchmark}
+                  onBenchmarkChange={(value) =>
+                    setBenchmarkSelection({ value, revision: benchmarksRevision })
+                  }
+                />
+              )}
+              {showLetter && (
+                <PortfolioLetterCard
+                  state={letter.state}
+                  writeState={letter.writeState}
+                  onDiscuss={discussLetter}
+                  onWrite={letter.write}
+                />
+              )}
               {widgets.has("agent") && <PortfolioAgentCard />}
-            </>
-          )}
+            </aside>
+          </div>
         </>
       )}
     </div>
@@ -1422,9 +1248,61 @@ function Positions() {
   if (state.status === "error") return <DashboardError message={state.message} />;
   return (
     <>
-      {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-      <DashboardProblems problems={state.data.problems} />
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
       <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
+    </>
+  );
+}
+
+/** Realised-gain + income report (plan §3 WS4.3/WS4.4, #296). The report rides
+ *  the dashboard payload, so this page reads one resource and no extra fetch.
+ *  A dashboard stored before the report existed renders the empty state until
+ *  the next refresh builds it. */
+function Reports() {
+  const state = useDashboard();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  if (state.status === "loading") return <DashboardLoading />;
+  if (state.status === "error") return <DashboardError message={state.message} />;
+  const report = state.data.realized;
+  if (!report)
+    return (
+      <EmptyState
+        title="Realised report not ready"
+        description="Refresh the dashboard to build the realised-gain and income report from the current broker snapshot."
+      />
+    );
+  const entries = report.accounts.map((account) => ({
+    broker: account.broker,
+    account: account.account,
+    wrapper: account.wrapper,
+  }));
+  const setWrapper = async (entry: {
+    broker: string;
+    account: string;
+    wrapper: Parameters<typeof withWrapper>[3];
+  }) => {
+    const saved = await saveAccountWrappers(
+      withWrapper(entries, entry.broker, entry.account, entry.wrapper),
+    );
+    if (!saved) {
+      setSaveError("Could not save the account type. Try again.");
+      return;
+    }
+    setSaveError(null);
+    readDashboard();
+  };
+  return (
+    <>
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
+      {saveError && (
+        <p
+          role="status"
+          className="mb-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+        >
+          {saveError}
+        </p>
+      )}
+      <RealizedReport report={report} onSetWrapper={setWrapper} />
     </>
   );
 }
@@ -1455,14 +1333,11 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="position-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-primary">
-            {position.status === "closed" ? "Closed position" : "Open position"}
-          </p>
-          <h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">
+          <h3 id="position-title" className="font-display text-4xl">
             {position.description ?? position.symbol}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -1536,7 +1411,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         >
           {position.returnStatus === "missing-fx"
             ? "FX rate missing. Return cannot be calculated."
-            : "Import earlier transactions or connect your other brokers to calculate return."}
+            : (basisUnknownCopy(position.basis) ??
+              "Import earlier transactions or connect your other brokers to calculate return.")}
         </p>
       )}
       {brokerUnrealized && (
@@ -1559,7 +1435,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             aria-expanded={quantityOpen}
             aria-controls="quantity-history"
             onClick={() => setQuantityOpen((open) => !open)}
-            className="pressable mt-1 rounded-xs text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            className="pressable mt-1 rounded-chip text-xs font-semibold text-accent underline-offset-2 hover:underline"
           >
             {quantityOpen ? "Hide history" : "Show quantity history"}
           </button>
@@ -1567,7 +1443,17 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         {position.status === "open" && (
           <>
             <div>
-              <dt className="text-muted-foreground">Average cost</dt>
+              <dt className="text-muted-foreground">
+                Average cost
+                {position.basis?.source === "manual" && position.basis.locked && (
+                  <span
+                    className="ml-2 text-xs font-medium text-muted-foreground"
+                    title="A locked manual cost basis survives broker syncs"
+                  >
+                    · locked
+                  </span>
+                )}
+              </dt>
               <dd className="mt-1 font-semibold tabular-nums">
                 {money(position.averageCost).replace(/^\+/, "")}
               </dd>
@@ -1594,6 +1480,15 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           <dd className="mt-1 font-semibold tabular-nums">
             {money(position.returns.realizedGain)}
           </dd>
+          {position.realized && (
+            <Link
+              to="/reports"
+              className="mt-1 inline-block text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              {position.realized.disposals} disposal
+              {position.realized.disposals === 1 ? "" : "s"} in the realised report
+            </Link>
+          )}
         </div>
         <div>
           <dt className="text-muted-foreground">Dividends received</dt>
@@ -1659,9 +1554,9 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
   return (
     <section
       aria-labelledby="activity-title"
-      className="rounded-card border border-border bg-card p-5 shadow-md sm:p-6"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
     >
-      <h3 id="activity-title" className="font-display text-2xl font-semibold">
+      <h3 id="activity-title" className="font-display text-3xl">
         Activity
       </h3>
       {dates.length === 0 ? (
@@ -1748,7 +1643,7 @@ function PositionDetail() {
     <div className="space-y-5">
       <Link
         to={{ pathname: "/positions", search: query ? `?${query}` : "" }}
-        className="text-sm font-semibold text-primary hover:underline"
+        className="text-sm font-semibold text-accent hover:underline"
       >
         ← Back to positions
       </Link>
@@ -1763,8 +1658,7 @@ function PositionDetail() {
         <DashboardError message={state.message} />
       ) : state.data.position?.symbol.toUpperCase() === positionSymbol ? (
         <>
-          {state.refreshError && <DashboardRefreshError message={state.refreshError} />}
-          <DashboardProblems problems={state.data.problems} />
+          <DashboardStatus data={state.data} refreshError={state.refreshError} />
           <CompletePositionDetail position={state.data.position} />
         </>
       ) : (
@@ -1813,6 +1707,9 @@ export function App() {
               </ModuleRoute>
             }
           />
+          {/* Reports is always available: a stored layout has no id for it, so
+              making it a toggleable module would change every saved layout. */}
+          <Route path="/reports" element={<Reports />} />
           <Route
             path="/agents"
             element={

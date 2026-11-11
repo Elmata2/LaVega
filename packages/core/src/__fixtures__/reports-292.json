@@ -1,0 +1,343 @@
+{
+  "asOf": "2026-11-11",
+  "accounts": [
+    {
+      "key": "betaal",
+      "name": "Betaalrekening",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Betaalrekening",
+      "openingBalanceCents": 100000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "spaar",
+      "name": "Spaarrekening",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Spaarrekening",
+      "openingBalanceCents": 500000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "lening",
+      "name": "Hypotheek",
+      "bank": "ING",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Lening",
+      "openingBalanceCents": -900000,
+      "openingDate": "2026-11-01"
+    },
+    {
+      "key": "woning",
+      "name": "Woning",
+      "bank": "",
+      "entity": "Prive",
+      "currency": "EUR",
+      "balance": null,
+      "type": "Woning"
+    }
+  ],
+  "txs": [
+    {
+      "id": "t1",
+      "accountKey": "betaal",
+      "date": "2026-11-03",
+      "amount": -250,
+      "currency": "EUR",
+      "counterparty": "Woonstad",
+      "description": "Huur",
+      "category": "Housing & energy",
+      "manual": false
+    },
+    {
+      "id": "t2",
+      "accountKey": "betaal",
+      "date": "2026-11-05",
+      "amount": 3000,
+      "currency": "EUR",
+      "counterparty": "Werkgever",
+      "description": "Salaris",
+      "category": "Inkomen",
+      "manual": false
+    },
+    {
+      "id": "t3",
+      "accountKey": "betaal",
+      "date": "2026-11-07",
+      "amount": -125,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false
+    },
+    {
+      "id": "t4",
+      "accountKey": "spaar",
+      "date": "2026-11-10",
+      "amount": 250,
+      "currency": "EUR",
+      "counterparty": "ING",
+      "description": "Naar spaarrekening",
+      "category": "Eigen overboeking",
+      "manual": false
+    },
+    {
+      "id": "t5",
+      "accountKey": "lening",
+      "date": "2026-11-11",
+      "amount": -1000,
+      "currency": "EUR",
+      "counterparty": "ING",
+      "description": "Aflossing",
+      "category": "Eigen overboeking",
+      "manual": false
+    },
+    {
+      "id": "t6",
+      "accountKey": "betaal",
+      "date": "2026-10-25",
+      "amount": 3000,
+      "currency": "EUR",
+      "counterparty": "Werkgever",
+      "description": "Salaris",
+      "category": "Inkomen",
+      "manual": false
+    },
+    {
+      "id": "t7",
+      "accountKey": "betaal",
+      "date": "2026-10-01",
+      "amount": -250,
+      "currency": "EUR",
+      "counterparty": "Woonstad",
+      "description": "Huur",
+      "category": "Housing & energy",
+      "manual": false
+    },
+    {
+      "id": "t8",
+      "accountKey": "betaal",
+      "date": "2026-10-05",
+      "amount": -400,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false
+    },
+    {
+      "id": "t9",
+      "accountKey": "betaal",
+      "date": "2026-10-20",
+      "amount": -100,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false
+    },
+    {
+      "id": "t10",
+      "accountKey": "betaal",
+      "date": "2026-10-22",
+      "amount": 50,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Retour",
+      "category": "Boodschappen",
+      "manual": false
+    },
+    {
+      "id": "t11",
+      "accountKey": "betaal",
+      "date": "2026-10-28",
+      "amount": 20,
+      "currency": "EUR",
+      "counterparty": "Woonstad",
+      "description": "Terugbetaling",
+      "category": "Terugbetaling",
+      "manual": false
+    },
+    {
+      "id": "t12",
+      "accountKey": "betaal",
+      "date": "2026-10-09",
+      "amount": -999,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false,
+      "excluded": true
+    },
+    {
+      "id": "t13",
+      "accountKey": "betaal",
+      "date": "2026-10-10",
+      "amount": -888,
+      "currency": "EUR",
+      "counterparty": "Albert Heijn",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false,
+      "pending": true
+    },
+    {
+      "id": "t14",
+      "accountKey": "betaal",
+      "date": "2026-10-11",
+      "amount": -10,
+      "currency": "USD",
+      "counterparty": "Amazon",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false
+    },
+    {
+      "id": "t15",
+      "accountKey": "betaal",
+      "date": "2026-09-15",
+      "amount": -100,
+      "currency": "EUR",
+      "counterparty": "Jumbo",
+      "description": "Boodschappen",
+      "category": "Boodschappen",
+      "manual": false
+    }
+  ],
+  "valuations": [
+    {
+      "id": "woning|2026-11-05",
+      "accountKey": "woning",
+      "date": "2026-11-05",
+      "amountCents": 42000000,
+      "currency": "EUR",
+      "kind": "reconciliation",
+      "source": "manual",
+      "createdAt": "2026-11-11"
+    }
+  ],
+  "expected": {
+    "periods": [
+      {
+        "month": "2026-11",
+        "partial": true,
+        "incomeCents": 300000,
+        "spendCents": 37500,
+        "netSavingsCents": 262500,
+        "savingsRate": 0.875,
+        "transactionsCount": 3,
+        "cleanedRows": 2,
+        "excludedForeignCount": 0,
+        "incomeCategories": [
+          [
+            "Inkomen",
+            300000
+          ]
+        ],
+        "spendCategories": [
+          [
+            "Housing & energy",
+            25000
+          ],
+          [
+            "Boodschappen",
+            12500
+          ]
+        ]
+      },
+      {
+        "month": "2026-10",
+        "partial": false,
+        "incomeCents": 302000,
+        "spendCents": 70000,
+        "netSavingsCents": 232000,
+        "savingsRate": 0.7682119205298013,
+        "transactionsCount": 6,
+        "cleanedRows": 0,
+        "excludedForeignCount": 1,
+        "incomeCategories": [
+          [
+            "Inkomen",
+            300000
+          ],
+          [
+            "Terugbetaling",
+            2000
+          ]
+        ],
+        "spendCategories": [
+          [
+            "Boodschappen",
+            45000
+          ],
+          [
+            "Housing & energy",
+            25000
+          ]
+        ]
+      },
+      {
+        "month": "2026-09",
+        "partial": false,
+        "incomeCents": 0,
+        "spendCents": 10000,
+        "netSavingsCents": -10000,
+        "savingsRate": null,
+        "transactionsCount": 1,
+        "cleanedRows": 0,
+        "excludedForeignCount": 0,
+        "incomeCategories": [],
+        "spendCategories": [
+          [
+            "Boodschappen",
+            10000
+          ]
+        ]
+      }
+    ],
+    "balanceSheet": {
+      "assetsCents": 42887500,
+      "liabilitiesCents": 800000,
+      "equityCents": 42087500,
+      "netWorthCents": 42087500,
+      "knownAssetsCents": 42887500,
+      "knownLiabilitiesCents": 800000,
+      "assetGroups": [
+        [
+          "current",
+          362500
+        ],
+        [
+          "savings",
+          525000
+        ],
+        [
+          "property",
+          42000000
+        ]
+      ],
+      "liabilityGroups": [
+        [
+          "loan",
+          800000
+        ]
+      ]
+    },
+    "gap": {
+      "unknownAccounts": [
+        "woning"
+      ],
+      "knownAssetsCents": 887500,
+      "knownLiabilitiesCents": 800000
+    }
+  }
+}

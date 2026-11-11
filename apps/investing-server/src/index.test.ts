@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createMemoryBrokerSyncStateStore,
   type BrokerResult,
   type ScheduledSyncResult,
@@ -16,6 +16,7 @@ import {
   createRuntimeBrokerSync,
 } from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createMemoryCashFlowStore } from "./cashFlowSuggestions.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -178,7 +179,10 @@ test("a second concurrent run waits instead of spending the same rate limit", as
   } as unknown as ReturnType<typeof createFileCredentialStore>;
   const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore());
 
-  const [first, second] = await Promise.all([sync(true), sync(true)]);
+  const [first, second] = await Promise.all([
+    sync(true, ["holdings", "history"]),
+    sync(true, ["holdings", "history"]),
+  ]);
 
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
@@ -224,7 +228,7 @@ test("runtime broker sync passes the signed-in tenant to credential-aware adapte
     "user-123",
   );
 
-  const result = await sync(true);
+  const result = await sync(true, ["holdings", "history"]);
 
   expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
   expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");
@@ -467,7 +471,7 @@ test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", 
     set: vi.fn(async () => undefined),
   };
   const runtimeApp = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     marketDataConsentStore,
     sectorInferenceSettingStore,
   });
@@ -486,7 +490,7 @@ test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", 
 test("portfolio chat context resolves a renamed holding's sector through its price-resolved listing", async () => {
   vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
   vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const store = createInMemoryPriceStore();
+  const store = createInMemorySharedPriceStore();
   const sectorStore = createInMemorySectorProfileStore();
   await sectorStore.set("AAPLX", {
     kind: "stock",
@@ -499,12 +503,12 @@ test("portfolio chat context resolves a renamed holding's sector through its pri
   // listing for it, exactly like a real renamed holding: the summary route
   // already cached its sector profile under the listing prices settled on
   // (AAPLX), not under the broker symbol still on the position.
-  await store.putCoverage("local", {
-    symbol: "AAPL",
+  await store.putCoverage("isin:US0378331005:USD", {
     from: "2026-01-01",
     to: "2026-09-01",
     listing: "AAPLX",
     currency: "USD",
+    provider: "yahoo",
   });
 
   const context = await runtimeApp.portfolioChatContext();
@@ -775,7 +779,7 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
     vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
     vi.stubEnv("TRADING212_BASE_URL", baseUrl);
 
-    const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
     const result = (await response.json()) as { problems: string[] };
     const progress = (await (await runtimeApp.request("/api/brokers/sync/status")).json()) as {
@@ -821,7 +825,7 @@ test.each(["locked", "empty"] as const)(
       vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "");
 
       await expect(
-        createRuntimeApp({ priceStore: createInMemoryPriceStore() }),
+        createRuntimeApp({ priceStore: createInMemorySharedPriceStore() }),
       ).resolves.toBeDefined();
       await expect(readFile(legacyFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
@@ -854,7 +858,7 @@ test("runtime forwards the request deadline through broker orchestration", async
     vi.stubEnv("INVESTING_PRICE_SYNC_BUDGET_MS", "1");
     vi.stubEnv("INVESTING_SYNC_BUDGET_MS", "60000");
 
-    const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
     const result = (await response.json()) as { problems: string[] };
 
@@ -901,10 +905,10 @@ test("sync status reports history completeness from durable state, not the invoc
     vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
     vi.stubEnv("TRADING212_BASE_URL", baseUrl);
 
-    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const syncing = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
 
-    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const restarted = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     const progress = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
       status: string;
       history: { trading212: { ordersComplete: boolean; lastSyncedAt: string | null } } | null;
@@ -939,10 +943,10 @@ test("a rejected API key stays visible to the next invocation", async () => {
     vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
     vi.stubEnv("TRADING212_BASE_URL", baseUrl);
 
-    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const syncing = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
 
-    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const restarted = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     const progress = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
       status: string;
       message: string | null;
@@ -956,8 +960,8 @@ test("a rejected API key stays visible to the next invocation", async () => {
 });
 
 test("each tenant gets its own runtime, so no cache is shared between users", async () => {
-  const priceStore = createInMemoryPriceStore();
-  const getRange = vi.spyOn(priceStore, "getRange");
+  const priceStore = createInMemorySharedPriceStore();
+  const getRanges = vi.spyOn(priceStore, "getRanges");
   const benchmarkSymbols = vi.fn(async (tenantId: string) => [`BENCH-${tenantId}`]);
   let tenantId = "user-a";
   const runtimeApp = await createRuntimeApp({
@@ -971,17 +975,29 @@ test("each tenant gets its own runtime, so no cache is shared between users", as
   await runtimeApp.request("/api/investing/dashboard");
 
   expect(benchmarkSymbols.mock.calls.map(([tenant]) => tenant)).toEqual(["user-a", "user-b"]);
-  // Price bars are read under the requesting tenant, never a shared one.
-  expect(getRange.mock.calls.map(([tenant, symbol]) => `${tenant}:${symbol}`)).toEqual([
-    "user-a:BENCH-user-a",
-    "user-b:BENCH-user-b",
-  ]);
+  // Price bars are read by instrument key, one series for every caller: the
+  // benchmark a tenant selected is the only tenant-specific part (issue #307).
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toEqual(
+    expect.arrayContaining(["sym:BENCH-user-a:EUR", "sym:BENCH-user-b:EUR"]),
+  );
+});
+
+test("an account with no stored benchmark reads MSCI World by default", async () => {
+  const priceStore = createInMemorySharedPriceStore();
+  const getRanges = vi.spyOn(priceStore, "getRanges");
+  const runtimeApp = await createRuntimeApp({ priceStore });
+
+  const dashboard = await runtimeApp.request("/api/investing/dashboard");
+  expect(dashboard.status).toBe(200);
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toContain(
+    "sym:IWDA.AS:EUR",
+  );
 });
 
 test("a tenant's broker sync status is its own, not the last caller's", async () => {
   let tenantId = "user-a";
   const runtimeApp = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => tenantId,
   });
 
@@ -1054,4 +1070,48 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
   expect(cache.read().positions).toMatchObject([{ symbol: "AAPL" }]);
   expect(cache.snapshot().trading212?.positions).toHaveLength(1);
   expect(cache.snapshot().ibkr).toBeUndefined();
+});
+
+test("an injected cash-flow store reaches the app on the no-Sentry runtime path", async () => {
+  /* Regression (#137 UI slice): the local runtime builds its app through the
+   * `if (!dsn)` branch, and that branch forgot to pass `cashFlowStore`, so a
+   * standalone/mounted run silently answered from the memory store and the
+   * seeded file rules/suggestions never reached the API. The owner's
+   * confirmation UI reads exactly these routes; without this the panel is
+   * always empty on a real local run. */
+  const previousDsn = process.env.SENTRY_DSN;
+  delete process.env.SENTRY_DSN;
+  try {
+    const cashFlowStore = createMemoryCashFlowStore();
+    await cashFlowStore.setSuggestionsEnabled(true);
+    await cashFlowStore.saveSuggestions([
+      {
+        broker: "trading212",
+        typeKey: "SHARES_IN",
+        rawType: "SHARES_IN",
+        kind: "withdrawal",
+        confidence: 0.72,
+        state: "pending",
+        amount: 250,
+        sign: 1,
+        currency: "EUR",
+        description: "Share purchase settlement",
+        createdAt: "2026-11-11T04:40:00.000Z",
+      },
+    ]);
+    const app = await createRuntimeApp({
+      priceStore: createInMemorySharedPriceStore(),
+      cashFlowStore,
+      resolveTenantId: () => "local",
+    });
+    const body = (await (
+      await app.request("http://localhost/api/investing/cash-flow-suggestions")
+    ).json()) as { enabled: boolean; count: number; pending: unknown[] };
+    expect(body.enabled).toBe(true);
+    expect(body.count).toBe(1);
+    expect(body.pending[0]).toMatchObject({ rawType: "SHARES_IN", signChange: true });
+  } finally {
+    if (previousDsn === undefined) delete process.env.SENTRY_DSN;
+    else process.env.SENTRY_DSN = previousDsn;
+  }
 });

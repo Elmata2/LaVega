@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { AuthHonestyLine } from "@/components/auth-layout";
 import { Input } from "@/components/ui/input";
 
 export type LoginValues = { email: string; password: string };
@@ -30,7 +31,6 @@ export function LoginForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
         <CardTitle as="h1">Sign in</CardTitle>
         <CardDescription>Enter your email and password to continue.</CardDescription>
       </CardHeader>
@@ -46,7 +46,7 @@ export function LoginForm({
                 <FieldLabel htmlFor="login-password">Password</FieldLabel>
                 <Link
                   to="/forgot-password"
-                  className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                  className="text-sm font-semibold text-accent underline-offset-4 hover:underline"
                 >
                   Forgot password?
                 </Link>
@@ -69,6 +69,7 @@ export function LoginForm({
                 {error}
               </p>
             )}
+            <AuthHonestyLine />
             <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Signing in…" : "Sign in"}
             </Button>
@@ -76,7 +77,7 @@ export function LoginForm({
               New to LaVega?{" "}
               <Link
                 to="/sign-up"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Create an account
               </Link>

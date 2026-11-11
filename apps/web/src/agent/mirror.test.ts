@@ -1,4 +1,13 @@
-import type { PlanResult, Rule, ScheduledFlow } from "@lavega/core";
+import {
+  ownAccounts,
+  spendOf,
+  upgradeRules,
+  type PlanResult,
+  type Rule,
+  type RuleV2,
+  type ScheduledFlow,
+  type Tx,
+} from "@lavega/core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { buildMirror, createMirrorSync } from "./mirror.js";
 
@@ -211,4 +220,70 @@ test("the day boundary is the Amsterdam day: 00:30 local in winter and in summer
       instant,
     ).toEqual([today]);
   }
+});
+
+/* The app holds rules as master's `upgradeRules()` output: every legacy row is
+ * lowered to a v2 rule. The mirror has to carry those back, or the server
+ * categorises with the built-in list only. */
+test("upgraded legacy rules are all mirrored, in order, as {id, match, category}", () => {
+  const stored = [
+    { id: "a", match: "tikkie", category: "Overboekingen" },
+    { id: "b", match: "albert heijn", category: "Boodschappen" },
+  ];
+  const upgraded = upgradeRules(stored).rules;
+  expect(upgraded.every((r) => "v" in r)).toBe(true);
+  const m = buildMirror({ rules: upgraded, flows: [], plan: null, now: NOW });
+  expect(m.rules).toEqual(stored);
+});
+
+const v2 = (over: Partial<RuleV2>): RuleV2 => ({
+  v: 2,
+  id: "x",
+  conditions: [{ kind: "text", target: "text", op: "contains", value: "x" }],
+  actions: [{ kind: "setCategory", category: "C" }],
+  stopProcessing: true,
+  ...over,
+});
+
+test("v2 rules that are not the lowered legacy shape are skipped", () => {
+  const skipped: RuleV2[] = [
+    v2({ id: "two", conditions: [...v2({}).conditions, { kind: "direction", direction: "out" }] }),
+    v2({ id: "op", conditions: [{ kind: "text", target: "text", op: "equals", value: "x" }] }),
+    v2({
+      id: "target",
+      conditions: [{ kind: "text", target: "counterparty", op: "contains", value: "x" }],
+    }),
+    v2({ id: "act", actions: [{ kind: "addTag", tag: "t" }] }),
+    v2({ id: "two-act", actions: [...v2({}).actions, { kind: "exclude" }] }),
+    v2({ id: "future", effectiveFrom: "2030-01-01" }),
+    v2({ id: "continue", stopProcessing: false }),
+  ];
+  const m = buildMirror({ rules: [...skipped, v2({ id: "ok" })], flows: [], plan: null, now: NOW });
+  expect(m.rules).toEqual([{ id: "ok", match: "x", category: "C" }]);
+});
+
+const tikkieTx: Tx = {
+  id: "t1",
+  accountKey: "NL01INGB0000000001",
+  date: "2026-11-10",
+  amount: -42,
+  currency: "EUR",
+  counterparty: "Jansen Klusbedrijf",
+  description: "",
+  category: "",
+  manual: false,
+};
+
+test("a mirrored transfer rule keeps the transaction out of spend; without it the spend counts", () => {
+  const own = ownAccounts([]);
+  const upgraded = upgradeRules([{ id: "r", match: "jansen", category: "Overboekingen" }]).rules;
+  const withRule = buildMirror({ rules: upgraded, flows: [], plan: null, now: NOW }).rules;
+  expect(spendOf(tikkieTx, withRule, own)).toBeNull();
+  expect(spendOf(tikkieTx, [], own)).toEqual({ cents: 4200, category: expect.any(String) });
+  // Same answer as the app's own (lowered) rule set: same text field and case handling.
+  expect(spendOf(tikkieTx, upgraded, own)).toEqual(spendOf(tikkieTx, withRule, own));
+  const upper = { ...tikkieTx, counterparty: "JANSEN KLUSBEDRIJF" };
+  expect(spendOf(upper, withRule, own)).toEqual(spendOf(upper, upgraded, own));
+  const inDescription = { ...tikkieTx, counterparty: "x", description: "betaling Jansen" };
+  expect(spendOf(inDescription, withRule, own)).toEqual(spendOf(inDescription, upgraded, own));
 });

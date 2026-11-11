@@ -73,6 +73,10 @@ const props = (
     onFCategoryChange: () => {},
     configured: false,
     onApplyCategories: async () => {},
+    transfers: [],
+    suggestions: [],
+    onConfirmTransfer: () => {},
+    onRejectTransfer: () => {},
   }) as unknown as Parameters<typeof Transacties>[0];
 
 test("a EUR row is unchanged: no approx figure, in either mode", () => {

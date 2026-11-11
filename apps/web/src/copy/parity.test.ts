@@ -6,6 +6,10 @@ import { optimiseCopy } from "./optimise.js";
 import { apiErrorCopy } from "./apiErrors.js";
 import { intakeCopy } from "./intake.js";
 import { instinctCopy } from "./instinct.js";
+import { billsCopy } from "./bills.js";
+import { documentsCopy } from "./documents.js";
+import { importSessionCopy } from "./importSession.js";
+import { assistantCopy } from "./assistant.js";
 import {
   assumptionsCopy,
   bufferCopy,
@@ -14,6 +18,7 @@ import {
   goalsCopy,
   monthCopy,
   planShellCopy,
+  reportsCopy,
   spendingCopy,
   subscriptionsCopy,
 } from "./plan/index.js";
@@ -94,6 +99,10 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["apiErrors", apiErrorCopy],
   ["intake", intakeCopy],
   ["instinct", instinctCopy],
+  ["bills", billsCopy],
+  ["documents", documentsCopy],
+  ["importSession", importSessionCopy],
+  ["assistant", assistantCopy],
   ["plan/shell", planShellCopy],
   ["plan/month", monthCopy],
   ["plan/buffer", bufferCopy],
@@ -103,6 +112,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["plan/cards", cardsCopy],
   ["plan/goals", goalsCopy],
   ["plan/assumptions", assumptionsCopy],
+  ["plan/reports", reportsCopy],
 ];
 
 test.each(MODULES)("%s has the same keys in both languages", (_name, copy) => {

@@ -97,12 +97,6 @@ describe("checkPages", () => {
     expect(rules([page({ description: "x".repeat(160) })])).not.toContain("description-length");
   });
 
-  it("disclaimer", () => {
-    expect(rules([page({ bodyMarkdown: "Tekst." })])).toContain("disclaimer");
-    expect(rules([page({ locale: "en", bodyMarkdown: `Text. ${NL}` })])).toContain("disclaimer");
-    expect(rules([page()])).not.toContain("disclaimer");
-  });
-
   it("sources", () => {
     expect(rules([page({ sources: [] })])).toContain("sources");
     expect(rules([page({ sources: [], family: "over" })])).not.toContain("sources");

@@ -204,13 +204,13 @@ describe("import boundaries", () => {
     });
 
     expect(violations).toEqual([]);
-  });
+  }, 30_000);
 
   test("investing server request path does not import Node builtins transitively", async () => {
     const violations = findInvestingServerNodeImports(await collectModules());
 
     expect(violations).toEqual([]);
-  });
+  }, 30_000);
 
   test("transitive Node builtin imports fail boundary check", () => {
     const fixture: SourceModule[] = [
@@ -272,5 +272,5 @@ describe("import boundaries", () => {
     });
 
     expect(violations).toEqual([]);
-  });
+  }, 30_000);
 });

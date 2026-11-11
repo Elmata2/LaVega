@@ -27,7 +27,7 @@ export const UNLINKED_ATTEMPTS = 5;
 export const UNLINKED_WINDOW_MS = 15 * 60 * 1000;
 
 /* Cheap first filter only. The real, durable throttle is in SQL
- * (agent_consume_link_code, migration 0029): this process forgets on a cold start. */
+ * (agent_consume_link_code, migration 0040): this process forgets on a cold start. */
 const sharedLimiter = createRateLimiter(UNLINKED_ATTEMPTS, UNLINKED_WINDOW_MS);
 /* Everything else an unknown number sends: ignored, under a looser cap that
  * never touches the code budget, so ordinary chatter cannot lock out linking. */

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "./ui/button";
 import { GICS_SECTOR_LABELS } from "@lavega/core";
 
 type SectorKind = "stock" | "fund" | "unknown";
@@ -108,7 +109,7 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
             Correct sector
             <select
               aria-label="Correct sector"
-              className="rounded-md border bg-background px-2 py-1"
+              className="rounded-tile border border-input bg-background px-3 py-2 text-sm"
               value={selection}
               onChange={(event) => setSelection(event.target.value)}
             >
@@ -120,23 +121,25 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
               ))}
             </select>
           </label>
-          <button
+          <Button
             type="button"
-            className="rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+            variant="outline"
+            size="sm"
             disabled={!selection || saving}
             onClick={() => void save()}
           >
             {saving ? "Saving…" : "Save"}
-          </button>
+          </Button>
           {state.source === "correction" && (
-            <button
+            <Button
               type="button"
-              className="rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+              variant="ghost"
+              size="sm"
               disabled={resetting}
               onClick={() => void reset()}
             >
               {resetting ? "Resetting…" : "Reset to automatic"}
-            </button>
+            </Button>
           )}
         </>
       )}

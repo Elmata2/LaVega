@@ -9,6 +9,7 @@ import {
   signUp,
   verificationCallbackUrl,
 } from "../lib/auth-client";
+import { AuthLayout } from "./auth-layout";
 import { LoginForm, type LoginValues } from "./login-form";
 import { SignupForm, type SignupValues } from "./signup-form";
 import { Button } from "./ui/button";
@@ -67,7 +68,7 @@ export function AuthForm({ mode }: { mode: "sign-up" | "sign-in" }) {
   }
 
   return (
-    <AuthShell>
+    <AuthLayout>
       {mode === "sign-up" ? (
         <SignupForm onSubmit={createAccount} pending={pending} error={error} />
       ) : (
@@ -78,7 +79,7 @@ export function AuthForm({ mode }: { mode: "sign-up" | "sign-in" }) {
           verified={new URLSearchParams(location.search).get("verified") === "1"}
         />
       )}
-    </AuthShell>
+    </AuthLayout>
   );
 }
 
@@ -110,7 +111,7 @@ export function CheckEmailPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">Check your email</CardTitle>
           <CardDescription>
             If this address is new to LaVega, a confirmation link is on its way
@@ -156,7 +157,7 @@ export function CheckEmailPage() {
             <p className="text-center text-sm text-muted-foreground">
               <Link
                 to="/sign-in"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Back to sign in
               </Link>
@@ -210,13 +211,13 @@ export function EmailConfirmedPage() {
           <div className="flex gap-4 text-sm">
             <Link
               to="/check-email"
-              className="font-semibold text-primary underline-offset-4 hover:underline"
+              className="font-semibold text-accent underline-offset-4 hover:underline"
             >
               Request another link
             </Link>
             <Link
               to="/sign-in"
-              className="font-semibold text-primary underline-offset-4 hover:underline"
+              className="font-semibold text-accent underline-offset-4 hover:underline"
             >
               Sign in
             </Link>
@@ -252,7 +253,7 @@ export function ForgotPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">Reset your password</CardTitle>
           <CardDescription>
             Enter your account email. We will send a link to set a new password.
@@ -288,7 +289,7 @@ export function ForgotPasswordPage() {
             <p className="text-center text-sm">
               <Link
                 to="/sign-in"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Back to sign in
               </Link>
@@ -336,7 +337,7 @@ export function ResetPasswordPage() {
     <AuthShell>
       <Card className="w-full">
         <CardHeader>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
+          <p className="font-display text-3xl">LaVega</p>
           <CardTitle as="h1">{done ? "Password changed" : "Choose a new password"}</CardTitle>
           <CardDescription>
             {done
@@ -384,7 +385,7 @@ export function ResetPasswordPage() {
             <p className="text-center text-sm">
               <Link
                 to={done ? "/sign-in" : "/forgot-password"}
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 {done ? "Sign in" : "Request another link"}
               </Link>

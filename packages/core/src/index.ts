@@ -1,9 +1,20 @@
 export const VERSION = "0.0.0";
 export * from "./model.js";
 export * from "./balance.js";
+export * from "./balanceSeries.js";
+export * from "./reports.js";
+export * from "./statements/index.js";
 export * from "./hash.js";
+export * from "./money.js";
+export * from "./budget.js";
+export * from "./transfers.js";
+export * from "./labels.js";
 export * from "./ingest.js";
+export * from "./csvImport.js";
 export * from "./views.js";
+/* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
+ * it); its barrel exports only the engine, the types and the dry run. */
+export * from "./rules/index.js";
 export * from "./accounts.js";
 export * from "./entities.js";
 export * from "./tracking.js";
@@ -48,6 +59,8 @@ export * from "./spendPercentile.js";
 export * from "./plan/index.js";
 export * from "./localeRedirect.js";
 export * from "./redact.js";
+export * from "./agentTools.js";
+export * from "./provenance.js";
 export * from "./sentryScrub.js";
 export * from "./advisor/evidence.js";
 export * from "./advisor/profile.js";
@@ -72,8 +85,22 @@ export * from "./advisor/riskScale.js";
 export * from "./advisor/knowledge.js";
 export * from "./advisor/resolve.js";
 export * from "./instinct/types.js";
-export * from "./instinct/candidates.js";
+/* `addDays` stays internal to the instinct module: bills/index.ts already exports a different `addDays`. */
+export {
+  daysFromTo,
+  amsterdamDay,
+  spendOf,
+  spendOnDay,
+  spendingCandidate,
+  upcomingRenewals,
+  deadlineCandidates,
+  offerCandidates,
+  type UpcomingRenewal,
+} from "./instinct/candidates.js";
 export * from "./instinct/tips.js";
 export * from "./instinct/dailyMessage.js";
 export * from "./instinct/render.js";
 export * from "./instinct/tools.js";
+export * from "./bills/index.js";
+export * from "./interop/index.js";
+export * from "./assistant.js";

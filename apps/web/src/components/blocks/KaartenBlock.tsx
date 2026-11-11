@@ -62,6 +62,11 @@ const TYPE_ORDER = [
   "Betaalrekening",
   "Spaarrekening",
   "Beleggingsrekening",
+  "Lening",
+  "Woning",
+  "Voertuig",
+  "Overig bezit",
+  "Overige schuld",
   "Overig",
 ];
 
@@ -77,6 +82,16 @@ function typeLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string 
       return c.credit;
     case "investment":
       return c.investment;
+    case "loan":
+      return c.loan;
+    case "property":
+      return c.property;
+    case "vehicle":
+      return c.vehicle;
+    case "otherAsset":
+      return c.otherAsset;
+    case "otherLiability":
+      return c.otherLiability;
     case "other":
       return c.other;
   }

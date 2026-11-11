@@ -70,7 +70,7 @@ const EMPTY_MIRROR: AgentMirror = { rules: [], dueDates: [], cardOffer: null };
 /**
  * Everything here is keyed by the real current Amsterdam date: the claim, the no-repeat keys, the
  * dedupe keys, the day words the reader sees and the bank's fetch counter. The due-listing
- * (migration 0028) may call this after midnight for a send hour that began the evening before; that
+ * (migration 0039) may call this after midnight for a send hour that began the evening before; that
  * retry still delivers, and it takes the real date's claim. So a user gets at most one message per
  * real calendar date, the claim never moves backwards, and the regular send of that same date is
  * then not made (it comes the next day). Claim and content are never a date apart.

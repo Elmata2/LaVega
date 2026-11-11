@@ -4,7 +4,7 @@ Date: 10 November 2026. Status: phases 1 and 2 implemented 11 November 2026
 (staged on branch `docs/instinct-agent-design`, not deployed). Phase 3
 (cancelling) is not built and waits for a lawyer. Where this spec and the code
 differ, the code is right; the notes marked "As built" and
-`docs/adr/0010-server-reads-transactions-at-night.md` say how. Evidence: `docs/research/2026-10-26-instinct-teardown.md`, prior
+`docs/adr/0014-server-reads-transactions-at-night.md` say how. Evidence: `docs/research/2026-10-26-instinct-teardown.md`, prior
 proposal `docs/research/2026-10-26-lavega-agent-memory-design.md` (on the
 card-advice worktree; copy it into this branch with the spec).
 
@@ -59,7 +59,7 @@ read-only; cancelling a subscription is phase 3 and is not built.
   text, NL (v2, `CONSENT_VERSION` "2026-11-v2"): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
   EN: "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner." This changes today's privacy promise (vault closed to
   the server) for opted-in users only; the vault itself stays as it is. The first
-  sentence said "elke nacht"; v2 replaced it (see ADR 0010).
+  sentence said "elke nacht"; v2 replaced it (see ADR 0014).
 - **Two-way WhatsApp, like Instinct**, via the official WhatsApp Business
   (Cloud) API with a LaVega number.
 - **Cancelling is real, by email (phase 3, not built).** On the user's "Ja" for that subscription,
@@ -87,7 +87,7 @@ listable and deletable by the user, and "erase everything" covers it.
   number), email, push subscription(s), language, consent version and date.
   As built there are no quiet hours; the send hour takes their place. The
   cancellation authorisation text is phase 3.
-- **Hourly job** (Vercel cron `0 * * * *` on `/api/cron/instinct`, per due
+- **Hourly job** (hourly trigger `7 * * * *` from the GitHub workflow `.github/workflows/instinct-cron.yml` on `/api/cron/instinct`; Vercel plan allows daily crons only, per due
   opted-in user): fetch 90 days → compute candidates in memory using
   existing core functions (spending by day, `computeSubscriptions`, card
   comparison, live rates; the card gain comes from the browser's mirror) → pick at most one message → render per channel →
@@ -202,7 +202,7 @@ My calls:
   says so once. A refused fetch skips that run silently; the cron tries again in
   the next hour while the 2-hour retry window lasts, then waits for the next day. "Agent on" requires at least one connected bank.
 - **Server access to sessions**: the cron lists due users through a
-  `SECURITY DEFINER` function (`personal.list_agent_due_users`, migration 0028)
+  `SECURITY DEFINER` function (`personal.list_agent_due_users`, migration 0039)
   and then reads each user's `eb_sessions` inside `withTenant(userId)`. No
   dedicated server role was added; see the ADR 0004 amendment.
 - **Categories and due dates**: for opted-in users the browser mirrors the
@@ -259,7 +259,7 @@ registered only when a runtime database is configured.
 | `GET /api/agent/feed`                     | Events, newest first. Query: `channel`, `limit` (1 to 100), `before` cursor. |
 | `DELETE /api/agent/events/:id`            | Delete one event.                                                    |
 | `DELETE /api/agent/conversation/:channel` | Delete all events of one channel.                                    |
-| `GET /api/cron/instinct`                  | The hourly cron (`0 * * * *`). Public in `apiGuard`, guarded by `CRON_SECRET` as a bearer token. Registered even without a database. |
+| `GET /api/cron/instinct`                  | The hourly cron route (triggered at minute 7 by GitHub Actions). Public in `apiGuard`, guarded by `CRON_SECRET` as a bearer token. Registered even without a database. |
 | `GET /api/whatsapp/webhook`               | Meta handshake: echoes `hub.challenge` only when `hub.mode` is `subscribe`, `hub.verify_token` matches and the challenge is non-empty, else 403. |
 | `POST /api/whatsapp/webhook`              | Inbound messages. Public in `apiGuard`, trusted only by the Meta signature. |
 
@@ -348,6 +348,26 @@ the event name, error name and status only.
   The owner may want to change this.
 - Tone in WhatsApp answers comes from a fixed set of phrases that the owner can
   edit; the phrasing is not unique per answer.
+- v2 rules with more than one condition, other operators or other actions are
+  not mirrored (`apps/web/src/agent/mirror.ts`). Legacy rules, which the app
+  holds lowered to v2, are mirrored back in order. For the rest the daily message
+  categorises spending with the built-in list.
+- GitHub schedules can run late or skip a run. The 2-hour retry window after the
+  send hour covers a late run; it misses a user only when no run lands in any of
+  the three Amsterdam hours send_hour to send_hour+2.
+- Not unified with master's newer modules (separate code, may drift):
+  - Bills engine (`packages/core/src/bills/`: `occurrences.ts`, `match.ts`,
+    `forecast.ts`, `paycheck.ts`) versus our upcoming-charges and deadline
+    candidates (`packages/core/src/instinct/candidates.ts`).
+  - Rules evaluator v2 (`packages/core/src/rules/`, `categorizeDetailed` in
+    `packages/core/src/views.ts`) versus our categorisation mirror
+    (`apps/web/src/agent/mirror.ts`). No merchant registry module was found in
+    master at merge time.
+  - Assistant approval events (`packages/core/src/assistant.ts`) versus our
+    approval scaffolding (`apps/server/src/whatsapp/approval.ts`).
+  - AI usage ledger and its ops/reservation code (`packages/database/src/index.ts`,
+    `aiUsageOps.test.ts`, `aiUsageReservation.test.ts`) versus our budget and
+    usage use (`apps/server/src/agent/budget.ts`, route "instinct-reply").
 
 ## Open at spec time (status 11 Nov 2026)
 

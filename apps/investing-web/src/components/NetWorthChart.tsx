@@ -3,9 +3,11 @@ import { useCallback, useId, useMemo } from "react";
 import { Area, AreaChart, Line, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer, ChartTooltip } from "./ui/chart";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
+import { LineSwatch } from "./Swatch";
 
 /** A portfolio point, optionally carrying the owner's opted-in Personal total
  *  (`@lavega/core`'s `mergeInPersonalNetWorth`). Both extra fields are
@@ -123,18 +125,16 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
           <p className="text-sm font-medium text-muted-foreground">Net worth</p>
           <CardTitle>Investments and cash</CardTitle>
         </div>
-        <div
-          role="group"
-          aria-label="Choose net worth period"
-          className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
-        >
+        <div role="group" aria-label="Choose net worth period" className={segmentedTrack}>
           {chartRanges.map((item) => (
             <button
               key={item.value}
               type="button"
               aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value}
               onClick={() => chart.applyPreset(item.value)}
-              className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "preset" && chart.window.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+              className={segmentedItem(
+                chart.window.kind === "preset" && chart.window.range === item.value,
+              )}
             >
               {item.label}
             </button>
@@ -150,7 +150,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <strong className="font-display text-2xl tabular-nums">
+              <strong className="text-2xl tabular-nums">
                 {displayValue(activePoint?.netTotal ?? null, currency)}
               </strong>
               <span className="text-xs text-muted-foreground">
@@ -265,7 +265,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
               role="img"
               tabIndex={0}
               aria-label="Net worth: investments, cash and total. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom."
-              className="touch-pan-y select-none rounded-xl"
+              className="touch-pan-y select-none rounded-tile"
               {...chart.handlers}
             >
               <ChartContainer className="h-[320px]" aria-hidden="true">
@@ -304,13 +304,13 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                   </defs>
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: string) => value.slice(5)}
                   />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     width={72}
@@ -385,7 +385,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     name="Total"
                     connectNulls={false}
                     stroke="hsl(var(--foreground))"
-                    strokeWidth={2.25}
+                    strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4 }}
                     isAnimationActive={false}
@@ -405,6 +405,10 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
               className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground"
               aria-label="Net worth chart series"
             >
+              <span className="inline-flex items-center gap-2 font-semibold text-foreground">
+                <LineSwatch thick color="hsl(var(--foreground))" />
+                Your net worth
+              </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="size-2 rounded-full bg-chart-teal" />
                 Investments
@@ -419,10 +423,6 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                   Bank accounts (Personal, as of {dateLabel(personalAsOfDate)})
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-0.5 w-3 bg-foreground" />
-                Total
-              </span>
               {warnings.forwardFilled.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden="true" className="h-2.5 w-3 net-worth-hatch" />
@@ -484,8 +484,12 @@ function NetWorthTooltip({
   const point = active ? payload?.[0]?.payload : null;
   if (!point) return null;
   return (
-    <div className="max-w-[min(320px,80vw)] rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-md">
+    <div className="max-w-[min(320px,80vw)] rounded-tile border border-border bg-card px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 text-muted-foreground">{dateLabel(point.date)}</p>
+      <p className="flex items-center gap-2 font-semibold">
+        <LineSwatch thick color="hsl(var(--foreground))" />
+        Your net worth
+      </p>
       <p className="mb-2 text-base font-semibold tabular-nums">
         {displayValue(point.netTotal, currency)}
       </p>

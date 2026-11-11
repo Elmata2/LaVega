@@ -8,15 +8,14 @@ export function AgentsList() {
   const researchCard = (
     <Link
       to="/agents/research"
-      className="pressable mb-5 block rounded-card border border-primary/30 bg-primary/5 p-5 sm:p-6"
+      className="pressable mb-5 block rounded-card border border-accent/30 bg-accent/5 p-5 sm:p-6"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-primary">Research Stock</p>
-      <h2 className="mt-1 font-display text-3xl font-semibold">One stock. All six agents.</h2>
+      <h2 className="font-display text-4xl">One stock. All six agents.</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Research a stock with all six agents together, compare their views, then explore any view in
         a conversation.
       </p>
-      <span className="mt-4 inline-block text-sm font-semibold text-primary">
+      <span className="mt-4 inline-block text-sm font-semibold text-accent">
         Start stock research →
       </span>
     </Link>
@@ -51,10 +50,9 @@ export function AgentsList() {
           <Link
             key={agent.id}
             to={`/agents/${agent.id}`}
-            className="pressable rounded-card border border-border bg-card p-5 shadow-sm hover:bg-secondary/40"
+            className="pressable rounded-card border border-border bg-card p-5 hover:bg-secondary/40"
           >
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Agent</p>
-            <h3 className="mt-1 font-display text-2xl font-semibold">{agent.displayName}</h3>
+            <h3 className="font-display text-3xl">{agent.displayName}</h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
           </Link>
         ))}

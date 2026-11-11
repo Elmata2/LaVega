@@ -1,4 +1,5 @@
 import type { Account, Rule, Tx } from "../model.js";
+import type { LegacyRule } from "../rules/model.js";
 import type { RateBenchmark } from "../interest.js";
 
 export type CandidateKind = "deadline" | "better-offer" | "spending" | "tip";
@@ -43,7 +44,10 @@ export const CARD_OFFER_MAX_AGE_DAYS = 90;
 /** Same shape as `AgentMirror` in @lavega/database, which core cannot import;
  *  apps/server/src/agentRuleType.test.ts fails tsc if the two drift. */
 export type AgentMirror = {
-  rules: Rule[];
+  /** Only legacy `{ id, match, category }` rows are mirrored. A v2 rule (typed
+   *  conditions and actions) is not, so the daily message counts its
+   *  transactions under the built-in category instead. */
+  rules: LegacyRule[];
   dueDates: { kind: "vat" | "other"; label: string; date: string }[];
   cardOffer: { name: string; yearlyGainCents: number; computedAt: string } | null;
 };

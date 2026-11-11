@@ -9,7 +9,7 @@ import {
 } from "./index.js";
 
 /*
- * Instinct agent storage (ADR 0010, migration 0027). Free text and payloads are
+ * Instinct agent storage (ADR 0014, migration 0038). Free text and payloads are
  * sealed with encryptBlob (ADR 0007) before they reach Neon; the plain columns
  * are only what a query has to filter on. Transactions, balances and IBANs are
  * never stored here.
@@ -120,7 +120,7 @@ export function assertAgentConfig(): void {
 }
 
 /*
- * WhatsApp link (migration 0029). The phone number is personal data: it is
+ * WhatsApp link (migration 0040). The phone number is personal data: it is
  * sealed with encryptBlob, and `phoneHash` (HMAC under AGENT_PHONE_HMAC_KEY) is
  * the only lookup key. Nothing here logs or returns a code, hash or number
  * beyond what the caller asked for.
@@ -632,7 +632,7 @@ export type DueUser = { userId: string; day: string };
 /**
  * Opted-in users whose send time has come and who have not had that day's message.
  * `hour` and `today` are the Amsterdam hour and date of now. The window wraps
- * midnight (migration 0028). Like `listBrokerSyncTenants`, deliberately tenantless:
+ * midnight (migration 0039). Like `listBrokerSyncTenants`, deliberately tenantless:
  * the SECURITY DEFINER function returns user ids and the message day, nothing else.
  */
 export async function listAgentDueUsers(
@@ -650,7 +650,7 @@ export async function listAgentDueUsers(
 }
 
 /**
- * Delete link-attempt rows older than the 15 minute window (migration 0029).
+ * Delete link-attempt rows older than the 15 minute window (migration 0040).
  * Tenantless like `listAgentDueUsers`: the table has no policy or grant for the
  * runtime role, only the SECURITY DEFINER function reaches it. Returns the count.
  */
@@ -667,7 +667,7 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The user a phone belongs to, or null. Tenantless on purpose: the webhook only
- * knows a number. The SECURITY DEFINER function from migration 0029 returns one
+ * knows a number. The SECURITY DEFINER function from migration 0040 returns one
  * user id and nothing else.
  */
 export async function userForPhone(db: Database, hash: string): Promise<string | null> {
@@ -678,7 +678,7 @@ export async function userForPhone(db: Database, hash: string): Promise<string |
   return id ? String(id) : null;
 }
 
-/** Link-code brute-force throttle, enforced in SQL (migration 0029): failures within the window. */
+/** Link-code brute-force throttle, enforced in SQL (migration 0040): failures within the window. */
 export const LINK_ATTEMPTS_PER_PHONE = 5;
 export const LINK_ATTEMPTS_WINDOW_MINUTES = 15;
 
@@ -687,7 +687,7 @@ export type ConsumeLinkCodeResult =
   | { ok: false; reason: "invalid" | "phone-taken" };
 
 /**
- * Use a one-time link code for a phone, in one SQL statement (migration 0029).
+ * Use a one-time link code for a phone, in one SQL statement (migration 0040).
  * `invalid` covers wrong, used and expired codes alike. `phone-taken` means
  * another account already has that phone; the code is kept.
  */

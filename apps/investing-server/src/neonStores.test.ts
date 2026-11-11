@@ -3,7 +3,6 @@ import {
   createNeonBenchmarkSelectionStore,
   createNeonInvestingLayoutStore,
   createNeonMarketDataConsentStore,
-  createNeonPriceStore,
   createNeonSectorCorrectionStore,
   createNeonSectorInferenceSettingStore,
 } from "./neonStores.js";
@@ -34,35 +33,6 @@ const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
   );
 
 afterEach(() => vi.clearAllMocks());
-
-test("price reads and writes run under the tenant that owns the bars", async () => {
-  const { db, calls } = fakeDatabase([
-    { symbol: "AAPL", date: "2026-01-02", close: "120.5", currency: "USD" },
-  ]);
-  const store = createNeonPriceStore(db, () => "user-purge");
-
-  await store.getRange("user-a", "AAPL", "2026-01-01", "2026-01-31");
-  await store.upsert("user-b", [{ symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]);
-  await store.replaceRange("user-c", "AAPL", [], "2026-01-01");
-  await store.purgeAll();
-
-  expect(identities(calls)).toEqual(["user-a", "user-b", "user-c", "user-purge"]);
-});
-
-test("purging the price cache clears only the caller's rows", async () => {
-  const { db, calls } = fakeDatabase();
-
-  await createNeonPriceStore(db, () => "user-a").purgeAll();
-
-  expect(
-    calls.some(
-      (call) =>
-        call.sql ===
-        "WITH coverage AS (DELETE FROM investing.price_coverage) DELETE FROM investing.price_bars",
-    ),
-  ).toBe(true);
-  expect(calls.some((call) => call.sql.includes("TRUNCATE"))).toBe(false);
-});
 
 test("benchmark selection is validated on the way in and out", async () => {
   const { db, calls } = fakeDatabase([{ benchmark_symbols: ["^AEX", "^GSPC"] }]);

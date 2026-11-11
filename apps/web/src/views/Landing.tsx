@@ -49,7 +49,7 @@ function Heading({ lead, em }: { lead: string; em: string }) {
   );
 }
 
-/** Public marketing landing page: midnight palette, Instrument Serif, the
+/** Public marketing landing page: midnight palette, Libron, the
  *  gradient only in the hero and the closing call to action. Every "get early
  *  access" button opens the auth dialog on its sign-up view; "Log in" opens it
  *  on sign-in and enters the vault (`/app`) via `onEnter`. */
@@ -215,11 +215,15 @@ export default function Landing({
     };
   }, []);
 
-  // Scroll-reveal (fade/rise) via IntersectionObserver. Without one, show everything.
+  // Scroll-reveal (fade/rise) via IntersectionObserver. The hiding class is
+  // decided at render time (see .lp-reveal in landing.css), so the prerendered
+  // HTML stays readable if the bundle never runs, and a reduced-motion visitor
+  // gets the end state rather than a faster animation. Without an observer
+  // nothing is hidden in the first place.
   useEffect(() => {
     const els = rootRef.current?.querySelectorAll<HTMLElement>(".r");
     if (!els) return;
-    if (typeof IntersectionObserver === "undefined") {
+    if (!animated || typeof IntersectionObserver === "undefined") {
       els.forEach((el) => el.classList.add("in-view"));
       return;
     }
@@ -236,7 +240,7 @@ export default function Landing({
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, []);
+  }, [animated]);
 
   // Scrollspy: the nav link of the section crossing the middle of the screen.
   useEffect(() => {
@@ -261,7 +265,7 @@ export default function Landing({
   const shot = c.hero.shot;
 
   return (
-    <div className="lp" ref={rootRef}>
+    <div className={animated ? "lp lp-reveal" : "lp"} ref={rootRef}>
       <a className="skip" href="#main">
         {c.skip}
       </a>
