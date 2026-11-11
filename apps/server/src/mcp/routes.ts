@@ -19,15 +19,24 @@ import {
   buildAgentTools,
   capAgentToolResult,
   findAgentTool,
+  safeAgentToolError,
+  validateAccountWrapperMap,
   type AgentToolDefinition,
   type AgentToolScope,
   type CappedAgentToolResult,
 } from "@lavega/core";
 import { createInvestingReadTools } from "@lavega/investing-server/src/tools/investingTools.js";
+import {
+  createInvestingWriteTools,
+  type InvestingWriteSource,
+} from "@lavega/investing-server/src/tools/writeTools.js";
 import type { McpAuditEntry } from "@lavega/database";
 import { MCP_PATH, mcpIdentity } from "../apiGuard.js";
 import { recordMcpAudit, type McpAuditSink } from "./audit.js";
 import { createMcpInvestingRead } from "./investingRead.js";
+import { createMcpInvestingWrite } from "./investingWrite.js";
+import { createRulePreviewStore, type RulePreviewStore } from "./previewTokens.js";
+import { checkBudget } from "../agent/budget.js";
 import {
   isJsonRpcId,
   jsonRpcError,
@@ -50,15 +59,67 @@ export const MCP_SERVER_INFO = { name: "lavega-investing", version: "1.0.0" } as
 const MCP_INSTRUCTIONS =
   "Read-only LaVega investing data for the token's own account. Money is a decimal amount in the portfolio's presentation currency; a null value means unknown, not zero. Never ask for a tenant id: the token names it.";
 
+/** The spend gate answer for one call. The gate is a peek: MCP tool calls do not
+ *  buy model tokens, but the account's AI budget still bounds the endpoint. */
+export type McpBudgetGate = { ok: true } | { ok: false; scope: string };
+
 export type McpRouteDependencies = {
   /** Build the caller's registry. Handlers must be bound to the caller's tenant. */
   createTools(identity: McpTokenIdentity, origin: string): readonly AgentToolDefinition[];
   audit: McpAuditSink;
   sessions: McpSessionStore;
   rateLimit: McpRateLimiter;
+  /** Single-use preview tokens for the write path (WS5.4). */
+  previewTokens: RulePreviewStore;
+  /** Applied to EVERY tools/call, before dispatch (WS5.7). */
+  checkBudget: (tenantId: string) => Promise<McpBudgetGate>;
   now?: () => number;
   serverInfo?: { name: string; version: string };
 };
+
+/** The one place a caller's registry is built for `/mcp`: the read tools every
+ *  token gets, plus the write tools only a write-scoped token lists (WS5.4). */
+function createMcpTools(
+  identity: McpTokenIdentity,
+  origin: string,
+  deps: Pick<McpRouteDependencies, "previewTokens" | "now">,
+): readonly AgentToolDefinition[] {
+  const tools = createInvestingReadTools(createMcpInvestingRead(identity.tenantId, origin));
+  if (!identity.scopes.includes("write")) return tools;
+  const now = deps.now ?? (() => Date.now());
+  const source: InvestingWriteSource = {
+    currentEntries: async () => {
+      const read = createMcpInvestingRead(identity.tenantId, origin);
+      const { status, body } = await read("/api/investing/account-wrappers");
+      if (status !== 200) throw new Error("The account labels could not be read");
+      const entries = (body as { entries?: unknown } | null)?.entries;
+      return validateAccountWrapperMap(entries);
+    },
+    storePreview: async ({ entries, changes, ttlMs }) => {
+      const stored = deps.previewTokens.issue({
+        tenantId: identity.tenantId,
+        tokenId: identity.tokenId,
+        entries,
+        changes,
+        now: now(),
+        ttlMs,
+      });
+      return { previewToken: stored.previewToken, expiresAt: stored.expiresAt };
+    },
+    applyPreview: async (previewToken) => {
+      const stored = deps.previewTokens.consume({
+        previewToken,
+        tenantId: identity.tenantId,
+        tokenId: identity.tokenId,
+        now: now(),
+      });
+      if (!stored) throw new Error("Preview token is unknown, used or expired");
+      await createMcpInvestingWrite(identity.tenantId, origin)(stored.entries);
+      return { applied: true as const, entries: [...stored.entries] };
+    },
+  };
+  return [...tools, ...createInvestingWriteTools(source)];
+}
 
 /** Production wiring. Tests replace the pieces they need to observe. */
 export function mcpRouteDependencies(
@@ -67,15 +128,28 @@ export function mcpRouteDependencies(
   const configured = Number(
     process.env.MCP_RATE_LIMIT_PER_MINUTE ?? MCP_RATE_LIMIT_DEFAULT_PER_MINUTE,
   );
-  return {
-    createTools: (identity, origin) =>
-      createInvestingReadTools(createMcpInvestingRead(identity.tenantId, origin)),
+  const base = {
     audit: recordMcpAudit,
     sessions: createMcpSessionStore(),
     rateLimit: createMcpRateLimiter({
       max: Number.isFinite(configured) ? configured : MCP_RATE_LIMIT_DEFAULT_PER_MINUTE,
     }),
+    previewTokens: createRulePreviewStore(),
+    checkBudget: async (tenantId: string): Promise<McpBudgetGate> => {
+      try {
+        const gate = await checkBudget(undefined, tenantId);
+        return gate.ok ? { ok: true } : { ok: false, scope: gate.scope };
+      } catch {
+        /* Fail closed: an unreadable budget must not silently admit every call. */
+        return { ok: false, scope: "unavailable" };
+      }
+    },
     ...overrides,
+  };
+  return {
+    ...base,
+    createTools:
+      overrides.createTools ?? ((identity, origin) => createMcpTools(identity, origin, base)),
   };
 }
 
@@ -136,16 +210,7 @@ function toolCallSuccess(name: string, capped: CappedAgentToolResult): Record<st
  * the boundary sends a generic message — never the exception, SQL or a path.
  */
 function toolCallFailure(name: string, error: unknown): Record<string, unknown> {
-  const schemaError = (error as { _tag?: unknown } | null)?._tag === "SchemaError";
-  const payload = schemaError
-    ? {
-        error: "invalid_arguments",
-        hint: "Check the argument names and types against tools/list, then retry once.",
-      }
-    : {
-        error: "tool_failed",
-        hint: "The tool could not answer. Retry once; do not keep retrying the same call.",
-      };
+  const payload = safeAgentToolError(error);
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
     structuredContent: payload,
@@ -161,7 +226,9 @@ function visibleTools(
   tools: readonly AgentToolDefinition[],
   scopes: readonly AgentToolScope[],
 ): readonly AgentToolDefinition[] {
-  return buildAgentTools(tools, { scopes });
+  /* A write token opts into the preview-gated tools by holding the write scope;
+   * a read token never reaches them (WS5.4). */
+  return buildAgentTools(tools, { scopes, preview: scopes.includes("write") });
 }
 
 /**
@@ -208,10 +275,7 @@ export async function handleMcpRequest(
   }
   if (!isPlainObject(payload)) {
     await audit("unknown", null, "refused");
-    return jsonResponse(
-      400,
-      jsonRpcError(null, JSON_RPC_CODES.invalidRequest, "Invalid Request"),
-    );
+    return jsonResponse(400, jsonRpcError(null, JSON_RPC_CODES.invalidRequest, "Invalid Request"));
   }
 
   const method = typeof payload.method === "string" ? payload.method : "";
@@ -235,10 +299,7 @@ export async function handleMcpRequest(
   }
   if (!isJsonRpcId(payload.id)) {
     await audit(method, null, "refused");
-    return jsonResponse(
-      400,
-      jsonRpcError(null, JSON_RPC_CODES.invalidRequest, "Invalid Request"),
-    );
+    return jsonResponse(400, jsonRpcError(null, JSON_RPC_CODES.invalidRequest, "Invalid Request"));
   }
   const id: JsonRpcId = payload.id;
   const params = objectParams(payload.params);
@@ -247,12 +308,13 @@ export async function handleMcpRequest(
    * leaked id would be usable from another token. Unknown/expired is a 404, the
    * MCP transport's answer for a session the client must re-initialize. */
   const sessionId = request.headers.get("mcp-session-id");
-  if (method !== "initialize" && sessionId && !deps.sessions.matches(sessionId, identity, startedAt)) {
+  if (
+    method !== "initialize" &&
+    sessionId &&
+    !deps.sessions.matches(sessionId, identity, startedAt)
+  ) {
     await audit(method, null, "refused");
-    return jsonResponse(
-      404,
-      jsonRpcError(id, JSON_RPC_CODES.invalidRequest, "Session not found"),
-    );
+    return jsonResponse(404, jsonRpcError(id, JSON_RPC_CODES.invalidRequest, "Session not found"));
   }
 
   const tools = deps.createTools(identity, origin);
@@ -304,12 +366,38 @@ export async function handleMcpRequest(
           protocolEcho(request),
         );
       }
+      /* WS5.7: the spend gate applies to EVERY MCP call, before dispatch. */
+      const budget = await deps.checkBudget(identity.tenantId);
+      if (!budget.ok) {
+        await audit(method, name, "refused");
+        const payload = {
+          error: budget.scope === "unavailable" ? "budget_unavailable" : "budget_exhausted",
+          hint:
+            budget.scope === "unavailable"
+              ? "The spend gate could not be read. Nothing was executed; retry later."
+              : `The account's AI spend cap is reached for this ${budget.scope}. Nothing was executed.`,
+        };
+        return jsonResponse(
+          200,
+          jsonRpcResult(id, {
+            content: [{ type: "text", text: JSON.stringify(payload) }],
+            structuredContent: payload,
+            _meta: { tool: name, error: payload.error },
+            isError: true,
+          }),
+          protocolEcho(request),
+        );
+      }
       const args = objectParams(params.arguments);
       try {
         const value = await tool.handler(args);
         const capped = capAgentToolResult(value);
         await audit(method, name, "ok");
-        return jsonResponse(200, jsonRpcResult(id, toolCallResult(name, capped)), protocolEcho(request));
+        return jsonResponse(
+          200,
+          jsonRpcResult(id, toolCallResult(name, capped)),
+          protocolEcho(request),
+        );
       } catch (error) {
         await audit(method, name, "error");
         return jsonResponse(

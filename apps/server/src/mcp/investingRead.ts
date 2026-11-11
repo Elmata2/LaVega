@@ -24,6 +24,9 @@ export const MCP_READ_PATH_PREFIXES = [
   "/api/investing/fundamentals/",
   "/api/investing/sectors",
   "/api/memory",
+  /* The write path's dry-run diff reads the current labels; the write itself
+   * goes through the separate allowlist in investingWrite.ts. */
+  "/api/investing/account-wrappers",
 ] as const;
 
 export function isMcpReadPath(path: string): boolean {
@@ -40,8 +43,7 @@ export function createMcpInvestingRead(
   forward: ForwardInvesting = forwardInvesting,
 ): InvestingToolRead {
   return async (path) => {
-    if (!isMcpReadPath(path))
-      throw new Error(`MCP read refused: ${path} is not a read-only path`);
+    if (!isMcpReadPath(path)) throw new Error(`MCP read refused: ${path} is not a read-only path`);
     const response = await forward(new Request(new URL(path, origin)), tenantId);
     const text = await response.text();
     let body: unknown = null;

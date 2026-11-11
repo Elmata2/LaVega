@@ -11,6 +11,8 @@ import type { McpAuditEntry } from "@lavega/database";
 import { handleMcpRequest, mcpRouteDependencies, MCP_SERVER_INFO } from "./routes.js";
 import type { McpRouteDependencies } from "./routes.js";
 import { createMcpSessionStore } from "./sessions.js";
+import { createRulePreviewStore } from "./previewTokens.js";
+import { createInvestingWriteTools } from "@lavega/investing-server/src/tools/writeTools.js";
 import { createMcpRateLimiter } from "./rateLimit.js";
 import type { McpTokenIdentity } from "./tokens.js";
 
@@ -57,6 +59,8 @@ const deps = (overrides: Partial<McpRouteDependencies> = {}): McpRouteDependenci
   audit: vi.fn(async () => undefined),
   sessions: createMcpSessionStore(),
   rateLimit: createMcpRateLimiter({ max: 100 }),
+  previewTokens: createRulePreviewStore(),
+  checkBudget: async () => ({ ok: true }),
   now: () => 1_000,
   ...overrides,
 });
@@ -175,7 +179,11 @@ test("a response over the row cap is truncated and marked, not streamed whole", 
 test("a schema failure is error-as-data with a retry hint and no decoder text", async () => {
   const res = await call(rpc("tools/call", { name: "get_bad_input", arguments: {} }));
   const body = (await res.json()) as {
-    result: { isError: boolean; structuredContent: { error: string; hint: string }; content: Array<{ text: string }> };
+    result: {
+      isError: boolean;
+      structuredContent: { error: string; hint: string };
+      content: Array<{ text: string }>;
+    };
   };
   expect(body.result.isError).toBe(true);
   expect(body.result.structuredContent.error).toBe("invalid_arguments");
@@ -290,4 +298,149 @@ test("a tool result is a CappedAgentToolResult, so caps are always part of the c
   const res = await call(rpc("tools/call", { name: "get_positions", arguments: {} }));
   const body = (await res.json()) as { result: { _meta: CappedAgentToolResult } };
   expect(body.result._meta).toMatchObject({ truncated: false, keptRows: 1, totalRows: 1 });
+});
+
+/* WS5.4/WS5.7 (#299): the write pair through the real registry, and the spend
+ * gate on every tool call. */
+
+const writeIdentity: McpTokenIdentity = {
+  tokenId: "token-write",
+  tenantId: "user-1",
+  scopes: ["write"],
+};
+
+const writeCall = (
+  body: unknown,
+  deps: McpRouteDependencies,
+  token: McpTokenIdentity = writeIdentity,
+): Promise<Response> =>
+  handleMcpRequest(
+    new Request("http://local/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    token,
+    "http://local",
+    deps,
+  );
+
+test("a write token previews a rule, changes nothing, then applies it once", async () => {
+  const previewTokens = createRulePreviewStore();
+  const applyPreview = vi.fn(async () => undefined);
+  const writeTools = createInvestingWriteTools({
+    currentEntries: async () => [{ broker: "trading212", account: "ISA", wrapper: "unknown" }],
+    storePreview: async ({ entries, changes, ttlMs }) => {
+      const issued = previewTokens.issue({
+        tenantId: "user-1",
+        tokenId: "token-write",
+        entries,
+        changes,
+        now: 1_000,
+        ...(ttlMs === undefined ? {} : { ttlMs }),
+      });
+      return { previewToken: issued.previewToken, expiresAt: issued.expiresAt };
+    },
+    applyPreview: async (previewToken) => {
+      const stored = previewTokens.consume({
+        previewToken,
+        tenantId: "user-1",
+        tokenId: "token-write",
+        now: 2_000,
+      });
+      if (!stored) throw new Error("Preview token is unknown, used or expired");
+      await applyPreview();
+      return { applied: true as const, entries: [...stored.entries] };
+    },
+  });
+  const routeDeps = deps({
+    createTools: () => writeTools,
+    previewTokens,
+    checkBudget: async () => ({ ok: true }),
+  });
+
+  const previewResponse = await writeCall(
+    rpc("tools/call", {
+      name: "preview_rule",
+      arguments: { entries: [{ broker: "trading212", account: "ISA", wrapper: "isa" }] },
+    }),
+    routeDeps,
+  );
+  const preview = (await previewResponse.json()) as {
+    result: {
+      isError: boolean;
+      structuredContent: { applied: boolean; valid: boolean; previewToken: string };
+    };
+  };
+  expect(preview.result.isError).toBe(false);
+  expect(preview.result.structuredContent).toMatchObject({ applied: false, valid: true });
+  expect(applyPreview).not.toHaveBeenCalled();
+
+  const apply = (await (
+    await writeCall(
+      rpc("tools/call", {
+        name: "apply_rule",
+        arguments: { previewToken: preview.result.structuredContent.previewToken },
+      }),
+      routeDeps,
+    )
+  ).json()) as { result: { isError: boolean; structuredContent: { applied: boolean } } };
+  expect(apply.result.isError).toBe(false);
+  expect(apply.result.structuredContent).toMatchObject({ applied: true });
+  expect(applyPreview).toHaveBeenCalledTimes(1);
+
+  // The token is single-use: a second apply changes nothing.
+  const replay = (await (
+    await writeCall(
+      rpc("tools/call", {
+        name: "apply_rule",
+        arguments: { previewToken: preview.result.structuredContent.previewToken },
+      }),
+      routeDeps,
+    )
+  ).json()) as { result: { isError: boolean; structuredContent: { applied: boolean } } };
+  expect(replay.result.structuredContent.applied).toBe(false);
+  expect(applyPreview).toHaveBeenCalledTimes(1);
+});
+
+test("the spend gate refuses every tool call before dispatch", async () => {
+  const handler = vi.fn(async () => ({ ok: true }));
+  const routeDeps = deps({
+    createTools: () => [tool("get_positions", handler)],
+    checkBudget: async () => ({ ok: false, scope: "day" }),
+  });
+
+  const res = await writeCall(
+    rpc("tools/call", { name: "get_positions", arguments: {} }),
+    routeDeps,
+    identity,
+  );
+
+  expect(handler).not.toHaveBeenCalled();
+  const body = (await res.json()) as {
+    result: { isError: boolean; structuredContent: { error: string; hint: string } };
+  };
+  expect(body.result.isError).toBe(true);
+  expect(body.result.structuredContent.error).toBe("budget_exhausted");
+  expect(body.result.structuredContent.hint).toContain("Nothing was executed");
+});
+
+test("an unreadable spend gate fails closed with safe error data", async () => {
+  const handler = vi.fn(async () => ({ ok: true }));
+  const routeDeps = deps({
+    createTools: () => [tool("get_positions", handler)],
+    checkBudget: async () => ({ ok: false, scope: "unavailable" }),
+  });
+
+  const res = await writeCall(
+    rpc("tools/call", { name: "get_positions", arguments: {} }),
+    routeDeps,
+    identity,
+  );
+
+  expect(handler).not.toHaveBeenCalled();
+  const body = (await res.json()) as {
+    result: { structuredContent: { error: string; hint: string } };
+  };
+  expect(body.result.structuredContent.error).toBe("budget_unavailable");
 });

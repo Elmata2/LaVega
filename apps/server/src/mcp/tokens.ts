@@ -51,16 +51,25 @@ export function mcpBearerToken(request: Request): string | null {
  * tenant its stores use (`local` for the file-backed single-tenant runtime).
  *
  * A token WITHOUT a tenant configured resolves to nothing: 401, not local data.
+ *
+ * Two env tokens exist because the plan keeps write behind a SEPARATE credential
+ * (WS5.4): `MCP_API_TOKEN` is read-only, `MCP_WRITE_API_TOKEN` carries the write
+ * scope. They must differ; the read token is checked first, so an operator who
+ * sets one value for both gets the read-only identity.
  */
 export function envMcpTokenIdentity(raw: string): McpTokenIdentity | null {
   /* The table is the only authority once there is a database; see the header. */
   if (process.env.DATABASE_URL?.trim()) return null;
-  const expected = process.env.MCP_API_TOKEN?.trim();
-  const tenantId =
-    process.env.MCP_TENANT_ID?.trim() || process.env.MCP_USER_EMAIL?.trim() || "";
-  if (!expected || !tenantId) return null;
-  if (!secretsMatch(raw, expected)) return null;
-  return { tokenId: "env", tenantId, scopes: ["read"] };
+  const tenantId = process.env.MCP_TENANT_ID?.trim() || process.env.MCP_USER_EMAIL?.trim() || "";
+  if (!tenantId) return null;
+  const readToken = process.env.MCP_API_TOKEN?.trim();
+  if (readToken && secretsMatch(raw, readToken))
+    return { tokenId: "env", tenantId, scopes: ["read"] };
+  const writeToken = process.env.MCP_WRITE_API_TOKEN?.trim();
+  if (writeToken && secretsMatch(raw, writeToken))
+    /* A write token also reads: its previews are described from the reads. */
+    return { tokenId: "env-write", tenantId, scopes: ["read", "write"] };
+  return null;
 }
 
 /** Resolve one raw bearer token to its tenant and scopes. Null = 401. */

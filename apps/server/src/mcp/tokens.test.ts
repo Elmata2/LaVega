@@ -1,12 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 import { envMcpTokenIdentity, hashMcpToken, mcpBearerToken, resolveMcpToken } from "./tokens.js";
 
-const ENV_KEYS = [
-  "DATABASE_URL",
-  "MCP_API_TOKEN",
-  "MCP_TENANT_ID",
-  "MCP_USER_EMAIL",
-] as const;
+const ENV_KEYS = ["DATABASE_URL", "MCP_API_TOKEN", "MCP_TENANT_ID", "MCP_USER_EMAIL"] as const;
 
 const saved = new Map<string, string | undefined>();
 for (const key of ENV_KEYS) saved.set(key, process.env[key]);
@@ -31,8 +26,7 @@ test("a raw token is stored as a SHA-256 digest, never the token", () => {
 });
 
 test("the bearer token is read from Authorization only", () => {
-  const request = (headers: Record<string, string>) =>
-    new Request("http://local/mcp", { headers });
+  const request = (headers: Record<string, string>) => new Request("http://local/mcp", { headers });
   expect(mcpBearerToken(request({ authorization: "Bearer abc.def" }))).toBe("abc.def");
   expect(mcpBearerToken(request({ authorization: "bearer   abc.def  " }))).toBe("abc.def");
   expect(mcpBearerToken(request({ authorization: "Basic abc" }))).toBeNull();
@@ -98,4 +92,34 @@ test("resolveMcpToken resolves the env pair on a no-database install", async () 
     tenantId: "owner",
     scopes: ["read"],
   });
+});
+
+test("the env fallback keeps write behind a separate token", () => {
+  const previous = {
+    database: process.env.DATABASE_URL,
+    read: process.env.MCP_API_TOKEN,
+    write: process.env.MCP_WRITE_API_TOKEN,
+    tenant: process.env.MCP_TENANT_ID,
+  };
+  delete process.env.DATABASE_URL;
+  process.env.MCP_API_TOKEN = "read-token";
+  process.env.MCP_WRITE_API_TOKEN = "write-token";
+  process.env.MCP_TENANT_ID = "local";
+  try {
+    expect(envMcpTokenIdentity("read-token")).toMatchObject({ scopes: ["read"] });
+    expect(envMcpTokenIdentity("write-token")).toMatchObject({
+      tokenId: "env-write",
+      scopes: ["read", "write"],
+    });
+    expect(envMcpTokenIdentity("other")).toBeNull();
+  } finally {
+    if (previous.database === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previous.database;
+    if (previous.read === undefined) delete process.env.MCP_API_TOKEN;
+    else process.env.MCP_API_TOKEN = previous.read;
+    if (previous.write === undefined) delete process.env.MCP_WRITE_API_TOKEN;
+    else process.env.MCP_WRITE_API_TOKEN = previous.write;
+    if (previous.tenant === undefined) delete process.env.MCP_TENANT_ID;
+    else process.env.MCP_TENANT_ID = previous.tenant;
+  }
 });

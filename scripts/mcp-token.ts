@@ -1,18 +1,20 @@
-/* Operator CLI for read-only MCP tokens (#285, ADR 0012).
+/* Operator CLI for MCP tokens (#285/#299, ADR 0012).
  *
- *   DATABASE_URL=... tsx scripts/mcp-token.ts create --user <better-auth-user-id> [--label "cursor"]
+ *   DATABASE_URL=... tsx scripts/mcp-token.ts create --user <better-auth-user-id> [--label "cursor"] [--scopes read|write]
  *   DATABASE_URL=... tsx scripts/mcp-token.ts list   --user <better-auth-user-id>
  *   DATABASE_URL=... tsx scripts/mcp-token.ts revoke --id <token-row-id>
  *
  * `create` prints the raw token exactly once. Only its SHA-256 digest is stored,
- * so a lost token is replaced, never recovered. Scopes are always `read`: ADR
- * 0012 §4 keeps write tools behind a separate decision. */
+ * so a lost token is replaced, never recovered. Scopes default to `read`; a
+ * `--scopes write` token is the SEPARATE write credential WS5.4 requires (it
+ * lists the preview/apply pair and no read tool is withheld from it, because a
+ * write token also needs the reads its previews describe). */
 import { randomBytes } from "node:crypto";
 import { createDatabase, createMcpTokenRepository } from "@lavega/database";
 import { hashMcpToken } from "../apps/server/src/mcp/tokens.js";
 
 const USAGE = `usage:
-  tsx scripts/mcp-token.ts create --user <user-id> [--label <label>]
+  tsx scripts/mcp-token.ts create --user <user-id> [--label <label>] [--scopes read,write]
   tsx scripts/mcp-token.ts list   --user <user-id>
   tsx scripts/mcp-token.ts revoke --id <token-row-id>`;
 
@@ -23,8 +25,7 @@ function parseArgs(argv: readonly string[]): {
   values: Map<string, string>;
 } {
   const command = argv[0];
-  if (command !== "create" && command !== "list" && command !== "revoke")
-    throw new Error(USAGE);
+  if (command !== "create" && command !== "list" && command !== "revoke") throw new Error(USAGE);
   const values = new Map<string, string>();
   for (let index = 1; index < argv.length; index += 2) {
     const flag = argv[index];
@@ -50,12 +51,22 @@ async function main(): Promise<void> {
   try {
     if (command === "create") {
       const userId = required(values, "user");
+      const scopes = (values.get("scopes")?.trim() || "read")
+        .split(",")
+        .map((scope) => scope.trim())
+        .filter(Boolean);
+      if (scopes.length === 0 || !scopes.every((scope) => scope === "read" || scope === "write"))
+        throw new Error(`--scopes must be read, write or read,write\n${USAGE}`);
+      /* A write token also reads: its previews are described from the reads. */
+      const effectiveScopes = scopes.includes("write")
+        ? (["read", "write"] as const)
+        : (["read"] as const);
       const raw = randomBytes(32).toString("base64url");
       const id = await repository.create({
         userId,
         tokenHash: hashMcpToken(raw),
         label: values.get("label")?.trim() || null,
-        scopes: ["read"],
+        scopes: [...effectiveScopes],
       });
       /* One line of JSON: the raw token is shown here and nowhere else. */
       console.log(
