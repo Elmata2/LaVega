@@ -11,7 +11,16 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { allSections, type BrokerResult } from "./BrokerAccessAdapter.js";
 import { createBrokerDataCache, type BrokerDataSnapshot } from "./brokerSnapshot.js";
 import { parseFlexStatement } from "./ibkr/flexParser.js";
-import { createTrading212Adapter, resolveTrading212CashHistory } from "./trading212/adapter.js";
+import {
+  createTrading212Adapter as createPacedTrading212Adapter,
+  resolveTrading212CashHistory,
+  type Trading212Config,
+} from "./trading212/adapter.js";
+import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
+
+/* The loopback server here has no rate limit to respect: grant every slot at once. */
+const createTrading212Adapter = (config: Trading212Config) =>
+  createPacedTrading212Adapter({ partnerBudget: createImmediatePartnerBudget(), ...config });
 
 const DATES = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"];
 const FX: FxRate = { base: "EUR", date: "2026-01-05", rates: { USD: 1.25 } };

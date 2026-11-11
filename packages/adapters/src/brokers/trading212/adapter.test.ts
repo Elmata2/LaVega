@@ -2,7 +2,18 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { afterEach, expect, test, vi } from "vitest";
 import { computePortfolioValueSeries } from "@lavega/core";
 import type { CashBalance, CashFlow, Dividend, TradeWithoutId } from "@lavega/core";
-import { createTrading212Adapter, resolveTrading212CashHistory } from "./adapter.js";
+import {
+  createTrading212Adapter as createPacedTrading212Adapter,
+  resolveTrading212CashHistory,
+  type Trading212Config,
+} from "./adapter.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
+
+/* These tests are about what the adapter reads and maps, over a real loopback
+ * server on real timers. Pacing has its own tests (rateLimit.test.ts), so here
+ * every slot is granted at once. */
+const createTrading212Adapter = (config: Trading212Config) =>
+  createPacedTrading212Adapter({ partnerBudget: createImmediatePartnerBudget(), ...config });
 
 const servers: ReturnType<typeof createServer>[] = [];
 
