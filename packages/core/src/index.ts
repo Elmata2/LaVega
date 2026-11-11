@@ -1,6 +1,7 @@
 export const VERSION = "0.0.0";
 export * from "./model.js";
 export * from "./balance.js";
+export * from "./balanceSeries.js";
 export * from "./hash.js";
 export * from "./money.js";
 export * from "./budget.js";

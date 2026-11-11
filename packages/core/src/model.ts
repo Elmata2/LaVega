@@ -13,6 +13,15 @@ export type Account = {
   balance: number | null;
   balanceDate?: string;
   type?: string;
+  /* Absolute opening anchor (WS3.1, issue #291). A manual account knows where
+   * it STARTED, not where it is today: the balance series replays the ledger
+   * forward from here. Both fields are integer cents / ISO date and additive:
+   * a vault written before them decrypts unchanged, and an account without an
+   * opening keeps an UNKNOWN series (a gap, never a zero). */
+  /** Absolute balance on `openingDate`, in integer cents (ADR 0011). */
+  openingBalanceCents?: number;
+  /** ISO date the opening balance held. Absent with the amount means unknown. */
+  openingDate?: string;
   /** Optional annual interest rate (%) for the Optimisatie tab. User-set;
    *  suggested from detected "rente" bijschrijvingen when absent. */
   interestRate?: number;
