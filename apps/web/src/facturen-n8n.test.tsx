@@ -47,6 +47,8 @@ function fakeVault(): VaultStorage {
     putValuations: async () => {},
     getDocuments: async () => [],
     putDocuments: async () => {},
+    getImportSessions: async () => [],
+    putImportSessions: async () => {},
     putDocumentBytes: async () => {},
     getDocumentBytes: async () => null,
     hasDocumentBytes: async () => false,

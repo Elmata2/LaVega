@@ -105,6 +105,7 @@ async function seedVault(
     await storage.putScheduledFlows(seed.flows);
     await storage.putBillPlan(seed.bills, seed.billOccurrences);
     await storage.putValuations(seed.valuations);
+    await storage.putImportSessions(seed.importSessions);
     await storage.putProfile(completeProfile(today));
     const budget = budgetSeed(seed.accounts, seed.txs, today);
     await storage.putBudgetPeriods(budget.periods);

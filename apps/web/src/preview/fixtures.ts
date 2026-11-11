@@ -19,6 +19,7 @@ import {
   type Bill,
   type BillOccurrence,
   type Valuation,
+  type ImportSession,
   assignTxIds,
   ownAccounts,
   generateBillOccurrences,
@@ -187,6 +188,9 @@ export type VaultSeed = {
   bills: Bill[];
   billOccurrences: BillOccurrence[];
   valuations: Valuation[];
+  /** One earlier import in a DIFFERENT format, so the generic session's
+   *  cross-format warning is visible in the preview (WS3.6). */
+  importSessions: ImportSession[];
 };
 
 /** A bills screen that has something to say: rent, energy, two subscriptions,
@@ -465,6 +469,22 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
     bills: bills.bills,
     billOccurrences: bills.billOccurrences,
     valuations,
+    importSessions: [
+      {
+        id: "preview-mt940",
+        documentId: null,
+        filename: "ing-afschrift-2026-09.sta",
+        // The savings account: importing its generic CSV is the second format.
+        accountKey: SAVINGS_IBAN,
+        format: "mt940",
+        importedAt: iso(addDays(today, -30)),
+        txIds: [],
+        rowsRead: 12,
+        rowsImported: 12,
+        duplicatesSkipped: 0,
+        rowsRejected: 0,
+      },
+    ],
   };
 }
 

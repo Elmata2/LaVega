@@ -18,6 +18,7 @@ import type {
   BillOccurrence,
   Valuation,
   VaultDocument,
+  ImportSession,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
@@ -31,6 +32,8 @@ import {
   matchStatementAccount,
   removeDocument,
   upsertDocument,
+  applyGenericImport,
+  revertImport,
   dropAccountValuations,
   mergeValuations,
   normalizeValuation,
@@ -174,6 +177,7 @@ import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Bills from "./views/Bills";
 import type { DocumentNotice } from "./components/documents/DocumentsCard.js";
+import type { GenericImportRequest } from "./components/import/GenericImportCard.js";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
@@ -182,6 +186,7 @@ import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 import { useAppLocale } from "./appLocale.js";
 import { shellCopy } from "./copy/shell.js";
+import { importSessionCopy } from "./copy/importSession.js";
 import { importNotices, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
@@ -287,6 +292,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [documentNotice, setDocumentNotice] = useState<DocumentNotice | null>(null);
   /** How many documents the last erase removed, for the card's one line. */
   const [documentErased, setDocumentErased] = useState<number | null>(null);
+  // Generic import sessions (WS3.6, issue #294): which rows one import created,
+  // so a revert removes exactly those.
+  const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -672,6 +681,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedDecisions,
         loadedValuations,
         loadedDocuments,
+        loadedImportSessions,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -691,6 +701,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getBillDecisions(),
         storage.getValuations(),
         storage.getDocuments(),
+        storage.getImportSessions(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -724,6 +735,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setBillDecisions(matched.decisions);
       setValuations(loadedValuations);
       setDocuments(loadedDocuments);
+      setImportSessions(loadedImportSessions);
       if (generated.added > 0 || matched.changed) {
         await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
       }
@@ -1069,6 +1081,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setValuations([]);
     setDocuments([]);
     setDocumentNotice(null);
+    setImportSessions([]);
+    setImportNotice(null);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -1199,6 +1213,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshOccurrences,
       freshDocuments,
       freshValuations,
+      freshImportSessions,
     ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
@@ -1213,12 +1228,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       storage.getBillOccurrences(),
       storage.getDocuments(),
       storage.getValuations(),
+      storage.getImportSessions(),
     ]);
     // A restored vault carries its statement metadata AND its valuations; the
     // document BYTES came back in the document store, so the card can show
     // them immediately instead of after a reload.
     setDocuments(freshDocuments);
     setValuations(freshValuations);
+    setImportSessions(freshImportSessions);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
     const storedRules = upgradeRules(freshRules);
@@ -1827,6 +1844,95 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setDocuments([]);
     setDocumentNotice(null);
     setDocumentErased(erased);
+  }
+
+  // WS3.6: confirm the dry run, write exactly its new rows, and remember the
+  // session so a revert is exact. The source file is retained in the #293
+  // document store under its SHA-256.
+  async function handleGenericImport(request: GenericImportRequest) {
+    setBusy(true);
+    setImportNotice(null);
+    try {
+      const sha256 = await sha256Hex(request.bytes);
+      const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
+      const result = applyGenericImport({
+        existingTxs: txs,
+        plan: request.plan,
+        id: sessionId,
+        filename: request.filename,
+        asOf,
+        documentId: sha256,
+      });
+      const added = new Set(result.importedIds);
+      const newRows = result.txs.filter((tx) => added.has(tx.id));
+      if (newRows.length > 0) await storage.putTxs(newRows);
+      setTxs(result.txs);
+      const nextSessions = [...importSessions, result.session];
+      setImportSessions(nextSessions);
+      await storage.putImportSessions(nextSessions);
+
+      const dates = request.plan.parsed.map((row) => row.date).sort();
+      const mime =
+        request.format === "generic-xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "text/csv";
+      const document: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: request.filename,
+        mime,
+        byteSize: request.bytes.byteLength,
+        kind: "statement",
+        source: "import",
+        uploadedAt: asOf,
+        periodFrom: dates[0] ?? null,
+        periodTo: dates[dates.length - 1] ?? null,
+        currency: "EUR",
+        accountKey: request.plan.accountKey,
+        suggestedAccountKey: null,
+        matchConfidence: 1,
+        accountLast4: null,
+        institutionHint: null,
+        accountNameHint: null,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "linked",
+        metadataSources: ["import"],
+        txIds: result.importedIds,
+        importId: sessionId,
+      };
+      await storage.putDocumentBytes(sha256, request.bytes);
+      const nextDocuments = upsertDocument(documents, document);
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+      setImportNotice(importSessionCopy[locale].imported(result.importedIds.length));
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Revert ONE import: exactly the rows its session recorded. The retained
+  // source document stays (it is the evidence) but is no longer linked.
+  async function handleRevertImport(sessionId: string) {
+    const reverted = revertImport({ txs, sessions: importSessions, sessionId });
+    if (reverted.session == null) return;
+    if (reverted.removedIds.length > 0) await storage.deleteTxs(reverted.removedIds);
+    setTxs(reverted.txs);
+    const nextSessions = importSessions.filter((session) => session.id !== sessionId);
+    setImportSessions(nextSessions);
+    await storage.putImportSessions(nextSessions);
+    if (reverted.documentId != null) {
+      const nextDocuments = documents.map((doc) =>
+        doc.id === reverted.documentId ? { ...doc, importId: undefined, txIds: [] } : doc,
+      );
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+    }
+    setImportNotice(importSessionCopy[locale].reverted(reverted.removedIds.length));
   }
 
   // Manually set/override an account's annual interest rate (%) for the
@@ -2552,6 +2658,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onDocumentReject={(id) => void handleDocumentReject(id)}
               onDocumentRemove={(id) => void handleDocumentRemove(id)}
               onDocumentEraseAll={() => void handleDocumentEraseAll()}
+              importSessions={importSessions}
+              importNotice={importNotice}
+              onGenericImport={(request) => void handleGenericImport(request)}
+              onGenericRevert={(id) => void handleRevertImport(id)}
             />
           )}
         </main>

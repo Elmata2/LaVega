@@ -7,6 +7,7 @@ import { apiErrorCopy } from "./apiErrors.js";
 import { intakeCopy } from "./intake.js";
 import { billsCopy } from "./bills.js";
 import { documentsCopy } from "./documents.js";
+import { importSessionCopy } from "./importSession.js";
 import {
   assumptionsCopy,
   bufferCopy,
@@ -97,6 +98,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["intake", intakeCopy],
   ["bills", billsCopy],
   ["documents", documentsCopy],
+  ["importSession", importSessionCopy],
   ["plan/shell", planShellCopy],
   ["plan/month", monthCopy],
   ["plan/buffer", bufferCopy],

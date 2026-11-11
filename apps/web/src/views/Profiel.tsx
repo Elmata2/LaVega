@@ -3,6 +3,7 @@ import type {
   Account,
   EntityScope,
   EntitySummary,
+  ImportSession,
   LearnedFact,
   Tx,
   Valuation,
@@ -47,6 +48,9 @@ import { intakeCopy } from "../copy/intake.js";
 import type { View } from "../appRoutes.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
 import DocumentsCard, { type DocumentNotice } from "../components/documents/DocumentsCard.js";
+import GenericImportCard, {
+  type GenericImportRequest,
+} from "../components/import/GenericImportCard.js";
 import Import from "./Import";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
@@ -128,6 +132,11 @@ type ProfielProps = {
   onDocumentReject?: (id: string) => void;
   onDocumentRemove?: (id: string) => void;
   onDocumentEraseAll?: () => void;
+  /** Generic import sessions (WS3.6, issue #294). */
+  importSessions?: ImportSession[];
+  importNotice?: string | null;
+  onGenericImport?: (request: GenericImportRequest) => void;
+  onGenericRevert?: (sessionId: string) => void;
 };
 
 /* Account — sign in against the configured LaVega server so the owner can test
@@ -492,6 +501,10 @@ export default function Profiel({
   onDocumentReject,
   onDocumentRemove,
   onDocumentEraseAll,
+  importSessions = [],
+  importNotice = null,
+  onGenericImport,
+  onGenericRevert,
   onNavigate,
 }: ProfielProps) {
   const [locale, setLocale] = useAppLocale();
@@ -797,6 +810,18 @@ export default function Profiel({
         onImport={onImport}
         onRefreshBank={onRefreshBank}
       />
+
+      {onGenericImport != null && (
+        <GenericImportCard
+          accounts={[...accounts]}
+          existingTxs={[...txs]}
+          sessions={importSessions}
+          busy={busy}
+          notice={importNotice}
+          onImport={onGenericImport}
+          onRevert={onGenericRevert ?? (() => {})}
+        />
+      )}
 
       {onDocumentUpload != null && (
         <DocumentsCard
