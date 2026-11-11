@@ -113,6 +113,71 @@ test("erasing one account takes its ai_usage with it and leaves the other accoun
   expect((await spend("user-b")).dayCents).toBe(7);
 });
 
+test("erasing an account empties every personal.agent_* table for it and lists each in the report", async () => {
+  const tables = [
+    "agent_settings",
+    "agent_state",
+    "agent_mirror",
+    "agent_push_subscriptions",
+    "agent_events",
+    "agent_whatsapp",
+    "agent_link_codes",
+  ];
+  await pglite.exec(`
+    SELECT set_config('app.user_id', 'user-a', false);
+    INSERT INTO personal.agent_settings (user_id) VALUES ('user-a');
+    INSERT INTO personal.agent_state (user_id) VALUES ('user-a');
+    INSERT INTO personal.agent_mirror (user_id) VALUES ('user-a');
+    INSERT INTO personal.agent_push_subscriptions (user_id, endpoint_hash, subscription_blob)
+      VALUES ('user-a', 'h', '\\x01');
+    INSERT INTO personal.agent_events (user_id, id, channel, type, body_blob)
+      VALUES ('user-a', gen_random_uuid(), 'feed', 'message', '\\x01');
+    INSERT INTO personal.agent_whatsapp (user_id, phone_hash) VALUES ('user-a', 'hash-a');
+    INSERT INTO personal.agent_link_codes (user_id, code_hash, expires_at, ai_consent_at)
+      VALUES ('user-a', 'code-a', CURRENT_TIMESTAMP + INTERVAL '15 minutes', CURRENT_TIMESTAMP);
+    SELECT set_config('app.user_id', 'user-b', false);
+    INSERT INTO personal.agent_settings (user_id) VALUES ('user-b');
+    INSERT INTO personal.agent_whatsapp (user_id, phone_hash) VALUES ('user-b', 'hash-b');
+  `);
+
+  const report = await eraseUserData(db, "user-a");
+
+  for (const table of tables) {
+    expect(report.map((entry) => entry.table)).toContain(`personal.${table}`);
+    await pglite.exec("SELECT set_config('app.user_id', 'user-a', false)");
+    expect(await rows(`SELECT 1 FROM personal.${table}`), table).toEqual([]);
+  }
+  await pglite.exec("SELECT set_config('app.user_id', 'user-b', false)");
+  expect(await rows("SELECT 1 FROM personal.agent_settings")).toHaveLength(1);
+  expect(await rows("SELECT 1 FROM personal.agent_whatsapp")).toHaveLength(1);
+});
+
+test("every personal.agent_* table that holds a user id is in the erasure report, and the throttle table holds none", async () => {
+  /* Drift guard: a table added to the schema later but not to USER_DATA_TABLES
+   * fails here, by name. agent_link_attempts has no user id (it is keyed by a
+   * phone hash, migration 0029) and expires on its own, so it is not erased by user. */
+  await pglite.exec("RESET ROLE;");
+  const withUser = await rows<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.columns
+       WHERE table_schema = 'personal' AND table_name LIKE 'agent%' AND column_name = 'user_id'`,
+  );
+  const withoutUser = await rows<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables t
+       WHERE table_schema = 'personal' AND table_name LIKE 'agent%'
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns c
+           WHERE c.table_schema = t.table_schema AND c.table_name = t.table_name AND c.column_name = 'user_id')`,
+  );
+  await pglite.exec("SET ROLE lavega_runtime;");
+  const report = await eraseUserData(db, "user-a");
+  const reported = report
+    .map((entry) => entry.table)
+    .filter((table) => table.startsWith("personal.agent_"))
+    .sort();
+  expect(reported).toEqual(withUser.map((r) => `personal.${r.table_name}`).sort());
+  expect(reported).toHaveLength(7);
+  expect(withoutUser.map((r) => r.table_name)).toEqual(["agent_link_attempts"]);
+});
+
 test("deletes the Better Auth user, session, account and verification rows", async () => {
   /* M3: deleting application rows alone left the password authenticating and a
    * fresh sign-in recreating a vault under the same id — the erasure reported

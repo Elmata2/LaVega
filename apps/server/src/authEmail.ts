@@ -10,9 +10,13 @@ export function authEmailConfig(): { configured: boolean; apiKey: string; from: 
 
 export type AuthEmail = { subject: string; text: string; html: string };
 
-export async function sendAuthEmail(input: AuthEmail & { to: string }): Promise<void> {
-  const { configured, apiKey, from } = authEmailConfig();
-  if (!configured) {
+export async function sendAuthEmail(
+  input: AuthEmail & { to: string; from?: string },
+): Promise<void> {
+  const config = authEmailConfig();
+  const apiKey = config.apiKey;
+  const from = input.from?.trim() || config.from;
+  if (apiKey.length === 0 || from.length === 0) {
     throw new Error("Verification email is not configured (RESEND_API_KEY, AUTH_EMAIL_FROM)");
   }
   const response = await fetch("https://api.resend.com/emails", {
@@ -41,8 +45,11 @@ export async function sendAuthEmail(input: AuthEmail & { to: string }): Promise<
     const message = reason
       ? `Verification email failed (${response.status}): ${reason}`
       : `Verification email failed (${response.status})`;
-    console.error(message);
-    throw new Error(message);
+    // Event name, error name and HTTP status only: the reason can echo the recipient address.
+    console.error(
+      JSON.stringify({ event: "auth_email.failed", kind: "Error", status: response.status }),
+    );
+    throw Object.assign(new Error(message), { status: response.status });
   }
 }
 

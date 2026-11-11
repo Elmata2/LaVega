@@ -130,3 +130,8 @@ test("plan is a routed view at /app/plan", () => {
   expect(viewFromPathname("/app/plan")).toBe("plan");
   expect(viewFromPathname("/app/plan/")).toBe("plan");
 });
+
+test("meldingen is a routed view at /app/meldingen", () => {
+  expect(pathForView("meldingen")).toBe("/app/meldingen");
+  expect(viewFromPathname("/app/meldingen")).toBe("meldingen");
+});

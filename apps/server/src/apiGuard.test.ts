@@ -116,6 +116,23 @@ test("/api/cron/investing-sync and /api/investing/health pass the guard without 
   }
 });
 
+test("/api/cron/instinct is public (it carries its own CRON_SECRET bearer) while /api/agent/settings stays guarded", async () => {
+  expect(isPublicApiPath("/api/cron/instinct")).toBe(true);
+  expect(isPublicApiPath("/api/agent/settings")).toBe(false);
+  const cron = await app.request("/api/cron/instinct");
+  // The route's own bearer check answers 401 with {problems}; the guard's body differs.
+  expect(await cron.clone().json()).toEqual({ problems: ["Unauthorized cron request"] });
+  expect(await cron.text()).not.toContain('{"error":"unauthorized"}');
+  const settings = await app.request("/api/agent/settings");
+  expect(settings.status).toBe(401);
+});
+
+test("/api/whatsapp/webhook is public (it carries its own signature) while link routes stay guarded", async () => {
+  expect(isPublicApiPath("/api/whatsapp/webhook")).toBe(true);
+  expect(isPublicApiPath("/api/agent/whatsapp")).toBe(false);
+  expect(isPublicApiPath("/api/agent/whatsapp/link-code")).toBe(false);
+});
+
 test("an anonymous GET to /api/agent/budget is refused with 401 — spend figures are operational data, unlike /api/agent/status's boolean", async () => {
   const res = await app.request("/api/agent/budget");
   expect(res.status).toBe(401);

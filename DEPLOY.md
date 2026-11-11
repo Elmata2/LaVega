@@ -113,7 +113,9 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   `/api/<ns>/…`; security review 2026-10-17, H1). Closed unless the
   path is on the public list (`/api/auth/*`, `/api/rates`, `/api/fx/rate`, the two
   `status` probes, `/api/investing/health`, and the two machine endpoints that
-  carry their own secret: the card-terms ingest and `/api/cron/investing-sync`)
+  carry their own secret: the card-terms ingest and `/api/cron/investing-sync`,
+  plus `/api/cron/instinct`, guarded by `CRON_SECRET`, and
+  `/api/whatsapp/webhook`, guarded by the Meta signature)
   or the request has a verified session. Everything else answers
   `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
@@ -298,6 +300,29 @@ locally, create your own Neon branch and put its connection string, a
   personal vault key (`personal.vault_keys`, docs/adr/0009). Losing it loses
   every stored credential and every personal vault. Preview and Production
   must use the same value.
+- `AGENT_DEDUPE_HMAC_KEY` — 32 bytes, 64 hex characters (`openssl rand -hex 32`).
+  Keys the HMAC stored in `personal.agent_events.dedupe_key`, so no merchant
+  name or amount sits in that clear-text column (docs/adr/0010). Required once
+  the instinct agent is on. `assertAgentConfig()` checks it, and
+  `LAVEGA_ENCRYPTION_KEY`, on every agent route and every cron run, not at
+  boot: a missing key answers `503 agent-not-configured` and never stops the
+  server from starting. Rotating it only risks one repeated message per event.
+- `AGENT_PHONE_HMAC_KEY` — 32 bytes, 64 hex characters (`openssl rand -hex 32`).
+  Keys the HMAC that looks up a linked WhatsApp number
+  (`personal.agent_whatsapp.phone_hash`) and the one-time link codes. No
+  default: without it, linking and inbound lookups fail closed (the link-code
+  route answers `503 agent-not-configured`). Rotating it
+  unlinks every phone (users link again).
+- `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` — WhatsApp Cloud API sender.
+  `WHATSAPP_APP_SECRET` — Meta app secret; `POST /api/whatsapp/webhook` verifies
+  `X-Hub-Signature-256` on the raw body with it and rejects every request while
+  it is unset (fail closed). `WHATSAPP_VERIFY_TOKEN` — the string you enter in
+  Meta's webhook setup; the `GET` handshake echoes `hub.challenge` only when it
+  matches. `WHATSAPP_TEMPLATE_DAILY` — approved utility template name; it must have
+  exactly one body variable (the short figures line) and exist in both `nl` and `en`
+  under the same name.
+  `WHATSAPP_NUMBER_DISPLAY` — the number users send their link code to. The
+  webhook URL is `https://<host>/api/whatsapp/webhook`; subscribe to `messages`.
 - `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account mail: email
   confirmation, password reset, password changed, and welcome. Each goes out in
   Dutch or English, chosen by the `lavega_locale` cookie, then
@@ -305,13 +330,27 @@ locally, create your own Neon branch and put its connection string, a
   verified Resend sender, for example `LaVega <accounts@lavega.dev>`. The
   sending domain needs SPF, DKIM, and DMARC records, or Gmail and Outlook file
   the mail as spam.
+- `AGENT_EMAIL_FROM` — optional sender for the instinct agent's email channel
+  (a verified Resend sender, for example `LaVega <meldingen@lavega.dev>`). Falls
+  back to `AUTH_EMAIL_FROM`; uses the same `RESEND_API_KEY`.
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — web push for the
+  instinct agent. Generate the pair once with `npx web-push generate-vapid-keys`;
+  `VAPID_SUBJECT` is a `mailto:` or `https:` contact. Without all three the push
+  channel reports `failed` and sends nothing. Never rotate the pair casually:
+  existing browser subscriptions are tied to the public key.
+- `CRON_SECRET` — bearer secret that Vercel sends to the cron routes. It
+  guards `/api/cron/investing-sync` (daily, `0 4 * * *`) and the instinct
+  agent's `/api/cron/instinct` (hourly, `0 * * * *`). The hourly schedule is in
+  `scripts/vercel-build.mjs` and needs a Vercel plan that allows hourly crons.
+  Redeploy after the plan is confirmed so the cron config updates.
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
 - `MISTRAL_API_KEY` — enables `/api/agent/*` (invoice extraction, chat, AI
   categorization). Obtained from console.mistral.ai (La Plateforme). Absent
   means `/api/agent/status` answers `configured: false` and the agent routes
-  answer `503`.
+  answer `503`. The instinct agent's WhatsApp answers also need it: without it
+  a linked user's question gets no reply.
 - `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend per account, in euro cents.
   Default `400` (€4). The agent routes refuse with 429 once that account's
   recorded spend for today meets or exceeds this.
@@ -335,6 +374,68 @@ locally, create your own Neon branch and put its connection string, a
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.
   `config.json`, `*.pem`, `.env*` are git-ignored.
+
+## Owner actions for the Instinct agent
+
+Nothing below is done by code. Do the steps in this order. Phases 1 and 2 are
+staged on branch `docs/instinct-agent-design` and not deployed.
+
+1. **Apply the migrations** `0027_instinct_agent.sql`, `0028_agent_due_users.sql`
+   and `0029_whatsapp_links.sql` on the production Neon database AND the
+   preview branch. Connect as the schema owner, using a role with `BYPASSRLS`
+   (or superuser): 0028 and 0029 refuse to apply otherwise, because their
+   lookup functions run as the owner and must see past forced row-level
+   security. If the SQL editor says "Failed transaction", run `ROLLBACK;` first.
+   Then `pnpm db:migrate:check`.
+2. **Set the keys** on Vercel (Production and Preview):
+   - `AGENT_DEDUPE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
+   - `AGENT_PHONE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
+   - `LAVEGA_ENCRYPTION_KEY` — already set; the same value in both environments.
+   - `CRON_SECRET` — a long random string.
+   - `AGENT_EMAIL_FROM` — optional verified Resend sender; falls back to
+     `AUTH_EMAIL_FROM`. `RESEND_API_KEY` must be set.
+   - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (from
+     `npx web-push generate-vapid-keys`) and `VAPID_SUBJECT` (`mailto:` or
+     `https:` contact).
+   - `MISTRAL_API_KEY` — also needed for WhatsApp answers.
+   - `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`,
+     `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TEMPLATE_DAILY`,
+     `WHATSAPP_NUMBER_DISPLAY` (see the variable list above and
+     `apps/server/.env.example`).
+3. **Set up Meta** (WhatsApp Cloud API): a verified business, a WhatsApp
+   Business account, a phone number, a permanent system-user token
+   (`WHATSAPP_ACCESS_TOKEN`) and the app secret (`WHATSAPP_APP_SECRET`). Create
+   ONE utility template with exactly one body variable (the short figures line), in BOTH `nl` and `en`,
+   under the same name (`WHATSAPP_TEMPLATE_DAILY`), and wait for approval. Set
+   the webhook URL to `https://<host>/api/whatsapp/webhook`, enter your
+   `WHATSAPP_VERIFY_TOKEN` as the verify token, and subscribe to `messages`.
+   Check Meta's rate card for NL before launch.
+4. **Review the five tips** in `packages/core/src/instinct/tips.ts`. Each has
+   `reviewedAt: null`, and a tip with `reviewedAt: null` is never sent. Until
+   you review them and set the date, the agent sends no tip.
+5. **Get the privacy text reviewed by a lawyer.** `apps/server/src/legal.ts`
+   carries one marker, `DRAFT: owner legal review pending`, at the draft text
+   (section "Dagelijkse melding"). Review the privacy paragraph and the consent
+   checkbox in the WhatsApp link panel together: the checkbox is the separate
+   consent for sending WhatsApp questions to Mistral. Remove the marker when
+   the review is done. The draft text covers what the question filter
+   removes, that link codes expire after 15 minutes, and that unlinking keeps
+   conversations until the user deletes them or 90 days pass, and what the
+   two scrubbing functions (the question filter and the categorise filter)
+   remove and leave. Also review the AI-toggle consent copy in the web app
+   (`apps/web/src/copy/money.ts`, the sentence that says IBANs, bedragen and
+   datums are filtered out): it may overclaim in the same way, so review it
+   with the privacy text.
+6. **Decide the consent wording.** The sentence says "elke nacht" but the read
+   happens at the user's send time (docs/adr/0010). If you change it, edit
+   `apps/server/src/instinctConsent.ts` and bump `CONSENT_VERSION`.
+7. **Confirm the Vercel plan allows an hourly cron** (`0 * * * *` on
+   `/api/cron/instinct`), then deploy so the cron config updates.
+8. **Verify on the preview deployment**: turn the agent on for a test account
+   with a sandbox bank, call
+   `curl -H "Authorization: Bearer $CRON_SECRET" https://<preview>/api/cron/instinct`,
+   and check that one event appears in the feed. Real push and WhatsApp
+   delivery are checked by hand.
 
 ## Enable Banking (flow is built — needs credentials)
 

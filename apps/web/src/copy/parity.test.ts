@@ -5,6 +5,7 @@ import { moneyCopy } from "./money.js";
 import { optimiseCopy } from "./optimise.js";
 import { apiErrorCopy } from "./apiErrors.js";
 import { intakeCopy } from "./intake.js";
+import { instinctCopy } from "./instinct.js";
 import {
   assumptionsCopy,
   bufferCopy,
@@ -92,6 +93,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["optimise", optimiseCopy],
   ["apiErrors", apiErrorCopy],
   ["intake", intakeCopy],
+  ["instinct", instinctCopy],
   ["plan/shell", planShellCopy],
   ["plan/month", monthCopy],
   ["plan/buffer", bufferCopy],

@@ -14,6 +14,7 @@ import type {
   ProfileRead,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
+import type { PlanResult } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
@@ -148,8 +149,10 @@ import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
+import AgentFeed from "./views/AgentFeed";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 import { useAppLocale } from "./appLocale.js";
+import { useAgentMirror } from "./agent/useAgentMirror.js";
 import { shellCopy } from "./copy/shell.js";
 import { importNotices, type ShellNotice } from "./shellNotice.js";
 
@@ -223,6 +226,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  // The latest plan computed on the Plan page; only its card figures reach the
+  // daily-message mirror (see agent/mirror.ts).
+  const [agentPlan, setAgentPlan] = useState<PlanResult | null>(null);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -1238,6 +1244,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => [...scheduledFlows, ...invoiceFlows],
     [scheduledFlows, invoiceFlows],
   );
+  // Daily-message mirror: only for signed-in accounts that opted in. The hook
+  // owns the on/off state per account (see agent/useAgentMirror.ts).
+  const agent = useAgentMirror({
+    accountId: owner.kind === "account" ? owner.id : null,
+    ready: gate === "ready",
+    rules,
+    flows: allScheduledFlows,
+    plan: agentPlan,
+    locale,
+  });
   // Scheduled flows constrained to BOTH scopes, so Overzicht/Forecast never
   // show a company's VAT reservation while you are looking at your private
   // money. A flow carries its own entity (it can exist before that entity has
@@ -1749,6 +1765,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               mode={fxConversionMode}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
+              agentEnabled={agent.enabled}
               {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
                 ? {
                     intake: {
@@ -1968,8 +1985,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
           )}
 
+          {view === "meldingen" && <AgentFeed locale={locale} onNavigate={setView} />}
+
           {view === "plan" && (
             <PlanRoute
+              onComputed={setAgentPlan}
               profileRead={profileRead}
               onRetry={() => void retryProfileRead()}
               store={
@@ -2035,6 +2055,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               ownerName={ownerName}
               onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}
+              onAgentEnabledChange={agent.setEnabled}
               entity={entity}
               onEntityChange={setEntity}
               busy={busy}

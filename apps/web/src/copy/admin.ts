@@ -1324,7 +1324,7 @@ const nlBackup: BackupCopy = {
     erase: {
       button: "Servergegevens verwijderen",
       warning:
-        "Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up, bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs, je instellingen en de sleutel van je kluis. Zonder die sleutel kan niemand je kluis nog openen: niet in deze browser en niet uit een gedownloade back-up. Dit kun je niet terugdraaien.",
+        "Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up, bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs, je dagelijkse meldingen met hun instellingen, berichten en pushkoppelingen, je instellingen en de sleutel van je kluis. Zonder die sleutel kan niemand je kluis nog openen: niet in deze browser en niet uit een gedownloade back-up. Dit kun je niet terugdraaien.",
       confirmButton: "Ja, verwijder",
       cancelButton: "Annuleer",
       success: (rows, tables) => `Verwijderd: ${rows} rijen over ${tables} tabellen.`,
@@ -1990,7 +1990,7 @@ const enBackup: BackupCopy = {
     erase: {
       button: "Delete server data",
       warning:
-        "This deletes everything the server holds about you: the encrypted backup, bank connections and broker vaults, price history, AI runs, your settings and your vault key. Without that key nobody can open your vault again: not in this browser and not from a downloaded backup. This cannot be undone.",
+        "This deletes everything the server holds about you: the encrypted backup, bank connections and broker vaults, price history, AI runs, your daily alerts with their settings, messages and push subscriptions, your settings and your vault key. Without that key nobody can open your vault again: not in this browser and not from a downloaded backup. This cannot be undone.",
       confirmButton: "Yes, delete",
       cancelButton: "Cancel",
       success: (rows, tables) => `Deleted: ${rows} rows across ${tables} tables.`,

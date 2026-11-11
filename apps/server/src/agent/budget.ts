@@ -114,6 +114,7 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   travel: 20,
   "portfolio-persona": 1,
   "sector-inference": 1,
+  "instinct-reply": 3,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost —

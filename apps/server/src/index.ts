@@ -15,11 +15,14 @@ import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
 import { registerN8nRoutes, n8nRouteDependencies } from "./n8n-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
+import { instinctRouteDependencies, registerInstinctRoutes } from "./instinct-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
 import { registerNetWorthRoutes, netWorthRouteDependencies } from "./net-worth-routes.js";
 import { initServerSentry, serverErrorResponse } from "./observability.js";
 import { initPosthogLogs, logPosthogInfo } from "./posthogLogs.js";
 import { loadCatalogue } from "./catalogFile.js";
+import { registerWhatsappWebhook, whatsappWebhookDependencies } from "./whatsapp/webhook.js";
+import { runInstinctCron } from "./agent/instinctCron.js";
 import {
   forwardInvesting,
   investingOwnsApiPath,
@@ -371,12 +374,23 @@ registerN8nRoutes(app, n8nRouteDependencies());
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */
 registerAgentRoutes(app);
+app.get("/api/cron/instinct", (c) => runInstinctCron(c.req.raw));
 
 /* Encrypted backup of the personal vault. Only with a database configured —
  * there is nowhere to put it otherwise, and a route that always fails is worse
  * than one that is not there. */
 const vaultDependencies = vaultRouteDependencies();
 if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
+
+/* The daily message's settings, mirror, push subscriptions and feed. Same
+ * condition as the vault routes. A missing agent key answers 503 on these
+ * routes only; it never stops the server from starting. */
+const instinctDependencies = instinctRouteDependencies();
+if (instinctDependencies) {
+  registerInstinctRoutes(app, instinctDependencies);
+  /* Meta's callback: public in apiGuard, trusted only by its own signature. */
+  registerWhatsappWebhook(app, whatsappWebhookDependencies());
+}
 
 /* Erasure of everything this deployment stores about the caller. Same condition
  * as the vault routes: without a database there is nothing to erase. */

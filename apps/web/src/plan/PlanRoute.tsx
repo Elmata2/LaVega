@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import type { PlanResult } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import Button from "../components/ui/Button.js";
 import { intakeCopy } from "../copy/intake.js";
@@ -8,6 +10,8 @@ export type PlanRouteProps = UsePlanInput &
   Pick<PlanProps, "onSaveProfile" | "onNavigate"> & {
     profileRead: PlanProps["profileRead"] | "loading" | "error";
     onRetry: () => void;
+    /** Called with each freshly computed plan (the agent mirror reads the card figures). */
+    onComputed?: (result: PlanResult) => void;
   };
 
 /** The /app/plan route. It exists so the plan is computed only while the page
@@ -19,12 +23,17 @@ export default function PlanRoute({
   onRetry,
   onSaveProfile,
   onNavigate,
+  onComputed,
   ...input
 }: PlanRouteProps) {
   const [locale] = useAppLocale();
   const c = intakeCopy[locale];
   const loaded = profileRead !== "loading" && profileRead !== "error";
   const plan = usePlan({ ...input, ready: (input.ready ?? true) && loaded });
+  const result = plan.result;
+  useEffect(() => {
+    onComputed?.(result);
+  }, [result, onComputed]);
   if (profileRead === "loading") return <p role="status">{c.loading}</p>;
   if (profileRead === "error") {
     return (

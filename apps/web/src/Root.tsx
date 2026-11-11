@@ -5,6 +5,7 @@ import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from ".
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
 import posthog from "./posthog";
+import { registerServiceWorker } from "./swRegistration";
 
 /** Public landing at `/`. Vault app at `/app` and `/app/<view>`. Legacy
  *  `/#app` and `/?eb=…` normalise into `/app` so Enable Banking still lands. */
@@ -27,6 +28,11 @@ export default function Root() {
    * validity. */
   const { state: authState } = useAuthState();
   const identifiedUserId = useRef<string | null>(null);
+
+  /* Registered only once a session exists; the permission prompt is separate. */
+  useEffect(() => {
+    void registerServiceWorker(authState.kind === "signed-in");
+  }, [authState.kind]);
 
   /* The root session gate is the one place that sees both a freshly returned
    * Better Auth session and every later page refresh. Keep identity here so

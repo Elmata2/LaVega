@@ -576,6 +576,13 @@ test("erasure clears every table that holds personal data, in one transaction", 
   expect(calls[1]).toBe("SELECT set_config('app.user_id', $1, true)");
   expect(calls.at(-1)).toBe("COMMIT");
   expect(calls.filter((sql) => sql.startsWith("DELETE FROM"))).toEqual([
+    "DELETE FROM personal.agent_whatsapp WHERE user_id = $1",
+    "DELETE FROM personal.agent_link_codes WHERE user_id = $1",
+    "DELETE FROM personal.agent_events WHERE user_id = $1",
+    "DELETE FROM personal.agent_push_subscriptions WHERE user_id = $1",
+    "DELETE FROM personal.agent_mirror WHERE user_id = $1",
+    "DELETE FROM personal.agent_state WHERE user_id = $1",
+    "DELETE FROM personal.agent_settings WHERE user_id = $1",
     "DELETE FROM personal.eb_sessions WHERE user_id = $1",
     "DELETE FROM personal.eb_pending_auth WHERE user_id = $1",
     "DELETE FROM personal.n8n_forwarding WHERE user_id = $1",
@@ -606,7 +613,7 @@ test("erasure clears every table that holds personal data, in one transaction", 
   ]);
   // The personal vault — the one thing the server cannot read — is still erasable.
   expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
-  expect(report).toHaveLength(25);
+  expect(report).toHaveLength(32);
 });
 
 test("erasure deletes the Better Auth identity in the SAME transaction, matching verification tokens by user id when no address is found", async () => {
@@ -655,7 +662,7 @@ test("erasure reports zero rows rather than pretending it did not run", async ()
   const { db } = erasureDatabase(0);
   const report = await eraseUserData(db, "user-123");
   expect(report.every((entry) => entry.rows === 0)).toBe(true);
-  expect(report).toHaveLength(25);
+  expect(report).toHaveLength(32);
 });
 
 test("a half-erased account rolls back — the caller is never told they are gone when they are not", async () => {

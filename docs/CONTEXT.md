@@ -18,7 +18,7 @@ A **local-first, privacy-first personal finance agent** — a "financial company
 ## Hard constraints (non-negotiable)
 
 1. **No FinnTell reuse.** No code, export, domain, or asset from the old FinnTell / House-of-Founders environment. New name, new repo, new everything. Only the _ideas, market knowledge, and interview insights_ are ours to keep. (The Kasoverzicht restart app is clean-room and _is_ a valid basis — its logic may be re-implemented here.)
-2. **Privacy / local-first by default.** No cloud, account, or tracking by default. Bank data stays on the machine except to the aggregator API itself. **Secrets (private keys, tokens, bank data) NEVER in the repo** — verify `.gitignore` before the first commit.
+2. **Privacy / local-first by default.** No cloud, account, or tracking by default. Bank data stays on the machine except to the aggregator API itself, with one opt-in exception: for a user who turns on the Instinct agent (off by default), the server reads the last 90 days of transactions and balances in memory for one run and discards them. It stores no raw transaction, balance or IBAN. See `docs/adr/0010-server-reads-transactions-at-night.md`. **Secrets (private keys, tokens, bank data) NEVER in the repo** — verify `.gitignore` before the first commit.
 3. **Read-only bank access, no payment initiation (PIS).** Keeps us in the lightest PSD2 class — no own license required. Do not add PIS.
 
 ## Architecture — deployment-agnostic, adapter-based
@@ -121,6 +121,10 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Risk tolerance** — a user profile setting with three levels: Conservative, Balanced, Aggressive. Every agent reads it before it answers. If it is not set, the agent asks once in conversation and saves the answer.
 - **Portfolio letter** — one stored letter from Charlie Munger about the whole portfolio: a verdict and at most three observations, each citing the owner's own figures. The broker-sync cron writes it when the broker snapshot changes, and the owner can ask for one with `Write letter now` on the card (see ADR 0008). The card shows the latest one; it never generates one on page load.
 - **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, portfolio letter, and profile setting. It is separate from deleting one thread.
+
+## Instinct agent glossary
+
+- **Instinct agent / daily message** — the opt-in agent (`docs/adr/0010-server-reads-transactions-at-night.md`). An hourly cron sends a user at most one short money message a day, at the user's send time (default 08:00 Europe/Amsterdam), by feed, web push, email or a WhatsApp template. The server reads the bank into memory for that run only. On WhatsApp the user can also ask read-only questions. It cannot cancel anything; cancelling is phase 3 and waits for a lawyer.
 
 ## Conventions
 

@@ -108,6 +108,7 @@ beforeEach(() => {
 
 /** Start a real authorisation and return the `state` the server issued. */
 async function issueState(): Promise<string> {
+  ebMock.mockResolvedValueOnce({ aspsps: [] }); // consent-maximum lookup
   ebMock.mockResolvedValueOnce({ url: "https://bank.example/authorize" });
   const res = await app.request("/api/eb/auth", {
     method: "POST",
@@ -115,7 +116,7 @@ async function issueState(): Promise<string> {
     body: JSON.stringify({ name: "ING", country: "NL" }),
   });
   expect(res.status).toBe(200);
-  const sent = ebMock.mock.calls[0]![3] as { state: string };
+  const sent = ebMock.mock.calls[1]![3] as { state: string };
   return sent.state;
 }
 
@@ -132,6 +133,7 @@ test("a callback whose state this server never issued does not exchange the code
  * fixed sentence. */
 test("an Enable Banking failure does not leak the private-key filesystem path", async () => {
   const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  ebMock.mockResolvedValueOnce({ aspsps: [] });
   ebMock.mockRejectedValueOnce(
     new Error("Enable Banking: private key not found at /srv/lavega/secrets/eb-key.pem"),
   );
@@ -176,8 +178,8 @@ test("a callback carrying a state this server issued is exchanged", async () => 
   const state = await issueState();
   ebMock.mockResolvedValueOnce({ session_id: "sess-1", accounts: [], aspsp: { name: "ING" } });
   const res = await app.request(`/api/eb/callback?code=real-code&state=${state}`);
-  expect(ebMock).toHaveBeenCalledTimes(2);
-  expect(ebMock.mock.calls[1]![2]).toBe("/sessions");
+  expect(ebMock).toHaveBeenCalledTimes(3);
+  expect(ebMock.mock.calls[2]![2]).toBe("/sessions");
   expect(res.headers.get("location")).toBe("/?eb=sess-1");
 });
 
@@ -316,13 +318,14 @@ test("aspsps with an invalid psu_type in the query is rejected before the bank c
 });
 
 test("auth with psuType personal in the body overrides the configured default", async () => {
+  ebMock.mockResolvedValueOnce({ aspsps: [] });
   ebMock.mockResolvedValueOnce({ url: "https://bank.example/authorize" });
   await app.request("/api/eb/auth", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: "ING", country: "NL", psuType: "personal" }),
   });
-  const sent = ebMock.mock.calls[0]![3] as { psu_type: string };
+  const sent = ebMock.mock.calls[1]![3] as { psu_type: string };
   expect(sent.psu_type).toBe("personal");
 });
 
@@ -498,4 +501,106 @@ test("refresh is rate limited, because it spends the bank's quota on every press
   expect((await third.json()).code).toBe("eb-rate-limited");
   // En de standaardlimiet is een getal dat een mens niet raakt.
   expect(EB_REFRESH_PER_MINUTE).toBeGreaterThanOrEqual(3);
+});
+
+/* Consent length: the bank's own maximum, capped at 180 days, else 89. */
+const DAY = 86_400_000;
+async function authFor(aspsps: unknown[], name = "ING") {
+  ebMock.mockResolvedValueOnce({ aspsps });
+  ebMock.mockResolvedValueOnce({ url: "https://bank.example/authorize" });
+  const before = Date.now();
+  const res = await app.request("/api/eb/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, country: "NL" }),
+  });
+  expect(res.status).toBe(200);
+  const sent = ebMock.mock.calls[1]![3] as {
+    state: string;
+    access: { valid_until: string };
+  };
+  return { sent, days: (Date.parse(sent.access.valid_until) - before) / DAY };
+}
+
+test("consentDaysFor caps at 180 days and falls back to 89", async () => {
+  const { consentDaysFor } = await import("./eb-routes.js");
+  expect(consentDaysFor({ maximum_consent_validity: 15_552_000 })).toBe(180);
+  expect(consentDaysFor({ maximum_consent_validity: 31_536_000 })).toBe(180);
+  expect(consentDaysFor({ maximum_consent_validity: 7_776_000 })).toBe(90);
+  expect(consentDaysFor({ maximum_consent_validity: 0 })).toBe(CONSENT_DAYS);
+  expect(consentDaysFor({})).toBe(CONSENT_DAYS);
+  expect(consentDaysFor(undefined)).toBe(CONSENT_DAYS);
+  expect(SESSION_TTL_MS).toBe(181 * DAY);
+});
+
+test("auth asks for the bank's stated maximum consent (180 days)", async () => {
+  const { days } = await authFor([{ name: "ING", maximum_consent_validity: 15_552_000 }]);
+  expect(days).toBeGreaterThan(179.9);
+  expect(days).toBeLessThan(180.1);
+});
+
+test("auth asks for 89 days when the bank states no maximum", async () => {
+  const { days } = await authFor([{ name: "ING" }]);
+  expect(days).toBeGreaterThan(88.9);
+  expect(days).toBeLessThan(89.1);
+});
+
+test("auth still connects, with 89 days, when the bank-list lookup fails", async () => {
+  ebMock.mockRejectedValueOnce(new Error("aspsps down"));
+  ebMock.mockResolvedValueOnce({ url: "https://bank.example/authorize" });
+  const res = await app.request("/api/eb/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "ING", country: "NL" }),
+  });
+  expect(res.status).toBe(200);
+  const sent = ebMock.mock.calls[1]![3] as { access: { valid_until: string } };
+  expect((Date.parse(sent.access.valid_until) - Date.now()) / DAY).toBeLessThan(89.1);
+});
+
+test("the callback stores the validUntil the bank granted", async () => {
+  const { sent } = await authFor([{ name: "ING", maximum_consent_validity: 15_552_000 }]);
+  ebMock.mockResolvedValueOnce({
+    session_id: "sess-180",
+    accounts: [],
+    aspsp: { name: "ING" },
+    access: { valid_until: sent.access.valid_until },
+  });
+  const res = await app.request(`/api/eb/callback?code=c&state=${sent.state}`);
+  expect(res.status).toBe(302);
+  expect(sessions.get("sess-180")!.payload.validUntil).toBe(sent.access.valid_until);
+});
+
+test("the callback falls back to 89 days when the bank echoes no validity", async () => {
+  const state = await issueState();
+  ebMock.mockResolvedValueOnce({ session_id: "sess-89", accounts: [], aspsp: { name: "ING" } });
+  await app.request(`/api/eb/callback?code=c&state=${state}`);
+  const days = (Date.parse(sessions.get("sess-89")!.payload.validUntil!) - Date.now()) / DAY;
+  expect(days).toBeGreaterThan(88.9);
+  expect(days).toBeLessThan(89.1);
+});
+
+test("the callback ignores an echoed validUntil in the past or beyond 180 days", async () => {
+  for (const [id, echoed] of [
+    ["sess-past", new Date(Date.now() - DAY).toISOString()],
+    ["sess-far", new Date(Date.now() + 400 * DAY).toISOString()],
+  ] as const) {
+    ebMock.mockClear();
+    const state = await issueState();
+    ebMock.mockResolvedValueOnce({
+      session_id: id,
+      accounts: [],
+      aspsp: { name: "ING" },
+      access: { valid_until: echoed },
+    });
+    await app.request(`/api/eb/callback?code=c&state=${state}`);
+    const days = (Date.parse(sessions.get(id)!.payload.validUntil!) - Date.now()) / DAY;
+    expect(days).toBeGreaterThan(88.9);
+    expect(days).toBeLessThan(89.1);
+  }
+});
+
+test("the bank-name match for the consent maximum ignores case and spaces", async () => {
+  const { days } = await authFor([{ name: " ing ", maximum_consent_validity: 15_552_000 }]);
+  expect(days).toBeGreaterThan(179.9);
 });

@@ -45,6 +45,7 @@ import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import SignInForm from "../components/SignInForm.js";
+import AgentSettings from "./AgentSettings";
 
 /* Profiel — everything that is a setting rather than a place you work.
  *
@@ -95,6 +96,8 @@ type ProfielProps = {
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
   onLock: () => void;
+  /** The daily message was turned on or off here; the browser mirror follows. */
+  onAgentEnabledChange?: (enabled: boolean) => void;
   /** Import (unchanged component, moved here from the homescreen). */
   entity: string;
   onEntityChange: (entity: string) => void;
@@ -432,6 +435,29 @@ function CashbackCorrigeren({
   );
 }
 
+/* The daily message: only for a signed-in account, because the server keeps
+ * its settings per account. Nothing renders while the session is loading, same
+ * as AccountBlock, so a signed-out card never flashes. */
+function AgentBlock({
+  onEnabledChange,
+  onNavigate,
+}: {
+  onEnabledChange: ((enabled: boolean) => void) | undefined;
+  onNavigate: ((view: View) => void) | undefined;
+}) {
+  const [locale] = useAppLocale();
+  const { state } = useAuthState();
+  if (state.kind !== "signed-in") return null;
+  return (
+    <AgentSettings
+      locale={locale}
+      accountEmail={state.email}
+      {...(onEnabledChange ? { onEnabledChange } : {})}
+      {...(onNavigate ? { onNavigate } : {})}
+    />
+  );
+}
+
 export default function Profiel({
   enabledModules,
   onModulesChange,
@@ -450,6 +476,7 @@ export default function Profiel({
   ownerName,
   onOwnerNameChange,
   onLock,
+  onAgentEnabledChange,
   entity,
   onEntityChange,
   busy,
@@ -513,6 +540,8 @@ export default function Profiel({
       </Card>
 
       <AccountBlock />
+
+      <AgentBlock onEnabledChange={onAgentEnabledChange} onNavigate={onNavigate} />
 
       {onNavigate && (
         <Card as="section" aria-label={intakeCopy[locale].aboutYou.profielCard.title}>

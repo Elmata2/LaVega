@@ -1,3 +1,5 @@
+import { CONSENT_TEXT_EN, CONSENT_TEXT_NL } from "./instinctConsent.js";
+
 /* Privacy policy + terms of service, served as standalone HTML at /privacy and
  * /terms. Needed for the Enable Banking application registration (which asks for
  * a contact email + privacy + terms URL) and generally good practice. Content
@@ -11,7 +13,7 @@
  * all shipped while the page still said the server only did two things. */
 
 const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
-const UPDATED = "2026-10-07";
+const UPDATED = "2026-11-10";
 
 function page(title: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -41,6 +43,7 @@ ${bodyHtml}
 </body></html>`;
 }
 
+// DRAFT: owner legal review pending (Instinct phase 2)
 export const privacyHtml = page(
   "Privacybeleid",
   `<h1>Privacybeleid</h1>
@@ -58,22 +61,36 @@ export const privacyHtml = page(
 <ul>
   <li>Koppelen van een bank verloopt via <strong>Enable Banking</strong>, een gelicentieerde dienstverlener voor rekeninginformatie (AIS/PSD2). Je autoriseert de toegang rechtstreeks bij je eigen bank.</li>
   <li>De toegang is <strong>alleen-lezen</strong>: rekeninginformatie en transacties. LaVega kan <strong>geen betalingen</strong> initiëren.</li>
-  <li>Opgehaalde rekening- en transactiegegevens gaan direct door naar je lokale, versleutelde opslag; ze worden niet blijvend op onze server bewaard.</li>
+  <li>Opgehaalde rekening- en transactiegegevens gaan direct door naar je lokale, versleutelde opslag; ze worden niet blijvend op onze server bewaard. De enige uitzondering is de dagelijkse melding hieronder, en die kun je zelf aanzetten en uitzetten: ook dan lezen we transacties, maar bewaren we ze niet.</li>
 </ul>
 
 <h2>AI-functies — standaard uit</h2>
 <p>LaVega heeft vier functies die een AI-model van <strong>Mistral</strong> gebruiken. Ze zijn <strong>opt-in</strong>: je zet ze zelf aan, en wat er verstuurd wordt krijg je eerst te zien ter bevestiging. Staan ze uit, dan gaat er niets heen.</p>
 <ul>
   <li><strong>Factuur uitlezen</strong> — het factuurdocument dat je aanbiedt (PDF), om er bedrag, datum en leverancier uit te halen.</li>
-  <li><strong>Transacties categoriseren</strong> — alleen de omschrijving van een transactie, met een filter dat IBANs, bedragen en datums er vooraf uit haalt. Niet je saldo, niet je rekeningnummer.</li>
+  <li><strong>Transacties categoriseren</strong> — de tegenpartij en de omschrijving van een transactie, en of het geld erbij kwam of eraf ging, nadat een filter er IBANs, e-mailadressen, datums met een jaar (zoals 01-08-2026), bedragen met € of EUR ervoor, bedragen met twee decimalen en getallen van vier of meer cijfers uit heeft gehaald. Hele bedragen zonder decimalen (zoals 45), datums in woorden (zoals 14 juli) en datums zonder jaar (zoals 14-07) blijven staan. Het bedrag zelf, je datum, je saldo en je rekeningnummer sturen we niet mee.</li>
   <li><strong>Chat</strong> — de context van het tabblad waar je op staat: rekeningtypes en saldi, abonnementen, facturen en btw-instellingen. Rekeningnummers gaan niet mee.</li>
   <li><strong>Reisfeiten opzoeken</strong> — de naam van een aanbieder of kaart, geen persoonsgegevens.</li>
 </ul>
 <p>Mistral verwerkt deze gegevens <strong>binnen de EU</strong> (Frankrijk) om er een antwoord op te geven. De sleutel is van ons, niet van jou; je hoeft dus geen eigen account. Wij bewaren deze verzoeken niet.</p>
 <p>Bij Chat en Reisfeiten zoekt het model ook op het open web; die pagina's komen van overal en vallen buiten deze garantie.</p>
+<p><strong>Vragen via WhatsApp</strong> zijn een aparte opt-in. Bij het koppelen van WhatsApp vink je zelf aan dat de vragen die je daar stelt naar Mistral gaan om te bepalen welke berekening past. Zonder dat vinkje beantwoordt LaVega geen vragen via WhatsApp en gaat er niets naar Mistral. Wat er dan heen gaat, staat bij "Dagelijkse melding" hieronder.</p>
 
 <h2>Facturen per e-mail — alleen als je het aanzet</h2>
 <p>Zet je het doorstuuradres voor facturen aan, dan loopt inkomende post langs <strong>Cloudflare</strong> (die het adres bedient) naar <strong>n8n</strong> (dat de mail en de bijlagen klaarzet voor je Facturen-scherm). Een factuur wordt pas geboekt nadat jij hem bevestigt. Gebruik je een eigen n8n-server, dan gaat het naar de jouwe.</p>
+
+<h2>Dagelijkse melding, alleen als je het aanzet</h2>
+<p>${CONSENT_TEXT_NL}</p>
+<ul>
+  <li><strong>Wat de server leest.</strong> Voor gebruikers die dit hebben aangezet haalt de server elke nacht, op het tijdstip dat jij koos, de transacties en saldi van de laatste 90 dagen op bij je bank (via Enable Banking, alleen om te lezen) en kiest daaruit hoogstens één melding per dag. Dat gebeurt zonder dat jij erbij bent, binnen de toestemming die je bij je bank gaf. Verloopt die toestemming, dan stoppen de meldingen die gegevens nodig hebben en zeggen we dat één keer.</li>
+  <li><strong>Wat de server niet bewaart.</strong> De transacties, saldi en rekeningnummers blijven alleen in het werkgeheugen tijdens die ene run. Ze komen niet in de database, niet in logboeken en niet in de tekst van een melding die iets anders noemt dan jouw eigen cijfers.</li>
+  <li><strong>Wat de server wel bewaart.</strong> Je instelling (aan of uit, kanalen, tijdstip, taal, je e-mailadres als je e-mail koos, de versie van deze toestemming), de meldingen die we je stuurden, versleuteld met onze serversleutel, en een kopie van wat je browser ons doorgeeft zodat de melding kan rekenen: je categorieregels, de data van naderende deadlines zonder bedragen, en één getal, het jaarlijkse voordeel van een betere kaart. Daarnaast een pushabonnement als je pushmeldingen koos en een korte lijst van wat we je al meldden, zodat we niets herhalen.</li>
+  <li><strong>Hoe lang.</strong> Meldingen bewaren we 90 dagen. Je kunt elke melding of een heel gesprek eerder verwijderen.</li>
+  <li><strong>WhatsApp.</strong> Kies je WhatsApp, dan bezorgt <strong>Meta</strong> (WhatsApp Business Platform) de berichten die wij je sturen en de vragen die jij ons stuurt. Je telefoonnummer bewaren we versleuteld met onze serversleutel; om een binnenkomend bericht aan jou te koppelen bewaren we daarnaast een hash van het nummer met een eigen sleutel, waaruit het nummer niet terug te halen is. De gesprekken bewaren we 90 dagen, versleuteld, en je kunt ze per bericht of in één keer verwijderen. Een koppelcode bewaren we alleen als hash; hij verloopt na 15 minuten en wordt verwijderd bij de volgende code, bij ontkoppelen en bij uitzetten. Een vraag die je via WhatsApp stelt gaat, alleen na je aparte toestemming bij het koppelen, naar Mistral (EU), met een filter dat rekeningnummers (IBAN, van elk land), e-mailadressen, Nederlandse telefoonnummers (06…, 010… en +31), burgerservicenummers en bedragen met € of EUR ervoor (zoals € 45) eruit haalt; een bedrag met het valutateken erachter, zoals 45 EUR of 45€, blijft staan. Mistral kiest daarmee alleen welke door ons uitgerekende zin past, en krijgt daarbij die zinnen te zien: totalen, data en categorienamen. Je losse transacties en namen van tegenpartijen gaan niet mee; een berekende uitkomst (zoals een totaal per dag of categorie) kan wel meegaan. Staan er namen van tegenpartijen in het antwoord, zoals bij aankomende afschrijvingen, dan gaat dat antwoord niet naar Mistral en sturen we alle regels.</li>
+  <li><strong>Uitzetten.</strong> Zet je de melding uit, dan verwijderen we in één keer je instelling, je meldingen, de kopie uit je browser, je pushabonnementen en je WhatsApp-koppeling met nummer, gesprekken en openstaande koppelcode. Ontkoppel je alleen WhatsApp, dan verwijderen we het nummer en de koppelcode; de gesprekken blijven staan tot je ze zelf verwijdert of tot 90 dagen voorbij zijn. Dat is niet terug te draaien.</li>
+  <li><strong>Wie erbij betrokken is.</strong> Enable Banking levert de bankgegevens, Resend bezorgt een melding per e-mail, Meta bezorgt een melding of antwoord via WhatsApp, en de pushdienst van je eigen browser (Google, Apple of Mozilla) bezorgt een pushmelding. Een melding noemt alleen jouw eigen cijfers.</li>
+</ul>
+<p lang="en"><em>In English.</em> ${CONSENT_TEXT_EN} For users who turn it on, our server reads the last 90 days of transactions and balances from your bank each night, picks at most one message a day and does not store the transactions, balances or account numbers. It stores your settings, the messages it sent you (encrypted with our server key, kept 90 days), a copy of your category rules, upcoming deadline dates without amounts and one yearly card gain figure, plus any push subscription. If you pick WhatsApp, Meta delivers the messages; your phone number is stored encrypted with a keyed hash for lookup, conversations are kept 90 days and can be deleted per message or as a whole, and link codes are kept as a hash and expire after 15 minutes; they are deleted when the next code is made, on unlinking and on turning the feature off. Unlinking removes the number; conversations stay until you delete them or 90 days pass. Questions you ask over WhatsApp go to Mistral (EU) only after a separate consent you give when linking; it only chooses which computed sentence fits (answers that contain counterparty names never go to Mistral), and your individual transactions and counterparty names are not sent; a calculated result (such as a total per day or category) may be. Turning the feature off deletes all of it, including the WhatsApp link, at once.</p>
 
 <h2>De rol van de server</h2>
 <p>De server: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Mistral-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt elke API achter een ingelogde sessie.</p>
@@ -91,10 +108,11 @@ export const privacyHtml = page(
 <table>
   <tr><th align="left">Wie</th><th align="left">Wat er heen gaat</th><th align="left">Wanneer</th></tr>
   <tr><td><strong>Enable Banking</strong></td><td>Banktoegang (AIS), rekening- en transactiegegevens</td><td>Als je een bank koppelt</td></tr>
-  <tr><td><strong>Mistral</strong> (EU)</td><td>Factuurdocumenten, transactieomschrijvingen</td><td>Alleen met AI-functies aan</td></tr>
+  <tr><td><strong>Mistral</strong> (EU)</td><td>Factuurdocumenten, transactieomschrijvingen; bij vragen via WhatsApp je gefilterde vraag en de door ons uitgerekende zinnen (geen losse transacties of namen van tegenpartijen)</td><td>Alleen met AI-functies aan; WhatsApp-vragen alleen na de aparte toestemming bij het koppelen</td></tr>
+  <tr><td><strong>Meta</strong> (WhatsApp Business Platform)</td><td>Je telefoonnummer en de berichten die je ons via WhatsApp stuurt en van ons krijgt: de dagelijkse melding en antwoorden op je vragen</td><td>Alleen als je WhatsApp koppelt</td></tr>
   <tr><td><strong>Cloudflare</strong></td><td>Inkomende factuurmail</td><td>Alleen met het factuuradres aan</td></tr>
   <tr><td><strong>n8n</strong></td><td>Diezelfde mail plus bijlagen</td><td>Alleen met het factuuradres aan</td></tr>
-  <tr><td><strong>Resend</strong></td><td>Je e-mailadres en de inhoud van account-mails (bevestigingslink, wachtwoord resetten, nieuwe inloglink)</td><td>Bij het aanmaken van een account en bij inloggen of resetten</td></tr>
+  <tr><td><strong>Resend</strong></td><td>Je e-mailadres en de inhoud van account-mails (bevestigingslink, wachtwoord resetten, nieuwe inloglink), en de dagelijkse melding als je e-mail koos</td><td>Bij het aanmaken van een account, bij inloggen of resetten, en bij de dagelijkse melding per e-mail</td></tr>
   <tr><td><strong>Frankfurter</strong> (ECB)</td><td>Valutaparen — publiek, niet persoonlijk</td><td>Bij de valutafunctie</td></tr>
   <tr><td><strong>Vercel</strong> (VS)</td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
   <tr><td><strong>Sentry</strong></td><td>Foutmeldingen ter diagnose; zonder financiële gegevens; IP-adressen worden niet opgeslagen (EU-regio)</td><td>Alleen als er een fout optreedt</td></tr>

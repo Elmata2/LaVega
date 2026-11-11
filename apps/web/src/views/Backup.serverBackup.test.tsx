@@ -274,3 +274,10 @@ test("an English browser gets English copy, including the erase warning and repo
 
   expect(container!.textContent).toContain(c.server.erase.success(4, 2));
 });
+
+test("the erase warning names the daily message data in both languages", () => {
+  expect(adminCopy.nl.backup.server.erase.warning).toContain("dagelijkse meldingen");
+  expect(adminCopy.nl.backup.server.erase.warning).toContain("pushkoppelingen");
+  expect(adminCopy.en.backup.server.erase.warning).toContain("daily alerts");
+  expect(adminCopy.en.backup.server.erase.warning).toContain("push subscriptions");
+});

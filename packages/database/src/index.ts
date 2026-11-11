@@ -1240,6 +1240,13 @@ export function createPersonalNetWorthRepository(db: Database, userId: string | 
  * worse — silently missed. Order is child-before-parent: agent memory
  * (0020) references investing.agent_threads, so its children go first. */
 const USER_DATA_TABLES = [
+  "personal.agent_whatsapp",
+  "personal.agent_link_codes",
+  "personal.agent_events",
+  "personal.agent_push_subscriptions",
+  "personal.agent_mirror",
+  "personal.agent_state",
+  "personal.agent_settings",
   "personal.eb_sessions",
   "personal.eb_pending_auth",
   "personal.n8n_forwarding",
@@ -1531,7 +1538,8 @@ export type AiUsage = {
     | "chat"
     | "travel"
     | "portfolio-persona"
-    | "sector-inference";
+    | "sector-inference"
+    | "instinct-reply";
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -1816,5 +1824,6 @@ export function createN8nForwardingRepository(db: Database) {
   };
 }
 
+export * from "./agent.js";
 export * from "./agentMemory.js";
 export * from "./rateLimit.js";
