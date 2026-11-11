@@ -44,6 +44,7 @@ import type {
   Valuation,
   VaultDocument,
   ImportSession,
+  AssistantState,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { decryptJSON, deriveKey, openBytes, sealBytes, sealJSON } from "../crypto/vaultCrypto.js";
@@ -155,6 +156,11 @@ type VaultData = {
   importSessions?: ImportSession[];
   learning?: LearningSection;
   events?: VaultEvent[];
+  /** The personal assistant thin slice (WS5.8, issue #301): append-only
+   *  approval events and the memories an approval wrote. Additive optional
+   *  field, like `facts`: a legacy vault decrypts without it and reads the
+   *  empty state. Nothing here ever leaves the browser. */
+  assistant?: AssistantState;
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
@@ -238,6 +244,10 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   ): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
+  /** The assistant's approval events and approved memories; a legacy vault
+   *  reads the empty state. One replace-all save per decision. */
+  getAssistant(): Promise<AssistantState>;
+  putAssistant(state: AssistantState): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
   putN8nSettings(settings: N8nSettings): Promise<void>;
   getAutoBookedInvoices(): Promise<N8nAutoBooked[]>;
@@ -863,6 +873,29 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, facts: [...f] };
+        await persist();
+      });
+    },
+
+    // The personal assistant's approval events and approved memories
+    // (WS5.8, issue #301). Same additive optional field + replace-all shape as
+    // facts above; a legacy vault reads the empty state, so the panel starts
+    // with no timeline rather than a fabricated one.
+    async getAssistant(): Promise<AssistantState> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      const state = data.assistant;
+      return {
+        approvals: [...(state?.approvals ?? [])],
+        memories: [...(state?.memories ?? [])],
+      };
+    },
+    putAssistant(state: AssistantState): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = {
+          ...data,
+          assistant: { approvals: [...state.approvals], memories: [...state.memories] },
+        };
         await persist();
       });
     },

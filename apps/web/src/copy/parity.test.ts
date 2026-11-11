@@ -8,6 +8,7 @@ import { intakeCopy } from "./intake.js";
 import { billsCopy } from "./bills.js";
 import { documentsCopy } from "./documents.js";
 import { importSessionCopy } from "./importSession.js";
+import { assistantCopy } from "./assistant.js";
 import {
   assumptionsCopy,
   bufferCopy,
@@ -99,6 +100,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["bills", billsCopy],
   ["documents", documentsCopy],
   ["importSession", importSessionCopy],
+  ["assistant", assistantCopy],
   ["plan/shell", planShellCopy],
   ["plan/month", monthCopy],
   ["plan/buffer", bufferCopy],

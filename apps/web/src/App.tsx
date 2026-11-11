@@ -2298,6 +2298,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
           {view === "overview" && (
             <Overzicht
+              storage={storage}
               accounts={currentScopedAccounts}
               txs={scopedTxs}
               rules={rules}

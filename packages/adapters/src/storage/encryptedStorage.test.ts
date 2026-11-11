@@ -1210,3 +1210,36 @@ test("bill decisions ride in the same putBillPlan save and survive without one",
   expect(await s.open(KEY, "user:a")).toBe("opened");
   expect(await s.getBillDecisions()).toEqual(decisions);
 });
+
+test("assistant approvals and memories round-trip across lock/unlock; legacy vault reads empty", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-assistant");
+  await v.open(KEY, "user:a");
+  expect(await v.getAssistant()).toEqual({ approvals: [], memories: [] }); // legacy/new vault
+
+  const state = {
+    approvals: [
+      {
+        id: "approval-1",
+        tool: "remember_preference" as const,
+        payload: { subject: "lengte", valueId: "kort" },
+        decision: "approved" as const,
+        decidedAt: "2026-11-11T10:00:00.000Z",
+        createdAt: "2026-11-11T09:59:00.000Z",
+      },
+    ],
+    memories: [
+      {
+        id: "assistant-memory-lengte",
+        subject: "lengte" as const,
+        valueId: "kort",
+        createdAt: "2026-11-11T10:00:00.000Z",
+      },
+    ],
+  };
+  await v.putAssistant(state);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  // The decision must survive the reload the owner experiences.
+  expect(await v.getAssistant()).toEqual(state);
+});
