@@ -50,6 +50,7 @@ import {
   reconcileTransfers,
   rejectTransfer,
   suggestTransfers,
+  upgradeRules,
 } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import {
@@ -542,8 +543,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setScope(next);
   }
 
-  const [ruleMatch, setRuleMatch] = useState("");
-  const [ruleCategory, setRuleCategory] = useState("");
   // Alert buffer (cents): warn when the forecast dips below this, so shortfalls
   // surface early instead of only at €0. Persisted as a local preference.
   const [bufferCents, setBufferCentsState] = useState<number>(() => getBufferCents());
@@ -644,7 +643,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
-      setRules(loadedRules);
+      // Rows are parsed and upgraded once, at the vault boundary. A row that
+      // cannot be used is counted in one warning, never dropped silently — and
+      // never allowed to block the rest of the vault from loading.
+      const storedRules = upgradeRules(loadedRules);
+      if (storedRules.problems.length > 0) {
+        console.warn(
+          `[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`,
+        );
+      }
+      setRules(storedRules.rules);
       setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
       setVatSettings(loadedVat);
@@ -1119,7 +1127,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
-    setRules(freshRules);
+    const storedRules = upgradeRules(freshRules);
+    if (storedRules.problems.length > 0) {
+      console.warn(`[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`);
+    }
+    setRules(storedRules.rules);
     setTransfers(freshTransfers);
     setScheduledFlows(freshFlows);
     setVatSettings(freshVat);
@@ -1951,11 +1963,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {view === "transactions" && (
             <Regels
               rules={rules}
+              txs={txs}
+              accounts={accounts}
+              own={own}
               busy={busy}
-              ruleMatch={ruleMatch}
-              onRuleMatchChange={setRuleMatch}
-              ruleCategory={ruleCategory}
-              onRuleCategoryChange={setRuleCategory}
               onSaveRules={saveRules}
             />
           )}
