@@ -295,7 +295,7 @@ ${crumbs(l, [
   { name: p.title },
 ])}
 <h1>${esc(p.title)}</h1>
-<p class="meta">${t.by} ${authorHtml} · ${t.updated}: <time datetime="${p.updated}">${esc(fmtDate(p.updated, l))}</time></p>
+<p class="meta"><span>${t.by} ${authorHtml}</span><span aria-hidden="true">·</span><span class="meta-date">${t.updated}: <time datetime="${p.updated}">${esc(fmtDate(p.updated, l))}</time></span></p>
 ${toc(p.bodyMarkdown, l)}
 <div class="body">
 ${renderMarkdown(p.bodyMarkdown, l)}</div>
