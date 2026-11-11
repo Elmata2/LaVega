@@ -20,6 +20,8 @@ function fakeStorage(): VaultStorage {
     getAccounts: async () => mockAccounts,
     getTxs: async () => [],
     getRules: async () => [],
+    getTransfers: async () => [],
+    putTransfers: async () => {},
     getScheduledFlows: async () => [],
     getVatSettings: async () => [],
     getInvoices: async () => [],

@@ -12,6 +12,7 @@ import type {
   EntityScope,
   AdvisorProfileStore,
   ProfileRead,
+  TransferPair,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
@@ -43,6 +44,12 @@ import {
   TRAVEL_AGENT,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
+  applyTransferDecisions,
+  autoConfirmTransfers,
+  confirmTransfer,
+  reconcileTransfers,
+  rejectTransfer,
+  suggestTransfers,
 } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import {
@@ -202,6 +209,14 @@ function isN8nNoticeLike(v: unknown): v is N8nNotice {
   );
 }
 
+/** Replace-or-append one transfer decision by its content id. Confirming and
+ *  rejecting write the SAME row (a pair is in exactly one state), so a plain
+ *  append could leave a confirmed and a rejected copy of one pair behind — and
+ *  the matcher would then read the rejection memory AND the confirmed pair. */
+function upsertTransferPair(pairs: TransferPair[], pair: TransferPair): TransferPair[] {
+  return [...pairs.filter((p) => p.id !== pair.id), pair];
+}
+
 export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
   const [openAttempt, setOpenAttempt] = useState(0);
@@ -222,6 +237,13 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [entity, setEntity] = useState(() => getDefaultEntity(shellCopy[locale].scope.personal));
   const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  // Stored transfer decisions only (confirmed pairs + rejection memory); a
+  // suggestion is derived from the ledger on read, never kept here.
+  const [transfers, setTransfers] = useState<TransferPair[]>([]);
+  // Set when an account merge/delete dropped transfer pairs whose legs no
+  // longer both exist. Rekeningen shows the count under its duplicate banner —
+  // silently orphaning a pair is the failure this exists to prevent.
+  const [transferLinksDropped, setTransferLinksDropped] = useState<number | null>(null);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -480,6 +502,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Built once at mount (empty deps — never re-reads the clock), so the
   // forecast stays deterministic for the lifetime of the session.
   const asOf = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  /* The read model: a confirmed pair makes both legs "Eigen overboeking" for
+   * every spend aggregation downstream, because MOVED_CATEGORIES already
+   * excludes that one category. Derived on read and NEVER persisted — a
+   * rejected pair has to restore exactly what each row said before (a manual
+   * category, a rule's result), which a stored rewrite could not do. */
+  const ledgerTxs = useMemo(() => applyTransferDecisions(txs, transfers), [txs, transfers]);
   const [fEntity, setFEntity] = useState("");
   const [fAccount, setFAccount] = useState("");
   const [fSearch, setFSearch] = useState("");
@@ -589,6 +617,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedAccounts,
         loadedTxs,
         loadedRules,
+        loadedTransfers,
         loadedFlows,
         loadedVat,
         loadedInvoices,
@@ -602,6 +631,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
+        storage.getTransfers(),
         storage.getScheduledFlows(),
         storage.getVatSettings(),
         storage.getInvoices(),
@@ -615,6 +645,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
       setRules(loadedRules);
+      setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
@@ -946,6 +977,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setAccounts([]);
     setTxs([]);
     setRules([]);
+    setTransfers([]);
+    setTransferLinksDropped(null);
     setScheduledFlows([]);
     setVatSettings([]);
     setInvoices([]);
@@ -965,6 +998,41 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   async function saveRules(next: Rule[]) {
     setRules(next);
     await storage.putRules(next);
+  }
+
+  /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
+   * core mutators keep one row per pair id — so this is the only write path.
+   * Projected rows are NEVER written: `applyTransferDecisions` is derived on
+   * read, or rejecting a pair could not restore what a row said before. */
+  async function saveTransfers(next: TransferPair[]) {
+    setTransfers(next);
+    await storage.putTransfers(next);
+  }
+
+  /* Promote the unambiguous exact two-leg proofs into stored pairs, so the
+   * owner is only ever asked about a pair the ledger does not already prove.
+   * Idempotent (the core contract): a second run over its own output adds
+   * nothing, which is what lets this depend on `transfers` without looping.
+   * The write is replace-all like saveRules — `pairs` is the full list. */
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const auto = autoConfirmTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf });
+    if (auto.added.length === 0) return;
+    // Background write: a lock mid-flight closes the vault, and the next unlock
+    // re-runs this same deterministic promotion, so there is nothing to report.
+    void saveTransfers(auto.pairs).catch(() => {});
+    // saveTransfers is read, not depended on: its identity changes per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, txs, accounts, transfers, fxHistory, asOf]);
+
+  /** Confirm or reject one derived suggestion. Both write the same pair row
+   *  (one pair, one state) and persist the whole decision list. Rejection is
+   *  memory, not deletion: the matcher must never propose those two legs again. */
+  function handleConfirmTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, confirmTransfer(pair, asOf)));
+  }
+  function handleRejectTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, rejectTransfer(pair, asOf)));
   }
 
   // Per-BV VAT settings are UI-owned as a whole list (replace-all persistence),
@@ -1032,6 +1100,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshAccounts,
       freshTxs,
       freshRules,
+      freshTransfers,
       freshFlows,
       freshVat,
       freshInvoices,
@@ -1041,6 +1110,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
+      storage.getTransfers(),
       storage.getScheduledFlows(),
       storage.getVatSettings(),
       storage.getInvoices(),
@@ -1050,6 +1120,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setAccounts(freshAccounts);
     setTxs(freshTxs);
     setRules(freshRules);
+    setTransfers(freshTransfers);
     setScheduledFlows(freshFlows);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
@@ -1127,7 +1198,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
     const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
     const computed = computeRoom({
-      txs,
+      txs: ledgerTxs,
       accounts,
       profiles: entityProfiles,
       rules,
@@ -1140,7 +1211,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }, [
     view,
     profileRead,
-    txs,
+    ledgerTxs,
     accounts,
     entityProfiles,
     rules,
@@ -1158,7 +1229,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (view !== "about-you")
       return capacityFor(profile, { kind: "none", reason: "no-data" }, asOf);
     const computed = computeRoom({
-      txs,
+      txs: ledgerTxs,
       accounts,
       profiles: entityProfiles,
       rules,
@@ -1171,7 +1242,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }, [
     view,
     profileRead,
-    txs,
+    ledgerTxs,
     accounts,
     entityProfiles,
     rules,
@@ -1186,6 +1257,15 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // filed under the wrong BV); Rekeningen narrows the banner to the scope.
   const duplicateGroups = useMemo(() => findDuplicateAccounts(accounts), [accounts]);
 
+  /* Pairs the matcher derives on read. The input is the UNSCOPED ledger on
+   * purpose: a transfer between a personal and a business account is one pair,
+   * and scoping the matcher would give each half only one leg of it. Derived,
+   * never stored — a new import can invalidate a pending suggestion, so
+   * persisting one would leave a stale claim in the vault. */
+  const transferSuggestions = useMemo(
+    () => suggestTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf }),
+    [txs, accounts, transfers, fxHistory, asOf],
+  );
   // Self-heal the Transacties entity filter and the top-bar entity scope: if
   // the selected entity no longer exists (e.g. its last account was
   // reassigned away in Rekeningen), reset to "Alle" so neither control keeps
@@ -1211,8 +1291,26 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     [scopeAccounts, entityScope],
   );
   // A transaction follows its account's classification — it is never classified
-  // on its own, so the two can't disagree.
-  const scopedTxs = useMemo(() => txsForAccounts(scopedAccounts, txs), [txs, scopedAccounts]);
+  // on its own, so the two can't disagree. Built from the transfer-projected
+  // ledger: a confirmed pair must stop counting as spending everywhere that
+  // reads these rows (Overzicht, Top-uitgaven, Statistiek, Transacties itself),
+  // and deriving it once here is what keeps every one of them in step.
+  const scopedTxs = useMemo(
+    () => txsForAccounts(scopedAccounts, ledgerTxs),
+    [ledgerTxs, scopedAccounts],
+  );
+
+  /* Only suggestions whose BOTH legs are in the current half reach the view.
+   * Naming an account from the other half would cross the line the scope switch
+   * draws; an unambiguous exact cross-half pair is auto-confirmed anyway, so
+   * what stays hidden is only the ambiguous cross-half case — a gap, not a
+   * leak. */
+  const scopedTransferSuggestions = useMemo(() => {
+    const visible = new Set(scopedTxs.map((t) => t.id));
+    return transferSuggestions.filter(
+      (s) => visible.has(s.pair.outflowTxId) && visible.has(s.pair.inflowTxId),
+    );
+  }, [transferSuggestions, scopedTxs]);
 
   // A stored balance is only "as of" its balanceDate (no date => already
   // current); roll every account forward to `asOf` with its later txs so
@@ -1424,6 +1522,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       await storage.deleteAccount(key);
       setTxs(txs.filter((t) => t.accountKey !== key));
       setAccounts(accounts.filter((a) => a.key !== key));
+      // Every tx of that account is gone. A pair pointing at one would link to
+      // a row nothing can render, so it is explicitly dropped — and the count
+      // is reported on Rekeningen, never swallowed.
+      const reconciled = reconcileTransfers(
+        transfers,
+        new Map<string, string | null>(ids.map((id) => [id, null])),
+      );
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
     } finally {
       setBusy(false);
     }
@@ -1446,6 +1554,13 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       await storage.deleteAccount(duplicateKey);
       setTxs(merged.txs);
       setAccounts(merged.accounts);
+      // The merge re-keys tx ids and collapses overlapping rows. Reconcile the
+      // stored pairs against that remap: a surviving pair follows its legs, a
+      // pair whose leg was absorbed is dropped and the count is reported.
+      const reconciled = reconcileTransfers(transfers, merged.txIdRemap);
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
     } finally {
       setBusy(false);
     }
@@ -1802,6 +1917,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               scopedTxs={scopedTxs}
               rules={rules}
               own={own}
+              transfers={transfers}
+              suggestions={scopedTransferSuggestions}
+              onConfirmTransfer={handleConfirmTransfer}
+              onRejectTransfer={handleRejectTransfer}
               fxHistory={fxHistory}
               mode={fxConversionMode}
               entityOptions={entityOptions}
@@ -1846,6 +1965,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               accounts={scopedAccounts}
               txs={scopedTxs}
               busy={busy}
+              transferLinksDropped={transferLinksDropped ?? undefined}
               onEntityChange={handleEntityChange}
               onAccountCommit={handleAccountCommit}
               onAccountFieldChange={handleAccountFieldChange}
@@ -1979,7 +2099,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               }
               storage={storage}
               accounts={accounts}
-              txs={txs}
+              txs={ledgerTxs}
               entityProfiles={entityProfiles}
               rules={rules}
               own={ownWithNames}

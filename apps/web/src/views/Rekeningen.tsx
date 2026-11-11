@@ -42,6 +42,10 @@ type RekeningenProps = {
    *  the FULL list in App; only groups touching the current scope are shown. */
   duplicateGroups: DuplicateGroup[];
   onMergeDuplicates: (survivorKey: string, duplicateKey: string) => void;
+  /** How many stored transfer pairs the last merge/delete had to drop because
+   *  one of their legs no longer exists. A count, not a sentence: the wording
+   *  lives in the copy module with the rest of this screen's copy. */
+  transferLinksDropped?: number;
 };
 
 /* ---------------------------------------------------------------------------
@@ -899,6 +903,7 @@ export default function Rekeningen({
   onDeleteAccount,
   duplicateGroups,
   onMergeDuplicates,
+  transferLinksDropped,
 }: RekeningenProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].rekeningen;
@@ -981,6 +986,12 @@ export default function Rekeningen({
           </div>
         );
       })}
+
+      {transferLinksDropped != null && transferLinksDropped > 0 && (
+        <p className="dup-banner-sub" role="status" data-testid="transfer-links-dropped">
+          {c.transferLinksDropped(transferLinksDropped)}
+        </p>
+      )}
 
       {accounts.length === 0 ? (
         <p>{c.geenRekeningen}</p>

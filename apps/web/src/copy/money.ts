@@ -1,5 +1,5 @@
 import type { Locale } from "../locale.js";
-import type { FlowLabel } from "@lavega/core";
+import type { FlowLabel, TransferKind } from "@lavega/core";
 import { monthShort, formatEuroIn } from "../format.js";
 import type { AlertBody } from "@lavega/core";
 
@@ -159,6 +159,10 @@ type RekeningenCopy = {
   koppelmomentOnbekend: string;
   linkedNoteKnown: (date: string) => string;
   linkedNoteUnknown: string;
+  /** What an account merge/delete had to drop: a stored transfer pair whose
+   *  legs no longer both exist. The count is the honest part — an orphan link
+   *  would otherwise disappear without a word. */
+  transferLinksDropped: (n: number) => string;
 };
 
 type TransactiesReasonCopy = { label: string; what: string };
@@ -218,6 +222,22 @@ type TransactiesCopy = {
   tableBedrag: string;
   tableEntiteit: string;
   tableCategorie: string;
+  /* Transfers (issue #282): the badge on a stored pair's legs, and the panel
+   * where a DERIVED suggestion becomes a stored decision. The panel copy has to
+   * say that confirming changes the spending totals — that is the whole reason
+   * the owner is asked. */
+  transferBadge: string;
+  possibleTransferBadge: string;
+  transferKinds: Record<TransferKind, string>;
+  possibleTransfersHeading: string;
+  possibleTransfersIntro: string;
+  possibleTransfersFootnote: string;
+  possibleTransferConfirm: string;
+  possibleTransferReject: string;
+  possibleTransferConfirmAria: (from: string, to: string) => string;
+  possibleTransferRejectAria: (from: string, to: string) => string;
+  possibleTransferAmbiguous: string;
+  possibleTransferDayGap: (days: number) => string;
 };
 
 type ForecastCopy = {
@@ -694,6 +714,9 @@ const nl: MoneyCopy = {
       ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
       ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
       ` koppelt of importeert krijgen hun moment wel.`,
+    transferLinksDropped: (n) =>
+      `${n} overboekingskoppeling${n === 1 ? "" : "en"} losgelaten: een van de twee transacties` +
+      ` bestaat niet meer na het samenvoegen of verwijderen.`,
   },
   accountTypes: {
     current: "Betaalrekening",
@@ -774,6 +797,26 @@ const nl: MoneyCopy = {
     tableBedrag: "Bedrag",
     tableEntiteit: "Entiteit",
     tableCategorie: "Categorie",
+    transferBadge: "Transfer",
+    possibleTransferBadge: "Mogelijk",
+    transferKinds: {
+      funds_movement: "eigen overboeking",
+      cc_payment: "creditcardafbetaling",
+      loan_payment: "leningbetaling",
+      investment_contribution: "beleggingsinleg",
+    },
+    possibleTransfersHeading: "Mogelijke overboekingen",
+    possibleTransfersIntro:
+      "Twee kanten van hetzelfde geld: hetzelfde bedrag, dicht bij elkaar in datum, op twee verschillende rekeningen." +
+      " Bevestigen telt ze als overboeking en haalt ze uit je uitgaven; afwijzen onthoudt dat het geen overboeking is.",
+    possibleTransfersFootnote: "LaVega bevestigt dit niet vanzelf — jij beslist.",
+    possibleTransferConfirm: "Bevestig",
+    possibleTransferReject: "Afwijzen",
+    possibleTransferConfirmAria: (from, to) => `Bevestig overboeking ${from} naar ${to}`,
+    possibleTransferRejectAria: (from, to) => `Wijs overboeking ${from} naar ${to} af`,
+    possibleTransferAmbiguous: "Meerdere kandidaten voor dezelfde kant — kies zelf",
+    possibleTransferDayGap: (days) =>
+      days === 0 ? "zelfde dag" : `${days} dag${days === 1 ? "" : "en"} ertussen`,
   },
   forecast: {
     tekortSignaleringAria: "Tekort-signalering",
@@ -1338,6 +1381,9 @@ const en: MoneyCopy = {
       ` tracking the link moment. Filling in today's date would turn an account from months ago into a` +
       ` fresh link, so that does not happen — this stays unknown. Accounts you link or import from now` +
       ` on will get their moment recorded.`,
+    transferLinksDropped: (n) =>
+      `${n} transfer link${n === 1 ? "" : "s"} dropped: one of the two transactions no longer` +
+      ` exists after the merge or delete.`,
   },
   accountTypes: {
     current: "Current account",
@@ -1417,6 +1463,26 @@ const en: MoneyCopy = {
     tableBedrag: "Amount",
     tableEntiteit: "Entity",
     tableCategorie: "Category",
+    transferBadge: "Transfer",
+    possibleTransferBadge: "Possible",
+    transferKinds: {
+      funds_movement: "own transfer",
+      cc_payment: "credit card payment",
+      loan_payment: "loan payment",
+      investment_contribution: "investment contribution",
+    },
+    possibleTransfersHeading: "Possible transfers",
+    possibleTransfersIntro:
+      "Two sides of the same money: the same amount, close together in date, on two different accounts." +
+      " Confirming counts them as a transfer and leaves them out of your spending; rejecting remembers that this is not a transfer.",
+    possibleTransfersFootnote: "LaVega never confirms these by itself — you decide.",
+    possibleTransferConfirm: "Confirm",
+    possibleTransferReject: "Reject",
+    possibleTransferConfirmAria: (from, to) => `Confirm transfer from ${from} to ${to}`,
+    possibleTransferRejectAria: (from, to) => `Reject transfer from ${from} to ${to}`,
+    possibleTransferAmbiguous: "More than one candidate for the same leg — you choose",
+    possibleTransferDayGap: (days) =>
+      days === 0 ? "same day" : `${days} day${days === 1 ? "" : "s"} apart`,
   },
   forecast: {
     tekortSignaleringAria: "Shortfall signal",

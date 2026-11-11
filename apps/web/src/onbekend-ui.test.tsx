@@ -65,6 +65,10 @@ const props = (txs: Tx[], configured = true) =>
     onFCategoryChange: () => {},
     configured,
     onApplyCategories: async () => {},
+    transfers: [],
+    suggestions: [],
+    onConfirmTransfer: () => {},
+    onRejectTransfer: () => {},
   }) as unknown as Parameters<typeof Transacties>[0];
 
 test("the onbekend pile is quantified on screen, per named reason", () => {
