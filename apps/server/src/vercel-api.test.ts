@@ -106,6 +106,59 @@ test.each([
   expect(await response.text()).toBe(body ?? "");
 });
 
+/* Vercel's launcher puts its own `close` listeners on each response before the
+ * handler runs. Three of them plus the eight that `pipeline(Readable.fromWeb(),
+ * res)` added made 11, which printed MaxListenersExceededWarning on most
+ * production requests (#312). */
+test("one request adds one close listener to the response and no MaxListeners warning", async () => {
+  const warnings: Error[] = [];
+  const onWarning = (warning: Error) => warnings.push(warning);
+  process.on("warning", onWarning);
+  let peak = 0;
+  let remaining = -1;
+  serverFetch.mockResolvedValue(
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"ok":true}'));
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    ),
+  );
+  const server = createServer((req, res) => {
+    for (let i = 0; i < 3; i++) res.on("close", () => {});
+    const add = res.on.bind(res);
+    res.on = res.addListener = ((event: string, listener: (...args: unknown[]) => void) => {
+      add(event, listener);
+      if (event === "close") peak = Math.max(peak, res.listenerCount("close") - 3);
+      return res;
+    }) as typeof res.on;
+    void handler(req, res)
+      .then(() => {
+        remaining = res.listenerCount("close") - 3;
+      })
+      .catch(() => res.destroy());
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("No server address");
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/investing/dashboard`);
+    expect(await response.text()).toBe('{"ok":true}');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(peak).toBe(1);
+    expect(remaining).toBe(0);
+    expect(warnings.filter((warning) => warning.name === "MaxListenersExceededWarning")).toEqual(
+      [],
+    );
+  } finally {
+    process.off("warning", onWarning);
+  }
+});
+
 test("client disconnect cancels model response and aborts its request", async () => {
   let upstreamRequest!: Request;
   let cancelled!: () => void;
