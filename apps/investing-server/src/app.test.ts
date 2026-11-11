@@ -16,6 +16,7 @@ import {
   createYahooPriceProvider,
 } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
+import { createMemorySyncRunStore } from "./syncRun.js";
 import {
   buildCompositionProjection,
   buildRiskProjection,
@@ -66,6 +67,7 @@ const acceptedConsentStore = () => ({
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test("GET /health reports investing server health through Hono app.request", async () => {
@@ -2519,4 +2521,44 @@ test("account-wrapper route persists labels, drops unknown ones and rejects a no
     body: JSON.stringify({ entries: "nope" }),
   });
   expect(rejected.status).toBe(400);
+});
+
+test("POST /api/sync/continue refuses the wrong caller and validates runId and hop", async () => {
+  vi.stubEnv("CRON_SECRET", "cron-secret");
+  const syncRun = createApp({
+    syncRunStore: createMemorySyncRunStore(),
+    syncRunBackground: async () => undefined,
+  });
+  const body = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({ tenantId: "local", runId: "run-1", hop: 1, ...over });
+  const send = (payload: string, authorized = true) =>
+    syncRun.request("/api/sync/continue", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorized ? { authorization: "Bearer cron-secret" } : {}),
+      },
+      body: payload,
+    });
+
+  // No bearer secret: the route is machine-only.
+  expect((await send(body(), false)).status).toBe(401);
+  // Hop above MAX_HOPS is a schema-level 400, not a silent no-op.
+  expect((await send(body({ hop: 21 }))).status).toBe(400);
+  expect((await send(body({ runId: "" }))).status).toBe(400);
+  // A run id that is not the stored one is accepted and does no work.
+  const accepted = await send(body({ runId: "not-the-run" }));
+  expect(accepted.status).toBe(202);
+  expect(await accepted.json()).toEqual({ accepted: false });
+});
+
+test("POST /api/sync/refresh names the missing CRON_SECRET on a hosted host", async () => {
+  vi.stubEnv("VERCEL", "1");
+  vi.stubEnv("CRON_SECRET", "");
+  const syncRun = createApp({});
+
+  const response = await syncRun.request("/api/sync/refresh", { method: "POST" });
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("CRON_SECRET");
 });
