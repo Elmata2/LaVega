@@ -1,6 +1,8 @@
 import { openDB, type IDBPDatabase } from "idb";
 import { Effect } from "effect";
 import {
+  budgetPeriodFromLimits,
+  decodePlanState,
   decodeProfileStore,
   emptyPlanSection,
   carryUnknownKeys,
@@ -31,6 +33,8 @@ import type {
   N8nAutoBooked,
   TransferPair,
   Merchant,
+  BudgetPeriod,
+  CategoryGroup,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
@@ -99,6 +103,14 @@ type VaultData = {
    *  user entered is silently lost. */
   profileCorruptBackup?: unknown;
   plan?: PlanSection;
+  /** Budget envelopes (issue #289): one row per initialized month, carrying the
+   *  previous month's surplus. Additive optional field; a legacy vault decrypts
+   *  without it and the open pass migrates `categoryLimits` into the first
+   *  period (see `withMigratedBudgets`). */
+  budgetPeriods?: BudgetPeriod[];
+  /** The explicit category -> group map. Optional like `budgetPeriods`: absent
+   *  means every category is its own top-level budget line. */
+  categoryGroups?: CategoryGroup[];
   learning?: LearningSection;
   events?: VaultEvent[];
 };
@@ -130,6 +142,12 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** Stored transfer decisions; a legacy vault has none and reads []. */
   getTransfers(): Promise<TransferPair[]>;
   putTransfers(p: TransferPair[]): Promise<void>;
+  /** Stored budget envelopes, oldest month first; a legacy vault reads []. */
+  getBudgetPeriods(): Promise<BudgetPeriod[]>;
+  putBudgetPeriods(periods: BudgetPeriod[]): Promise<void>;
+  /** The category-group map; a legacy vault reads []. */
+  getCategoryGroups(): Promise<CategoryGroup[]>;
+  putCategoryGroups(groups: CategoryGroup[]): Promise<void>;
   /** The owner's merchant aliases; a legacy vault has none and reads []. */
   getMerchants(): Promise<Merchant[]>;
   putMerchants(m: Merchant[]): Promise<void>;
@@ -263,6 +281,32 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       : { vault, changed: false };
   }
 
+  /** The WS2.9 budget migration: the first stored period is built from the
+   *  legacy `categoryLimits`, once. After the field exists this returns the
+   *  same object, so the pass costs one write in total and a later open writes
+   *  nothing. A plan section that does not decode is left alone: its limits
+   *  stay readable and no guess is written. */
+  function withMigratedBudgets(vault: VaultData): { vault: VaultData; changed: boolean } {
+    if (vault.budgetPeriods !== undefined) return { vault, changed: false };
+    let limits: Record<string, { cents: number; at: string }>;
+    try {
+      limits = decodePlanState(vault.plan).preferences.categoryLimits;
+    } catch {
+      return { vault, changed: false };
+    }
+    const first = budgetPeriodFromLimits(limits);
+    return first === null
+      ? { vault, changed: false }
+      : { vault: { ...vault, budgetPeriods: [first] }, changed: true };
+  }
+
+  /** Both open-time migration passes, so an old vault still re-seals once. */
+  function withMigrations(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const tx = withMigratedTxStates(vault);
+    const budget = withMigratedBudgets(tx.vault);
+    return { vault: budget.vault, changed: tx.changed || budget.changed };
+  }
+
   return {
     async open(ownerKey, owner): Promise<VaultOpenResult> {
       if (!owner.trim()) throw new Error("vault owner is required");
@@ -276,7 +320,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         // Throws if another key sealed it. That is not a state to paper over:
         // the key is per account and never replaced.
         const opened = await decryptJSON<VaultData>(ownerKey, onDisk);
-        const migrated = withMigratedTxStates(opened);
+        const migrated = withMigrations(opened);
         data = migrated.vault;
         blob = onDisk;
         // Exactly one save for the whole vault, and only when this open was the
@@ -298,7 +342,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       } catch {
         return false; // wrong passphrase, tampered blob, or sub-floor iterations
       }
-      await enqueueWrite(() => adopt(withMigratedTxStates(opened).vault));
+      await enqueueWrite(() => adopt(withMigrations(opened).vault));
       // Only once the re-sealed copy is on disk is the password copy redundant.
       await deleteBlobFromDisk(dbName);
       return true;
@@ -334,7 +378,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       }
       // Through the same queue as every mutator, so a put still resolving
       // cannot land after the swap and revert disk.
-      await enqueueWrite(() => adopt(withMigratedTxStates(decrypted).vault));
+      await enqueueWrite(() => adopt(withMigrations(decrypted).vault));
       return true;
     },
 
@@ -461,6 +505,31 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, transfers: [...p] };
+        await persist();
+      });
+    },
+    // Budget envelopes (issue #289): replace-all, additive optional fields. A
+    // vault written before this reads [] and the plan falls back to the legacy
+    // `categoryLimits` (see `budgetPeriodsOf` in @lavega/core).
+    async getBudgetPeriods(): Promise<BudgetPeriod[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(data.budgetPeriods ?? []);
+    },
+    putBudgetPeriods(periods: BudgetPeriod[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, budgetPeriods: structuredClone(periods) };
+        await persist();
+      });
+    },
+    async getCategoryGroups(): Promise<CategoryGroup[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(data.categoryGroups ?? []);
+    },
+    putCategoryGroups(groups: CategoryGroup[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, categoryGroups: structuredClone(groups) };
         await persist();
       });
     },

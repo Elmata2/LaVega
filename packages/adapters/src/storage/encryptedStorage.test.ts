@@ -9,6 +9,7 @@ import {
   type ProfileRead,
   LOCAL_TENANT_ID,
   commitProfile,
+  emptyPlanPreferences,
   emptyProfile,
   emptyProfileStore,
   encodeProfileStore,
@@ -792,4 +793,74 @@ test("two rapid puts: the second wins (enqueueWrite ordering)", async () => {
   v.lock();
   await v.open(KEY, "user:a");
   expect(currentWorry(await v.getProfile())).toBe("second");
+});
+
+test("legacy categoryLimits migrate to the first budget period in ONE save; a reopen writes nothing", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A vault from before WS2.9: the plan holds only the legacy category limits.
+  const preferences = emptyPlanPreferences();
+  (preferences.categoryLimits as Record<string, { cents: number; at: string }>)["Boodschappen"] = {
+    cents: 40_000,
+    at: "2026-10-01",
+  };
+  const legacy = await sealJSON(KEY, {
+    accounts: [],
+    txs: [],
+    rules: [],
+    plan: { preferences: { at: "2026-10-02", value: preferences }, snapshots: {} },
+  });
+  const v = createEncryptedStorage("lavega-vault-test-budgets");
+  await v.open(KEY, "user:a");
+  expect(await v.getBudgetPeriods()).toEqual([]);
+  expect(await v.restore(legacy)).toBe(true); // restore runs the same pass
+
+  const periods = await v.getBudgetPeriods();
+  expect(periods).toEqual([
+    {
+      month: "2026-10",
+      currency: "EUR",
+      budgetedSpendingCents: 40_000,
+      rollover: false,
+      lines: [{ category: "Boodschappen", allocationCents: 40_000 }],
+      billsReservedCents: null,
+    },
+  ]);
+  // The legacy record is untouched: an older build still reads it.
+  const plan = await v.getSection("plan");
+  expect(plan.preferences?.value).toMatchObject({
+    categoryLimits: { Boodschappen: { cents: 40_000 } },
+  });
+
+  // The pass wrote once, during the restore that adopted the old blob. A later
+  // open must not re-seal it (a re-seal always changes the ciphertext).
+  const afterMigration = JSON.stringify(v.export());
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(JSON.stringify(v.export())).toBe(afterMigration);
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+});
+
+test("budget periods and category groups round-trip; fields are optional", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-budget-roundtrip");
+  await v.open(KEY, "user:a");
+  const periods = [
+    {
+      month: "2026-10",
+      currency: "EUR",
+      budgetedSpendingCents: 50_000,
+      rollover: true,
+      lines: [{ category: "Boodschappen", allocationCents: 30_000, rollover: true }],
+      billsReservedCents: null,
+    },
+  ];
+  const groups = [{ name: "Huishouden", categories: ["Boodschappen"] }];
+  await v.putBudgetPeriods(periods);
+  await v.putCategoryGroups(groups);
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+  expect(await v.getCategoryGroups()).toEqual(groups);
+  v.lock();
+  expect(await v.open(KEY, "user:a")).toBe("opened");
+  expect(await v.getBudgetPeriods()).toEqual(periods);
+  expect(await v.getCategoryGroups()).toEqual(groups);
 });
