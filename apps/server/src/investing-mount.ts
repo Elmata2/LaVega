@@ -234,9 +234,36 @@ export async function forwardInvesting(request: Request, tenantId: string): Prom
   });
 }
 
+/** How many self-continuations one daily cron pass may chain. 40 x 240 s is
+ *  about 2.5 h of tenant work, the cap the issue states for Hobby. */
+export const CRON_MAX_HOPS = 40;
+
+/** The kill switch covers the cron chain too: `off` means every trigger
+ *  advances the work by one budget and nothing calls itself. */
+function cronChainEnabled(): boolean {
+  return process.env.INVESTING_SYNC_CHAIN !== "off";
+}
+
+/**
+ * The daily cron worker. For each tenant it asks the investing app to drive the
+ * tenant's run in this invocation (`POST /api/sync/drive`, awaited: the cron
+ * invocation itself is the worker) and passes its own deadline so one tenant can
+ * never eat the next one's time.
+ *
+ * Hobby allows one cron per day, so continuity comes from a hop chain: when the
+ * budget ends with tenants left, this invocation sends ONE authenticated
+ * request to the same route with `after=<last tenant>` and `hop=<n>` and ends.
+ * The cursor travels in the query string; nothing is stored.
+ */
 export async function runInvestingCron(request: Request): Promise<Response> {
   if (!authorizedCronRequest(request))
     return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
+  const url = new URL(request.url);
+  const after = url.searchParams.get("after");
+  const hopParam = url.searchParams.get("hop");
+  const hop = hopParam === null ? 0 : Number(hopParam);
+  if (!Number.isInteger(hop) || hop < 0 || hop > CRON_MAX_HOPS)
+    return Response.json({ problems: [`Invalid cron hop: ${hopParam}`] }, { status: 400 });
   /* One clock for the whole pass, started before the first thing that costs time. */
   const { cronMs, sliceMs } = syncBudgets((name) => process.env[name]?.trim() || undefined);
   const deadlineMs = cronMs === undefined ? undefined : Date.now() + cronMs;
@@ -247,39 +274,64 @@ export async function runInvestingCron(request: Request): Promise<Response> {
     cronProblem("Could not list tenants to sync", error);
     return Response.json({ problems: ["Could not list tenants to sync"] }, { status: 503 });
   }
-  const origin = new URL(request.url).origin;
-  const results = [];
-  let reached = 0;
-  for (const tenantId of tenants) {
-    /* /api/brokers/sync runs the tenant's price slice itself, under the same
-     * deadline, so one request is the whole tenant and one slice bounds it. */
+  /* A cursor that is no longer in the list means it left the queue: start over
+   * rather than skip the tenants before it. */
+  const startIndex = after === null ? 0 : Math.max(0, tenants.indexOf(after) + 1);
+  const queue = tenants.slice(startIndex);
+  const origin = url.origin;
+  const secret = process.env.CRON_SECRET?.trim() ?? "";
+  const results: Array<{ tenantId: string; status?: number; result?: unknown; error?: string }> =
+    [];
+  let lastProcessed: string | null = null;
+
+  for (const tenantId of queue) {
+    /* A tenant costs at most one price-slice margin more than the drive's own
+     * deadline. The margin keeps the last tenant's persistence inside the pass. */
     if (!hasBrokerSyncTime(deadlineMs, sliceMs ?? 0)) break;
-    reached += 1;
+    /* Counted as processed once it is started: its drive returns "continue"
+     * when its own budget ends, and the run resumes on its next trigger. */
+    lastProcessed = tenantId;
     try {
-      const broker = await forwardInvesting(
-        new Request(`${origin}/api/brokers/sync`, { method: "POST" }),
+      const response = await forwardInvesting(
+        new Request(`${origin}/api/sync/drive`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secret}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false, deadlineMs }),
+        }),
         tenantId,
       );
-      /* The letter is a side effect of the sync, never part of its outcome:
-       * a model or database failure here must not turn a good sync red. */
-      const letterStatus = await forwardInvesting(
-        new Request(`${origin}/api/letters/ensure`, { method: "POST" }),
-        tenantId,
-      ).then(
-        (response) => response.status,
-        () => 0,
-      );
-      results.push({ tenantId, brokerStatus: broker.status, letterStatus });
+      const body = (await response.json().catch(() => null)) as { result?: unknown } | null;
+      results.push({ tenantId, status: response.status, result: body?.result ?? null });
     } catch (error) {
       cronProblem(`Tenant ${tenantId} sync failed`, error);
       results.push({ tenantId, error: "Tenant sync failed" });
     }
   }
-  if (tenants.length > 0 && reached === 0) {
+
+  const skipped = queue.length - results.length;
+  const continuing =
+    skipped > 0 && lastProcessed !== null && hop < CRON_MAX_HOPS && cronChainEnabled();
+  if (continuing && lastProcessed !== null) {
+    const next = new URL(request.url);
+    next.searchParams.set("after", lastProcessed);
+    next.searchParams.set("hop", String(hop + 1));
+    /* Fire and end. The next hop is a fresh invocation; holding this one open
+     * for another budget would exceed the function's maxDuration. */
+    void fetch(next, { headers: { authorization: `Bearer ${secret}` } }).catch((error: unknown) =>
+      cronProblem("Cron continuation failed", error),
+    );
+  } else if (skipped > 0 && hop >= CRON_MAX_HOPS) {
+    cronProblem(`Stopped at hop ${hop} with ${skipped} tenants left`);
+  }
+
+  if (queue.length > 0 && results.length === 0) {
     cronProblem(
       "No tenant fits the cron budget; check INVESTING_SYNC_BUDGET_MS and INVESTING_PRICE_SYNC_BUDGET_MS",
     );
     return Response.json({ problems: ["Sync budget too small for one tenant"] }, { status: 500 });
   }
-  return Response.json({ tenants: results, skipped: tenants.length - reached });
+  return Response.json({ tenants: results, skipped, hop, continued: continuing });
 }
