@@ -36,6 +36,12 @@ function fakeVault(): VaultStorage {
     getPendingNotices: async () => [...state.pendingNotices],
     getBills: async () => [],
     getBillOccurrences: async () => [],
+    getBillDecisions: async () => ({
+      matches: [],
+      marks: [],
+      rejections: [],
+      priceChanges: [],
+    }),
     putBillPlan: async () => {},
     putPendingNotices: async (list: unknown[]) => {
       state.pendingNotices = [...list];

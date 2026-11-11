@@ -14,6 +14,7 @@ import type {
   ProfileRead,
   TransferPair,
   Bill,
+  BillDecisions,
   BillOccurrence,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
@@ -33,6 +34,8 @@ import {
   generateBillOccurrences,
   regenerateBillOccurrences,
   scheduleChanged,
+  runBillMatcher,
+  EMPTY_BILL_DECISIONS,
   reconcileInvoices,
   applyCategorizations,
   findDuplicateAccounts,
@@ -257,6 +260,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // identity; materialization runs lazily on unlock and writes ONE vault save.
   const [bills, setBills] = useState<Bill[]>([]);
   const [billOccurrences, setBillOccurrences] = useState<BillOccurrence[]>([]);
+  // Stored payment decisions only (allocations, marks, rejection memory, price
+  // history). Suggestions are derived from the ledger on read, exactly like
+  // transfer suggestions; only what the owner or the exact tier decided is kept.
+  const [billDecisions, setBillDecisions] = useState<BillDecisions>(EMPTY_BILL_DECISIONS);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -639,6 +646,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedPendingNotices,
         loadedBills,
         loadedOccurrences,
+        loadedDecisions,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -655,6 +663,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getPendingNotices(),
         storage.getBills(),
         storage.getBillOccurrences(),
+        storage.getBillDecisions(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -670,14 +679,24 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setRules(storedRules.rules);
       setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
-      setBills(loadedBills);
-      // Lazy materialization, one vault write: the first unlock after a bill
-      // was added (or a schedule edited) fills the 90-day horizon. A second
-      // unlock adds nothing and writes nothing.
+      // Lazy materialization + matching, one vault write: the first unlock
+      // after a bill was added (or a schedule edited) fills the 90-day horizon;
+      // the exact matcher tier then writes the allocations it is sure of. A
+      // second unlock adds nothing and writes nothing.
       const generated = generateBillOccurrences(loadedBills, loadedOccurrences, asOf);
-      setBillOccurrences(generated.occurrences);
-      if (generated.added > 0) {
-        await storage.putBillPlan(loadedBills, generated.occurrences);
+      const matched = runBillMatcher({
+        bills: loadedBills,
+        occurrences: generated.occurrences,
+        decisions: loadedDecisions,
+        txs: loadedTxs,
+        accounts: loadedAccounts,
+        asOf,
+      });
+      setBills(matched.bills);
+      setBillOccurrences(matched.occurrences);
+      setBillDecisions(matched.decisions);
+      if (generated.added > 0 || matched.changed) {
+        await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
       }
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
@@ -1017,6 +1036,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setScheduledFlows([]);
     setBills([]);
     setBillOccurrences([]);
+    setBillDecisions(EMPTY_BILL_DECISIONS);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -1410,7 +1430,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // only that series' future rows (paid and closed rows are history and are
   // never touched); adding a series or resuming one materializes what it is
   // missing. The pair is saved in ONE vault write.
-  async function saveBillPlan(nextBills: Bill[], nextOccurrences: BillOccurrence[]) {
+  async function saveBillPlan(
+    nextBills: Bill[],
+    nextOccurrences: BillOccurrence[],
+    nextDecisions: BillDecisions = billDecisions,
+  ) {
     let occurrences = nextOccurrences;
     for (const next of nextBills) {
       const previous = bills.find((b) => b.id === next.id);
@@ -1421,7 +1445,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     occurrences = generateBillOccurrences(nextBills, occurrences, asOf).occurrences;
     setBills(nextBills);
     setBillOccurrences(occurrences);
-    await storage.putBillPlan(nextBills, occurrences);
+    setBillDecisions(nextDecisions);
+    // ONE save: a decision and the occurrence rows it closed cannot land apart.
+    await storage.putBillPlan(nextBills, occurrences, nextDecisions);
   }
 
   // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
@@ -1467,6 +1493,19 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       const reconciled = reconcileInvoices(curInvoices, freshTxs);
       if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
         await saveInvoices(reconciled);
+      // A new statement can contain the payment a bill was waiting for: run the
+      // matcher over the fresh ledger and persist its decisions together with
+      // the rows they close (one save; nothing changes when nothing matched).
+      const matched = runBillMatcher({
+        bills,
+        occurrences: billOccurrences,
+        decisions: billDecisions,
+        txs: freshTxs,
+        accounts: freshAccounts,
+        asOf,
+      });
+      if (matched.changed)
+        await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
       // Nothing read = a file we could not use (the wizard shows
       // its own message; the page banner is not on screen there).
       return result.txs.length === 0
@@ -2087,6 +2126,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               bills={bills}
               occurrences={billOccurrences}
               accounts={scopedAccounts}
+              txs={scopedTxs}
+              decisions={billDecisions}
               asOf={asOf}
               busy={busy}
               onSavePlan={saveBillPlan}

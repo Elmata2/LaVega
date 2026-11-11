@@ -2,12 +2,24 @@ import { useMemo, useState } from "react";
 import type {
   Account,
   Bill,
+  BillAction,
+  BillDecisions,
   BillFrequency,
   BillOccurrence,
   BillProblem,
   BillRule,
+  Tx,
 } from "@lavega/core";
-import { billProblems, billsOutlook, resolveBillAmountCents, toCents } from "@lavega/core";
+import {
+  EMPTY_BILL_DECISIONS,
+  applyBillAction,
+  billProblems,
+  billSettlements,
+  billsOutlook,
+  resolveBillAmountCents,
+  suggestBillMatches,
+  toCents,
+} from "@lavega/core";
 import { formatDate, formatEuroIn, monthLabel, weekdayLabel } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { billsCopy, type BillsCopy } from "../copy/bills.js";
@@ -34,17 +46,28 @@ import {
  * reads the clock (`asOf` is a prop) and nothing invents a number: no known
  * balance or no income series means "unknown", not zero (ADR 0011 §8).
  *
- * Mark-paid and match suggestions belong to the second half (#287/#288), so the
- * "paid" section shows closed rows from the vault and says so when there are
- * none. */
+ * Payment matching (#287) rides on top: the screen shows the matcher's
+ * suggestion on an open row (confirm/reject), a partial badge when a payment
+ * covers only part of it, a mark-paid action for a row paid without a bank
+ * transaction, and the price history of a series. Suggestions are DERIVED on
+ * read; only confirmations, marks, rejections and price changes are stored. */
 
 type BillsProps = {
   bills: Bill[];
   occurrences: BillOccurrence[];
   accounts: Account[];
+  /** The ledger the matcher reads; absent means no suggestions (tests that
+   *  only render the schedule stay unchanged). */
+  txs?: Tx[];
+  /** Stored payment decisions. Absent means the empty section. */
+  decisions?: BillDecisions;
   asOf: string;
   busy?: boolean;
-  onSavePlan: (bills: Bill[], occurrences: BillOccurrence[]) => Promise<void> | void;
+  onSavePlan: (
+    bills: Bill[],
+    occurrences: BillOccurrence[],
+    decisions?: BillDecisions,
+  ) => Promise<void> | void;
 };
 
 type CadenceKey = "weekly" | "monthly" | "quarterly" | "semiannual" | "yearly" | "custom";
@@ -191,6 +214,8 @@ export default function Bills({
   bills,
   occurrences,
   accounts,
+  txs,
+  decisions,
   asOf,
   busy,
   onSavePlan,
@@ -216,6 +241,56 @@ export default function Bills({
   const rows = useMemo(() => upcomingRows(bills, occurrences, asOf), [bills, occurrences, asOf]);
   const series = useMemo(() => seriesRows(bills, occurrences, asOf), [bills, occurrences, asOf]);
   const history = useMemo(() => historyRows(bills, occurrences), [bills, occurrences]);
+  const decisionsNow = decisions ?? EMPTY_BILL_DECISIONS;
+  const settlements = useMemo(
+    () => billSettlements(bills, occurrences, decisionsNow),
+    [bills, occurrences, decisionsNow],
+  );
+  // One suggestion per open occurrence, already ranked by the matcher. Keyed
+  // for O(1) lookup while rendering the rows.
+  const suggestions = useMemo(() => {
+    const byOccurrence = new Map<string, ReturnType<typeof suggestBillMatches>[number]>();
+    for (const candidate of suggestBillMatches({
+      bills,
+      occurrences,
+      txs: txs ?? [],
+      decisions: decisionsNow,
+      accounts,
+      asOf,
+    })) {
+      if (!byOccurrence.has(candidate.occurrenceId)) {
+        byOccurrence.set(candidate.occurrenceId, candidate);
+      }
+    }
+    return byOccurrence;
+  }, [bills, occurrences, txs, decisionsNow, accounts, asOf]);
+  const txById = useMemo(() => new Map((txs ?? []).map((tx) => [tx.id, tx])), [txs]);
+  const priceChangeByBill = useMemo(() => {
+    const byBill = new Map<string, BillDecisions["priceChanges"][number]>();
+    for (const priceChange of decisionsNow.priceChanges) {
+      const current = byBill.get(priceChange.billId);
+      if (current == null || priceChange.effectiveOn >= current.effectiveOn) {
+        byBill.set(priceChange.billId, priceChange);
+      }
+    }
+    return byBill;
+  }, [decisionsNow]);
+
+  // One decision, one save. The core decides the new rows/statuses and the
+  // caller writes them together with the decisions they came from.
+  function act(action: BillAction) {
+    const outcome = applyBillAction({
+      bills,
+      occurrences,
+      decisions: decisionsNow,
+      txs: txs ?? [],
+      accounts,
+      asOf,
+      action,
+    });
+    if (!outcome.changed) return;
+    void onSavePlan(outcome.bills, outcome.occurrences, outcome.decisions);
+  }
   const weeks = useMemo(
     () => calendarWeeks(bills, occurrences, month, asOf),
     [bills, occurrences, month, asOf],
@@ -233,13 +308,14 @@ export default function Bills({
       ? bills.map((b) => (b.id === next.id ? next : b))
       : [...bills, next];
     setDraft(null);
-    void onSavePlan(nextBills, occurrences);
+    void onSavePlan(nextBills, occurrences, decisionsNow);
   }
 
   function setStatus(bill: Bill, status: Bill["status"]) {
     void onSavePlan(
       bills.map((b) => (b.id === bill.id ? { ...b, status } : b)),
       occurrences,
+      decisionsNow,
     );
   }
 
@@ -491,23 +567,89 @@ export default function Bills({
           </p>
         ) : (
           <ul className="m-0 list-none p-0" data-testid="bills-upcoming">
-            {rows.map((row) => (
-              <li
-                key={row.occurrence.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line py-2 last:border-b-0"
-              >
-                <span className="flex min-w-[12rem] flex-col">
-                  <span className="font-medium">{row.bill.name}</span>
-                  <span className="text-muted">
-                    {formatDate(locale, row.occurrence.dueOn)} · {cadenceText(row.bill, locale, c)}
-                  </span>
-                </span>
-                <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
-                <span className={row.direction === "in" ? "text-pos" : ""}>
-                  {money(row.amountCents)}
-                </span>
-              </li>
-            ))}
+            {rows.map((row) => {
+              const suggestion = suggestions.get(row.occurrence.id);
+              const settlement = settlements.get(row.occurrence.id);
+              return (
+                <li key={row.occurrence.id} className="border-b border-line py-2 last:border-b-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="flex min-w-[12rem] flex-col">
+                      <span className="font-medium">{row.bill.name}</span>
+                      <span className="text-muted">
+                        {formatDate(locale, row.occurrence.dueOn)} ·{" "}
+                        {cadenceText(row.bill, locale, c)}
+                      </span>
+                    </span>
+                    <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
+                    <span className={row.direction === "in" ? "text-pos" : ""}>
+                      {money(row.amountCents)}
+                    </span>
+                  </div>
+                  {settlement?.state === "partial" && (
+                    <p
+                      className="m-0 mt-1 text-muted"
+                      data-testid={`bills-partial-${row.occurrence.id}`}
+                    >
+                      {c.match.partial(money(settlement.remainingCents))}
+                    </p>
+                  )}
+                  {suggestion != null && (
+                    <div
+                      className="mt-1 flex flex-wrap items-center gap-3"
+                      data-testid={`bills-match-${row.occurrence.id}`}
+                    >
+                      <span>
+                        {c.match.suggestion}:{" "}
+                        <strong>
+                          {txById.get(suggestion.txId)?.counterparty ?? suggestion.txName}
+                        </strong>
+                        {" · "}
+                        {money(suggestion.amountCents)}
+                        {" · "}
+                        {formatDate(locale, suggestion.txDate)}
+                      </span>
+                      <span className="text-muted">
+                        {c.match.score(`${Math.round(suggestion.confidence * 100)}%`)}
+                      </span>
+                      {suggestion.evidence.pending && (
+                        <Badge className="border-neg text-neg">{c.match.pending}</Badge>
+                      )}
+                      {suggestion.ambiguous && (
+                        <Badge className="border-neg text-neg">{c.match.ambiguous}</Badge>
+                      )}
+                      <Button
+                        data-testid={`bills-confirm-${row.occurrence.id}`}
+                        variant="primary"
+                        disabled={busy}
+                        onClick={() =>
+                          act({ kind: "confirm-match", candidate: suggestion, source: "user" })
+                        }
+                      >
+                        {c.match.confirm}
+                      </Button>
+                      <Button
+                        data-testid={`bills-reject-${row.occurrence.id}`}
+                        disabled={busy}
+                        onClick={() => act({ kind: "reject-match", candidate: suggestion })}
+                      >
+                        {c.match.reject}
+                      </Button>
+                    </div>
+                  )}
+                  {settlement?.state !== "paid" && (
+                    <CardLink
+                      className="mt-1"
+                      aria-label={`${c.match.markPaid}: ${row.bill.name}`}
+                      data-testid={`bills-mark-paid-${row.occurrence.id}`}
+                      disabled={busy}
+                      onClick={() => act({ kind: "mark-paid", occurrenceId: row.occurrence.id })}
+                    >
+                      {c.match.markPaid}
+                    </CardLink>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -587,6 +729,12 @@ export default function Bills({
                     {nextDueOn != null && bill.status === "active"
                       ? ` · ${c.series.nextDue(formatDate(locale, nextDueOn))}`
                       : ""}
+                    {priceChangeByBill.has(bill.id) &&
+                      ` · ${c.match.priceChanged(
+                        money(priceChangeByBill.get(bill.id)?.oldAmountCents ?? 0),
+                        money(priceChangeByBill.get(bill.id)?.newAmountCents ?? 0),
+                        formatDate(locale, priceChangeByBill.get(bill.id)?.effectiveOn ?? asOf),
+                      )}`}
                   </span>
                 </span>
                 <span className="flex gap-3">
@@ -638,23 +786,36 @@ export default function Bills({
           </p>
         ) : (
           <ul className="m-0 list-none p-0">
-            {history.map(({ occurrence, bill, amountCents }) => (
-              <li
-                key={occurrence.id}
-                className="flex items-baseline justify-between gap-2 border-b border-line py-2 last:border-b-0"
-              >
-                <span>
-                  {bill.name}{" "}
-                  <span className="text-muted">{formatDate(locale, occurrence.dueOn)}</span>
-                </span>
-                <span className="flex gap-3">
-                  <Badge className={statusTone(occurrence.status)}>
-                    {c.rowStatus[occurrence.status as keyof BillsCopy["rowStatus"]]}
-                  </Badge>
-                  <span>{formatEuroIn(locale, amountCents / 100)}</span>
-                </span>
-              </li>
-            ))}
+            {history.map(({ occurrence, bill, amountCents }) => {
+              const match = decisionsNow.matches.find((m) => m.occurrenceId === occurrence.id);
+              const mark = decisionsNow.marks.find((m) => m.occurrenceId === occurrence.id);
+              const source =
+                mark != null
+                  ? c.match.markedPaid
+                  : match == null
+                    ? ""
+                    : match.source === "auto"
+                      ? c.match.autoMatched
+                      : c.match.paidBy(txById.get(match.txId)?.counterparty ?? "");
+              return (
+                <li
+                  key={occurrence.id}
+                  className="flex items-baseline justify-between gap-2 border-b border-line py-2 last:border-b-0"
+                >
+                  <span>
+                    {bill.name}{" "}
+                    <span className="text-muted">{formatDate(locale, occurrence.dueOn)}</span>
+                    {source !== "" && <span className="block text-muted">{source}</span>}
+                  </span>
+                  <span className="flex gap-3">
+                    <Badge className={statusTone(occurrence.status)}>
+                      {c.rowStatus[occurrence.status as keyof BillsCopy["rowStatus"]]}
+                    </Badge>
+                    <span>{formatEuroIn(locale, amountCents / 100)}</span>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

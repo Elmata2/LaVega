@@ -2,14 +2,21 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import type { Account, Bill, BillOccurrence } from "@lavega/core";
-import { generateBillOccurrences } from "@lavega/core";
+import type {
+  Account,
+  Bill,
+  BillDecisions,
+  BillMatchDecision,
+  BillOccurrence,
+  Tx,
+} from "@lavega/core";
+import { EMPTY_BILL_DECISIONS, generateBillOccurrences } from "@lavega/core";
 import Bills from "./views/Bills";
 
 /* The Bills screen, driven like the owner drives it: add a series through the
- * form, see it appear on the upcoming list, then pause it. The screen is the
- * first half of WS2 (#286); mark-paid and match suggestions are not here, so
- * the paid section says so instead of pretending. */
+ * form, see it appear on the upcoming list, pause it, then the #287 half —
+ * confirm a suggested payment, reject one, and mark one paid without a
+ * transaction. */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -17,7 +24,11 @@ const AS_OF = "2026-11-11";
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;
-let saved: Array<{ bills: Bill[]; occurrences: BillOccurrence[] }> = [];
+let saved: Array<{
+  bills: Bill[];
+  occurrences: BillOccurrence[];
+  decisions: BillDecisions;
+}> = [];
 
 afterEach(() => {
   if (root) act(() => root!.unmount());
@@ -27,7 +38,13 @@ afterEach(() => {
   saved = [];
 });
 
-function render(bills: Bill[], occurrences: BillOccurrence[], accounts: Account[] = []) {
+function render(
+  bills: Bill[],
+  occurrences: BillOccurrence[],
+  accounts: Account[] = [],
+  txs: Tx[] = [],
+  decisions: BillDecisions = EMPTY_BILL_DECISIONS,
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -37,12 +54,18 @@ function render(bills: Bill[], occurrences: BillOccurrence[], accounts: Account[
         bills={bills}
         occurrences={occurrences}
         accounts={accounts}
+        txs={txs}
+        decisions={decisions}
         asOf={AS_OF}
-        onSavePlan={(nextBills, nextOccurrences) => {
+        onSavePlan={(nextBills, nextOccurrences, nextDecisions) => {
           // Mirror App's save path: materialize, then re-render from the result.
           const generated = generateBillOccurrences(nextBills, nextOccurrences, AS_OF).occurrences;
-          saved.push({ bills: nextBills, occurrences: generated });
-          render(nextBills, generated, accounts);
+          saved.push({
+            bills: nextBills,
+            occurrences: generated,
+            decisions: nextDecisions ?? decisions,
+          });
+          render(nextBills, generated, accounts, txs, nextDecisions ?? decisions);
         }}
       />,
     ),
@@ -202,4 +225,168 @@ test("with a salary series the screen answers what is short before payday", () =
   // EUR 1.000 rent due, EUR 700 cash: EUR 300 short before the 25th.
   expect(shortfall).toContain("300,00");
   expect(shortfall).toContain("25 nov 2026");
+});
+
+const rent = (overrides: Partial<Bill> = {}): Bill => ({
+  id: "huur",
+  name: "Huur",
+  type: "bill",
+  status: "active",
+  direction: "out",
+  amountCents: 98_550,
+  amountStrategy: "fixed",
+  currency: "EUR",
+  rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 20 }],
+  anchorDate: "2026-11-20",
+  weekendAdjust: "none",
+  endMode: "never",
+  tags: [],
+  ...overrides,
+});
+
+const rentTx = (overrides: Partial<Tx> = {}): Tx => ({
+  id: "tx-1",
+  accountKey: "NL01",
+  date: "2026-11-20",
+  amount: -985.5,
+  currency: "EUR",
+  counterparty: "Woonstad Verhuur",
+  description: "Huur",
+  category: "",
+  manual: false,
+  ...overrides,
+});
+
+const matchDecision = (overrides: Partial<BillMatchDecision> = {}): BillMatchDecision => ({
+  id: "m1",
+  occurrenceId: "huur|2026-11-20",
+  billId: "huur",
+  txId: "tx-1",
+  amountCents: 98_550,
+  currency: "EUR",
+  source: "auto",
+  confidence: 0.95,
+  decidedAt: AS_OF,
+  ...overrides,
+});
+
+test("a suggested payment is shown on its occurrence and confirms in one save", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences;
+  render([bill], occurrences, [account(5_000)], [rentTx()]);
+
+  const suggestion = container!.querySelector('[data-testid="bills-match-huur|2026-11-20"]');
+  expect(suggestion?.textContent).toContain("Mogelijke betaling");
+  expect(suggestion?.textContent).toContain("Woonstad Verhuur");
+
+  click(byTestId("bills-confirm-huur|2026-11-20"));
+
+  expect(saved).toHaveLength(1);
+  expect(saved[0].decisions.matches).toHaveLength(1);
+  expect(saved[0].decisions.matches[0].txId).toBe("tx-1");
+  expect(saved[0].decisions.matches[0].source).toBe("user");
+  const paid = saved[0].occurrences.find((o) => o.id === "huur|2026-11-20");
+  expect(paid?.status).toBe("paid");
+  expect(paid?.closedSource).toBe("user");
+  // The closed occurrence is in Paid with its source; other rows stay open.
+  expect(container!.querySelector('[data-testid="bills-confirm-huur|2026-11-20"]')).toBeNull();
+  expect(container!.textContent).toContain("Betaald door Woonstad Verhuur");
+});
+
+test("rejecting a suggestion stores the memory and stops proposing it", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences;
+  render([bill], occurrences, [account(5_000)], [rentTx()]);
+
+  click(byTestId("bills-reject-huur|2026-11-20"));
+
+  expect(saved).toHaveLength(1);
+  expect(saved[0].decisions.rejections).toEqual([
+    { billId: "huur", txId: "tx-1", occurrenceId: "huur|2026-11-20", rejectedAt: AS_OF },
+  ]);
+  expect(container!.querySelector('[data-testid="bills-match-huur|2026-11-20"]')).toBeNull();
+  const row = saved[0].occurrences.find((o) => o.id === "huur|2026-11-20");
+  expect(row?.status).toBe("scheduled");
+});
+
+test("marking an occurrence paid closes it without a transaction", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences;
+  render([bill], occurrences, [account(5_000)], []);
+
+  const markPaid = container!.querySelector<HTMLElement>(
+    '[data-testid="bills-mark-paid-huur|2026-11-20"]',
+  )!;
+  click(markPaid);
+
+  expect(saved).toHaveLength(1);
+  expect(saved[0].decisions.marks).toEqual([
+    {
+      occurrenceId: "huur|2026-11-20",
+      billId: "huur",
+      paidOn: AS_OF,
+      amountCents: 98_550,
+      currency: "EUR",
+      markedAt: AS_OF,
+    },
+  ]);
+  const paid = saved[0].occurrences.find((o) => o.id === "huur|2026-11-20");
+  expect(paid?.status).toBe("paid");
+  expect(paid?.closedSource).toBe("user");
+  expect(container!.textContent).toContain("Door jou als betaald gemarkeerd");
+});
+
+test("a partial payment shows what is still open", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences.map((o) =>
+    o.id === "huur|2026-11-20" ? { ...o } : o,
+  );
+  render([bill], occurrences, [account(5_000)], [], {
+    ...EMPTY_BILL_DECISIONS,
+    matches: [matchDecision({ amountCents: 40_000, source: "user" })],
+  });
+  const partial = byTestId("bills-partial-huur|2026-11-20").textContent ?? "";
+  expect(partial).toContain("Deels betaald");
+  expect(partial).toContain("585,50");
+});
+
+test("an auto-matched occurrence is labelled in Paid", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences.map((o) =>
+    o.id === "huur|2026-11-20"
+      ? {
+          ...o,
+          status: "paid" as const,
+          paidOn: "2026-11-20",
+          paidAmountCents: 98_550,
+          closedAt: AS_OF,
+          closedSource: "auto" as const,
+        }
+      : o,
+  );
+  render([bill], occurrences, [account(5_000)], [rentTx()], {
+    ...EMPTY_BILL_DECISIONS,
+    matches: [matchDecision()],
+  });
+  expect(container!.textContent).toContain("Automatisch gekoppeld");
+});
+
+test("the series shows a recorded price change", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences;
+  render([bill], occurrences, [], [], {
+    ...EMPTY_BILL_DECISIONS,
+    priceChanges: [
+      {
+        billId: "huur",
+        effectiveOn: "2026-11-20",
+        oldAmountCents: 95_000,
+        newAmountCents: 98_550,
+        currency: "EUR",
+        detectedAt: AS_OF,
+        source: "auto",
+      },
+    ],
+  });
+  expect(container!.textContent).toContain("Prijs gewijzigd");
 });

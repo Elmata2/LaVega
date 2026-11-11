@@ -109,6 +109,12 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       getPendingNotices: async () => [],
       getBills: async () => [],
       getBillOccurrences: async () => [],
+    getBillDecisions: async () => ({
+      matches: [],
+      marks: [],
+      rejections: [],
+      priceChanges: [],
+    }),
       putBillPlan: async () => {},
       putPendingNotices: async () => {},
     }),

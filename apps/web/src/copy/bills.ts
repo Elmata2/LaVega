@@ -90,6 +90,23 @@ export type BillsCopy = {
     empty: string;
     emptyHint: string;
   };
+  match: {
+    /** "Possible match" label in front of a suggestion. */
+    suggestion: string;
+    confirm: string;
+    reject: string;
+    markPaid: string;
+    markPaidHint: string;
+    /** Shown on a partially paid occurrence: what is still open. */
+    partial: (amount: string) => string;
+    paidBy: (name: string) => string;
+    markedPaid: string;
+    autoMatched: string;
+    priceChanged: (from: string, to: string, date: string) => string;
+    score: (pct: string) => string;
+    pending: string;
+    ambiguous: string;
+  };
   status: Record<BillStatus, string>;
   rowStatus: Record<"upcoming" | "due" | "overdue" | "paid" | "skipped" | "missed", string>;
   typeLabels: Record<BillType, string>;
@@ -192,7 +209,22 @@ const nl: BillsCopy = {
   history: {
     title: "Betaald",
     empty: "Nog geen afgesloten termijnen.",
-    emptyHint: "Betaalmatchen komt met de betaalmatcher (#287).",
+    emptyHint: "Bevestig een voorgestelde betaling of markeer een termijn als betaald.",
+  },
+  match: {
+    suggestion: "Mogelijke betaling",
+    confirm: "Klopt",
+    reject: "Niet deze",
+    markPaid: "Markeer als betaald",
+    markPaidHint: "Sluit deze termijn zonder banktransactie.",
+    partial: (amount) => `Deels betaald; ${amount} staat nog open.`,
+    paidBy: (name) => `Betaald door ${name}`,
+    markedPaid: "Door jou als betaald gemarkeerd",
+    autoMatched: "Automatisch gekoppeld",
+    priceChanged: (from, to, date) => `Prijs gewijzigd van ${from} naar ${to} op ${date}`,
+    score: (pct) => `zekerheid ${pct}`,
+    pending: "Nog niet afgeboekt",
+    ambiguous: "Meerdere kandidaten; kies zelf",
   },
   status: {
     suggested: "Voorgesteld",
@@ -319,7 +351,22 @@ const en: BillsCopy = {
   history: {
     title: "Paid",
     empty: "No closed payments yet.",
-    emptyHint: "Payment matching lands with the matcher (#287).",
+    emptyHint: "Confirm a suggested payment, or mark an occurrence as paid.",
+  },
+  match: {
+    suggestion: "Possible payment",
+    confirm: "This one",
+    reject: "Not this one",
+    markPaid: "Mark as paid",
+    markPaidHint: "Close this occurrence without a bank transaction.",
+    partial: (amount) => `Partly paid; ${amount} still open.`,
+    paidBy: (name) => `Paid by ${name}`,
+    markedPaid: "Marked paid by you",
+    autoMatched: "Matched automatically",
+    priceChanged: (from, to, date) => `Price changed from ${from} to ${to} on ${date}`,
+    score: (pct) => `score ${pct}`,
+    pending: "Not settled yet",
+    ambiguous: "Multiple candidates; you decide",
   },
   status: {
     suggested: "Suggested",

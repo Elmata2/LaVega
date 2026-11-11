@@ -28,6 +28,12 @@ function fakeStorage(): VaultStorage {
     getPendingNotices: async () => [],
     getBills: async () => [],
     getBillOccurrences: async () => [],
+    getBillDecisions: async () => ({
+      matches: [],
+      marks: [],
+      rejections: [],
+      priceChanges: [],
+    }),
     putBillPlan: async () => {},
     getProfile: async () => ({ kind: "absent" }),
   } as unknown as VaultStorage;

@@ -186,10 +186,12 @@ export type VaultSeed = {
   billOccurrences: BillOccurrence[];
 };
 
-/** A bills screen that has something to say: rent, energy, a subscription, a
- *  paused gym, a yearly insurance, a salary series as the payday, and a finite
- *  instalment plan. Two past rows are already closed so the "paid" section is
- *  not empty — closing them here is fixture data, not a mark-paid feature. */
+/** A bills screen that has something to say: rent, energy, two subscriptions,
+ *  a paused gym, a yearly insurance, a salary series as the payday, and a finite
+ *  instalment plan. Most past rows are already closed so the "paid" section is
+ *  not empty; the most recent Netflix and Basic-Fit rows stay open on purpose,
+ *  so the real transactions beside them are shown as #287 match suggestions
+ *  (confirm / reject), and an open Huur row demonstrates mark-paid. */
 function billSeed(today: Date): { bills: Bill[]; billOccurrences: BillOccurrence[] } {
   const asOf = iso(today);
   const day = (n: number) => dayOf(today, n);
@@ -268,6 +270,28 @@ function billSeed(today: Date): { bills: Bill[]; billOccurrences: BillOccurrence
     },
     {
       ...base,
+      id: "b-netflix",
+      name: "Netflix",
+      type: "subscription",
+      amountCents: 1_329,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 7 }],
+      anchorDate: firstOfLastMonth,
+      merchant: "Netflix",
+      category: "Abonnementen",
+    },
+    {
+      ...base,
+      id: "b-sportschool",
+      name: "Sportschool",
+      type: "subscription",
+      amountCents: 2_929,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 11 }],
+      anchorDate: firstOfLastMonth,
+      merchant: "Basic-Fit",
+      category: "Sport",
+    },
+    {
+      ...base,
       id: "b-salaris",
       name: "Salaris",
       type: "income",
@@ -280,12 +304,25 @@ function billSeed(today: Date): { bills: Bill[]; billOccurrences: BillOccurrence
   const generated = generateBillOccurrences(bills, [], asOf);
   // Every cycle before today is closed, the way real history would be: an open
   // past row with no matcher behind it would read as debt the owner already paid.
+  // The latest past Netflix / Basic-Fit row is the exception: those are the two
+  // rows the fixture transactions in `rows(today)` are meant to pay, so the
+  // matcher has something real to suggest.
   const byId = new Map(bills.map((b) => [b.id, b]));
+  const latestOpen = new Map<string, string>();
+  for (const billId of ["b-netflix", "b-sportschool"]) {
+    const past = generated.occurrences.filter((o) => o.billId === billId && o.dueOn < asOf);
+    const latest = past
+      .map((o) => o.dueOn)
+      .sort()
+      .pop();
+    if (latest != null) latestOpen.set(billId, latest);
+  }
   const occurrences: BillOccurrence[] = generated.occurrences.map((o) => {
     if (o.dueOn >= asOf) return o;
     if (o.billId === "b-gym") {
       return { ...o, status: "skipped", closedAt: o.dueOn, closedSource: "user" };
     }
+    if (latestOpen.get(o.billId) === o.dueOn) return o;
     const bill = byId.get(o.billId);
     return {
       ...o,
