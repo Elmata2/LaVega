@@ -100,13 +100,15 @@ function syncWith(
   input: Omit<Parameters<typeof syncPrices>[0], "key" | "owner" | "alias"> & {
     /** Leftover from the per-tenant contract; ignored by the shared store. */
     tenantId?: string;
+    /** The run id this call claims the key under. */
+    owner?: string;
   },
 ) {
   const key = priceInstrumentKey(input.request);
   const alias = key.startsWith("isin:")
     ? priceInstrumentKey({ symbol: input.request.symbol, currency: input.request.currency })
     : undefined;
-  return syncPrices({ ...input, key, ...(alias ? { alias } : {}), owner: RUN });
+  return syncPrices({ ...input, key, ...(alias ? { alias } : {}), owner: input.owner ?? RUN });
 }
 
 
@@ -1428,4 +1430,141 @@ test("a provisional close older than its window is accepted as final", async () 
   });
 
   expect(get).not.toHaveBeenCalledWith(expect.objectContaining({ from: "2025-01-09" }));
+});
+
+/* ---------- issue #307 acceptance, unit-provable without a database ---------- */
+
+test("criterion 1: one tenant's sync leaves the other with zero provider requests", async () => {
+  const store = createInMemorySharedPriceStore();
+  let providerCalls = 0;
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: async ({ to }: { to?: string }) => {
+      providerCalls += 1;
+      return { bars: asBars(weekdays("2026-01-01", to ?? "2026-01-01")), problems: [] };
+    },
+  };
+  const run = (owner: string) =>
+    syncWith({
+      store,
+      owner,
+      priceProviders: [provider],
+      request: {
+        symbol: "AAPL",
+        ticker: "AAPL",
+        exchange: "UNKNOWN",
+        currency: "USD",
+        isin: "US0378331005",
+        backfillFrom: "2026-01-01",
+        today: "2026-01-05",
+      },
+    });
+
+  // Tenant A holds the instrument and pays for the one backfill.
+  await run("run-a");
+  const firstCalls = providerCalls;
+  // Tenant B holds the same instrument: same key, stored bars, no request.
+  const second = await run("run-b");
+
+  expect(firstCalls).toBeGreaterThan(0);
+  expect(providerCalls).toBe(firstCalls);
+  expect(second.fetched).toBe(false);
+  expect(second.bars.length).toBeGreaterThan(0);
+  expect(second.bars.every((bar) => bar.symbol === "AAPL")).toBe(true);
+});
+
+test("criterion 2: the same plain ticker under two ISINs is two series", async () => {
+  const store = createInMemorySharedPriceStore();
+  const providerFor = (close: number) => ({
+    sourceKey: "yahoo",
+    priority: 10,
+    get: async () => ({
+      bars: [{ symbol: "AAPL", date: "2026-01-02", close, currency: "USD", split: 1 }],
+      problems: [],
+    }),
+  });
+  const request = (isin: string) => ({
+    symbol: "AAPL",
+    ticker: "AAPL",
+    exchange: "UNKNOWN",
+    currency: "USD",
+    isin,
+    backfillFrom: "2026-01-02",
+    today: "2026-01-02",
+  });
+
+  await syncWith({ store, owner: "run-a", priceProviders: [providerFor(100)], request: request("US0378331005") });
+  await syncWith({ store, owner: "run-b", priceProviders: [providerFor(200)], request: request("CA0378331005") });
+
+  const first = await store.getRange({ key: "isin:US0378331005:USD" });
+  const second = await store.getRange({ key: "isin:CA0378331005:USD" });
+  expect(first.map((bar) => bar.close)).toEqual([100]);
+  expect(second.map((bar) => bar.close)).toEqual([200]);
+});
+
+test("criterion 7: a refused claim is pending, and the next slice completes with no request", async () => {
+  const store = createInMemorySharedPriceStore();
+  let providerCalls = 0;
+  const priceProviders = [
+    {
+      sourceKey: "yahoo",
+      priority: 10,
+      get: async () => {
+        providerCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return { bars: asBars(weekdays("2026-01-01", "2026-01-02")), problems: [] };
+      },
+    },
+  ];
+  const run = (owner: string) =>
+    syncWith({
+      store,
+      owner,
+      priceProviders,
+      request: {
+        symbol: "AAPL",
+        ticker: "AAPL",
+        exchange: "UNKNOWN",
+        currency: "USD",
+        isin: "US0378331005",
+        backfillFrom: "2026-01-01",
+        today: "2026-01-02",
+      },
+    });
+
+  const [first, second] = await Promise.all([run("run-a"), run("run-b")]);
+  const results = [first, second];
+  // Exactly one backfill reached the provider; the other was told to wait.
+  expect(providerCalls).toBe(1);
+  expect(results.filter((result) => result.pending === true)).toHaveLength(1);
+  const pending = results.find((result) => result.pending === true)!;
+  const winner = results.find((result) => result.pending !== true)!;
+  expect(pending.bars).toEqual([]);
+  expect(winner.bars.length).toBeGreaterThan(0);
+
+  // Next slice: the rows the winner wrote answer, and still no provider call.
+  const resumed = await run("run-c");
+  expect(providerCalls).toBe(1);
+  expect(resumed.fetched).toBe(false);
+  expect(resumed.bars.length).toBeGreaterThan(0);
+});
+
+test("calling syncWith on a key another owner still holds is pending", async () => {
+  const store = createInMemorySharedPriceStore();
+  const key = priceInstrumentKey({ symbol: "AAPL", currency: "USD" });
+  expect(await store.claim(key, "other-run", 60_000)).toBe(true);
+  const result = await syncWith({
+    store,
+    priceProviders: [],
+    request: {
+      symbol: "AAPL",
+      ticker: "AAPL",
+      exchange: "UNKNOWN",
+      currency: "USD",
+      backfillFrom: "2026-01-01",
+      today: "2026-01-03",
+    },
+  });
+  expect(result).toMatchObject({ pending: true, fetched: false, bars: [] });
 });

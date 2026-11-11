@@ -156,6 +156,63 @@ test("a current stored dashboard is served without reading the vault", async () 
   expect(priceRead).not.toHaveBeenCalled();
 });
 
+test("criterion 8: a shared price write to a key the build read rebuilds it", async () => {
+  const stored = { ...emptyInvestingDashboard(), dataVersion: 7 };
+  const loadBrokerData = vi.fn(async () => undefined);
+  const put = vi.fn(async () => undefined);
+  const priceStore = createInMemorySharedPriceStore();
+  // The stored build read AAPL, and its series changed after that build.
+  await priceStore.putCoverage("sym:AAPL:EUR", {
+    from: "2026-01-01",
+    to: "2026-01-02",
+    listing: "AAPL.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const snapshots: Snapshots = {
+    get: async () => ({
+      version: 1,
+      dashboard: stored,
+      priceKeys: ["sym:AAPL:EUR"],
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    }),
+    put,
+  };
+
+  const result = await runRead(makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }));
+
+  expect(result).not.toBe(stored);
+  expect(loadBrokerData).toHaveBeenCalledTimes(1);
+  expect(put).toHaveBeenCalledWith("", 1, result, expect.arrayContaining(["sym:AAPL:EUR"]));
+});
+
+test("criterion 8: a write to a key the build never read serves the stored dashboard", async () => {
+  const stored = { ...emptyInvestingDashboard(), dataVersion: 7 };
+  const loadBrokerData = vi.fn(async () => undefined);
+  const priceStore = createInMemorySharedPriceStore();
+  // MSFT changed, but the stored build never read it.
+  await priceStore.putCoverage("sym:MSFT:EUR", {
+    from: "2026-01-01",
+    to: "2026-01-02",
+    listing: "MSFT.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const snapshots: Snapshots = {
+    get: async () => ({
+      version: 1,
+      dashboard: stored,
+      priceKeys: ["sym:AAPL:EUR"],
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    }),
+    put: vi.fn(async () => undefined),
+  };
+
+  const result = await runRead(makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }));
+  expect(result).toBe(stored);
+  expect(loadBrokerData).not.toHaveBeenCalled();
+});
+
 test("a dashboard stored before risk carried its basis is rebuilt and stored again", async () => {
   const stale = {
     ...emptyInvestingDashboard(),
