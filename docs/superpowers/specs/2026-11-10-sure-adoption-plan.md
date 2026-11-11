@@ -473,6 +473,89 @@ deliberate:
   `@effect/vitest`), 44 of them across the cadence matrix, idempotency, regeneration and
   outlook.
 
+**As built (WS2.4/WS2.5, WS2.8 second half, [#287](https://github.com/Elmata2/LaVega/issues/287), 2026-11-11).**
+The payment matcher, the allocation/close rules and the minimal correction UI landed in
+one slice: `packages/core/src/bills/match.ts`, `packages/core/src/bills/allocate.ts`, one
+additive `VaultData.billDecisions` written through the existing `putBillPlan` save, and
+the suggestion / mark-paid / price-history surface on the #286 Bills screen. Divergences
+from the plan text, each deliberate:
+
+- **Suggestions stay derived; only decisions persist.** `suggestBillMatches` runs over the
+  current ledger on read, exactly like `suggestTransfers`: confirmed allocations, marks,
+  rejections and price changes live in the sidecar, a pending suggestion does not. The
+  sidecar is written by the SAME `putBillPlan` save as the occurrence rows it closes, so a
+  confirmation and its paid row cannot land apart; a save without a decisions argument
+  keeps what the vault holds, so a schedule edit or a lazy materialization never forgets a
+  payment.
+- **Sure's matcher ported with one addition the Rails query hid.** Hard filters (currency,
+  account, sign, merchant/alias/name/transfer), the 0.40/0.35/0.40 party weights, the
+  0.30/0.25 amount weights, the 0.20→0.05 date slope, 0.10 account, the 0.85 / 0.60 tiers,
+  the 0.15 ambiguity margin, the 0.60 suggestion floor, and "no auto-link for pending, no
+  suggestions for income" are Sure's. Sure pairs one entry with the nearest open
+  occurrence per series in its SQL; in memory the overdue window reaches `asOf`, so without
+  an explicit nearest-occurrence pass every past occurrence would compete for every later
+  payment of the same series. `billMatchCandidates` therefore keeps one occurrence per
+  (series, transaction) before the ambiguity guard.
+- **The amount band is still a hard filter.** A payment outside `expected * max(tolerance,
+learned)` is not proposed at all (Sure scores it 0 and the candidate dies). Consequence:
+  a genuinely partial payment (say EUR 40 of EUR 985) is not auto-suggested; it enters
+  through a manual allocation. That manual-attach UI is NOT in this slice (the plan's
+  WS2.8 second half only asks for suggestion confirm/reject plus mark-paid), so partial
+  payments are covered by `allocate.ts` and its tests, not by a screen path. Carried for
+  the manual-match slice.
+- **No cross-currency matcher, because Sure has none.** The plan's FX edge fixture is
+  honoured as a hard filter: a USD row is never a candidate for a EUR series. Sure's
+  allocator converts a manual allocation at the entry-date rate; this slice has no manual
+  allocation to convert, so no FX history is threaded into bills. Carried with the manual
+  attach.
+- **Close rules are Sure's.** A single confirmed allocation within the band closes the
+  occurrence; otherwise the summed allocations close it when they cover the expected
+  amount minus one cent (an overpayment settles too); anything short is a partial payment
+  with a remaining amount and a second payment can finish it.
+- **Price changes are recorded on every single settled payment that differs.** Sure's
+  `price_change_detector` compares the settled amount to the expected one, stores the
+  change with its effective date and moves the series price; a `fixed` series therefore
+  takes the new amount, while `average`/`last` keep deriving their own. The known
+  consequence, kept rather than special-cased: a one-off overpayment that settles an
+  occurrence also reads as a price change, exactly as Sure would record it. A mark-paid
+  and a multi-payment settlement never record one.
+- **Learning is bounded and only from the owner.** A manual match outside the band that
+  settles the occurrence widens `learnedTolerancePct` to the needed percentage, capped at
+  Sure's 25%; the same confirmation teaches the counterparty spelling as an alias (max 8).
+  The matcher's own exact tier never learns, and the widened band is used by the next
+  matcher pass.
+- **User closes never reopen; auto closes are repaired.** A mark or a user confirmation
+  sets `closedSource: "user"` and no later pass touches it. `reconcileBillDecisions` is
+  Sure's `repair_orphan_allocations` for a content-addressed ledger: it drops decisions
+  whose transaction, occurrence or series disappeared, and reopens ONLY a matcher-closed
+  (`auto`) row whose payments vanished, so a replaced entry cannot leave a row paid by a
+  transaction nothing can render.
+- **Model additions are five optional fields on `Bill`.** `matchDaysEarly` (default 2),
+  `matchDaysLate` (default 7), `amountTolerancePct` (default 7.5), `learnedTolerancePct`
+  (cap 25) and `aliases`, all of which a #286 series omits and therefore keeps Sure's
+  defaults. Nothing else on the existing shape moved.
+- **Automation is lazy, like materialization.** `runBillMatcher` (repair → derive →
+  exact tier) runs in `App.tsx` on unlock and after an import and writes only when it
+  changed something; a second run over its own output adds nothing. There is no server
+  cron, per ADR 0009: the personal vault is only decryptable in the browser.
+- **Acceptance measurement is a labelled real-shaped vault, not the owner's vault.**
+  `packages/core/src/bills/__fixtures__/real-shaped-vault.json` holds 12 months of a Dutch
+  household (9 series, SEPA date jitter, groceries/transfers as noise, a pending row, an
+  in-band price change, an overpayment, an ambiguous same-amount twin, an instalment paid
+  in two parts) and labels every bill payment with its intended occurrence. Measured by
+  `match.real-data.test.ts`: **81/81 confirmed payments (100%) landed on the intended
+  occurrence, 78 of them auto-confirmed; recall was 81 of 86 labelled rows (94.2%)**. The
+  5 uncovered rows are exactly the four partial instalment rows (no manual attach in this
+  slice) and the twin the owner must choose. The owner's real vault is local-first and
+  never enters the repo; the fixture copies its shape, not its data.
+- **UI stays the #286 screen.** A suggestion line with the transaction, amount, date, score
+  and (when relevant) a `pending`/`ambiguous` badge; Confirm and Reject buttons; a
+  mark-paid action on every open row; the partial remainder; the close source in Paid; the
+  latest price change on the series row. No redesign, no new view.
+- **Tests are plain vitest**, like the rest of the package: 79 bills tests across the
+  matcher tiers, the five Sure edge fixtures, allocation/close, learning, marks, repair,
+  the UI interactions and the measured real-shaped run.
+
 ### WS3 — Wealth view and evidence (personal)
 
 **Goal.** One statement of assets and liabilities with a defensible audit trail, and a path
@@ -992,7 +1075,7 @@ reimplemented for LaVega", and the change date.
 | `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb` | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10     | 1     |
 | `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                              | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10 | 1     |
 | `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                              | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                   | 1     |
-| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`               | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine (#286); matcher pending; 2026-11-11    | 2     |
+| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`               | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine (#286); matcher pending; 2026-11-11   | 2     |
 | `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`              | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                         | 2     |
 | `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`                                               | 562fe09 | AGPL-3.0 | re-expressed over vault arrays                                                           | 3     |
 | `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                           | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                              | 3     |
