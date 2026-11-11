@@ -144,3 +144,33 @@ test("the table refuses a non-positive interval", async () => {
     ),
   ).rejects.toThrow(/partner_budgets_interval_positive/);
 });
+
+test("reserveBefore on a key with no row seeds it and grants now", async () => {
+  const budget = createPartnerBudgetRepository(db);
+  const before = Date.now();
+  const result = await budget.reserveBefore(key, 300, new Date(before + 60_000));
+  expect(result.granted).toBe(true);
+  expect(result.slot.getTime()).toBeGreaterThanOrEqual(before - 5);
+  const next = await budget.reserve(key, 300);
+  expect(next.getTime() - result.slot.getTime()).toBeGreaterThanOrEqual(300);
+});
+
+test("a refused reserveBefore does not move next_at and the next reserve gets the offered slot", async () => {
+  const budget = createPartnerBudgetRepository(db);
+  await budget.reserve(key, 300);
+  const stored = await row();
+  const refused = await budget.reserveBefore(key, 300, new Date(Date.now() - 60_000));
+  expect(refused.granted).toBe(false);
+  expect((await row()).next_ms).toBe(stored.next_ms);
+  expect((await budget.reserve(key, 300)).getTime()).toBe(refused.slot.getTime());
+});
+
+test("blockedUntil reads the block, null when there is none, and writes nothing", async () => {
+  const budget = createPartnerBudgetRepository(db);
+  expect(await budget.blockedUntil(key)).toBeNull();
+  const until = new Date(Date.now() + 5_000);
+  await budget.reject(key, until);
+  const before = await row();
+  expect((await budget.blockedUntil(key))?.getTime()).toBe(until.getTime());
+  expect(await row()).toEqual(before);
+});

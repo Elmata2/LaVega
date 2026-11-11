@@ -182,6 +182,8 @@ itEffect("awaitSlot: with no deadline it always sleeps", () =>
 
 const brokenStore: PartnerBudgetStore = {
   reserve: () => Promise.reject(new Error("connection refused")),
+  reserveBefore: () => Promise.reject(new Error("connection refused")),
+  blockedUntil: () => Promise.reject(new Error("connection refused")),
   observe: () => Promise.reject(new Error("connection refused")),
   reject: () => Promise.reject(new Error("connection refused")),
 };
@@ -211,6 +213,8 @@ itEffect("store layer: passes the table interval and maps a Date back to an inst
       calls.push([candidate, intervalMs]);
       return new Date(42_000);
     },
+    reserveBefore: async () => ({ slot: new Date(42_000), granted: true }),
+    blockedUntil: async () => null,
     observe: async () => undefined,
     reject: async () => undefined,
   };
@@ -238,3 +242,20 @@ test("client bridge: rejects with the typed errors the adapters map", async () =
   await wait.dispose();
   await broken.dispose();
 });
+
+itEffect("awaitSlot: callers refused at their deadline do not push the queue into the future", () =>
+  Effect.gen(function* () {
+    const budget = yield* PartnerBudget;
+    // Three granted slots: the next free one is at 900.
+    yield* budget.reserve(key);
+    yield* budget.reserve(key);
+    yield* budget.reserve(key);
+    // 20 callers whose deadline is 500: each is refused, none consumes a slot.
+    for (let caller = 0; caller < 20; caller += 1) {
+      const error = yield* Effect.flip(awaitSlot(key, 500));
+      expect(isPartnerWait(error)).toBe(true);
+      expect(ms((error as PartnerWait).until)).toBe(900);
+    }
+    expect(ms(yield* budget.reserve(key))).toBe(900);
+  }).pipe(memory),
+);

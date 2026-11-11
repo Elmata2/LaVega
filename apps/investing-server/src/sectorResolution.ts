@@ -39,7 +39,12 @@ export const PROVIDER_RETRY_HOURS = 24;
  *  remaining symbols resolve from stored data only. */
 export const SECTOR_FETCH_BUDGET_MS = 8_000;
 
-export type SectorProfileLookup = (symbol: string) => Promise<SectorProfile | null>;
+/** `deadlineMs` is the read's own deadline: a provider slot after it must fail
+ *  instead of sleeping past the read's budget. */
+export type SectorProfileLookup = (
+  symbol: string,
+  options?: { deadlineMs?: number },
+) => Promise<SectorProfile | null>;
 export type SectorCorrectionLookup = (symbol: string) => Promise<string | null>;
 
 export type SectorResolutionOptions = {
@@ -254,7 +259,10 @@ async function resolveWeights(
       if (candidate && needsProviderFetch(profile, lastAttempt, Date.now())) {
         let fetched: SectorProfile | null | "timeout" | "threw";
         try {
-          fetched = await raceBudget(fetchProfile(lookupSymbol), remaining);
+          fetched = await raceBudget(
+            fetchProfile(lookupSymbol, { deadlineMs: deadline }),
+            remaining,
+          );
         } catch (error) {
           /* A budget stop sent no request, so it is no answer about the symbol,
            * the same as a timeout. Recording it would hide the symbol from every

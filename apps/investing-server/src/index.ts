@@ -735,6 +735,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     options.fundamentalsProvider ??
     createYahooFundamentalsProvider(
       new YahooHttpClient(undefined, undefined, undefined, { partnerBudget }),
+      // Awaited by a request (stock research, chat): no partner slot past 10 s.
+      { budgetMs: 10_000 },
     );
   const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
   const unavailableFundamentals: FundamentalsProvider = {

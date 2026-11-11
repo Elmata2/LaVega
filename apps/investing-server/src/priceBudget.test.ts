@@ -3,11 +3,16 @@ import {
   YahooHttpClient,
   createInMemoryPriceStore,
   createPartnerBudgetClient,
+  createYahooFundamentalsProvider,
   createYahooPriceProvider,
+  fetchYahooSectorProfile,
+  isPartnerBudgetStop,
   syncPrices,
   type PartnerBudgetStore,
   type PartnerBudgetClient,
 } from "@lavega/adapters";
+import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
+import { resolvePortfolioSectors } from "./sectorResolution.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createInMemoryPriceSyncProgressStore,
@@ -160,6 +165,8 @@ test("a budget store that is down sends no Yahoo request and the run pauses with
   const yahoo = fakeYahoo();
   const down: PartnerBudgetStore = {
     reserve: () => Promise.reject(new Error("connection refused")),
+    reserveBefore: () => Promise.reject(new Error("connection refused")),
+    blockedUntil: () => Promise.reject(new Error("connection refused")),
     observe: () => Promise.reject(new Error("connection refused")),
     reject: () => Promise.reject(new Error("connection refused")),
   };
@@ -177,4 +184,49 @@ test("a budget store that is down sends no Yahoo request and the run pauses with
   );
   expect(progress.problems).toEqual([]);
   expect(progress.remainingSymbols).toHaveLength(5);
+});
+
+test("20 sector reads that each hit a blocked budget send nothing and leave the queue where it was", async () => {
+  const yahoo = fakeYahoo();
+  const budget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
+  const client = new YahooHttpClient(yahoo.fetchFn, 20_000, 1, { partnerBudget: budget });
+  await budget.reject({ partner: "yahoo", endpoint: "any", scopeId: "shared" }, START + 120_000);
+  const store = createInMemorySectorProfileStore();
+
+  for (let read = 0; read < 20; read += 1) {
+    const pending = resolvePortfolioSectors([{ symbol: `S${read}`, marketValue: 10 }], {
+      store,
+      fetchProfile: (symbol, options) =>
+        fetchYahooSectorProfile(symbol, client.withDeadline(options?.deadlineMs)),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const { sectorBySymbol } = await pending;
+    expect(sectorBySymbol.get(`S${read}`)).toBe("Unknown");
+    expect(await store.lastProviderAttempt(`S${read}`)).toBeNull();
+  }
+  // No read waited for the block or sent a request, and no refused read took a slot.
+  expect(yahoo.fetchFn).not.toHaveBeenCalled();
+  expect(Date.now()).toBe(START);
+  // The next price run slot is the end of the block, not 20 intervals past it.
+  const run = orchestratorFor("alice", 1, client).run("alice");
+  await vi.advanceTimersByTimeAsync(121_000);
+  const progress = await run;
+  expect(progress.status).toBe("completed");
+  const first = Math.min(...yahoo.times);
+  expect(first).toBe(START + 120_000);
+});
+
+test("a fundamentals fetch under a 120 s block returns inside its 10 s deadline", async () => {
+  const yahoo = fakeYahoo();
+  const budget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
+  const client = new YahooHttpClient(yahoo.fetchFn, 20_000, 1, { partnerBudget: budget });
+  await budget.reject({ partner: "yahoo", endpoint: "any", scopeId: "shared" }, START + 120_000);
+  const provider = createYahooFundamentalsProvider(client, { budgetMs: 10_000 });
+
+  const outcome = provider.fetch("AAPL").catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(10_000);
+  const error = await outcome;
+  expect(isPartnerBudgetStop(error)).toBe(true);
+  expect(Date.now()).toBeLessThanOrEqual(START + 10_000);
+  expect(yahoo.fetchFn).not.toHaveBeenCalled();
 });

@@ -187,7 +187,10 @@ type PriceDependencies = {
   onPriceDataChanged: () => void;
   marketDataConsentStore: MarketDataConsentStore;
   personalNetWorthStore: PersonalNetWorthStore;
-  sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
+  sectorProfile: (
+    symbol: string,
+    options?: { deadlineMs?: number },
+  ) => Promise<SectorProfile | null>;
   sectorStore: SectorProfileStore;
   sectorCorrectionStore: SectorCorrectionStore;
   sectorInferenceSettingStore: SectorInferenceSettingStore;
@@ -202,6 +205,10 @@ type PriceDependencies = {
   passphraseMode: () => PassphraseMode;
   healthCheck: () => Promise<InvestingHealth>;
 };
+/** What a request-path Yahoo call may spend on partner slots. A slot after it
+ *  fails with `PartnerWait` instead of holding the request. */
+const REQUEST_PARTNER_BUDGET_MS = 10_000;
+
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   /* One budget for every partner call this app makes. Hosted, it is Neon's, so
@@ -248,7 +255,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const benchmarkSearch =
     dependencies.benchmarkSearch ??
-    ((query: string) => searchYahooBenchmarks(query, { client: yahooClient }));
+    ((query: string) =>
+      searchYahooBenchmarks(query, {
+        client: yahooClient.withDeadline(Date.now() + REQUEST_PARTNER_BUDGET_MS),
+      }));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const personalNetWorthStore =
@@ -258,7 +268,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * reads queues on the same slots as a price run. */
   const sectorProfile =
     dependencies.sectorProfile ??
-    ((symbol: string) => fetchYahooSectorProfile(symbol, yahooClient));
+    ((symbol: string, options?: { deadlineMs?: number }) =>
+      fetchYahooSectorProfile(symbol, yahooClient.withDeadline(options?.deadlineMs)));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   const sectorCorrectionStore =
     dependencies.sectorCorrectionStore ?? createInMemorySectorCorrectionStore();

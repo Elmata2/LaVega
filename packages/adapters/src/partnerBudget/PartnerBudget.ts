@@ -68,12 +68,25 @@ export function toObservation(seen: PartnerSeen): PartnerObservation {
   return { blockedUntilMs, intervalMs };
 }
 
+/** The slot a caller was offered and whether it was taken. */
+export type Reservation = { slot: DateTime.Utc; granted: boolean };
+
 export type PartnerIntervals = (key: PartnerKey) => number | undefined;
 
 /** The persistence a hosted layer needs. Times are absolute instants. */
 export type PartnerBudgetStore = {
   /** Takes the next slot. `intervalMs` is the table interval for the key. */
   reserve(key: PartnerKey, intervalMs: number): Promise<Date>;
+  /** Takes the next slot only if it is at or before `notAfter`. Otherwise it
+   *  returns the slot it would have given, `granted: false`, and leaves the queue
+   *  unchanged. */
+  reserveBefore(
+    key: PartnerKey,
+    intervalMs: number,
+    notAfter: Date,
+  ): Promise<{ slot: Date; granted: boolean }>;
+  /** The instant the key is blocked until, or null. Read only. */
+  blockedUntil(key: PartnerKey): Promise<Date | null>;
   observe(key: PartnerKey, seen: PartnerObservation): Promise<void>;
   reject(key: PartnerKey, until: Date): Promise<void>;
 };
@@ -93,8 +106,20 @@ export class PartnerBudget extends Context.Service<
   PartnerBudget,
   {
     /** Takes the next free slot for the key and returns its instant.
-     *  The slot is consumed even if the caller does not use it. */
+     *  The slot is consumed even if the caller does not use it; a caller that
+     *  may not wait for it uses `reserveBefore`. */
     readonly reserve: (key: PartnerKey) => Effect.Effect<DateTime.Utc, PartnerBudgetUnavailable>;
+    /** Takes the next slot only if it is at or before `notAfter`. A later slot
+     *  is returned with `granted: false` and consumes nothing: the next caller
+     *  gets the slot this one was offered. */
+    readonly reserveBefore: (
+      key: PartnerKey,
+      notAfter: DateTime.Utc,
+    ) => Effect.Effect<Reservation, PartnerBudgetUnavailable>;
+    /** The instant the key is blocked until, or none. Read only. */
+    readonly blockedUntil: (
+      key: PartnerKey,
+    ) => Effect.Effect<DateTime.Utc | null, PartnerBudgetUnavailable>;
     /** Records limit headers of a successful response. */
     readonly observe: (
       key: PartnerKey,
@@ -143,6 +168,25 @@ function makeMemory(intervals: PartnerIntervals) {
     return DateTime.makeUnsafe(slot);
   });
 
+  const reserveBefore = Effect.fnUntraced(function* (key: PartnerKey, notAfter: DateTime.Utc) {
+    const intervalMs = yield* intervalOrDie(intervals, key);
+    const now = yield* Clock.currentTimeMillis;
+    const id = rowId(key);
+    const row = rows.get(id);
+    const slot = row === undefined ? now : Math.max(now, row.nextAt, row.blockedUntil ?? now);
+    if (slot > DateTime.toEpochMillis(notAfter))
+      return { slot: DateTime.makeUnsafe(slot), granted: false };
+    if (row === undefined)
+      rows.set(id, { nextAt: now + intervalMs, blockedUntil: null, intervalMs: null });
+    else row.nextAt = slot + (row.intervalMs ?? intervalMs);
+    return { slot: DateTime.makeUnsafe(slot), granted: true };
+  });
+
+  const blockedUntil = Effect.fnUntraced(function* (key: PartnerKey) {
+    const until = rows.get(rowId(key))?.blockedUntil ?? null;
+    return until === null ? null : DateTime.makeUnsafe(until);
+  });
+
   const upsert = (key: PartnerKey, now: number): Row => {
     const id = rowId(key);
     const existing = rows.get(id);
@@ -167,7 +211,7 @@ function makeMemory(intervals: PartnerIntervals) {
     block(upsert(key, yield* Clock.currentTimeMillis), DateTime.toEpochMillis(until));
   });
 
-  return PartnerBudget.of({ reserve, observe, reject });
+  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject });
 }
 
 function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
@@ -185,6 +229,20 @@ function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
     return DateTime.fromDateUnsafe(slot);
   });
 
+  const reserveBefore = Effect.fnUntraced(function* (key: PartnerKey, notAfter: DateTime.Utc) {
+    const intervalMs = yield* intervalOrDie(intervals, key);
+    const result = yield* Effect.tryPromise({
+      try: () => store.reserveBefore(key, intervalMs, DateTime.toDateUtc(notAfter)),
+      catch: unavailable,
+    });
+    return { slot: DateTime.fromDateUnsafe(result.slot), granted: result.granted };
+  });
+
+  const blockedUntil = (key: PartnerKey) =>
+    Effect.tryPromise({ try: () => store.blockedUntil(key), catch: unavailable }).pipe(
+      Effect.map((until) => (until === null ? null : DateTime.fromDateUnsafe(until))),
+    );
+
   const observe = (key: PartnerKey, seen: PartnerSeen) =>
     Effect.tryPromise({ try: () => store.observe(key, toObservation(seen)), catch: unavailable });
 
@@ -194,21 +252,30 @@ function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
       catch: unavailable,
     });
 
-  return PartnerBudget.of({ reserve, observe, reject });
+  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject });
 }
 
 /**
  * Reserves a slot, sleeps until it, or fails with `PartnerWait` when the slot
- * is after `deadlineMs`. A slot exactly one second before the deadline still
- * proceeds. With no deadline it always sleeps.
+ * is after `deadlineMs`; then no slot was consumed. A slot exactly one second
+ * before the deadline still proceeds. With no deadline it always sleeps.
  */
 export const awaitSlot = Effect.fnUntraced(function* (key: PartnerKey, deadlineMs?: number) {
   const budget = yield* PartnerBudget;
-  const slot = yield* budget.reserve(key);
-  const slotMs = DateTime.toEpochMillis(slot);
-  if (deadlineMs !== undefined && slotMs > deadlineMs - DEADLINE_MARGIN_MS) {
-    return yield* new PartnerWait({ until: slot });
+  let slot: DateTime.Utc;
+  if (deadlineMs === undefined) {
+    slot = yield* budget.reserve(key);
+  } else {
+    // A slot after the deadline is refused without being consumed, so a caller
+    // that will not wait does not push the shared queue into the future.
+    const reservation = yield* budget.reserveBefore(
+      key,
+      DateTime.makeUnsafe(deadlineMs - DEADLINE_MARGIN_MS),
+    );
+    if (!reservation.granted) return yield* new PartnerWait({ until: reservation.slot });
+    slot = reservation.slot;
   }
+  const slotMs = DateTime.toEpochMillis(slot);
   const now = yield* Clock.currentTimeMillis;
   if (slotMs > now) yield* Effect.sleep(slotMs - now);
 });

@@ -67,8 +67,22 @@ type TimeseriesResponse = {
   timeseries?: { result?: Array<{ meta?: { type?: string[] } } & Record<string, unknown>> };
 };
 
-export function createYahooFundamentalsProvider(client?: YahooHttpClient): FundamentalsProvider {
-  return { fetch: (symbol) => fetchYahooFundamentals(symbol, client) };
+/** `budgetMs` bounds what one fetch may spend on partner slots, counted from the
+ *  call: a slot after it fails with `PartnerWait` instead of sleeping, so a
+ *  request that awaits this provider cannot hang on the shared queue. */
+export function createYahooFundamentalsProvider(
+  client?: YahooHttpClient,
+  input: { budgetMs?: number } = {},
+): FundamentalsProvider {
+  return {
+    fetch: (symbol) =>
+      fetchYahooFundamentals(
+        symbol,
+        client !== undefined && input.budgetMs !== undefined
+          ? client.withDeadline(Date.now() + input.budgetMs)
+          : client,
+      ),
+  };
 }
 
 /** Resolves null when Yahoo knows no company under any candidate symbol.

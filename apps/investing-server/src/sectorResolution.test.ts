@@ -311,7 +311,7 @@ test("an owner correction outranks a freshly-fetched stock and never invokes the
   // AAPL isn't a fund before trusting the correction — but the correction,
   // not the fetched stock's own sector, is what gets displayed and the
   // classifier is never reached for it.
-  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL", { deadlineMs: expect.any(Number) });
   expect(classifier).not.toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL" }));
 });
 
@@ -598,7 +598,7 @@ test("a cached inferred profile is reused without re-invoking the classifier, bu
   });
 
   expect(classifier).not.toHaveBeenCalled();
-  expect(fetchProfile).toHaveBeenCalledWith("MYST");
+  expect(fetchProfile).toHaveBeenCalledWith("MYST", { deadlineMs: expect.any(Number) });
   expect(sectorBySymbol.get("MYST")).toBe("Technology");
 });
 
@@ -839,8 +839,8 @@ test("a renamed holding resolves its sector under the price-resolved listing, no
   );
 
   expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Healthcare");
-  expect(fetchProfile).toHaveBeenCalledWith("HIMS");
-  expect(fetchProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(fetchProfile).toHaveBeenCalledWith("HIMS", { deadlineMs: expect.any(Number) });
+  expect(fetchProfile).not.toHaveBeenCalledWith("OAC_US_EQ", expect.anything());
   expect(await store.get("HIMS")).toMatchObject({ sector: "Healthcare" });
   expect(await store.get("OAC_US_EQ")).toBeNull();
 });
@@ -882,7 +882,7 @@ test("a symbol prices never resolved a listing for behaves exactly as before, ke
   });
 
   expect(sectorBySymbol.get("AAPL")).toBe("Technology");
-  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL", { deadlineMs: expect.any(Number) });
   expect(await store.get("AAPL")).toMatchObject({ sector: "Technology" });
 });
 
@@ -900,7 +900,7 @@ test("omitting resolveListing keeps every call keyed by the broker symbol, same 
     fetchProfile,
   });
 
-  expect(fetchProfile).toHaveBeenCalledWith("OAC_US_EQ");
+  expect(fetchProfile).toHaveBeenCalledWith("OAC_US_EQ", { deadlineMs: expect.any(Number) });
 });
 
 test("an owner correction still keys off the broker symbol even when the listing resolves elsewhere", async () => {
@@ -1169,3 +1169,23 @@ test.each([
     expect(fetchProfile).toHaveBeenCalledTimes(2);
   },
 );
+
+test("the profile fetch gets the read's own deadline: its start plus the fetch budget", async () => {
+  vi.useFakeTimers({ now: 5_000_000 });
+  try {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(async (_symbol: string, _options?: { deadlineMs?: number }) => null);
+    await resolvePortfolioSectors(
+      [
+        { symbol: "A", marketValue: 10 },
+        { symbol: "B", marketValue: 10 },
+      ],
+      { store, fetchProfile },
+    );
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+    for (const [, options] of fetchProfile.mock.calls)
+      expect(options).toEqual({ deadlineMs: 5_000_000 + SECTOR_FETCH_BUDGET_MS });
+  } finally {
+    vi.useRealTimers();
+  }
+});

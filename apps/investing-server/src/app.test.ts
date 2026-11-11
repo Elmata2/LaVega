@@ -1106,8 +1106,8 @@ test("GET sectors with consent still fetches a never-attempted symbol under its 
   expect(((await response.json()) as { sectors: unknown }).sectors).toEqual([
     { sector: "Healthcare", weight: 1 },
   ]);
-  expect(sectorProfile).toHaveBeenCalledWith("HIMS");
-  expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(sectorProfile).toHaveBeenCalledWith("HIMS", { deadlineMs: expect.any(Number) });
+  expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ", expect.anything());
   expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare" });
 });
 
@@ -2302,9 +2302,12 @@ test.each([
           return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
         if (url.includes("getcrumb")) return new Response("crumb");
         if (url.includes("/search")) return new Response(JSON.stringify({ quotes: [] }));
-        return new Response(JSON.stringify({ chart: { result: null, error: { code: "Not Found" } } }), {
-          status: 404,
-        });
+        return new Response(
+          JSON.stringify({ chart: { result: null, error: { code: "Not Found" } } }),
+          {
+            status: 404,
+          },
+        );
       }),
     );
     const immediate = createImmediatePartnerBudget();

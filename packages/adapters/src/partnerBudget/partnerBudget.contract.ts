@@ -158,4 +158,61 @@ export function partnerBudgetContract(
     expect(slots[1]! - slots[0]!).toBeGreaterThanOrEqual(INTERVAL_MS);
     expect(slots[1]! - slots[0]!).toBeLessThan(1_000);
   });
+
+  test(`${name}: a refused reserveBefore leaves the queue unchanged`, async () => {
+    const harness = await createHarness(intervals);
+    const key = newKey();
+    const { first, refused, next } = await harness.run(
+      Effect.gen(function* () {
+        const budget = yield* PartnerBudget;
+        const now = yield* Clock.currentTimeMillis;
+        const first = yield* budget.reserve(key);
+        // The next slot is a full interval away; ask for one that is long gone.
+        const refused = yield* budget.reserveBefore(key, DateTime.makeUnsafe(now - 60_000));
+        const next = yield* budget.reserve(key);
+        return { first, refused, next };
+      }),
+    );
+    expect(refused.granted).toBe(false);
+    expect(ms(refused.slot)).toBeGreaterThanOrEqual(ms(first) + INTERVAL_MS);
+    // The caller that was refused consumed nothing: the next one gets its slot.
+    expect(ms(next)).toBe(ms(refused.slot));
+  });
+
+  test(`${name}: reserveBefore grants a slot at or before notAfter and consumes it`, async () => {
+    const harness = await createHarness(intervals);
+    const key = newKey();
+    const { granted, after } = await harness.run(
+      Effect.gen(function* () {
+        const budget = yield* PartnerBudget;
+        const now = yield* Clock.currentTimeMillis;
+        const notAfter = DateTime.makeUnsafe(now + 60_000);
+        const granted = yield* budget.reserveBefore(key, notAfter);
+        const after = yield* budget.reserveBefore(key, notAfter);
+        return { granted, after };
+      }),
+    );
+    expect(granted.granted).toBe(true);
+    expect(after.granted).toBe(true);
+    expect(ms(after.slot) - ms(granted.slot)).toBeGreaterThanOrEqual(INTERVAL_MS);
+  });
+
+  test(`${name}: blockedUntil reads a block and changes nothing`, async () => {
+    const harness = await createHarness(intervals);
+    const key = newKey();
+    const { none, until, seen, slot } = await harness.run(
+      Effect.gen(function* () {
+        const budget = yield* PartnerBudget;
+        const none = yield* budget.blockedUntil(key);
+        const now = yield* Clock.currentTimeMillis;
+        const until = DateTime.makeUnsafe(now + 5_000);
+        yield* budget.reject(key, until);
+        const seen = yield* budget.blockedUntil(key);
+        return { none, until, seen, slot: yield* budget.reserve(key) };
+      }),
+    );
+    expect(none).toBeNull();
+    expect(seen && ms(seen)).toBe(ms(until));
+    expect(ms(slot)).toBeGreaterThanOrEqual(ms(until));
+  });
 }
