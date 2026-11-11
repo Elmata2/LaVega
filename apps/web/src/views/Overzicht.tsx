@@ -13,7 +13,13 @@ import type {
   ScheduledFlow,
   VatSettings,
 } from "@lavega/core";
-import { cashOnHandCents, forecastCashflow, computeAlerts, paycheckOverview } from "@lavega/core";
+import {
+  billForecastProjection,
+  cashOnHandCents,
+  forecastCashflow,
+  computeAlerts,
+  paycheckOverview,
+} from "@lavega/core";
 import type { View } from "../App";
 import type { ConversionMode } from "../settings.js";
 import { useAppLocale } from "../appLocale.js";
@@ -143,11 +149,33 @@ export default function Overzicht({
 }: OverzichtProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
+  // WS2.10 (#290): bills occurrences are forecast drivers on this card too, so
+  // the Overzicht position and the Forecast screen cannot disagree. An absent
+  // bills lane yields the empty projection and the pre-#290 call.
+  const forecastProjection = useMemo(
+    () =>
+      billForecastProjection({
+        bills: bills ?? [],
+        occurrences: billOccurrences ?? [],
+        decisions: billDecisions,
+        txs,
+        accounts,
+        asOf,
+      }),
+    [bills, billOccurrences, billDecisions, txs, accounts, asOf],
+  );
   const forecast = useMemo(
     () =>
-      forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows, fxHistory, mode })
-        .consolidated,
-    [txs, accounts, asOf, bufferCents, scheduledFlows, fxHistory, mode],
+      forecastCashflow(txs, accounts, {
+        asOf,
+        bufferCents,
+        scheduledFlows,
+        fxHistory,
+        mode,
+        commitments: forecastProjection.commitments,
+        claimedStreams: forecastProjection.claimedStreams,
+      }).consolidated,
+    [txs, accounts, asOf, bufferCents, scheduledFlows, fxHistory, mode, forecastProjection],
   );
 
   // The alert centre: shortfall (vs. buffer) + overdue recurring payments +

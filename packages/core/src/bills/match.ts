@@ -268,6 +268,23 @@ function dateWeight(
   );
 }
 
+/** Does the text name this bill's party (merchant, a learned alias, or the
+ *  bill's own name)? The hard party filter, shared by the matcher and the
+ *  forecast adapter (WS2.10) so a bill is claimed by the same series in both. */
+export function billMatchesPartyText(bill: Bill, text: string): boolean {
+  const merchant = (bill.merchant ?? "").trim();
+  if (merchant !== "") {
+    const billKey = canonicalMerchantKey(merchant);
+    const textKey = canonicalMerchantKey(text);
+    if (billKey !== "" && textKey !== "" && billKey === textKey) return true;
+    if (nameMatches(merchant, text)) return true;
+  }
+  for (const alias of bill.aliases ?? []) {
+    if (nameMatches(alias, text)) return true;
+  }
+  return nameMatches(bill.name, text);
+}
+
 /** The party score and what named the party, or null when nothing did (the
  *  hard merchant/name filter). */
 function partyScore(

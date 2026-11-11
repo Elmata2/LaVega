@@ -29,7 +29,9 @@
  * and never enters the repo (ADR 0009). See `__fixtures__/forecast-commitments-vault.json`.
  */
 import type { Account, Tx } from "../model.js";
+import type { Bill } from "../bills/model.js";
 import type { EntityForecast } from "../forecast.js";
+import { forecastCashflow } from "../forecast.js";
 
 /** The three plan checkpoints, and the weekly close that represents each. */
 export const FORECAST_ERROR_CHECKPOINTS: ReadonlyArray<{
@@ -165,4 +167,45 @@ function indexOfDay(to: string, from: string): number {
     return Date.UTC(y, m - 1, d) / 86_400_000;
   };
   return Math.round(dayNumber(to) - dayNumber(from));
+}
+
+/** The labelled fixture shape both measurement tests share. The JSON itself is
+ *  imported by the tests (a runtime source file in this package must not read
+ *  the filesystem; the import-boundary test enforces that). */
+export type ForecastFixture = {
+  note: string;
+  asOf: string;
+  horizonDays: number;
+  accounts: Account[];
+  bills: Bill[];
+  txs: Tx[];
+};
+
+/** The pre-#290 model: detected recurring streams plus the incidental baseline,
+ *  no bills occurrences. This is the code path every existing consumer uses. */
+export const streamsOnlyForecast: ForecastRunner = ({ txs, accounts, asOf, horizonDays }) =>
+  forecastCashflow(txs, accounts, {
+    asOf,
+    horizonDays,
+    bufferCents: 0,
+    scheduledFlows: [],
+    fxHistory: {},
+    mode: "separate",
+  }).consolidated;
+
+/** The fixture split the measurement needs: what a forecast at `asOf` may see,
+ *  and the actuals it is scored against. Exported so the integration test uses
+ *  the same split and the same checkpoints. */
+export function measureFixture(
+  runForecast: ForecastRunner,
+  fixture: ForecastFixture,
+): ForecastErrorReport {
+  return measureForecastError({
+    asOf: fixture.asOf,
+    accounts: fixture.accounts,
+    visibleTxs: fixture.txs.filter((tx) => tx.date <= fixture.asOf),
+    actualTxs: fixture.txs,
+    runForecast,
+    horizonDays: fixture.horizonDays ?? FORECAST_ERROR_HORIZON_DAYS,
+  });
 }

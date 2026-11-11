@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { forecastCashflow } from "../forecast.js";
 import type { EntityForecast } from "../forecast.js";
+import fixtureJson from "./__fixtures__/forecast-commitments-vault.json";
 
 /* WS2.10 acceptance, measured: forecast absolute error at the 30/60/90-day
  * checkpoints against the pre-integration baseline.
@@ -20,13 +21,19 @@ import type { EntityForecast } from "../forecast.js";
  * shape of the owner's real ING data, not the data: the owner's vault is
  * local-first and never enters the repo (ADR 0009). */
 
-import { FORECAST_FIXTURE, measureFixture, streamsOnlyForecast } from "./forecastErrorFixture.js";
-import type { ForecastErrorReport } from "./forecastError.js";
+import {
+  measureFixture,
+  streamsOnlyForecast,
+  type ForecastErrorReport,
+  type ForecastFixture,
+} from "./forecastError.js";
+
+const FORECAST_FIXTURE = fixtureJson as ForecastFixture;
 
 const BASELINE_URL = new URL("./__fixtures__/forecast-error-baseline-290.json", import.meta.url);
 
 describe("forecast error baseline (#290)", () => {
-  const measured = measureFixture(streamsOnlyForecast);
+  const measured = measureFixture(streamsOnlyForecast, FORECAST_FIXTURE);
 
   test("the fixture really hides its future from the forecast", () => {
     const visible = FORECAST_FIXTURE.txs.filter((tx) => tx.date <= FORECAST_FIXTURE.asOf);

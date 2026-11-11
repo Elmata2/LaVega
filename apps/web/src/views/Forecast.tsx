@@ -1,9 +1,17 @@
-import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
-import { forecastCashflow } from "@lavega/core";
+import type {
+  Account,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
+  EntityForecast,
+  Tx,
+  ScheduledFlow,
+} from "@lavega/core";
+import { billForecastProjection, forecastCashflow } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
-import { formatEuroIn } from "../format";
+import { formatDate, formatEuroIn } from "../format";
 import { useAppLocale, pick } from "../appLocale";
-import { moneyCopy } from "../copy/money";
+import { moneyCopy, type MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
 import {
   bannerState,
@@ -25,6 +33,12 @@ type ForecastProps = {
   scheduledFlows: ScheduledFlow[];
   fxHistory: Record<string, Record<string, number>>;
   mode: ConversionMode;
+  /** The bills lane (#286–#288). Threaded so the projection can use the real
+   *  committed occurrence dates and amounts (WS2.10, #290). Absent on an older
+   *  caller, which keeps the streams-only forecast exactly as before. */
+  bills?: Bill[];
+  billOccurrences?: BillOccurrence[];
+  billDecisions?: BillDecisions;
 };
 
 // 91 days = 13 weekly points. The buffer is user-set (Overzicht → Aandacht) and
@@ -269,6 +283,33 @@ function ForecastChart({
   );
 }
 
+/** A driver's label, plus — for a bills commitment (WS2.10) — the committed
+ *  occurrence dates and how observed the series is. A detected stream keeps the
+ *  plain label: its dates are extrapolated, not committed. */
+function DriverLabel({
+  driver,
+  locale,
+  c,
+}: {
+  driver: EntityForecast["drivers"][number];
+  locale: Parameters<typeof formatDate>[0];
+  c: MoneyCopy["forecast"];
+}) {
+  return (
+    <span className="driver-label">
+      {driver.label}
+      {driver.dates != null && driver.dates.length > 0 && (
+        <span className="eyebrow block">
+          {c.vastgelegd(driver.dates.map((date) => formatDate(locale, date)).join(" · "))}
+          {driver.commitmentConfidence != null
+            ? ` · ${c.zekerheid[driver.commitmentConfidence]}`
+            : ""}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function Forecast({
   txs,
   accounts,
@@ -278,9 +319,25 @@ export default function Forecast({
   scheduledFlows,
   fxHistory,
   mode,
+  bills,
+  billOccurrences,
+  billDecisions,
 }: ForecastProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].forecast;
+  // Bills occurrences become forecast drivers (WS2.10): real committed dates
+  // and amounts instead of the detector's extrapolation, and the streams they
+  // explain are claimed so the same money is never projected twice. Without a
+  // bills lane this is the empty projection and the call below is unchanged.
+  const projection = billForecastProjection({
+    bills: bills ?? [],
+    occurrences: billOccurrences ?? [],
+    decisions: billDecisions,
+    txs,
+    accounts,
+    asOf,
+    horizonDays: HORIZON_DAYS,
+  });
   const fc = forecastCashflow(txs, accounts, {
     asOf,
     horizonDays: HORIZON_DAYS,
@@ -288,6 +345,8 @@ export default function Forecast({
     scheduledFlows,
     fxHistory,
     mode,
+    commitments: projection.commitments,
+    claimedStreams: projection.claimedStreams,
   });
   // Honor entityScope, but fall back to the consolidated view if the scope
   // isn't (or is no longer) present in byEntity — App.tsx self-heals a stale
@@ -338,7 +397,7 @@ export default function Forecast({
                 <div className="drivers-list">
                   {inkomsten.map((d) => (
                     <div className="driver-row" key={`${d.label}-${d.sign}`}>
-                      <span className="driver-label">{d.label}</span>
+                      <DriverLabel driver={d} locale={locale} c={c} />
                       <span className="text-pos driver-amount">
                         +€{euroNumber(locale, d.perWeekCents)}
                       </span>
@@ -354,7 +413,7 @@ export default function Forecast({
                 <div className="drivers-list">
                   {uitgaven.map((d) => (
                     <div className="driver-row" key={`${d.label}-${d.sign}`}>
-                      <span className="driver-label">{d.label}</span>
+                      <DriverLabel driver={d} locale={locale} c={c} />
                       <span className="text-neg driver-amount">
                         −€{euroNumber(locale, Math.abs(d.perWeekCents))}
                       </span>

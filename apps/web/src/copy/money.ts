@@ -267,6 +267,10 @@ type ForecastCopy = {
   geenHerkendeUitgavenstromen: string;
   gestoptNietMeegeteld: string;
   laatst: (date: string) => string;
+  /** WS2.10 (#290): committed bills dates behind a driver. */
+  vastgelegd: (dates: string) => string;
+  /** WS2.10: how observed a bills series' recurrence is. */
+  zekerheid: { low: string; medium: string; high: string };
   nogGeenLopendeStromen: string;
   positieAsOfLabel: string;
   verwachteKaspositieAria: string;
@@ -860,6 +864,8 @@ const nl: MoneyCopy = {
     geenHerkendeUitgavenstromen: "Geen herkende uitgavenstromen.",
     gestoptNietMeegeteld: "Gestopt · niet meegeteld",
     laatst: (date) => `laatst ${date}`,
+    vastgelegd: (dates) => `Vastgelegd: ${dates}`,
+    zekerheid: { low: "nog niet gezien", medium: "een keer gezien", high: "reeks gezien" },
     nogGeenLopendeStromen: "Nog geen lopende terugkerende stromen herkend.",
     positieAsOfLabel: "nu",
     verwachteKaspositieAria: "Verwachte kaspositie komende 13 weken",
@@ -1535,6 +1541,8 @@ const en: MoneyCopy = {
     geenHerkendeUitgavenstromen: "No recognised expense streams.",
     gestoptNietMeegeteld: "Stopped · not counted",
     laatst: (date) => `last ${date}`,
+    vastgelegd: (dates) => `Committed: ${dates}`,
+    zekerheid: { low: "not seen yet", medium: "seen once", high: "series observed" },
     nogGeenLopendeStromen: "No active recurring flows recognised yet.",
     positieAsOfLabel: "now",
     verwachteKaspositieAria: "Expected cash position over the next 13 weeks",

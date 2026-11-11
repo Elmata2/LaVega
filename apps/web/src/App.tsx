@@ -2104,6 +2104,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               scheduledFlows={scopedScheduledFlows}
               fxHistory={fxHistory}
               mode={fxConversionMode}
+              bills={bills}
+              billOccurrences={billOccurrences}
+              billDecisions={billDecisions}
             />
           )}
 
