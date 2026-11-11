@@ -427,6 +427,52 @@ slice. Divergences from the plan text, each deliberate:
   surplus months carry, negative months stop at zero, the currency change breaks the chain,
   and the grouped child is not double-counted.
 
+**As built (WS2.1–WS2.3, WS2.8 first half, [#286](https://github.com/Elmata2/LaVega/issues/286), 2026-11-11).**
+The first shippable half landed: `packages/core/src/bills/{model,schedule,occurrences}.ts`,
+one additive `VaultData.bills` + `VaultData.billOccurrences` section saved through a single
+`putBillPlan` mutator, and a `/app/bills` screen. Divergences from the plan text, each
+deliberate:
+
+- **Six-month history backfill is opt-in, not the default.** Sure's generator is called for
+  declared bills with `from = cycle_for(today).begin` and clamps it to `anchor_date`; a
+  backfill is a separate call. LaVega's first half has no payment matcher, so backfilling six
+  months of past occurrences would present already-paid cycles as unpaid debt. The default
+  window therefore starts at the cycle containing `asOf`; `historyMonths` is the explicit
+  option the detection/matcher half (WS2.6/WS2.4) passes once past rows can be closed.
+- **Occurrence identity is the row id.** Instead of Sure's unique index on
+  `(recurring_transaction_id, original_due_on)`, the deterministic id is
+  `billId|originalDueOn`. Running the generator twice cannot duplicate, and no database
+  constraint is needed. Closed and paid rows are never rewritten by an edit; the
+  re-generatable future is the only thing a schedule edit drops.
+- **`stoodInFor` is ported in full.** A paid row from before a due-day edit already is its
+  cycle, so it stands in for the nearest occurrence within half a cycle. Without it, moving a
+  bill from the 1st to the 15th would leave two rows per past month.
+- **Amounts**: integer cents, direction explicit (`direction: "in" | "out"`), and an
+  occurrence stores `expectedAmountCents: null` unless the owner overrode that instance. The
+  series strategy (`fixed`/`average`/`last`) resolves on read, so a price edit needs no sweep
+  (ADR 0011). `last` reads the previous PAID occurrence's `paidAmountCents`, never the closed
+  estimate.
+- **The screen answers the third question honestly.** "Short before payday" needs a payday,
+  and the paycheck planner (WS2.7) is out of scope. The period ends at the next occurrence of
+  an active `income` bill; with no income series the shortfall is `null`, shown as unknown,
+  not zero. Cash on hand is the sum of known EUR balances; an unknown balance keeps the
+  shortfall unknown. Mark-paid, match suggestions and price-change history are not here
+  (#287–#290); the "Paid" section renders closed rows that the vault holds and says so when
+  there are none.
+- **No detector in this slice.** `forecast.ts` stays the only detector; bills do not fork
+  `detectRecurringStreams`. WS2.6 claims its output later.
+- **No `ScheduledFlow` bridge is written yet.** The model carries an optional
+  `scheduledFlowId`; projecting occurrences into flows is WS2.10, and the flow contract stays
+  untouched.
+- **Storage shape.** `getBills`/`getBillOccurrences` read `[]` on a legacy vault;
+  `putBillPlan` writes both in one persist, so lazy materialization on unlock is one save and
+  the vault never holds a series without its rows. Materialization runs in `App.tsx`'s vault
+  load, not in `packages/adapters` (the adapter has no clock and must not grow one).
+- **Dates stay clock-free.** Every schedule function takes ISO dates and `asOf`; the engine
+  uses Effect `DateTime` in UTC. Tests are plain vitest (the package still has no
+  `@effect/vitest`), 44 of them across the cadence matrix, idempotency, regeneration and
+  outlook.
+
 ### WS3 — Wealth view and evidence (personal)
 
 **Goal.** One statement of assets and liabilities with a defensible audit trail, and a path
@@ -946,7 +992,7 @@ reimplemented for LaVega", and the change date.
 | `packages/core/src/transfers.ts`            | `app/models/family/auto_transfer_matchable.rb`, `transfer.rb`, `transaction/transferable.rb` | 562fe09 | AGPL-3.0 | independently reimplemented; pure TS, direction explicit, no SQL; changed 2026-11-10     | 1     |
 | `packages/core/src/rules/*`                 | `app/models/rule.rb`, `rule/**`                                                              | 562fe09 | AGPL-3.0 | independently reimplemented; evaluator first, no email/split actions; changed 2026-11-10 | 1     |
 | `packages/core/src/labels.ts`               | `transaction/label_normalizer*`                                                              | 562fe09 | AGPL-3.0 | trimmed NL/DE/EN packs                                                                   | 1     |
-| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`               | 562fe09 | AGPL-3.0 | independently reimplemented pure date/score engine; changed 2026-11-10                   | 2     |
+| `packages/core/src/bills/*`                 | `recurring_transaction*`, `recurring_occurrence.rb`, `recurring_allocation.rb`               | 562fe09 | AGPL-3.0 | independently reimplemented date/occurrence engine (#286); matcher pending; 2026-11-11    | 2     |
 | `packages/core/src/budget.ts`               | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`, `period.rb`              | 562fe09 | AGPL-3.0 | envelope math, no UI/share chain                                                         | 2     |
 | `packages/core/src/balanceSeries.ts`        | `balance/{base,forward,reverse}_calculator.rb`                                               | 562fe09 | AGPL-3.0 | re-expressed over vault arrays                                                           | 3     |
 | `packages/core/src/reports.ts`              | `income_statement*`, `balance_sheet*`, `period.rb`                                           | 562fe09 | AGPL-3.0 | subset: balance sheet, income statement, spending-vs-normal                              | 3     |

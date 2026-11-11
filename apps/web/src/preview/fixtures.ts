@@ -16,8 +16,12 @@ import {
   type BudgetPeriod,
   type CategoryGroup,
   type Tx,
+  type Bill,
+  type BillOccurrence,
   assignTxIds,
   ownAccounts,
+  generateBillOccurrences,
+  resolveBillAmountCents,
 } from "@lavega/core";
 import { createFileImport } from "@lavega/adapters";
 import {
@@ -178,7 +182,127 @@ export type VaultSeed = {
   txs: Tx[];
   rewards: RewardsBalance[];
   flows: ScheduledFlow[];
+  bills: Bill[];
+  billOccurrences: BillOccurrence[];
 };
+
+/** A bills screen that has something to say: rent, energy, a subscription, a
+ *  paused gym, a yearly insurance, a salary series as the payday, and a finite
+ *  instalment plan. Two past rows are already closed so the "paid" section is
+ *  not empty — closing them here is fixture data, not a mark-paid feature. */
+function billSeed(today: Date): { bills: Bill[]; billOccurrences: BillOccurrence[] } {
+  const asOf = iso(today);
+  const day = (n: number) => dayOf(today, n);
+  const month = today.getUTCMonth() + 1;
+  const firstOfLastMonth = iso(
+    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)),
+  );
+  const base: Omit<Bill, "id" | "name" | "amountCents" | "rules" | "anchorDate"> = {
+    type: "bill",
+    status: "active",
+    direction: "out",
+    amountStrategy: "fixed",
+    currency: "EUR",
+    weekendAdjust: "none",
+    endMode: "never",
+    tags: [],
+  };
+  const bills: Bill[] = [
+    {
+      ...base,
+      id: "b-huur",
+      name: "Huur",
+      amountCents: 125_000,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 1 }],
+      anchorDate: firstOfLastMonth,
+      category: "Wonen",
+    },
+    {
+      ...base,
+      id: "b-energie",
+      name: "Energie",
+      amountCents: 9_200,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 8 }],
+      anchorDate: firstOfLastMonth,
+      category: "Wonen",
+    },
+    {
+      ...base,
+      id: "b-spotify",
+      name: "Spotify",
+      type: "subscription",
+      amountCents: 1_099,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 15 }],
+      anchorDate: firstOfLastMonth,
+      merchant: "Spotify",
+      category: "Abonnementen",
+    },
+    {
+      ...base,
+      id: "b-gym",
+      name: "Sportschool",
+      type: "subscription",
+      status: "paused",
+      amountCents: 3_495,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 5 }],
+      anchorDate: firstOfLastMonth,
+    },
+    {
+      ...base,
+      id: "b-verzekering",
+      name: "Inboedelverzekering",
+      amountCents: 48_000,
+      rules: [{ frequency: "yearly", interval: 1, monthOfYear: month, dayOfMonth: day(20) }],
+      anchorDate: asOf,
+    },
+    {
+      ...base,
+      id: "b-studie",
+      name: "Studieschuld",
+      type: "installment",
+      amountCents: 14_500,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+      anchorDate: firstOfLastMonth,
+      endMode: "after_count",
+      endAfterCount: 24,
+    },
+    {
+      ...base,
+      id: "b-salaris",
+      name: "Salaris",
+      type: "income",
+      direction: "in",
+      amountCents: 380_000,
+      rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+      anchorDate: firstOfLastMonth,
+    },
+  ];
+  const generated = generateBillOccurrences(bills, [], asOf);
+  // Every cycle before today is closed, the way real history would be: an open
+  // past row with no matcher behind it would read as debt the owner already paid.
+  const byId = new Map(bills.map((b) => [b.id, b]));
+  const occurrences: BillOccurrence[] = generated.occurrences.map((o) => {
+    if (o.dueOn >= asOf) return o;
+    if (o.billId === "b-gym") {
+      return { ...o, status: "skipped", closedAt: o.dueOn, closedSource: "user" };
+    }
+    const bill = byId.get(o.billId);
+    return {
+      ...o,
+      status: "paid",
+      paidOn: o.dueOn,
+      paidAmountCents: bill == null ? 0 : resolveBillAmountCents(bill),
+      closedAt: o.dueOn,
+      closedSource: "auto",
+    };
+  });
+  return { bills, billOccurrences: occurrences };
+}
+
+/** The day-of-month of `today + n` days, for a yearly fixture anchored near today. */
+function dayOf(today: Date, n: number): number {
+  return new Date(today.getTime() + n * 86_400_000).getUTCDate();
+}
 
 export async function buildVaultSeed(today: Date, entity: string): Promise<VaultSeed> {
   const result = await createFileImport().load({
@@ -241,7 +365,15 @@ export async function buildVaultSeed(today: Date, entity: string): Promise<Vault
       note: "10 nights = 1 free",
     }),
   ];
-  return { accounts, txs: assignTxIds(result.txs), rewards, flows };
+  const bills = billSeed(today);
+  return {
+    accounts,
+    txs: assignTxIds(result.txs),
+    rewards,
+    flows,
+    bills: bills.bills,
+    billOccurrences: bills.billOccurrences,
+  };
 }
 
 /** Two stored budget envelopes for the fixture vault (issue #289): the last

@@ -68,6 +68,7 @@ export const MODES: Mode[] = [
     path: "/app/transactions",
   },
   { id: "forecast", group: "App", label: "Forecast", kind: "app", path: "/app/forecast" },
+  { id: "bills", group: "App", label: "Bills", kind: "app", path: "/app/bills" },
   { id: "optimise", group: "App", label: "Optimise", kind: "app", path: "/app/optimalisatie" },
   { id: "points", group: "App", label: "Points", kind: "app", path: "/app/punten" },
   { id: "profile", group: "App", label: "Profile", kind: "app", path: "/app/profiel" },
@@ -102,6 +103,7 @@ async function seedVault(
     await storage.putTxs(seed.txs);
     await storage.putRewards(seed.rewards);
     await storage.putScheduledFlows(seed.flows);
+    await storage.putBillPlan(seed.bills, seed.billOccurrences);
     await storage.putProfile(completeProfile(today));
     const budget = budgetSeed(seed.accounts, seed.txs, today);
     await storage.putBudgetPeriods(budget.periods);

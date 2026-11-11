@@ -8,9 +8,9 @@ import {
   occurrencesBetween,
 } from "@lavega/core";
 import type { Locale } from "./locale.js";
-import { formatDate, monthLabel, monthShort, weekdayLabel } from "./format.js";
+import { monthLabel, weekdayLabel } from "./format.js";
 import type { BillsCopy } from "./copy/bills.js";
-import { daysBetween, shiftDate, weekdayIndex } from "./components/blocks/dates.js";
+import { shiftDate, weekdayIndex } from "./components/blocks/dates.js";
 
 /* The bills screen's derivations, pure and clock-free: cadence text, the
  * upcoming rows, the calendar grid and the series rows. `asOf` is always an
@@ -206,11 +206,4 @@ export function shiftMonth(month: string, n: number): string {
   const [y, m] = month.split("-").map(Number);
   const index = y * 12 + (m - 1) + n;
   return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
-}
-
-/** "12 nov 2026" plus the relative day count, for a date tile's caption. */
-export function dateCaption(locale: Locale, date: string, asOf: string): string {
-  const days = daysBetween(asOf, date);
-  if (days === 0) return monthShort(locale, date);
-  return formatDate(locale, date);
 }
