@@ -8,6 +8,11 @@ export function backupFilename(dateStr: string): string {
   return `lavega-backup-${dateStr}.lavega`;
 }
 
+/** True when this back-up file carries the sealed document bytes (v3). */
+export function backupCarriesDocuments(blob: CipherBlob): boolean {
+  return blob.v === 3;
+}
+
 export function serializeBackup(blob: CipherBlob): string {
   return JSON.stringify(blob);
 }
@@ -16,8 +21,10 @@ export function serializeBackup(blob: CipherBlob): string {
  *  CipherBlob — the actual passphrase check happens later, in vault.restore. */
 export function parseBackup(text: string): CipherBlob {
   const o = JSON.parse(text);
-  // Sealed with the account's vault key: no KDF parameters to bound.
-  if (o?.v === 2) {
+  // Sealed with the account's vault key: no KDF parameters to bound. Version 3
+  // is the full bundle (vault + sealed document bytes); version 2 is the older
+  // vault-only file, still restorable (it clears the document store).
+  if (o?.v === 2 || o?.v === 3) {
     if (o.kdf !== "account-key" || typeof o.iv !== "string" || typeof o.ct !== "string")
       throw new Error("ongeldig back-upbestand");
     return o as CipherBlob;

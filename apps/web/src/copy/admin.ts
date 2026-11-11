@@ -713,6 +713,8 @@ type BackupCopy = {
     title: string;
     description: string;
     button: string;
+    /** The full .lavega bundle carries the sealed documents too. */
+    includesDocuments: (count: number) => string;
   };
   server: {
     title: string;
@@ -726,6 +728,10 @@ type BackupCopy = {
       overwriteButton: string;
     };
     success: string;
+    /** A server backup cannot carry the document bytes (a server-side bundle
+     *  needs a server change this slice does not own), so it refuses in words
+     *  instead of dropping them silently. */
+    documentsBlocked: (count: number) => string;
     errors: {
       locked: string;
       saveFailed: string;
@@ -1536,6 +1542,8 @@ const nlBackup: BackupCopy = {
     title: "Download",
     description: "Download een versleutelde back-up. Hij gaat alleen open met jouw LaVega-account.",
     button: "Download back-up",
+    includesDocuments: (count) =>
+      `${count} document${count === 1 ? "" : "en"} zit${count === 1 ? "" : "ten"} in deze back-up: de bestanden worden mee versleuteld.`,
   },
   server: {
     title: "Back-up op de server",
@@ -1552,6 +1560,8 @@ const nlBackup: BackupCopy = {
       overwriteButton: "Toch overschrijven",
     },
     success: "Back-up opgeslagen.",
+    documentsBlocked: (count) =>
+      `De back-up op de server kan de ${count} document${count === 1 ? "" : "en"} niet meenemen. Download de volledige .lavega-back-up hierboven; die bevat de bestanden wel.`,
     errors: {
       locked: "Ontgrendel de kluis voordat je een back-up maakt.",
       saveFailed: "Back-up opslaan mislukt.",
@@ -2333,6 +2343,8 @@ const enBackup: BackupCopy = {
     title: "Download",
     description: "Download an encrypted backup. Only your LaVega account can open it.",
     button: "Download backup",
+    includesDocuments: (count) =>
+      `${count} document${count === 1 ? "" : "s"} ${count === 1 ? "is" : "are"} in this backup: the files are sealed with it.`,
   },
   server: {
     title: "Backup on the server",
@@ -2349,6 +2361,8 @@ const enBackup: BackupCopy = {
       overwriteButton: "Overwrite anyway",
     },
     success: "Backup saved.",
+    documentsBlocked: (count) =>
+      `The server backup cannot carry the ${count} document${count === 1 ? "" : "s"}. Download the full .lavega backup above; it includes the files.`,
     errors: {
       locked: "Unlock the vault before making a backup.",
       saveFailed: "Failed to save backup.",

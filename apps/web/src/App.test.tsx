@@ -42,6 +42,16 @@ function fakeStorage(): VaultStorage {
     putBillPlan: async () => {},
     getValuations: async () => [],
     putValuations: async () => {},
+    getDocuments: async () => [],
+    putDocuments: async () => {},
+    putDocumentBytes: async () => {},
+    getDocumentBytes: async () => null,
+    hasDocumentBytes: async () => false,
+    deleteDocumentBytes: async () => {},
+    listDocumentBytes: async () => [],
+    deleteAllDocumentBytes: async () => {},
+    exportBundle: async () => null,
+    eraseDocuments: async () => 0,
   } as unknown as VaultStorage;
 }
 

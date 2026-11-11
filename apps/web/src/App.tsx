@@ -17,6 +17,7 @@ import type {
   BillDecisions,
   BillOccurrence,
   Valuation,
+  VaultDocument,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
@@ -24,6 +25,12 @@ import {
   ingest,
   reassignEntity,
   accountIsLiability,
+  checkDocumentUpload,
+  detectStatementMetadata,
+  findDocumentBySha,
+  matchStatementAccount,
+  removeDocument,
+  upsertDocument,
   dropAccountValuations,
   mergeValuations,
   normalizeValuation,
@@ -166,6 +173,7 @@ import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Bills from "./views/Bills";
+import type { DocumentNotice } from "./components/documents/DocumentsCard.js";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
@@ -273,6 +281,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Dated absolute valuations (WS3.1, issue #291). Account-keyed absolute
   // amounts; derived from them, never stored separately, is the daily series.
   const [valuations, setValuations] = useState<Valuation[]>([]);
+  // Statement METADATA only (WS3.4/#293). The sealed bytes live in their own
+  // IndexedDB store, so an upload never rewrites the vault ciphertext.
+  const [documents, setDocuments] = useState<VaultDocument[]>([]);
+  const [documentNotice, setDocumentNotice] = useState<DocumentNotice | null>(null);
+  /** How many documents the last erase removed, for the card's one line. */
+  const [documentErased, setDocumentErased] = useState<number | null>(null);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -657,6 +671,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedOccurrences,
         loadedDecisions,
         loadedValuations,
+        loadedDocuments,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -675,6 +690,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getBillOccurrences(),
         storage.getBillDecisions(),
         storage.getValuations(),
+        storage.getDocuments(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -707,6 +723,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setBillOccurrences(matched.occurrences);
       setBillDecisions(matched.decisions);
       setValuations(loadedValuations);
+      setDocuments(loadedDocuments);
       if (generated.added > 0 || matched.changed) {
         await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
       }
@@ -1050,6 +1067,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setBillOccurrences([]);
     setBillDecisions(EMPTY_BILL_DECISIONS);
     setValuations([]);
+    setDocuments([]);
+    setDocumentNotice(null);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -1178,6 +1197,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshProfiles,
       freshBills,
       freshOccurrences,
+      freshDocuments,
+      freshValuations,
     ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
@@ -1190,7 +1211,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       storage.getEntityProfiles(),
       storage.getBills(),
       storage.getBillOccurrences(),
+      storage.getDocuments(),
+      storage.getValuations(),
     ]);
+    // A restored vault carries its statement metadata AND its valuations; the
+    // document BYTES came back in the document store, so the card can show
+    // them immediately instead of after a reload.
+    setDocuments(freshDocuments);
+    setValuations(freshValuations);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
     const storedRules = upgradeRules(freshRules);
@@ -1674,6 +1702,131 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     const next = valuations.filter((v) => v.id !== id);
     setValuations(next);
     await storage.putValuations(next);
+  }
+
+  /** SHA-256 of the bytes: the document's identity, so the same file uploaded
+   *  twice is ONE document. */
+  async function sha256Hex(bytes: Uint8Array): Promise<string> {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as BufferSource);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function saveDocuments(next: VaultDocument[]) {
+    setDocuments(next);
+    await storage.putDocuments(next);
+  }
+
+  // WS3.4/WS3.5: gate → hash → dedupe → seal the bytes into the document store
+  // → detect the metadata → suggest an account. The bytes go FIRST, so metadata
+  // never points at something the vault does not hold.
+  async function handleDocumentUpload(file: File) {
+    setBusy(true);
+    setDocumentNotice(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const check = checkDocumentUpload({
+        filename: file.name,
+        mime: file.type,
+        byteSize: bytes.byteLength,
+      });
+      if (!check.ok) {
+        setDocumentNotice({ kind: "refused", filename: file.name, problem: check.problem });
+        return;
+      }
+      const sha256 = await sha256Hex(bytes);
+      if (findDocumentBySha(documents, sha256) != null) {
+        setDocumentNotice({ kind: "duplicate", filename: file.name });
+        return;
+      }
+      await storage.putDocumentBytes(sha256, bytes);
+      // A CSV is text we can read, so the detector's content tier works there
+      // exactly as Sure's does for an extracted PDF page.
+      const text =
+        check.extension === ".csv" || file.type.startsWith("text/")
+          ? new TextDecoder().decode(bytes.slice(0, 256 * 1024))
+          : null;
+      const detected = detectStatementMetadata({ filename: file.name, mime: file.type, text });
+      const match = matchStatementAccount(
+        {
+          institutionHint: detected.institutionHint,
+          accountNameHint: detected.accountNameHint,
+          accountLast4: detected.accountLast4,
+          currency: detected.currency,
+        },
+        accounts,
+      );
+      const doc: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: file.name,
+        mime: file.type || "application/octet-stream",
+        byteSize: bytes.byteLength,
+        kind: "statement",
+        source: "manual-upload",
+        uploadedAt: asOf,
+        periodFrom: detected.periodFrom,
+        periodTo: detected.periodTo,
+        currency: detected.currency ?? "EUR",
+        accountKey: null,
+        suggestedAccountKey: match.status === "matched" ? match.accountKey : null,
+        matchConfidence: match.status === "matched" ? match.confidence : null,
+        accountLast4: detected.accountLast4,
+        institutionHint: detected.institutionHint,
+        accountNameHint: detected.accountNameHint,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "unmatched",
+        metadataSources: detected.metadataSources,
+      };
+      await saveDocuments(upsertDocument(documents, doc));
+      setDocumentNotice({ kind: "stored", filename: file.name });
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDocumentLink(id: string, accountKey: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id
+          ? {
+              ...doc,
+              accountKey,
+              reviewStatus: "linked" as const,
+              suggestedAccountKey: null,
+              matchConfidence: 1,
+            }
+          : doc,
+      ),
+    );
+  }
+
+  async function handleDocumentReject(id: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id ? { ...doc, accountKey: null, reviewStatus: "rejected" as const } : doc,
+      ),
+    );
+  }
+
+  // Removing a document removes BOTH halves: the sealed bytes and the metadata.
+  async function handleDocumentRemove(id: string) {
+    const doc = documents.find((d) => d.id === id);
+    if (doc == null) return;
+    await storage.deleteDocumentBytes(doc.sha256);
+    await saveDocuments(removeDocument(documents, id));
+    setDocumentNotice(null);
+  }
+
+  async function handleDocumentEraseAll() {
+    const erased = await storage.eraseDocuments();
+    setDocuments([]);
+    setDocumentNotice(null);
+    setDocumentErased(erased);
   }
 
   // Manually set/override an account's annual interest rate (%) for the
@@ -2303,7 +2456,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           )}
 
           {view === "backup" && (
-            <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
+            <Backup
+              storage={storage}
+              asOf={asOf}
+              documentCount={documents.length}
+              onRestored={handleRestored}
+            />
           )}
 
           {view === "plan" && (
@@ -2383,6 +2541,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               storage={storage}
               asOf={asOf}
               onRestored={handleRestored}
+              documents={documents}
+              documentNotice={documentNotice}
+              documentErased={documentErased}
+              accounts={accounts}
+              txs={txs}
+              valuations={valuations}
+              onDocumentUpload={(file) => void handleDocumentUpload(file)}
+              onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
+              onDocumentReject={(id) => void handleDocumentReject(id)}
+              onDocumentRemove={(id) => void handleDocumentRemove(id)}
+              onDocumentEraseAll={() => void handleDocumentEraseAll()}
             />
           )}
         </main>

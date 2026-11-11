@@ -14,6 +14,9 @@ import { Field, CheckboxField } from "../components/ui/Field.js";
 type BackupProps = {
   storage: VaultStorage;
   asOf: string;
+  /** How many documents the vault holds; used to refuse a server backup that
+   *  cannot carry them, instead of silently dropping the files. */
+  documentCount?: number;
   // Called after a successful restore so App reloads accounts/txs/rules from
   // the (now swapped) vault state — restore() itself never touches React state.
   onRestored: () => void;
@@ -28,7 +31,13 @@ const formatDateTime = (locale: Locale, iso: string) =>
  * mag bestaan naast de download, en het is ook de reden dat een verloren
  * wachtwoord deze back-up net zo onbruikbaar maakt als die op schijf.
  */
-function ServerBackup({ storage }: { storage: VaultStorage }) {
+function ServerBackup({
+  storage,
+  documentCount = 0,
+}: {
+  storage: VaultStorage;
+  documentCount?: number;
+}) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
   const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
@@ -132,7 +141,16 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
         {updatedAt ? c.server.lastBackup(formatDateTime(locale, updatedAt)) : c.server.noBackupYet}{" "}
         {c.server.encryptionNote}
       </p>
-      <Button variant="primary" disabled={busy || erasing} onClick={() => void upload(false)}>
+      {documentCount > 0 && (
+        <p role="status" data-testid="server-backup-documents-blocked">
+          {c.server.documentsBlocked(documentCount)}
+        </p>
+      )}
+      <Button
+        variant="primary"
+        disabled={busy || erasing || documentCount > 0}
+        onClick={() => void upload(false)}
+      >
         {busy ? c.common.busy : c.server.backupNowButton}
       </Button>
       {conflict && (
@@ -207,7 +225,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
   );
 }
 
-export default function Backup({ storage, asOf, onRestored }: BackupProps) {
+export default function Backup({ storage, asOf, documentCount = 0, onRestored }: BackupProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
   const [file, setFile] = useState<File | null>(null);
@@ -217,8 +235,10 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
 
-  function handleDownload() {
-    const blob = storage.export();
+  async function handleDownload() {
+    // The FULL bundle (v3): the vault AND the sealed document bytes. A download
+    // that dropped documents would be worse than no download at all.
+    const blob = await storage.exportBundle();
     if (!blob) return; // locked/empty — nothing to download
     const url = URL.createObjectURL(
       new Blob([serializeBackup(blob)], { type: "application/json" }),
@@ -228,7 +248,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
     a.download = backupFilename(asOf);
     a.click();
     URL.revokeObjectURL(url);
-    posthog.capture("backup_downloaded");
+    posthog.capture("backup_downloaded", { documents: documentCount });
   }
 
   async function handleRestore(e: FormEvent) {
@@ -268,7 +288,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
         {c.download.button}
       </Button>
 
-      <ServerBackup storage={storage} />
+      <ServerBackup storage={storage} documentCount={documentCount} />
 
       <h3>{c.restore.title}</h3>
       <p className="text-warn">{c.restore.warning}</p>
