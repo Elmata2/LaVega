@@ -1173,6 +1173,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       createApp({
         brokerSync,
         partnerBudgetClient: partnerBudget,
+        cashFlowStore,
         ...credentialDependencies,
         ...sectorDependencies,
         resolveTenantId: options.resolveTenantId,

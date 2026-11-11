@@ -16,6 +16,7 @@ import {
   createRuntimeBrokerSync,
 } from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createMemoryCashFlowStore } from "./cashFlowSuggestions.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -1069,4 +1070,48 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
   expect(cache.read().positions).toMatchObject([{ symbol: "AAPL" }]);
   expect(cache.snapshot().trading212?.positions).toHaveLength(1);
   expect(cache.snapshot().ibkr).toBeUndefined();
+});
+
+test("an injected cash-flow store reaches the app on the no-Sentry runtime path", async () => {
+  /* Regression (#137 UI slice): the local runtime builds its app through the
+   * `if (!dsn)` branch, and that branch forgot to pass `cashFlowStore`, so a
+   * standalone/mounted run silently answered from the memory store and the
+   * seeded file rules/suggestions never reached the API. The owner's
+   * confirmation UI reads exactly these routes; without this the panel is
+   * always empty on a real local run. */
+  const previousDsn = process.env.SENTRY_DSN;
+  delete process.env.SENTRY_DSN;
+  try {
+    const cashFlowStore = createMemoryCashFlowStore();
+    await cashFlowStore.setSuggestionsEnabled(true);
+    await cashFlowStore.saveSuggestions([
+      {
+        broker: "trading212",
+        typeKey: "SHARES_IN",
+        rawType: "SHARES_IN",
+        kind: "withdrawal",
+        confidence: 0.72,
+        state: "pending",
+        amount: 250,
+        sign: 1,
+        currency: "EUR",
+        description: "Share purchase settlement",
+        createdAt: "2026-11-11T04:40:00.000Z",
+      },
+    ]);
+    const app = await createRuntimeApp({
+      priceStore: createInMemorySharedPriceStore(),
+      cashFlowStore,
+      resolveTenantId: () => "local",
+    });
+    const body = (await (
+      await app.request("http://localhost/api/investing/cash-flow-suggestions")
+    ).json()) as { enabled: boolean; count: number; pending: unknown[] };
+    expect(body.enabled).toBe(true);
+    expect(body.count).toBe(1);
+    expect(body.pending[0]).toMatchObject({ rawType: "SHARES_IN", signChange: true });
+  } finally {
+    if (previousDsn === undefined) delete process.env.SENTRY_DSN;
+    else process.env.SENTRY_DSN = previousDsn;
+  }
 });
