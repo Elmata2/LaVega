@@ -30,3 +30,5 @@ export * from "./market-data/yahoo/index.js";
 export * from "./benchmarks/inMemoryBenchmarkSelectionStore.js";
 export * from "./benchmarks/indexedDbBenchmarkSelectionStore.js";
 export * from "./layout/inMemoryInvestingLayoutStore.js";
+export * from "./partnerBudget/limits.js";
+export * from "./partnerBudget/PartnerBudget.js";
