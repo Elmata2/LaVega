@@ -10,8 +10,7 @@ import type { Tx } from "./model.js";
  *  keeps LaVega's negative-outflow convention at the `Tx` boundary. */
 export type Direction = "in" | "out";
 
-export const directionOfTx = (tx: Pick<Tx, "amount">): Direction =>
-  tx.amount < 0 ? "out" : "in";
+export const directionOfTx = (tx: Pick<Tx, "amount">): Direction => (tx.amount < 0 ? "out" : "in");
 
 /** EUR units to integer cents, half away from zero on both signs (ADR 0011).
  *  `-0.005` is `-1`, not `0`: `Math.round` alone truncates negative halves
