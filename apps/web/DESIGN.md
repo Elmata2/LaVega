@@ -148,6 +148,14 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 `--ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1)` — fast out, gentle settle. Transitions are 120–250ms and touch colour, opacity and transform only. Respect `prefers-reduced-motion`: a reduced-motion user gets the end state, not a faster animation.
 
+The marketing landing page (`src/styles/landing.css`) shares this curve as `--ease-out`. It adds three deliberate exceptions:
+
+- **Press feedback.** Every real control gets `scale(0.98)` on `:active` — 120ms on `.btn`, 140ms on the rest, 0.96 on the sign-in dialog's close. The hover rule is scoped with `:not(:active)` so the later, equal-specificity declaration cannot override the press.
+- **FAQ accordion.** `::details-content` animates `block-size` at 240ms — height is the one layout property an accordion may animate, since there is no transform equivalent. `allow-discrete` keeps the answer painted through the exit. Browsers without `::details-content` keep the instant behaviour.
+- **Scroll reveal.** Content is visible by default; `.lp-reveal` is added at render time only when an `IntersectionObserver` can restore it. A failed bundle therefore cannot leave the prerendered page blank. When the mobile menu closes, the panel leaves in 160ms and its items in 140ms with no stagger; opening takes 300ms on the panel and 400ms on its items, 60ms apart. Out is faster than in, and nothing on the way out waits for its turn.
+
+Reduced motion removes all three and shows the end state. Unlit words in the scroll-lit sentence sit at `opacity: 0.4` (~3.7:1 on midnight), not `0.3` (2.5:1), so the sentence meets WCAG AA for large text before its turn.
+
 ## Rules
 
 - **Do** keep one typeface. A second face is a design change, not a component decision.
