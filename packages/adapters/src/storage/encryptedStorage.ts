@@ -43,6 +43,7 @@ import type {
   BillOccurrence,
   Valuation,
   VaultDocument,
+  ImportSession,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { decryptJSON, deriveKey, openBytes, sealBytes, sealJSON } from "../crypto/vaultCrypto.js";
@@ -148,6 +149,10 @@ type VaultData = {
    *  sealed in the separate `documents` object store under the same SHA-256.
    *  Additive optional field; a legacy vault decrypts without it and reads []. */
   documents?: VaultDocument[];
+  /** Generic import sessions (WS3.6, issue #294): which rows one import
+   *  created, so a revert removes exactly those. Additive optional field; a
+   *  legacy vault decrypts without it and reads []. */
+  importSessions?: ImportSession[];
   learning?: LearningSection;
   events?: VaultEvent[];
 };
@@ -209,6 +214,10 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   /** Erase all document metadata and all sealed bytes in one pass (issue #293
    *  acceptance: erase removes BOTH). Returns how many documents were erased. */
   eraseDocuments(): Promise<number>;
+  /** Generic import sessions, oldest first; a legacy vault reads []. */
+  getImportSessions(): Promise<ImportSession[]>;
+  /** Replace-all: a revert rewrites the list in one save. */
+  putImportSessions(sessions: ImportSession[]): Promise<void>;
   /** The owner's merchant aliases; a legacy vault has none and reads []. */
   getMerchants(): Promise<Merchant[]>;
   putMerchants(m: Merchant[]): Promise<void>;
@@ -562,6 +571,17 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, documents: [...documents] };
+        await persist();
+      });
+    },
+    async getImportSessions(): Promise<ImportSession[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.importSessions ?? [])];
+    },
+    putImportSessions(sessions: ImportSession[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, importSessions: [...sessions] };
         await persist();
       });
     },

@@ -12,6 +12,7 @@ import type {
   Tx,
   Valuation,
   VaultDocument,
+  ImportSession,
 } from "@lavega/core";
 import {
   AdvisorProfile,
@@ -1054,6 +1055,36 @@ test("valuations round-trip; a legacy vault defaults to [] and a rewrite is repl
   s.lock();
   expect(await s.open(KEY, "user:a")).toBe("opened");
   expect(await s.getValuations()).toEqual([valuation]);
+});
+
+test("import sessions round-trip; a legacy vault defaults to [] and a rewrite is replace-all", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-import-sessions");
+  await s.open(KEY, "user:a");
+  expect(await s.getImportSessions()).toEqual([]); // legacy vault default
+  const session: ImportSession = {
+    id: "import-1",
+    documentId: "sha",
+    filename: "export.csv",
+    accountKey: "A",
+    format: "generic-csv",
+    importedAt: "2026-11-11",
+    txIds: ["t1", "t2"],
+    rowsRead: 3,
+    rowsImported: 2,
+    duplicatesSkipped: 0,
+    rowsRejected: 1,
+  };
+  await s.putImportSessions([session]);
+  expect(await s.getImportSessions()).toEqual([session]);
+  // Replace-all: a revert rewrites the list, so a removed session cannot return
+  // from a stale snapshot.
+  await s.putImportSessions([]);
+  expect(await s.getImportSessions()).toEqual([]);
+  await s.putImportSessions([session]);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("opened");
+  expect(await s.getImportSessions()).toEqual([session]);
 });
 
 test("opening a vault migrates a known account-type spelling once", async () => {
