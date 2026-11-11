@@ -1269,3 +1269,68 @@ test("a tail page with an unknown row keeps paging and reads the new rows", asyn
   // orders was a tail, so it must not replace the stored collection.
   expect(result.fullStreams).toEqual(["transactions", "dividends"]);
 });
+
+test("60 new orders at the head of a 1,500-order history cost exactly 3 order requests", async () => {
+  // Stored: 1,500 known trades (fill ids 1..1500, the brokerTradeId the adapter
+  // maps to). New: 60 trades (fill ids 2000..2059) at the newest end.
+  const known = new Set<string>();
+  for (let id = 1; id <= 1500; id += 1) {
+    known.add(
+      `trading212:${stableTradeId({
+        entity: "BV",
+        date: "2026-08-18",
+        symbol: "AAPL",
+        side: "buy",
+        quantity: 2,
+        price: 10,
+        amount: 20,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId: String(id),
+      })}`,
+    );
+  }
+  const orderWithFill = (fillId: number) => {
+    const base = order(fillId, "AAPL");
+    return { ...base, fill: { ...base.fill, id: fillId } };
+  };
+  const newOrders = Array.from({ length: 60 }, (_, index) => orderWithFill(2000 + index));
+  const storedOrders = Array.from({ length: 50 }, (_, index) => orderWithFill(1 + index));
+  const pages: Array<Record<string, unknown>> = [
+    // Page 1: 50 new rows.
+    { items: newOrders.slice(0, 50), nextPagePath: "/orders-page-2" },
+    // Page 2: 10 new rows, then 40 already-stored rows.
+    {
+      items: [...newOrders.slice(50), ...storedOrders.slice(0, 40)],
+      nextPagePath: "/orders-page-3",
+    },
+    // Page 3: 50 already-stored rows, so the tail stops here.
+    {
+      items: storedOrders.slice(40, 50).concat(storedOrders.slice(0, 40)),
+      nextPagePath: "/orders-page-4",
+    },
+    { items: storedOrders, nextPagePath: null },
+  ];
+  let orderRequests = 0;
+  const baseUrl = await serve((request, response) => {
+    const url = request.url ?? "";
+    if (url.startsWith("/api/v0/equity/history/orders") || url.startsWith("/orders-page-")) {
+      const index =
+        url === "/api/v0/equity/history/orders?limit=50" ? 0 : Number(url.split("-").at(-1)) - 1;
+      orderRequests += 1;
+      return json(response, 200, pages[Math.min(index, pages.length - 1)]);
+    }
+    return json(response, 200, { items: [], nextPagePath: null });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: [],
+    knownHistory: { tradeIds: known },
+  });
+
+  expect(orderRequests).toBe(3);
+  expect(result.historyMode).toBe("incremental");
+  expect(result.fullStreams).not.toContain("orders");
+});

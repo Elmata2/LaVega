@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { createIbkrFlexAdapter } from "./flexAdapter.js";
 import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
@@ -249,4 +249,14 @@ test("separate syncs do not share in-flight statement state", async () => {
     adapter().sync({ lanes: ["holdings", "history"], entity: "two" }),
   ]);
   expect(reference).toBe(2);
+});
+
+test("a holdings-only lane spends no Flex request", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const result = await adapter().sync({ entity: "personal", lanes: ["holdings"] });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(result.problems).toEqual([]);
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.sections.trades.status).toBe("unavailable");
 });

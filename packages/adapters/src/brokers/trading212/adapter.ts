@@ -16,7 +16,6 @@ import {
   historyPending,
   type BrokerAccessAdapter,
   type BrokerHistoryStream,
-  type BrokerKnownHistory,
   type BrokerResult,
   type BrokerSyncResume,
 } from "../BrokerAccessAdapter.js";
