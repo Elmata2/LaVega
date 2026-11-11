@@ -182,10 +182,11 @@ function makeMemory(intervals: PartnerIntervals) {
     return { slot: DateTime.makeUnsafe(slot), granted: true };
   });
 
-  const blockedUntil = Effect.fnUntraced(function* (key: PartnerKey) {
-    const until = rows.get(rowId(key))?.blockedUntil ?? null;
-    return until === null ? null : DateTime.makeUnsafe(until);
-  });
+  const blockedUntil = (key: PartnerKey) =>
+    Effect.sync(() => {
+      const until = rows.get(rowId(key))?.blockedUntil ?? null;
+      return until === null ? null : DateTime.makeUnsafe(until);
+    });
 
   const upsert = (key: PartnerKey, now: number): Row => {
     const id = rowId(key);

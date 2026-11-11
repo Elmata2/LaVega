@@ -393,7 +393,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           updatedAt,
           message: "Positions are loaded",
         };
-      } else {
+      } else if (event.type === "response") {
         syncProgress = {
           ...syncProgress,
           status: "running",
