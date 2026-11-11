@@ -3,6 +3,7 @@ export * from "./storage/indexeddb.js";
 export * from "./storage/encryptedStorage.js";
 export * from "./prices/PriceStore.js";
 export * from "./prices/inMemoryPriceStore.js";
+export * from "./prices/sharedPriceStoreCore.js";
 export * from "./prices/indexedDbPriceStore.js";
 export * from "./crypto/vaultCrypto.js";
 export * from "./credentials/localCredentialStore.js";

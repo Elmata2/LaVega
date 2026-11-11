@@ -6,6 +6,7 @@ import {
   createPriceBarRepository,
   createPartnerBudgetRepository,
   createPriceSyncStateRepository,
+  createSharedPriceRepository,
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
@@ -33,6 +34,9 @@ import type {
   BrokerSyncOperationStore,
   PriceStore,
   ScheduledBroker,
+  SharedPriceBar,
+  SharedPriceCoverage,
+  SharedPriceStore,
 } from "@lavega/adapters";
 import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
 
@@ -65,6 +69,52 @@ export function createNeonPriceStore(
       // No tenant in the signature, so the caller's own is the only safe one.
       await createPriceBarRepository(db, await resolveTenantId()).purgeAll();
     },
+  };
+}
+
+/**
+ * The shared, instrument-keyed price store (issue #307). The SQL lives in
+ * `@lavega/database`; this maps a stored row to the contract's row shape, which
+ * carries no instrument key and no symbol (the series is the key; the reader
+ * supplies its own symbol).
+ */
+export function createNeonSharedPriceStore(db: Database): SharedPriceStore {
+  const repository = createSharedPriceRepository(db);
+  const bar = ({ instrumentKey: _key, ...rest }: { instrumentKey: string } & SharedPriceBar) =>
+    rest;
+  return {
+    async getRange(key, from, to) {
+      return (await repository.getRange(key, from, to)).map(bar);
+    },
+    async getRanges(keys) {
+      const grouped = await repository.getRanges(keys);
+      return new Map([...grouped].map(([key, rows]) => [key, rows.map(bar)]));
+    },
+    lastDate: (key) => repository.lastDate(key),
+    upsert: (instrumentKey, bars) =>
+      repository.upsert(
+        instrumentKey,
+        bars.map((row) => ({ ...row, instrumentKey })),
+      ),
+    replaceRange: (instrumentKey, bars, from, to) =>
+      repository.replaceRange(
+        instrumentKey,
+        bars.map((row) => ({ ...row, instrumentKey })),
+        from,
+        to,
+      ),
+    async getCoverage(key): Promise<SharedPriceCoverage | null> {
+      const row = await repository.getCoverage(key);
+      if (!row) return null;
+      const { instrumentKey: _key, ...coverage } = row;
+      return coverage;
+    },
+    putCoverage: (instrumentKey, coverage) =>
+      repository.putCoverage(instrumentKey, { ...coverage, instrumentKey }),
+    latestChange: (instrumentKeys) => repository.latestChange(instrumentKeys),
+    adoptAlias: (key, alias) => repository.adoptAlias(key, alias),
+    claim: (key, owner, ttlMs) => repository.claim(key, owner, ttlMs),
+    release: (key, owner) => repository.release(key, owner),
   };
 }
 
