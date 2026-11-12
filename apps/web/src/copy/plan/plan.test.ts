@@ -913,7 +913,7 @@ describe("plan copy: wording", () => {
     "%s: every rendered template, reason, empty state and note is free of advice language",
     (l) => {
       const hits = renderAll(l)
-        // The footer states that LaVega now makes recommendations (owner, 27 Oct 2026).
+        // The footer is the disclaimer itself ("not financial advice"), so it names the word.
         .filter((r) => !/shell\.footer/.test(r.where))
         .map((r) => ({ ...r, found: findAdviceLanguage(r.text, l) }))
         .filter((r) => r.found.length > 0)
