@@ -288,7 +288,7 @@ test("each half keeps its own module, so switching back and forth is a round tri
   const personal = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("a.nav-item", "Forecast")); // Zakelijk left on Forecast
+  await click(button("a.nav-item", "Optimalisatie")); // Zakelijk left on Optimalisatie
   const business = screen();
 
   await click(scopeButton("Persoonlijk"));
@@ -296,7 +296,7 @@ test("each half keeps its own module, so switching back and forth is a round tri
   expect(screen()).toBe(personal);
 
   await click(scopeButton("Zakelijk"));
-  expect(title()).toBe("Forecast");
+  expect(title()).toBe("Optimalisatie");
   expect(screen()).toBe(business);
 });
 
@@ -323,4 +323,17 @@ test("a filter naming an account of one half never narrows the other half", asyn
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
   expect(screen()).not.toContain("Kantoorhuur");
+});
+
+test("an optional view that is not in the nav still opens by direct URL", async () => {
+  window.history.pushState({}, "", "/app/forecast");
+  try {
+    await mount();
+    expect(title()).toBe("Forecast");
+    expect([...container!.querySelectorAll("a.nav-item")].map((a) => a.textContent)).not.toContain(
+      "Forecast",
+    );
+  } finally {
+    window.history.pushState({}, "", "/");
+  }
 });

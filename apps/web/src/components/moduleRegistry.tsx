@@ -50,6 +50,10 @@ export type ModuleDef = {
   /** IN DE NAV ZODRA ER NOG NIETS GEKOZEN IS? Standaard ja — zie
    *  DEFAULT_MODULES, waar staat waarom "alles aan" het juiste beginpunt is.
    *
+   *  Sinds de focus-beslissing (Overzicht, Optimalisatie, Rekeningen) zijn
+   *  Verplichtingen, Forecast en Punten ook optioneel: wel te openen en aan te
+   *  zetten in Profiel, niet standaard in de nav. De route blijft bereikbaar.
+   *
    *  Eén module zegt hier nee, en dat is geen uitzondering maar het gevolg van
    *  een eerder besluit: Transacties is in augustus BEWUST uit de navigatie
    *  gehaald (commit a52da45 — importeren hoort op de startpagina en transacties
@@ -229,6 +233,7 @@ export const MODULES: ModuleDef[] = [
     id: "bills",
     label: "Verplichtingen",
     what: "Wat er af moet, wat betaald is en wat tekort is voor je volgende salaris.",
+    defaultOn: false,
     icon: (
       <Icon>
         <rect x="4" y="5" width="16" height="16" rx="2" />
@@ -255,6 +260,7 @@ export const MODULES: ModuleDef[] = [
     id: "forecast",
     label: "Forecast",
     what: "Wat er de komende 30, 60 en 90 dagen binnenkomt en uitgaat.",
+    defaultOn: false,
     icon: (
       <Icon>
         <path d="M4 16l5-6 4 3 7-9" />
@@ -357,6 +363,7 @@ export const MODULES: ModuleDef[] = [
      * een moduletekst die iets belooft wat het scherm niet toont, is precies het
      * soort onwaarheid dat hier nergens mag staan. */
     what: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
+    defaultOn: false,
     icon: (
       <Icon>
         <circle cx="12" cy="12" r="8" />

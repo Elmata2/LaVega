@@ -131,18 +131,18 @@ test("the picker toggles a module out of the nav and back in again", () => {
 
 test("the selection survives a reload — it is a local preference, not React state", () => {
   render();
-  click(toggle("Punten"));
-  expect(navLabels()).not.toContain("Punten");
+  click(toggle("Valuta"));
+  expect(navLabels()).not.toContain("Valuta");
 
   // What a reload actually reads back: the choice is stored, and it is the
-  // ABSENCE of "punten" that has to survive.
-  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).not.toContain("punten");
+  // ABSENCE of "valuta" that has to survive.
+  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).not.toContain("valuta");
 
   // Tear the whole tree down and mount a fresh one, as a reload would.
   act(() => root!.unmount());
   container!.remove();
   render();
-  expect(navLabels()).not.toContain("Punten");
+  expect(navLabels()).not.toContain("Valuta");
 });
 
 test("Overzicht cannot be switched off — an app with no home is a broken app", () => {
@@ -156,6 +156,20 @@ test("Overzicht cannot be switched off — an app with no home is a broken app",
 
   expect(toggleModule(["overview", "valuta"], HOME_MODULE, false)).toContain("overview");
   expect(enabledModules([])).toEqual(["overview"]);
+});
+
+test("the default nav is plan, overview, accounts, optimalisatie; the rest is optional but in the picker", () => {
+  expect(DEFAULT_MODULES).toEqual(expect.arrayContaining(["overview", "accounts", "optimalisatie"]));
+  for (const id of ["forecast", "bills", "punten", "transactions"] as const) {
+    expect(DEFAULT_MODULES).not.toContain(id);
+  }
+  render();
+  expect(navLabels()).not.toContain("Forecast");
+  for (const label of ["Forecast", "Verplichtingen", "Punten", "Transacties"]) {
+    expect(toggle(label).getAttribute("aria-checked")).toBe("false");
+  }
+  click(toggle("Forecast"));
+  expect(navLabels()).toContain("Forecast");
 });
 
 test("an unset preference is the default set, an emptied one is not", () => {
