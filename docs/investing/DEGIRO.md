@@ -21,8 +21,13 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   `onbekend of leeg bestand — geen transacties of posities herkend`. D2 (#314)
   replaced that detection: the same file is now named `DeGiro account`. See
   [Reader and detection](#reader-and-detection-d2-314).
-- Row mapping is **not** built yet. A recognised file reports one problem naming
-  the profile and returns no rows; #315–#319 add the mapping.
+- The account statement maps to `CashFlow[]` with a completeness proof (D3,
+  #315): `readAccountStatement` classifies every row into one of four buckets
+  and walks the `Saldo` column. See
+  [Account statement → cash flows](#account-statement--cash-flows-d3-315).
+  It is not wired into the import path yet: dividends (#316), trades (#317) and
+  the adapter (#323) still have to consume it, so a recognised file still
+  reports one problem naming the profile.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -168,6 +173,45 @@ asserts the headers, the walk, the row kinds and the internal arithmetic.
 - `parseBrokerFile(filename, text)` delegates to `readDeGiroCsv` and **ignores
   `filename`**. No filename regex is left in the DeGiro path.
 
+### Account statement → cash flows (D3, #315)
+
+`packages/core/src/parsers/degiro/account.ts`, `classify.ts`, `saldo.ts`.
+
+`readAccountStatement(text)` returns `{ cashFlows, counts, saldo, problems }` and
+never throws. It first classifies every data row into exactly one bucket, so no
+row is dropped and no row is counted twice:
+
+| Bucket      | Rows                                                                                                 | Owner      |
+| ----------- | ---------------------------------------------------------------------------------------------------- | ---------- |
+| `cash-flow` | external money, interest, fees, sweep, FX legs without an Order Id, iDEAL reservations, unknown text | this issue |
+| `dividend`  | `Dividend`, `Dividendbelasting`                                                                      | #316       |
+| `trade`     | executions, their `DEGIRO Transactiekosten…` rows, and `Valuta …` AutoFX legs carrying an Order Id   | #317       |
+| `skipped`   | information lines and corporate actions: empty `Mutatie`                                             | —          |
+
+`counts` sums to the number of data rows; the fixture gives 12 / 3 / 10 / 4 for
+29 rows. An unrecognised description still becomes a cash flow of kind `other`
+and adds a problem naming the text — it is never dropped.
+
+Cash-flow kinds follow the spec: external money only is `deposit` /
+`withdrawal`; interest keeps the signed `Mutatie`; `DEGIRO Aansluitingskosten`
+and a commission row without an Order Id are `fee`; the cash sweep, FX legs
+without an Order Id and the iDEAL reservations are `other` with their
+description. Ids are the same content hash the IBKR and Trading 212 paths use
+(`degiro-cash-flow | date | currency | amount | kind | description`, plus an
+occurrence counter for identical rows), so re-parsing the same file yields the
+same ids and a merge cannot append duplicates.
+
+**Reservation finding (the open question in #315).** `Reservation iDEAL /
+Sofort Deposit` rows do _not_ double move cash with a later `iDEAL Deposit`.
+Evidence: the Saldo walk holds on the fixture **with** both reservation rows
+included, so each one moves real cash and dropping them would break the walk.
+Their magnitudes are not a mirror pair of one deposit either — the fixture has
++76,76 and later −73,24 while the real `iDEAL Deposit` is a separate +21,76 row.
+Conclusion: a reservation is a reservation leg, not external money arriving. It
+is `other` with its description and **never** `deposit`, so counting deposits in
+`flatex Storting` / `iDEAL Deposit` alone cannot double count. Encoded in
+`classify.test.ts` and `account.test.ts`.
+
 ### One file set, three profiles
 
 | Profile        | DeGiro export               | Produces                                                    | Status   |
@@ -286,4 +330,5 @@ number and keep the Saldo walk consistent.
 Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
 
 Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
-header-signature detection).
+header-signature detection), D3 (#315, account statement to cash flows plus the
+Saldo walk invariant).

@@ -54,6 +54,16 @@ export * from "./parsers/mt940.js";
 export * from "./parsers/parseBankFile.js";
 export * from "./parsers/degiro/read.js";
 export * from "./parsers/degiro/profiles.js";
+/* `AccountClassification` in this package already means asset vs liability
+ * (`./balance.ts`), so the DeGiro row bucket is exported under its own name. */
+export {
+  classifyAccountRow,
+  type AccountBucket,
+  type AccountRowRef,
+} from "./parsers/degiro/classify.js";
+export type { AccountClassification as DeGiroRowClassification } from "./parsers/degiro/classify.js";
+export * from "./parsers/degiro/saldo.js";
+export * from "./parsers/degiro/account.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
 export * from "./n8nSettings.js";
