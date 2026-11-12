@@ -32,6 +32,7 @@ import {
 } from "@lavega/core";
 import Plan from "../../views/Plan";
 import { planShellCopy } from "../../copy/plan";
+import { cardsCopy } from "../../copy/plan/index.js";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
 import { buildHeldCards } from "../heldCards";
 import ChangeLog from "../ChangeLog";
@@ -1013,6 +1014,22 @@ test("rarely paying in full with the only card marked paid in full: warning and 
   openAll(c);
   expect(c.textContent).toContain("You do not always pay your card off in full");
   expect(q(c, "plan-card-interest-ignored")).not.toBeNull();
+  unmount();
+});
+
+test.each([
+  ["sometimes", true],
+  ["rarely", true],
+  ["full", false],
+] as const)("card repayment %s: interest warning shown = %s", (cardRepayment, shown) => {
+  const { ctx, result } = cardsFor([], {
+    ...statedPatch,
+    cardRepayment: { value: cardRepayment, source: "stated", at: AS_OF },
+  });
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const warning = cardsCopy.en.interest.warning;
+  expect(c.textContent!.includes(warning)).toBe(shown);
   unmount();
 });
 
