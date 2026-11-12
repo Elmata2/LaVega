@@ -64,11 +64,14 @@ function finishPositions(positions: Omit<Position, "entity" | "tenantId">[]): Pa
 }
 
 /**
- * Parses DeGiro's transaction export. Verified export shape (Dutch/English):
- * semicolon-delimited CSV with Date/Datum, Product, ISIN, Quantity/Aantal,
- * Price/Koers, Total/Totaal, Currency/Valuta and Order ID columns. DeGiro's
- * cash-flow export has no product/order fields and is reported, not discarded.
- * Portfolio exports are parsed as positions when no transaction shape matches.
+ * Broker-file detection and parsing.
+ *
+ * WARNING: the DeGiro shape this function looks for is the invented one from
+ * #47/#49 (semicolon-separated, with a separate Currency column). Real DeGiro
+ * exports are comma-separated and label the currency next to the amount. The
+ * real formats are recorded in `docs/investing/DEGIRO.md`; #314 replaces this
+ * detection and the parsing that hangs off it. Do not add DeGiro fixtures
+ * against the shape below.
  */
 export function parseBrokerFile(filename: string, text: string): ParsedBrokerFile {
   if (!text.trim())

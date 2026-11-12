@@ -13,19 +13,21 @@ file import, no credentials, no automation.
 - `packages/core/src/parsers/parseBrokerFile.ts` and
   `packages/adapters/src/brokers/degiro/fileImport.ts` exist (#47, #49).
 - Nothing in `apps/` imports them. A user cannot reach DeGiro in the product.
-- The checked-in fixtures use invented headers (`Date;Time;…;Currency;Order ID`,
-  semicolon). No real DeGiro export has that shape.
+- The old #47/#49 fixtures used invented headers (`Date;Time;…;Currency;Order
+ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
+  checked in real-format fixtures.
 - Run against a real NL account statement (`Rekeningoverzicht`, the file DeGiro
   calls `Account.csv`), the parser returns
   `onbekend of leeg bestand — geen transacties of posities herkend`.
-- `Transactions.csv` and `Portfolio.csv` shapes are **unverified**. Headers
-  reconstructed from memory also fail (one misreads a USD trade as a EUR
-  position). Treat both shapes as unknown until D1 checks in real exports.
+- `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
+  They are now verified from real exports of 2026-11-12 (see the two sections
+  below). The parser still looks for the invented #47/#49 shape; #314 replaces
+  it, and the real-format fixtures are checked in.
 
 ## Verified: the account statement (`Account.csv`)
 
-Observed in two real NL exports (110 and 10 rows). Headers and description
-vocabulary only; no amounts are recorded here.
+Observed in three real NL exports (109, 21 and 9 rows). Headers and
+description vocabulary only; no amounts are recorded here.
 
 ```
 Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id
@@ -58,16 +60,75 @@ Row kinds seen (`#` = number):
 
 Not seen in the sample and required in D1's fixture: a sell (`Verkoop`), a
 corporate action (split, ISIN change, merger), a transfer of shares in or out.
+These rows are in the checked-in fixture; they are hand-built, not observed.
+
+## Verified: the transaction export (`Transactions.csv`)
+
+Observed in real NL and EN exports of 2026-11-12 (25 rows each, identical rows,
+only the header differs). Headers, byte for byte:
+
+```
+Datum,Tijd,Product,ISIN,Beurs,Uitvoeringsplaats,Aantal,Koers,,Lokale waarde,,Waarde EUR,Wisselkoers,AutoFX Kosten,Transactiekosten en/of kosten van derden EUR,Totaal EUR,Order ID
+```
+
+```
+Date,Time,Product,ISIN,Reference exchange,Venue,Quantity,Price,,Local value,,Value EUR,Exchange rate,AutoFX Fee,Transaction and/or third party fees EUR,Total EUR,Order ID
+```
+
+- Comma delimiter, quoted fields, comma decimals (`"27,0700"`, `"-189,49"`).
+- `Koers`/`Price` is followed by an unnamed **price-currency** column; `Lokale
+waarde`/`Local value` by an unnamed **local-currency** column. EUR value,
+  AutoFX fee and transaction fee are in EUR.
+- Rows are newest first. 25 rows, 24 Order Ids: a partial fill shares one
+  Order Id.
+- The sample holds buys only. A sell row is not verified; #318 must handle it
+  from the account statement until one appears in an export.
+- `AutoFX Kosten` is present on every row, also when it is `0,00`.
+
+## Verified: the portfolio export (`Portfolio.csv`)
+
+Observed in real NL and EN exports of 2026-11-12 (13 rows each, identical rows).
+Headers, byte for byte:
+
+```
+Product,Symbool/ISIN,Aantal,Slotkoers,Lokale waarde,,Waarde in EUR
+```
+
+```
+Product,Symbol/ISIN,Amount,Closing,Local value,,Value in EUR
+```
+
+- Comma delimiter, quoted fields, comma decimals.
+- The first row is `CASH & CASH FUND & FTX CASH (EUR)` with empty ISIN,
+  quantity and closing price: a cash balance, not a position. Confirmed.
+- No date column. The export date must be asked for, never invented.
+- `Lokale waarde` is followed by an unnamed local-currency column.
+
+## Fixtures (D1, #313)
+
+`packages/core/src/parsers/__fixtures__/degiro/{nl,en}/`
+
+| File                  | Source                            | Rows | Notes                                                                                               |
+| --------------------- | --------------------------------- | ---- | --------------------------------------------------------------------------------------------------- |
+| `nl/account.csv`      | real 109-row NL account statement | 29   | header byte-identical; sell, partial fill, split, transfer-in and a full AutoFX group added by hand |
+| `nl/transactions.csv` | real 25-row NL transaction export | 25   | header byte-identical; partial-fill Order Id kept                                                   |
+| `en/transactions.csv` | real 25-row EN transaction export | 25   | same rows; EN header                                                                                |
+| `nl/portfolio.csv`    | real 13-row NL portfolio export   | 13   | header byte-identical; cash row kept                                                                |
+| `en/portfolio.csv`    | real 13-row EN portfolio export   | 13   | same rows; EN header                                                                                |
+
+Every amount, balance, Order Id, ISIN and product is synthetic. `Saldo` was
+recomputed so the walk above holds per currency. `degiroFixtures.test.ts`
+asserts the headers, the walk, the row kinds and the internal arithmetic.
 
 ## Design
 
 ### One file set, three profiles
 
-| Profile        | DeGiro export               | Produces                                                    | Status     |
-| -------------- | --------------------------- | ----------------------------------------------------------- | ---------- |
-| `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | verified   |
-| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | unverified |
-| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | unverified |
+| Profile        | DeGiro export               | Produces                                                    | Status   |
+| -------------- | --------------------------- | ----------------------------------------------------------- | -------- |
+| `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | verified |
+| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | verified |
+| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | verified |
 
 The account statement is the **primary** import. It alone proves cash history.
 Transactions and Portfolio enrich it; neither is required.
@@ -86,9 +147,17 @@ header, never a guess.
   Otherwise `unknown` with the failing row named.
 - **Saldo walk invariant.** The file is newest first: reverse it, never re-sort
   (a trade, its fee and its AutoFX legs share one `Datum`+`Tijd`; file order is
-  the only true order). Then per currency:
-  `Saldo[n] = Saldo[n-1] + Mutatie[n]`. This test proves no row was dropped or
-  double-counted. It decides the iDEAL reservation question with evidence.
+  the only true order). Two kinds of row stay out of the walk:
+  - `Degiro Cash Sweep Transfer` moves cash between the DeGiro account and the
+    flatex bank; its `Saldo` column reports the flatex-bank leg.
+  - a row with an empty `Mutatie` is an information line; no cash moves.
+
+  For the rest, per currency: `Saldo[n] = Saldo[n-1] + Mutatie[n]`. Verified on
+  the three real exports (109, 21 and 9 rows): no break, except one row in two
+  of the files that differs by €0.01 because the file rounds quantity × price
+  to cents. The naive rule, which includes sweeps and information lines, breaks
+  on every sweep and information row.
+
 - **Cash flow kinds.** External money only is `deposit`/`withdrawal`. Cash
   sweep, FX legs and flatex transfer lines are `other` with the description.
   Information lines with empty `Mutatie` emit nothing.
@@ -106,7 +175,7 @@ header, never a guess.
   OpenFIGI ISIN path that Trading 212 already uses.
 - **Portfolio cash row.** A `CASH & CASH FUND …` row (if D1 confirms it) is a
   `CashBalance`, not a position.
-- **Position `asOf`.** The portfolio export carries no date (to confirm in D1).
+- **Position `asOf`.** The portfolio export carries no date (confirmed 2026-11-12).
   The upload form asks for the export date, default today. Never invent one
   silently.
 
