@@ -2,6 +2,8 @@ import { expect, test } from "vitest";
 import { AdvisorProfile, RISK_SCALE, emptyProfile } from "@lavega/core";
 import {
   applyBirthYear,
+  applyCardBalances,
+  applyCardRepayment,
   applyChildren,
   applyForeignSpend,
   applyGoals,
@@ -9,6 +11,7 @@ import {
   applyPriorities,
   applySpendMix,
   applyStatedBanks,
+  applyStatedCards,
 } from "../state.js";
 import {
   answerCards,
@@ -421,6 +424,47 @@ test("the VAT screen follows work and appears only for freelance or business", (
     expect(list).toHaveLength(screensFor(emptyProfile()).length + 1);
   }
   expect(sectionOf("vat")).toBe("about");
+});
+
+test("card-balances follows card-repayment and only exists when credit cards are stated", () => {
+  expect(screensFor(emptyProfile())).not.toContain("card-balances");
+  const stated = applyStatedCards(emptyProfile(), ["american-express-gold-card"], AS_OF);
+  const all = screensFor(stated);
+  const at = all.indexOf("card-balances");
+  expect(all[at - 1]).toBe("card-repayment");
+  expect(all[at + 1]).toBe("spend-mix");
+  expect(all).toHaveLength(screensFor(answerCards(stated, false, AS_OF)).length + 2);
+  expect(sectionOf("card-balances")).toBe("about");
+  expect(screensFor(answerCards(stated, false, AS_OF))).not.toContain("card-balances");
+});
+
+test("resume after card-repayment lands on card-balances; after it on spend-mix", () => {
+  const stated = answeredNew(
+    applyCardRepayment(applyStatedCards(emptyProfile(), ["other"], AS_OF), "full", AS_OF),
+  );
+  expect(resumeScreen(markDone(stated, "card-repayment"))).toBe("card-balances");
+  expect(resumeScreen(markDone(stated, "card-balances"))).toBe("spend-mix");
+});
+
+test("answering Nee on cards drops the stated balances", () => {
+  const p = applyCardBalances(
+    applyStatedCards(emptyProfile(), ["other"], AS_OF),
+    [{ cardId: "other", balanceCents: 1000, paysInFull: true }],
+    AS_OF,
+  );
+  expect(answerCards(p, false, AS_OF).cardBalances).toBeUndefined();
+});
+
+test("card-balances is answered when every stated credit card has an entry, or none is stated", () => {
+  const entry = (cardId: string) => ({ cardId, balanceCents: 0, paysInFull: true });
+  const two = applyStatedCards(emptyProfile(), ["a", "b"], AS_OF);
+  expect(isAnswered(emptyProfile(), "card-balances")).toBe(true);
+  expect(isAnswered(answerCards(two, false, AS_OF), "card-balances")).toBe(true);
+  expect(isAnswered(two, "card-balances")).toBe(false);
+  const one = applyCardBalances(two, [entry("a")], AS_OF);
+  expect(isAnswered(one, "card-balances")).toBe(false);
+  expect(isAnswered(applyCardBalances(two, [entry("a"), entry("b")], AS_OF), "card-balances")).toBe(true);
+  expect(isAnswered(applyStatedCards(one, ["c"], AS_OF), "card-balances")).toBe(false);
 });
 
 test("Nee on cards drops cardRepayment", () => {

@@ -20,6 +20,8 @@ import {
   type StatedCardRow,
 } from "../statedCards.js";
 import SectionCard from "../SectionCard.js";
+import CardAdviceBlock from "./CardAdvice.js";
+import CardBalancesEditor from "./CardBalancesEditor.js";
 import {
   CalcList,
   Group,
@@ -205,6 +207,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 heldNames={heldNames}
               />
             ) : null}
+            <CardAdviceBlock advice={f.advice} />
             <StatusBody
               section="cards"
               result={result}
@@ -287,10 +290,10 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
             />
           </div>
         ),
-        assumptions:
-          programs.length === 0 ? null : (
+        assumptions: (
             <Group title={a.groups.yourFigures}>
-              <Redemption programs={programs} ctx={ctx} />
+              <CardBalancesEditor ctx={ctx} />
+              {programs.length > 0 && <Redemption programs={programs} ctx={ctx} />}
               {f.balances.map((b) => (
                 <ValueInput
                   key={b.programId}
@@ -315,7 +318,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 />
               ))}
             </Group>
-          ),
+        ),
         howCalculated: <CalcList section="cards" result={result} />,
         sources: <Sources lines={[terms]} />,
       }}

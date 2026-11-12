@@ -2247,6 +2247,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             corrupt={profileRead.kind === "corrupt"}
             asOf={asOf}
             onSave={saveProfile}
+            rewards={rewards}
+            onSaveRewards={saveRewards}
             onImport={importFile}
             round={intakeRound}
             onFinish={() => {
@@ -2608,6 +2610,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               valuations={valuations}
               asOf={asOf}
               onSaveProfile={saveProfile}
+              onSaveRewards={saveRewards}
               onNavigate={setView}
             />
           )}

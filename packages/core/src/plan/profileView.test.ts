@@ -114,6 +114,23 @@ test("work kinds and the VAT answer reach the plan profile; absent means empty a
   expect(p.chargesVat).toBe(true);
 });
 
+test("the plan sees the stated credit cards and their balances; none stated gives empty lists", () => {
+  expect(planProfileOf(null)).toMatchObject({ statedCardIds: [], cardBalances: [] });
+  const store = storeWith({
+    ...base,
+    statedCards: { value: ["american-express-gold-card", "other"], source: "stated", at: "2026-10-27" },
+    cardBalances: {
+      value: [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 }],
+      source: "stated",
+      at: "2026-10-27",
+    },
+  });
+  expect(planProfileOf(store)).toMatchObject({
+    statedCardIds: ["american-express-gold-card", "other"],
+    cardBalances: [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 }],
+  });
+});
+
 test("planProfileOf exposes the new fields and they change profileHash", () => {
   const stated = { source: "stated" as const, at: "2026-10-24" };
   const empty = planProfileOf(storeWith({ ...base }));

@@ -8,6 +8,7 @@ import {
   type EntityProfile,
   type ProfileRead,
   type PublicFact,
+  type RewardsBalance,
   type SectionId,
 } from "@lavega/core";
 import type { View } from "../App";
@@ -46,6 +47,9 @@ export type PlanProps = {
   asOf: string;
   onSaveProfile: (next: AdvisorProfileStore) => Promise<void>;
   onNavigate: (view: View) => void;
+  /** The manual points balances and how to store them (the Punten store). */
+  rewards?: readonly RewardsBalance[];
+  onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
   /** UNSCOPED accounts and the entity profiles that scope them; a goal can be
    *  linked only to a personal account. */
   accounts?: readonly Account[];
@@ -89,6 +93,8 @@ export default function Plan({
   accounts = [],
   entityProfiles = [],
   publicFacts,
+  rewards,
+  onSaveRewards,
 }: PlanProps) {
   const [locale] = useAppLocale();
   const shell = planShellCopy[locale];
@@ -161,6 +167,8 @@ export default function Plan({
     },
     publicFacts,
     onNavigate,
+    ...(rewards === undefined ? {} : { rewards }),
+    ...(onSaveRewards === undefined ? {} : { saveRewards: onSaveRewards }),
   };
 
   return (
